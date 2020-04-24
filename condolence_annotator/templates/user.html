@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+
+<html>
+    <head>
+        <script src="jquery-3.3.1.min.js"></script>
+
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            * {
+                box-sizing: border-box;
+            }
+
+            .row {
+                display: flex;
+            }
+
+            /* Create two equal columns that sits next to each other */
+            .column {
+                flex: 50%;
+                padding: 15px;
+            }
+        </style>
+    </head>
+
+    <body>
+        <h4>Welcome {{firstname}} {{lastname}}</h4>
+
+        <p> 
+            Your mission {{firstname}}, should you choose to accept it, is to <br>
+            determine whether the two articles before you are the same story. <br><br>
+        </p>
+
+        <fieldset>
+            <div class="row">
+                <div class="column" style="background-color:#cccccc;">
+                    <h4>Story 1</h4>
+                    {{story_1}}
+                </div>
+                <div class="column" style="background-color:#c4c4c4;">
+                    <h4>Story 2</h4>
+                    {{story_2}}
+                </div>
+            </div>
+        </fieldset>
+
+        <center>
+            <p>
+                Tap left arrow if the stories DON'T match                    Tap right arrow if the stories DO match.
+            </p>
+            <p>
+                .
+            </p>
+            <p>
+                Tap down arrow if the stories don't make any sense (i.e. not english, random words, etc)
+            </p>
+        </center>
+
+        <input type="hidden" name="f" id="f" value="{{firstname}}">
+        <input type="hidden" name="l" id="l" value="{{lastname}}">
+
+        <script>
+            document.onkeydown = check_key;
+            function check_key(e) {
+                new_stories(e, document.getElementById('f').value, document.getElementById('l').value)
+            }
+        </script>
+
+        <script>
+            // We submit a new post to the same (user/namepoint) endpoint
+            function post(params) {
+                // The rest of this code assumes you are not using a library.
+                // It can be made less wordy if you use one.
+                var form = document.createElement("form");
+                form.setAttribute("method", "post");
+                form.setAttribute("action", "namepoint");
+
+                for (var key in params) {
+                    if (params.hasOwnProperty(key)) {
+                        var hiddenField = document.createElement("input");
+                        hiddenField.setAttribute("type", "hidden");
+                        hiddenField.setAttribute("name", key);
+                        hiddenField.setAttribute("value", params[key]);
+
+                        form.appendChild(hiddenField);
+                    }
+                }
+
+                document.body.appendChild(form);
+                form.submit();
+            }
+
+            function new_stories(event, first, last) {
+                var x = event.keyCode;
+                console.log(x)
+                console.log(first)
+                console.log(last)
+                var ism = "";
+                if (x == 37) { // Left
+                    ism = "n";
+                }
+                else if (x == 39) { // Right
+                    ism = "y";
+                }
+                else if (x == 40) { // Down
+                    ism = "b";
+                }
+                else if (x == 32) { // Spacebar
+                    ism = "go_back";
+                }
+                else {
+                    return
+                }
+
+                var post_req = {
+                    firstname: first,
+                    lastname: last,
+                    is_match: ism
+                }
+
+                post(post_req)
+
+            }
+
+        </script>
+
+
+
+    </body>
+</html>

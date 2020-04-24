@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+
+<html>
+    <head>
+        <script src="jquery-3.3.1.min.js"></script>
+
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            * {
+                box-sizing: border-box;
+            }
+
+            .row {
+                display: flex;
+            }
+
+            /* Create two equal columns that sits next to each other */
+            .column {
+                flex: 50%;
+                padding: 15px;
+            }
+        </style>
+    </head>
+
+    <body>
+        <h4>Welcome {{firstname}} {{lastname}}</h4>
+
+        <p>
+            Please be careful to all your choices <br><br><br>
+            Progress: {{annotated_amount}}/{{ amount }}<br>
+            Current_id: {{ id }}<br>
+            Last_question: {{ last_question }}<br>
+            Last_score: {{ last_score }}<br>
+
+
+        </p>
+
+        <form action="/user/namepoint" method="post">
+        <fieldset>
+            <input type="hidden" name="firstname" id="a" value="{{firstname}}">
+            <input type="hidden" name="lastname" id="b" value="{{lastname}}">
+            <input type="hidden" name="src" id="src" value="go_to">
+            <input name="go_to" id="go_to" value="" onfocusin="user_input()" onfocusout="user_input_leave()" max=4799 min=0 placeholder="0-4799" required>
+            <input type="submit" value="go">
+        </fieldset>
+        </form>
+
+
+
+        <fieldset>
+            <div class="row">
+                <div class="column" style="background-color:#cccccc;">
+                    <div name="best_item" id="best_item"></div>
+                    {{ story_0 }} <br>
+                    {{ story_1 }} <br>
+                    {{ story_2 }} <br>
+                    {{ story_3 }} <br>
+                    {{ story_4 }} <br>
+                </div>
+
+            </div>
+        </fieldset>
+
+        <center>
+            <p>
+                Tap a,b,c,d to choose from the 4 displayed questions.
+            </p>
+            <p>
+                .
+            </p>
+            <p>
+                Tap leftarrow to see previous selections and tap rightarrow to see next tuple.
+            </p>
+        </center>
+
+        <input type="hidden" name="f" id="f" value="{{firstname}}">
+        <input type="hidden" name="l" id="l" value="{{lastname}}">
+        <input type="hidden" name="source" id="source" value="annotation">
+        <input type="hidden" name="ismm" id="ismm" value="{{is_match}}">
+
+
+
+        <script>
+            input_flag = 0;
+            best_item.innerHTML = String.fromCharCode(parseInt(document.getElementById('ismm').value) + 64);
+
+            function user_input() {
+                input_flag = 1;
+            }
+
+            function user_input_leave(){
+                input_flag = 0;
+            }
+
+            document.onkeydown = check_key;
+            function check_key(e) {
+                if(input_flag == 0){
+                    new_stories(e, document.getElementById('f').value, document.getElementById('l').value);
+                }
+            }
+        </script>
+
+        <script>
+            window.onunload = check_close;
+            function check_close() {
+                 console.error("session closed");
+                var post_req = {
+                    is_close: "closed"
+                }
+                post(post_req);
+            }
+        </script>
+
+        <script>
+            flag = 0;
+            continue_flag = 0;
+            src = "annotation";
+            ism = "";
+            // We submit a new post to the same (user/namepoint) endpoint
+            function post(params) {
+                // The rest of this code assumes you are not using a library.
+                // It can be made less wordy if you use one.
+                var form = document.createElement("form");
+                form.setAttribute("method", "post");
+                form.setAttribute("action", "namepoint");
+
+                for (var key in params) {
+                    if (params.hasOwnProperty(key)) {
+                        var hiddenField = document.createElement("input");
+                        hiddenField.setAttribute("type", "hidden");
+                        hiddenField.setAttribute("name", key);
+                        hiddenField.setAttribute("value", params[key]);
+
+                        form.appendChild(hiddenField);
+                    }
+                }
+
+                document.body.appendChild(form);
+                form.submit();
+            }
+
+            function new_stories(event, first, last, story_1) {
+
+                var x = event.keyCode;
+                console.log(x);
+                console.log(first);
+                console.log(last);
+                console.log(story_1);
+
+                if (x == 37) { // back
+                     src = "back";
+                     continue_flag = 1;
+                }
+                else if (x == 39) { // back
+                     continue_flag = 1;
+                     src = "go";
+                }
+                /*
+                else if (x == 13) { // enter
+                    if (flag == 2) {
+                        continue_flag = 1;
+                    }
+                    else{
+                        return;
+                    }
+                }*/
+                else if (x >= 49 && x <= 52 ) { // Down
+                    sig = (x-48).toString();
+                    ism = sig;
+                    best_item.innerHTML = String.fromCharCode(parseInt(ism[0]) + 64);
+
+                    continue_flag = 1;
+
+                }
+                else {
+
+                    return;
+                }
+
+
+                var post_req = {
+                    firstname: first,
+                    lastname: last,
+                    is_match: ism,
+                    story:story_1,
+                    src:src
+                }
+
+                if (continue_flag==1) {
+                    post(post_req);
+                    continue_flag = 0;
+                }
+
+            }
+
+        </script>
+
+
+
+    </body>
+</html>

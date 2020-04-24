@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+
+<html>
+    <head>
+        <script src="jquery-3.3.1.min.js"></script>
+
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta http-equiv="content-type" content="text/html;charset=UTF-8">
+        <style>
+            * {
+                box-sizing: border-box;
+            }
+
+            .row {
+                display: flex;
+                flex-direction: column;
+            }
+
+            /* Create two equal columns that sits next to each other */
+            .column {
+                flex: 50%;
+                padding: 15px;
+            }
+        </style>
+    </head>
+
+    <body>
+        <h4>Welcome {{firstname}} {{lastname}}</h4>
+
+        <p>
+        On a scale of (1 - 5), how closely does the observer comment's
+        appraisal of a situation align with the target comment's appraisal
+        along the following dimensions?
+        <ul>
+            <li>
+                <b>pleasantness</b>
+                (how pleasant the situation was)
+            </li>
+            <li>
+                <b>anticipated effort</b>
+                (how much effort was needed to deal with the situation)
+            </li>
+            <li>
+                <b>situational control</b>
+                (how much the situation was out of anyone’s contro)
+            </li>
+            <li>
+                <b>self-other agency</b>
+                (how much oneself or another person was responsible for the situation)
+            </li>
+            <li>
+                <b>attentional activity</b>
+                (how much their attention was drawn to the situation rather
+                than diverted away from the situation)
+            </li>
+            <li>
+                <b>certainty</b>
+                (certainty about what was happening in the situation or what
+                would happen next)
+            </li>
+        </ul>
+        </p>
+
+        <form action="/user/namepoint" method="post">
+        <fieldset>
+        <p>
+        On entry {{ id }}. {{ annotated_amount }} / {{ amount }} entries annotated.
+        </p>
+        <p>
+        {% if is_match %}
+        You've annotated this with <b>{{ is_match }}</b>.
+        {% endif %}
+        </p>
+            <input type="hidden" name="firstname" id="a" value="{{firstname}}">
+            <input type="hidden" name="lastname" id="b" value="{{lastname}}">
+            <input type="hidden" name="src" id="src" value="go_to">
+            <input name="go_to" id="go_to" value=""  max={{ amount - 1 }} min=0 placeholder="0-{{ amount - 1 }}" required>
+            <input type="submit" value="go">
+        </fieldset>
+        </form>
+
+        <fieldset>
+            <div class="row">
+                <h4>Target</h4>
+                {{ target_comment }}
+            </div>
+            <div class="row">
+                <h4>Observer</h4>
+                {{ observer_comment }}
+            </div>
+        </fieldset>
+
+        <center>
+            <p>
+            Tap 1, 2, 3, 4, 5 where 1 is strongly does not align and 5 is
+            strongly aligns. (j/k) to go to next/previous sample.
+            </p>
+        </center>
+
+        <input type="hidden" name="f" id="f" value="{{firstname}}">
+        <input type="hidden" name="l" id="l" value="{{lastname}}">
+
+        <script>
+            document.onkeydown = check_key;
+            function check_key(e) {
+                new_stories(e, document.getElementById('f').value, document.getElementById('l').value)
+            }
+        </script>
+
+        <script>
+            window.onunload = check_close;
+            function check_close() {
+                 console.error("session closed");
+                var post_req = {
+                    is_close: "closed"
+                }
+                post(post_req);
+            }
+        </script>
+
+        <script>
+            // We submit a new post to the same (user/namepoint) endpoint
+            function post(params) {
+                // The rest of this code assumes you are not using a library.
+                // It can be made less wordy if you use one.
+                var form = document.createElement("form");
+                form.setAttribute("method", "post");
+                form.setAttribute("action", "namepoint");
+
+                for (var key in params) {
+                    if (params.hasOwnProperty(key)) {
+                        var hiddenField = document.createElement("input");
+                        hiddenField.setAttribute("type", "hidden");
+                        hiddenField.setAttribute("name", key);
+                        hiddenField.setAttribute("value", params[key]);
+
+                        form.appendChild(hiddenField);
+                    }
+                }
+
+                document.body.appendChild(form);
+                form.submit();
+            }
+
+            function new_stories(event, first, last) {
+                var x = event.key;
+                if (event.target.id == "go_to") return
+                var src = ""
+                var ism = ""
+                console.log(x)
+                console.log(first)
+                console.log(last)
+                if (x == " " || x == "k") { // Spacebar
+                    src = "back";
+                }
+                else if (x == "j") {
+                    src = "go";
+                }
+                else if (x == "s") {
+                    src = "";
+                    ism = "-1";
+                }
+                else if (parseInt(x) > 0 && parseInt(x) < 6) {
+                    src = "";
+                    ism = x;
+                }
+                else {
+                    return
+                }
+
+                var post_req = {
+                    firstname: first,
+                    lastname: last,
+                    label: ism,
+                    src: src
+                }
+
+                post(post_req)
+
+            }
+
+        </script>
+
+
+
+    </body>
+</html>
