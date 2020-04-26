@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<title>Bootstrap 4 Fluid Layout Example</title>
+<link rel="stylesheet" href="css/bootstrap.min.css">
+<script src="http://code.jquery.com/jquery-3.3.1.min.js"></script>
+<script src="js/bootstrap.min.js"></script>
+</head>
+<body>
+<nav class="navbar navbar-expand-md navbar-dark bg-dark mb-3">
+    <div class="container-fluid">
+        <a href="#" class="navbar-brand mr-3">Tutorial Republic</a>
+        <button type="button" class="navbar-toggler" data-toggle="collapse" data-target="#navbarCollapse">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarCollapse">
+            <div class="navbar-nav">
+              <a href="#" class="nav-item nav-link active">Home</a>
+                <a href="#" class="nav-item nav-link">Annotation Codebook</a>
+                <a href="#" class="nav-item nav-link disabled">Statistics</a>
+                <a href="#" class="nav-item nav-link disabled">Help</a>
+            </div>
+            <div class="navbar-nav ml-auto">
+              <p class="text-secondary">Currently logged in as {{ first }} { last }}</a>
+            </div>
+        </div>
+    </div>    
+</nav>
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-6">
+            <h2>Instance</h2>
+            <p>HTML is the standard markup language for describing the structure of the web pages. Our HTML tutorials will help you to understand the basics of latest HTML5 language, so that you can create your own web pages or website.</p>
+            <p><a href="https://www.tutorialrepublic.com/html-tutorial/" target="_blank" class="btn btn-success">Learn More &raquo;</a></p>
+        </div>
+        <div class="col-md-6">
+            <h2>Annotation</h2>
+            <p>CSS is used for describing the presentation of web pages. CSS can save a lot of time and effort. Our CSS tutorials will help you to learn the essentials of latest CSS3, so that you can control the style and layout of your website.</p>
+            <p><a href="https://www.tutorialrepublic.com/css-tutorial/" target="_blank" class="btn btn-success">Learn More &raquo;</a></p>
+        </div>
+    </div>
+    <hr>
+    <footer>
+        <div class="row">
+            <div class="col-md-6">
+                <p>Copyright &copy; 2020 Blablablab</p>
+            </div>
+            <div class="col-md-6 text-md-right">
+                <a href="#" class="text-dark">Fork on GitHub</a> 
+                <span class="text-muted mx-2">|</span> 
+                <a href="#" class="text-dark">Cite Us</a>
+            </div>
+        </div>
+    </footer>
+</div>
+</body>
+</html>

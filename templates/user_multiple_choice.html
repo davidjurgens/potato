@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+
+<html>
+  {{ HEADER }}
+  
+    <body>
+        <h4>Welcome {{firstname}} {{lastname}}</h4>
+
+        {{ INSTRUCTIONS }}
+        
+        <form action="/user/namepoint" method="post">
+        <fieldset>
+        <p>
+        On entry {{ id }}. {{ annotated_amount }} / {{ amount }} entries annotated.
+        </p>
+        <p>
+        {% if is_match %}
+        You've annotated this with <b>{{ is_match }}</b>.
+        {% endif %}
+        </p>
+            <input type="hidden" name="firstname" id="a" value="{{firstname}}">
+            <input type="hidden" name="lastname" id="b" value="{{lastname}}">
+            <input type="hidden" name="src" id="src" value="go_to">
+            <input name="go_to" id="go_to" value=""  max={{ amount - 1 }} min=0 placeholder="0-{{ amount - 1 }}" required>
+            <input type="submit" value="go">
+        </fieldset>
+        </form>
+
+
+        <input type="hidden" name="f" id="f" value="{{firstname}}">
+        <input type="hidden" name="l" id="l" value="{{lastname}}">
+
+        <script>
+            document.onkeydown = check_key;
+            function check_key(e) {
+                new_stories(e, document.getElementById('f').value, document.getElementById('l').value)
+            }
+        </script>
+
+        {{ annotation }}
+        
+        <script>
+            window.onunload = check_close;
+            function check_close() {
+                 console.error("session closed");
+                var post_req = {
+                    is_close: "closed"
+                }
+                post(post_req);
+            }
+        </script>
+
+        
+        <script>
+            // We submit a new post to the same (user/namepoint) endpoint
+            function post(params) {
+                // The rest of this code assumes you are not using a library.
+                // It can be made less wordy if you use one.
+                var form = document.createElement("form");
+                form.setAttribute("method", "post");
+                form.setAttribute("action", "namepoint");
+
+                for (var key in params) {
+                    if (params.hasOwnProperty(key)) {
+                        var hiddenField = document.createElement("input");
+                        hiddenField.setAttribute("type", "hidden");
+                        hiddenField.setAttribute("name", key);
+                        hiddenField.setAttribute("value", params[key]);
+
+                        form.appendChild(hiddenField);
+                    }
+                }
+
+                document.body.appendChild(form);
+                form.submit();
+            }
+
+            function new_stories(event, first, last) {
+                var x = event.key;
+                if (event.target.id == "go_to") return
+                var src = ""
+                var ism = ""
+                console.log(x)
+                console.log(first)
+                console.log(last)
+                if (x == " " || x == "k") { // Spacebar
+                    src = "back";
+                }
+                else if (x == "j") {
+                    src = "go";
+                }
+                else if (x == "s") {
+                    src = "";
+                    ism = "-1";
+                }
+                else if (parseInt(x) > 0 && parseInt(x) < 6) {
+                    src = "";
+                    ism = x;
+                }
+                else {
+                    return
+                }
+
+                var post_req = {
+                    firstname: first,
+                    lastname: last,
+                    label: ism,
+                    src: src
+                }
+
+                post(post_req)
+
+            }
+
+        </script>
+
+
+
+    </body>
+</html>
