@@ -8,6 +8,8 @@ import yaml
 
 from os.path import basename
 
+from os import path
+
 from bs4 import BeautifulSoup
 
 import logging
@@ -76,6 +78,7 @@ class UserAnnotationState:
         self.instance_cursor = 0
 
     def current_instance(self):
+        #print("current_instance(): cursor is now ", self.instance_cursor)        
         inst_id = self.instance_id_ordering[self.instance_cursor]
         instance = instance_id_to_data[inst_id]
         return instance
@@ -85,8 +88,14 @@ class UserAnnotationState:
             self.instance_cursor -= 1
 
     def go_forward(self):
+        old_cur = self.instance_cursor 
+        #print("current cursor: %d/%d, updating to %d/%d" % \
+        #      (self.instance_cursor, len(self.instance_id_to_data) - 1,
+        #       min(self.instance_cursor + 1,  len(self.instance_id_to_data) - 1),
+        #       len(self.instance_id_to_data) - 1))
         if self.instance_cursor < len(self.instance_id_to_data) - 1:
             self.instance_cursor += 1
+        #print("go_forward(): cursor %d -> %d" % (old_cur, self.instance_cursor))
         
     def get_annotations(self, instance_id):
         if instance_id not in self.instance_id_to_labeling:
@@ -95,10 +104,42 @@ class UserAnnotationState:
             # NB: Should this be a view/copy?
             return self.instance_id_to_labeling[instance_id]
 
-    def set_annotation(self, instance_id, schema_to_labels):
-        self.instance_id_to_labeling[instance_id] = schema_to_labels
+    def get_annotation_count(self):
+        return len(self.instance_id_to_labeling)
         
+    def set_annotation(self, instance_id, schema_to_labels):
+        old_annotation = defaultdict(list)
+        if instance_id in self.instance_id_to_labeling:
+            old_annotation = self.instance_id_to_labeling[instance_id]
 
+        # Avoid updating with no entries
+        if len(schema_to_labels) > 0:
+            self.instance_id_to_labeling[instance_id] = schema_to_labels
+        elif instance_id in self.instance_id_to_labeling:
+            del self.instance_id_to_labeling[instance_id]
+        
+        return old_annotation != schema_to_labels
+
+    def update(self, id_key, annotation_order, annotated_instances):
+        self.instance_id_to_labeling = {}
+        for inst in annotated_instances:
+
+            inst_id = inst['id']
+            annotation = inst['annotation']
+            
+            self.instance_id_to_labeling[inst_id] = annotation
+        
+        self.instance_id_ordering = annotation_order
+
+        # Set the current item to be the one after the last thing that was
+        # annotated
+        self.instance_cursor = min(len(self.instance_id_to_labeling),
+                                   len(self.instance_id_ordering)-1)
+
+        #print("update(): user had annotated %d instances, so setting cursor to %d" % 
+        #      (len(self.instance_id_to_labeling), self.instance_cursor))
+        
+    
 def load_all_data(config):
     global annotate_state # formerly known as user_state
     global all_data
@@ -133,96 +174,7 @@ def load_all_data(config):
                 items_to_annotate.append(item)
                 
         logger.debug('Loaded %d instances from %s' % (line_no, data_fname))
-    all_data["items_to_annotate"] = items_to_annotate
-
-
-    # This keeps track of what was done in the past so we can rewind and make
-    # sense of what has happened
-    state_filename = config['annotation_state_file']
-    if os.path.exists(state_filename):
-        logger.info("Loading prior annotation state from %s" % state_filename)
-        # REMINDER: we probably want to make this some kind of multi-file
-        # directory so we can cache stuff for the curriculum learning (e.g.,
-        # internal train splits, etc.)
-        with open(config.annotation_state_file, 'rt') as f:
-            annotate_state = json.load(f)
-    else:
-        logger.info("No prior annotate state seen; starting annotation from scratch")
-            
-
-    
-    
-def old_load_user_data():
-    def initialize_user_data(path, user_id):
-        with open(path, "w") as w:
-            i = 0
-            for line in annotated_data:
-                new_line = {"id": i, "line": line, "annotated": False}
-                for it in line["annotations"]:
-                    if int(it["user"]) == int(user_id):
-                        new_line["annotated"] = True
-                        new_line["label"] = it["label"]
-                i += 1
-                w.writelines(json.dumps(new_line) + "\n")
-                
-    id2user = {}
-    # load user data
-    for user in user_dict:
-        path = user_dict[user]["path"]
-        if not os.path.exists(path):
-            initialize_user_data(path, user_dict[user]["user_id"])
-        user_data = {}
-        user_dict[user]["start_id"] = len(all_data["annotated_data"])
-        story = []
-        ism = ""
-
-        with open(path, "r") as r:
-            lines = r.readlines()
-            flag = True
-            for line in lines:
-                line = json.loads(line.strip())
-                user_data[str(line["id"])] = line
-                if flag and "label" not in line:
-                    user_dict[user]["start_id"] = line["id"]
-                    story = all_data["annotated_data"][
-                        int(user_dict[user]["start_id"])
-                    ]["text"].split("<SPLIT_TOKEN>")
-                    flag = False
-
-            user_dict[user]["start_id"] = len(lines) - 1
-            story = all_data["annotated_data"][int(user_dict[user]["start_id"])][
-                "text"
-            ].split("<SPLIT_TOKEN>")
-            user_dict[user]["user_data"] = user_data
-
-        user_dict[user]["current_display"] = {
-            "id": user_dict[user]["start_id"],
-            "story": story,
-            "ism": ism,
-            "annotated_amount": cal_amount(user),
-        }
-
-        user_dict[user]["QUESTION_START"] = True
-        # user_dict[user]['last_question'] = ''
-        # user_dict[user]['last_score'] = 0.0
-
-    for user in user_dict:
-        print(user, user_dict[user]["start_id"])
-
-    # # load old text data
-    # text_data = []
-    # with open(args.text_data_path, "r") as r:
-    #     lines = r.readlines()
-    #     for line in lines:
-    #         text_data.append(line.strip())
-
-    # all_data["all_text_data"] = text_data
-
-    # initialize user data file
-    # text_amount = len(text_data)
-
-    # combine_bws()
-    # compute_ranking()
+    all_data["items_to_annotate"] = items_to_annotate                       
 
 
 def cal_amount(user):
@@ -253,47 +205,14 @@ def move_to_prev_instance(username):
     user_state = lookup_user_state(username)
     user_state.go_back()
     
-    if False:
-        user_dict[user]["start_id"] = max(user_dict[user]["start_id"] - 1, 0)
-        story = all_data["annotated_data"][int(user_dict[user]["start_id"])]["text"].split(
-            "<SPLIT_TOKEN>"
-        )
-        ism = ""
-        if user_dict[user]["user_data"][str(user_dict[user]["start_id"])]["annotated"]:
-            ism = user_dict[user]["user_data"][str(user_dict[user]["start_id"])]["label"]
-        user_dict[user]["current_display"] = {
-            "id": user_dict[user]["start_id"],
-            "story": story,
-            "ism": ism,
-            "annotated_amount": user_dict[user]["current_display"]["annotated_amount"],
-        }
-
 
 def move_to_next_instance(username):
     user_state = lookup_user_state(username)
     user_state.go_forward()
     
-    
-    if False:
-        user_dict[user]["start_id"] = min(
-            user_dict[user]["start_id"] + 1, len(all_data["annotated_data"]) - 1
-        )
-        story = all_data["annotated_data"][int(user_dict[user]["start_id"])]["text"].split(
-            "<SPLIT_TOKEN>"
-        )
-        ism = ""
-        if user_dict[user]["user_data"][str(user_dict[user]["start_id"])]["annotated"]:
-            ism = user_dict[user]["user_data"][str(user_dict[user]["start_id"])]["label"]
-        user_dict[user]["current_display"] = {
-            "id": user_dict[user]["start_id"],
-            "story": story,
-            "ism": ism,
-            "annotated_amount": user_dict[user]["current_display"]["annotated_amount"],
-        }
 
 def update_annotation_state(username, form):
     user_state = lookup_user_state(username)
-    user_state.go_back()
 
     instance_id = request.form['instance_id']
 
@@ -310,8 +229,9 @@ def update_annotation_state(username, form):
 
         schema_to_labels[annotation_schema].append(annotation_label)
 
-    print("-- for user %s, instance %s -> %s" % (username, instance_id, str(schema_to_labels)))
-    user_state.set_annotation(instance_id, schema_to_labels)
+    # print("-- for user %s, instance %s -> %s" % (username, instance_id, str(schema_to_labels)))
+    did_change = user_state.set_annotation(instance_id, schema_to_labels)
+    return did_change
     
     
 def get_annotations_for_user_on(username, instance_id):
@@ -380,6 +300,8 @@ def home():
 
 
 def lookup_user_state(username):
+    global user_to_annotation_state
+    
     if username not in user_to_annotation_state:
         logger.debug("Previously unknown user \"%s\"; creating new annotation state" % (username))
         user_state = UserAnnotationState(instance_id_to_data)
@@ -388,6 +310,86 @@ def lookup_user_state(username):
         user_state = user_to_annotation_state[username]
 
     return user_state
+
+def save_user_state(username, save_order=False):
+    global user_to_annotation_state
+    global config
+    global instance_id_to_data
+    
+    # Figure out where this user's data would be stored on disk
+    user_state_dir = config['user_state_dir']
+
+    # NB: Do some kind of sanitizing on the username to improve security
+    user_dir = path.join(user_state_dir, username)
+
+    user_state = lookup_user_state(username)
+    
+    if not os.path.exists(user_dir):        
+        os.makedirs(user_dir)
+        logger.debug("Created state directory for user \"%s\"" % (username))        
+    
+    annotation_order_fname = path.join(user_dir, "annotation_order.txt")
+    if not os.path.exists(annotation_order_fname) or save_order:
+        with open(annotation_order_fname, 'wt') as outf:
+            for inst in user_state.instance_id_ordering:
+                outf.write(inst + '\n')
+                
+    annotated_instances_fname = path.join(user_dir, "annotated_instances.jsonl")
+    with open(annotated_instances_fname, 'wt') as outf:
+        for inst_id, data in user_state.instance_id_to_labeling.items():
+            output = {'id': inst_id, 'annotation': data }
+            json.dump(output, outf)
+            outf.write('\n')
+            
+    
+    
+
+def load_user_state(username):
+    global user_to_annotation_state
+    global config
+    global instance_id_to_data
+    global logger
+    
+    # Figure out where this user's data would be stored on disk
+    user_state_dir = config['user_state_dir']
+
+    # NB: Do some kind of sanitizing on the username to improve securty
+    user_dir = path.join(user_state_dir, username)
+
+    # User has annotated before
+    if os.path.exists(user_dir):
+        logger.debug("Found known user \"%s\"; loading annotation state" % (username))
+
+        annotation_order_fname = path.join(user_dir, "annotation_order.txt")
+        annotation_order = []
+        with open(annotation_order_fname, 'rt') as f:
+            for line in f:
+                annotation_order.append(line[:-1])
+                
+        annotated_instances_fname = path.join(user_dir, "annotated_instances.jsonl")
+        annotated_instances = []
+        with open(annotated_instances_fname, 'rt') as f:
+            for line in f:
+                annotated_instances.append(json.loads(line))
+
+        id_key = config['item_properties']['id_key']
+                
+        user_state = UserAnnotationState(instance_id_to_data)
+        user_state.update(id_key, annotation_order, annotated_instances)
+
+        # Make sure we keep track of the user throughout the program
+        user_to_annotation_state[username] = user_state
+        
+        logger.info("Loaded %d annotations for known user \"%s\"" %
+                     (user_state.get_annotation_count(), len(instance_id_to_data)))
+
+    # New user, so initialize state
+    else:
+
+        logger.debug("Previously unknown user \"%s\"; creating new annotation state" % (username))
+        user_state = UserAnnotationState(instance_id_to_data)
+        user_to_annotation_state[username] = user_state
+        
         
         
 def get_cur_instance_for_user(username):
@@ -425,44 +427,40 @@ def user_name_endpoint():
     username = firstname + '_' + lastname
     
     if 'instance_id' in request.form:
-        update_annotation_state(username, request.form)
+        did_change = update_annotation_state(username, request.form)
+        if did_change:
+            save_user_state(username)
     
-    print("--REQUESTS FORM: ", json.dumps(request.form))
+    # print("--REQUESTS FORM: ", json.dumps(request.form))
     
     ism = request.form.get("label")
-    src = request.form.get("src")
-    print("label: \"%s\"" % ism)
-    print("src: \"%s\"" % src)
+    action = request.form.get("src")
+    #print("label: \"%s\"" % ism)
+    # print("action: \"%s\"" % action)
     
-    if src == "home":
-        print("session recovered")
-        #print(user_dict[username]["current_display"]["ism"])
-        #print(user_dict[username]["current_display"]["story"])
-    elif src == "prev_instance":
+    if action == "home":
+        load_user_state(username)
+        # gprint("session recovered")
+    elif action == "prev_instance":
+        #print("moving to prev instance")
         move_to_prev_instance(username)
-    elif src == "next_instance":
+    elif action == "next_instance":
+        #print("moving to next instance")
         move_to_next_instance(username)
-        #print(user_dict[username]["current_display"]["ism"])
-    elif src == "go_to":
+    elif action == "go_to":
         go_to_id(username, request.form.get("go_to"))
-        #print(user_dict[username]["current_display"]["ism"])
     elif ism == None:
         print("ISM IS NULLLLLLL")
-        # user_dict[username]['user_data'][str(user_dict[username]['start_id'])]["annotated"] = False
-        # del user_dict[username]['user_data'][str(user_dict[username]['start_id'])]["label"]
-        # user_dict[username]['current_display']['ism'] = ""
-        # write_data(username)
-        # merge_annotation()
-
     else:
-        print('unrecognized action request: "%s"' % src)
-
+        print('unrecognized action request: "%s"' % action)
 
     instance = get_cur_instance_for_user(username)
 
-    # TODO: use the config's keys specificiation
-    text = instance['text']
-    instance_id = instance['id_str']
+    text_key = config['item_properties']['text_key']
+    id_key = config['item_properties']['id_key']
+
+    text = instance[text_key]
+    instance_id = instance[id_key]
 
     text, labels = post_process(text)
 
@@ -473,6 +471,8 @@ def user_name_endpoint():
         # This is what instance the user is currently on
         instance=text,
         instance_id=instance_id,
+        finished=lookup_user_state(username).get_annotation_count(),
+        total_count=len(instance_id_to_data),
         #amount=len(all_data["annotated_data"]),
         #annotated_amount=user_dict[username]["current_display"]["annotated_amount"],
     )    
@@ -482,7 +482,7 @@ def user_name_endpoint():
     annotations = get_annotations_for_user_on(username, instance_id)
     if annotations is not None:
 
-        print('Saw previous annotations for %s: %s' % (instance_id, annotations))
+        # print('Saw previous annotations for %s: %s' % (instance_id, annotations))
         
         # Parse the page so we can programmatically reset the annotation state
         # to what it was before
@@ -497,7 +497,7 @@ def user_name_endpoint():
 
         rendered_html = soup.prettify()
         
-    print('rendered_html type: ', type(rendered_html))
+
     return rendered_html
     
 
@@ -651,6 +651,9 @@ def main():
 
     # TODO: load previous annotation state
     #load_annotation_state(config)
+
+    flask_logger = logging.getLogger('werkzeug')
+    flask_logger.setLevel(logging.ERROR)
     
     app.run(debug=args.very_verbose, host="0.0.0.0", port=args.port)
 

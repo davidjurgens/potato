@@ -64,8 +64,6 @@
                 var form = document.createElement("form");
                 form.setAttribute("method", "post");
                 form.setAttribute("action", "namepoint");
-
-                console.log("test in post()")
                 
                 for (var key in params) {
                     if (params.hasOwnProperty(key)) {
@@ -88,9 +86,6 @@
 
 
                         if (input.is(":checked")) {
-                                                
-                            console.log('Type: ' + input.attr('type') + '; Name: ' + input.attr('name')
-                                        + '; Value: ' + input.val() + "; Checked? " + input.is(":checked"));
                             // Stuff all the input fields into something for the post
                             var hiddenField = document.createElement("input");
                             hiddenField.setAttribute("type", "hidden");
@@ -109,7 +104,7 @@
                 // if (event.target.id == "go_to") return
                 var action = ""
                 var ism = ""
-                console.log(event)
+
                 //console.log(x)
                 //console.log(firstname)
                 //console.log(lastname)
@@ -140,6 +135,9 @@
 
         </script>
 
+
+        
+         
   
 <nav class="navbar navbar-expand-md navbar-dark bg-dark mb-3">
     <div class="container-fluid">
@@ -154,8 +152,11 @@
                 <a href="#" class="nav-item nav-link disabled">Statistics</a>
                 <a href="#" class="nav-item nav-link disabled">Help</a>
             </div>
+            <div class="p-2 bd-highlight text-secondary align-middle">
+              Finished {{finished}}/{{total_count}}
+            </div>
             <div class="navbar-nav ml-auto">
-              <p class="text-secondary">Currently logged in as {{firstname}} {{lastname}}</a>
+              <div class="text-secondary align-middle">Currently logged in as {{firstname}} {{lastname}}</div>
             </div>
         </div>
     </div>    

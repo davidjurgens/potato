@@ -8,7 +8,7 @@
     "output_dir": "../output/",
 
     # NOTE: This is probably going to be a directory / DB at some point...
-    "annotation_state_file": "output/annotation_state.jsonl",
+    "user_state_dir": "annotation_output",
 
     "codebook": "https://docs.google.com/document/d/1eXgaOZJDahhZLqYWbLTD_84-d1rnQ4M-bccer3HY6WI",
 
