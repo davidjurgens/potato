@@ -1,2 +1,2 @@
-# potatoes
-potato: portable text annotation tool
+# potato: portable text annotation tool
+
