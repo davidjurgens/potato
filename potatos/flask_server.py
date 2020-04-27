@@ -8,6 +8,8 @@ import yaml
 
 from os.path import basename
 
+from bs4 import BeautifulSoup
+
 import logging
 
 # import requests
@@ -92,7 +94,10 @@ class UserAnnotationState:
         else:
             # NB: Should this be a view/copy?
             return self.instance_id_to_labeling[instance_id]
-            
+
+    def set_annotation(self, instance_id, schema_to_labels):
+        self.instance_id_to_labeling[instance_id] = schema_to_labels
+        
 
 def load_all_data(config):
     global annotate_state # formerly known as user_state
@@ -286,6 +291,29 @@ def move_to_next_instance(username):
             "annotated_amount": user_dict[user]["current_display"]["annotated_amount"],
         }
 
+def update_annotation_state(username, form):
+    user_state = lookup_user_state(username)
+    user_state.go_back()
+
+    instance_id = request.form['instance_id']
+
+    schema_to_labels = defaultdict(list)
+    
+    for key in form:
+        # Look for the marker that indicates an annotation label
+        if '|||' not in key:
+            continue
+
+        cols = key.split('|||')
+        annotation_schema = cols[0]
+        annotation_label = cols[1]
+
+        schema_to_labels[annotation_schema].append(annotation_label)
+
+    print("-- for user %s, instance %s -> %s" % (username, instance_id, str(schema_to_labels)))
+    user_state.set_annotation(instance_id, schema_to_labels)
+    
+    
 def get_annotations_for_user_on(username, instance_id):
     user_state = lookup_user_state(username)
     annotations = user_state.get_annotations(instance_id)
@@ -390,38 +418,21 @@ def previous_response(user, file_path):
 
 @app.route("/user/namepoint", methods=["GET", "POST"])
 def user_name_endpoint():
-    global curr_user_story_similarity
-    global user_file_written_map
-    global user_story_pos
-    global user_response_dicts_queue
-    global user_dict
-    global closed
-    global all_data
     
-    reading_user_response = False
-    # story_dict = get_story_dict()
-    name_dict = {}
-    name_types = ["firstname", "lastname"]
-    True_user = False
-    #while True:
-    #    try:
     firstname = request.form.get("firstname")
     lastname = request.form.get("lastname")
-    #name_dict["firstname"] = firstname
-    #        name_dict["lastname"] = lastname
-    #        break
-    #    except BaseException as ex:
-    #        print(repr(ex))
-    #        raise
 
     username = firstname + '_' + lastname
-
+    
+    if 'instance_id' in request.form:
+        update_annotation_state(username, request.form)
+    
     print("--REQUESTS FORM: ", json.dumps(request.form))
     
     ism = request.form.get("label")
     src = request.form.get("src")
     print("label: \"%s\"" % ism)
-    print("src: \"%s\"", src)
+    print("src: \"%s\"" % src)
     
     if src == "home":
         print("session recovered")
@@ -444,33 +455,17 @@ def user_name_endpoint():
         # merge_annotation()
 
     else:
-        print('unrecognized input')
-        if False:
-            user_dict[username]["user_data"][str(user_dict[username]["start_id"])][
-                "label"
-            ] = int(ism)
-            user_dict[username]["user_data"][str(user_dict[username]["start_id"])][
-                "annotated"
-            ] = True
-            user_dict[username]["current_display"]["ism"] = ism
-            user_dict[username]["current_display"]["annotated_amount"] = cal_amount(
-                username
-            )
-        #print("NOTHING", ism)
-        #write_data(username)
-        #merge_annotation()
+        print('unrecognized action request: "%s"' % src)
 
 
     instance = get_cur_instance_for_user(username)
-    print("NEXT INST: " + str(instance))
-    
-    text = instance['text'] # '@chibull28 @Write2speak1 @Pragmatic_Ideas @SecNielsen @DHSgov @USCIS So what is the game here? To screw immigrants of a particular country? You must be insane to think no reforms should be made to any laws. Why then do they have the Congress &amp; Senate. They might as well close it down.'
+
+    # TODO: use the config's keys specificiation
+    text = instance['text']
     instance_id = instance['id_str']
 
     text, labels = post_process(text)
-    
-    #print(user_dict[username]["current_display"]["story"][0])
-    #print(user_dict[username]["current_display"]["story"][1])
+
     rendered_html = render_template(
         config['site_file'],
         firstname=firstname,
@@ -486,9 +481,23 @@ def user_name_endpoint():
     # did
     annotations = get_annotations_for_user_on(username, instance_id)
     if annotations is not None:
-        # TODO: refill out the page
-        pass
+
+        print('Saw previous annotations for %s: %s' % (instance_id, annotations))
         
+        # Parse the page so we can programmatically reset the annotation state
+        # to what it was before
+        soup = BeautifulSoup(rendered_html, 'html.parser')
+        
+        # Reset the state
+        for schema, labels in annotations.items():
+            for label in labels:
+                name = schema + "|||" + label
+                input_field = soup.find("input", {"name":name})
+                input_field['checked'] = True
+
+        rendered_html = soup.prettify()
+        
+    print('rendered_html type: ', type(rendered_html))
     return rendered_html
     
 
@@ -599,7 +608,9 @@ def generate_schematic(annotation_scheme):
             
             schematic += \
                 (('  <input type="checkbox" id="%s" name="%s" value="%s">' + \
-                 '  <label for="%s">%s</label><br/>') % (label, label, label, label, label))
+                 '  <label for="%s">%s</label><br/>') % (label,
+                                                         annotation_scheme['name'] + '|||' + label,
+                                                         label, label, label))
 
         schematic += '  </fieldset>\n</form>\n'
 
@@ -612,15 +623,6 @@ def generate_schematic(annotation_scheme):
 
 
 def main():
-    #global file_to_read_from
-    #global default_port
-    #global user_story_set
-    #global NUM_STORIES_TO_READ
-    #global SHOW_PATH
-    #global SHOW_SIMILARITY
-    #global user_dict
-    #global all_data
-    #global args
     global config
     global logger
     
@@ -640,22 +642,17 @@ def main():
     if args.very_verbose:
         logger.setLevel(logging.NOTSET)
 
+    # Creates the templates we'll use in flask by mashing annotation
+    # specification on top of the proto-templates
     generate_site(config)
-    
-    #with open("user_config.json", "r") as r:
-    #    lines = r.readlines()
-    #    for line in lines:
-    #        line = json.loads(line)
-    #        line["path"] = (
-    #            args.user_data_path + "user_" + str(line["firstname"]) + ".json"
-    #        )
-    #        user_dict[str(line["firstname"])] = line
 
+    # Loads the training data
     load_all_data(config)
 
-    flask_debug = True if args.verbose or args.very_verbose else False
+    # TODO: load previous annotation state
+    #load_annotation_state(config)
     
-    app.run(debug=False, host="0.0.0.0", port=args.port)
+    app.run(debug=args.very_verbose, host="0.0.0.0", port=args.port)
 
 
 if __name__ == "__main__":

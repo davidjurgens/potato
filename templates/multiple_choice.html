@@ -17,27 +17,16 @@
 
         <input type="hidden" name="firstname" id="firstname" value="{{firstname}}">
         <input type="hidden" name="lastname" id="lastname" value="{{lastname}}">
+        <input type="hidden" name="instance_id" id="instance_id" value="{{instance_id}}">
 
         <script>
           document.addEventListener('keyup', function (event) {
-              // console.log(event)
+              // Each time we process a user's key presses, track who is doing
+              // it by grabbing the hidden firstname and lastname fields
               new_stories(event, document.getElementById('firstname').value,
                           document.getElementById('lastname').value)
               
           });
-        </script>
-        
-        <script>
-          document.onkeydown = check_key;
-          function check_key(e) {
-              // Each time we process a user's key presses, track who is doing
-              // it by grabbing the hidden firstname and lastname fields
-              //console.log("thing")
-              //new_stories(e, document.getElementById('firstname').value,
-              //          document.getElementById('lastname').value)
-          }
-          document.dispatchEvent(keyboardEvent);
-          }
         </script>
 
         <script>
@@ -45,22 +34,10 @@
               // Gacky code to simulate the submit button as a keyboard event
               // and not have two separate paths to handle keyboard and mouse
               // events
-              var event = document.createEvent("KeyboardEvent");
-              var initMethod = typeof event.initKeyboardEvent !== 'undefined' ? "initKeyboardEvent" : "initKeyEvent";
+              var e = $.Event('keyup');
+              e.key = "ArrowRight";
               
-              event[initMethod](
-                  "keydown", // event type: keydown, keyup, keypress
-                  true,      // bubbles
-                  true,      // cancelable
-                  window,    // view: should be window
-                  false,     // ctrlKey
-                  false,     // altKey
-                  false,     // shiftKey
-                  false,     // metaKey
-                  39,        // keyCode: unsigned long - the virtual key code, else 0
-                  "ArrowRight" 
-              );
-              new_stories(event, document.getElementById('firstname').value,
+              new_stories(e, document.getElementById('firstname').value,
                           document.getElementById('lastname').value)
           } 
         </script>
@@ -96,18 +73,40 @@
                         hiddenField.setAttribute("type", "hidden");
                         hiddenField.setAttribute("name", key);
                         hiddenField.setAttribute("value", params[key]);
-
+                        
                         form.appendChild(hiddenField);
                     }
                 }
 
+                // Stuff all the 
+                $('form input, form select').each(
+                    function(index){  
+                        var input = $(this);
+                        if (input.attr('type') != 'checkbox') {
+                            return
+                        }
+
+
+                        if (input.is(":checked")) {
+                                                
+                            console.log('Type: ' + input.attr('type') + '; Name: ' + input.attr('name')
+                                        + '; Value: ' + input.val() + "; Checked? " + input.is(":checked"));
+                            // Stuff all the input fields into something for the post
+                            var hiddenField = document.createElement("input");
+                            hiddenField.setAttribute("type", "hidden");
+                            hiddenField.setAttribute("name", input.attr('name'));
+                            hiddenField.setAttribute("value", input.is(":checked"));
+                            form.appendChild(hiddenField);
+                        }
+                    }
+                );
                 document.body.appendChild(form);
                 form.submit();
             }
  
             function new_stories(event, firstname, lastname) {
                 var x = event.key;
-                if (event.target.id == "go_to") return
+                // if (event.target.id == "go_to") return
                 var action = ""
                 var ism = ""
                 console.log(event)
@@ -125,11 +124,14 @@
                     return
                 }
 
+                
+                var instance_id = document.getElementById('instance_id').value
                 var post_req = {
                     firstname: firstname,
                     lastname: lastname,
                     label: ism,
-                    src: action
+                    src: action,
+                    instance_id: instance_id
                 }
 
                 post(post_req)
@@ -168,7 +170,7 @@
           <h2>Annotation Scheme</h2>
           {{annotation_schematic}}
           <p>
-            <a class="btn btn-secondary" href="#" role="button" onclick="click_to_next()">Submit</a>
+            <div class="text-center"><a class="btn btn-secondary" href="#" role="button" onclick="click_to_next()">Submit</a></div>
           </p>
         </div>
     </div>
