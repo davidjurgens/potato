@@ -17,7 +17,7 @@
     ],
 
     "item_properties": {
-        "id_key": "id",
+        "id_key": "id_str",
         "text_key": "text"
         
     },
@@ -39,20 +39,46 @@
             "annotation_type": "multiselect",
             "name": "Issue General",
             "labels": [
-                "Label 1",
-                "Label 2",
-                "Label 3",
-                "Label 4",
-                "Label 5"                
+                "Economic",
+                "Capacity and Resources",
+                "Morality and Ethics",
+                "Legality, Constitutionality, and Jurisdiction",
+                "Crime and Punishment",
+                "Security and Defense",
+                "Health and Safety",
+                "Quality of Life",
+                "Cultural Identity",                
+                "Public Sentiment",
+                "Political Factors and Implications",
+                "Policy",
+                "External Regulation and Reputation",                
             ]
         },
+
         {
             "annotation_type": "multiselect",
             "name": "Issue Specific",
             "labels": [
-                "Label 1",
-                "Label 2",
-                "Label 3"
+                "Victim: Global Economy",
+                "Victim: Humanitarian",
+                "Victim: War",
+                "Hero: Cultural Diversity",
+                "Hero: Integration",
+                "Hero: Worker",
+                "Threat: Jobs",
+                "Threat: Public Order",
+                "Threat: Fiscal",
+                "Threat: National Cohesion",
+            ]
+            
+        },
+
+        {
+            "annotation_type": "multiselect",
+            "name": "Narrative",
+            "labels": [
+                "Episodic",
+                "Thematic",                
             ]
             
         }
@@ -65,7 +91,7 @@
     "header_file": "templates/header.html",
 
     # This is where the actual HTML files will be generated
-    "site_dir": "site/",
+    "site_dir": "potatos/templates/",
 
     # comment    
     "state_update_rate": 1,

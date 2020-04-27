@@ -41,6 +41,8 @@ user_file_written_map = defaultdict(dict)
 user_current_story_dict = {}
 user_response_dicts_queue = defaultdict(deque)
 
+user_to_annotation_state = {}
+
 curr_user_story_similarity = {}
 
 minimum_list = 30
@@ -55,31 +57,57 @@ config = None
 
 app = Flask(__name__)
 
-def choose_file(files):
-    chosen_file_id = random.randint(0, len(files) - 1)
-    return files[chosen_file_id]
+class UserAnnotationState:
+    
+    def __init__(self, instance_id_to_data):
+        self.instance_id_to_labeling = {}
 
+        self.instance_id_to_data = instance_id_to_data
+        
+        # NOTE: this might be dumb but at the moment, we cache the order in
+        # which this user will walk the instances. This might not work if we're
+        # annotating a ton of things with a lot of people, but hopefully it's
+        # not too bad. The underlying motivation is to programmatically change
+        # this ordering later
+        self.instance_id_ordering = list(instance_id_to_data.keys())
 
-def generate_pairs(line):
-    tuples = []
-    for i in range(4):
-        if line[4] != line[i]:
-            tuples.append((line[4], line[i]))
-            if line[5] != line[i]:
-                tuples.append((line[i], line[5]))
-    return tuples
+        self.instance_cursor = 0
 
+    def current_instance(self):
+        inst_id = self.instance_id_ordering[self.instance_cursor]
+        instance = instance_id_to_data[inst_id]
+        return instance
+
+    def go_back(self):
+        if self.instance_cursor > 0:
+            self.instance_cursor -= 1
+
+    def go_forward(self):
+        if self.instance_cursor < len(self.instance_id_to_data) - 1:
+            self.instance_cursor += 1
+        
+    def get_annotations(self, instance_id):
+        if instance_id not in self.instance_id_to_labeling:
+            return None
+        else:
+            # NB: Should this be a view/copy?
+            return self.instance_id_to_labeling[instance_id]
+            
 
 def load_all_data(config):
     global annotate_state # formerly known as user_state
     global all_data
     global logger
+    global instance_id_to_data
     
     # Where to look in the JSON item object for the text to annotate
     text_key = config['item_properties']['text_key']
+    id_key = config['item_properties']['id_key']
     
     items_to_annotate = []
 
+    instance_id_to_data = {}
+    
     data_files = config['data_files']
     logger.debug('Loading data from %d files' % (len(data_files)))
 
@@ -92,6 +120,11 @@ def load_all_data(config):
                 # fix the encoding            
                 # item[text_key] = item[text_key].encode("latin-1").decode("utf-8")           
 
+                instance_id = item[id_key]
+
+                # TODO: check for duplicate instance_id                
+                instance_id_to_data[instance_id] = item
+                    
                 items_to_annotate.append(item)
                 
         logger.debug('Loaded %d instances from %s' % (line_no, data_fname))
@@ -211,40 +244,54 @@ def find_start_id(user):
     # user_dict[user]['user_data'] = user_data
 
 
-def go_back(user):
-    user_dict[user]["start_id"] = max(user_dict[user]["start_id"] - 1, 0)
-    story = all_data["annotated_data"][int(user_dict[user]["start_id"])]["text"].split(
-        "<SPLIT_TOKEN>"
-    )
-    ism = ""
-    if user_dict[user]["user_data"][str(user_dict[user]["start_id"])]["annotated"]:
-        ism = user_dict[user]["user_data"][str(user_dict[user]["start_id"])]["label"]
-    user_dict[user]["current_display"] = {
-        "id": user_dict[user]["start_id"],
-        "story": story,
-        "ism": ism,
-        "annotated_amount": user_dict[user]["current_display"]["annotated_amount"],
-    }
+def move_to_prev_instance(username):
+    user_state = lookup_user_state(username)
+    user_state.go_back()
+    
+    if False:
+        user_dict[user]["start_id"] = max(user_dict[user]["start_id"] - 1, 0)
+        story = all_data["annotated_data"][int(user_dict[user]["start_id"])]["text"].split(
+            "<SPLIT_TOKEN>"
+        )
+        ism = ""
+        if user_dict[user]["user_data"][str(user_dict[user]["start_id"])]["annotated"]:
+            ism = user_dict[user]["user_data"][str(user_dict[user]["start_id"])]["label"]
+        user_dict[user]["current_display"] = {
+            "id": user_dict[user]["start_id"],
+            "story": story,
+            "ism": ism,
+            "annotated_amount": user_dict[user]["current_display"]["annotated_amount"],
+        }
 
 
-def go_ahead(user):
-    user_dict[user]["start_id"] = min(
-        user_dict[user]["start_id"] + 1, len(all_data["annotated_data"]) - 1
-    )
-    story = all_data["annotated_data"][int(user_dict[user]["start_id"])]["text"].split(
-        "<SPLIT_TOKEN>"
-    )
-    ism = ""
-    if user_dict[user]["user_data"][str(user_dict[user]["start_id"])]["annotated"]:
-        ism = user_dict[user]["user_data"][str(user_dict[user]["start_id"])]["label"]
-    user_dict[user]["current_display"] = {
-        "id": user_dict[user]["start_id"],
-        "story": story,
-        "ism": ism,
-        "annotated_amount": user_dict[user]["current_display"]["annotated_amount"],
-    }
+def move_to_next_instance(username):
+    user_state = lookup_user_state(username)
+    user_state.go_forward()
+    
+    
+    if False:
+        user_dict[user]["start_id"] = min(
+            user_dict[user]["start_id"] + 1, len(all_data["annotated_data"]) - 1
+        )
+        story = all_data["annotated_data"][int(user_dict[user]["start_id"])]["text"].split(
+            "<SPLIT_TOKEN>"
+        )
+        ism = ""
+        if user_dict[user]["user_data"][str(user_dict[user]["start_id"])]["annotated"]:
+            ism = user_dict[user]["user_data"][str(user_dict[user]["start_id"])]["label"]
+        user_dict[user]["current_display"] = {
+            "id": user_dict[user]["start_id"],
+            "story": story,
+            "ism": ism,
+            "annotated_amount": user_dict[user]["current_display"]["annotated_amount"],
+        }
 
+def get_annotations_for_user_on(username, instance_id):
+    user_state = lookup_user_state(username)
+    annotations = user_state.get_annotations(instance_id)
+    return annotations
 
+    
 def go_to_id(user, id):
     if int(id) >= len(all_data["annotated_data"]) or int(id) < 0:
         print("illegal id:", id)
@@ -304,6 +351,28 @@ def home():
     return render_template("home.html")
 
 
+def lookup_user_state(username):
+    if username not in user_to_annotation_state:
+        logger.debug("Previously unknown user \"%s\"; creating new annotation state" % (username))
+        user_state = UserAnnotationState(instance_id_to_data)
+        user_to_annotation_state[username] = user_state
+    else:
+        user_state = user_to_annotation_state[username]
+
+    return user_state
+        
+        
+def get_cur_instance_for_user(username):
+    global user_to_annotation_state
+    global instance_id_to_data
+    global logger
+    
+    user_state = lookup_user_state(username)
+
+    return user_state.current_instance()
+    
+
+
 def previous_response(user, file_path):
     global user_story_pos
     global user_response_dicts_queue
@@ -328,50 +397,44 @@ def user_name_endpoint():
     global user_dict
     global closed
     global all_data
-
-    print("----TRACE----made it here to user_name_endpoint")
     
     reading_user_response = False
     # story_dict = get_story_dict()
     name_dict = {}
     name_types = ["firstname", "lastname"]
     True_user = False
-    while not True_user:
-        try:
-            # consider first name as user id, last name as password
-            firstname = request.form.get("firstname")
-            lastname = request.form.get("lastname")
-            name_dict["firstname"] = firstname
-            name_dict["lastname"] = lastname
+    #while True:
+    #    try:
+    firstname = request.form.get("firstname")
+    lastname = request.form.get("lastname")
+    #name_dict["firstname"] = firstname
+    #        name_dict["lastname"] = lastname
+    #        break
+    #    except BaseException as ex:
+    #        print(repr(ex))
+    #        raise
 
-            # TODO: assign each annotator an ID
-            # name_dict["user_id"] = user_dict[firstname]["user_id"]
-            break
-        except BaseException as ex:
-            print(repr(ex))
-            raise
+    username = firstname + '_' + lastname
 
-    username = firstname
-
+    print("--REQUESTS FORM: ", json.dumps(request.form))
+    
     ism = request.form.get("label")
     src = request.form.get("src")
-    print(ism)
-    print("src:", src)
-
-    print("----TRACE----made past the label get thing")
+    print("label: \"%s\"" % ism)
+    print("src: \"%s\"", src)
     
     if src == "home":
         print("session recovered")
-        print(user_dict[username]["current_display"]["ism"])
-        print(user_dict[username]["current_display"]["story"])
-    elif src == "back":
-        go_back(username)
-    elif src == "go":
-        go_ahead(username)
-        print(user_dict[username]["current_display"]["ism"])
+        #print(user_dict[username]["current_display"]["ism"])
+        #print(user_dict[username]["current_display"]["story"])
+    elif src == "prev_instance":
+        move_to_prev_instance(username)
+    elif src == "next_instance":
+        move_to_next_instance(username)
+        #print(user_dict[username]["current_display"]["ism"])
     elif src == "go_to":
         go_to_id(username, request.form.get("go_to"))
-        print(user_dict[username]["current_display"]["ism"])
+        #print(user_dict[username]["current_display"]["ism"])
     elif ism == None:
         print("ISM IS NULLLLLLL")
         # user_dict[username]['user_data'][str(user_dict[username]['start_id'])]["annotated"] = False
@@ -381,47 +444,57 @@ def user_name_endpoint():
         # merge_annotation()
 
     else:
-        user_dict[username]["user_data"][str(user_dict[username]["start_id"])][
-            "label"
-        ] = int(ism)
-        user_dict[username]["user_data"][str(user_dict[username]["start_id"])][
-            "annotated"
-        ] = True
-        user_dict[username]["current_display"]["ism"] = ism
-        user_dict[username]["current_display"]["annotated_amount"] = cal_amount(
-            username
-        )
-        print(ism)
-        write_data(username)
-        merge_annotation()
+        print('unrecognized input')
+        if False:
+            user_dict[username]["user_data"][str(user_dict[username]["start_id"])][
+                "label"
+            ] = int(ism)
+            user_dict[username]["user_data"][str(user_dict[username]["start_id"])][
+                "annotated"
+            ] = True
+            user_dict[username]["current_display"]["ism"] = ism
+            user_dict[username]["current_display"]["annotated_amount"] = cal_amount(
+                username
+            )
+        #print("NOTHING", ism)
+        #write_data(username)
+        #merge_annotation()
 
-    print(user_dict[username]["current_display"]["story"][0])
-    print(user_dict[username]["current_display"]["story"][1])
-    return render_template(
-        "user_likert.html",
+
+    instance = get_cur_instance_for_user(username)
+    print("NEXT INST: " + str(instance))
+    
+    text = instance['text'] # '@chibull28 @Write2speak1 @Pragmatic_Ideas @SecNielsen @DHSgov @USCIS So what is the game here? To screw immigrants of a particular country? You must be insane to think no reforms should be made to any laws. Why then do they have the Congress &amp; Senate. They might as well close it down.'
+    instance_id = instance['id_str']
+
+    text, labels = post_process(text)
+    
+    #print(user_dict[username]["current_display"]["story"][0])
+    #print(user_dict[username]["current_display"]["story"][1])
+    rendered_html = render_template(
+        config['site_file'],
         firstname=firstname,
         lastname=lastname,
-        target_comment=user_dict[username]["current_display"]["story"][0]
-        .encode()
-        .decode("unicode_escape")
-        .encode("latin-1")
-        .decode("utf-8"),
-        observer_comment=user_dict[username]["current_display"]["story"][1]
-        .encode()
-        .decode("unicode_escape")
-        .encode("latin-1")
-        .decode("utf-8"),
-        is_match=user_dict[username]["current_display"]["ism"],
-        id=user_dict[username]["start_id"],
-        amount=len(all_data["annotated_data"]),
-        annotated_amount=user_dict[username]["current_display"]["annotated_amount"],
-    )
+        # This is what instance the user is currently on
+        instance=text,
+        instance_id=instance_id,
+        #amount=len(all_data["annotated_data"]),
+        #annotated_amount=user_dict[username]["current_display"]["annotated_amount"],
+    )    
 
+    # If the user has annotated this before, wall the DOM and fill out what they
+    # did
+    annotations = get_annotations_for_user_on(username, instance_id)
+    if annotations is not None:
+        # TODO: refill out the page
+        pass
+        
+    return rendered_html
+    
 
-def temp_choose_file_to_read_from():
-    global file_list
-    file_path = choose_file(file_list)
-    return file_path
+def post_process(text):
+    return text, []
+    
 
 
 def parse_story_pair_from_file(filepath):
@@ -491,9 +564,16 @@ def generate_site(config):
         annotation_schematic += "</td>\n"
     annotation_schematic += "</tr></table>"
 
-    html_template = html_template.replace("{{ annotation_schematic }}", annotation_schematic)
-        
+    html_template = html_template.replace("{{annotation_schematic}}", annotation_schematic)
+
+    html_template = html_template.replace("{{annotation_task_name}}", config['annotation_task_name'])
+    
     output_html_fname = os.path.join(config['site_dir'], basename(html_template_file))
+
+    # Cache this path as a shortcut to figure out which page to render
+    config['site_file'] = basename(html_template_file)
+
+    # Write the file
     with open(output_html_fname, 'wt') as outf:
         outf.write(html_template)
 
@@ -575,7 +655,7 @@ def main():
 
     flask_debug = True if args.verbose or args.very_verbose else False
     
-    app.run(debug=flask_debug, host="0.0.0.0", port=args.port)
+    app.run(debug=False, host="0.0.0.0", port=args.port)
 
 
 if __name__ == "__main__":

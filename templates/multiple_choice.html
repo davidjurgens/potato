@@ -15,17 +15,57 @@
 
 
 
-        <input type="hidden" name="f" id="f" value="{{firstname}}">
-        <input type="hidden" name="l" id="l" value="{{lastname}}">
+        <input type="hidden" name="firstname" id="firstname" value="{{firstname}}">
+        <input type="hidden" name="lastname" id="lastname" value="{{lastname}}">
 
         <script>
-            document.onkeydown = check_key;
-            function check_key(e) {
-                new_stories(e, document.getElementById('f').value, document.getElementById('l').value)
-            }
+          document.addEventListener('keyup', function (event) {
+              // console.log(event)
+              new_stories(event, document.getElementById('firstname').value,
+                          document.getElementById('lastname').value)
+              
+          });
+        </script>
+        
+        <script>
+          document.onkeydown = check_key;
+          function check_key(e) {
+              // Each time we process a user's key presses, track who is doing
+              // it by grabbing the hidden firstname and lastname fields
+              //console.log("thing")
+              //new_stories(e, document.getElementById('firstname').value,
+              //          document.getElementById('lastname').value)
+          }
+          document.dispatchEvent(keyboardEvent);
+          }
         </script>
 
-        {{ annotation }}
+        <script>
+          function click_to_next() {
+              // Gacky code to simulate the submit button as a keyboard event
+              // and not have two separate paths to handle keyboard and mouse
+              // events
+              var event = document.createEvent("KeyboardEvent");
+              var initMethod = typeof event.initKeyboardEvent !== 'undefined' ? "initKeyboardEvent" : "initKeyEvent";
+              
+              event[initMethod](
+                  "keydown", // event type: keydown, keyup, keypress
+                  true,      // bubbles
+                  true,      // cancelable
+                  window,    // view: should be window
+                  false,     // ctrlKey
+                  false,     // altKey
+                  false,     // shiftKey
+                  false,     // metaKey
+                  39,        // keyCode: unsigned long - the virtual key code, else 0
+                  "ArrowRight" 
+              );
+              new_stories(event, document.getElementById('firstname').value,
+                          document.getElementById('lastname').value)
+          } 
+        </script>
+        
+        {{annotation}}
         
         <script>
             window.onunload = check_close;
@@ -48,6 +88,8 @@
                 form.setAttribute("method", "post");
                 form.setAttribute("action", "namepoint");
 
+                console.log("test in post()")
+                
                 for (var key in params) {
                     if (params.hasOwnProperty(key)) {
                         var hiddenField = document.createElement("input");
@@ -62,38 +104,32 @@
                 document.body.appendChild(form);
                 form.submit();
             }
-
-            function new_stories(event, first, last) {
+ 
+            function new_stories(event, firstname, lastname) {
                 var x = event.key;
                 if (event.target.id == "go_to") return
-                var src = ""
+                var action = ""
                 var ism = ""
-                console.log(x)
-                console.log(first)
-                console.log(last)
-                if (x == " " || x == "k") { // Spacebar
-                    src = "back";
+                console.log(event)
+                //console.log(x)
+                //console.log(firstname)
+                //console.log(lastname)
+                if (x == "ArrowLeft") { // Spacebar
+                    action = "prev_instance";
                 }
-                else if (x == "j") {
-                    src = "go";
-                }
-                else if (x == "s") {
-                    src = "";
-                    ism = "-1";
-                }
-                else if (parseInt(x) > 0 && parseInt(x) < 6) {
-                    src = "";
-                    ism = x;
+                else if (x == "ArrowRight") {
+                    action = "next_instance";
                 }
                 else {
+                    console.log("Unknown key press", event)
                     return
                 }
 
                 var post_req = {
-                    firstname: first,
-                    lastname: last,
+                    firstname: firstname,
+                    lastname: lastname,
                     label: ism,
-                    src: src
+                    src: action
                 }
 
                 post(post_req)
@@ -105,7 +141,7 @@
   
 <nav class="navbar navbar-expand-md navbar-dark bg-dark mb-3">
     <div class="container-fluid">
-        <a href="#" class="navbar-brand mr-3">{{ annotation task name }}</a>
+        <a href="#" class="navbar-brand mr-3">{{annotation_task_name}}</a>
         <button type="button" class="navbar-toggler" data-toggle="collapse" data-target="#navbarCollapse">
             <span class="navbar-toggler-icon"></span>
         </button>
@@ -125,13 +161,14 @@
 <div class="container-fluid">
     <div class="row">
         <div class="col-md-6">
-            <h2>Instance</h2>
+          <h2>Instance</h2>
+          {{instance}}
         </div>
         <div class="col-md-6">
           <h2>Annotation Scheme</h2>
-          {{ annotation_schematic }}
+          {{annotation_schematic}}
           <p>
-            <a class="btn btn-secondary" href="#" role="button">Submit</a>
+            <a class="btn btn-secondary" href="#" role="button" onclick="click_to_next()">Submit</a>
           </p>
         </div>
     </div>
