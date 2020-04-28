@@ -10,7 +10,7 @@
     # NOTE: This is probably going to be a directory / DB at some point...
     "user_state_dir": "annotation_output",
 
-    "codebook": "https://docs.google.com/document/d/1eXgaOZJDahhZLqYWbLTD_84-d1rnQ4M-bccer3HY6WI",
+    "annotation_codebook_url": "https://docs.google.com/document/d/1eXgaOZJDahhZLqYWbLTD_84-d1rnQ4M-bccer3HY6WI",
 
     "data_files": [
        "data/framing_tweets.json"
@@ -32,16 +32,17 @@
         "../data/examples"
     ],
 
-
+    "keyword_highlights_file": "config/frame_keywords.tsv",
 
     "annotation_schemes": [
         {
             "annotation_type": "multiselect",
-            "name": "Issue General",
+            "name": "Issue-General",
             "labels": [
                 "Economic",
                 "Capacity and Resources",
                 "Morality and Ethics",
+                "Fairness and Equality",
                 "Legality, Constitutionality, and Jurisdiction",
                 "Crime and Punishment",
                 "Security and Defense",
@@ -50,14 +51,14 @@
                 "Cultural Identity",                
                 "Public Sentiment",
                 "Political Factors and Implications",
-                "Policy",
+                "Policy Prescription and Evaluation",
                 "External Regulation and Reputation",                
             ]
         },
 
         {
             "annotation_type": "multiselect",
-            "name": "Issue Specific",
+            "name": "Issue-Specific",
             "labels": [
                 "Victim: Global Economy",
                 "Victim: Humanitarian",
@@ -91,7 +92,7 @@
     "header_file": "templates/header.html",
 
     # This is where the actual HTML files will be generated
-    "site_dir": "potatos/templates/",
+    "site_dir": "potato/templates/",
 
     # comment    
     "state_update_rate": 1,

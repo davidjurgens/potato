@@ -4,13 +4,18 @@ import sys
 import numpy as np
 from flask import Flask, render_template, request, url_for, jsonify
 
-import yaml
+import pandas as pd
 
+import yaml
+import re
 from os.path import basename
 
 from os import path
 
 from bs4 import BeautifulSoup
+
+
+import html
 
 import logging
 
@@ -58,6 +63,12 @@ FIRST_LOAD = True
 closed = False
 
 config = None
+
+
+# Hacky nonsense
+schema_label_to_color = {}
+
+COLOR_PALETTE = ['rgb(179,226,205)', 'rgb(253,205,172)', 'rgb(203,213,232)', 'rgb(244,202,228)', 'rgb(230,245,201)', 'rgb(255,242,174)', 'rgb(241,226,204)', 'rgb(204,204,204)', 'rgb(102, 197, 204)', 'rgb(246, 207, 113)', 'rgb(248, 156, 116)', 'rgb(220, 176, 242)', 'rgb(135, 197, 95)', 'rgb(158, 185, 243)', 'rgb(254, 136, 177)', 'rgb(201, 219, 116)', 'rgb(139, 224, 164)', 'rgb(180, 151, 231)', 'rgb(179, 179, 179)']
 
 app = Flask(__name__)
 
@@ -145,6 +156,9 @@ def load_all_data(config):
     global all_data
     global logger
     global instance_id_to_data
+
+    # Hacky nonsense
+    global re_to_highlights
     
     # Where to look in the JSON item object for the text to annotate
     text_key = config['item_properties']['text_key']
@@ -176,7 +190,23 @@ def load_all_data(config):
         logger.debug('Loaded %d instances from %s' % (line_no, data_fname))
     all_data["items_to_annotate"] = items_to_annotate                       
 
+    # TODO: make this fully configurable somehow...
+    if 'keyword_highlights_file' in config:
+        kh_file = config['keyword_highlights_file']
+        logger.debug("Loading keyword highlighting from %s" % (kh_file))
 
+        re_to_highlights = defaultdict(list)
+        
+        with open(kh_file, 'rt') as f:
+            # TODO: make it flexible based on keyword
+            df = pd.read_csv(kh_file, sep='\t')
+            for i, row in df.iterrows():
+                regex = r'\b' + row['Word'].replace("*", "[a-z]*?") + r'\b'
+                re_to_highlights[regex].append((row['Schema'], row['Label']))
+
+        logger.debug('Loaded %d regexes to map to %d labels for dynamic highlighting' \
+                     % (len(re_to_highlights), i))
+                
 def cal_amount(user):
     count = 0
     lines = user_dict[user]["user_data"]
@@ -462,8 +492,8 @@ def user_name_endpoint():
     text = instance[text_key]
     instance_id = instance[id_key]
 
-    text, labels = post_process(text)
-
+    updated_text, schema_labels_to_highlight = post_process(config, text)        
+    
     rendered_html = render_template(
         config['site_file'],
         firstname=firstname,
@@ -477,34 +507,151 @@ def user_name_endpoint():
         #annotated_amount=user_dict[username]["current_display"]["annotated_amount"],
     )    
 
+
+    # UGHGHGHGH the tempalte does unusual escaping, which makes it a PAIN to do
+    # the replacement later
+    m = re.search('<div name="instance_text">([^<]+)</div>', rendered_html)
+    text = m.group(1)
+
+    # For whatever reason, doing this before the render_template causes the
+    # embedded HTML to get escaped, so we just do a wholesale replacement here.
+    rendered_html = rendered_html.replace(text, updated_text)    
+
+    soup = BeautifulSoup(rendered_html, 'html.parser')
+    
+    # Parse the page so we can programmatically reset the annotation state
+    # to what it was before
+    
+
+    # Highlight the schema's labels as necessary
+    for schema, label in schema_labels_to_highlight:
+        name = schema + "|||" + label
+        # print(name)
+        label_elem = soup.find("label", {"for":name}) # .next_sibling
+
+        # Update style to match the current color
+        c = get_color_for_schema_label(schema, label)
+        label_elem['style'] = ("background-color: %s"  % c)        
+    
     # If the user has annotated this before, wall the DOM and fill out what they
     # did
     annotations = get_annotations_for_user_on(username, instance_id)
     if annotations is not None:
 
         # print('Saw previous annotations for %s: %s' % (instance_id, annotations))
-        
-        # Parse the page so we can programmatically reset the annotation state
-        # to what it was before
-        soup = BeautifulSoup(rendered_html, 'html.parser')
-        
+               
         # Reset the state
         for schema, labels in annotations.items():
             for label in labels:
                 name = schema + "|||" + label
                 input_field = soup.find("input", {"name":name})
+                if input_field is None:
+                    print('No input for ', name)
                 input_field['checked'] = True
+                
 
-        rendered_html = soup.prettify()
-        
 
+    rendered_html = str(soup) # soup.prettify()
+    
     return rendered_html
-    
 
-def post_process(text):
-    return text, []
-    
 
+def get_color_for_schema_label(schema, label):
+    global schema_label_to_color
+
+    t = (schema, label)
+    if t in schema_label_to_color:
+        return schema_label_to_color[t]
+    else:
+        c = COLOR_PALETTE[len(schema_label_to_color)]
+        schema_label_to_color[t] = c
+        return c
+
+def post_process(config, text):
+    global schema_label_to_color
+
+    schema_labels_to_highlight = set()
+    
+    # Grab the highlights
+    for regex, labels in re_to_highlights.items():
+
+        search_from = 0
+
+        regex = re.compile(regex, re.I)
+        
+        while True:
+            try:
+                match = regex.search(text, search_from)
+            except BaseException as e:
+                print(repr(e))
+                break
+            if match is None:
+                break
+
+            #print('Searching with %s at %d in [0, %d]' % (regex, search_from, len(text)))
+            
+            # print('Saw keyword', match.group())
+
+            start = match.start()
+            end = match.end()
+
+            # we're going to replace this instance with a color coded one
+            if len(labels) == 1:
+                schema, label = labels[0]
+
+                # print('%s -> %s:%s' % (match.group(), schema, label))
+                
+                schema_labels_to_highlight.add((schema, label))
+                
+                c = get_color_for_schema_label(schema, label)
+
+                pre = "<span style=\"background-color: %s\">"  % c
+
+                replacement = pre + match.group() + '</span>'
+
+                text = text[:start] + replacement + text[end:]
+
+                # print(text)
+                
+                # Be sure to count all the junk we just added when searching again
+                search_from += end + (len(replacement) - len(match.group()))
+                # print('\n%d -> %d\n%s' % (end, search_from, text[search_from:]))
+
+
+            # slightly harder, but just to get the MVP out
+            elif len(labels) == 2:
+
+                colors = []
+                
+                for schema, label in labels:                
+                    schema_labels_to_highlight.add((schema, label))
+                    c = get_color_for_schema_label(schema, label)
+                    colors.append(c)
+
+                matched_word = match.group()
+
+                first_half = matched_word[:int(len(matched_word)/2)]
+                last_half = matched_word[int(len(matched_word)/2):]
+            
+                pre = "<span style=\"background-color: %s;\">" 
+
+                replacement = (pre % colors[0]) + first_half + '</span>' \
+                    + (pre % colors[1]) + last_half + '</span>'
+
+                # replacement = '<span style="font-size: 0">' + replacement + '</span>'
+                
+                text = text[:start] + replacement + text[end:]
+
+                # Be sure to count all the junk we just added when searching again
+                search_from += end + (len(replacement) - len(matched_word))
+            
+            # Gotta make this hard somehow...
+            else:
+                search_from = end
+
+    #print("FINAL TEXT::: ", text)
+                
+    return text, schema_labels_to_highlight
 
 def parse_story_pair_from_file(filepath):
     with open(filepath, "r") as f:
@@ -575,6 +722,10 @@ def generate_site(config):
 
     html_template = html_template.replace("{{annotation_schematic}}", annotation_schematic)
 
+    if 'annotation_codebook_url' in config:
+        annotation_codebook = config['annotation_codebook_url']
+        html_template = html_template.replace("{{annotation_codebook}}", annotation_codebook)
+
     html_template = html_template.replace("{{annotation_task_name}}", config['annotation_task_name'])
     
     output_html_fname = os.path.join(config['site_dir'], basename(html_template_file))
@@ -605,12 +756,13 @@ def generate_schematic(annotation_scheme):
             ('  <legend>%s:</legend>' % annotation_scheme['name'])
 
         for label in annotation_scheme['labels']:
+
+            name = annotation_scheme['name'] + '|||' + label
             
             schematic += \
                 (('  <input type="checkbox" id="%s" name="%s" value="%s">' + \
                  '  <label for="%s">%s</label><br/>') % (label,
-                                                         annotation_scheme['name'] + '|||' + label,
-                                                         label, label, label))
+                                                         name, name, name, label))
 
         schematic += '  </fieldset>\n</form>\n'
 
