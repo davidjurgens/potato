@@ -461,8 +461,8 @@ def user_name_endpoint():
         did_change = update_annotation_state(username, request.form)
         if did_change:
             save_user_state(username)
-    
-    # print("--REQUESTS FORM: ", json.dumps(request.form))
+            
+    print("--REQUESTS FORM: ", json.dumps(request.form))
     
     ism = request.form.get("label")
     action = request.form.get("src")
@@ -649,43 +649,6 @@ def post_process(config, text):
             # Gotta make this hard somehow...
             else:
                 search_from = end
-
-    #print("FINAL TEXT::: ", text)
-                
-    return text, schema_labels_to_highlight
-
-            # slightly harder, but just to get the MVP out
-            elif len(labels) == 2:
-
-                colors = []
-                
-                for schema, label in labels:                
-                    schema_labels_to_highlight.add((schema, label))
-                    c = get_color_for_schema_label(schema, label)
-                    colors.append(c)
-
-                matched_word = match.group()
-
-                first_half = matched_word[:int(len(matched_word)/2)]
-                last_half = matched_word[int(len(matched_word)/2):]
-            
-                pre = "<span style=\"background-color: %s;\">" 
-
-                replacement = (pre % colors[0]) + first_half + '</span>' \
-                    + (pre % colors[1]) + last_half + '</span>'
-
-                # replacement = '<span style="font-size: 0">' + replacement + '</span>'
-                
-                text = text[:start] + replacement + text[end:]
-
-                # Be sure to count all the junk we just added when searching again
-                search_from += end + (len(replacement) - len(matched_word))
-            
-            # Gotta make this hard somehow...
-            else:
-                search_from = end
-
-    #print("FINAL TEXT::: ", text)
                 
     return text, schema_labels_to_highlight
 
@@ -800,18 +763,15 @@ def generate_schematic(annotation_scheme):
                 tooltip_text = ''
                 if 'tooltip' in label_data:
                     tooltip_text = label_data['tooltip']
-                    print('direct: ', tooltip_text)
+                    # print('direct: ', tooltip_text)
                 elif 'tooltip_file' in label_data:                    
                     with open(label_data['tooltip_file'], 'rt') as f:
                         lines = f.readlines()
                     tooltip_text = ''.join(lines)
-                    print('file: ', tooltip_text)
+                    # print('file: ', tooltip_text)
                 if len(tooltip_text) > 0:
                     tooltip  = 'data-toggle="tooltip" data-html="true" data-placement="top" title="%s"' \
-                        % tooltip_text
-            
-            
-        for label in annotation_scheme['labels']:
+                        % tooltip_text                        
 
             name = annotation_scheme['name'] + '|||' + label
             
