@@ -26,6 +26,7 @@ import json
 import gzip
 from datetime import datetime
 from collections import deque, defaultdict
+import collections
 from argparse import ArgumentParser
 
 # import choix
@@ -755,14 +756,34 @@ def generate_schematic(annotation_scheme):
             '  <fieldset>' + \
             ('  <legend>%s:</legend>' % annotation_scheme['name'])
 
-        for label in annotation_scheme['labels']:
+        for label_data in annotation_scheme['labels']:
 
+            label = label_data if isinstance(label_data, str) else label_data['name']
+
+            tooltip = ''
+            if isinstance(label_data, collections.Mapping):
+                tooltip_text = ''
+                if 'tooltip' in label_data:
+                    tooltip_text = label_data['tooltip']
+                    print('direct: ', tooltip_text)
+                elif 'tooltip_file' in label_data:                    
+                    with open(label_data['tooltip_file'], 'rt') as f:
+                        lines = f.readlines()
+                    tooltip_text = ''.join(lines)
+                    print('file: ', tooltip_text)
+                if len(tooltip_text) > 0:
+                    tooltip  = 'data-toggle="tooltip" data-html="true" data-placement="top" title="%s"' \
+                        % tooltip_text
+            
+            
             name = annotation_scheme['name'] + '|||' + label
             
             schematic += \
                 (('  <input type="checkbox" id="%s" name="%s" value="%s">' + \
-                 '  <label for="%s">%s</label><br/>') % (label,
-                                                         name, name, name, label))
+                 '  <label for="%s" %s>%s</label><br/>') \
+                 % (label, name, name, name, tooltip, label))
+
+            title="Hooray!"
 
         schematic += '  </fieldset>\n</form>\n'
 

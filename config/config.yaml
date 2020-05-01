@@ -39,20 +39,51 @@
             "annotation_type": "multiselect",
             "name": "Issue-General",
             "labels": [
-                "Economic",
-                "Capacity and Resources",
-                "Morality and Ethics",
-                "Fairness and Equality",
-                "Legality, Constitutionality, and Jurisdiction",
-                "Crime and Punishment",
-                "Security and Defense",
-                "Health and Safety",
-                "Quality of Life",
-                "Cultural Identity",                
-                "Public Sentiment",
-                "Political Factors and Implications",
-                "Policy Prescription and Evaluation",
-                "External Regulation and Reputation",                
+                { "name": "Economic",
+                  "tooltip_file": "config/tooltips/ig_economic.html"
+                },
+                {
+                  "name": "Capacity and Resources",
+                  "tooltip_file": "config/tooltips/ig_capacity.html"
+                 },
+
+                { "name": "Morality and Ethics",
+                  "tooltip_file": "config/tooltips/ig_morality.html"
+                },
+                
+                { "name": "Fairness and Equality",
+                  "tooltip_file": "config/tooltips/ig_fairness.html",
+                },
+                { "name": "Legality, Constitutionality, and Jurisdiction",
+                  "tooltip": "",
+                },
+                { "name": "Crime and Punishment",
+                  "tooltip": "",
+                },
+                { "name": "Security and Defense",
+                  "tooltip": "",
+                },
+                { "name": "Health and Safety",
+                  "tooltip": "",
+                },
+                { "name": "Quality of Life",
+                  "tooltip": ""
+                },
+                { "name": "Cultural Identity",
+                  "tooltip": ""
+                },
+                { "name": "Public Sentiment",
+                  "tooltip": ""
+                },
+                { "name": "Political Factors and Implications",
+                  "tooltip": ""
+                },
+                { "name": "Policy Prescription and Evaluation",
+                  "tooltip": ""
+                },
+                { "name": "External Regulation and Reputation",
+                  "tooltip": ""
+                }
             ]
         },
 
@@ -69,7 +100,19 @@
                 "Threat: Jobs",
                 "Threat: Public Order",
                 "Threat: Fiscal",
-                "Threat: National Cohesion",
+                {
+                    "name": "Threat: National Cohesion",
+                    "tooltip":
+                    "<ul><li>Treats immigrant cultural differences (customs, religion, language) as a threat to national unity and social harmony
+<li>Immigrants bring foreign customs and values that threaten to undermine the host country’s culture or national identity
+<li>Immigrants are unassimilable
+<li>Immigrants are diluting our culture, language, and values
+<li>Emphasis on foreignness/otherness 
+<li>Emphasis on some outside group taking over a country (e.g. Islamist takeover)
+<ul><li>Shifting cultural values as result of immigration, takeover suggests that this is happening in a forced/unwanted way</ul>
+<li>Includes claims that citizens’ political power is being lost or stolen
+<ul><li>By illegal immigrants (illegally) voting</ul></ul>"
+                }
             ]
             
         },
@@ -78,8 +121,14 @@
             "annotation_type": "multiselect",
             "name": "Narrative",
             "labels": [
-                "Episodic",
-                "Thematic",                
+                {
+                   "name": "Episodic",
+                   "tooltip": "Message focuses on the place, event, or individual person involved",
+                },
+                {
+                  "name": "Thematic",
+                  "tooltip": "More abstract, generic views of an event or issue"
+                },
             ]
             
         }
