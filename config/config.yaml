@@ -39,7 +39,6 @@
             "annotation_type": "multiselect",
             "name": "Issue-General",
             "labels": [
-<<<<<<< HEAD
                 { "name": "Economic",
                   "tooltip_file": "config/tooltips/ig_economic.html"
                 },
@@ -85,22 +84,6 @@
                 { "name": "External Regulation and Reputation",
                   "tooltip": ""
                 }
-=======
-                "Economic",
-                "Capacity and Resources",
-                "Morality and Ethics",
-                "Fairness and Equality",
-                "Legality, Constitutionality, and Jurisdiction",
-                "Crime and Punishment",
-                "Security and Defense",
-                "Health and Safety",
-                "Quality of Life",
-                "Cultural Identity",                
-                "Public Sentiment",
-                "Political Factors and Implications",
-                "Policy Prescription and Evaluation",
-                "External Regulation and Reputation",                
->>>>>>> 7912e06ce2571b16b70b21c78b41c9bda749c503
             ]
         },
 
