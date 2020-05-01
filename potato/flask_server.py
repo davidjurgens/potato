@@ -567,66 +567,14 @@ def get_color_for_schema_label(schema, label):
         c = COLOR_PALETTE[len(schema_label_to_color)]
         schema_label_to_color[t] = c
         return c
-<<<<<<< HEAD
 
 def post_process(config, text):
     global schema_label_to_color
 
-=======
-
-def post_process(config, text):
-    global schema_label_to_color
-
->>>>>>> 7912e06ce2571b16b70b21c78b41c9bda749c503
     schema_labels_to_highlight = set()
     
     # Grab the highlights
-    for regex, labels in re_to_highlights.items():
-<<<<<<< HEAD
-=======
-
-        search_from = 0
-
-        regex = re.compile(regex, re.I)
-        
-        while True:
-            try:
-                match = regex.search(text, search_from)
-            except BaseException as e:
-                print(repr(e))
-                break
-            if match is None:
-                break
-
-            #print('Searching with %s at %d in [0, %d]' % (regex, search_from, len(text)))
-            
-            # print('Saw keyword', match.group())
-
-            start = match.start()
-            end = match.end()
-
-            # we're going to replace this instance with a color coded one
-            if len(labels) == 1:
-                schema, label = labels[0]
-
-                # print('%s -> %s:%s' % (match.group(), schema, label))
-                
-                schema_labels_to_highlight.add((schema, label))
-                
-                c = get_color_for_schema_label(schema, label)
-
-                pre = "<span style=\"background-color: %s\">"  % c
-
-                replacement = pre + match.group() + '</span>'
-
-                text = text[:start] + replacement + text[end:]
-
-                # print(text)
-                
-                # Be sure to count all the junk we just added when searching again
-                search_from += end + (len(replacement) - len(match.group()))
-                # print('\n%d -> %d\n%s' % (end, search_from, text[search_from:]))
->>>>>>> 7912e06ce2571b16b70b21c78b41c9bda749c503
+    for regex, labels in re_to_highlights.items():               
 
         search_from = 0
 
@@ -843,7 +791,6 @@ def generate_schematic(annotation_scheme):
             '  <fieldset>' + \
             ('  <legend>%s:</legend>' % annotation_scheme['name'])
 
-<<<<<<< HEAD
         for label_data in annotation_scheme['labels']:
 
             label = label_data if isinstance(label_data, str) else label_data['name']
@@ -864,23 +811,15 @@ def generate_schematic(annotation_scheme):
                         % tooltip_text
             
             
-=======
         for label in annotation_scheme['labels']:
 
->>>>>>> 7912e06ce2571b16b70b21c78b41c9bda749c503
             name = annotation_scheme['name'] + '|||' + label
             
             schematic += \
                 (('  <input type="checkbox" id="%s" name="%s" value="%s">' + \
-<<<<<<< HEAD
                  '  <label for="%s" %s>%s</label><br/>') \
                  % (label, name, name, name, tooltip, label))
 
-            title="Hooray!"
-=======
-                 '  <label for="%s">%s</label><br/>') % (label,
-                                                         name, name, name, label))
->>>>>>> 7912e06ce2571b16b70b21c78b41c9bda749c503
 
         schematic += '  </fieldset>\n</form>\n'
 
