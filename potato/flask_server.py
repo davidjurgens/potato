@@ -572,7 +572,14 @@ def post_process(config, text):
     global schema_label_to_color
 
     schema_labels_to_highlight = set()
-    
+
+    all_words = list(set(re.findall(r'\b[a-z]{4,}\b', text)))
+    all_words = [w for w in all_words if not w.startswith('http')]
+    random.shuffle(all_words)
+    print(all_words)
+
+    all_schemas = list([x[0] for x in re_to_highlights.values()])
+
     # Grab the highlights
     for regex, labels in re_to_highlights.items():               
 
@@ -649,7 +656,60 @@ def post_process(config, text):
             # Gotta make this hard somehow...
             else:
                 search_from = end
-                
+
+    # Pick a few random words to highlight
+    #
+    # NOTE: we do this after the label assignment because if we somehow screw up
+    # and wrongly flag a valid word, this coloring is embedded within the outer
+    # (correct) <span> tag, so the word will get labeled correctly
+    num_false_labels = random.randint(0, 1)
+    # print('adding %d false labels' % num_false_labels)
+    
+    for i in range(num_false_labels):
+
+        # Pick a random word
+        to_highlight = all_words[i]
+        
+        # Pick a random schema and label
+        schema, label = random.choice(all_schemas)
+
+        # print('assigning "%s" to false label "%s:%s"' % (to_highlight, schema, label))
+        
+        schema_labels_to_highlight.add((schema, label))
+
+        # Figure out where this word occurs
+
+        
+        c = get_color_for_schema_label(schema, label)
+
+        search_from = 0
+        regex = r'\b' + to_highlight + r'\b'
+        regex = re.compile(regex, re.I)
+        
+        while True:
+            try:
+                match = regex.search(text, search_from)
+            except BaseException as e:
+                print(repr(e))
+                break
+            if match is None:
+                break
+
+            start = match.start()
+            end = match.end()
+            
+            pre = "<span style=\"background-color: %s\">"  % c
+
+            replacement = pre + match.group() + '</span>'
+
+            # print(pre + match.group() + '</span>')
+            
+            text = text[:start] + replacement + text[end:]
+
+            # Be sure to count all the junk we just added when searching again
+            search_from += end + (len(replacement) - len(match.group()))
+            # print('\n%d -> %d\n%s' % (end, search_from, text[search_from:]))
+            
     return text, schema_labels_to_highlight
 
 def parse_story_pair_from_file(filepath):
