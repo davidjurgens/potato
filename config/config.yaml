@@ -54,36 +54,37 @@
                 { "name": "Fairness and Equality",
                   "tooltip_file": "config/tooltips/ig_fairness.html",
                 },
-                { "name": "Legality, Constitutionality, and Jurisdiction",
-                  "tooltip": "",
+                { "name": "Legality, Constitutionality, Jurisdiction",
+                  "tooltip_file": "config/tooltips/ig_legality.html",
                 },
                 { "name": "Crime and Punishment",
-                  "tooltip": "",
+                  "tooltip_file": "config/tooltips/ig_crime.html",
                 },
                 { "name": "Security and Defense",
-                  "tooltip": "",
+                  "tooltip_file": "config/tooltips/ig_security.html",
                 },
                 { "name": "Health and Safety",
-                  "tooltip": "",
+                  "tooltip_file": "config/tooltips/ig_health.html",
                 },
                 { "name": "Quality of Life",
-                  "tooltip": ""
+                  "tooltip_file": "config/tooltips/ig_quality.html"
                 },
                 { "name": "Cultural Identity",
-                  "tooltip": ""
+                  "tooltip_file": "config/tooltips/ig_cultural.html"
                 },
                 { "name": "Public Sentiment",
-                  "tooltip": ""
+                  "tooltip_file": "config/tooltips/ig_public.html"
                 },
                 { "name": "Political Factors and Implications",
-                  "tooltip": ""
+                  "tooltip_file": "config/tooltips/ig_political.html"
                 },
                 { "name": "Policy Prescription and Evaluation",
-                  "tooltip": ""
+                  "tooltip_file": "config/tooltips/ig_policy.html"
                 },
                 { "name": "External Regulation and Reputation",
-                  "tooltip": ""
-                }
+                  "tooltip_file": "config/tooltips/ig_external.html"
+                },
+                "None"
             ]
         },
 
@@ -91,28 +92,41 @@
             "annotation_type": "multiselect",
             "name": "Issue-Specific",
             "labels": [
-                "Victim: Global Economy",
-                "Victim: Humanitarian",
-                "Victim: War",
-                "Hero: Cultural Diversity",
-                "Hero: Integration",
-                "Hero: Worker",
-                "Threat: Jobs",
-                "Threat: Public Order",
-                "Threat: Fiscal",
-                {
-                    "name": "Threat: National Cohesion",
-                    "tooltip":
-                    "<ul><li>Treats immigrant cultural differences (customs, religion, language) as a threat to national unity and social harmony
-<li>Immigrants bring foreign customs and values that threaten to undermine the host country’s culture or national identity
-<li>Immigrants are unassimilable
-<li>Immigrants are diluting our culture, language, and values
-<li>Emphasis on foreignness/otherness 
-<li>Emphasis on some outside group taking over a country (e.g. Islamist takeover)
-<ul><li>Shifting cultural values as result of immigration, takeover suggests that this is happening in a forced/unwanted way</ul>
-<li>Includes claims that citizens’ political power is being lost or stolen
-<ul><li>By illegal immigrants (illegally) voting</ul></ul>"
-                }
+
+                { "name": "Victim: Global Economy",
+                  "tooltip_file": "config/tooltips/sp_global.html"
+                },
+                { "name": "Victim: Humanitarian",
+                  "tooltip_file": "config/tooltips/sp_humanitarian.html"
+                },
+                { "name": "Victim: War",
+                  "tooltip_file": "config/tooltips/sp_war.html"
+                },
+                { "name": "Victim: Discrimination",
+                  "tooltip_file": "config/tooltips/sp_discrimination.html"
+                },
+                { "name": "Hero: Cultural Diversity",
+                  "tooltip_file": "config/tooltips/sp_diversity.html"
+                },
+                { "name": "Hero: Integration",
+                  "tooltip_file": "config/tooltips/sp_integration.html"
+                },
+                { "name": "Hero: Worker",
+                  "tooltip_file": "config/tooltips/sp_worker.html"
+                },
+                { "name": "Threat: Jobs",
+                  "tooltip_file": "config/tooltips/sp_jobs.html"
+                },
+                { "name": "Threat: Public Order",
+                  "tooltip_file": "config/tooltips/sp_order.html"
+                },
+                { "name": "Threat: Fiscal",
+                  "tooltip_file": "config/tooltips/sp_fiscal.html"
+                },
+                { "name": "Threat: National Cohesion",
+                  "tooltip_file": "config/tooltips/sp_cohesion.html"
+                },
+                "None"
             ]
             
         },
@@ -123,12 +137,13 @@
             "labels": [
                 {
                    "name": "Episodic",
-                   "tooltip": "Message focuses on the place, event, or individual person involved",
+                   "tooltip_file": "config/tooltips/narr_episodic.html",
                 },
                 {
                   "name": "Thematic",
-                  "tooltip": "More abstract, generic views of an event or issue"
+                  "tooltip_file": "config/tooltips/narr_thematic.html"
                 },
+                "None"
             ]
             
         }
