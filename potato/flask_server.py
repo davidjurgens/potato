@@ -397,16 +397,35 @@ def load_user_state(username):
         annotation_order = []
         with open(annotation_order_fname, 'rt') as f:
             for line in f:
+                instance_id = line[:-1]
+                if instance_id not in instance_id_to_data:
+                    logger.warning('Annotation state for %s does not match instances in existing dataset at %s' \
+                                   % (user_dir, ','.join(config['data_files'])))
+                    continue
                 annotation_order.append(line[:-1])
                 
         annotated_instances_fname = path.join(user_dir, "annotated_instances.jsonl")
         annotated_instances = []
-        with open(annotated_instances_fname, 'rt') as f:
-            for line in f:
-                annotated_instances.append(json.loads(line))
 
-        id_key = config['item_properties']['id_key']
+        with open(annotated_instances_fname, 'rt') as f:        
+            for line in f:
+                annotated_instance = json.loads(line)                
+                instance_id = annotated_instance['id']
+                if instance_id not in instance_id_to_data:
+                    logger.warning('Annotation state for %s does not match instances in existing dataset at %s' \
+                                   % (user_dir, ','.join(config['data_files'])))
+                    continue
+                annotated_instances.append(annotated_instance)
+
+
+        # Ensure the current data is represented in the annotation order
+        # NOTE: this is a hack to be fixed for when old user data is in the same directory
+        # 
+        for iid in instance_id_to_data.keys():
+            if iid not in annotation_order:
+                annotation_order.append(iid)
                 
+        id_key = config['item_properties']['id_key']                
         user_state = UserAnnotationState(instance_id_to_data)
         user_state.update(id_key, annotation_order, annotated_instances)
 
@@ -667,7 +686,7 @@ def post_process(config, text):
     num_false_labels = random.randint(0, 1)
     # print('adding %d false labels' % num_false_labels)
     
-    for i in range(min(num_false_labels), len(all_words)):
+    for i in range(min(num_false_labels, len(all_words))):
 
         # Pick a random word
         to_highlight = all_words[i]
