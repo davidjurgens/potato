@@ -76,6 +76,8 @@ app = Flask(__name__)
 class UserAnnotationState:
     
     def __init__(self, instance_id_to_data):
+
+        # This data structure keeps the 
         self.instance_id_to_labeling = {}
 
         self.instance_id_to_data = instance_id_to_data
@@ -665,7 +667,7 @@ def post_process(config, text):
     num_false_labels = random.randint(0, 1)
     # print('adding %d false labels' % num_false_labels)
     
-    for i in range(num_false_labels):
+    for i in range(min(num_false_labels), len(all_words)):
 
         # Pick a random word
         to_highlight = all_words[i]
