@@ -365,7 +365,8 @@ def save_user_state(username, save_order=False):
     if not os.path.exists(annotation_order_fname) or save_order:
         with open(annotation_order_fname, 'wt') as outf:
             for inst in user_state.instance_id_ordering:
-                outf.write(inst + '\n')
+                #JIAXIN: output id has to be str
+                outf.write(str(inst) + '\n')
                 
     annotated_instances_fname = path.join(user_dir, "annotated_instances.jsonl")
     with open(annotated_instances_fname, 'wt') as outf:
@@ -553,7 +554,9 @@ def user_name_endpoint():
 
         # Update style to match the current color
         c = get_color_for_schema_label(schema, label)
-        label_elem['style'] = ("background-color: %s"  % c)        
+        #Jiaxin: sometimes label_elem is None
+        if label_elem:
+            label_elem['style'] = ("background-color: %s"  % c)
     
     # If the user has annotated this before, wall the DOM and fill out what they
     # did
@@ -855,11 +858,18 @@ def generate_schematic(annotation_scheme):
                         % tooltip_text                        
 
             name = annotation_scheme['name'] + '|||' + label
-            
-            schematic += \
-                (('  <input type="checkbox" id="%s" name="%s" value="%s">' + \
-                 '  <label for="%s" %s>%s</label><br/>') \
-                 % (label, name, name, name, tooltip, label))
+            class_name  = annotation_scheme['name']
+
+            if ("single_select" in annotation_scheme) and (annotation_scheme["single_select"] == "True"):
+                schematic += \
+                    (('  <input class="%s" type="checkbox" id="%s" name="%s" value="%s" onclick="onlyOne(this)">' + \
+                      '  <label for="%s" %s>%s</label><br/>') \
+                     % (class_name, label, name, name, name, tooltip, label))
+            else:
+                schematic += \
+                    (('  <input type="checkbox" id="%s" name="%s" value="%s">' + \
+                     '  <label for="%s" %s>%s</label><br/>') \
+                     % (label, name, name, name, tooltip, label))
 
 
         schematic += '  </fieldset>\n</form>\n'
@@ -904,7 +914,8 @@ def main():
 
     flask_logger = logging.getLogger('werkzeug')
     flask_logger.setLevel(logging.ERROR)
-    
+
+    print('running at:\n0.0.0.0:'+str(args.port))
     app.run(debug=args.very_verbose, host="0.0.0.0", port=args.port)
 
 
