@@ -203,11 +203,11 @@ def load_all_data(config):
     all_data["items_to_annotate"] = items_to_annotate                       
 
     # TODO: make this fully configurable somehow...
+    re_to_highlights = defaultdict(list)
     if 'keyword_highlights_file' in config:
         kh_file = config['keyword_highlights_file']
         logger.debug("Loading keyword highlighting from %s" % (kh_file))
 
-        re_to_highlights = defaultdict(list)
         
         with open(kh_file, 'rt') as f:
             # TODO: make it flexible based on keyword
@@ -512,8 +512,11 @@ def user_name_endpoint():
 
     text = instance[text_key]
     instance_id = instance[id_key]
-
-    updated_text, schema_labels_to_highlight = post_process(config, text)        
+    
+    if "keyword_highlights_file" in config:
+        updated_text, schema_labels_to_highlight = post_process(config, text)        
+    else:
+        updated_text, schema_labels_to_highlight = text, set()
     
     rendered_html = render_template(
         config['site_file'],
