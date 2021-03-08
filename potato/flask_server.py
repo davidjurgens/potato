@@ -2,6 +2,7 @@ import socketserver
 import os
 import sys
 import numpy as np
+import flask
 from flask import Flask, render_template, request, url_for, jsonify
 
 import pandas as pd
@@ -203,11 +204,11 @@ def load_all_data(config):
     all_data["items_to_annotate"] = items_to_annotate                       
 
     # TODO: make this fully configurable somehow...
+    re_to_highlights = defaultdict(list)
     if 'keyword_highlights_file' in config:
         kh_file = config['keyword_highlights_file']
         logger.debug("Loading keyword highlighting from %s" % (kh_file))
 
-        re_to_highlights = defaultdict(list)
         
         with open(kh_file, 'rt') as f:
             # TODO: make it flexible based on keyword
@@ -512,8 +513,11 @@ def user_name_endpoint():
 
     text = instance[text_key]
     instance_id = instance[id_key]
-
-    updated_text, schema_labels_to_highlight = post_process(config, text)        
+    
+    if "keyword_highlights_file" in config:
+        updated_text, schema_labels_to_highlight = post_process(config, text)        
+    else:
+        updated_text, schema_labels_to_highlight = text, set()
     
     rendered_html = render_template(
         config['site_file'],
@@ -521,6 +525,7 @@ def user_name_endpoint():
         lastname=lastname,
         # This is what instance the user is currently on
         instance=text,
+        instance_obj=instance,
         instance_id=instance_id,
         finished=lookup_user_state(username).get_annotation_count(),
         total_count=len(instance_id_to_data),
@@ -870,17 +875,25 @@ def generate_schematic(annotation_scheme):
                     key2label[key_value] = label
             #print(key_value)
 
+            label_content = label
+            if annotation_scheme.get("video_as_label", None) == "True":
+                assert "videopath" in label_data, "Video path should in each label_data when video_as_label is True."
+                video_path = label_data["videopath"]
+                label_content = f'''
+                <video width="320" height="240" autoplay loop muted>
+                    <source src="{video_path}" type="video/mp4" />
+                </video>'''
 
             if ("single_select" in annotation_scheme) and (annotation_scheme["single_select"] == "True"):
                 schematic += \
                     (('  <input class="%s" type="checkbox" id="%s" name="%s" value="%s" onclick="onlyOne(this)">' + \
                       '  <label for="%s" %s>%s</label><br/>') \
-                     % (class_name, label, name, key_value, name, tooltip, label))
+                     % (class_name, label, name, key_value, name, tooltip, label_content))
             else:
                 schematic += \
                     (('  <input type="checkbox" id="%s" name="%s" value="%s">' + \
                      '  <label for="%s" %s>%s</label><br/>') \
-                     % (label, name, key_value, name, tooltip, label))
+                     % (label, name, key_value, name, tooltip, label_content))
 
 
         schematic += '  </fieldset>\n</form>\n'
@@ -890,8 +903,13 @@ def generate_schematic(annotation_scheme):
 
     return schematic
 
-    
-
+@app.route('/file/<path:filename>')
+def get_file(filename):
+    """Return css file in css folder."""
+    try:
+        return flask.send_from_directory("data/files/", filename)
+    except FileNotFoundError:
+        flask.abort(404)
 
 def main():
     global config
