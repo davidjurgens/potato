@@ -8,6 +8,6 @@ The latest multi-choice template supporting all the functions is:
     
     templates/single_multiple_choice.html
     
-Please check `config/config_single.yaml` to see how to config single-choice/likert schema and keyboard shortcuts
+Please check `config/config_single.yaml` to see how to set up single-choice/likert schema and keyboard shortcuts.
     
    
