@@ -41,49 +41,64 @@
             "name": "Issue-General",
             "labels": [
                 { "name": "Economic",
-                  "tooltip_file": "config/tooltips/ig_economic.html"
+                  "tooltip_file": "config/tooltips/ig_economic.html",
+                  "key_value": '1'
                 },
                 {
                   "name": "Capacity and Resources",
-                  "tooltip_file": "config/tooltips/ig_capacity.html"
+                  "tooltip_file": "config/tooltips/ig_capacity.html",
+                  "key_value": '2'
                  },
 
                 { "name": "Morality and Ethics",
-                  "tooltip_file": "config/tooltips/ig_morality.html"
+                  "tooltip_file": "config/tooltips/ig_morality.html",
+                  "key_value": '3'
                 },
 
                 { "name": "Fairness and Equality",
                   "tooltip_file": "config/tooltips/ig_fairness.html",
+                  "key_value": '4'
                 },
                 { "name": "Legality, Constitutionality, Jurisdiction",
                   "tooltip_file": "config/tooltips/ig_legality.html",
+                  "key_value": '5'
                 },
                 { "name": "Crime and Punishment",
                   "tooltip_file": "config/tooltips/ig_crime.html",
+                  "key_value": '6'
                 },
                 { "name": "Security and Defense",
                   "tooltip_file": "config/tooltips/ig_security.html",
+                  "key_value": '7'
                 },
                 { "name": "Health and Safety",
                   "tooltip_file": "config/tooltips/ig_health.html",
+                  "key_value": '8'
                 },
                 { "name": "Quality of Life",
-                  "tooltip_file": "config/tooltips/ig_quality.html"
+                  "tooltip_file": "config/tooltips/ig_quality.html",
+                  "key_value": '9'
                 },
                 { "name": "Cultural Identity",
-                  "tooltip_file": "config/tooltips/ig_cultural.html"
+                  "tooltip_file": "config/tooltips/ig_cultural.html",
+                  "key_value": '0'
                 },
                 { "name": "Public Sentiment",
-                  "tooltip_file": "config/tooltips/ig_public.html"
+                  "tooltip_file": "config/tooltips/ig_public.html",
+                  "key_value": 'q'
                 },
                 { "name": "Political Factors and Implications",
-                  "tooltip_file": "config/tooltips/ig_political.html"
+                  "tooltip_file": "config/tooltips/ig_political.html",
+                  "key_value": 'w'
                 },
                 { "name": "Policy Prescription and Evaluation",
-                  "tooltip_file": "config/tooltips/ig_policy.html"
+                  "tooltip_file": "config/tooltips/ig_policy.html",
+                  "key_value": 'e'
                 },
                 { "name": "External Regulation and Reputation",
-                  "tooltip_file": "config/tooltips/ig_external.html"
+                  "tooltip_file": "config/tooltips/ig_external.html",
+                  "key_value": 'r'
+
                 },
                 "None"
             ]

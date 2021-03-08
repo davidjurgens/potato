@@ -35,6 +35,19 @@
 
         <script>
           document.addEventListener('keyup', function (event) {
+              //first check whether this keyboard input is a shortcut for checkboxes
+              var checkboxes = document.querySelectorAll('input[type=checkbox]')
+              var x = event.key.toLowerCase();
+
+              for (var i = 0; i < checkboxes.length; i++) {
+                  //alert(checkboxes[i].value)
+                  if(x === checkboxes[i].value){
+                      checkboxes[i].checked = !checkboxes[i].checked;
+                      if (checkboxes[i].onclick != null) checkboxes[i].onclick.apply(checkboxes[i]);
+                      return;
+                  };
+              }
+
               // Each time we process a user's key presses, track who is doing
               // it by grabbing the hidden firstname and lastname fields
               new_stories(event, document.getElementById('firstname').value,
@@ -43,8 +56,10 @@
           });
         </script>
 
+
         <script>
 			function onlyOne(checkbox) {
+			    // this function is used for the single-choice setting
 				//alert(checkbox.className)
 			    var x = document.getElementsByClassName(checkbox.className);
 			    var i;
@@ -198,7 +213,6 @@
                 </fieldset>
                 </form>
             </div>
-
             <div class="navbar-nav ml-auto">
               <div class="text-secondary align-middle">Currently logged in as {{firstname}} {{lastname}}</div>
             </div>

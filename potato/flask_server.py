@@ -836,9 +836,17 @@ def generate_schematic(annotation_scheme):
             '  <fieldset>' + \
             ('  <legend>%s:</legend>' % annotation_scheme['name'])
 
+        # TODO: display keyboard shortcuts on the annotation page
+        key2label = {}
+
         for label_data in annotation_scheme['labels']:
+            print(label_data)
 
             label = label_data if isinstance(label_data, str) else label_data['name']
+
+            name = annotation_scheme['name'] + '|||' + label
+            class_name = annotation_scheme['name']
+            key_value = name
 
             tooltip = ''
             if isinstance(label_data, collections.Mapping):
@@ -853,21 +861,26 @@ def generate_schematic(annotation_scheme):
                     # print('file: ', tooltip_text)
                 if len(tooltip_text) > 0:
                     tooltip  = 'data-toggle="tooltip" data-html="true" data-placement="top" title="%s"' \
-                        % tooltip_text                        
+                        % tooltip_text
+                if 'key_value' in label_data:
+                    key_value = label_data['key_value']
+                    if key_value in key2label:
+                        logger.warning("Keyboard input conflict: %s" % key_value)
+                        quit()
+                    key2label[key_value] = label
+            #print(key_value)
 
-            name = annotation_scheme['name'] + '|||' + label
-            class_name  = annotation_scheme['name']
 
             if ("single_select" in annotation_scheme) and (annotation_scheme["single_select"] == "True"):
                 schematic += \
                     (('  <input class="%s" type="checkbox" id="%s" name="%s" value="%s" onclick="onlyOne(this)">' + \
                       '  <label for="%s" %s>%s</label><br/>') \
-                     % (class_name, label, name, name, name, tooltip, label))
+                     % (class_name, label, name, key_value, name, tooltip, label))
             else:
                 schematic += \
                     (('  <input type="checkbox" id="%s" name="%s" value="%s">' + \
                      '  <label for="%s" %s>%s</label><br/>') \
-                     % (label, name, name, name, tooltip, label))
+                     % (label, name, key_value, name, tooltip, label))
 
 
         schematic += '  </fieldset>\n</form>\n'
