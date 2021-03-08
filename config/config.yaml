@@ -19,9 +19,9 @@
     "item_properties": {
         "id_key": "id_str",
         "text_key": "text"
-        
+
     },
-    
+
     "users": [
         {"user_id": "0", "firstname": "David", "lastname": "Jurgens"},
         {"user_id": "1", "firstname": "Jiaxin", "lastname": "Pei"},
@@ -50,7 +50,7 @@
                 { "name": "Morality and Ethics",
                   "tooltip_file": "config/tooltips/ig_morality.html"
                 },
-                
+
                 { "name": "Fairness and Equality",
                   "tooltip_file": "config/tooltips/ig_fairness.html",
                 },
@@ -128,7 +128,7 @@
                 },
                 "None"
             ]
-            
+
         },
 
         {
@@ -145,22 +145,21 @@
                 },
                 "None"
             ]
-            
+
         }
 
     ],
 
 
     # Visualization
-    "html_template": "templates/multiple_choice.html",
+    "html_template": "templates/single_multiple_choice.html",
     "header_file": "templates/header.html",
 
     # This is where the actual HTML files will be generated
     "site_dir": "potato/templates/",
 
-    # comment    
+    # comment
     "state_update_rate": 1,
 
 
 }
-        
