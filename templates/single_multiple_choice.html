@@ -184,6 +184,21 @@
             <div class="p-2 bd-highlight text-secondary align-middle">
               Finished {{finished}}/{{total_count}}
             </div>
+            <div class="p-2 bd-highlight text-secondary align-middle">
+              Current_id {{instance_id}}
+            </div>
+            <div class="p-2 bd-highlight text-secondary align-middle">
+                <form action="/user/namepoint" method="post">
+                <fieldset>
+                    <input type="hidden" name="firstname" id="a" value="{{firstname}}">
+                    <input type="hidden" name="lastname" id="b" value="{{lastname}}">
+                    <input type="hidden" name="src" id="src" value="go_to">
+                    <input type="number" name="go_to" id="go_to" value="" onfocusin="user_input()" onfocusout="user_input_leave()" max={{total_count}} min=0 required>
+                    <input type="submit" value="go">
+                </fieldset>
+                </form>
+            </div>
+
             <div class="navbar-nav ml-auto">
               <div class="text-secondary align-middle">Currently logged in as {{firstname}} {{lastname}}</div>
             </div>

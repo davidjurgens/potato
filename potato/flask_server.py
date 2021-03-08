@@ -110,6 +110,15 @@ class UserAnnotationState:
         if self.instance_cursor < len(self.instance_id_to_data) - 1:
             self.instance_cursor += 1
         #print("go_forward(): cursor %d -> %d" % (old_cur, self.instance_cursor))
+
+    def go_to_id(self,id):
+        old_cur = self.instance_cursor
+        #print("current cursor: %d/%d, updating to %d/%d" % \
+        #      (self.instance_cursor, len(self.instance_id_to_data) - 1,
+        #       min(self.instance_cursor + 1,  len(self.instance_id_to_data) - 1),
+        #       len(self.instance_id_to_data) - 1))
+        if id < len(self.instance_id_to_data) and id >= 0:
+            self.instance_cursor = id
         
     def get_annotations(self, instance_id):
         if instance_id not in self.instance_id_to_labeling:
@@ -242,6 +251,11 @@ def move_to_prev_instance(username):
 def move_to_next_instance(username):
     user_state = lookup_user_state(username)
     user_state.go_forward()
+
+def go_to_id(username, id):
+    # go to specific item
+    user_state = lookup_user_state(username)
+    user_state.go_to_id(int(id))
     
 
 def update_annotation_state(username, form):
@@ -272,24 +286,8 @@ def get_annotations_for_user_on(username, instance_id):
     annotations = user_state.get_annotations(instance_id)
     return annotations
 
-    
-def go_to_id(user, id):
-    if int(id) >= len(all_data["annotated_data"]) or int(id) < 0:
-        print("illegal id:", id)
-        return
-    user_dict[user]["start_id"] = int(id)
-    story = all_data["annotated_data"][int(user_dict[user]["start_id"])]["text"].split(
-        "<SPLIT_TOKEN>"
-    )
-    ism = ""
-    if user_dict[user]["user_data"][str(user_dict[user]["start_id"])]["annotated"]:
-        ism = user_dict[user]["user_data"][str(user_dict[user]["start_id"])]["label"]
-    user_dict[user]["current_display"] = {
-        "id": user_dict[user]["start_id"],
-        "story": story,
-        "ism": ism,
-        "annotated_amount": user_dict[user]["current_display"]["annotated_amount"],
-    }
+
+
 
 
 def merge_annotation():
