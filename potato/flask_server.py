@@ -813,11 +813,15 @@ def generate_site(config):
         html_template = html_template.replace("{{annotation_codebook}}", annotation_codebook)
 
     html_template = html_template.replace("{{annotation_task_name}}", config['annotation_task_name'])
-    
-    output_html_fname = os.path.join(config['site_dir'], basename(html_template_file))
+
+    #Jiaxin: change the basename from the template name to the project name + template name, to allow multiple annotation tasks using the same template
+    site_name = '-'.join(config['annotation_task_name'].split(' ')) + '-' + basename(html_template_file)
+    output_html_fname = os.path.join(config['site_dir'], site_name)
+    #print(basename(html_template_file))
+    #print(output_html_fname)
 
     # Cache this path as a shortcut to figure out which page to render
-    config['site_file'] = basename(html_template_file)
+    config['site_file'] = site_name
 
     # Write the file
     with open(output_html_fname, 'wt') as outf:
