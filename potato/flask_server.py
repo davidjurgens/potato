@@ -893,6 +893,8 @@ def generate_schematic(annotation_scheme):
                     <source src="{video_path}" type="video/mp4" />
                 </video>'''
             #add shortkey to the label so that the annotators will know how to use it
+            #when the shortkey is "None", this will not displayed as we do not allow short key for None category
+            #if label in label2key and label2key[label] != 'None':
             if label in label2key:
                 label_content = label + ' [' + label2key[label].upper() + ']'
             if ("single_select" in annotation_scheme) and (annotation_scheme["single_select"] == "True"):
@@ -903,9 +905,9 @@ def generate_schematic(annotation_scheme):
                      % (class_name, label, name, key_value, name, tooltip, label_content))
             else:
                 schematic += \
-                    (('  <input type="checkbox" id="%s" name="%s" value="%s">' + \
+                    (('  <input class="%s" type="checkbox" id="%s" name="%s" value="%s" onclick="whetherNone(this)">' + \
                      '  <label for="%s" %s>%s</label><br/>') \
-                     % (label, name, key_value, name, tooltip, label_content))
+                     % (class_name, label, name, key_value, name, tooltip, label_content))
 
 
         schematic += '  </fieldset>\n</form>\n'
