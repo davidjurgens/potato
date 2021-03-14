@@ -876,8 +876,6 @@ def generate_schematic(annotation_scheme):
                         quit()
                     key2label[key_value] = label
                     label2key[label] = key_value
-                else:
-                    label2key[label] = ''
             # print(key_value)
 
             label_content = label
@@ -888,9 +886,11 @@ def generate_schematic(annotation_scheme):
                 <video width="320" height="240" autoplay loop muted>
                     <source src="{video_path}" type="video/mp4" />
                 </video>'''
+
             # add shortkey to the label so that the annotators will know how to use it
             if label in label2key:
-                label_content = label + ' [' + label2key[label].upper() + ']'
+                label_content = label_content + \
+                    ' [' + label2key[label].upper() + ']'
             if ("single_select" in annotation_scheme) and (annotation_scheme["single_select"] == "True"):
 
                 schematic += \
