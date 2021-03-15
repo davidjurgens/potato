@@ -146,7 +146,12 @@
                 { "name": "Threat: National Cohesion",
                   "tooltip_file": "config/tooltips/sp_cohesion.html"
                 },
-                "None"
+                # if you include "None" label, this label will be used exclusively with other labels, and shortkey is disallowed for this category
+                { "name": "None",
+                  "tooltip": "This is not a good text sample or nothing applies here",
+                  "exclude_other": "True",
+                  "key_value": 'None'
+                }
             ]
 
         },
