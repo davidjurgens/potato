@@ -399,21 +399,20 @@ def load_user_state(username):
         annotation_order = []
         with open(annotation_order_fname, 'rt') as f:
             for line in f:
-                instance_id = line[:-1]
+                instance_id = int(line.strip())
                 if instance_id not in instance_id_to_data:
                     logger.warning('Annotation state for %s does not match instances in existing dataset at %s'
                                    % (user_dir, ','.join(config['data_files'])))
                     continue
-                annotation_order.append(line[:-1])
+                annotation_order.append(instance_id)
 
         annotated_instances_fname = path.join(
             user_dir, "annotated_instances.jsonl")
         annotated_instances = []
-
         with open(annotated_instances_fname, 'rt') as f:
             for line in f:
                 annotated_instance = json.loads(line)
-                instance_id = annotated_instance['id']
+                instance_id = int(annotated_instance['id'])
                 if instance_id not in instance_id_to_data:
                     logger.warning('Annotation state for %s does not match instances in existing dataset at %s'
                                    % (user_dir, ','.join(config['data_files'])))
@@ -423,8 +422,9 @@ def load_user_state(username):
         # Ensure the current data is represented in the annotation order
         # NOTE: this is a hack to be fixed for when old user data is in the same directory
         #
+        _annotation_order_set = set(annotation_order)
         for iid in instance_id_to_data.keys():
-            if iid not in annotation_order:
+            if iid not in _annotation_order_set:
                 annotation_order.append(iid)
 
         id_key = config['item_properties']['id_key']
@@ -434,8 +434,8 @@ def load_user_state(username):
         # Make sure we keep track of the user throughout the program
         user_to_annotation_state[username] = user_state
 
-        logger.info("Loaded %d annotations for known user \"%s\"" %
-                    (user_state.get_annotation_count(), len(instance_id_to_data)))
+        logger.info("Loaded %d annotations out of total %d for known user \"%s\"" %
+                    (user_state.get_annotation_count(), len(instance_id_to_data), username))
 
     # New user, so initialize state
     else:
@@ -883,9 +883,11 @@ def generate_schematic(annotation_scheme):
                 assert "videopath" in label_data, "Video path should in each label_data when video_as_label is True."
                 video_path = label_data["videopath"]
                 label_content = f'''
+                <div style="border:1px solid black;">
                 <video width="320" height="240" autoplay loop muted>
                     <source src="{video_path}" type="video/mp4" />
-                </video>'''
+                </video><br>
+                {label_content}</div>'''
 
             # add shortkey to the label so that the annotators will know how to use it
             if label in label2key:
