@@ -499,11 +499,16 @@ def previous_response(user, file_path):
 
 @app.route("/user/namepoint", methods=["GET", "POST"])
 def user_name_endpoint():
-
+    global authorized_users
     firstname = request.form.get("firstname")
     lastname = request.form.get("lastname")
 
     username = firstname + '_' + lastname
+
+    # Check if the user is authorized. If not, go to the login page
+    if username not in authorized_users:
+        logger.info("Unauthorized user")
+        return render_template("home.html")
 
     if 'instance_id' in request.form:
         did_change = update_annotation_state(username, request.form)
@@ -952,11 +957,17 @@ def get_file(filename):
 def main():
     global config
     global logger
+    global authorized_users
 
     args = arguments()
 
     with open(args.config_file, 'rt') as f:
         config = yaml.safe_load(f)
+
+    authorized_users = {}
+    for line in config["users"]:
+        username = line['firstname'] + '_' + line['lastname']
+        authorized_users[username] = {}
 
     logger = logging.getLogger(config['server_name'])
 
