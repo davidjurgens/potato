@@ -34,6 +34,9 @@
 
     "keyword_highlights_file": "config/frame_keywords.tsv",
 
+    # How many seconds do you want the annotators spend on each instance, after that, an alert will be sent per alert_time_each_instance seconds.
+    "alert_time_each_instance": 30,
+
     "annotation_schemes": [
         {
             "annotation_type": "multiselect",
