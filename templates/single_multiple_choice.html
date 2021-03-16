@@ -130,6 +130,7 @@
               var hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
               var minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
               var seconds = Math.floor((distance % (1000 * 60)) / 1000);
+              var total_seconds = Math.floor(distance / 1000);
 
               // Output the result in an element with id="timecounter"
               document.getElementById("timecounter").innerHTML = "Time spent: " + days + "d " + hours + "h "
@@ -141,7 +142,7 @@
               if (seconds % alert_time_each_instance == 0) {
                 //clearInterval(x);
                 //document.getElementById("timecounter").innerHTML = "EXPIRED";
-                  alert("You have spent " + seconds + " seconds on this instance")
+                  alert("You have spent " + total_seconds + " seconds on this instance")
               }
             }, 1000);
         </script>
