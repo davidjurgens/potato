@@ -1,6 +1,7 @@
 # potato: portable text annotation tool
 
-To run the latest demo with keyboard shortcuts and quick jump:
+### Start
+To run the latest demo for text annotation:
 
     python3 potato/flask_server.py config/config_single.yaml 
     
@@ -8,9 +9,19 @@ The latest multi-choice template supporting all the functions is:
     
     templates/single_multiple_choice.html
     
-Please check `config/config_single.yaml` to see how to set up single-choice/likert schema and keyboard shortcuts.
+Please check `config/config_single.yaml` to set up the configurations.
+
+### Recently added features
+    [2021.03.16 Jiaxin] count and display the time spent on each instance
+    [2021.03.08 Xingyao] video/image as labels
+    [2021.03.08 Jiaxin] keyboard shortcut 
+    [2021.03.08 Jiaxin] quick jump to the specific instance
+    [2021.02.17 Jiaxin] single-choice scheme supporting likert scales
+   
     
-## How to use `video_as_label`
+
+
+### How to use `video_as_label`
 
 Please refer to `config/config_single_video_label.yaml` for reference.
 
