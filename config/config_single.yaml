@@ -8,7 +8,7 @@
     "output_dir": "../output/",
 
     # NOTE: This is probably going to be a directory / DB at some point...
-    "user_state_dir": "annotation_output",
+    "user_state_dir": "potato/annotation_output",
 
     "annotation_codebook_url": "https://docs.google.com/document/d/1eXgaOZJDahhZLqYWbLTD_84-d1rnQ4M-bccer3HY6WI",
 
@@ -33,6 +33,9 @@
     ],
 
     "keyword_highlights_file": "config/frame_keywords.tsv",
+
+    # How many seconds do you want the annotators spend on each instance, after that, an alert will be sent per alert_time_each_instance seconds.
+    "alert_time_each_instance": 30,
 
     "annotation_schemes": [
         {
@@ -98,9 +101,13 @@
                 { "name": "External Regulation and Reputation",
                   "tooltip_file": "config/tooltips/ig_external.html",
                   "key_value": 'r'
-
                 },
-                "None"
+                # if you include "None" label, this label will be used exclusively with other labels, and shortkey is disallowed for this category
+                { "name": "None",
+                  "tooltip": "This is not a good text sample",
+                  "exclude_other": "True",
+                  "key_value": 'None'
+                }
             ]
         },
 
@@ -142,7 +149,12 @@
                 { "name": "Threat: National Cohesion",
                   "tooltip_file": "config/tooltips/sp_cohesion.html"
                 },
-                "None"
+                # if you include "None" label, this label will be used exclusively with other labels, and shortkey is disallowed for this category
+                { "name": "None",
+                  "tooltip": "This is not a good text sample or nothing applies here",
+                  "exclude_other": "True",
+                  "key_value": 'None'
+                }
             ]
 
         },

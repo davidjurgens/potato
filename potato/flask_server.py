@@ -85,6 +85,11 @@ class UserAnnotationState:
 
         self.instance_id_to_data = instance_id_to_data
 
+        # TODO: Put behavioral information of each instance with the labels together
+        # however, that requires too many changes of the data structure
+        # therefore, we contruct a separate dictionary to save all the behavioral information (e.g. time, click, ..)
+        self.instance_id_to_misc = {}
+
         # NOTE: this might be dumb but at the moment, we cache the order in
         # which this user will walk the instances. This might not work if we're
         # annotating a ton of things with a lot of people, but hopefully it's
@@ -133,7 +138,7 @@ class UserAnnotationState:
     def get_annotation_count(self):
         return len(self.instance_id_to_labeling)
 
-    def set_annotation(self, instance_id, schema_to_labels):
+    def set_annotation(self, instance_id, schema_to_labels, misc_dict):
         old_annotation = defaultdict(list)
         if instance_id in self.instance_id_to_labeling:
             old_annotation = self.instance_id_to_labeling[instance_id]
@@ -141,19 +146,28 @@ class UserAnnotationState:
         # Avoid updating with no entries
         if len(schema_to_labels) > 0:
             self.instance_id_to_labeling[instance_id] = schema_to_labels
+            # TODO: keep track of all the annotation behaviors instead of only keeping the latest one
+            #each time when new annotation is updated, we also update the misc_dict (currently done in the update_annotation_state function)
+            #self.instance_id_to_misc[instance_id] = misc_dict
         elif instance_id in self.instance_id_to_labeling:
             del self.instance_id_to_labeling[instance_id]
 
         return old_annotation != schema_to_labels
 
+    # This is only used to update the entire list of annotations,
+    # normally when loading all the saved data
     def update(self, id_key, annotation_order, annotated_instances):
         self.instance_id_to_labeling = {}
         for inst in annotated_instances:
 
             inst_id = inst['id']
             annotation = inst['annotation']
+            misc_dict = {}
+            if 'misc' in misc_dict:
+                misc_dict = inst['misc']
 
             self.instance_id_to_labeling[inst_id] = annotation
+            self.instance_id_to_misc[inst_id] = misc_dict
 
         self.instance_id_ordering = annotation_order
 
@@ -269,7 +283,13 @@ def update_annotation_state(username, form):
 
     schema_to_labels = defaultdict(list)
 
+    misc_dict = {}
     for key in form:
+        # look for behavioral information regarding time, click, ...
+        if key[:5] == 'misc_':
+            misc_dict[key[5:]] = form[key]
+            continue
+
         # Look for the marker that indicates an annotation label
         if '|||' not in key:
             continue
@@ -281,7 +301,11 @@ def update_annotation_state(username, form):
         schema_to_labels[annotation_schema].append(annotation_label)
 
     # print("-- for user %s, instance %s -> %s" % (username, instance_id, str(schema_to_labels)))
-    did_change = user_state.set_annotation(instance_id, schema_to_labels)
+    did_change = user_state.set_annotation(instance_id, schema_to_labels, misc_dict)
+    # update the behavioral information regarding time only when the annotations are changed
+    if did_change:
+        user_state.instance_id_to_misc[instance_id] = misc_dict
+        print('misc information updated')
     return did_change
 
 
@@ -290,7 +314,8 @@ def get_annotations_for_user_on(username, instance_id):
     annotations = user_state.get_annotations(instance_id)
     return annotations
 
-
+#This was used to merge annotated instances in previous annotations.
+#For example, you had some annotations from google sheet, and wanna merge it with the current annotation procedure
 def merge_annotation():
     global user_dict
     global closed
@@ -373,7 +398,8 @@ def save_user_state(username, save_order=False):
         user_dir, "annotated_instances.jsonl")
     with open(annotated_instances_fname, 'wt') as outf:
         for inst_id, data in user_state.instance_id_to_labeling.items():
-            output = {'id': inst_id, 'annotation': data}
+            misc_dict = user_state.instance_id_to_misc[inst_id] if inst_id in user_state.instance_id_to_misc else {}
+            output = {'id': inst_id, 'annotation': data, 'misc': misc_dict}
             json.dump(output, outf)
             outf.write('\n')
 
@@ -473,11 +499,16 @@ def previous_response(user, file_path):
 
 @app.route("/user/namepoint", methods=["GET", "POST"])
 def user_name_endpoint():
-
+    global authorized_users
     firstname = request.form.get("firstname")
     lastname = request.form.get("lastname")
 
     username = firstname + '_' + lastname
+
+    # Check if the user is authorized. If not, go to the login page
+    if username not in authorized_users:
+        logger.info("Unauthorized user")
+        return render_template("home.html")
 
     if 'instance_id' in request.form:
         did_change = update_annotation_state(username, request.form)
@@ -530,6 +561,7 @@ def user_name_endpoint():
         instance_id=instance_id,
         finished=lookup_user_state(username).get_annotation_count(),
         total_count=len(instance_id_to_data),
+        alert_time_each_instance=config['alert_time_each_instance']
         # amount=len(all_data["annotated_data"]),
         # annotated_amount=user_dict[username]["current_display"]["annotated_amount"],
     )
@@ -889,7 +921,9 @@ def generate_schematic(annotation_scheme):
                 </video><br>
                 {label_content}</div>'''
 
-            # add shortkey to the label so that the annotators will know how to use it
+            #add shortkey to the label so that the annotators will know how to use it
+            #when the shortkey is "None", this will not displayed as we do not allow short key for None category
+            #if label in label2key and label2key[label] != 'None':
             if label in label2key:
                 label_content = label_content + \
                     ' [' + label2key[label].upper() + ']'
@@ -901,9 +935,9 @@ def generate_schematic(annotation_scheme):
                      % (class_name, label, name, key_value, name, tooltip, label_content))
             else:
                 schematic += \
-                    (('  <input type="checkbox" id="%s" name="%s" value="%s">' +
-                      '  <label for="%s" %s>%s</label><br/>')
-                     % (label, name, key_value, name, tooltip, label_content))
+                    (('  <input class="%s" type="checkbox" id="%s" name="%s" value="%s" onclick="whetherNone(this)">' +
+                     '  <label for="%s" %s>%s</label><br/>')
+                     % (class_name, label, name, key_value, name, tooltip, label_content))
 
         schematic += '  </fieldset>\n</form>\n'
 
@@ -925,11 +959,17 @@ def get_file(filename):
 def main():
     global config
     global logger
+    global authorized_users
 
     args = arguments()
 
     with open(args.config_file, 'rt') as f:
         config = yaml.safe_load(f)
+
+    authorized_users = {}
+    for line in config["users"]:
+        username = line['firstname'] + '_' + line['lastname']
+        authorized_users[username] = {}
 
     logger = logging.getLogger(config['server_name'])
 
