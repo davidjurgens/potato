@@ -139,7 +139,7 @@
               // TODO: add configurations for alert message and maximum time spent on each instance
               // If the count down is over, write some text
               var alert_time_each_instance = document.getElementById("alert_time_each_instance").value;
-              if (seconds % alert_time_each_instance == 0) {
+              if (total_seconds % alert_time_each_instance == 0) {
                 //clearInterval(x);
                 //document.getElementById("timecounter").innerHTML = "EXPIRED";
                   alert("You have spent " + total_seconds + " seconds on this instance")
