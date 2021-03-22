@@ -1,11 +1,9 @@
-#python3 potato/flask_server.py config/config.yaml 
-
 {
     "port": 9001,
 
     "server_name": "potato annotator",
 
-    "annotation_task_name": "Dialogue Reactions",
+    "annotation_task_name": "Emotional Reactions in Literature",
 
     "output_dir": "../output/",
 
@@ -15,7 +13,7 @@
     "annotation_codebook_url": "https://docs.google.com/document/d/1eXgaOZJDahhZLqYWbLTD_84-d1rnQ4M-bccer3HY6WI",
 
     "data_files": [
-       "data/annotate-dr.json"
+       "data/annotate-erl.json"
     ],
 
     "item_properties": {
@@ -50,7 +48,6 @@
         {"user_id": "0", "firstname": "David", "lastname": "Jurgens"},
         {"user_id": "1", "firstname": "Jiaxin", "lastname": "Pei"},
         {"user_id": "2", "firstname": "Naitian", "lastname": "Zhou"},
-        {"user_id": "3", "firstname": "Sky", "lastname": "Wang"}
     ],
 
     "annotation_files": [
@@ -60,49 +57,60 @@
     "keyword_highlights_file": "config/frame_keywords.tsv",
 
     "annotation_schemes": [
+        {
+            "annotation_type": "multiselect",
+            "name": "Emotional Change",
+            "labels": [
+                { "name": "Anger",
+                  "tooltip_file": "config/tooltips/ig_economic.html"
+                },
+                {
+                  "name": "Fear",
+                  "tooltip_file": "config/tooltips/ig_capacity.html"
+                },
+                { "name": "Sadness",
+                  "tooltip_file": "config/tooltips/ig_morality.html"
+                },
+                { "name": "Disgust",
+                  "tooltip_file": "config/tooltips/ig_fairness.html",
+                },
+                { "name": "Surprise",
+                  "tooltip_file": "config/tooltips/ig_legality.html",
+                },
+                { "name": "Anticipation",
+                  "tooltip_file": "config/tooltips/ig_crime.html",
+                },
+                { "name": "Trust",
+                  "tooltip_file": "config/tooltips/ig_security.html",
+                },
+                { "name": "Joy",
+                  "tooltip_file": "config/tooltips/ig_health.html",
+                },
+                "None"
+            ]
+        },
 
         {
             "annotation_type": "slider",
-            "name": "How appropriate do you think this is, under average situations?",
+            "name": "Intensity of Change",
             "labels": [
-                { "name": "Very Inappropriate / Offensive",
+                { "name": "No Affect",
                   "tooltip_file": "config/tooltips/sp_global.html"
                 },
-                { "name": "Slightly Inappropriate",
+                { "name": "Minor Affect",
                   "tooltip_file": "config/tooltips/sp_humanitarian.html"
                 },
                 { "name": "Neutral",
                   "tooltip_file": "config/tooltips/sp_war.html"
                 },
-                { "name": "Slightly Positive",
+                { "name": "Moderate Affect",
                   "tooltip_file": "config/tooltips/sp_discrimination.html"
                 },
-                { "name": "Very Positive",
+                { "name": "Major Affect",
                   "tooltip_file": "config/tooltips/sp_diversity.html"
                 }
             ]
             
-        },
-
-        {
-            "annotation_type": "radio",
-            "name": "Imagine if this was said to you by another person; who of the following would make it most appropriate?",
-            "labels": [
-                "A Parental Figure",
-                "Your Child",
-                "Your Sibling",
-                "Your Co-worker",
-                "Your Boss",
-                "Your Underling",
-                "Your Nemesis",
-                "Your Best Friend",
-                "Someone You Just Met",
-                "Your Hero",
-                "A Fan Of Yours",
-                "Your Significant Other",
-                "Your Ex",
-                "None"
-            ]
         }
     ],
 

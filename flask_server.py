@@ -164,7 +164,7 @@ def load_all_data(config):
     global re_to_highlights
     
     # Where to look in the JSON item object for the text to annotate
-    #text_key = config['item_properties']['text_key']
+    text_key = config['item_properties']['text_key']
     id_key = config['item_properties']['id_key']
     
     items_to_annotate = []
@@ -482,13 +482,14 @@ def user_name_endpoint():
         did_change = update_annotation_state(username, request.form)
         if did_change:
             save_user_state(username)
-    
+            
     print("--REQUESTS FORM: ", json.dumps(request.form))
+    print(request)
     
     ism = request.form.get("label")
     action = request.form.get("src")
-    print("label: \"%s\"" % ism)
-    print("action: \"%s\"" % action)
+    #print("label: \"%s\"" % ism)
+    # print("action: \"%s\"" % action)
     
     if action == "home":
         load_user_state(username)
@@ -508,21 +509,20 @@ def user_name_endpoint():
 
     instance = get_cur_instance_for_user(username)
 
-    # text_key = config['item_properties']['paragraph0']
-    # id_key = config['item_properties']['id_key']
+    text_key = config['item_properties']['text_key']
+    id_key = config['item_properties']['id_key']
 
-    # text = instance[text_key]
-    instance_id = instance['id']
+    text = instance[text_key]
+    instance_id = instance[id_key]
 
-    updated_text, schema_labels_to_highlight, characters = post_process(config, instance)        
+    updated_text, schema_labels_to_highlight = post_process(config, text)        
     
     rendered_html = render_template(
         config['site_file'],
         firstname=firstname,
         lastname=lastname,
         # This is what instance the user is currently on
-        instance=updated_text,#text,
-        #characters=characters,
+        instance=text,
         instance_id=instance_id,
         finished=lookup_user_state(username).get_annotation_count(),
         total_count=len(instance_id_to_data),
@@ -591,239 +591,149 @@ def get_color_for_schema_label(schema, label):
         schema_label_to_color[t] = c
         return c
 
-def post_process(config, instance):
+def post_process(config, text):
+    global schema_label_to_color
 
-    text = "<i>Imagine if <strong>" + instance['relationship'] + "</strong> said the following to you:</i><br><br>"
+    schema_labels_to_highlight = set()
 
-    text += '"' + instance['quote'] + '"'
+    all_words = list(set(re.findall(r'\b[a-z]{4,}\b', text)))
+    all_words = [w for w in all_words if not w.startswith('http')]
+    random.shuffle(all_words)
+    print(all_words)
 
-    return text, None, None
+    all_schemas = list([x[0] for x in re_to_highlights.values()])
 
-    # # Construct text
+    # Grab the highlights
+    for regex, labels in re_to_highlights.items():               
 
-    # # Highlighting colors
-    # qh_color = 'rgb(179,226,205)'
-    # qch_color = 'rgb(84, 255, 147)'
-    # cch_color = 'rgb(56,185,245)'
+        search_from = 0
+
+        regex = re.compile(regex, re.I)
+        
+        while True:
+            try:
+                match = regex.search(text, search_from)
+            except BaseException as e:
+                print(repr(e))
+                break
+            if match is None:
+                break
+
+            #print('Searching with %s at %d in [0, %d]' % (regex, search_from, len(text)))
+            
+            # print('Saw keyword', match.group())
+
+            start = match.start()
+            end = match.end()
+
+            # we're going to replace this instance with a color coded one
+            if len(labels) == 1:
+                schema, label = labels[0]
+
+                # print('%s -> %s:%s' % (match.group(), schema, label))
+                
+                schema_labels_to_highlight.add((schema, label))
+                
+                c = get_color_for_schema_label(schema, label)
+
+                pre = "<span style=\"background-color: %s\">"  % c
+
+                replacement = pre + match.group() + '</span>'
+
+                text = text[:start] + replacement + text[end:]
+
+                # print(text)
+                
+                # Be sure to count all the junk we just added when searching again
+                search_from += end + (len(replacement) - len(match.group()))
+                # print('\n%d -> %d\n%s' % (end, search_from, text[search_from:]))
+
+
+            # slightly harder, but just to get the MVP out
+            elif len(labels) == 2:
+
+                colors = []
+                
+                for schema, label in labels:                
+                    schema_labels_to_highlight.add((schema, label))
+                    c = get_color_for_schema_label(schema, label)
+                    colors.append(c)
+
+                matched_word = match.group()
+
+                first_half = matched_word[:int(len(matched_word)/2)]
+                last_half = matched_word[int(len(matched_word)/2):]
+            
+                pre = "<span style=\"background-color: %s;\">" 
+
+                replacement = (pre % colors[0]) + first_half + '</span>' \
+                    + (pre % colors[1]) + last_half + '</span>'
+
+                # replacement = '<span style="font-size: 0">' + replacement + '</span>'
+                
+                text = text[:start] + replacement + text[end:]
+
+                # Be sure to count all the junk we just added when searching again
+                search_from += end + (len(replacement) - len(matched_word))
+            
+            # Gotta make this hard somehow...
+            else:
+                search_from = end
+
+    # Pick a few random words to highlight
+    #
+    # NOTE: we do this after the label assignment because if we somehow screw up
+    # and wrongly flag a valid word, this coloring is embedded within the outer
+    # (correct) <span> tag, so the word will get labeled correctly
+    num_false_labels = random.randint(0, 1)
+    # print('adding %d false labels' % num_false_labels)
     
-    # # Initializing variables
-    # paragraphs = [instance['paragraph0'], instance['paragraph1'], instance['paragraph2']]
-    # p_begin_offsets = [instance['paragraph0_beginOffset'], instance['paragraph1_beginOffset'], instance['paragraph2_beginOffset']]
-    # p_qc_offsets = [instance['paragraph0_qc_offsets'],
-    #                 instance['paragraph1_qc_offsets'],
-    #                 instance['paragraph2_qc_offsets']]
-    # p_cc_offsets = [instance['paragraph0_cc_offsets'],
-    #                 instance['paragraph1_cc_offsets'],
-    #                 instance['paragraph2_cc_offsets']]
-    # offsets_modifications = [[],[],[]] # Original index, modification
+    for i in range(min(num_false_labels, len(all_words))):
 
-    # # Post-process Characters
-    # q_aliases = instance['p_quoted_aliases'].split(",")
-    # c_aliases = instance['p_context_aliases'].split(",")
-
-    # # Tooltip stuff
-    # quote_tooltip = 'data-html="true" data-placement="top" data-toggle="tooltip" for="quote" title data-original-title="QUOTE, said by ' + q_aliases[0] + '"'
-    # p_qc_tooltip = 'data-html="true" data-placement="bottom" data-toggle="tooltip" for="p_qc" title data-original-title="' + q_aliases[0] + '"'
-    # p_cc_tooltip = 'data-html="true" data-placement="bottom" data-toggle="tooltip" for="p_cc" title data-original-title="' + c_aliases[0] + '"'
-
-    # # Highlight quote
-    # qh_bi = instance['q_beginOffset'] - instance['paragraph0_beginOffset']
-    # qh_ei = instance['q_endOffset'] - instance['paragraph0_beginOffset']
-    # paragraphs[0] = paragraphs[0][0:qh_bi] + ("<span style=\"background-color: %s\" %s>" % (qh_color, quote_tooltip)) + paragraphs[0][qh_bi:qh_ei] + '</span>' + paragraphs[0][qh_ei:]
-    # offsets_modifications[0].append((qh_bi, len(("<span style=\"background-color: %s\" %s>" % (qh_color, quote_tooltip)))))
-    # offsets_modifications[0].append((qh_ei, len("</span>")))
-
-    # # Highlight relevant character mentions
-    # for p_idx, p in enumerate(paragraphs):
-    #     # QC offsets
-    #     if p_qc_offsets[p_idx] != None:
-    #         qc_offsets = []
-    #         for x in p_qc_offsets[p_idx].split(","):
-    #             b, e = int(x.split("-")[0]) - p_begin_offsets[p_idx], int(x.split("-")[1]) - p_begin_offsets[p_idx]
-    #             qc_offsets.append((b,e))
-    #         for offset in qc_offsets:
-    #             begin, end = offset[0], offset[1]
-    #             bm, em = 0, 0
-    #             for om in offsets_modifications[p_idx]:
-    #                 if begin > om[0]:
-    #                     bm += om[1]
-    #                 if end > om[0]:
-    #                     em += om[1]
-    #             color_string = ("<span style=\"background-color: %s\" %s>" % (qch_color, p_qc_tooltip))
-    #             paragraphs[p_idx] = paragraphs[p_idx][0:begin+bm] + color_string + paragraphs[p_idx][begin+bm:end+em] + '</span>' + paragraphs[p_idx][end+em:]
-    #             offsets_modifications[p_idx].append((begin, len(color_string)))
-    #             offsets_modifications[p_idx].append((end, len('</span>')))
-    #     # Same for cc offsets
-    #     if p_cc_offsets[p_idx] != None:
-    #         cc_offsets = []
-    #         for x in p_cc_offsets[p_idx].split(","):
-    #             b, e = int(x.split("-")[0]) - p_begin_offsets[p_idx], int(x.split("-")[1]) - p_begin_offsets[p_idx]
-    #             cc_offsets.append((b,e))
-    #         for offset in cc_offsets:
-    #             begin, end = offset[0], offset[1]
-    #             bm, em = 0, 0
-    #             for om in offsets_modifications[p_idx]:
-    #                 if begin > om[0]:
-    #                     bm += om[1]
-    #                 if end > om[0]:
-    #                     em += om[1]
-    #             color_string = ("<span style=\"background-color: %s\" %s>" % (cch_color, p_cc_tooltip))
-    #             paragraphs[p_idx] = paragraphs[p_idx][0:begin+bm] + color_string + paragraphs[p_idx][begin+bm:end+em] + '</span>' + paragraphs[p_idx][end+em:]
-    #             offsets_modifications[p_idx].append((begin, len(color_string)))
-    #             offsets_modifications[p_idx].append((end, len('</span>')))
-
-    # text = "<br><br>".join([x for x in paragraphs])
-
-    # # HTML Formatting
-    # characters = ("<span style=\"background-color: %s\">" % qch_color) + q_aliases[0] + '</span>: ' + ', '.join(q_aliases[1:]) + "<br>"
-    # characters += ("<span style=\"background-color: %s\">" % cch_color) + c_aliases[0] + '</span>: ' + ', '.join(c_aliases[1:]) + "<br>"
-
-    # return text, None, characters
-
-
-# def post_process(config, text):
-#     global schema_label_to_color
-
-#     schema_labels_to_highlight = set()
-
-#     all_words = list(set(re.findall(r'\b[a-z]{4,}\b', text)))
-#     all_words = [w for w in all_words if not w.startswith('http')]
-#     random.shuffle(all_words)
-#     print(all_words)
-
-#     all_schemas = list([x[0] for x in re_to_highlights.values()])
-
-#     # Grab the highlights
-#     for regex, labels in re_to_highlights.items():               
-
-#         search_from = 0
-
-#         regex = re.compile(regex, re.I)
+        # Pick a random word
+        to_highlight = all_words[i]
         
-#         while True:
-#             try:
-#                 match = regex.search(text, search_from)
-#             except BaseException as e:
-#                 print(repr(e))
-#                 break
-#             if match is None:
-#                 break
+        # Pick a random schema and label
+        schema, label = random.choice(all_schemas)
 
-#             #print('Searching with %s at %d in [0, %d]' % (regex, search_from, len(text)))
-            
-#             # print('Saw keyword', match.group())
-
-#             start = match.start()
-#             end = match.end()
-
-#             # we're going to replace this instance with a color coded one
-#             if len(labels) == 1:
-#                 schema, label = labels[0]
-
-#                 # print('%s -> %s:%s' % (match.group(), schema, label))
-                
-#                 schema_labels_to_highlight.add((schema, label))
-                
-#                 c = get_color_for_schema_label(schema, label)
-
-#                 pre = "<span style=\"background-color: %s\">"  % c
-
-#                 replacement = pre + match.group() + '</span>'
-
-#                 text = text[:start] + replacement + text[end:]
-
-#                 # print(text)
-                
-#                 # Be sure to count all the junk we just added when searching again
-#                 search_from += end + (len(replacement) - len(match.group()))
-#                 # print('\n%d -> %d\n%s' % (end, search_from, text[search_from:]))
-
-
-#             # slightly harder, but just to get the MVP out
-#             elif len(labels) == 2:
-
-#                 colors = []
-                
-#                 for schema, label in labels:                
-#                     schema_labels_to_highlight.add((schema, label))
-#                     c = get_color_for_schema_label(schema, label)
-#                     colors.append(c)
-
-#                 matched_word = match.group()
-
-#                 first_half = matched_word[:int(len(matched_word)/2)]
-#                 last_half = matched_word[int(len(matched_word)/2):]
-            
-#                 pre = "<span style=\"background-color: %s;\">" 
-
-#                 replacement = (pre % colors[0]) + first_half + '</span>' \
-#                     + (pre % colors[1]) + last_half + '</span>'
-
-#                 # replacement = '<span style="font-size: 0">' + replacement + '</span>'
-                
-#                 text = text[:start] + replacement + text[end:]
-
-#                 # Be sure to count all the junk we just added when searching again
-#                 search_from += end + (len(replacement) - len(matched_word))
-            
-#             # Gotta make this hard somehow...
-#             else:
-#                 search_from = end
-
-#     # Pick a few random words to highlight
-#     #
-#     # NOTE: we do this after the label assignment because if we somehow screw up
-#     # and wrongly flag a valid word, this coloring is embedded within the outer
-#     # (correct) <span> tag, so the word will get labeled correctly
-#     num_false_labels = random.randint(0, 1)
-#     # print('adding %d false labels' % num_false_labels)
-    
-#     for i in range(min(num_false_labels, len(all_words))):
-
-#         # Pick a random word
-#         to_highlight = all_words[i]
+        # print('assigning "%s" to false label "%s:%s"' % (to_highlight, schema, label))
         
-#         # Pick a random schema and label
-#         schema, label = random.choice(all_schemas)
+        schema_labels_to_highlight.add((schema, label))
 
-#         # print('assigning "%s" to false label "%s:%s"' % (to_highlight, schema, label))
-        
-#         schema_labels_to_highlight.add((schema, label))
-
-#         # Figure out where this word occurs
+        # Figure out where this word occurs
 
         
-#         c = get_color_for_schema_label(schema, label)
+        c = get_color_for_schema_label(schema, label)
 
-#         search_from = 0
-#         regex = r'\b' + to_highlight + r'\b'
-#         regex = re.compile(regex, re.I)
+        search_from = 0
+        regex = r'\b' + to_highlight + r'\b'
+        regex = re.compile(regex, re.I)
         
-#         while True:
-#             try:
-#                 match = regex.search(text, search_from)
-#             except BaseException as e:
-#                 print(repr(e))
-#                 break
-#             if match is None:
-#                 break
+        while True:
+            try:
+                match = regex.search(text, search_from)
+            except BaseException as e:
+                print(repr(e))
+                break
+            if match is None:
+                break
 
-#             start = match.start()
-#             end = match.end()
+            start = match.start()
+            end = match.end()
             
-#             pre = "<span style=\"background-color: %s\">"  % c
+            pre = "<span style=\"background-color: %s\">"  % c
 
-#             replacement = pre + match.group() + '</span>'
+            replacement = pre + match.group() + '</span>'
 
-#             # print(pre + match.group() + '</span>')
+            # print(pre + match.group() + '</span>')
             
-#             text = text[:start] + replacement + text[end:]
+            text = text[:start] + replacement + text[end:]
 
-#             # Be sure to count all the junk we just added when searching again
-#             search_from += end + (len(replacement) - len(match.group()))
-#             # print('\n%d -> %d\n%s' % (end, search_from, text[search_from:]))
+            # Be sure to count all the junk we just added when searching again
+            search_from += end + (len(replacement) - len(match.group()))
+            # print('\n%d -> %d\n%s' % (end, search_from, text[search_from:]))
             
-#     return text, schema_labels_to_highlight
+    return text, schema_labels_to_highlight
 
 def parse_story_pair_from_file(filepath):
     with open(filepath, "r") as f:
@@ -955,44 +865,6 @@ def generate_schematic(annotation_scheme):
 
         schematic += '  </fieldset>\n</form>\n'
 
-    elif annotation_type == "radio":      
-
-        schematic = \
-            '<form action="/action_page.php">' + \
-            '  <fieldset>' + \
-            ('  <legend>%s:</legend>' % annotation_scheme['name'])
-
-        category = annotation_scheme['name']
-
-        for label_data in annotation_scheme['labels']:
-
-            label = label_data if isinstance(label_data, str) else label_data['name']
-
-            tooltip = ''
-            if isinstance(label_data, collections.Mapping):
-                tooltip_text = ''
-                if 'tooltip' in label_data:
-                    tooltip_text = label_data['tooltip']
-                    # print('direct: ', tooltip_text)
-                elif 'tooltip_file' in label_data:                    
-                    with open(label_data['tooltip_file'], 'rt') as f:
-                        lines = f.readlines()
-                    tooltip_text = ''.join(lines)
-                    # print('file: ', tooltip_text)
-                if len(tooltip_text) > 0:
-                    tooltip  = 'data-toggle="tooltip" data-html="true" data-placement="top" title="%s"' \
-                        % tooltip_text                        
-
-            name = annotation_scheme['name'] + '|||' + label
-            
-            schematic += \
-                (('  <input type="radio" id="%s" name="%s" value="%s">' + \
-                 '  <label for="%s" %s>%s</label><br/>') \
-                 % (label, category, name, name, tooltip, label))
-
-
-        schematic += '  </fieldset>\n</form>\n'
-
     elif annotation_type == "slider":
 
         schematic = \
@@ -1001,9 +873,9 @@ def generate_schematic(annotation_scheme):
             ('  <legend>%s:</legend>' % annotation_scheme['name'])
 
         # Slider itself
-        schematic += '<input type="range" id="' + "".join(annotation_scheme['name'].split()) + '" min="0" value="' + str(int((len(annotation_scheme['labels'])-1)/2)) + '" max="' + str(len(annotation_scheme['labels'])-1) + '" step="1" name="' + "".join(annotation_scheme['name'].split()) + '" onchange="updateSlider_' + "".join(annotation_scheme['name'].split()) + '(this.value)">'
+        schematic += '<input type="range" id="' + "".join(annotation_scheme['name'].split()) + '" min="0" value="0" max="' + str(len(annotation_scheme['labels'])-1) + '" step="1" name="' + "".join(annotation_scheme['name'].split()) + '" onchange="updateSlider_' + "".join(annotation_scheme['name'].split()) + '(this.value)">'
         # Show slider values interpretation (Likert). Initialized to show first value.
-        schematic += '</fieldset>\n</form>\n<div id="sliderValue_' + "".join(annotation_scheme['name'].split()) + '">' + annotation_scheme['labels'][int((len(annotation_scheme['labels'])-1)/2)]['name'] + '</div>'
+        schematic += '</fieldset>\n</form>\n<div id="sliderValue_' + "".join(annotation_scheme['name'].split()) + '">' + annotation_scheme['labels'][0]['name'] + '</div>'
         # Javascript for changing values on slide
         schematic += '<script>\n'
         schematic += 'function updateSlider_' + "".join(annotation_scheme['name'].split()) + '(slideAmount) {\n'

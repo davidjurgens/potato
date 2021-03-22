@@ -168,14 +168,14 @@
   
 <nav class="navbar navbar-expand-md navbar-dark bg-dark mb-3">
     <div class="container-fluid">
-        <a href="#" class="navbar-brand mr-3">{{annotation_task_name}}</a>
+        <a href="#" class="navbar-brand mr-3">Dialogue Reactions</a>
         <button type="button" class="navbar-toggler" data-toggle="collapse" data-target="#navbarCollapse">
             <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="navbarCollapse">
             <div class="navbar-nav">
               <a href="#" class="nav-item nav-link active">Home</a>
-                <a href="{{annotation_codebook}}" class="nav-item nav-link">Annotation Codebook</a>
+                <a href="https://docs.google.com/document/d/1eXgaOZJDahhZLqYWbLTD_84-d1rnQ4M-bccer3HY6WI" class="nav-item nav-link">Annotation Codebook</a>
                 <a href="#" class="nav-item nav-link disabled">Statistics</a>
                 <a href="#" class="nav-item nav-link disabled">Help</a>
             </div>
@@ -199,7 +199,38 @@
         </div>
         <div class="col-md-6">
           <h2>Annotation Scheme</h2>
-          {{annotation_schematic}}
+          <table><tr>
+<td valign="top" style="padding: 0 20px 0 0;">
+<form action="/action_page.php">  <fieldset>  <legend>How appropriate do you think this is, under average situations?:</legend><input type="range" id="Howappropriatedoyouthinkthisis,underaveragesituations?" min="0" value="2" max="4" step="1" name="Howappropriatedoyouthinkthisis,underaveragesituations?" onchange="updateSlider_Howappropriatedoyouthinkthisis,underaveragesituations?(this.value)"></fieldset>
+</form>
+<div id="sliderValue_Howappropriatedoyouthinkthisis,underaveragesituations?">Neutral</div><script>
+function updateSlider_Howappropriatedoyouthinkthisis,underaveragesituations?(slideAmount) {
+var sliderDiv = document.getElementById("sliderValue_Howappropriatedoyouthinkthisis,underaveragesituations?");
+if (slideAmount == 0) {
+sliderDiv.innerHTML = "Very Inappropriate / Offensive";
+document.getElementById("Howappropriatedoyouthinkthisis,underaveragesituations?").setAttribute("value", slideAmount.toString());}
+if (slideAmount == 1) {
+sliderDiv.innerHTML = "Slightly Inappropriate";
+document.getElementById("Howappropriatedoyouthinkthisis,underaveragesituations?").setAttribute("value", slideAmount.toString());}
+if (slideAmount == 2) {
+sliderDiv.innerHTML = "Neutral";
+document.getElementById("Howappropriatedoyouthinkthisis,underaveragesituations?").setAttribute("value", slideAmount.toString());}
+if (slideAmount == 3) {
+sliderDiv.innerHTML = "Slightly Positive";
+document.getElementById("Howappropriatedoyouthinkthisis,underaveragesituations?").setAttribute("value", slideAmount.toString());}
+if (slideAmount == 4) {
+sliderDiv.innerHTML = "Very Positive";
+document.getElementById("Howappropriatedoyouthinkthisis,underaveragesituations?").setAttribute("value", slideAmount.toString());}
+
+}
+</script>
+</td>
+<td valign="top" style="padding: 0 20px 0 0;">
+<form action="/action_page.php">  <fieldset>  <legend>Imagine if this was said to you by another person; who of the following would make it most appropriate?:</legend>  <input type="radio" id="A Parental Figure" name="Imagine if this was said to you by another person; who of the following would make it most appropriate?" value="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||A Parental Figure">  <label for="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||A Parental Figure" >A Parental Figure</label><br/>  <input type="radio" id="Your Child" name="Imagine if this was said to you by another person; who of the following would make it most appropriate?" value="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||Your Child">  <label for="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||Your Child" >Your Child</label><br/>  <input type="radio" id="Your Sibling" name="Imagine if this was said to you by another person; who of the following would make it most appropriate?" value="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||Your Sibling">  <label for="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||Your Sibling" >Your Sibling</label><br/>  <input type="radio" id="Your Co-worker" name="Imagine if this was said to you by another person; who of the following would make it most appropriate?" value="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||Your Co-worker">  <label for="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||Your Co-worker" >Your Co-worker</label><br/>  <input type="radio" id="Your Boss" name="Imagine if this was said to you by another person; who of the following would make it most appropriate?" value="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||Your Boss">  <label for="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||Your Boss" >Your Boss</label><br/>  <input type="radio" id="Your Underling" name="Imagine if this was said to you by another person; who of the following would make it most appropriate?" value="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||Your Underling">  <label for="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||Your Underling" >Your Underling</label><br/>  <input type="radio" id="Your Nemesis" name="Imagine if this was said to you by another person; who of the following would make it most appropriate?" value="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||Your Nemesis">  <label for="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||Your Nemesis" >Your Nemesis</label><br/>  <input type="radio" id="Your Best Friend" name="Imagine if this was said to you by another person; who of the following would make it most appropriate?" value="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||Your Best Friend">  <label for="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||Your Best Friend" >Your Best Friend</label><br/>  <input type="radio" id="Someone You Just Met" name="Imagine if this was said to you by another person; who of the following would make it most appropriate?" value="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||Someone You Just Met">  <label for="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||Someone You Just Met" >Someone You Just Met</label><br/>  <input type="radio" id="Your Hero" name="Imagine if this was said to you by another person; who of the following would make it most appropriate?" value="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||Your Hero">  <label for="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||Your Hero" >Your Hero</label><br/>  <input type="radio" id="A Fan Of Yours" name="Imagine if this was said to you by another person; who of the following would make it most appropriate?" value="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||A Fan Of Yours">  <label for="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||A Fan Of Yours" >A Fan Of Yours</label><br/>  <input type="radio" id="Your Significant Other" name="Imagine if this was said to you by another person; who of the following would make it most appropriate?" value="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||Your Significant Other">  <label for="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||Your Significant Other" >Your Significant Other</label><br/>  <input type="radio" id="Your Ex" name="Imagine if this was said to you by another person; who of the following would make it most appropriate?" value="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||Your Ex">  <label for="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||Your Ex" >Your Ex</label><br/>  <input type="radio" id="None" name="Imagine if this was said to you by another person; who of the following would make it most appropriate?" value="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||None">  <label for="Imagine if this was said to you by another person; who of the following would make it most appropriate?|||None" >None</label><br/>  </fieldset>
+</form>
+
+</td>
+</tr></table>
           <p>
             <div class="text-center"><a class="btn btn-secondary" href="#" role="button" onclick="click_to_next()">Submit</a></div>
           </p>
