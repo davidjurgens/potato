@@ -36,6 +36,9 @@
 
         <script>
           document.addEventListener('keyup', function (event) {
+              var active_id = document.activeElement.id;
+              if (active_id == 'go_to') return;
+
               //first check whether this keyboard input is a shortcut for checkboxes
               var checkboxes = document.querySelectorAll('input[type=checkbox]')
               var x = event.key.toLowerCase();
