@@ -97,7 +97,16 @@ class UserAnnotationState:
         # this ordering later
         self.instance_id_ordering = list(instance_id_to_data.keys())
 
+        #initialize the mapping from instance id to order
+        self.instance_id_to_order = self.generate_id_order_mapping(self.instance_id_ordering)
+
         self.instance_cursor = 0
+
+    def generate_id_order_mapping(self,instance_id_ordering):
+        id_order_mapping = {}
+        for i in range(len(instance_id_ordering)):
+            id_order_mapping[instance_id_ordering[i]] = i
+        return id_order_mapping
 
     def current_instance(self):
         #print("current_instance(): cursor is now ", self.instance_cursor)
@@ -170,11 +179,13 @@ class UserAnnotationState:
             self.instance_id_to_misc[inst_id] = misc_dict
 
         self.instance_id_ordering = annotation_order
+        self.instance_id_to_order = self.generate_id_order_mapping(self.instance_id_ordering)
 
         # Set the current item to be the one after the last thing that was
         # annotated
-        self.instance_cursor = min(len(self.instance_id_to_labeling),
-                                   len(self.instance_id_ordering)-1)
+        #self.instance_cursor = min(len(self.instance_id_to_labeling),
+        #                           len(self.instance_id_ordering)-1)
+        self.instance_cursor = self.instance_id_to_order[annotated_instances[-1]['id']]
 
         # print("update(): user had annotated %d instances, so setting cursor to %d" %
         #      (len(self.instance_id_to_labeling), self.instance_cursor))
