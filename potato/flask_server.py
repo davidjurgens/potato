@@ -172,7 +172,7 @@ class UserAnnotationState:
             inst_id = inst['id']
             annotation = inst['annotation']
             misc_dict = {}
-            if 'misc' in misc_dict:
+            if 'misc' in inst:
                 misc_dict = inst['misc']
 
             self.instance_id_to_labeling[inst_id] = annotation
