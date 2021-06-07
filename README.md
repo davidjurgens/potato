@@ -5,7 +5,7 @@ To run the latest demo for text annotation:
 
     python3 potato/flask_server.py config/config_single.yaml 
 
-by default, the website will running at 0.0.0.0:8000, to specify other port (e.g. 8001), try this:
+by default, the website will running at 0.0.0.0:8000, to specify other ports (e.g. 8001), try this:
 
     python3 potato/flask_server.py -p 8001 config/config_single.yaml 
 
