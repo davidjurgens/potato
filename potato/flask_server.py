@@ -949,6 +949,75 @@ def generate_schematic(annotation_scheme):
                      % (class_name, label, name, key_value, name, tooltip, label_content))
 
         schematic += '  </fieldset>\n</form>\n'
+    elif annotation_type == "radio":
+
+        schematic = \
+            '<form action="/action_page.php">' + \
+            '  <fieldset>' + \
+            ('  <legend>%s:</legend>' % annotation_scheme['name'])
+
+        # TODO: display keyboard shortcuts on the annotation page
+        key2label = {}
+        label2key = {}
+
+        for label_data in annotation_scheme['labels']:
+            print(label_data)
+
+            label = label_data if isinstance(
+                label_data, str) else label_data['name']
+
+            name = annotation_scheme['name'] + '|||' + label
+            class_name = annotation_scheme['name']
+            key_value = name
+
+            tooltip = ''
+            if isinstance(label_data, collections.Mapping):
+                tooltip_text = ''
+                if 'tooltip' in label_data:
+                    tooltip_text = label_data['tooltip']
+                    # print('direct: ', tooltip_text)
+                elif 'tooltip_file' in label_data:
+                    with open(label_data['tooltip_file'], 'rt') as f:
+                        lines = f.readlines()
+                    tooltip_text = ''.join(lines)
+                    # print('file: ', tooltip_text)
+                if len(tooltip_text) > 0:
+                    tooltip = 'data-toggle="tooltip" data-html="true" data-placement="top" title="%s"' \
+                        % tooltip_text
+                if 'key_value' in label_data:
+                    key_value = label_data['key_value']
+                    if key_value in key2label:
+                        logger.warning(
+                            "Keyboard input conflict: %s" % key_value)
+                        quit()
+                    key2label[key_value] = label
+                    label2key[label] = key_value
+            # print(key_value)
+
+            label_content = label
+            if annotation_scheme.get("video_as_label", None) == "True":
+                assert "videopath" in label_data, "Video path should in each label_data when video_as_label is True."
+                video_path = label_data["videopath"]
+                label_content = f'''
+                <video width="320" height="240" autoplay loop muted>
+                    <source src="{video_path}" type="video/mp4" />
+                </video>'''
+
+            #add shortkey to the label so that the annotators will know how to use it
+            #when the shortkey is "None", this will not displayed as we do not allow short key for None category
+            #if label in label2key and label2key[label] != 'None':
+            if label in label2key:
+                label_content = label_content + \
+                    ' [' + label2key[label].upper() + ']'
+
+
+            schematic += \
+                    (('  <input class="%s" type="radio" id="%s" name="%s" value="%s" onclick="onlyOne(this)">' +
+                     '  <label for="%s" %s>%s</label><br/>')
+                     % (class_name, label, name, key_value, name, tooltip, label_content))
+      
+
+        schematic += '  </fieldset>\n</form>\n'
 
     else:
         logger.warning("unsupported annotation type: %s" % annotation_type)

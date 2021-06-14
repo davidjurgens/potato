@@ -1,0 +1,100 @@
+{
+    "port": 9001,
+
+    "server_name": "potato annotator",
+
+    "annotation_task_name": "Contextual Acceptability",
+
+    "output_dir": "../output/",
+
+    # NOTE: This is probably going to be a directory / DB at some point...
+    "user_state_dir": "potato/annotation_output",
+
+    "annotation_codebook_url": "https://docs.google.com/document/d/1eXgaOZJDahhZLqYWbLTD_84-d1rnQ4M-bccer3HY6WI",
+
+    "data_files": [
+       "potato/data/quotes.json"
+    ],
+
+    "item_properties": {
+        "id_key": "id",
+        "text_key": "text"
+
+    },
+
+    "users": [
+        {"user_id": "0", "firstname": "David", "lastname": "Jurgens"},
+        {"user_id": "1", "firstname": "Jiaxin", "lastname": "Pei"},
+        {"user_id": "2", "firstname": "Naitian", "lastname": "Zhou"},
+        {"user_id": "3", "firstname": "Jackson", "lastname": "Sargent"}
+    ],
+
+    "annotation_files": [
+        "../data/examples"
+    ],
+
+    #"keyword_highlights_file": "config/frame_keywords.tsv",
+
+    # How many seconds do you want the annotators spend on each instance, after that, an alert will be sent per alert_time_each_instance seconds.
+    "alert_time_each_instance": 10000000,
+
+    "annotation_schemes": [
+        {
+            "annotation_type": "radio",
+            "name": "Social Acceptability",
+            "labels": [
+                { "name": "Strongly Unacceptable",
+                  "key_value": '1'
+                },
+                { "name": "Slightly Unacceptable",
+                  "key_value": '2'
+                },
+                { "name": "Neutral",
+                  "key_value": '3'
+                },
+                { "name": "Slightly Acceptable",
+                  "key_value": '4'
+                },
+                { "name": "Strongly Acceptable",
+                  "key_value": '5'
+                }
+            ]
+        },
+        {
+            "annotation_type": "radio",
+            "name": "Offensiveness",
+            "labels": [
+                { "name": "Strongly Offensive",
+                  "key_value": '6'
+                },
+                { "name": "Slightly Offensive",
+                  "key_value": '7'
+                },
+                { "name": "Neutral",
+                  "key_value": '8'
+                },
+                { "name": "Slightly Unoffensive",
+                  "key_value": '9'
+                },
+                { "name": "Strongly Unoffensive",
+                  "key_value": '0'
+                }
+            ]
+        }
+
+        
+    ],
+
+
+    # Visualization
+    "html_template": "templates/radios.html",
+    "header_file": "templates/header.html",
+
+    # This is where the actual HTML files will be generated
+    "site_dir": "potato/templates/",
+
+    # comment
+    "state_update_rate": 1,
+
+
+}
