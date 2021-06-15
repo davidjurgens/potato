@@ -18,8 +18,8 @@
 
     "item_properties": {
         "id_key": "id",
-        "text_key": "text"
-
+        "text_key": "text",
+        "context_key": "context"
     },
 
     "users": [
@@ -41,21 +41,21 @@
     "annotation_schemes": [
         {
             "annotation_type": "radio",
-            "name": "Social Acceptability",
+            "name": "Appropriateness",
             "labels": [
-                { "name": "Strongly Unacceptable",
+                { "name": "Highly Inappropriate",
                   "key_value": '1'
                 },
-                { "name": "Slightly Unacceptable",
+                { "name": "",
                   "key_value": '2'
                 },
-                { "name": "Neutral",
+                { "name": "",
                   "key_value": '3'
                 },
-                { "name": "Slightly Acceptable",
+                { "name": "",
                   "key_value": '4'
                 },
-                { "name": "Strongly Acceptable",
+                { "name": "Highly Appropriate",
                   "key_value": '5'
                 }
             ]
@@ -64,21 +64,30 @@
             "annotation_type": "radio",
             "name": "Offensiveness",
             "labels": [
-                { "name": "Strongly Offensive",
+                { "name": "Highly Offensive",
                   "key_value": '6'
                 },
-                { "name": "Slightly Offensive",
+                { "name": "",
                   "key_value": '7'
                 },
-                { "name": "Neutral",
+                { "name": "",
                   "key_value": '8'
                 },
-                { "name": "Slightly Unoffensive",
+                { "name": "",
                   "key_value": '9'
                 },
-                { "name": "Strongly Unoffensive",
+                { "name": "Highly Inoffensive",
                   "key_value": '0'
                 }
+            ]
+        },
+        {
+            "annotation_type": "text",
+            "name": "Other Context",
+            "labels": [
+                { "name": "Give an additional context"},
+                { "name": "Appropriateness [1-5]"},
+                { "name": "Offensiveness [1-5]"}
             ]
         }
 
@@ -87,7 +96,7 @@
 
 
     # Visualization
-    "html_template": "templates/radios.html",
+    "html_template": "templates/quotes.html",
     "header_file": "templates/header.html",
 
     # This is where the actual HTML files will be generated

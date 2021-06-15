@@ -553,39 +553,66 @@ def user_name_endpoint():
 
     text_key = config['item_properties']['text_key']
     id_key = config['item_properties']['id_key']
-
+    if config['annotation_task_name'] == "Contextual Acceptability":
+        context_key = config['item_properties']['context_key']
+        context = instance[context_key]
+    
     text = instance[text_key]
     instance_id = instance[id_key]
-
+    
+    
     if "keyword_highlights_file" in config:
         updated_text, schema_labels_to_highlight = post_process(config, text)
     else:
         updated_text, schema_labels_to_highlight = text, set()
+    if config['annotation_task_name'] == "Contextual Acceptability":
 
-    rendered_html = render_template(
-        config['site_file'],
-        firstname=firstname,
-        lastname=lastname,
-        # This is what instance the user is currently on
-        instance=text,
-        instance_obj=instance,
-        instance_id=instance_id,
-        finished=lookup_user_state(username).get_annotation_count(),
-        total_count=len(instance_id_to_data),
-        alert_time_each_instance=config['alert_time_each_instance']
-        # amount=len(all_data["annotated_data"]),
-        # annotated_amount=user_dict[username]["current_display"]["annotated_amount"],
-    )
+        rendered_html = render_template(
+            config['site_file'],
+            firstname=firstname,
+            lastname=lastname,
+            # This is what instance the user is currently on
+            context = context,
+            instance=text,
+            instance_obj=instance,
+            instance_id=instance_id,
+            finished=lookup_user_state(username).get_annotation_count(),
+            total_count=len(instance_id_to_data),
+            alert_time_each_instance=config['alert_time_each_instance']
+            # amount=len(all_data["annotated_data"]),
+            # annotated_amount=user_dict[username]["current_display"]["annotated_amount"],
+        )
+    else:
+        rendered_html = render_template(
+            config['site_file'],
+            firstname=firstname,
+            lastname=lastname,
+            # This is what instance the user is currently on
+            instance=text,
+            instance_obj=instance,
+            instance_id=instance_id,
+            finished=lookup_user_state(username).get_annotation_count(),
+            total_count=len(instance_id_to_data),
+            alert_time_each_instance=config['alert_time_each_instance']
+            # amount=len(all_data["annotated_data"]),
+            # annotated_amount=user_dict[username]["current_display"]["annotated_amount"],
+        )
 
     # UGHGHGHGH the tempalte does unusual escaping, which makes it a PAIN to do
     # the replacement later
     m = re.search('<div name="instance_text">([^<]+)</div>', rendered_html)
     text = m.group(1)
-
     # For whatever reason, doing this before the render_template causes the
     # embedded HTML to get escaped, so we just do a wholesale replacement here.
     rendered_html = rendered_html.replace(text, updated_text)
-
+    
+    if config['annotation_task_name'] == "Contextual Acceptability":
+        m = re.search('<div name="context_text">([^<]+)</div>', rendered_html)
+        text = m.group(1)
+        # For whatever reason, doing this before the render_template causes the
+        # embedded HTML to get escaped, so we just do a wholesale replacement here.
+        rendered_html = rendered_html.replace(text, context)
+        
     soup = BeautifulSoup(rendered_html, 'html.parser')
 
     # Parse the page so we can programmatically reset the annotation state
@@ -835,16 +862,25 @@ def generate_site(config):
     # The annotator schemes get stuff in a <table> for now, though this probably
     # should be made more flexible
     annotation_schematic = "<table><tr>\n"
-
+    context_schematic = "<table><tr>\n"
     for annotation_scheme in annotation_schemes:
-        annotation_schematic += "<td valign=\"top\" style=\"padding: 0 20px 0 0;\">\n"
-        annotation_schematic += generate_schematic(annotation_scheme) + "\n"
-        annotation_schematic += "</td>\n"
+        if (annotation_scheme['name'] == 'Other Context'):
+            context_schematic += "<td valign=\"top\" style=\"padding: 0 20px 0 0;\">\n"
+            context_schematic += generate_schematic(annotation_scheme) + "\n"
+            context_schematic += "</td>\n"
+        
+        else:
+            annotation_schematic += "<td valign=\"top\" style=\"padding: 0 20px 0 0;\">\n"
+            annotation_schematic += generate_schematic(annotation_scheme) + "\n"
+            annotation_schematic += "</td>\n"
+        
     annotation_schematic += "</tr></table>"
 
     html_template = html_template.replace(
         "{{annotation_schematic}}", annotation_schematic)
-
+    html_template = html_template.replace(
+        "{{context_schematic}}", context_schematic)
+        
     if 'annotation_codebook_url' in config:
         annotation_codebook = config['annotation_codebook_url']
         html_template = html_template.replace(
@@ -1018,11 +1054,84 @@ def generate_schematic(annotation_scheme):
       
 
         schematic += '  </fieldset>\n</form>\n'
+        
+    elif annotation_type == "text":
+
+        schematic = \
+            '<form action="/action_page.php">' + \
+            '  <fieldset>' + \
+            ('  <legend>%s:</legend>' % annotation_scheme['name'])
+
+        # TODO: display keyboard shortcuts on the annotation page
+        key2label = {}
+        label2key = {}
+
+        for label_data in annotation_scheme['labels']:
+            print(label_data)
+
+            label = label_data if isinstance(
+                label_data, str) else label_data['name']
+
+            name = annotation_scheme['name'] + '|||' + label
+            class_name = annotation_scheme['name']
+            key_value = name
+
+            tooltip = ''
+            if isinstance(label_data, collections.Mapping):
+                tooltip_text = ''
+                if 'tooltip' in label_data:
+                    tooltip_text = label_data['tooltip']
+                    # print('direct: ', tooltip_text)
+                elif 'tooltip_file' in label_data:
+                    with open(label_data['tooltip_file'], 'rt') as f:
+                        lines = f.readlines()
+                    tooltip_text = ''.join(lines)
+                    # print('file: ', tooltip_text)
+                if len(tooltip_text) > 0:
+                    tooltip = 'data-toggle="tooltip" data-html="true" data-placement="top" title="%s"' \
+                        % tooltip_text
+                if 'key_value' in label_data:
+                    key_value = label_data['key_value']
+                    if key_value in key2label:
+                        logger.warning(
+                            "Keyboard input conflict: %s" % key_value)
+                        quit()
+                    key2label[key_value] = label
+                    label2key[label] = key_value
+            # print(key_value)
+
+            label_content = label
+            if annotation_scheme.get("video_as_label", None) == "True":
+                assert "videopath" in label_data, "Video path should in each label_data when video_as_label is True."
+                video_path = label_data["videopath"]
+                label_content = f'''
+                <video width="320" height="240" autoplay loop muted>
+                    <source src="{video_path}" type="video/mp4" />
+                </video>'''
+
+            #add shortkey to the label so that the annotators will know how to use it
+            #when the shortkey is "None", this will not displayed as we do not allow short key for None category
+            #if label in label2key and label2key[label] != 'None':
+            if label in label2key:
+                label_content = label_content + \
+                    ' [' + label2key[label].upper() + ']'
+
+
+            schematic += \
+                    (('  <input class="%s" type="text" id="%s" name="%s" >' +
+                     '  <label for="%s" %s>%s</label><br/>')
+                     % (class_name, label, name, name, tooltip, label_content))
+      
+
+        schematic += '  </fieldset>\n</form>\n'
 
     else:
         logger.warning("unsupported annotation type: %s" % annotation_type)
 
     return schematic
+
+
+
 
 
 @app.route('/file/<path:filename>')

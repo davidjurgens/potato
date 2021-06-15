@@ -193,19 +193,24 @@
                 $('form input, form select').each(
                     function(index){  
                         var input = $(this);
-                        if (input.attr('type') != 'checkbox' && input.attr('type') != 'radio') {
-                            return
+                        if (input.attr('type') == 'checkbox' || input.attr('type') == 'radio') {
+                            if (input.is(":checked")) {
+                                // Stuff all the input fields into something for the post
+                                var hiddenField = document.createElement("input");
+                                hiddenField.setAttribute("type", "hidden");
+                                hiddenField.setAttribute("name", input.attr('name'));
+                                hiddenField.setAttribute("value", input.is(":checked"));
+                                form.appendChild(hiddenField);
+                            }
                         }
+                        /*else if (input.attr('type') == 'text'){
+                            if (input.attr.('value') != ''){
+                                
+                            }
+                        }*/
 
 
-                        if (input.is(":checked")) {
-                            // Stuff all the input fields into something for the post
-                            var hiddenField = document.createElement("input");
-                            hiddenField.setAttribute("type", "hidden");
-                            hiddenField.setAttribute("name", input.attr('name'));
-                            hiddenField.setAttribute("value", input.is(":checked"));
-                            form.appendChild(hiddenField);
-                        }
+                        
                     }
                 );
                 document.body.appendChild(form);
@@ -297,12 +302,24 @@
 <div class="container-fluid">
     <div class="row">
         <div class="col-md-6">
-          <h2>Instance</h2>
-            <!-- hide timer by default-->
-            <p id="timecounter" hidden>Time spent:</p>
-          <div name="instance_text">{{instance}}</div>
+            <div class="row">
+                <div class="col-md-12">
+                  <h2>Instance</h2>
+                    <!-- hide timer by default-->
+                    <p id="timecounter" hidden>Time spent:</p>
+                  <div name="instance_text">{{instance}}</div>
+                </div>
+            </div>
+            <div class="row">
+            </div>
+            <div class="row">
+                <div class="col-md-12">
+                  <h4>Context</h4>
+                  <div name="context_text">{{context}}</div>
+                  {{context_schematic}}
+                </div>
+            </div>
         </div>
-
         <div class="col-md-6">
           <h2>Annotation Scheme</h2>
           {{annotation_schematic}}
