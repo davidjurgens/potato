@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <!--- HEADER GOES BELOW HERE--->
+
+  {{ HEADER }}
+
+  <!--- HEADER GOES ABOVE HERE--->
+  
+  <body>
+
+
+
+    <input type="hidden" name="username" id="username" value="{{username}}">
+    <input type="hidden" name="instance_id" id="instance_id" value="{{instance_id}}">
+    <input type="hidden" name="alert_time_each_instance" id="alert_time_each_instance" value="{{alert_time_each_instance}}">
+
+    <script>
+      document.addEventListener('keyup', function (event) {
+          var active_id = document.activeElement.id;
+          if (active_id == 'go_to') return;
+
+          //first check whether this keyboard input is a shortcut for checkboxes
+          var checkboxes = document.querySelectorAll('input[type=checkbox]');
+          var radios = document.querySelectorAll('input[type=radio]');
+          var x = event.key.toLowerCase();
+
+          for (var i = 0; i < checkboxes.length; i++) {
+              //alert(checkboxes[i].value)
+              if(x === checkboxes[i].value){
+                  checkboxes[i].checked = !checkboxes[i].checked;
+                  if (checkboxes[i].onclick != null) checkboxes[i].onclick.apply(checkboxes[i]);
+                  return;
+              };
+          }
+          for (var i = 0; i < radios.length; i++) {
+              //alert(checkboxes[i].value)
+              if(x === radios[i].value){
+                  radios[i].checked = !radios[i].checked;
+                  if (radios[i].onclick != null) radios[i].onclick.apply(radios[i]);
+                  return;
+              };
+          }
+
+          // Each time we process a user's key presses, track who is doing
+          // it by grabbing the hidden firstname and lastname fields
+          get_new_instance(event, document.getElementById('firstname').value,
+                      document.getElementById('lastname').value)
+          
+      });
+    </script>
+    <script>
+      function barValue(range,sibling) {
+          // function used to obtain value for range input
+          sibling.value = range.value;
+          //var x = document.getElementsByClassName(range.className);
+          //var i;
+          //for (i=0: i < x.length; i++) {
+          //    if(x[i].value != range.value) x[i]
+          //}
+      }
+    </script>
+
+    <script>
+      function onlyOne(checkbox) {
+	  // this function is used for the single-choice setting
+	  //alert(checkbox.className)
+	  var x = document.getElementsByClassName(checkbox.className);
+	  var i;
+	  for (i = 0; i < x.length; i++) {
+	      if(x[i].value != checkbox.value) x[i].checked = false;
+	  }
+      }
+    </script>
+
+
+    <script>
+      function whetherNone(checkbox) {
+	  // this function is used to uncheck all the other labels when "None" is checked
+	  //alert(checkbox.className)
+	  var x = document.getElementsByClassName(checkbox.className);
+	  var i;
+	  for (i = 0; i < x.length; i++) {
+              if(checkbox.value == "None" && x[i].value != "None") x[i].checked = false;
+              if(checkbox.value != "None" && x[i].value == "None") x[i].checked = false;
+          }
+
+      }
+    </script>
+
+
+    <script>
+      function click_to_next() {
+          // Gacky code to simulate the submit button as a keyboard event
+          // and not have two separate paths to handle keyboard and mouse
+          // events
+          var e = $.Event('keyup');
+          e.key = "ArrowRight";
+
+          console.log("next_instance")
+          
+          get_new_instance(e, document.getElementById('firstname').value,
+                      document.getElementById('lastname').value)
+      }
+
+      function click_to_prev() {
+          // Gacky code to simulate the submit button as a keyboard event
+          // and not have two separate paths to handle keyboard and mouse
+          // events
+          var e = $.Event('keyup');
+          e.key = "ArrowLeft";
+          
+          get_new_instance(e, document.getElementById('firstname').value,
+                      document.getElementById('lastname').value)
+      } 
+      
+    </script>
+    
+    {{annotation}}
+    
+    <script>
+      window.onunload = check_close;
+      function check_close() {
+          console.error("session closed");
+          var post_req = {
+              is_close: "closed"
+          }
+          post(post_req);
+      }
+    </script>
+
+    <script>
+      // Set the date we're counting down to
+      var countDownDate = new Date().getTime();
+
+      // Update the count down every 1 second
+      var x = setInterval(function() {
+
+          // Get today's date and time
+          var now = new Date().getTime();
+
+          // Find the distance between now and the count down date
+          var distance = now - countDownDate;
+
+          // Time calculations for days, hours, minutes and seconds
+          var days = Math.floor(distance / (1000 * 60 * 60 * 24));
+          var hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+          var minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+          var seconds = Math.floor((distance % (1000 * 60)) / 1000);
+          var total_seconds = Math.floor(distance / 1000);
+
+          // Output the result in an element with id="timecounter"
+          /*
+          document.getElementById("timecounter").innerHTML = "Time spent: " + days + "d " + hours + "h "
+              + minutes + "m " + seconds + "s ";
+
+          // TODO: add configurations for alert message and maximum time spent on each instance
+          // If the count down is over, write some text
+
+          var alert_time_each_instance = document.getElementById("alert_time_each_instance").value;
+          if (total_seconds % alert_time_each_instance == 0) {
+              //clearInterval(x);
+              //document.getElementById("timecounter").innerHTML = "EXPIRED";
+              alert("You have spent " + total_seconds + " seconds on this instance")
+          }
+          */
+      }, 1000);
+    </script>
+    
+    <script>
+      // We submit a new post to the same (user/annotate) endpoint
+      function post(params) {
+          
+          // The rest of this code assumes you are not using a library.
+          // It can be made less wordy if you use one.
+          var form = document.createElement("form");
+          form.setAttribute("method", "post");
+          form.setAttribute("action", "annotate");
+          
+          for (var key in params) {
+              if (params.hasOwnProperty(key)) {
+                  var hiddenField = document.createElement("input");
+                  hiddenField.setAttribute("type", "hidden");
+                  hiddenField.setAttribute("name", key);
+                  hiddenField.setAttribute("value", params[key]);
+                  
+                  form.appendChild(hiddenField);
+              }
+          }
+
+          // Stuff all the current annotations into attributes for processing on the server side
+          $('form input, form select').each(
+              function(index){  
+                  var input = $(this);
+                  
+                  if (input.attr('type') == 'checkbox' || input.attr('type') == 'radio') {
+                      if (input.is(":checked")) {
+                          // Stuff all the input fields into something for the post
+                          var hiddenField = document.createElement("input");
+                          hiddenField.setAttribute("type", "hidden");
+                          hiddenField.setAttribute("name", input.attr('name'));
+                          hiddenField.setAttribute("value", input.is(":checked"));
+                          form.appendChild(hiddenField);
+                      }
+                  }
+                  else if (input.attr('type') == 'text') {
+                      var hiddenField = document.createElement("input");
+                      hiddenField.setAttribute("type", "hidden");
+                      hiddenField.setAttribute("name", input.attr('name'));
+                      hiddenField.setAttribute("value", input[0].value);
+                      form.appendChild(hiddenField);                                        
+                  }
+                  else {
+                      console.log("unknown form type")
+                  }
+              }
+          );
+          document.body.appendChild(form);
+          form.submit();
+      }
+
+
+      /**  
+       * Sends the current state of the instance's annotation to the server,
+       * along with any relevant key presses to request a new instance to
+       * annotate.
+       */     
+      function get_new_instance(event, firstname, lastname) {
+          var x = event.key;
+          var action = ""
+          var ism = ""
+
+          //console.log(x)
+          //console.log(firstname)
+          //console.log(lastname)
+          if (x == "ArrowLeft") { // Spacebar
+              action = "prev_instance";
+          }
+          else if (x == "ArrowRight") {
+              action = "next_instance";
+          }
+          else {
+              // console.log("Unknown key press", event)
+              return
+          }
+
+          console.log("get_new_instance")
+          
+          var instance_id = document.getElementById('instance_id').value
+          // var time_string = document.getElementById("timecounter").innerHTML //get time spent on this instance
+          time_string = '-1'
+          var post_req = {
+              firstname: firstname,
+              lastname: lastname,
+              label: ism,
+              src: action,
+              instance_id: instance_id,
+              misc_time_string: time_string
+          }
+
+          // Sends the post message to the server which will let us update the
+          // currently displayed content
+          post(post_req)
+      }
+
+    </script>
+
+    <script>
+      $(document).ready(function(){
+          $('[data-toggle="tooltip"]').tooltip();
+      });
+    </script>
+    
+    
+    
+    <nav class="navbar navbar-expand-md navbar-dark bg-dark mb-3">
+      <div class="container-fluid">
+        <a href="#" class="navbar-brand mr-3">{{annotation_task_name}}</a>
+        <button type="button" class="navbar-toggler" data-toggle="collapse" data-target="#navbarCollapse">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarCollapse">
+          <div class="navbar-nav">
+            <a href="#" class="nav-item nav-link active">Home</a>
+            {{annotation_codebook}}
+            <a href="#" class="nav-item nav-link disabled">Statistics</a>
+            <a href="#" class="nav-item nav-link disabled">Help</a>
+          </div>
+          <div class="p-2 bd-highlight text-secondary align-middle">
+            Finished {{finished}}/{{total_count}}
+          </div>
+          <div class="p-2 bd-highlight text-secondary align-middle">
+            Current_id {{instance_id}}
+          </div>
+          <div class="p-2 bd-highlight text-secondary align-middle">
+            <form action="/user/namepoint" method="post">
+              <fieldset>
+                <input type="hidden" name="firstname" id="a" value="{{firstname}}">
+                <input type="hidden" name="lastname" id="b" value="{{lastname}}">
+                <input type="hidden" name="src" id="src" value="go_to">
+                <input type="number" name="go_to" id="go_to" value="" onfocusin="user_input()" onfocusout="user_input_leave()" max={{total_count}} min=0 required>
+                <input type="submit" value="go">
+              </fieldset>
+            </form>
+          </div>
+          <div class="navbar-nav ml-auto">
+            <div class="text-secondary align-middle">Currently logged in as {{username}}</div>
+          </div>
+        </div>
+      </div>    
+    </nav>
+    <div class="container-fluid">
+
+      <!--- LAYOUT GOES BELOW HERE --->
+
+      {{ TASK_LAYOUT }}
+
+      <!--- LAYOUT GOES ABOVE  --->
+
+      <div>
+        <p>
+          <div class="text-center">
+            <a class="btn btn-secondary" href="#" role="button" onclick="click_to_next()">Submit</a>
+          </div>
+        </p>        
+      </div>
+      
+      <hr>
+      <footer>
+        <div class="row">
+          <div class="col-md-6">
+            <p>Copyright &copy; 2021 <a href="https://blablablab.si.umich.edu/">Blablablab</a> </p>
+          </div>
+          <div class="col-md-12 text-md-right">
+            <a href="#" class="text-dark">Fork on GitHub</a> 
+            <span class="text-muted mx-2">|</span> 
+            <a href="#" class="text-dark">Cite Us</a>
+          </div>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>
