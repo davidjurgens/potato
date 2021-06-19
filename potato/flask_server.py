@@ -15,6 +15,7 @@ from os import path
 
 from bs4 import BeautifulSoup
 
+import threading
 
 import html
 
@@ -76,8 +77,28 @@ COLOR_PALETTE = ['rgb(179,226,205)', 'rgb(253,205,172)', 'rgb(203,213,232)', 'rg
 app = Flask(__name__)
 
 
-class UserAnnotationState:
+class UserConfig:
+    '''
+    A class for maintaining state on which users are allowed to use the system
+    '''
+    
+    def __init__(self):
+        self.allow_all_users = False
+        self.usernames = set()
 
+    def add_user(self, username):
+        if username in self.usernames:
+            print("Duplicate user in list: %s" % username)
+        self.usernames.add(username)
+    
+    def is_valid_user(self, username):
+        return self.allow_all_users or username in self.usernames
+
+class UserAnnotationState:
+    '''
+    A class for maintaining state on which annotations users have completed.
+    '''
+    
     def __init__(self, instance_id_to_data):
 
         # This data structure keeps the
@@ -88,7 +109,7 @@ class UserAnnotationState:
         # TODO: Put behavioral information of each instance with the labels together
         # however, that requires too many changes of the data structure
         # therefore, we contruct a separate dictionary to save all the behavioral information (e.g. time, click, ..)
-        self.instance_id_to_misc = {}
+        self.instance_id_to_behavioral_data = {}
 
         # NOTE: this might be dumb but at the moment, we cache the order in
         # which this user will walk the instances. This might not work if we're
@@ -147,21 +168,30 @@ class UserAnnotationState:
     def get_annotation_count(self):
         return len(self.instance_id_to_labeling)
 
-    def set_annotation(self, instance_id, schema_to_labels, misc_dict):
-        old_annotation = defaultdict(list)
+    def set_annotation(self, instance_id, schema_to_label_to_value, behavioral_data_dict):
+        '''
+        Based on a user's actions, updates the annotation for this particular instance. 
+        '''
+        old_annotation = defaultdict(dict)
         if instance_id in self.instance_id_to_labeling:
             old_annotation = self.instance_id_to_labeling[instance_id]
-
+            
         # Avoid updating with no entries
-        if len(schema_to_labels) > 0:
-            self.instance_id_to_labeling[instance_id] = schema_to_labels
-            # TODO: keep track of all the annotation behaviors instead of only keeping the latest one
-            #each time when new annotation is updated, we also update the misc_dict (currently done in the update_annotation_state function)
-            #self.instance_id_to_misc[instance_id] = misc_dict
+        if len(schema_to_label_to_value) > 0:
+
+            self.instance_id_to_labeling[instance_id] = schema_to_label_to_value
+            
+            # TODO: keep track of all the annotation behaviors instead of only
+            # keeping the latest one each time when new annotation is updated,
+            # we also update the behavioral_data_dict (currently done in the
+            # update_annotation_state function)
+            #
+            # self.instance_id_to_behavioral_data[instance_id] = behavioral_data_dict
+            
         elif instance_id in self.instance_id_to_labeling:
             del self.instance_id_to_labeling[instance_id]
 
-        return old_annotation != schema_to_labels
+        return old_annotation != schema_to_label_to_value
 
     # This is only used to update the entire list of annotations,
     # normally when loading all the saved data
@@ -176,7 +206,7 @@ class UserAnnotationState:
                 misc_dict = inst['misc']
 
             self.instance_id_to_labeling[inst_id] = annotation
-            self.instance_id_to_misc[inst_id] = misc_dict
+            self.instance_id_to_behavioral_data[inst_id] = misc_dict
 
         self.instance_id_ordering = annotation_order
         self.instance_id_to_order = self.generate_id_order_mapping(self.instance_id_ordering)
@@ -185,9 +215,12 @@ class UserAnnotationState:
         # annotated
         #self.instance_cursor = min(len(self.instance_id_to_labeling),
         #                           len(self.instance_id_ordering)-1)
-        self.instance_cursor = self.instance_id_to_order[annotated_instances[-1]['id']]
+        if len(annotated_instances) > 0:
+            self.instance_cursor = self.instance_id_to_order[annotated_instances[-1]['id']]
+        else:
+            annotation_order[0]
 
-        # print("update(): user had annotated %d instances, so setting cursor to %d" %
+            # print("update(): user had annotated %d instances, so setting cursor to %d" %
         #      (len(self.instance_id_to_labeling), self.instance_cursor))
 
 
@@ -211,22 +244,44 @@ def load_all_data(config):
     data_files = config['data_files']
     logger.debug('Loading data from %d files' % (len(data_files)))
 
+    
     for data_fname in data_files:
+
+        fmt = data_fname.split('.')[-1]
+        if not (fmt == 'csv' or fmt == 'tsv' or fmt == 'json' or 'jsonl'):
+            raise Exception("Unsupported input file format %s for %s" % (fmt, data_fname))
+                
         logger.debug('Reading data from ' + data_fname)
-        with open(data_fname, "rt") as f:
-            for line_no, line in enumerate(f):
-                item = json.loads(line)
 
-                # fix the encoding
-                # item[text_key] = item[text_key].encode("latin-1").decode("utf-8")
+        if fmt == 'json' or fmt == 'jsonl':        
+            with open(data_fname, "rt") as f:
+                for line_no, line in enumerate(f):
+                    item = json.loads(line)
 
-                instance_id = item[id_key]
+                    # fix the encoding
+                    # item[text_key] = item[text_key].encode("latin-1").decode("utf-8")
+                    
+                    instance_id = item[id_key]
+
+                    # TODO: check for duplicate instance_id
+                    instance_id_to_data[instance_id] = item
+
+                    items_to_annotate.append(item)
+        else:
+            sep = ',' if fmt == 'csv' else '\t'
+            df = pd.read_csv(data_fname)
+            for i, row in df.iterrows():
+
+                item = { }
+                for c in df.columns:
+                    item[c] = row[c]
+                instance_id = row[id_key]
 
                 # TODO: check for duplicate instance_id
-                instance_id_to_data[instance_id] = item
-
+                instance_id_to_data[instance_id] = item                               
                 items_to_annotate.append(item)
-
+            line_no = len(df)
+                
         logger.debug('Loaded %d instances from %s' % (line_no, data_fname))
     all_data["items_to_annotate"] = items_to_annotate
 
@@ -288,35 +343,53 @@ def go_to_id(username, id):
 
 
 def update_annotation_state(username, form):
+    '''
+    Parses the state of the HTML form (what the user did to the instance) and
+    updates the state of the instance's annotations accordingly.
+    '''
+
+    # Get what the user has already annotated, which might include this instance too
     user_state = lookup_user_state(username)
 
     instance_id = request.form['instance_id']
 
-    schema_to_labels = defaultdict(list)
+    schema_to_label_to_value = defaultdict(dict)
 
-    misc_dict = {}
+    behavioral_data_dict = {}
+    
+    did_change = False
     for key in form:
         # look for behavioral information regarding time, click, ...
         if key[:5] == 'misc_':
-            misc_dict[key[5:]] = form[key]
+            behavioral_data_dict[key[5:]] = form[key]
             continue
 
         # Look for the marker that indicates an annotation label
-        if '|||' not in key:
+        if ':::' not in key:
             continue
 
-        cols = key.split('|||')
+        cols = key.split(':::')
         annotation_schema = cols[0]
         annotation_label = cols[1]
+        annotation_value = form[key]
 
-        schema_to_labels[annotation_schema].append(annotation_label)
+        schema_to_label_to_value[annotation_schema][annotation_label] = annotation_value
+        
+        #schema_to_labels[annotation_schema].append(annotation_label)
 
     # print("-- for user %s, instance %s -> %s" % (username, instance_id, str(schema_to_labels)))
-    did_change = user_state.set_annotation(instance_id, schema_to_labels, misc_dict)
+
+    #for schema, labels in schema_to_labels.items():
+    #    for label in labels:          
+    #        did_change |= user_state.set_annotation(instance_id, schema, label, value, behavioral_data_dict)
+
+    did_change = user_state.set_annotation(instance_id, schema_to_label_to_value, behavioral_data_dict)
+
     # update the behavioral information regarding time only when the annotations are changed
-    if did_change:
-        user_state.instance_id_to_misc[instance_id] = misc_dict
-        print('misc information updated')
+    #if did_change:
+    #    user_state.instance_id_to_behavioral_data[instance_id] = behavioral_data_dict
+        # print('misc information updated')
+
     return did_change
 
 
@@ -325,8 +398,9 @@ def get_annotations_for_user_on(username, instance_id):
     annotations = user_state.get_annotations(instance_id)
     return annotations
 
-#This was used to merge annotated instances in previous annotations.
-#For example, you had some annotations from google sheet, and wanna merge it with the current annotation procedure
+# This was used to merge annotated instances in previous annotations.  For
+# example, you had some annotations from google sheet, and want to merge it with
+# the current annotation procedure
 def merge_annotation():
     global user_dict
     global closed
@@ -364,7 +438,20 @@ def write_data(username):
 
 @app.route("/")
 def home():
-    return render_template("home.html")
+    global config
+    return render_template("home.html", title=config['annotation_task_name'])
+
+
+@app.route("/login", methods=['GET', 'POST'])
+def login():
+    # TODO: add in logic for checking/hashing passwords, safe password
+    # management, etc. For now just #yolo and log in people regardless.
+    return annotate_page()
+
+@app.route("/newuser")
+def new_user():
+    return render_template("newuser.html")
+
 
 
 def lookup_user_state(username):
@@ -387,10 +474,10 @@ def save_user_state(username, save_order=False):
     global instance_id_to_data
 
     # Figure out where this user's data would be stored on disk
-    user_state_dir = config['user_state_dir']
+    output_annotation_dir = config['output_annotation_dir']
 
     # NB: Do some kind of sanitizing on the username to improve security
-    user_dir = path.join(user_state_dir, username)
+    user_dir = path.join(output_annotation_dir, username)
 
     user_state = lookup_user_state(username)
 
@@ -407,22 +494,98 @@ def save_user_state(username, save_order=False):
 
     annotated_instances_fname = path.join(
         user_dir, "annotated_instances.jsonl")
+    
     with open(annotated_instances_fname, 'wt') as outf:
         for inst_id, data in user_state.instance_id_to_labeling.items():
-            misc_dict = user_state.instance_id_to_misc[inst_id] if inst_id in user_state.instance_id_to_misc else {}
-            output = {'id': inst_id, 'annotation': data, 'misc': misc_dict}
+            bd_dict = user_state.instance_id_to_behavioral_data[inst_id] if inst_id in user_state.instance_id_to_behavioral_data else {}
+            output = {'id': inst_id, 'annotation': data, 'behavioral_data': bd_dict}
             json.dump(output, outf)
             outf.write('\n')
 
 
+def save_all_annotations():
+    global user_to_annotation_state
+    global config
+    global instance_id_to_data
+
+    # Figure out where this user's data would be stored on disk
+    output_annotation_dir = config['output_annotation_dir']
+    fmt = config['output_annotation_format']
+
+    if not (fmt == 'csv' or fmt == 'tsv' or fmt == 'json' or 'jsonl'):
+        raise Exception("Unsupported output format: " + fmt)
+
+    if not os.path.exists(output_annotation_dir):
+        os.makedirs(output_annotation_dir)
+        logger.debug("Created state directory for annotations: %s" % (output_annotation_dir))
+        
+    annotated_instances_fname = path.join(output_annotation_dir, "annotated_instances." + fmt)
+    
+    # We write jsonl format regardless        
+    if fmt == 'json' or fmt == 'jsonl':
+        with open(annotated_instances_fname, 'wt') as outf:
+            for user_id, user_state in user_to_annotation_state.items():
+                for inst_id, data in user_state.instance_id_to_labeling.items():
+                    
+                    bd_dict = user_state.instance_id_to_behavioral_data[inst_id] if inst_id in user_state.instance_id_to_behavioral_data else {}
+                    output = {'id': inst_id, 'annotation': data, 'behavioral_data': bd_dict}
+                    json.dump(output, outf)
+                    outf.write('\n')
+    
+
+    # Convert to Pandas and then dump
+    elif fmt == 'csv' or fmt == 'tsv':
+        df = defaultdict(list)
+
+        # Loop 1, figure out which schemas/labels have values
+        schema_to_labels = defaultdict(set)
+
+        for user_id, user_state in user_to_annotation_state.items():
+            for inst_id, annotation in user_state.instance_id_to_labeling.items():
+                for schema, label_vals in annotation.items():
+                    for label, val in label_vals.items():
+                        schema_to_labels[schema].add(label)
+                # TODO: figure out what's in the behavioral dict and how to format it
+
+        # Loop 2, report everything that's been annotated
+        for user_id, user_state in user_to_annotation_state.items():
+            for inst_id, annotation in user_state.instance_id_to_labeling.items():
+
+                df['user'].append(user_id)
+                df['instance_id'].append(inst_id)
+
+                for schema, labels in schema_to_labels.items():
+                    if schema in annotation:
+                        label_vals = annotation[schema]
+                        for label in labels:
+                            val = label_vals[label] if label in label_vals else None
+                            # For some sanity, combine the schema and label it a single column
+                            df[schema + ':::' + label].append(val)
+                    # If the user did label this schema at all, fill it with None values
+                    else:
+                        for label in labels:
+                            df[schema + ':::' + label].append(None)
+                            
+                # TODO: figure out what's in the behavioral dict and how to format it
+                
+        df = pd.DataFrame(df)
+        sep = ',' if fmt == 'csv' else '\t'
+        df.to_csv(annotated_instances_fname, index=False, sep=sep)
+
+                    
+
 def load_user_state(username):
+    '''
+    Loads the user's state from disk. The state includes which instances they
+    have annotated and the order in which they are expected to see instances.
+    '''
     global user_to_annotation_state
     global config
     global instance_id_to_data
     global logger
 
     # Figure out where this user's data would be stored on disk
-    user_state_dir = config['user_state_dir']
+    user_state_dir = config['output_annotation_dir']
 
     # NB: Do some kind of sanitizing on the username to improve securty
     user_dir = path.join(user_state_dir, username)
@@ -508,25 +671,45 @@ def previous_response(user, file_path):
             f.write(line)
 
 
-@app.route("/user/namepoint", methods=["GET", "POST"])
-def user_name_endpoint():
-    global authorized_users
-    firstname = request.form.get("firstname")
-    lastname = request.form.get("lastname")
+@app.route("/annotate", methods=["GET", "POST"])
+def annotate_page():
+    '''
+    Parses the input received from the user's annotation and takes some action
+    based on what was clicked/typed. This method is the main switch for changing
+    the state of the server for this user.
+    '''
+    
+    global user_config
 
-    username = firstname + '_' + lastname
+    
+    username = request.form.get("email")
 
     # Check if the user is authorized. If not, go to the login page
-    if username not in authorized_users:
+    if not user_config.is_valid_user(username):
         logger.info("Unauthorized user")
         return render_template("home.html")
 
+    # Based on what the user did to the instance, update the annotate state for
+    # this instance. All of the instances clicks/checks/text are stored in the
+    # request.form object, which has the name of the HTML element and its value.
+    #
+    # If the user actually changed the annotate state (as opposed to just moving
+    # through instances), then save the state of the annotations.
+    #
+    # NOTE: I *think* this is safe from race conditions since the flask server
+    # is running in a single thread, but it's probably good to check on this at
+    # some point if we scale to having lots of concurrent users.
     if 'instance_id' in request.form:
         did_change = update_annotation_state(username, request.form)
         if did_change:
             save_user_state(username)
 
-    print("--REQUESTS FORM: ", json.dumps(request.form))
+            # Save everything in a separate thread to avoid I/O issues
+            th = threading.Thread(target=save_all_annotations)
+            th.start()
+
+
+    #print("--REQUESTS FORM: ", json.dumps(request.form))
 
     ism = request.form.get("label")
     action = request.form.get("src")
@@ -536,16 +719,21 @@ def user_name_endpoint():
     if action == "home":
         load_user_state(username)
         # gprint("session recovered")
+
     elif action == "prev_instance":
         #print("moving to prev instance")
         move_to_prev_instance(username)
+
     elif action == "next_instance":
         #print("moving to next instance")
         move_to_next_instance(username)
+
     elif action == "go_to":
         go_to_id(username, request.form.get("go_to"))
+
     elif ism == None:
         print("ISM IS NULLLLLLL")
+
     else:
         print('unrecognized action request: "%s"' % action)
 
@@ -565,62 +753,55 @@ def user_name_endpoint():
         updated_text, schema_labels_to_highlight = post_process(config, text)
     else:
         updated_text, schema_labels_to_highlight = text, set()
-    if config['annotation_task_name'] == "Contextual Acceptability":
 
-        rendered_html = render_template(
-            config['site_file'],
-            firstname=firstname,
-            lastname=lastname,
-            # This is what instance the user is currently on
-            context = context,
-            instance=text,
-            instance_obj=instance,
-            instance_id=instance_id,
-            finished=lookup_user_state(username).get_annotation_count(),
-            total_count=len(instance_id_to_data),
-            alert_time_each_instance=config['alert_time_each_instance']
-            # amount=len(all_data["annotated_data"]),
-            # annotated_amount=user_dict[username]["current_display"]["annotated_amount"],
-        )
-    else:
-        rendered_html = render_template(
-            config['site_file'],
-            firstname=firstname,
-            lastname=lastname,
-            # This is what instance the user is currently on
-            instance=text,
-            instance_obj=instance,
-            instance_id=instance_id,
-            finished=lookup_user_state(username).get_annotation_count(),
-            total_count=len(instance_id_to_data),
-            alert_time_each_instance=config['alert_time_each_instance']
-            # amount=len(all_data["annotated_data"]),
-            # annotated_amount=user_dict[username]["current_display"]["annotated_amount"],
-        )
+    # Fill in the kwargs that the user wanted us to include when rendering the page
+    kwargs = {}
+    if 'kwargs' in config['item_properties']:
+        for kw in config['item_properties']['kwargs']:
+            kwargs[kw] = instance[kw]
+        
+    # Flask will fill in the things we need into the HTML template we've created,
+    # replacing {{variable_name}} with the associated text for keyword arguments
+    rendered_html = render_template(
+        config['site_file'],
+        username=username,
+        # This is what instance the user is currently on
+        instance=text,
+        instance_obj=instance,
+        instance_id=instance_id,
+        finished=lookup_user_state(username).get_annotation_count(),
+        total_count=len(instance_id_to_data),
+        alert_time_each_instance=config['alert_time_each_instance'],
+        **kwargs
+        # amount=len(all_data["annotated_data"]),
+        # annotated_amount=user_dict[username]["current_display"]["annotated_amount"],
+    )
+   
 
     # UGHGHGHGH the tempalte does unusual escaping, which makes it a PAIN to do
     # the replacement later
-    m = re.search('<div name="instance_text">([^<]+)</div>', rendered_html)
+    m = re.search('<div name="instance_text">(.*?)</div>', rendered_html,
+                  flags=(re.DOTALL|re.MULTILINE))
     text = m.group(1)
+
     # For whatever reason, doing this before the render_template causes the
     # embedded HTML to get escaped, so we just do a wholesale replacement here.
     rendered_html = rendered_html.replace(text, updated_text)
-    
+
     if config['annotation_task_name'] == "Contextual Acceptability":
         m = re.search('<div name="context_text">([^<]+)</div>', rendered_html)
         text = m.group(1)
         # For whatever reason, doing this before the render_template causes the
         # embedded HTML to get escaped, so we just do a wholesale replacement here.
         rendered_html = rendered_html.replace(text, context)
-        
-    soup = BeautifulSoup(rendered_html, 'html.parser')
-
+            
     # Parse the page so we can programmatically reset the annotation state
     # to what it was before
+    soup = BeautifulSoup(rendered_html, 'html.parser')
 
     # Highlight the schema's labels as necessary
     for schema, label in schema_labels_to_highlight:
-        name = schema + "|||" + label
+        name = schema + ":::" + label
         # print(name)
         label_elem = soup.find("label", {"for": name})  # .next_sibling
 
@@ -639,12 +820,14 @@ def user_name_endpoint():
 
         # Reset the state
         for schema, labels in annotations.items():
-            for label in labels:
-                name = schema + "|||" + label
+            for label, value in labels.items():
+                name = schema + ":::" + label
                 input_field = soup.find("input", {"name": name})
                 if input_field is None:
                     print('No input for ', name)
                 input_field['checked'] = True
+                input_field['value'] = value
+                print(label, value)
 
     rendered_html = str(soup)  # soup.prettify()
 
@@ -671,7 +854,7 @@ def post_process(config, text):
     all_words = list(set(re.findall(r'\b[a-z]{4,}\b', text)))
     all_words = [w for w in all_words if not w.startswith('http')]
     random.shuffle(all_words)
-    print(all_words)
+    # print(all_words)
 
     all_schemas = list([x[0] for x in re_to_highlights.values()])
 
@@ -815,6 +998,9 @@ def parse_story_pair_from_file(filepath):
 
 
 def arguments():
+    '''
+    Creates and returns the arg parser for Potato on the command line
+    '''
     parser = ArgumentParser()
     parser.set_defaults(show_path=False, show_similarity=False)
 
@@ -835,64 +1021,123 @@ def arguments():
 
 
 def generate_site(config):
+    '''
+    Generates the full HTML file in site/ for annotating this tasks data,
+    combining the various templates with the annotation specification in
+    the yaml file.
+    '''
     global logger
 
     logger.info("Generating anntoation site at %s" % config['site_dir'])
 
-    # Load the template
-    html_template_file = config['html_template']
+    #
+    # Stage 1: Construct the core HTML file devoid the annotation-specific content
+    #    
+    
+    # Load the core template that has all the UI controls and non-task layout. 
+    html_template_file = config['base_html_template']
     logger.debug("Reading html annotation template %s" % html_template_file)
-    # TODO: add file exists checking
+    
+    if not os.path.exists(html_template_file):
+        raise FileNotFoundError("html_template_file not found: %s" % html_template_file)
+    
     with open(html_template_file, 'rt') as f:
         html_template = ''.join(f.readlines())
 
-    # Load the header we'll stuff in the template
+    # Load the header content we'll stuff in the template, which has scripts and assets we'll need
     header_file = config['header_file']
     logger.debug("Reading html header %s" % header_file)
-    # TODO: add file exists checking
+    
+    if not os.path.exists(header_file):
+        raise FileNotFoundError("header_file not found: %s" % header_file)
+    
     with open(header_file, 'rt') as f:
         header = ''.join(f.readlines())
 
     html_template = html_template.replace("{{ HEADER }}", header)
 
+
+    # Once we have the base template constructed, load the user's custom layout for their task
+    html_layout_file = config['html_layout']
+    logger.debug("Reading task layout html %s" % html_layout_file)
+
+    if not os.path.exists(html_layout_file):
+        raise FileNotFoundError("html_layout not found: %s" % html_layout_file)
+    with open(html_layout_file, 'rt') as f:
+        task_html_layout = ''.join(f.readlines())
+    
+
+    #
+    # Stage 2: Fill in the annotation-specific pieces in the layout
+    #    
+    
     # Grab the annotation schemes
     annotation_schemes = config['annotation_schemes']
     logger.debug("Saw %d annotation scheme(s)" % len(annotation_schemes))
 
     # The annotator schemes get stuff in a <table> for now, though this probably
     # should be made more flexible
-    annotation_schematic = "<table><tr>\n"
-    context_schematic = "<table><tr>\n"
-    for annotation_scheme in annotation_schemes:
-        if (annotation_scheme['name'] == 'Other Context'):
-            context_schematic += "<td valign=\"top\" style=\"padding: 0 20px 0 0;\">\n"
-            context_schematic += generate_schematic(annotation_scheme) + "\n"
-            context_schematic += "</td>\n"
-        
-        else:
-            annotation_schematic += "<td valign=\"top\" style=\"padding: 0 20px 0 0;\">\n"
-            annotation_schematic += generate_schematic(annotation_scheme) + "\n"
-            annotation_schematic += "</td>\n"
-        
-    annotation_schematic += "</tr></table>"
 
-    html_template = html_template.replace(
-        "{{annotation_schematic}}", annotation_schematic)
-    html_template = html_template.replace(
-        "{{context_schematic}}", context_schematic)
+    if 'custom_layout' in config and config['custom_layout']:
         
-    if 'annotation_codebook_url' in config:
+        for annotation_scheme in annotation_schemes:
+            schema_layout = generate_schematic(annotation_scheme) + "\n"
+            schema_name = annotation_scheme['name']
+
+            updated_layout = task_html_layout.replace(
+            "{{" + schema_name + "}}", schema_layout)
+
+            # Check that we actually updated the template
+            if task_html_layout == updated_layout:
+                raise Exception(
+                    ('%s indicated a custom layout but a corresponding layout ' +
+                     'was not found for {{%s}} in %s. Check to ensure the ' +
+                     'config.yaml and layout.html files have matching names') %
+                    (config['__config_file__'], schema_name, config['html_layout']))
+
+            task_html_layout = updated_layout        
+    else:
+        
+        # If we don't have a custom layout, accumulate all the tasks into a
+        # single HTML element 
+        schema_layouts = "" 
+        for annotation_scheme in annotation_schemes:
+            schema_layouts += generate_schematic(annotation_scheme) + "\n"
+            
+        task_html_layout = task_html_layout.replace(
+            "{{annotation_schematic}}", schema_layouts)
+
+    # Add in a codebook link if the admin specified one
+    codebook_html = ''
+    if 'annotation_codebook_url' in config and len(config['annotation_codebook_url']) > 0:
         annotation_codebook = config['annotation_codebook_url']
-        html_template = html_template.replace(
-            "{{annotation_codebook}}", annotation_codebook)
+        codebook_html = '<a href="{{annotation_codebook_url}}" class="nav-item nav-link">Annotation Codebook</a>'        
+        codebook_html = codebook_html.replace(
+            "{{annotation_codebook_url}}", annotation_codebook)
 
+
+    #
+    # Step 3, drop in the annotation layout and insert the rest of the task-specific variables
+    #
+
+
+    # Swap in the task's layout
+    html_template = html_template.replace("{{ TASK_LAYOUT }}", task_html_layout)            
+    
+    html_template = html_template.replace(
+        "{{annotation_codebook}}", codebook_html)
+        
     html_template = html_template.replace(
         "{{annotation_task_name}}", config['annotation_task_name'])
 
-    # Jiaxin: change the basename from the template name to the project name + template name, to allow multiple annotation tasks using the same template
+    
+    # Jiaxin: change the basename from the template name to the project name +
+    # template name, to allow multiple annotation tasks using the same template
     site_name = '-'.join(config['annotation_task_name'].split(' ')
                          ) + '-' + basename(html_template_file)
+    
     output_html_fname = os.path.join(config['site_dir'], site_name)
+
     # print(basename(html_template_file))
     # print(output_html_fname)
 
@@ -907,223 +1152,26 @@ def generate_site(config):
 
 
 def generate_schematic(annotation_scheme):
+    '''
+    Based on the task's yaml configuration, generate the full HTML site needed
+    to annotate the tasks's data.
+    '''
     global logger
 
     # Figure out which kind of tasks we're doing and build the input frame
     annotation_type = annotation_scheme['annotation_type']
 
     if annotation_type == "multiselect":
-
-        schematic = \
-            '<form action="/action_page.php">' + \
-            '  <fieldset>' + \
-            ('  <legend>%s:</legend>' % annotation_scheme['name'])
-
-        # TODO: display keyboard shortcuts on the annotation page
-        key2label = {}
-        label2key = {}
-
-        for label_data in annotation_scheme['labels']:
-            print(label_data)
-
-            label = label_data if isinstance(
-                label_data, str) else label_data['name']
-
-            name = annotation_scheme['name'] + '|||' + label
-            class_name = annotation_scheme['name']
-            key_value = name
-
-            tooltip = ''
-            if isinstance(label_data, collections.Mapping):
-                tooltip_text = ''
-                if 'tooltip' in label_data:
-                    tooltip_text = label_data['tooltip']
-                    # print('direct: ', tooltip_text)
-                elif 'tooltip_file' in label_data:
-                    with open(label_data['tooltip_file'], 'rt') as f:
-                        lines = f.readlines()
-                    tooltip_text = ''.join(lines)
-                    # print('file: ', tooltip_text)
-                if len(tooltip_text) > 0:
-                    tooltip = 'data-toggle="tooltip" data-html="true" data-placement="top" title="%s"' \
-                        % tooltip_text
-                if 'key_value' in label_data:
-                    key_value = label_data['key_value']
-                    if key_value in key2label:
-                        logger.warning(
-                            "Keyboard input conflict: %s" % key_value)
-                        quit()
-                    key2label[key_value] = label
-                    label2key[label] = key_value
-            # print(key_value)
-
-            label_content = label
-            if annotation_scheme.get("video_as_label", None) == "True":
-                assert "videopath" in label_data, "Video path should in each label_data when video_as_label is True."
-                video_path = label_data["videopath"]
-                label_content = f'''
-                <video width="320" height="240" autoplay loop muted>
-                    <source src="{video_path}" type="video/mp4" />
-                </video>'''
-
-            #add shortkey to the label so that the annotators will know how to use it
-            #when the shortkey is "None", this will not displayed as we do not allow short key for None category
-            #if label in label2key and label2key[label] != 'None':
-            if label in label2key:
-                label_content = label_content + \
-                    ' [' + label2key[label].upper() + ']'
-            if ("single_select" in annotation_scheme) and (annotation_scheme["single_select"] == "True"):
-
-                schematic += \
-                    (('  <input class="%s" type="checkbox" id="%s" name="%s" value="%s" onclick="onlyOne(this)">' +
-                      '  <label for="%s" %s>%s</label><br/>')
-                     % (class_name, label, name, key_value, name, tooltip, label_content))
-            else:
-                schematic += \
-                    (('  <input class="%s" type="checkbox" id="%s" name="%s" value="%s" onclick="whetherNone(this)">' +
-                     '  <label for="%s" %s>%s</label><br/>')
-                     % (class_name, label, name, key_value, name, tooltip, label_content))
-
-        schematic += '  </fieldset>\n</form>\n'
+        return generate_multiselect_layout(annotation_scheme)
+    
     elif annotation_type == "radio":
+        return generate_radio_layout(annotation_scheme)
 
-        schematic = \
-            '<form action="/action_page.php">' + \
-            '  <fieldset>' + \
-            ('  <legend>%s:</legend>' % annotation_scheme['name'])
-
-        # TODO: display keyboard shortcuts on the annotation page
-        key2label = {}
-        label2key = {}
-
-        for label_data in annotation_scheme['labels']:
-            print(label_data)
-
-            label = label_data if isinstance(
-                label_data, str) else label_data['name']
-
-            name = annotation_scheme['name'] + '|||' + label
-            class_name = annotation_scheme['name']
-            key_value = name
-
-            tooltip = ''
-            if isinstance(label_data, collections.Mapping):
-                tooltip_text = ''
-                if 'tooltip' in label_data:
-                    tooltip_text = label_data['tooltip']
-                    # print('direct: ', tooltip_text)
-                elif 'tooltip_file' in label_data:
-                    with open(label_data['tooltip_file'], 'rt') as f:
-                        lines = f.readlines()
-                    tooltip_text = ''.join(lines)
-                    # print('file: ', tooltip_text)
-                if len(tooltip_text) > 0:
-                    tooltip = 'data-toggle="tooltip" data-html="true" data-placement="top" title="%s"' \
-                        % tooltip_text
-                if 'key_value' in label_data:
-                    key_value = label_data['key_value']
-                    if key_value in key2label:
-                        logger.warning(
-                            "Keyboard input conflict: %s" % key_value)
-                        quit()
-                    key2label[key_value] = label
-                    label2key[label] = key_value
-            # print(key_value)
-
-            label_content = label
-            if annotation_scheme.get("video_as_label", None) == "True":
-                assert "videopath" in label_data, "Video path should in each label_data when video_as_label is True."
-                video_path = label_data["videopath"]
-                label_content = f'''
-                <video width="320" height="240" autoplay loop muted>
-                    <source src="{video_path}" type="video/mp4" />
-                </video>'''
-
-            #add shortkey to the label so that the annotators will know how to use it
-            #when the shortkey is "None", this will not displayed as we do not allow short key for None category
-            #if label in label2key and label2key[label] != 'None':
-            if label in label2key:
-                label_content = label_content + \
-                    ' [' + label2key[label].upper() + ']'
-
-
-            schematic += \
-                    (('  <input class="%s" type="radio" id="%s" name="%s" value="%s" onclick="onlyOne(this)">' +
-                     '  <label for="%s" %s>%s</label><br/>')
-                     % (class_name, label, name, key_value, name, tooltip, label_content))
-      
-
-        schematic += '  </fieldset>\n</form>\n'
+    elif annotation_type == "likert":
+        return generate_likert_layout(annotation_scheme)
         
     elif annotation_type == "text":
-
-        schematic = \
-            '<form action="/action_page.php">' + \
-            '  <fieldset>' + \
-            ('  <legend>%s:</legend>' % annotation_scheme['name'])
-
-        # TODO: display keyboard shortcuts on the annotation page
-        key2label = {}
-        label2key = {}
-
-        for label_data in annotation_scheme['labels']:
-            print(label_data)
-
-            label = label_data if isinstance(
-                label_data, str) else label_data['name']
-
-            name = annotation_scheme['name'] + '|||' + label
-            class_name = annotation_scheme['name']
-            key_value = name
-
-            tooltip = ''
-            if isinstance(label_data, collections.Mapping):
-                tooltip_text = ''
-                if 'tooltip' in label_data:
-                    tooltip_text = label_data['tooltip']
-                    # print('direct: ', tooltip_text)
-                elif 'tooltip_file' in label_data:
-                    with open(label_data['tooltip_file'], 'rt') as f:
-                        lines = f.readlines()
-                    tooltip_text = ''.join(lines)
-                    # print('file: ', tooltip_text)
-                if len(tooltip_text) > 0:
-                    tooltip = 'data-toggle="tooltip" data-html="true" data-placement="top" title="%s"' \
-                        % tooltip_text
-                if 'key_value' in label_data:
-                    key_value = label_data['key_value']
-                    if key_value in key2label:
-                        logger.warning(
-                            "Keyboard input conflict: %s" % key_value)
-                        quit()
-                    key2label[key_value] = label
-                    label2key[label] = key_value
-            # print(key_value)
-
-            label_content = label
-            if annotation_scheme.get("video_as_label", None) == "True":
-                assert "videopath" in label_data, "Video path should in each label_data when video_as_label is True."
-                video_path = label_data["videopath"]
-                label_content = f'''
-                <video width="320" height="240" autoplay loop muted>
-                    <source src="{video_path}" type="video/mp4" />
-                </video>'''
-
-            #add shortkey to the label so that the annotators will know how to use it
-            #when the shortkey is "None", this will not displayed as we do not allow short key for None category
-            #if label in label2key and label2key[label] != 'None':
-            if label in label2key:
-                label_content = label_content + \
-                    ' [' + label2key[label].upper() + ']'
-
-
-            schematic += \
-                    (('  <input class="%s" type="text" id="%s" name="%s" >' +
-                     '  <label for="%s" %s>%s</label><br/>')
-                     % (class_name, label, name, name, tooltip, label_content))
-      
-
-        schematic += '  </fieldset>\n</form>\n'
+        return generate_textbox_layout(annotation_scheme)
 
     else:
         logger.warning("unsupported annotation type: %s" % annotation_type)
@@ -1131,8 +1179,297 @@ def generate_schematic(annotation_scheme):
     return schematic
 
 
+def generate_multiselect_layout(annotation_scheme):
+    global logger
+    
+    schematic = \
+        '<form action="/action_page.php">' + \
+        '  <fieldset>' + \
+        ('  <legend>%s</legend>' % annotation_scheme['description'])
+
+    # TODO: display keyboard shortcuts on the annotation page
+    key2label = {}
+    label2key = {}
+
+    for i, label_data in enumerate(annotation_scheme['labels'], 1):
+
+        label = label_data if isinstance(
+            label_data, str) else label_data['name']
+
+        name = annotation_scheme['name'] + ':::' + label
+        class_name = annotation_scheme['name']
+        key_value = name
+
+        tooltip = ''
+        if isinstance(label_data, collections.Mapping):
+            tooltip_text = ''
+            if 'tooltip' in label_data:
+                tooltip_text = label_data['tooltip']
+                # print('direct: ', tooltip_text)
+            elif 'tooltip_file' in label_data:
+                with open(label_data['tooltip_file'], 'rt') as f:
+                    lines = f.readlines()
+                tooltip_text = ''.join(lines)
+                # print('file: ', tooltip_text)
+            if len(tooltip_text) > 0:
+                tooltip = 'data-toggle="tooltip" data-html="true" data-placement="top" title="%s"' \
+                    % tooltip_text
+                
+            if 'key_value' in label_data:
+                key_value = label_data['key_value']
+                if key_value in key2label:
+                    logger.warning(
+                        "Keyboard input conflict: %s" % key_value)
+                    quit()
+                key2label[key_value] = label
+                label2key[label] = key_value
 
 
+        if "sequential_key_binding" in annotation_scheme \
+           and  annotation_scheme["sequential_key_binding"] \
+           and len(annotation_scheme['labels']) <= 10:
+            key_value = str(i % 10)
+            key2label[key_value] = label
+            label2key[label] = key_value            
+
+        label_content = label
+        if annotation_scheme.get("video_as_label", None) == "True":
+            assert "videopath" in label_data, "Video path should in each label_data when video_as_label is True."
+            video_path = label_data["videopath"]
+            label_content = f'''
+            <video width="320" height="240" autoplay loop muted>
+                <source src="{video_path}" type="video/mp4" />
+            </video>'''
+
+        #add shortkey to the label so that the annotators will know how to use it
+        #when the shortkey is "None", this will not displayed as we do not allow short key for None category
+        #if label in label2key and label2key[label] != 'None':
+        #if label in label2key:
+        #    label_content = label_content + \
+        #        ' [' + label2key[label].upper() + ']'
+        
+        if ("single_select" in annotation_scheme) and (annotation_scheme["single_select"] == "True"):
+            logger.warning("single_select is Depricated and will be removed soon. Use \"radio\" instead.")
+            schematic += \
+                (('  <input class="%s" type="checkbox" id="%s" name="%s" value="%s" onclick="onlyOne(this)">' +
+                  '  <label for="%s" %s>%s</label><br/>')
+                 % (class_name, label, name, key_value, name, tooltip, label_content))
+        else:
+            schematic += \
+                (('<label for="%s" %s><input class="%s" type="checkbox" id="%s" name="%s" value="%s" onclick="whetherNone(this)">' +
+                 '  %s</label><br/>')
+                 % (name, tooltip, class_name, name, name, key_value, label_content))
+
+            
+    schematic += '  </fieldset>\n</form>\n'
+
+    return schematic
+
+
+def generate_radio_layout(annotation_scheme, horizontal=False):
+
+    schematic = \
+        '<form action="/action_page.php">' + \
+        '  <fieldset>' + \
+        ('  <legend>%s</legend>' % annotation_scheme['description'])
+
+    # TODO: display keyboard shortcuts on the annotation page
+    key2label = {}
+    label2key = {}
+
+    for i, label_data in enumerate(annotation_scheme['labels'], 1):
+
+        label = label_data if isinstance(
+            label_data, str) else label_data['name']
+
+        name = annotation_scheme['name'] + ':::' + label
+        class_name = annotation_scheme['name']
+        key_value = name
+
+        tooltip = ''
+        if isinstance(label_data, collections.Mapping):
+            tooltip_text = ''
+            if 'tooltip' in label_data:
+                tooltip_text = label_data['tooltip']
+                # print('direct: ', tooltip_text)
+            elif 'tooltip_file' in label_data:
+                with open(label_data['tooltip_file'], 'rt') as f:
+                    lines = f.readlines()
+                tooltip_text = ''.join(lines)
+                # print('file: ', tooltip_text)
+            if len(tooltip_text) > 0:
+                tooltip = 'data-toggle="tooltip" data-html="true" data-placement="top" title="%s"' \
+                    % tooltip_text
+
+            # Bind the keys
+            if 'key_value' in label_data:
+                key_value = label_data['key_value']
+                if key_value in key2label:
+                    logger.warning(
+                        "Keyboard input conflict: %s" % key_value)
+                    quit()
+                key2label[key_value] = label
+                label2key[label] = key_value                
+            # print(key_value)
+            
+        if "sequential_key_binding" in annotation_scheme \
+           and annotation_scheme["sequential_key_binding"] \
+           and len(annotation_scheme['labels']) <= 10:
+            key_value = str(i % 10)
+            key2label[key_value] = label
+            label2key[label] = key_value            
+            
+
+        label_content = label
+        if annotation_scheme.get("video_as_label", None) == "True":
+            assert "videopath" in label_data, "Video path should in each label_data when video_as_label is True."
+            video_path = label_data["videopath"]
+            label_content = f'''
+            <video width="320" height="240" autoplay loop muted>
+                <source src="{video_path}" type="video/mp4" />
+            </video>'''
+
+        # Add shortkey to the label so that the annotators will know how to use
+        # it when the shortkey is "None", this will not displayed as we do not
+        # allow short key for None category if label in label2key and
+        # label2key[label] != 'None':
+        #if label in label2key:
+        #    label_content = label_content + \
+        #        ' [' + label2key[label].upper() + ']'
+
+        schematic += \
+                (('  <input class="%s" type="radio" id="%s" name="%s" value="%s" onclick="onlyOne(this)">' +
+                 '  <label for="%s" %s>%s</label><br/>')
+                 % (class_name, label, name, key_value, name, tooltip, label_content))
+
+
+    schematic += '  </fieldset>\n</form>\n'
+    return schematic
+
+
+def generate_likert_layout(annotation_scheme):
+
+    # If the user specified the more complicated likert layout, default to the
+    # radio layout
+    if 'labels' in annotation_scheme:
+        return generate_radio_layout(annotation_scheme, horizontal=False)
+
+    if 'size' not in annotation_scheme:
+        raise Exception('Likert scale for "%s" did not include size' \
+                        % annotation_scheme['name'])
+    if 'min_label' not in annotation_scheme:
+        raise Exception('Likert scale for "%s" did not include min_label' \
+                        % annotation_scheme['name'])
+    if 'max_label' not in annotation_scheme:
+        raise Exception('Likert scale for "%s" did not include max_label' \
+                        % annotation_scheme['name'])
+
+    schematic = \
+        ('<div><form action="/action_page.php">' + \
+        '  <fieldset> <legend>%s</legend> <ul class="likert"> <li> %s </li>') \
+        % (annotation_scheme['description'], annotation_scheme['min_label'])
+
+
+
+    
+    key2label = {}
+    label2key = {}
+    
+    
+    for i in range(1, annotation_scheme['size']+1):
+
+        label = 'scale_' + str(i)
+        name = annotation_scheme['name'] + ':::' + label
+        class_name = annotation_scheme['name']
+
+        # if the user wants us to add in easy key bindings
+        if "sequential_key_binding" in annotation_scheme \
+           and annotation_scheme["sequential_key_binding"] \
+           and annotation_scheme['size'] <= 10: 
+            key_value = str(i % 10)
+            key2label[key_value] = label
+            label2key[label] = key_value
+        else:
+            key_value = ''
+
+        # In the collapsed version of the likert scale, no label is shown.
+        label_content = ''
+        tooltip = ''        
+
+        schematic += \
+                ((' <li><input class="%s" type="radio" id="%s" name="%s" value="%s" onclick="onlyOne(this)">' +
+                 '  <label for="%s" %s>%s</label></li>')
+                 % (class_name, label, name, key_value, name, tooltip, label_content))
+
+
+    schematic += ('  <li>%s</li> </ul></fieldset>\n</form></div>\n' \
+                  % (annotation_scheme['max_label']))
+    
+    return schematic
+
+def generate_textbox_layout(annotation_scheme):
+    #'<div style="border:1px solid black; border-radius: 25px;">' + \
+    schematic = \
+        '<form action="/action_page.php">' + \
+        '  <fieldset>' + \
+        ('  <legend>%s</legend>' % annotation_scheme['description'])
+
+    # TODO: display keyboard shortcuts on the annotation page
+    key2label = {}
+    label2key = {}
+
+    # TODO: decide whether text boxes need labels
+    label = 'text_box'
+
+    name = annotation_scheme['name'] + ':::' + label
+    class_name = annotation_scheme['name']
+    key_value = name
+
+    tooltip = ''
+    if False:
+        if 'tooltip' in annotation_scheme:
+            tooltip_text = annotation_scheme['tooltip']
+            # print('direct: ', tooltip_text)
+        elif 'tooltip_file' in annotation_scheme:
+            with open(annotation_scheme['tooltip_file'], 'rt') as f:
+                lines = f.readlines()
+            tooltip_text = ''.join(lines)
+            # print('file: ', tooltip_text)
+        if len(tooltip_text) > 0:
+            tooltip = 'data-toggle="tooltip" data-html="true" data-placement="top" title="%s"' \
+                % tooltip_text
+        if 'key_value' in label_data:
+            key_value = label_data['key_value']
+            if key_value in key2label:
+                logger.warning(
+                    "Keyboard input conflict: %s" % key_value)
+                quit()
+            key2label[key_value] = label
+            label2key[label] = key_value
+
+
+    label_content = label
+
+    #add shortkey to the label so that the annotators will know how to use it
+    #when the shortkey is "None", this will not displayed as we do not allow short key for None category
+    #if label in label2key and label2key[label] != 'None':
+    if label in label2key:
+        label_content = label_content + \
+            ' [' + label2key[label].upper() + ']'
+
+
+    schematic += \
+            (('  <input class="%s" type="text" id="%s" name="%s" >' +
+             '  <label for="%s" %s></label><br/>')
+             % (class_name, label, name, name, tooltip))
+
+
+    #schematic += '  </fieldset>\n</form></div>\n'
+    schematic += '  </fieldset>\n</form>\n'
+
+    
+    return schematic
+    
 
 @app.route('/file/<path:filename>')
 def get_file(filename):
@@ -1146,17 +1483,22 @@ def get_file(filename):
 def main():
     global config
     global logger
-    global authorized_users
+    global user_config
 
     args = arguments()
 
     with open(args.config_file, 'rt') as f:
         config = yaml.safe_load(f)
 
-    authorized_users = {}
-    for line in config["users"]:
-        username = line['firstname'] + '_' + line['lastname']
-        authorized_users[username] = {}
+    user_config = UserConfig()
+    user_config_data = config['user_config']
+    if 'allow_all_users' in user_config_data:
+        user_config.allow_all_users = user_config_data['allow_all_users']
+
+        if 'users' in user_config_data:       
+            for user in user_config_data["users"]:
+                username = user['firstname'] + '_' + user['lastname']
+                user_config.add_user(username)
 
     logger = logging.getLogger(config['server_name'])
 
@@ -1169,6 +1511,9 @@ def main():
     if args.very_verbose:
         logger.setLevel(logging.NOTSET)
 
+    # For helping in debugging, stuff in the config file name
+    config['__config_file__'] = args.config_file
+        
     # Creates the templates we'll use in flask by mashing annotation
     # specification on top of the proto-templates
     generate_site(config)
