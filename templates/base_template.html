@@ -44,9 +44,7 @@
 
           // Each time we process a user's key presses, track who is doing
           // it by grabbing the hidden firstname and lastname fields
-          get_new_instance(event, document.getElementById('firstname').value,
-                      document.getElementById('lastname').value)
-          
+          get_new_instance(event);          
       });
     </script>
     <script>
@@ -121,7 +119,7 @@
     <script>
       window.onunload = check_close;
       function check_close() {
-          console.error("session closed");
+          // console.error("session closed");
           var post_req = {
               is_close: "closed"
           }
@@ -177,6 +175,12 @@
           form.setAttribute("method", "post");
           form.setAttribute("action", "annotate");
           
+          var hiddenField = document.createElement("input");
+          hiddenField.setAttribute("type", "hidden");
+          hiddenField.setAttribute("name", "email");
+          hiddenField.setAttribute("value", document.getElementById('username').value);
+          form.appendChild(hiddenField);
+          
           for (var key in params) {
               if (params.hasOwnProperty(key)) {
                   var hiddenField = document.createElement("input");
@@ -225,7 +229,7 @@
        * along with any relevant key presses to request a new instance to
        * annotate.
        */     
-      function get_new_instance(event, firstname, lastname) {
+      function get_new_instance(event) { 
           var x = event.key;
           var action = ""
           var ism = ""
@@ -243,15 +247,11 @@
               // console.log("Unknown key press", event)
               return
           }
-
-          console.log("get_new_instance")
           
           var instance_id = document.getElementById('instance_id').value
           // var time_string = document.getElementById("timecounter").innerHTML //get time spent on this instance
           time_string = '-1'
           var post_req = {
-              firstname: firstname,
-              lastname: lastname,
               label: ism,
               src: action,
               instance_id: instance_id,

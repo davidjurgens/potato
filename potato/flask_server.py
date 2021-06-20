@@ -141,20 +141,11 @@ class UserAnnotationState:
 
     def go_forward(self):
         old_cur = self.instance_cursor
-        # print("current cursor: %d/%d, updating to %d/%d" % \
-        #      (self.instance_cursor, len(self.instance_id_to_data) - 1,
-        #       min(self.instance_cursor + 1,  len(self.instance_id_to_data) - 1),
-        #       len(self.instance_id_to_data) - 1))
         if self.instance_cursor < len(self.instance_id_to_data) - 1:
             self.instance_cursor += 1
-        #print("go_forward(): cursor %d -> %d" % (old_cur, self.instance_cursor))
 
     def go_to_id(self, id):
         old_cur = self.instance_cursor
-        # print("current cursor: %d/%d, updating to %d/%d" % \
-        #      (self.instance_cursor, len(self.instance_id_to_data) - 1,
-        #       min(self.instance_cursor + 1,  len(self.instance_id_to_data) - 1),
-        #       len(self.instance_id_to_data) - 1))
         if id < len(self.instance_id_to_data) and id >= 0:
             self.instance_cursor = id
 
@@ -731,9 +722,6 @@ def annotate_page():
     elif action == "go_to":
         go_to_id(username, request.form.get("go_to"))
 
-    elif ism == None:
-        print("ISM IS NULLLLLLL")
-
     else:
         print('unrecognized action request: "%s"' % action)
 
@@ -802,7 +790,7 @@ def annotate_page():
     # Highlight the schema's labels as necessary
     for schema, label in schema_labels_to_highlight:
         name = schema + ":::" + label
-        # print(name)
+
         label_elem = soup.find("label", {"for": name})  # .next_sibling
 
         # Update style to match the current color
@@ -816,8 +804,6 @@ def annotate_page():
     annotations = get_annotations_for_user_on(username, instance_id)
     if annotations is not None:
 
-        # print('Saw previous annotations for %s: %s' % (instance_id, annotations))
-
         # Reset the state
         for schema, labels in annotations.items():
             for label, value in labels.items():
@@ -827,7 +813,7 @@ def annotate_page():
                     print('No input for ', name)
                 input_field['checked'] = True
                 input_field['value'] = value
-                print(label, value)
+
 
     rendered_html = str(soup)  # soup.prettify()
 
@@ -854,7 +840,7 @@ def post_process(config, text):
     all_words = list(set(re.findall(r'\b[a-z]{4,}\b', text)))
     all_words = [w for w in all_words if not w.startswith('http')]
     random.shuffle(all_words)
-    # print(all_words)
+
 
     all_schemas = list([x[0] for x in re_to_highlights.values()])
 
