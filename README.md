@@ -1,37 +1,39 @@
-# potato: portable text annotation tool
+# Potato: the POrtable Text Annotation TOol
 
-### Start
-To run the latest demo for text annotation:
+##
 
-    python3 potato/flask_server.py config/config_single.yaml 
+Potato is an easy-to-use  web-based annotation tool to let you quickly mock-up and deploy a variety of text annotation tasks. Potato works in the back-end as a web server that you can launch locally and then annotators use the web-based front end to work through data. Our goal is to allow folks to quickly and easily annotate text data by themselves or in small teams&mdash;going from zero to annotating in a matter of a few lines of configuration.
 
-by default, the website will running at 0.0.0.0:8000, to specify other ports (e.g. 8001), try this:
+Potato is driven by a single configuration file that specifies the type of task and data you want to use. Potato does not require any coding to get up and running. For most tasks, no additional web design is needed, though Potato is easily customizable so you can tweak the interface and elements your annotators see.
 
-    python3 potato/flask_server.py -p 8001 config/config_single.yaml 
+Potato 
 
-    
-The latest multi-choice template supporting all the functions is:
-    
-    templates/single_multiple_choice.html
-    
-Please check `config/config_single.yaml` to set up the configurations.
 
-### Recently added features
+### Quick Start
+
+To run a simple check-box style annotation on text data, run
+
+    python3 potato/flask_server.py config/examples/simple-check-box.yaml
+        
+This will launch the webserver on port 8000 which can be accessed at [http://localhost:8000](http://localhost:8000). 
+
+Clicking "Submit" will autoadvance to the next instance and you can navigate between items using the arrow keys.
+
+The `config/examples` folder contains example `.yaml` configuration files that match many common simple use-cases. See the full [documentation](link pls) for all configuration options.
+
+
+### Versions
+    [2021.06.19 David] Overhaul of rendering engine and support for new annotation schemes
     [2021.03.16 Jiaxin] count and display the time spent on each instance
     [2021.03.08 Xingyao] video/image as labels
     [2021.03.08 Jiaxin] keyboard shortcut 
     [2021.03.08 Jiaxin] quick jump to the specific instance
     [2021.02.17 Jiaxin] single-choice scheme supporting likert scales
    
-    
+### Design Team and Support
 
+Potato is run by a small and engergetic team of academics doing the best the can. For support, please leave a ticket on this git repo. 
+   
+### Citing Potato
 
-### How to use `video_as_label`
-
-Please refer to `config/config_single_video_label.yaml` for reference.
-
-Note in order for server to access the video path specfied in the yaml, it is needed to link the directory where video is stored under `potato/data/files` (where the `files` would be a soft link):
-
-    ln -s /a/folder/contains/video potato/data/files
-
-Access `http://<annotation-server-url>:<port>/files/a/b/c.mp4` would be able to direct access the video file `/a/folder/contains/video/a/b/c.mp4`.
+Oh I sure hope we get to this.
