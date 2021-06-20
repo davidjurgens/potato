@@ -512,13 +512,13 @@ def signup():
         print(single_user['username'], result)
         if result == 'Success':
             user_config.save_user_config()
-            return render_template("home.html", title=config['annotation_task_name'])
+            return render_template("home.html", title=config['annotation_task_name'], email = username, password = password, login_error = 'User registration success for ' + username + ', please login now')
         else:
             #TODO: return to the signup page and display error message
-            return render_template("home.html", title=config['annotation_task_name'])
+            return render_template("home.html", title=config['annotation_task_name'], login_error = result + ', please try again')
     else:
         print('unknown action at home page')
-        return render_template("home.html", title=config['annotation_task_name'])
+        return render_template("home.html", title=config['annotation_task_name'], email = username, password = password, login_error = 'Invalid username or password')
 
 @app.route("/newuser")
 def new_user():
