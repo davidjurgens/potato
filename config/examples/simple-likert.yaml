@@ -1,8 +1,4 @@
 {
-    "port": 9001,
-
-    "server_name": "potato annotator",
-
     "annotation_task_name": "Simple Likert Scale Example",
 
     # Potato will write the annotation file for all annotations to this
@@ -23,26 +19,20 @@
     "annotation_codebook_url": "",
 
     "data_files": [
-       "data/narratives_for_annotation.json"
+       "data/toy-example.json"
     ],
 
     "item_properties": {
         "id_key": "id",
         "text_key": "text",
-        "context_key": "context"
     },
 
 
     "user_config": {
-
-      "allow_all_users": True,
-      
+      "allow_all_users": True,     
       "users": [  ],
     },
 
-    # How many seconds do you want the annotators spend on each instance, after
-    # that, an alert will be sent per alert_time_each_instance seconds.
-    "alert_time_each_instance": 10000000,
 
     "annotation_schemes": [      
         {
@@ -73,7 +63,7 @@
     # to influence the layout and description of your task. This is not a full
     # HTML page, just the piece that does lays out your task's pieces
     "html_layout": "templates/examples/plain_layout.html",
-
+ 
     # The core UI files for Potato. You should not need to change these normally.
     #
     # Exceptions to this might include:
@@ -84,6 +74,12 @@
     "base_html_template": "templates/base_template.html",
     "header_file": "templates/header.html",
 
+
+    # How many seconds do you want the annotators spend on each instance, after
+    # that, an alert will be sent per alert_time_each_instance seconds.
+    "alert_time_each_instance": 10000000,
+
+    
     # This is where the actual HTML files will be generated
     "site_dir": "potato/templates/",
 
