@@ -454,7 +454,7 @@ def write_data(username):
 @app.route("/")
 def home():
     global config
-    return render_template("home.html", title=config['annotation_task_name'])
+    return render_template("home.html", title=config['annotation_task_name'],login_error = ' ')
 
 
 @app.route("/login", methods=['GET', 'POST'])
@@ -470,7 +470,12 @@ def login():
     if user_config.is_valid_password(username, password):
         return annotate_page()
     else:
-        return render_template("home.html", title=config['annotation_task_name'], )
+        data = {
+            'username':username,
+            'pass':password,
+            'Login_error': 'Invalid username or password'
+        }
+        return render_template("home.html", title=config['annotation_task_name'], email = username, password = password, login_error = 'Invalid username or password')
 
 @app.route("/newuser")
 def new_user():

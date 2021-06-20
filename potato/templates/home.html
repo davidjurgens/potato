@@ -65,15 +65,18 @@
             <span class="login100-form-title">
               {{title}}
             </span>
+              <div class="text-center p-t-0">
+                  <p style="color:red">{{login_error}}</p>
+              </div>
             <div class="wrap-input100 validate-input" data-validate="Valid email is required: ex@abc.xyz">
-              <input class="input100" type="text" name="email" id="email" placeholder="Email">
+              <input class="input100" type="text" name="email" id="email" placeholder="Email" value = {{ email }}>
               <span class="focus-input100"></span>
               <span class="symbol-input100">
                 <i class="fa fa-envelope" aria-hidden="true"></i>
               </span>
             </div>
             <div class="wrap-input100 validate-input" data-validate="Password is required">
-              <input class="input100" type="password" name="pass" id="pass" placeholder="Password">
+              <input class="input100" type="password" name="pass" id="pass" placeholder="Password" value = {{ password }}>
               <span class="focus-input100"></span>
               <span class="symbol-input100">
                 <i class="fa fa-lock" aria-hidden="true"></i>
