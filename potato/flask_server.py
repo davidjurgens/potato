@@ -775,30 +775,28 @@ def annotate_page():
     # For whatever reason, doing this before the render_template causes the
     # embedded HTML to get escaped, so we just do a wholesale replacement here.
     rendered_html = rendered_html.replace(text, updated_text)
-
-    if config['annotation_task_name'] == "Contextual Acceptability":
-        m = re.search('<div name="context_text">([^<]+)</div>', rendered_html)
-        text = m.group(1)
-        # For whatever reason, doing this before the render_template causes the
-        # embedded HTML to get escaped, so we just do a wholesale replacement here.
-        rendered_html = rendered_html.replace(text, context)
-            
+    
     # Parse the page so we can programmatically reset the annotation state
     # to what it was before
     soup = BeautifulSoup(rendered_html, 'html.parser')
 
     # Highlight the schema's labels as necessary
     for schema, label in schema_labels_to_highlight:
-        name = schema + ":::" + label
-
-        label_elem = soup.find("label", {"for": name})  # .next_sibling
-
+        
+        name = schema + ":::" + label              
+        label_elem = soup.find("label", {"for": name})
+        
         # Update style to match the current color
         c = get_color_for_schema_label(schema, label)
+
         # Jiaxin: sometimes label_elem is None
         if label_elem:
             label_elem['style'] = ("background-color: %s" % c)
 
+
+    #for label in soup.find_all("label"):
+    #    print(label['for'])
+            
     # If the user has annotated this before, wall the DOM and fill out what they
     # did
     annotations = get_annotations_for_user_on(username, instance_id)
