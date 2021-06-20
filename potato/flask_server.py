@@ -85,12 +85,36 @@ class UserConfig:
     def __init__(self):
         self.allow_all_users = False
         self.usernames = set()
+        self.users = {}
+        self.required_user_info_keys = ['username','password']
 
+    #Jiaxin: this function will be depreciate since we will save the full user dict with password
     def add_user(self, username):
         if username in self.usernames:
             print("Duplicate user in list: %s" % username)
         self.usernames.add(username)
-    
+
+    #add a single user to the full user dict
+    def add_single_user(self, single_user):
+        for key in self.required_user_info_keys:
+            if key not in single_user:
+                print('Missing %s in user info' % key)
+                return 'Missing %s in user info' % key
+        if single_user['username'] in self.users:
+            print("Duplicate user in list: %s" % single_user['username'])
+            return "Duplicate user in list: %s" % single_user['username']
+        self.users[single_user['username']] = single_user
+        return 'Success'
+
+    #check if a user name is in the current user list
+    def is_valid_username(self, username):
+        return username in self.users
+
+    #check if the password is correct for a given (username, password) pair
+    #TODO: Currently we are just doing simple plaintext verification, but we will need ciphertext verification in the long run
+    def is_valid_password(self, username, password):
+        return self.is_valid_username(username)# and self.users[username] == password
+
     def is_valid_user(self, username):
         return self.allow_all_users or username in self.usernames
 
@@ -435,9 +459,18 @@ def home():
 
 @app.route("/login", methods=['GET', 'POST'])
 def login():
+    global user_config
+    global config
     # TODO: add in logic for checking/hashing passwords, safe password
     # management, etc. For now just #yolo and log in people regardless.
-    return annotate_page()
+    username = request.form.get("email")
+    password = request.form.get("pass")
+    print(username, password)
+
+    if user_config.is_valid_password(username, password):
+        return annotate_page()
+    else:
+        return render_template("home.html", title=config['annotation_task_name'], )
 
 @app.route("/newuser")
 def new_user():
@@ -676,7 +709,7 @@ def annotate_page():
     username = request.form.get("email")
 
     # Check if the user is authorized. If not, go to the login page
-    if not user_config.is_valid_user(username):
+    if not user_config.is_valid_username(username):
         logger.info("Unauthorized user")
         return render_template("home.html")
 
@@ -1471,6 +1504,10 @@ def main():
         config = yaml.safe_load(f)
 
     user_config = UserConfig()
+
+    #Jiaxin: commenting the following lines since we will have a seperate user_config file to save user info.
+    #        This is necessary since we cannot directly writing to the global config file for user registration
+    '''
     user_config_data = config['user_config']
     if 'allow_all_users' in user_config_data:
         user_config.allow_all_users = user_config_data['allow_all_users']
@@ -1479,6 +1516,15 @@ def main():
             for user in user_config_data["users"]:
                 username = user['firstname'] + '_' + user['lastname']
                 user_config.add_user(username)
+    '''
+
+    print('Loading users from', config['user_config_path'])
+    with open(config['user_config_path'],'rt') as f:
+        for line in f.readlines():
+            single_user = json.loads(line.strip())
+            result = user_config.add_single_user(single_user)
+            print(single_user['username'], result)
+
 
     logger_name = 'potato'
     if 'logger_name' in config:
