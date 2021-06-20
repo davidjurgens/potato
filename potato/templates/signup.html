@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+    <title>Login V1</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+
+    <link rel="icon" type="image/png" href="https://colorlib.com/etc/lf/Login_v1/images/icons/favicon.ico">
+
+
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='styles/bootstrap.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='styles/font-awesome.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='styles/animate.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='styles/hamburgers.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='styles/select2.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='styles/util.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='styles/main.css') }}">        
+    
+    <meta name="robots" content="noindex, follow">
+
+    <script>
+      function login() {
+
+          var email = document.getElementById('email').value;
+          var password = document.getElementById('pass').value;
+
+
+          // Sends the post message to the server which will let us update the
+          // currently displayed content
+          // The rest of this code assumes you are not using a library.
+          // It can be made less wordy if you use one.
+          var form = document.createElement("form");
+          form.setAttribute("method", "post");
+          form.setAttribute("action", "login");
+          
+          var hiddenField = document.createElement("input");
+          hiddenField.setAttribute("type", "hidden");
+          hiddenField.setAttribute("name", "email");
+          hiddenField.setAttribute("value", email);
+          form.appendChild(hiddenField);
+
+          hiddenField = document.createElement("input");
+          hiddenField.setAttribute("type", "hidden");
+          hiddenField.setAttribute("name", "pass");
+          hiddenField.setAttribute("value", password);
+          form.appendChild(hiddenField);
+
+          document.body.appendChild(form);
+          form.submit();
+      }
+      
+    </script>
+
+    
+  </head>
+  <body>
+    <div class="limiter">
+      <div class="container-login100">
+        <div class="wrap-login100">
+          <div class="login100-pic js-tilt" data-tilt="" style="will-change: transform; transform: perspective(300px) rotateX(0deg) rotateY(0deg);">
+            <img src="{{ url_for('static',filename='img-01.webp') }}" alt="IMG">
+          </div>
+          <form class="login100-form validate-form">
+            <span class="login100-form-title">
+              {{title}}
+            </span>
+              <div class="text-center p-t-0">
+                  <p style="color:red">{{login_error}}</p>
+              </div>
+            <div class="wrap-input100 validate-input" data-validate="Valid email is required: ex@abc.xyz">
+              <input class="input100" type="text" name="email" id="email" placeholder="Email" value = {{ email }}>
+              <span class="focus-input100"></span>
+              <span class="symbol-input100">
+                <i class="fa fa-envelope" aria-hidden="true"></i>
+              </span>
+            </div>
+            <div class="wrap-input100 validate-input" data-validate="Password is required">
+              <input class="input100" type="password" name="pass" id="pass" placeholder="Password" value = {{ password }}>
+              <span class="focus-input100"></span>
+              <span class="symbol-input100">
+                <i class="fa fa-lock" aria-hidden="true"></i>
+              </span>
+            </div>
+            <div class="container-login100-form-btn">
+              <a class="login100-form-btn" onclick="login()" role="buttom" href="#">
+                Login
+              </a>
+            </div>
+            <div class="text-center p-t-12">
+              <span class="txt1">
+                Forgot
+              </span>
+              <a class="txt2" href="#">
+                Username / Password?
+              </a>
+            </div>
+            <div class="text-center p-t-136">
+              <a class="txt2" href="#">
+                Create your Account
+                <i class="fa fa-long-arrow-right m-l-5" aria-hidden="true"></i>
+              </a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <script src="{{ url_for('static',filename='jquery-3.js') }}"></script>
+    <script src="{{ url_for('static',filename='popper.js') }}"></script>
+    <script src="{{ url_for('static',filename='bootstrap.js') }}"></script>
+    <script src="{{ url_for('static',filename='select2.js') }}"></script>
+    <script src="{{ url_for('static',filename='tilt.js') }}"></script>
+    
+    <script>
+      $('.js-tilt').tilt({
+	  scale: 1.1
+      })
+    </script>
+
+    <script async="" src="js"></script>
+
+    <script src="{{ url_for('static',filename='main.js') }}"></script>
+    <!-- <script defer="defer" src="beacon.js" data-cf-beacon="{&quot;rayId&quot;:&quot;661ee9948aa12d64&quot;,&quot;token&quot;:&quot;cd0b4b3a733644fc843ef0b185f98241&quot;,&quot;version&quot;:&quot;2021.5.2&quot;,&quot;si&quot;:10}"></script> -->
+
+
+</body></html>

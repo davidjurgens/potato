@@ -25,7 +25,6 @@
           var email = document.getElementById('email').value;
           var password = document.getElementById('pass').value;
 
-
           // Sends the post message to the server which will let us update the
           // currently displayed content
           // The rest of this code assumes you are not using a library.
@@ -35,6 +34,12 @@
           form.setAttribute("action", "login");
           
           var hiddenField = document.createElement("input");
+          hiddenField.setAttribute("type", "hidden");
+          hiddenField.setAttribute("name", "action");
+          hiddenField.setAttribute("value", "login");
+          form.appendChild(hiddenField);
+
+          hiddenField = document.createElement("input");
           hiddenField.setAttribute("type", "hidden");
           hiddenField.setAttribute("name", "email");
           hiddenField.setAttribute("value", email);
@@ -49,7 +54,89 @@
           document.body.appendChild(form);
           form.submit();
       }
-      
+
+      function signup() {
+
+          var email = document.getElementById('signup_email').value;
+          var password = document.getElementById('signup_pass').value;
+          var username = document.getElementById('signup_username').value;
+
+          // Sends the post message to the server which will let us update the
+          // currently displayed content
+          // The rest of this code assumes you are not using a library.
+          // It can be made less wordy if you use one.
+          var form = document.createElement("form");
+          form.setAttribute("method", "post");
+          form.setAttribute("action", "signup");
+
+          var hiddenField = document.createElement("input");
+          hiddenField.setAttribute("type", "hidden");
+          hiddenField.setAttribute("name", "action");
+          hiddenField.setAttribute("value", "signup");
+          form.appendChild(hiddenField);
+
+          hiddenField = document.createElement("input");
+          hiddenField.setAttribute("type", "hidden");
+          hiddenField.setAttribute("name", "email");
+          hiddenField.setAttribute("value", email);
+          form.appendChild(hiddenField);
+
+          hiddenField = document.createElement("input");
+          hiddenField.setAttribute("type", "hidden");
+          hiddenField.setAttribute("name", "pass");
+          hiddenField.setAttribute("value", password);
+          form.appendChild(hiddenField);
+
+          hiddenField = document.createElement("input");
+          hiddenField.setAttribute("type", "hidden");
+          hiddenField.setAttribute("name", "username");
+          hiddenField.setAttribute("value", username);
+          form.appendChild(hiddenField);
+
+          document.body.appendChild(form);
+          form.submit();
+      }
+
+      // check username for registration
+      function validateUsername(str) {
+            var error = "";
+            var illegalChars = /\W/; // allow letters, numbers, and underscores
+
+            if (str == "") {
+                error = "&bull; Please enter Username<br>";
+            } else if ((str.length < 5) || (str.length > 15)) {
+                error = "&bull; Username must have 5-15 characters<br>";
+            } else if (illegalChars.test(str)) {
+            error = "&bull; Please enter valid Username. Use only numbers and alphabets<br>";
+            } else {
+                error = "";
+            }
+            return error;
+        }
+
+      // check email for registration
+      function validateEmail(mail) {
+         if (/^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*$/.test(myForm.emailAddr.value)) {
+            return (true)
+          }
+          //alert("You have entered an invalid email address!")
+          return (false)
+        }
+
+      // check password for registration
+    function validateEmail(mail) {
+     if (/^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*$/.test(myForm.emailAddr.value)) {
+        return (true)
+      }
+      //alert("You have entered an invalid email address!")
+      return (false)
+    }
+
+     // check confirmation password
+
+
+    // Display error message when registration failed
+
     </script>
 
     
@@ -61,7 +148,7 @@
           <div class="login100-pic js-tilt" data-tilt="" style="will-change: transform; transform: perspective(300px) rotateX(0deg) rotateY(0deg);">
             <img src="{{ url_for('static',filename='img-01.webp') }}" alt="IMG">
           </div>
-          <form class="login100-form validate-form">
+          <form class="login100-form validate-form", id = 'login_form'>
             <span class="login100-form-title">
               {{title}}
             </span>
@@ -87,7 +174,7 @@
                 Login
               </a>
             </div>
-            <div class="text-center p-t-12">
+              <div class="text-center p-t-12">
               <span class="txt1">
                 Forgot
               </span>
@@ -95,13 +182,80 @@
                 Username / Password?
               </a>
             </div>
-            <div class="text-center p-t-136">
-              <a class="txt2" href="#">
+            <div class="text-center p-t-20">
+              <a class="txt2" href="#" onclick="document.getElementById('login_form').style.display='inline';document.getElementById('signup_form').style.display='none'">
+                Login
+                <i class="fa fa-long-arrow-right m-l-5" aria-hidden="true"></i>
+              </a>
+                &nbsp &nbsp &nbsp
+                <a class="txt2" href="#" onclick="document.getElementById('login_form').style.display='none';document.getElementById('signup_form').style.display='inline'">
                 Create your Account
                 <i class="fa fa-long-arrow-right m-l-5" aria-hidden="true"></i>
               </a>
             </div>
           </form>
+
+             <form class="login100-form validate-form", id = 'signup_form', style="display:none">
+            <span class="login100-form-title">
+              {{title}}
+            </span>
+              <div class="text-center p-t-0">
+                  <p style="color:red">{{signup_error}}</p>
+              </div>
+            <div class="wrap-input100 validate-input" data-validate="Valid email is required: ex@abc.xyz">
+              <input class="input100" type="text" name="email" id="signup_email" placeholder="Email" value = {{ signup_email }}>
+              <span class="focus-input100"></span>
+              <span class="symbol-input100">
+                <i class="fa fa-envelope" aria-hidden="true"></i>
+              </span>
+            </div>
+             <div class="wrap-input100 validate-input" data-validate="Valid username is required">
+              <input class="input100" type="text" name="username" id="signup_username" placeholder="Username" value = {{ signup_username }}>
+              <span class="focus-input100"></span>
+              <span class="symbol-input100">
+                <i class="fa fa-user" aria-hidden="true"></i>
+              </span>
+            </div>
+            <div class="wrap-input100 validate-input" data-validate="Password is required">
+              <input class="input100" type="password" name="pass" id="signup_pass" placeholder="Password" value = {{ signup_password }}>
+              <span class="focus-input100"></span>
+              <span class="symbol-input100">
+                <i class="fa fa-lock" aria-hidden="true"></i>
+              </span>
+            </div>
+             <div class="wrap-input100 validate-input" data-validate="Password is required">
+              <input class="input100" type="password" name="pass" id="pass_again" placeholder="Re-enter password">
+              <span class="focus-input100"></span>
+              <span class="symbol-input100">
+                <i class="fa fa-lock" aria-hidden="true"></i>
+              </span>
+            </div>
+            <div class="container-login100-form-btn">
+              <a class="login100-form-btn" onclick="signup()" role="buttom" href="#signup">
+                Sign up
+              </a>
+            </div>
+             <div class="text-center p-t-12">
+              <span class="txt1">
+                Forgot
+              </span>
+              <a class="txt2" href="#">
+                Username / Password?
+              </a>
+            </div>
+            <div class="text-center p-t-20">
+              <a class="txt2" href="#" onclick="document.getElementById('login_form').style.display='inline';document.getElementById('signup_form').style.display='none'">
+                Login
+                <i class="fa fa-long-arrow-right m-l-5" aria-hidden="true"></i>
+                  &nbsp &nbsp &nbsp
+              </a>
+                <a class="txt2" href="#" onclick="document.getElementById('login_form').style.display='none';document.getElementById('signup_form').style.display='inline'">
+                Create your Account
+                <i class="fa fa-long-arrow-right m-l-5" aria-hidden="true"></i>
+              </a>
+            </div>
+          </form>
+
         </div>
       </div>
     </div>
@@ -123,5 +277,16 @@
     <script src="{{ url_for('static',filename='main.js') }}"></script>
     <!-- <script defer="defer" src="beacon.js" data-cf-beacon="{&quot;rayId&quot;:&quot;661ee9948aa12d64&quot;,&quot;token&quot;:&quot;cd0b4b3a733644fc843ef0b185f98241&quot;,&quot;version&quot;:&quot;2021.5.2&quot;,&quot;si&quot;:10}"></script> -->
 
+    <script>
+    // Get the modal
+    var modal = document.getElementById('signup_form');
+
+    // When the user clicks anywhere outside of the modal, close it
+    window.onclick = function(event) {
+      if (event.target == modal) {
+        modal.style.display = "none";
+      }
+    }
+    </script>
 
 </body></html>

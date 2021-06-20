@@ -84,6 +84,8 @@ class UserConfig:
     
     def __init__(self):
         self.allow_all_users = False
+        self.user_config_path = ''
+        self.userlist = []
         self.usernames = set()
         self.users = {}
         self.required_user_info_keys = ['username','password']
@@ -104,7 +106,13 @@ class UserConfig:
             print("Duplicate user in list: %s" % single_user['username'])
             return "Duplicate user in list: %s" % single_user['username']
         self.users[single_user['username']] = single_user
+        self.userlist.append(single_user['username'])
         return 'Success'
+
+    def save_user_config(self):
+        with open(self.user_config_path, 'wt') as f:
+            for k in self.userlist:
+                f.writelines(json.dumps(self.users[k]) + '\n')
 
     #check if a user name is in the current user list
     def is_valid_username(self, username):
@@ -454,7 +462,7 @@ def write_data(username):
 @app.route("/")
 def home():
     global config
-    return render_template("home.html", title=config['annotation_task_name'],login_error = ' ')
+    return render_template("home.html", title=config['annotation_task_name'])
 
 
 @app.route("/login", methods=['GET', 'POST'])
@@ -463,19 +471,54 @@ def login():
     global config
     # TODO: add in logic for checking/hashing passwords, safe password
     # management, etc. For now just #yolo and log in people regardless.
+    action = request.form.get("action")
+    # Jiaxin: currently we are just using email as the username
     username = request.form.get("email")
     password = request.form.get("pass")
-    print(username, password)
+    print(action, username, password)
 
-    if user_config.is_valid_password(username, password):
-        return annotate_page()
+    if action == 'login':
+        if user_config.is_valid_password(username, password):
+            return annotate_page()
+        else:
+            data = {
+                'username':username,
+                'pass':password,
+                'Login_error': 'Invalid username or password'
+            }
+            return render_template("home.html", title=config['annotation_task_name'], email = username, password = password, login_error = 'Invalid username or password')
     else:
-        data = {
+        print('unknown action at home page')
+        return render_template("home.html", title=config['annotation_task_name'])
+
+@app.route("/signup", methods=['GET', 'POST'])
+def signup():
+    global user_config
+    global config
+    # TODO: add in logic for checking/hashing passwords, safe password
+    # management, etc. For now just #yolo and log in people regardless.
+    action = request.form.get("action")
+    # Jiaxin: currently we are just using email as the username
+    username = request.form.get("email")
+    password = request.form.get("pass")
+    print(action, username, password)
+
+    if action == 'signup':
+        single_user = {
             'username':username,
-            'pass':password,
-            'Login_error': 'Invalid username or password'
+            'password':password
         }
-        return render_template("home.html", title=config['annotation_task_name'], email = username, password = password, login_error = 'Invalid username or password')
+        result = user_config.add_single_user(single_user)
+        print(single_user['username'], result)
+        if result == 'Success':
+            user_config.save_user_config()
+            return render_template("home.html", title=config['annotation_task_name'])
+        else:
+            #TODO: return to the signup page and display error message
+            return render_template("home.html", title=config['annotation_task_name'])
+    else:
+        print('unknown action at home page')
+        return render_template("home.html", title=config['annotation_task_name'])
 
 @app.route("/newuser")
 def new_user():
@@ -1522,7 +1565,7 @@ def main():
                 username = user['firstname'] + '_' + user['lastname']
                 user_config.add_user(username)
     '''
-
+    user_config.user_config_path = config['user_config_path']
     print('Loading users from', config['user_config_path'])
     with open(config['user_config_path'],'rt') as f:
         for line in f.readlines():
