@@ -1368,13 +1368,9 @@ def generate_likert_layout(annotation_scheme):
         ('<div><form action="/action_page.php">' + \
         '  <fieldset> <legend>%s</legend> <ul class="likert"> <li> %s </li>') \
         % (annotation_scheme['description'], annotation_scheme['min_label'])
-
-
-
     
     key2label = {}
-    label2key = {}
-    
+    label2key = {}    
     
     for i in range(1, annotation_scheme['size']+1):
 
@@ -1500,7 +1496,11 @@ def main():
                 username = user['firstname'] + '_' + user['lastname']
                 user_config.add_user(username)
 
-    logger = logging.getLogger(config['server_name'])
+    logger_name = 'potato'
+    if 'logger_name' in config:
+        logger_name = config['logger_name']
+                
+    logger = logging.getLogger(logger_name)
 
     logger.setLevel(logging.INFO)
     logging.basicConfig()
@@ -1527,7 +1527,7 @@ def main():
     flask_logger = logging.getLogger('werkzeug')
     flask_logger.setLevel(logging.ERROR)
 
-    print('running at:\n0.0.0.0:'+str(args.port))
+    print('running at:\nlocalhost:'+str(args.port))
     app.run(debug=args.very_verbose, host="0.0.0.0", port=args.port)
 
 
