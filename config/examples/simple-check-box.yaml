@@ -32,6 +32,7 @@
         "context_key": "context"
     },
 
+    "user_config_path": "potato/user_config.json",
 
     "user_config": {
 
