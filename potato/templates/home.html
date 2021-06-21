@@ -23,7 +23,8 @@
       function login() {
 
           var email = document.getElementById('email').value;
-          var password = document.getElementById('pass').value;
+          var password = sha256(document.getElementById('pass').value);
+
 
           // Sends the post message to the server which will let us update the
           // currently displayed content
@@ -58,7 +59,7 @@
       function signup() {
 
           var email = document.getElementById('signup_email').value;
-          var password = document.getElementById('signup_pass').value;
+          var password = sha256(document.getElementById('signup_pass').value);
           //var username = document.getElementById('signup_username').value;
 
           // Sends the post message to the server which will let us update the
@@ -268,6 +269,7 @@
     <script src="{{ url_for('static',filename='bootstrap.js') }}"></script>
     <script src="{{ url_for('static',filename='select2.js') }}"></script>
     <script src="{{ url_for('static',filename='tilt.js') }}"></script>
+    <script src="{{ url_for('static',filename='sha256.js') }}"></script>
     
     <script>
       $('.js-tilt').tilt({

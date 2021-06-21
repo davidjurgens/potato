@@ -121,7 +121,7 @@ class UserConfig:
     #check if the password is correct for a given (username, password) pair
     #TODO: Currently we are just doing simple plaintext verification, but we will need ciphertext verification in the long run
     def is_valid_password(self, username, password):
-        return self.is_valid_username(username)# and self.users[username] == password
+        return self.is_valid_username(username) and self.users[username]['password'] == password
 
     def is_valid_user(self, username):
         return self.allow_all_users or username in self.usernames
@@ -486,7 +486,7 @@ def login():
                 'pass':password,
                 'Login_error': 'Invalid username or password'
             }
-            return render_template("home.html", title=config['annotation_task_name'], email = username, password = password, login_error = 'Invalid username or password')
+            return render_template("home.html", title=config['annotation_task_name'], email = username,  login_error = 'Invalid username or password')
     else:
         print('unknown action at home page')
         return render_template("home.html", title=config['annotation_task_name'])
@@ -500,25 +500,27 @@ def signup():
     action = request.form.get("action")
     # Jiaxin: currently we are just using email as the username
     username = request.form.get("email")
+    email = request.form.get("email")
     password = request.form.get("pass")
     print(action, username, password)
 
     if action == 'signup':
         single_user = {
             'username':username,
+            'email':email,
             'password':password
         }
         result = user_config.add_single_user(single_user)
         print(single_user['username'], result)
         if result == 'Success':
             user_config.save_user_config()
-            return render_template("home.html", title=config['annotation_task_name'], email = username, password = password, login_error = 'User registration success for ' + username + ', please login now')
+            return render_template("home.html", title=config['annotation_task_name'], email = username, login_error = 'User registration success for ' + username + ', please login now')
         else:
             #TODO: return to the signup page and display error message
             return render_template("home.html", title=config['annotation_task_name'], login_error = result + ', please try again')
     else:
         print('unknown action at home page')
-        return render_template("home.html", title=config['annotation_task_name'], email = username, password = password, login_error = 'Invalid username or password')
+        return render_template("home.html", title=config['annotation_task_name'], email = username, login_error = 'Invalid username or password')
 
 @app.route("/newuser")
 def new_user():
