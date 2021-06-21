@@ -21,9 +21,11 @@
 
     <script>
       function login() {
-
-          var email = document.getElementById('email').value;
-          var password = sha256(document.getElementById('pass').value);
+          if (check_input_fields("login")==false) {
+              return false;
+          }
+          var email = document.getElementById('login_email').value;
+          var password = sha256(document.getElementById('login_pass').value);
 
 
           // Sends the post message to the server which will let us update the
@@ -57,7 +59,9 @@
       }
 
       function signup() {
-
+          if (check_input_fields("signup")==false) {
+              return false;
+          }
           var email = document.getElementById('signup_email').value;
           var password = sha256(document.getElementById('signup_pass').value);
           //var username = document.getElementById('signup_username').value;
@@ -117,26 +121,89 @@
             return error;
         }
 
-      // check email for registration
-      function validateEmail(mail) {
-         if (/^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*$/.test(myForm.emailAddr.value)) {
-            return (true)
+      // check all input fields
+      function check_input_fields(action) {
+          var msg_key = action + "_error";
+          if (validateEmail(document.getElementById(action + '_email').value, action) == false) {
+              document.getElementById(action + '_error').innerHTML = "Invalid email address";
+              return false;
+          } else if (validatePassword(document.getElementById(action + '_pass').value, action) == false) {
+              //document.getElementById('signup_error').innerHTML = "Invalid email address";
+              return false;
+          } else if (confirmPassword(action) == false) {
+              return false;
           }
-          //alert("You have entered an invalid email address!")
-          return (false)
+          return true;
+      }
+
+      // check email for registration
+      function validateEmail(email, action) {
+          var msg_key = action + "_error";
+         if (/^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*$/.test(email)) {
+             document.getElementById(msg_key).innerHTML = "";
+            return true;
+          }
+         else{
+             document.getElementById(msg_key).innerHTML = "Invalid email address";
+             return false;
+         }
         }
 
-      // check password for registration
-    function validateEmail(mail) {
-     if (/^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*$/.test(myForm.emailAddr.value)) {
-        return (true)
+      // Depreciated: event function for email textbox
+      function validateEmail_event(e) {
+          if (validateEmail(e.value) == false) {
+              //alert("You have entered an invalid email address!")
+              document.getElementById('signup_error').innerHTML = "Invalid email address";
+          }
+          else{
+              document.getElementById('signup_error').innerHTML = "";
+          }
       }
-      //alert("You have entered an invalid email address!")
-      return (false)
+
+      // check password for registration
+    function validatePassword(password, action) {
+          var pw = password //document.getElementById("signup_password").value;
+          var msg_key = action + "_error";
+          //check empty password field
+          if(pw == "") {
+             document.getElementById(msg_key).innerHTML = "Password cannot be empty";
+             return false;
+          }
+
+         //minimum password length validation
+          if(pw.length < 6) {
+             document.getElementById(msg_key).innerHTML = "Password length must be at least 6 characters";
+             return false;
+          }
+
+        //maximum length of password validation
+          if(pw.length > 15) {
+             document.getElementById(msg_key).innerHTML = "Password length must not exceed 15 characters";
+             return false;
+          }
+
+          //if(action == "signup") {
+          //    return confirmPassword(action);
+          //}
+
+          document.getElementById(msg_key).innerHTML = "";
+          return true;
     }
 
      // check confirmation password
+    function confirmPassword(action) {
 
+          var msg_key = action + "_error";
+          var pw1 = document.getElementById("signup_pass").value;
+          var pw2 = document.getElementById("pass_again").value;
+          //alert(pw1)
+          if (pw1 != pw2) {
+              document.getElementById(msg_key).innerHTML = "Password not match";
+              return false;
+          }
+          document.getElementById(msg_key).innerHTML = "";
+          return true;
+    }
 
     // Display error message when registration failed
 
@@ -156,17 +223,17 @@
               {{title}}
             </span>
               <div class="text-center p-t-0">
-                  <p style="color:red">{{login_error}}</p>
+                  <p style="color:red", id="login_error">{{login_error}}</p>
               </div>
             <div class="wrap-input100 validate-input" data-validate="Valid email is required: ex@abc.xyz">
-              <input class="input100" type="text" name="email" id="email" placeholder="Email" value = {{ email }}>
+              <input class="input100" type="text" name="email" id="login_email" placeholder="Email" value = "{{ login_email }}">
               <span class="focus-input100"></span>
               <span class="symbol-input100">
                 <i class="fa fa-envelope" aria-hidden="true"></i>
               </span>
             </div>
             <div class="wrap-input100 validate-input" data-validate="Password is required">
-              <input class="input100" type="password" name="pass" id="pass" placeholder="Password" value = {{ password }}>
+              <input class="input100" type="password" name="pass" id="login_pass" placeholder="Password" value = "{{ login_password }}">
               <span class="focus-input100"></span>
               <span class="symbol-input100">
                 <i class="fa fa-lock" aria-hidden="true"></i>
@@ -203,10 +270,10 @@
               {{title}}
             </span>
               <div class="text-center p-t-0">
-                  <p style="color:red">{{signup_error}}</p>
+                  <p style="color:red" id="signup_error">{{signup_error}}</p>
               </div>
             <div class="wrap-input100 validate-input" data-validate="Valid email is required: ex@abc.xyz">
-              <input class="input100" type="text" name="email" id="signup_email" placeholder="Email" value = {{ signup_email }}>
+              <input class="input100" type="text" name="email" id="signup_email" placeholder="Email" action = "signup" onblur="validateEmail(this.value, this.getAttribute('action'))" value = "{{ signup_email }}" >
               <span class="focus-input100"></span>
               <span class="symbol-input100">
                 <i class="fa fa-envelope" aria-hidden="true"></i>
@@ -221,14 +288,14 @@
               </span>
             </div>-->
             <div class="wrap-input100 validate-input" data-validate="Password is required">
-              <input class="input100" type="password" name="pass" id="signup_pass" placeholder="Password" value = {{ signup_password }}>
+              <input class="input100" type="password" name="pass" id="signup_pass" placeholder="Password" action = "signup" onblur="validatePassword(this.value, this.getAttribute('action'))" value = "{{ signup_password }}">
               <span class="focus-input100"></span>
               <span class="symbol-input100">
                 <i class="fa fa-lock" aria-hidden="true"></i>
               </span>
             </div>
              <div class="wrap-input100 validate-input" data-validate="Password is required">
-              <input class="input100" type="password" name="pass" id="pass_again" placeholder="Re-enter password">
+              <input class="input100" type="password" name="pass" id="pass_again" placeholder="Re-enter password" action = "signup" onblur="confirmPassword(this.getAttribute('action'))">
               <span class="focus-input100"></span>
               <span class="symbol-input100">
                 <i class="fa fa-lock" aria-hidden="true"></i>
