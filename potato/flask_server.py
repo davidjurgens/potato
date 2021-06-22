@@ -78,6 +78,10 @@ instance_id_to_data = {}
 # Config is the Potation configuration the user has passed in as a .yaml file
 config = None
 
+# path to save user information
+USER_CONFIG_PATH = 'potato/user_config.json'
+
+
 # This variable of tyep ActiveLearningState keeps track of information on active
 # learning, such as which instances were sampled according to each strategy
 active_learning_state = None
@@ -95,14 +99,26 @@ class UserConfig:
     '''
     A class for maintaining state on which users are allowed to use the system
     '''
-    
-    def __init__(self, user_config_path):
+
+
+    def __init__(self, user_config_path='potato/user_config.json'):
         self.allow_all_users = False
         self.user_config_path = user_config_path
         self.userlist = []
         self.usernames = set()
         self.users = {}
         self.required_user_info_keys = ['username','password']
+
+        if os.path.isfile(self.user_config_path):
+            print('Loading users from' + self.user_config_path)
+            with open(self.user_config_path, 'rt') as f:
+                for line in f.readlines():
+                    single_user = json.loads(line.strip())
+                    result = self.add_single_user(single_user)
+                    # print(single_user['username'], result)
+        #else:
+        #    print('user info file not found at:', self.user_config_path)
+
 
     #Jiaxin: this function will be depreciate since we will save the full user dict with password
     def add_user(self, username):
@@ -124,10 +140,13 @@ class UserConfig:
         return 'Success'
 
     def save_user_config(self):
-        if user_config_path:
+        if self.user_config_path:
             with open(self.user_config_path, 'wt') as f:
                 for k in self.userlist:
                     f.writelines(json.dumps(self.users[k]) + '\n')
+            print('user info file saved at:', self.user_config_path)
+        else:
+            print('WARNING: user_config_path not specified, user registration info are not saved')
 
     #check if a user name is in the current user list
     def is_valid_username(self, username):
@@ -552,9 +571,9 @@ def login():
     password = request.form.get("pass")
     print(action, username, password)
 
-    if True:
-        return annotate_page()
-    elif action == 'login':
+    #if True:
+    #    return annotate_page()
+    if action == 'login':
         if user_config.is_valid_password(username, password):
             return annotate_page()
         else:
@@ -1854,7 +1873,7 @@ def main():
     with open(args.config_file, 'rt') as f:
         config = yaml.safe_load(f)
 
-    user_config = UserConfig(None)
+    user_config = UserConfig(USER_CONFIG_PATH)
 
     #Jiaxin: commenting the following lines since we will have a seperate
     #        user_config file to save user info.  This is necessary since we
@@ -1870,16 +1889,6 @@ def main():
                 username = user['firstname'] + '_' + user['lastname']
                 user_config.add_user(username)
     '''
-
-    if 'user_config_path' in config:
-        user_config.user_config_path = config['user_config_path']
-        logger.info('Loading users from' + config['user_config_path'])
-        with open(config['user_config_path'],'rt') as f:
-            for line in f.readlines():
-                single_user = json.loads(line.strip())
-                result = user_config.add_single_user(single_user)
-                #print(single_user['username'], result)
-
 
     logger_name = 'potato'
     if 'logger_name' in config:
