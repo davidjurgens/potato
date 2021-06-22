@@ -30,7 +30,6 @@
         "kwargs": ["my_kwarg", "my_other_kwarg"]
     },
 
-    "user_config_path": "potato/user_config.json",
 
     "user_config": {
       "allow_all_users": True,

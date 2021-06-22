@@ -27,7 +27,6 @@
         "text_key": "text",
     },
 
-    "user_config_path": "potato/user_config.json",
 
     "user_config": {
       "allow_all_users": True,     

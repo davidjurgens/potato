@@ -23,7 +23,7 @@
     "annotation_codebook_url": "",
 
     "data_files": [
-       "data/narratives_for_annotation.json"
+       "data/toy-example.json"
     ],
 
     "item_properties": {
@@ -32,7 +32,6 @@
         "context_key": "context"
     },
 
-    "user_config_path": "potato/user_config.json",
 
     "user_config": {
 

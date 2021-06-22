@@ -1567,9 +1567,9 @@ def main():
                 username = user['firstname'] + '_' + user['lastname']
                 user_config.add_user(username)
     '''
-    user_config.user_config_path = config['user_config_path']
-    print('Loading users from', config['user_config_path'])
-    with open(config['user_config_path'],'rt') as f:
+    user_config.user_config_path = 'potato/user_config.json'
+    print('Loading users from', user_config.user_config_path)
+    with open(user_config.user_config_path,'rt') as f:
         for line in f.readlines():
             single_user = json.loads(line.strip())
             result = user_config.add_single_user(single_user)
