@@ -353,7 +353,7 @@ def load_all_data(config):
                     items_to_annotate.append(item)
         else:
             sep = ',' if fmt == 'csv' else '\t'
-            df = pd.read_csv(data_fname)
+            df = pd.read_csv(data_fname, sep=sep)
             for i, row in df.iterrows():
 
                 item = { }
