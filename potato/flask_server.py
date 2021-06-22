@@ -15,6 +15,8 @@ from os import path
 
 from bs4 import BeautifulSoup
 
+from tqdm import tqdm
+
 import threading
 
 import html
@@ -27,9 +29,13 @@ import time
 import json
 import gzip
 from datetime import datetime
-from collections import deque, defaultdict
+from collections import deque, defaultdict, Counter, OrderedDict
 import collections
 from argparse import ArgumentParser
+
+from sklearn.pipeline import Pipeline
+
+from itertools import zip_longest
 
 # import choix
 # import networkx as nx
@@ -42,31 +48,39 @@ default_port = 8000
 user_dict = {}
 
 file_to_read_from = ""
-MAX_STORY_LENGTH = 99999  # No limit
-NUM_STORIES_TO_READ = 999999999  # No limit
+#MAX_STORY_LENGTH = 99999  # No limit
+#NUM_STORIES_TO_READ = 999999999  # No limit
 
 all_data = {}
 
-user_story_set = {}
+#user_story_set = {}
 user_story_pos = defaultdict(lambda: 0, dict())
-user_file_written_map = defaultdict(dict)
-user_current_story_dict = {}
+#user_file_written_map = defaultdict(dict)
+#user_current_story_dict = {}
 user_response_dicts_queue = defaultdict(deque)
 
 user_to_annotation_state = {}
 
-curr_user_story_similarity = {}
+# A global mapping from an instance's id to its data. This is filled by
+# load_all_data()
+instance_id_to_data = {}
 
-minimum_list = 30
+# curr_user_story_similarity = {}
 
-SHOW_PATH = False
-SHOW_SIMILARITY = False
-FIRST_LOAD = True
+# minimum_list = 30
+
+#SHOW_PATH = False
+#SHOW_SIMILARITY = False
+#FIRST_LOAD = True
 # QUESTION_START = True
-closed = False
+#closed = False
 
+# Config is the Potation configuration the user has passed in as a .yaml file
 config = None
 
+# This variable of tyep ActiveLearningState keeps track of information on active
+# learning, such as which instances were sampled according to each strategy
+active_learning_state = None
 
 # Hacky nonsense
 schema_label_to_color = {}
@@ -82,9 +96,9 @@ class UserConfig:
     A class for maintaining state on which users are allowed to use the system
     '''
     
-    def __init__(self):
+    def __init__(self, user_config_path):
         self.allow_all_users = False
-        self.user_config_path = ''
+        self.user_config_path = user_config_path
         self.userlist = []
         self.usernames = set()
         self.users = {}
@@ -110,9 +124,10 @@ class UserConfig:
         return 'Success'
 
     def save_user_config(self):
-        with open(self.user_config_path, 'wt') as f:
-            for k in self.userlist:
-                f.writelines(json.dumps(self.users[k]) + '\n')
+        if user_config_path:
+            with open(self.user_config_path, 'wt') as f:
+                for k in self.userlist:
+                    f.writelines(json.dumps(self.users[k]) + '\n')
 
     #check if a user name is in the current user list
     def is_valid_username(self, username):
@@ -126,6 +141,25 @@ class UserConfig:
     def is_valid_user(self, username):
         return self.allow_all_users or username in self.usernames
 
+class ActiveLearningState:
+    '''
+    A class for maintaining state on active learning.
+    '''
+    
+    def __init__(self):
+        self.id_to_selection_type = {}
+        self.id_to_update_round = {}
+        self.cur_round = 0    
+        
+    def update_selection_types(self, id_to_selection_type):
+        self.cur_round += 1
+
+        for iid, st in id_to_selection_type.items():
+            self.id_to_selection_type[iid] = st
+            self.id_to_update_round[iid] = self.cur_round
+
+    
+    
 class UserAnnotationState:
     '''
     A class for maintaining state on which annotations users have completed.
@@ -133,9 +167,12 @@ class UserAnnotationState:
     
     def __init__(self, instance_id_to_data):
 
-        # This data structure keeps the
+        # This data structure keeps the annotations the user has completed so far
         self.instance_id_to_labeling = {}
 
+        # This is a reference to the data
+        #
+        # NB: do we need this as a field?
         self.instance_id_to_data = instance_id_to_data
 
         # TODO: Put behavioral information of each instance with the labels together
@@ -195,6 +232,7 @@ class UserAnnotationState:
         '''
         Based on a user's actions, updates the annotation for this particular instance. 
         '''
+        
         old_annotation = defaultdict(dict)
         if instance_id in self.instance_id_to_labeling:
             old_annotation = self.instance_id_to_labeling[instance_id]
@@ -247,6 +285,28 @@ class UserAnnotationState:
         #      (len(self.instance_id_to_labeling), self.instance_cursor))
 
 
+    def reorder_remaining_instances(self, new_id_order, preserve_order):
+
+        # Preserve the ordering the user has seen so far for data they've
+        # annotated. This also includes items that *other* users have annotated
+        # to ensure all items get the same number of annotations (otherwise
+        # these items might get re-ordered farther away)
+        new_order = [ iid for iid in self.instance_id_ordering \
+                         if iid in preserve_order ]
+
+        # Now add all the other IDs
+        for iid in new_id_order:
+            if iid not in self.instance_id_to_labeling:
+                new_order.append(iid)
+
+
+        assert len(new_order) == len(self.instance_id_ordering)
+                
+        # Update the user's state
+        self.instance_id_ordering = new_order
+        self.instance_id_to_order = self.generate_id_order_mapping(self.instance_id_ordering)
+                        
+
 def load_all_data(config):
     global annotate_state  # formerly known as user_state
     global all_data
@@ -262,7 +322,8 @@ def load_all_data(config):
 
     items_to_annotate = []
 
-    instance_id_to_data = {}
+    # Keep the data in the same order we read it in
+    instance_id_to_data = OrderedDict()
 
     data_files = config['data_files']
     logger.debug('Loading data from %d files' % (len(data_files)))
@@ -364,6 +425,18 @@ def go_to_id(username, id):
     user_state = lookup_user_state(username)
     user_state.go_to_id(int(id))
 
+def get_total_annotations():
+    '''
+    Returns the total number of unique annotations done across all users
+    '''
+    total = 0
+    for username in get_users():
+        user_state = lookup_user_state(username)
+        total += user_state.get_annotation_count()
+
+    return total
+
+
 
 def update_annotation_state(username, form):
     '''
@@ -426,7 +499,7 @@ def get_annotations_for_user_on(username, instance_id):
 # the current annotation procedure
 def merge_annotation():
     global user_dict
-    global closed
+    #global closed
     global all_data
     global args
 
@@ -448,7 +521,7 @@ def merge_annotation():
 
 def write_data(username):
     global user_dict
-    global closed
+    #global closed
     global all_data
     global args
 
@@ -469,15 +542,19 @@ def home():
 def login():
     global user_config
     global config
+
     # TODO: add in logic for checking/hashing passwords, safe password
     # management, etc. For now just #yolo and log in people regardless.
     action = request.form.get("action")
+
     # Jiaxin: currently we are just using email as the username
     username = request.form.get("email")
     password = request.form.get("pass")
     print(action, username, password)
 
-    if action == 'login':
+    if True:
+        return annotate_page()
+    elif action == 'login':
         if user_config.is_valid_password(username, password):
             return annotate_page()
         else:
@@ -525,8 +602,20 @@ def new_user():
     return render_template("newuser.html")
 
 
+def get_users():
+    '''
+    Returns an iterable over the usernames of all users who have annotated in
+    the system so far
+    '''
+    global user_to_annotation_state
+    return user_to_annotation_state.keys()
+
 
 def lookup_user_state(username):
+    '''
+    Returns the UserAnnotationState for a user, or if that user has not yet
+    annotated, creates a new state for them and registers them with the system.
+    '''
     global user_to_annotation_state
 
     if username not in user_to_annotation_state:
@@ -757,9 +846,8 @@ def annotate_page():
     username = request.form.get("email")
 
     # Check if the user is authorized. If not, go to the login page
-    if not user_config.is_valid_username(username):
-        logger.info("Unauthorized user")
-        return render_template("home.html")
+    #if not user_config.is_valid_username(username):
+    #    return render_template("home.html")
 
     # Based on what the user did to the instance, update the annotate state for
     # this instance. All of the instances clicks/checks/text are stored in the
@@ -773,20 +861,40 @@ def annotate_page():
     # some point if we scale to having lots of concurrent users.
     if 'instance_id' in request.form:
         did_change = update_annotation_state(username, request.form)
+
         if did_change:
+
+            # Check if we need to run active learning to re-order instances. We
+            # do this before saving the user state in case the order does change.o
+            #
+            # NOTE: In a perfect world, this would be done in a separate process
+            # that is synchronized and users get their next instance from some
+            # centrally managed queue so we don't block while doing all this
+            # training. However, such advanced wizardry is beyond this MVP and
+            # will have to wait
+            if "active_learning_config" in config \
+               and config["active_learning_config"]['enable_active_learning']:
+
+                # Check to see if we've hit the threshold for the number of
+                # annotations needed
+                al_config = config["active_learning_config"]
+
+                # How many total annotations do we need to have
+                update_rate = al_config['update_rate']
+                total_annotations = get_total_annotations()
+                print(total_annotations, update_rate, total_annotations % update_rate)
+                
+                if total_annotations % update_rate == 0:
+                    actively_learn()
+            
             save_user_state(username)
 
             # Save everything in a separate thread to avoid I/O issues
             th = threading.Thread(target=save_all_annotations)
             th.start()
 
-
-    #print("--REQUESTS FORM: ", json.dumps(request.form))
-
     ism = request.form.get("label")
     action = request.form.get("src")
-    #print("label: \"%s\"" % ism)
-    # print("action: \"%s\"" % action)
 
     if action == "home":
         load_user_state(username)
@@ -873,10 +981,6 @@ def annotate_page():
         # Jiaxin: sometimes label_elem is None
         if label_elem:
             label_elem['style'] = ("background-color: %s" % c)
-
-
-    #for label in soup.find_all("label"):
-    #    print(label['for'])
             
     # If the user has annotated this before, wall the DOM and fill out what they
     # did
@@ -1239,9 +1343,7 @@ def generate_schematic(annotation_scheme):
         return generate_textbox_layout(annotation_scheme)
 
     else:
-        logger.warning("unsupported annotation type: %s" % annotation_type)
-
-    return schematic
+        raise Exception("unsupported annotation type: %s" % annotation_type)
 
 
 def generate_multiselect_layout(annotation_scheme):
@@ -1541,6 +1643,205 @@ def get_file(filename):
         flask.abort(404)
 
 
+
+def get_class( kls ):
+    '''
+    Returns an instantiated class object from a fully specified name.
+    '''
+    parts = kls.split('.')
+    module = ".".join(parts[:-1])
+    m = __import__( module )
+    for comp in parts[1:]:
+        m = getattr(m, comp)            
+    return m
+
+
+def actively_learn():
+    global config
+    global logger
+    global user_to_annotation_state
+    global instance_id_to_data
+
+    if 'active_learning_config' not in config:
+        logger.warning("the server is trying to do active learning " +
+                       "but this hasn't been configured")
+        return
+
+    al_config = config['active_learning_config']
+
+    # Skip if the user doesn't want us to do active learning
+    if 'enable_active_learning' in al_config and not al_config['enable_active_learning']:
+        return
+
+    if 'classifier_name' not in al_config:
+        raise Exception("active learning enabled but no classifier is set with \"classifier_name\"")
+
+    if 'vectorizer_name' not in al_config:
+        raise Exception("active learning enabled but no vectorizer is set with \"vectorizer_name\"")
+
+    if 'resolution_strategy' not in al_config:
+        raise Exception("active learning enabled but resolution_strategy is not set")
+
+    # This specifies which schema we need to use in active learning (separate
+    # classifiers for each). If the user doesn't specify these, we use all of
+    # them.
+    schema_used = []
+    if "active_learning_schema" in al_config:
+        schema_used = al_config["active_learning_schema"]
+    
+    cls_kwargs = al_config['classifier_kwargs'] if 'classifier_kwargs' in al_config else {}
+    vectorizer_kwargs = al_config['vectorizer_kwargs'] if 'vectorizer_kwargs' in al_config else {}
+    strategy = al_config['resolution_strategy']
+
+    # Collect all the current labels
+    instance_to_labels = defaultdict(list)
+    for uid, uas in user_to_annotation_state.items():
+        for iid, annotation in uas.instance_id_to_labeling.items():
+            instance_to_labels[iid].append(annotation)
+
+    # Resolve all the mutiple-annotations to a single one using the provided
+    # strategy to get training data
+    instance_to_label = {}
+    schema_seen = set()
+    for iid, annotations in instance_to_labels.items():
+        resolved = resolve(annotations, strategy)
+
+        # Prune to just the schema we care about
+        if len(schema_used) > 0:
+            resolved = {k: resolved[k] for k in schema_used}
+
+        for s in resolved:
+            schema_seen.add(s)
+        instance_to_label[iid] = resolved
+
+
+    # Construct a dataframe for easy processing
+    texts = []
+    # We'll train one classifier for each scheme
+    scheme_to_labels = defaultdict(list)
+    text_key = config['item_properties']['text_key']
+    for iid, schema_to_label in instance_to_label.items():
+        # get the text
+        text = instance_id_to_data[iid][text_key]
+        texts.append(text)
+        for s in schema_seen:
+            # In some cases where the user has not selected anything but somehow
+            # this is considered annotated, we include some dummy label
+            label = schema_to_label[s] if s in schema_to_label else 'DUMMY:NONE'
+
+            # HACK: this needs to get fixed for multilabel data and possibly
+            # number data
+            label = list(label.keys())[0]
+            scheme_to_labels[s].append(label)
+
+
+    scheme_to_classifier = {}
+            
+    # Train a classifier for each scheme
+    for scheme, labels in scheme_to_labels.items():
+
+        # Sanity check we have more than 1 label
+        print(labels)
+        label_counts = Counter(labels)
+        if len(label_counts) < 2:
+            logger.warning(('In the current data, data labeled with %s has only a'
+                            + 'single unique label, which is insufficient for '
+                            + 'active learning; skipping...') % scheme)
+            continue
+
+        # Instantiate the classifier and the tokenizer
+        cls = get_class(al_config['classifier_name'])(**cls_kwargs)
+        vectorizer = get_class(al_config['vectorizer_name'])(**vectorizer_kwargs)
+
+        # Train the classifier
+        clf = Pipeline([('vectorizer', vectorizer), ('classifier', cls)])
+        logger.info("training classifier for %s..." % scheme)
+        clf.fit(texts, labels)
+        logger.info("done training classifier for %s" % scheme)
+        scheme_to_classifier[scheme] = clf
+
+
+    # Get the remaining unlabeled instances and start predicting
+    unlabeled_ids = [iid for iid in instance_id_to_data if iid not in instance_to_label]
+    random.shuffle(unlabeled_ids)
+
+    perc_random = al_config['random_sample_percent'] / 100
+
+    # Split to keep some of the data random
+    random_ids = unlabeled_ids[int(len(unlabeled_ids) * perc_random):]
+    unlabeled_ids = unlabeled_ids[:int(len(unlabeled_ids) * perc_random)]
+    remaining_ids = []
+    
+    # Cap how much inference we need to do (important for big datasets)    
+    if 'max_inferred_predictions' in al_config:
+        max_insts = al_config['max_inferred_predictions']
+        remaining_ids = unlabeled_ids[max_insts:]
+        unlabeled_ids = unlabeled_ids[:max_insts]
+
+    # For each scheme, use its classifier to label the data
+    scheme_to_predictions = {}
+    unlabeled_texts = [instance_id_to_data[iid][text_key] for iid in unlabeled_ids]
+    for scheme, clf in scheme_to_classifier.items():
+        logger.info("Inferring labels for %s" % scheme)
+        preds = clf.predict_proba(unlabeled_texts)
+        scheme_to_predictions[scheme] = preds
+        # id_to_scheme_to_predictions[iid][scheme] = preds
+            
+    # Figure out which of the instances to prioritize, keeping the specified
+    # ratio of random-vs-AL-selected instances.
+    ids_and_confidence = []
+    logger.info("Scoring items by model confidence")
+    for i, iid in enumerate(tqdm(unlabeled_ids)):
+        most_confident_pred = 0
+        mp_scheme = None
+        for scheme, all_preds in scheme_to_predictions.items():
+
+            preds = all_preds[i,:]
+            mp = max(preds)
+            # print(mp, preds)
+            if mp > most_confident_pred:
+                most_confident_pred = mp
+                mp_scheme = scheme
+        ids_and_confidence.append((iid, most_confident_pred, mp_scheme))
+
+    # Sort by confidence
+    ids_and_confidence = sorted(ids_and_confidence, key=lambda x: x[1])
+
+    print(ids_and_confidence[:5])
+        
+    # Re-order all of the unlabeled instances
+    new_id_order = []
+    id_to_selection_type = {}
+    for (al, rand_id) in zip_longest(ids_and_confidence, random_ids, fillvalue=None):
+        if al:
+            new_id_order.append(al[0])
+            id_to_selection_type[al[0]] = '%s Classifier' % al[2]
+        if rand_id:
+            new_id_order.append(rand_id)
+            id_to_selection_type[rand_id] = 'Random'
+            
+    # These are the IDs that weren't in the random sample or that we didn't
+    # reorder with active learning
+    new_id_order.extend(remaining_ids)
+
+    # Update each user's ordering, preserving the order for any item that has
+    # any annotation so that it stays in the front of the users' queues even if
+    # they haven't gotten to it yet (but others have)
+    already_annotated = list(instance_to_labels.keys())
+    for user, annotation_state in user_to_annotation_state.items():
+        annotation_state.reorder_remaining_instances(new_id_order,
+                                                     already_annotated)
+
+    logger.info('Finished reording instances')
+        
+def resolve(annotations, strategy):
+    if strategy == 'random':
+        return random.choice(annotations)
+    else:
+        raise Exception("Unknonwn annotation resolution strategy: \"%s\"" % (strategy))
+    
+
+        
 def main():
     global config
     global logger
@@ -1551,10 +1852,12 @@ def main():
     with open(args.config_file, 'rt') as f:
         config = yaml.safe_load(f)
 
-    user_config = UserConfig()
+    user_config = UserConfig(None)
 
-    #Jiaxin: commenting the following lines since we will have a seperate user_config file to save user info.
-    #        This is necessary since we cannot directly writing to the global config file for user registration
+    #Jiaxin: commenting the following lines since we will have a seperate
+    #        user_config file to save user info.  This is necessary since we
+    #        cannot directly write to the global config file for user
+    #        registration
     '''
     user_config_data = config['user_config']
     if 'allow_all_users' in user_config_data:
@@ -1565,13 +1868,14 @@ def main():
                 username = user['firstname'] + '_' + user['lastname']
                 user_config.add_user(username)
     '''
-    user_config.user_config_path = config['user_config_path']
-    print('Loading users from', config['user_config_path'])
-    with open(config['user_config_path'],'rt') as f:
-        for line in f.readlines():
-            single_user = json.loads(line.strip())
-            result = user_config.add_single_user(single_user)
-            print(single_user['username'], result)
+    if 'user_config_path' in config:
+        user_config.user_config_path = config['user_config_path']
+        logger.info('Loading users from' + config['user_config_path'])
+        with open(config['user_config_path'],'rt') as f:
+            for line in f.readlines():
+                single_user = json.loads(line.strip())
+                result = user_config.add_single_user(single_user)
+                #print(single_user['username'], result)
 
 
     logger_name = 'potato'
