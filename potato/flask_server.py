@@ -372,7 +372,9 @@ def load_all_data(config):
                     items_to_annotate.append(item)
         else:
             sep = ',' if fmt == 'csv' else '\t'
-            df = pd.read_csv(data_fname, sep=sep)
+            # Ensure the key is loaded as a string form (prevents weirdness
+            # later)
+            df = pd.read_csv(data_fname, sep=sep, dtype={id_key: str})
             for i, row in df.iterrows():
 
                 item = { }
@@ -1015,6 +1017,7 @@ def annotate_page():
                 input_field = soup.find("input", {"name": name})
                 if input_field is None:
                     print('No input for ', name)
+                    continue
                 input_field['checked'] = True
                 input_field['value'] = value
 
@@ -1570,20 +1573,25 @@ def generate_likert_layout(annotation_scheme):
         if "sequential_key_binding" in annotation_scheme \
            and annotation_scheme["sequential_key_binding"] \
            and annotation_scheme['size'] <= 10: 
-            key_value = str(i % 10)
             key2label[key_value] = label
             label2key[label] = key_value
-        else:
-            key_value = ''
 
+        key_value = str(i % 10)
+            
         # In the collapsed version of the likert scale, no label is shown.
         label_content = ''
         tooltip = ''        
 
+        #schematic += \
+        #        ((' <li><input class="%s" type="radio" id="%s" name="%s" value="%s" onclick="onlyOne(this)">' +
+        #         '  <label for="%s" %s>%s</label></li>')
+        #         % (class_name, label, name, key_value, name, tooltip, label_content))
+
         schematic += \
-                ((' <li><input class="%s" type="radio" id="%s" name="%s" value="%s" onclick="onlyOne(this)">' +
-                 '  <label for="%s" %s>%s</label></li>')
-                 % (class_name, label, name, key_value, name, tooltip, label_content))
+            ((' <li><input class="{class_name}" type="radio" id="{id}" name="{name}" value="{value}" onclick="onlyOne(this)">' + \
+              '  <label for="{label_for}" {label_args}>{label_text}</label></li>')).format(
+                  class_name=class_name, id=label, name=name, value=key_value, label_for=name, 
+                  label_args=tooltip, label_text=label_content)
 
 
     schematic += ('  <li>%s</li> </ul></fieldset>\n</form></div>\n' \
