@@ -1271,12 +1271,19 @@ def generate_site(config):
     annotation_schemes = config['annotation_schemes']
     logger.debug("Saw %d annotation scheme(s)" % len(annotation_schemes))
 
+    # Keep track of all the keybindings we have
+    all_keybindings = [
+        ('&#8594;', "Next Instance"),
+        ('&#8592;', "Previous Instance"),
+    ]
+    
     # Potato admin can specify a custom HTML layout that allows variable-named
     # placement of task elements
     if 'custom_layout' in config and config['custom_layout']:
         
         for annotation_scheme in annotation_schemes:
-            schema_layout = generate_schematic(annotation_scheme) + "\n"
+            schema_layout, keybindings = generate_schematic(annotation_scheme)
+            all_keybindings.extend(keybindings)
             schema_name = annotation_scheme['name']
 
             updated_layout = task_html_layout.replace(
@@ -1296,10 +1303,6 @@ def generate_site(config):
         # If we don't have a custom layout, accumulate all the tasks into a
         # single HTML element 
         schema_layouts = ""
-        all_keybindings = [
-            ('&#8594;', "Next Instance"),
-            ('&#8592;', "Previous Instance"),
-        ]
         for annotation_scheme in annotation_schemes:
             schema_layout, keybindings = generate_schematic(annotation_scheme)
             schema_layouts += schema_layout + "\n"
@@ -1653,6 +1656,9 @@ def generate_textbox_layout(annotation_scheme):
     class_name = annotation_scheme['name']
     key_value = name
 
+    # Technically, text boxes don't have these but we define it anyway
+    key_bindings = []
+    
     tooltip = ''
     if False:
         if 'tooltip' in annotation_scheme:
