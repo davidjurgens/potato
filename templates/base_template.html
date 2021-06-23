@@ -23,7 +23,8 @@
     <script>
       document.addEventListener('keyup', function (event) {
           var active_id = document.activeElement.id;
-          if (active_id == 'go_to') return;
+          var active_type = document.activeElement.getAttribute('type');
+          if (active_id == 'go_to' | active_type == 'text') return;
 
           //first check whether this keyboard input is a shortcut for checkboxes
           var checkboxes = document.querySelectorAll('input[type=checkbox]');

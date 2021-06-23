@@ -258,7 +258,6 @@ class UserAnnotationState:
             
         # Avoid updating with no entries
         if len(schema_to_label_to_value) > 0:
-
             self.instance_id_to_labeling[instance_id] = schema_to_label_to_value
             
             # TODO: keep track of all the annotation behaviors instead of only
@@ -489,6 +488,10 @@ def update_annotation_state(username, form):
         annotation_schema = cols[0]
         annotation_label = cols[1]
         annotation_value = form[key]
+
+        #skip the input when it is an empty string (from a text-box)
+        if annotation_value == '':
+            continue
 
         schema_to_label_to_value[annotation_schema][annotation_label] = annotation_value
         
