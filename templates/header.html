@@ -93,6 +93,82 @@
                 list-style-type: none;
             }
 
+
+            /* The sidepanel menu */
+            .sidepanel {
+                min-height: 250px; /* Specify a height */
+                width: 0; /* 0 width - change this with JavaScript */
+                position: fixed; /* Stay in place */
+                z-index: 1; /* Stay on top */
+                top: 20px;
+                left: 20px;
+                background-color: #111; /* Black*/
+                overflow-x: hidden; /* Disable horizontal scroll */
+                padding-top: 10px; /* Place content 60px from the top */
+                padding-bottom: 20px;
+                transition: 0.5s; /* 0.5 second transition effect to slide in the sidepanel */
+            }
+
+            /* The sidepanel links */
+            .sidepanel a {
+                padding: 8px 8px 8px 32px;
+                text-decoration: none;
+                font-size: 55px;
+                color: #ffffff; /* #818181; */
+                display: block;
+                transition: 0.3s;
+            }
+
+            /* When you mouse over the navigation links, change their color */
+            .sidepanel a:hover {
+                color: #f1f1f1;
+            }
+
+            /* When you mouse over the navigation links, change their color */
+            .sidepanel table {
+                color: #ffffff;
+                font-size: 20px;
+                /*padding: 8px 8px 18px 62px;*/
+                margin-left: 20px;
+                margin-top: 10px;
+                border-spacing: 10px;
+            }
+            
+            .sidepanel td, th  {
+                color: #ffffff;
+                padding: 5px;
+            }
+
+            .sidepanel tr:nth-child(even) {
+                background-color: #333333;
+            }
+                        
+            
+            /* Position and style the close button (top right corner) */
+            .sidepanel .closebtn {
+                position: absolute;
+                top: 0;
+                right: 25px;
+                font-size: 36px;
+                margin-left: 50px;
+            }
+
+            /* Style the button that is used to open the sidepanel */
+            .openbtn {
+                cursor: pointer;
+                /*
+                font-size: 20px;                
+                background-color: #111;
+                color: white;
+                padding: 10px 15px;
+                border: none;*/
+            }
+
+            .openbtn:hover {
+                background-color: #444;
+            } 
+            
         </style>
     </head>
 
+    
