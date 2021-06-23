@@ -1289,13 +1289,18 @@ def generate_site(config):
 
             task_html_layout = updated_layout
     # If the admin doesn't specify a custom layout, use the default layout
-    else:
-        
+    else:        
         # If we don't have a custom layout, accumulate all the tasks into a
         # single HTML element 
-        schema_layouts = "" 
+        schema_layouts = ""
+        all_keybindings = [
+            ('&#8594;', "Next Instance"),
+            ('&#8592;', "Previous Instance"),
+        ]
         for annotation_scheme in annotation_schemes:
-            schema_layouts += generate_schematic(annotation_scheme) + "\n"
+            schema_layout, keybindings = generate_schematic(annotation_scheme)
+            schema_layouts += schema_layout + "\n"
+            all_keybindings.extend(keybindings)
             
         task_html_layout = task_html_layout.replace(
             "{{annotation_schematic}}", schema_layouts)
@@ -1323,6 +1328,11 @@ def generate_site(config):
     html_template = html_template.replace(
         "{{annotation_task_name}}", config['annotation_task_name'])
 
+
+    keybindings_desc = generate_keybidings_sidebar(all_keybindings)
+    html_template = html_template.replace(
+        "{{keybindings}}", keybindings_desc)
+    
     
     # Jiaxin: change the basename from the template name to the project name +
     # template name, to allow multiple annotation tasks using the same template
@@ -1343,6 +1353,19 @@ def generate_site(config):
 
     logger.debug('writing annotation html to %s' % output_html_fname)
 
+
+def generate_keybidings_sidebar(keybindings):
+    ''' 
+    Generate an HTML layout for the end-user of the keybindings for the current 
+    task. The layout is intended to be displayed in a side bar
+    '''
+
+    layout = '<table><tr><th>Key</th><th>Description</th></tr>'
+    for key, desc in keybindings:
+        layout += '<tr><td style="text-align: center;">%s</td><td>%s</td></tr>' % (key, desc)
+    layout += '</table>'
+    return layout
+        
 
 def generate_schematic(annotation_scheme):
     '''
@@ -1382,6 +1405,8 @@ def generate_multiselect_layout(annotation_scheme):
     key2label = {}
     label2key = {}
 
+    key_bindings = []
+    
     for i, label_data in enumerate(annotation_scheme['labels'], 1):
 
         label = label_data if isinstance(
@@ -1414,7 +1439,7 @@ def generate_multiselect_layout(annotation_scheme):
                     quit()
                 key2label[key_value] = label
                 label2key[label] = key_value
-
+                key_bindings.append((key_value, class_name +': ' + label))
 
         if "sequential_key_binding" in annotation_scheme \
            and  annotation_scheme["sequential_key_binding"] \
@@ -1454,7 +1479,7 @@ def generate_multiselect_layout(annotation_scheme):
             
     schematic += '  </fieldset>\n</form>\n'
 
-    return schematic
+    return schematic, key_bindings
 
 
 def generate_radio_layout(annotation_scheme, horizontal=False):
@@ -1467,7 +1492,8 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
     # TODO: display keyboard shortcuts on the annotation page
     key2label = {}
     label2key = {}
-
+    key_bindings = []
+    
     for i, label_data in enumerate(annotation_scheme['labels'], 1):
 
         label = label_data if isinstance(
@@ -1500,7 +1526,8 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
                         "Keyboard input conflict: %s" % key_value)
                     quit()
                 key2label[key_value] = label
-                label2key[label] = key_value                
+                label2key[label] = key_value
+                key_bindings.append((key_value, class_name +': ' + label))
             # print(key_value)
             
         if "sequential_key_binding" in annotation_scheme \
@@ -1535,7 +1562,7 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
 
 
     schematic += '  </fieldset>\n</form>\n'
-    return schematic
+    return schematic, key_bindings
 
 
 def generate_likert_layout(annotation_scheme):
@@ -1562,6 +1589,7 @@ def generate_likert_layout(annotation_scheme):
     
     key2label = {}
     label2key = {}    
+    key_bindings = []
     
     for i in range(1, annotation_scheme['size']+1):
 
@@ -1577,7 +1605,7 @@ def generate_likert_layout(annotation_scheme):
            and annotation_scheme['size'] <= 10: 
             key2label[key_value] = label
             label2key[label] = key_value
-
+            key_bindings.append((key_value, class_name + ': ' + key_value))
 
             
         # In the collapsed version of the likert scale, no label is shown.
@@ -1599,9 +1627,12 @@ def generate_likert_layout(annotation_scheme):
     schematic += ('  <li>%s</li> </ul></fieldset>\n</form></div>\n' \
                   % (annotation_scheme['max_label']))
     
-    return schematic
+    return schematic, key_bindings
+
+
 
 def generate_textbox_layout(annotation_scheme):
+    
     #'<div style="border:1px solid black; border-radius: 25px;">' + \
     schematic = \
         '<form action="/action_page.php">' + \
@@ -1662,7 +1693,7 @@ def generate_textbox_layout(annotation_scheme):
     schematic += '  </fieldset>\n</form>\n'
 
     
-    return schematic
+    return schematic, key_bindings
     
 
 @app.route('/file/<path:filename>')

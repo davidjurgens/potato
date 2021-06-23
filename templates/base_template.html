@@ -15,6 +15,11 @@
     <input type="hidden" name="instance_id" id="instance_id" value="{{instance_id}}">
     <input type="hidden" name="alert_time_each_instance" id="alert_time_each_instance" value="{{alert_time_each_instance}}">
 
+    <div id="mySidepanel" class="sidepanel">
+      <a href="javascript:void(0)" class="closebtn" onclick="closeNav()">&times;</a>
+      {{keybindings}}
+    </div>
+    
     <script>
       document.addEventListener('keyup', function (event) {
           var active_id = document.activeElement.id;
@@ -284,7 +289,7 @@
             <a href="#" class="nav-item nav-link active">Home</a>
             {{annotation_codebook}}
             <a href="#" class="nav-item nav-link disabled">Statistics</a>
-            <a href="#" class="nav-item nav-link disabled">Help</a>
+            <a role="button" href="#" class="nav-item nav-link openbtn" onclick="openNav()">Help</a>
           </div>
           <div class="p-2 bd-highlight text-secondary align-middle">
             Finished {{finished}}/{{total_count}}
@@ -339,5 +344,17 @@
         </div>
       </footer>
     </div>
+
+    <script>
+      /* Set the width of the sidebar to 250px (show it) */
+      function openNav() {
+          document.getElementById("mySidepanel").style.width = "350px";
+      }
+      
+      /* Set the width of the sidebar to 0 (hide it) */
+      function closeNav() {
+          document.getElementById("mySidepanel").style.width = "0";
+      } 
+    </script>
   </body>
 </html>
