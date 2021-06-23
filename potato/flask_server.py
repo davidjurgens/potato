@@ -1271,9 +1271,8 @@ def generate_site(config):
     annotation_schemes = config['annotation_schemes']
     logger.debug("Saw %d annotation scheme(s)" % len(annotation_schemes))
 
-    # The annotator schemes get stuff in a <table> for now, though this probably
-    # should be made more flexible
-
+    # Potato admin can specify a custom HTML layout that allows variable-named
+    # placement of task elements
     if 'custom_layout' in config and config['custom_layout']:
         
         for annotation_scheme in annotation_schemes:
@@ -1291,7 +1290,8 @@ def generate_site(config):
                      'config.yaml and layout.html files have matching names') %
                     (config['__config_file__'], schema_name, config['html_layout']))
 
-            task_html_layout = updated_layout        
+            task_html_layout = updated_layout
+    # If the admin doesn't specify a custom layout, use the default layout
     else:
         
         # If we don't have a custom layout, accumulate all the tasks into a
@@ -1572,6 +1572,8 @@ def generate_likert_layout(annotation_scheme):
         name = annotation_scheme['name'] + ':::' + label
         class_name = annotation_scheme['name']
 
+        key_value = str(i % 10)
+        
         # if the user wants us to add in easy key bindings
         if "sequential_key_binding" in annotation_scheme \
            and annotation_scheme["sequential_key_binding"] \
@@ -1579,7 +1581,7 @@ def generate_likert_layout(annotation_scheme):
             key2label[key_value] = label
             label2key[label] = key_value
 
-        key_value = str(i % 10)
+
             
         # In the collapsed version of the likert scale, no label is shown.
         label_content = ''
