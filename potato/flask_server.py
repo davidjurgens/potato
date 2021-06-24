@@ -265,7 +265,7 @@ class UserAnnotationState:
             # we also update the behavioral_data_dict (currently done in the
             # update_annotation_state function)
             #
-            # self.instance_id_to_behavioral_data[instance_id] = behavioral_data_dict
+            self.instance_id_to_behavioral_data[instance_id] = behavioral_data_dict
             
         elif instance_id in self.instance_id_to_labeling:
             del self.instance_id_to_labeling[instance_id]
@@ -280,12 +280,12 @@ class UserAnnotationState:
 
             inst_id = inst['id']
             annotation = inst['annotation']
-            misc_dict = {}
-            if 'misc' in inst:
-                misc_dict = inst['misc']
+            behavior_dict = {}
+            if 'behavior' in inst:
+                behavior_dict = inst['behavior']
 
             self.instance_id_to_labeling[inst_id] = annotation
-            self.instance_id_to_behavioral_data[inst_id] = misc_dict
+            self.instance_id_to_behavioral_data[inst_id] = behavior_dict
 
         self.instance_id_ordering = annotation_order
         self.instance_id_to_order = self.generate_id_order_mapping(self.instance_id_ordering)
@@ -476,8 +476,8 @@ def update_annotation_state(username, form):
     did_change = False
     for key in form:
         # look for behavioral information regarding time, click, ...
-        if key[:5] == 'misc_':
-            behavioral_data_dict[key[5:]] = form[key]
+        if key[:9] == 'behavior_':
+            behavioral_data_dict[key[9:]] = form[key]
             continue
 
         # Look for the marker that indicates an annotation label
@@ -506,8 +506,8 @@ def update_annotation_state(username, form):
     did_change = user_state.set_annotation(instance_id, schema_to_label_to_value, behavioral_data_dict)
 
     # update the behavioral information regarding time only when the annotations are changed
-    #if did_change:
-    #    user_state.instance_id_to_behavioral_data[instance_id] = behavioral_data_dict
+    if did_change:
+        user_state.instance_id_to_behavioral_data[instance_id] = behavioral_data_dict
         # print('misc information updated')
 
     return did_change
@@ -886,6 +886,8 @@ def annotate_page():
     # is running in a single thread, but it's probably good to check on this at
     # some point if we scale to having lots of concurrent users.
     if 'instance_id' in request.form:
+        #for key in request.form:
+        #    print(key, request.form.get(key))
         did_change = update_annotation_state(username, request.form)
 
         if did_change:
