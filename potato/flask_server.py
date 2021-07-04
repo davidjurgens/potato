@@ -1995,6 +1995,7 @@ def main():
     global config
     global logger
     global user_config
+    global user_to_annotation_state
 
     args = arguments()
 
@@ -2042,6 +2043,11 @@ def main():
 
     # Loads the training data
     load_all_data(config)
+
+    # load users with annotations to user_to_annotation_state
+    users_with_annotations = [f for f in os.listdir(config['output_annotation_dir']) if os.path.isdir(config['output_annotation_dir'] + f)]
+    for user in users_with_annotations:
+        load_user_state(user)
 
     # TODO: load previous annotation state
     # load_annotation_state(config)
