@@ -36,6 +36,7 @@ from argparse import ArgumentParser
 from sklearn.pipeline import Pipeline
 
 from itertools import zip_longest
+import krippendorff
 
 # import choix
 # import networkx as nx
@@ -83,7 +84,7 @@ USER_CONFIG_PATH = 'potato/user_config.json'
 
 #TODO: Move this to config.yaml files
 #Items which will be displayed in the popup statistics sidebar
-STATS_KEYS = {'Annotated instances':'Annotated instances','Total working time':'Total working time', 'Average time on each instance':'Average time on each instance'}
+STATS_KEYS = {'Annotated instances':'Annotated instances','Total working time':'Total working time', 'Average time on each instance':'Average time on each instance', 'Agreement':'Agreement'}
 
 
 # This variable of tyep ActiveLearningState keeps track of information on active
@@ -454,9 +455,146 @@ def load_all_data(config):
                      % (len(re_to_highlights), i))
 
 
+def convert_labels(annotation, schema_type):
+    if schema_type == 'likert':
+        return int(list(annotation.keys())[0][6:])
+    elif schema_type == 'radio':
+        return list(annotation.keys())[0]
+    elif schema_type == 'multiselect':
+        return list(annotation.keys())
+    else:
+        print("Unrecognized schema_type %s" % schema_type)
+        return None
+
+#get the final agreement score for selected users and schemas
+def get_agreement_score(user_list, schema_name, return_type = 'overall_average'):
+    global user_to_annotation_state
+    global config
+
+    if user_list == 'all':
+        user_list = user_to_annotation_state.keys()
+
+    name2alpha = {}
+    if schema_name == 'all':
+        for i in range(len(config['annotation_schemes'])):
+            schema = config['annotation_schemes'][i]
+            alpha = cal_agreement(user_list, schema['name'])
+            name2alpha[schema['name']] = alpha
+
+    alpha_list = []
+    if return_type == 'overall_average':
+        for name in name2alpha:
+            alpha = name2alpha[name]
+            if type(alpha) == dict:
+                average_alpha = sum([it[1] for it in list(alpha.items())]) / len(alpha)
+                alpha_list.append(average_alpha)
+            else:
+                alpha_list.append(alpha)
+        return round(sum(alpha_list) / len(alpha_list), 2)
+    else:
+        return name2alpha
 
 
-#def cal_agreement(task, schema):
+# calculate the krippendorff's alpha for selected users and schema
+def cal_agreement(user_list, schema_name, schema_type = None, selected_keys = None):
+    global user_to_annotation_state
+    global config
+
+    #get the schema_type/annotation_type from the config file
+    for i in range(len(config['annotation_schemes'])):
+        schema = config['annotation_schemes'][i]
+        if schema['name'] == schema_name:
+            schema_type = schema['annotation_type']
+            break
+
+    #obtain the list of keys for calculating IAA and the user annotations
+    union_keys = set()
+    user_annotation_list = []
+    for user in user_list:
+        if user not in user_to_annotation_state:
+            print('%s not found in user_to_annotation_state' % user)
+        user_annotated_ids = user_to_annotation_state[user].instance_id_to_labeling.keys()
+        union_keys = union_keys | user_annotated_ids
+        user_annotation_list.append(user_to_annotation_state[user].instance_id_to_labeling)
+
+    if len(user_annotation_list) < 2:
+        print('Cannot calculate agreement score for less than 2 users')
+        return None
+
+    #only calculate the agreement for selected keys when selected_keys is specified
+    if selected_keys == None:
+        selected_keys = list(union_keys)
+
+    if len(selected_keys) == 0:
+        print('Cannot calculate agreement score when annotators work on different sets of instances')
+        return None
+
+
+    if schema_type in ['radio', 'likert']:
+        distance_metric_dict = {
+            'radio': 'nominal',
+            'likert': 'ordinal'
+        }
+        #initialize agreement data matrix
+        l = []
+        for i in range(len(user_annotation_list)):
+            l.append([np.nan] * len(selected_keys))
+
+        for i in range(len(selected_keys)):
+            key = selected_keys[i]
+            for j in range(len(l)):
+                if key in user_annotation_list[j]:
+                    l[j][i] = convert_labels(user_annotation_list[j][key][schema_name], schema_type)
+                    # print([it[i] for it in l])
+            # print(key, l1[-1],l2[-1])
+            # print(l)
+        alpha = krippendorff.alpha(np.array(l), level_of_measurement=distance_metric_dict[schema_type])
+        return alpha
+
+
+    # When multiple labels are annotated for each instance, calculate the IAA for each label
+    elif schema_type == 'multiselect':
+        #collect the label list from configuration file
+        if type(schema['labels'][0]) == dict:
+            labels = [it['name'] for it in schema['labels']]
+        elif type(schema['labels'][0]) == str:
+            labels = schema['labels']
+        else:
+            print('Unknown label type in schema[\'labels\']')
+            return None
+
+        #initialize agreement data matrix for each label
+        l_dict = {}
+        for l in labels:
+            l_dict[l] = []
+            for i in range(len(user_annotation_list)):
+                l_dict[l].append([np.nan] * len(selected_keys))
+
+        #consider binary agreement for each label in the multi-label schema
+        for i in range(len(selected_keys)):
+            key = selected_keys[i]
+            for j in range(len(user_annotation_list)):
+                if (key in user_annotation_list[j]) and (schema_name in user_annotation_list[j][key]):
+                    annotations = convert_labels(user_annotation_list[j][key][schema_name], schema_type)
+                    for l in labels:
+                        # print(key,j,user_annotation_list[j][key]['annotation'])
+                        if l not in annotations:
+                            l_dict[l][j][i] = 0
+                        else:
+                            l_dict[l][j][i] = 1
+                    # for l in user_annotation_list[j][key]['annotation'][project2]:
+                    #    l_dict[l][j][i] = 1
+
+        alpha_dict = {}
+        for key in labels:
+            # print(l_dict[key])
+            alpha_dict[key] = krippendorff.alpha(np.array(l_dict[key]), level_of_measurement='nominal')
+        return alpha_dict
+
+
+
+
+
 
 
 
@@ -1020,6 +1158,9 @@ def annotate_page():
             kwargs[kw] = instance[kw]
 
     all_statistics = lookup_user_state(username).generate_user_statistics()
+
+    #TODO: Display plots for agreement scores instead of only the overall score in the statistics sidebar
+    all_statistics['Agreement'] = get_agreement_score('all', 'all', return_type='overall_average')
     #print(all_statistics)
         
     # Flask will fill in the things we need into the HTML template we've created,
