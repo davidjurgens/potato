@@ -366,7 +366,10 @@ class UserAnnotationState:
         statistics = {}
         statistics['Annotated instances'] = len(self.instance_id_to_labeling)
         statistics['Total working time'] = self.total_working_time()[1]
-        statistics['Average time on each instance'] = '%s seconds' % str(round(self.total_working_time()[0] / len(self.instance_id_to_labeling),1))
+        if statistics['Annotated instances'] != 0:
+            statistics['Average time on each instance'] = '%s seconds' % str(round(self.total_working_time()[0] / statistics['Annotated instances'],1))
+        else:
+            statistics['Average time on each instance'] = 'N/A'
 
         return statistics
 
@@ -449,6 +452,12 @@ def load_all_data(config):
 
         logger.debug('Loaded %d regexes to map to %d labels for dynamic highlighting'
                      % (len(re_to_highlights), i))
+
+
+
+
+#def cal_agreement(task, schema):
+
 
 
 def cal_amount(user):
