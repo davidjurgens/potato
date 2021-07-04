@@ -17,8 +17,13 @@
     <p id="timecounter" hidden>Time spent:</p>
 
     <div id="mySidepanel" class="sidepanel">
-      <a href="javascript:void(0)" class="closebtn" onclick="closeNav()">&times;</a>
+      <a href="javascript:void(0)" class="closebtn" target_id="mySidepanel" onclick="closeNav(this.getAttribute('target_id'))">&times;</a>
       {{keybindings}}
+    </div>
+
+    <div id="Statpanel" class="sidepanel">
+      <a href="javascript:void(0)" class="closebtn" target_id="Statpanel" onclick="closeNav(this.getAttribute('target_id'))">&times;</a>
+      {{statistics_nav}}
     </div>
     
     <script>
@@ -286,8 +291,8 @@
           <div class="navbar-nav">
             <a href="#" class="nav-item nav-link active">Home</a>
             {{annotation_codebook}}
-            <a href="#" class="nav-item nav-link disabled">Statistics</a>
-            <a role="button" href="#" class="nav-item nav-link openbtn" onclick="openNav()">Help</a>
+            <a role="button" href="#" class="nav-item nav-link openbtn" target_id="Statpanel" width = "475px" onclick="openNav(this.getAttribute('target_id'),this.getAttribute('width'))">Statistics</a>
+            <a role="button" href="#" class="nav-item nav-link openbtn" target_id="mySidepanel" onclick="openNav(this.getAttribute('target_id'))">Help</a>
           </div>
           <div class="p-2 bd-highlight text-secondary align-middle">
             Finished {{finished}}/{{total_count}}
@@ -345,13 +350,13 @@
 
     <script>
       /* Set the width of the sidebar to 250px (show it) */
-      function openNav() {
-          document.getElementById("mySidepanel").style.width = "350px";
+      function openNav(target_id, width = "350px") {
+          document.getElementById(target_id).style.width = width;
       }
       
       /* Set the width of the sidebar to 0 (hide it) */
-      function closeNav() {
-          document.getElementById("mySidepanel").style.width = "0";
+      function closeNav(target_id) {
+          document.getElementById(target_id).style.width = "0";
       } 
     </script>
   </body>
