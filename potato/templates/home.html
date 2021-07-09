@@ -35,6 +35,12 @@
           var form = document.createElement("form");
           form.setAttribute("method", "post");
           form.setAttribute("action", "login");
+
+          var hiddenField = document.createElement("input");
+          hiddenField.setAttribute("type", "hidden");
+          hiddenField.setAttribute("name", "src");
+          hiddenField.setAttribute("value", "home");
+          form.appendChild(hiddenField);
           
           var hiddenField = document.createElement("input");
           hiddenField.setAttribute("type", "hidden");
