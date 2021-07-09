@@ -488,9 +488,14 @@ def get_agreement_score(user_list, schema_name, return_type = 'overall_average')
             if type(alpha) == dict:
                 average_alpha = sum([it[1] for it in list(alpha.items())]) / len(alpha)
                 alpha_list.append(average_alpha)
-            else:
+            elif type(alpha) == float:
                 alpha_list.append(alpha)
-        return round(sum(alpha_list) / len(alpha_list), 2)
+            else:
+                continue
+        if len(alpha_list) > 0:
+            return round(sum(alpha_list) / len(alpha_list), 2)
+        else:
+            return 'N/A'
     else:
         return name2alpha
 
