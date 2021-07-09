@@ -1441,7 +1441,15 @@ def generate_site(config):
     logger.debug("Reading html annotation template %s" % html_template_file)
     
     if not os.path.exists(html_template_file):
-        raise FileNotFoundError("html_template_file not found: %s" % html_template_file)
+
+        real_path = os.path.realpath(config['__config_file__'])
+        dir_path = os.path.dirname(real_path)
+        abs_html_template_file = dir_path + '/' + html_template_file
+        
+        if not os.path.exists(abs_html_template_file):
+            raise FileNotFoundError("html_template_file not found: %s" % html_template_file)
+        else:
+            html_template_file = abs_html_template_file
     
     with open(html_template_file, 'rt') as f:
         html_template = ''.join(f.readlines())
@@ -1451,7 +1459,16 @@ def generate_site(config):
     logger.debug("Reading html header %s" % header_file)
     
     if not os.path.exists(header_file):
-        raise FileNotFoundError("header_file not found: %s" % header_file)
+
+        # See if we can get it from the relative path
+        real_path = os.path.realpath(config['__config_file__'])
+        dir_path = os.path.dirname(real_path)
+        abs_header_file = dir_path + '/' + header_file
+
+        if not os.path.exists(abs_header_file):
+            raise FileNotFoundError("header_file not found: %s" % header_file)
+        else:
+            header_file = abs_header_file
     
     with open(header_file, 'rt') as f:
         header = ''.join(f.readlines())
@@ -1464,7 +1481,17 @@ def generate_site(config):
     logger.debug("Reading task layout html %s" % html_layout_file)
 
     if not os.path.exists(html_layout_file):
-        raise FileNotFoundError("html_layout not found: %s" % html_layout_file)
+
+        # See if we can get it from the relative path
+        real_path = os.path.realpath(config['__config_file__'])
+        dir_path = os.path.dirname(real_path)
+        abs_html_layout_file = dir_path + '/' + html_layout_file
+
+        if not os.path.exists(abs_html_layout_file):        
+            raise FileNotFoundError("html_layout not found: %s" % html_layout_file)
+        else:
+            html_layout_file = abs_html_layout_file
+            
     with open(html_layout_file, 'rt') as f:
         task_html_layout = ''.join(f.readlines())
     
