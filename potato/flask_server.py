@@ -523,7 +523,7 @@ def cal_agreement(user_list, schema_name, schema_type = None, selected_keys = No
         user_annotation_list.append(user_to_annotation_state[user].instance_id_to_labeling)
 
     if len(user_annotation_list) < 2:
-        print('Cannot calculate agreement score for less than 2 users')
+        # print('Cannot calculate agreement score for less than 2 users')
         return None
 
     #only calculate the agreement for selected keys when selected_keys is specified
@@ -2217,6 +2217,10 @@ def main():
     # Loads the training data
     load_all_data(config)
 
+    # Generate the output directory if it doesn't exist yet
+    if not os.path.exists(config['output_annotation_dir']):
+        os.makedirs(config['output_annotation_dir'])
+        
     # load users with annotations to user_to_annotation_state
     users_with_annotations = [f for f in os.listdir(config['output_annotation_dir']) if os.path.isdir(config['output_annotation_dir'] + f)]
     for user in users_with_annotations:
