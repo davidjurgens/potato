@@ -1838,6 +1838,17 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
                  '  <label for="%s" %s>%s</label><br/>')
                  % (class_name, label, name, key_value, name, tooltip, label_content))
 
+    if 'has_free_response' in annotation_scheme and annotation_scheme['has_free_response']:
+
+        label='free_response'
+        name = annotation_scheme['name'] + ':::free_response' 
+        class_name = annotation_scheme['name']
+        tooltip = 'Entire a label not listed here'
+
+        schematic += \
+        (('Other? <input class="%s" type="text" id="%s" name="%s" >' +
+         '  <label for="%s" %s></label><br/>')
+         % (class_name, label, name, name, tooltip))        
 
     schematic += '  </fieldset>\n</form>\n'
     return schematic, key_bindings
