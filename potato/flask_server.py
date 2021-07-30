@@ -756,7 +756,11 @@ def write_data(username):
 @app.route("/")
 def home():
     global config
-    return render_template("home.html", title=config['annotation_task_name'])
+    
+    if config['__debug__']:
+        return annotate_page()
+    else:
+        return render_template("home.html", title=config['annotation_task_name'])
 
 
 @app.route("/login", methods=['GET', 'POST'])
@@ -764,19 +768,19 @@ def login():
     global user_config
     global config
 
-    # TODO: add in logic for checking/hashing passwords, safe password
-    # management, etc. For now just #yolo and log in people regardless.
-    action = request.form.get("action")
 
-    # Jiaxin: currently we are just using email as the username
-    username = request.form.get("email")
-    password = request.form.get("pass")
-    print(action, username, password)
-
-    #if True:
-    #    return annotate_page()
+    if config['__debug__'] == True:
+        action = 'login'
+        usenrame = 'debug_user'
+        password = 'debug'
+    else:
+        # Jiaxin: currently we are just using email as the username
+        action = request.form.get("action")
+        username = request.form.get("email")
+        password = request.form.get("pass")
+        
     if action == 'login':
-        if user_config.is_valid_password(username, password):
+        if config['__debug__'] or user_config.is_valid_password(username, password):
             return annotate_page()
         else:
             data = {
@@ -1414,6 +1418,9 @@ def arguments():
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Report verbose output", default=False)
 
+    parser.add_argument("--debug", action="store_true",
+                        help="Launch in debug mode with no login", default=False)
+    
     parser.add_argument("--veryVerbose", action="store_true", dest="very_verbose",
                         help="Report very verbose output", default=False)
     # parser.add_argument("-p", "--show_path", action="store_true", dest="show_path")
@@ -1713,7 +1720,7 @@ def generate_multiselect_layout(annotation_scheme):
             <video width="320" height="240" autoplay loop muted>
                 <source src="{video_path}" type="video/mp4" />
             </video>'''
-
+            
         #add shortkey to the label so that the annotators will know how to use it
         #when the shortkey is "None", this will not displayed as we do not allow short key for None category
         #if label in label2key and label2key[label] != 'None':
@@ -1732,6 +1739,20 @@ def generate_multiselect_layout(annotation_scheme):
                 (('<label for="%s" %s><input class="%s" type="checkbox" id="%s" name="%s" value="%s" onclick="whetherNone(this)">' +
                  '  %s</label><br/>')
                  % (name, tooltip, class_name, name, name, key_value, label_content))
+
+
+
+    if 'has_free_response' in annotation_scheme and annotation_scheme['has_free_response']:
+
+        label='free_response'
+        name = annotation_scheme['name'] + ':::free_response' 
+        class_name = annotation_scheme['name']
+        tooltip = 'Entire a label not listed here'
+
+        schematic += \
+        (('Other? <input class="%s" type="text" id="%s" name="%s" >' +
+         '  <label for="%s" %s></label><br/>')
+         % (class_name, label, name, name, tooltip))
 
             
     schematic += '  </fieldset>\n</form>\n'
@@ -2209,7 +2230,10 @@ def main():
 
     # For helping in debugging, stuff in the config file name
     config['__config_file__'] = args.config_file
-        
+
+    if args.debug:
+        config['__debug__'] = True
+    
     # Creates the templates we'll use in flask by mashing annotation
     # specification on top of the proto-templates
     generate_site(config)
