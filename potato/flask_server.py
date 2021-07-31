@@ -1765,9 +1765,9 @@ def generate_multiselect_layout(annotation_scheme):
         tooltip = 'Entire a label not listed here'
 
         schematic += \
-        (('Other? <input class="%s" type="text" id="%s" name="%s" >' +
-         '  <label for="%s" %s></label><br/>')
-         % (class_name, label, name, name, tooltip))
+        (('<tr><td colspan="%s"><div style="float:left; display:flex; flex-direction:row;">Other? <input class="%s" type="text" id="%s" name="%s">' +
+         '  <label for="%s" %s></label></div></td</tr>')
+         % (str(n_columns), class_name, label, name, name, tooltip))
 
 
     schematic += '</table>'
