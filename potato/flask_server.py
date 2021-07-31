@@ -2268,6 +2268,7 @@ def main():
     # For helping in debugging, stuff in the config file name
     config['__config_file__'] = args.config_file
 
+    config['__debug__'] = False
     if args.debug:
         config['__debug__'] = True
     
