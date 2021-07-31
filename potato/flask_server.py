@@ -422,7 +422,7 @@ def load_all_data(config):
             sep = ',' if fmt == 'csv' else '\t'
             # Ensure the key is loaded as a string form (prevents weirdness
             # later)
-            df = pd.read_csv(data_fname, sep=sep, dtype={id_key: str})
+            df = pd.read_csv(data_fname, sep=sep, dtype={id_key: str, text_key: str})
             for i, row in df.iterrows():
 
                 item = { }
@@ -1193,13 +1193,14 @@ def annotate_page():
 
     # UGHGHGHGH the tempalte does unusual escaping, which makes it a PAIN to do
     # the replacement later
-    m = re.search('<div name="instance_text">(.*?)</div>', rendered_html,
-                  flags=(re.DOTALL|re.MULTILINE))
-    text = m.group(1)
+    #m = re.search('<div name="instance_text">(.*?)</div>', rendered_html,
+    #              flags=(re.DOTALL|re.MULTILINE))
+    #text = m.group(1)
 
     # For whatever reason, doing this before the render_template causes the
     # embedded HTML to get escaped, so we just do a wholesale replacement here.
-    rendered_html = rendered_html.replace(text, updated_text)
+    #print(text, updated_text)
+    #rendered_html = rendered_html.replace(text, updated_text)
     
     # Parse the page so we can programmatically reset the annotation state
     # to what it was before
@@ -1670,9 +1671,20 @@ def generate_multiselect_layout(annotation_scheme):
     label2key = {}
 
     key_bindings = []
+
+    display_info = annotation_scheme['display_config'] if 'display_config' in annotation_scheme else {}
+    
+    n_columns = display_info['num_columns'] if 'num_columns' in display_info else 1
+
+    schematic += '<table>'
     
     for i, label_data in enumerate(annotation_scheme['labels'], 1):
 
+        
+        if (i-1) % n_columns == 0:
+            schematic += '<tr>'
+        schematic += '<td>'
+        
         label = label_data if isinstance(
             label_data, str) else label_data['name']
 
@@ -1740,6 +1752,9 @@ def generate_multiselect_layout(annotation_scheme):
                  '  %s</label><br/>')
                  % (name, tooltip, class_name, name, name, key_value, label_content))
 
+        schematic += '</td>'
+        if i % n_columns == 0:
+            schematic += '</tr>'
 
 
     if 'has_free_response' in annotation_scheme and annotation_scheme['has_free_response']:
@@ -1754,7 +1769,8 @@ def generate_multiselect_layout(annotation_scheme):
          '  <label for="%s" %s></label><br/>')
          % (class_name, label, name, name, tooltip))
 
-            
+
+    schematic += '</table>'
     schematic += '  </fieldset>\n</form>\n'
 
     return schematic, key_bindings
@@ -1941,6 +1957,16 @@ def generate_textbox_layout(annotation_scheme):
 
     # Technically, text boxes don't have these but we define it anyway
     key_bindings = []
+
+    display_info = annotation_scheme['display_config'] if 'display_config' in annotation_scheme else {}
+
+    # TODO: pull this out into a separate method that does some sanity checks
+    custom_css = '""'
+    if 'custom_css' in display_info:
+        custom_css = '"'
+        for k, v in display_info['custom_css'].items():
+            custom_css += k + ":" + v + ";"
+        custom_css += '"'
     
     tooltip = ''
     if False:
@@ -1976,9 +2002,9 @@ def generate_textbox_layout(annotation_scheme):
 
 
     schematic += \
-            (('  <input class="%s" type="text" id="%s" name="%s" >' +
+            (('  <input class="%s" style=%s type="text" id="%s" name="%s" >' +
              '  <label for="%s" %s></label><br/>')
-             % (class_name, label, name, name, tooltip))
+             % (class_name, custom_css, label, name, name, tooltip))
 
 
     #schematic += '  </fieldset>\n</form></div>\n'
