@@ -1,9 +1,7 @@
-import socketserver
 import os
-import sys
 import numpy as np
 import flask
-from flask import Flask, render_template, request, url_for, jsonify
+from flask import Flask, render_template, request
 
 import pandas as pd
 
@@ -19,18 +17,13 @@ from tqdm import tqdm
 
 import threading
 
-import html
 
 import logging
 
 # import requests
 import random
-import time
 import json
-import gzip
-from datetime import datetime
-from collections import deque, defaultdict, Counter, OrderedDict
-import collections
+from collections import deque, defaultdict, Counter, OrderedDict, Mapping
 from argparse import ArgumentParser
 
 from sklearn.pipeline import Pipeline
@@ -1693,7 +1686,7 @@ def generate_multiselect_layout(annotation_scheme):
         key_value = name
 
         tooltip = ''
-        if isinstance(label_data, collections.Mapping):
+        if isinstance(label_data, Mapping):
             tooltip_text = ''
             if 'tooltip' in label_data:
                 tooltip_text = label_data['tooltip']
@@ -1798,7 +1791,7 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
         key_value = name
 
         tooltip = ''
-        if isinstance(label_data, collections.Mapping):
+        if isinstance(label_data, Mapping):
             tooltip_text = ''
             if 'tooltip' in label_data:
                 tooltip_text = label_data['tooltip']
