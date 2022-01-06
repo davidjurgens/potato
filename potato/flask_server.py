@@ -1408,7 +1408,7 @@ def arguments():
     parser.add_argument("config_file")
 
     parser.add_argument("-p", "--port", action="store", type=int, dest="port",
-                        help="The port to run on", default=8000)
+                        help="The port to run on", default=default_port)
 
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Report verbose output", default=False)
