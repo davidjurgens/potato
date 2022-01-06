@@ -23,7 +23,8 @@ import logging
 # import requests
 import random
 import json
-from collections import deque, defaultdict, Counter, OrderedDict, Mapping
+from collections import deque, defaultdict, Counter, OrderedDict
+from collections.abc import Mapping
 from argparse import ArgumentParser
 
 from sklearn.pipeline import Pipeline
