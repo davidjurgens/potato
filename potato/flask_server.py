@@ -1408,7 +1408,7 @@ def arguments():
     parser.add_argument("config_file")
 
     parser.add_argument("-p", "--port", action="store", type=int, dest="port",
-                        help="The port to run on", default=default_port)
+                        help="The port to run on", default=None)
 
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Report verbose output", default=False)
@@ -2288,8 +2288,9 @@ def main():
     flask_logger = logging.getLogger('werkzeug')
     flask_logger.setLevel(logging.ERROR)
 
-    print('running at:\nlocalhost:'+str(args.port))
-    app.run(debug=args.very_verbose, host="0.0.0.0", port=args.port)
+    port = args.port or config.get('port', default_port)
+    print('running at:\nlocalhost:'+str(port))
+    app.run(debug=args.very_verbose, host="0.0.0.0", port=port)
 
 
 if __name__ == "__main__":
