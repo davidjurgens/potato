@@ -2008,11 +2008,11 @@ def generate_textbox_layout(annotation_scheme):
     return schematic, key_bindings
     
 
-@app.route('/file/<path:filename>')
+@app.route('/files/<path:filename>')
 def get_file(filename):
-    """Return css file in css folder."""
+    """Make files available for annotation access from a folder."""
     try:
-        return flask.send_from_directory("data/files/", filename)
+        return flask.send_from_directory("../data/files/", filename)
     except FileNotFoundError:
         flask.abort(404)
 
