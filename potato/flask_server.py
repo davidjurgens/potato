@@ -1194,7 +1194,7 @@ def annotate_page():
     # For whatever reason, doing this before the render_template causes the
     # embedded HTML to get escaped, so we just do a wholesale replacement here.
     #print(text, updated_text)
-    #rendered_html = rendered_html.replace(text, updated_text)
+    rendered_html = rendered_html.replace(text, updated_text)
     
     # Parse the page so we can programmatically reset the annotation state
     # to what it was before
