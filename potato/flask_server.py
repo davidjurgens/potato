@@ -31,6 +31,7 @@ from sklearn.pipeline import Pipeline
 
 from itertools import zip_longest
 import krippendorff
+import string
 
 # import choix
 # import networkx as nx
@@ -1144,8 +1145,21 @@ def annotate_page():
     if config['annotation_task_name'] == "Contextual Acceptability":
         context_key = config['item_properties']['context_key']
         context = instance[context_key]
-    
+
+
     text = instance[text_key]
+
+    # automatically unfold the text list when input text is a list (e.g. best-worst-scaling).
+    if 'list_as_text' in config and config['list_as_text']:
+        if type(text) == list:
+            if config['list_as_text']['text_list_prefix_type'] == 'alphabet':
+                prefix_list = list(string.ascii_uppercase)
+                text = [prefix_list[i] + '. ' + text[i] for i in range(len(text))]
+            elif config['list_as_text']['text_list_prefix_type'] == 'number':
+                text = [str(i) + '. ' + text[i] for i in range(len(text))]
+            text = '<br>'.join(text)
+        else:
+            raise Exception('list_as_text is used when input column %s is not a list' % config['item_properties']['text_key'])
     instance_id = instance[id_key]
     
     
@@ -1194,7 +1208,7 @@ def annotate_page():
     # For whatever reason, doing this before the render_template causes the
     # embedded HTML to get escaped, so we just do a wholesale replacement here.
     #print(text, updated_text)
-    #rendered_html = rendered_html.replace(text, updated_text)
+    rendered_html = rendered_html.replace(text, updated_text)
     
     # Parse the page so we can programmatically reset the annotation state
     # to what it was before
@@ -1772,6 +1786,10 @@ def generate_multiselect_layout(annotation_scheme):
 
 def generate_radio_layout(annotation_scheme, horizontal=False):
 
+    #when horizontal is specified in the annotation_scheme, set horizontal = True
+    if "horizontal" in annotation_scheme and annotation_scheme['horizontal']:
+        horizontal = True
+
     schematic = \
         '<form action="/action_page.php">' + \
         '  <fieldset>' + \
@@ -1843,10 +1861,14 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
         #    label_content = label_content + \
         #        ' [' + label2key[label].upper() + ']'
 
+        #add support for horizontal layout
+        br_label = "<br/>"
+        if horizontal:
+            br_label = ''
         schematic += \
-                (('  <input class="%s" type="radio" id="%s" name="%s" value="%s" onclick="onlyOne(this)">' +
-                 '  <label for="%s" %s>%s</label><br/>')
-                 % (class_name, label, name, key_value, name, tooltip, label_content))
+                (('      <input class="%s" type="radio" id="%s" name="%s" value="%s" onclick="onlyOne(this)">' +
+                 '  <label for="%s" %s>%s</label>%s')
+                 % (class_name, label, name, key_value, name, tooltip, label_content, br_label))
 
     if 'has_free_response' in annotation_scheme and annotation_scheme['has_free_response']:
 
