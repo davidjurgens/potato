@@ -30,6 +30,10 @@ The `config/examples` folder contains example `.yaml` configuration files that m
 
 
 ### Versions
+
+  Partial version/commit log so far: 
+  
+    [2022.01.24 David] Initial public release
     [2021.06.19 David] Overhaul of rendering engine and support for new annotation schemes
     [2021.03.16 Jiaxin] count and display the time spent on each instance
     [2021.03.08 Xingyao] video/image as labels
@@ -39,7 +43,7 @@ The `config/examples` folder contains example `.yaml` configuration files that m
    
 ### Design Team and Support
 
-Potato is run by a small and engergetic team of academics doing the best the can. For support, please leave a ticket on this git repo. 
+Potato is run by a small and engergetic team of academics doing the best they can. For support, please leave a issue on this git repo. Feature requests and issues are both welcomed!
    
 ### Citing Potato
 
