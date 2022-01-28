@@ -38,6 +38,10 @@ from sklearn.pipeline import Pipeline
 from itertools import zip_longest
 import krippendorff
 
+import webbrowser
+
+from create_task_cli import create_task_cli
+
 # import choix
 # import networkx as nx
 
@@ -1424,8 +1428,6 @@ def arguments():
     
     parser.add_argument("--veryVerbose", action="store_true", dest="very_verbose",
                         help="Report very verbose output", default=False)
-    # parser.add_argument("-p", "--show_path", action="store_true", dest="show_path")
-    # parser.add_argument("-s", "--show_sim", action="store_true", dest="show_similarity")
 
     return parser.parse_args()
 
@@ -2219,7 +2221,15 @@ def resolve(annotations, strategy):
         return random.choice(annotations)
     else:
         raise Exception("Unknonwn annotation resolution strategy: \"%s\"" % (strategy))
-    
+
+
+def yes_or_no(question):
+    while "the answer is invalid":
+        reply = str(input(question+' (y/n): ')).lower().strip()
+        if reply[:1] == 'y':
+            return True
+        if reply[:1] == 'n':
+            return False    
 
         
 def main():
@@ -2228,6 +2238,22 @@ def main():
     global user_config
     global user_to_annotation_state
 
+
+    # Check if the user launched with no arguments and if so, launch the task
+    # configuration script for them
+    if len(sys.argv) == 1:
+        if yes_or_no("Launch task creation process?"):
+            if yes_or_no("Launch on command line?"):
+                config_file = create_task_cli()
+            else:
+                # Probably need to launch the Flask server to accept form inputs
+                webbrowser.open('file://' + TODO + 'potato/static/create-task.html', new=1)
+
+                # TODO: figure out how to capture the config file
+                config_file = 'unknown'
+            
+            return
+    
     args = arguments()
 
     with open(args.config_file, 'rt') as f:
