@@ -1,9 +1,7 @@
-import socketserver
 import os
-import sys
 import numpy as np
 import flask
-from flask import Flask, render_template, request, url_for, jsonify
+from flask import Flask, render_template, request
 
 import pandas as pd
 
@@ -19,24 +17,21 @@ from tqdm import tqdm
 
 import threading
 
-import html
 
 import logging
 
 # import requests
 import random
-import time
 import json
-import gzip
-from datetime import datetime
 from collections import deque, defaultdict, Counter, OrderedDict
-import collections
+from collections.abc import Mapping
 from argparse import ArgumentParser
 
 from sklearn.pipeline import Pipeline
 
 from itertools import zip_longest
 import krippendorff
+import string
 
 import webbrowser
 
@@ -492,7 +487,7 @@ def get_agreement_score(user_list, schema_name, return_type = 'overall_average')
             if type(alpha) == dict:
                 average_alpha = sum([it[1] for it in list(alpha.items())]) / len(alpha)
                 alpha_list.append(average_alpha)
-            elif type(alpha) == float:
+            elif isinstance(alpha, (np.floating, float)):
                 alpha_list.append(alpha)
             else:
                 continue
@@ -1154,8 +1149,21 @@ def annotate_page():
     if config['annotation_task_name'] == "Contextual Acceptability":
         context_key = config['item_properties']['context_key']
         context = instance[context_key]
-    
+
+
     text = instance[text_key]
+
+    # automatically unfold the text list when input text is a list (e.g. best-worst-scaling).
+    if 'list_as_text' in config and config['list_as_text']:
+        if type(text) == list:
+            if config['list_as_text']['text_list_prefix_type'] == 'alphabet':
+                prefix_list = list(string.ascii_uppercase)
+                text = [prefix_list[i] + '. ' + text[i] for i in range(len(text))]
+            elif config['list_as_text']['text_list_prefix_type'] == 'number':
+                text = [str(i) + '. ' + text[i] for i in range(len(text))]
+            text = '<br>'.join(text)
+        else:
+            raise Exception('list_as_text is used when input column %s is not a list' % config['item_properties']['text_key'])
     instance_id = instance[id_key]
     
     
@@ -1204,7 +1212,7 @@ def annotate_page():
     # For whatever reason, doing this before the render_template causes the
     # embedded HTML to get escaped, so we just do a wholesale replacement here.
     #print(text, updated_text)
-    #rendered_html = rendered_html.replace(text, updated_text)
+    rendered_html = rendered_html.replace(text, updated_text)
     
     # Parse the page so we can programmatically reset the annotation state
     # to what it was before
@@ -1418,7 +1426,7 @@ def arguments():
     parser.add_argument("config_file")
 
     parser.add_argument("-p", "--port", action="store", type=int, dest="port",
-                        help="The port to run on", default=8000)
+                        help="The port to run on", default=None)
 
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Report verbose output", default=False)
@@ -1695,7 +1703,7 @@ def generate_multiselect_layout(annotation_scheme):
         key_value = name
 
         tooltip = ''
-        if isinstance(label_data, collections.Mapping):
+        if isinstance(label_data, Mapping):
             tooltip_text = ''
             if 'tooltip' in label_data:
                 tooltip_text = label_data['tooltip']
@@ -1780,6 +1788,10 @@ def generate_multiselect_layout(annotation_scheme):
 
 def generate_radio_layout(annotation_scheme, horizontal=False):
 
+    #when horizontal is specified in the annotation_scheme, set horizontal = True
+    if "horizontal" in annotation_scheme and annotation_scheme['horizontal']:
+        horizontal = True
+
     schematic = \
         '<form action="/action_page.php">' + \
         '  <fieldset>' + \
@@ -1800,7 +1812,7 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
         key_value = name
 
         tooltip = ''
-        if isinstance(label_data, collections.Mapping):
+        if isinstance(label_data, Mapping):
             tooltip_text = ''
             if 'tooltip' in label_data:
                 tooltip_text = label_data['tooltip']
@@ -1851,10 +1863,14 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
         #    label_content = label_content + \
         #        ' [' + label2key[label].upper() + ']'
 
+        #add support for horizontal layout
+        br_label = "<br/>"
+        if horizontal:
+            br_label = ''
         schematic += \
-                (('  <input class="%s" type="radio" id="%s" name="%s" value="%s" onclick="onlyOne(this)">' +
-                 '  <label for="%s" %s>%s</label><br/>')
-                 % (class_name, label, name, key_value, name, tooltip, label_content))
+                (('      <input class="%s" type="radio" id="%s" name="%s" value="%s" onclick="onlyOne(this)">' +
+                 '  <label for="%s" %s>%s</label>%s')
+                 % (class_name, label, name, key_value, name, tooltip, label_content, br_label))
 
     if 'has_free_response' in annotation_scheme and annotation_scheme['has_free_response']:
 
@@ -2016,11 +2032,11 @@ def generate_textbox_layout(annotation_scheme):
     return schematic, key_bindings
     
 
-@app.route('/file/<path:filename>')
+@app.route('/files/<path:filename>')
 def get_file(filename):
-    """Return css file in css folder."""
+    """Make files available for annotation access from a folder."""
     try:
-        return flask.send_from_directory("data/files/", filename)
+        return flask.send_from_directory("../data/files/", filename)
     except FileNotFoundError:
         flask.abort(404)
 
@@ -2320,8 +2336,9 @@ def main():
     flask_logger = logging.getLogger('werkzeug')
     flask_logger.setLevel(logging.ERROR)
 
-    print('running at:\nlocalhost:'+str(args.port))
-    app.run(debug=args.very_verbose, host="0.0.0.0", port=args.port)
+    port = args.port or config.get('port', default_port)
+    print('running at:\nlocalhost:'+str(port))
+    app.run(debug=args.very_verbose, host="0.0.0.0", port=port)
 
 
 if __name__ == "__main__":
