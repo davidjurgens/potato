@@ -1,4 +1,4 @@
-import simplejson as json
+import json
 import yaml
 from collections import OrderedDict
 import os
