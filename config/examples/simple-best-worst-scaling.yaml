@@ -8,7 +8,7 @@
     # Potato will write the annotation file for all annotations to this
     # directory, as well as per-annotator output files and state information
     # necessary to restart annotation.
-    "output_annotation_dir": "annotation_output/simple-radio-selection/",
+    "output_annotation_dir": "annotation_output/simple-bws/",
 
     # The output format for the all-annotator data. Allowed formats are:
     # * jsonl
