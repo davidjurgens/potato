@@ -22,6 +22,7 @@ import logging
 
 # import requests
 import random
+random.seed(0)
 import json
 from collections import deque, defaultdict, Counter, OrderedDict
 from collections.abc import Mapping
@@ -59,11 +60,15 @@ user_story_pos = defaultdict(lambda: 0, dict())
 #user_current_story_dict = {}
 user_response_dicts_queue = defaultdict(deque)
 
+#A global mapping from username to the annotator's
 user_to_annotation_state = {}
 
 # A global mapping from an instance's id to its data. This is filled by
 # load_all_data()
 instance_id_to_data = {}
+
+#A global dict to keep tracking of the task assignment status
+task_assignment = {}
 
 # curr_user_story_similarity = {}
 
@@ -188,7 +193,7 @@ class UserAnnotationState:
     A class for maintaining state on which annotations users have completed.
     '''
     
-    def __init__(self, instance_id_to_data):
+    def __init__(self, assigned_user_data):
 
         # This data structure keeps the annotations the user has completed so far
         self.instance_id_to_labeling = {}
@@ -196,7 +201,7 @@ class UserAnnotationState:
         # This is a reference to the data
         #
         # NB: do we need this as a field?
-        self.instance_id_to_data = instance_id_to_data
+        self.instance_id_to_data = assigned_user_data
 
         # TODO: Put behavioral information of each instance with the labels together
         # however, that requires too many changes of the data structure
@@ -208,7 +213,7 @@ class UserAnnotationState:
         # annotating a ton of things with a lot of people, but hopefully it's
         # not too bad. The underlying motivation is to programmatically change
         # this ordering later
-        self.instance_id_ordering = list(instance_id_to_data.keys())
+        self.instance_id_ordering = list(assigned_user_data.keys())
 
         #initialize the mapping from instance id to order
         self.instance_id_to_order = self.generate_id_order_mapping(self.instance_id_ordering)
@@ -224,8 +229,14 @@ class UserAnnotationState:
     def current_instance(self):
         #print("current_instance(): cursor is now ", self.instance_cursor)
         inst_id = self.instance_id_ordering[self.instance_cursor]
-        instance = instance_id_to_data[inst_id]
+        instance = self.instance_id_to_data[inst_id]
         return instance
+
+    def get_instance_cursor(self):
+        return self.instance_cursor
+
+    def cursor_to_real_instance_id(self, cursor):
+        return self.instance_id_ordering[cursor]
 
     def go_back(self):
         if self.instance_cursor > 0:
@@ -250,6 +261,9 @@ class UserAnnotationState:
 
     def get_annotation_count(self):
         return len(self.instance_id_to_labeling)
+
+    def get_assigned_instance_count(self):
+        return len(self.instance_id_ordering)
 
     def set_annotation(self, instance_id, schema_to_label_to_value, behavioral_data_dict):
         '''
@@ -378,6 +392,8 @@ def load_all_data(config):
     global all_data
     global logger
     global instance_id_to_data
+    global unassigned_ids
+    global task_assignment
 
     # Hacky nonsense
     global re_to_highlights
@@ -452,6 +468,26 @@ def load_all_data(config):
 
         logger.debug('Loaded %d regexes to map to %d labels for dynamic highlighting'
                      % (len(re_to_highlights), i))
+
+    # path to save task assignment information
+    task_assignment_path = config['output_annotation_dir'] + config["automatic_assignment"]["output_filename"]
+
+    # Load the annotation assignment info if automatic task assignment is on.
+    # Jiaxin: we are simply saving this as a json file at this moment
+    if "automatic_assignment" in config and config["automatic_assignment"]['on']:
+
+        if os.path.exists(task_assignment_path):
+            # load the task assignment if it has been generated and saved
+            with open(task_assignment_path, 'r') as r:
+                task_assignment = json.load(r)
+        else:
+            # Otherwise generate a new task assignment dict
+            task_assignment = {'assigned':{}, 'unassigned':{}}
+            for id in instance_id_to_data:
+                # set the total labels per instance, if not specified, default to 3
+                task_assignment['unassigned'][id] = config["automatic_assignment"]["labels_per_instance"] if "labels_per_instance" in config["automatic_assignment"] else 3
+                #task_assignment['assigned'][id] = []
+
 
 
 def convert_labels(annotation, schema_type):
@@ -663,7 +699,8 @@ def update_annotation_state(username, form):
     # Get what the user has already annotated, which might include this instance too
     user_state = lookup_user_state(username)
 
-    instance_id = request.form['instance_id']
+    # Jiaxin: the instance_id are changed to the user's local instance cursor
+    instance_id = user_state.cursor_to_real_instance_id(int(request.form['instance_id']))
 
     schema_to_label_to_value = defaultdict(dict)
 
@@ -837,18 +874,88 @@ def get_users():
     return user_to_annotation_state.keys()
 
 
+
+
+
+
+def assign_instances_to_user(username):
+    '''
+    Assign instances to a user
+    :return: UserAnnotationState
+    '''
+
+    global user_to_annotation_state
+    global config
+    global instance_id_to_data
+
+    #"sampling_strategy:": 'random',
+
+   # "instance_per_annotator": 50,
+
+    if "sampling_strategy:" not in config["automatic_assignment"]:
+        logger.debug(
+            "Undefined sampling strategy, default to random assignment")
+        config["automatic_assignment"]["sampling_strategy"] = 'random'
+
+    # Force the sampling strategy to be random at this moment, will change this when more sampling strategies are created
+    config["automatic_assignment"]["sampling_strategy"] = 'random'
+
+    if config["automatic_assignment"]["sampling_strategy"] == 'random':
+        sampled_keys = random.sample(list(task_assignment['unassigned'].keys()), config["automatic_assignment"]["instance_per_annotator"])
+        # update task_assignment to keep track of task assignment status globally
+        for key in sampled_keys:
+            if key not in task_assignment['assigned']:
+                task_assignment['assigned'][key] = []
+            task_assignment['assigned'][key].append(username)
+            task_assignment['unassigned'][key] -= 1
+            if task_assignment['unassigned'][key] == 0:
+                del task_assignment['unassigned'][key]
+
+        # save task assignment status
+        task_assignment_path = config['output_annotation_dir'] + config["automatic_assignment"]["output_filename"]
+        with open(task_assignment_path, 'w') as w:
+            json.dump(task_assignment, w)
+
+        assigned_user_data = {key:instance_id_to_data[key] for key in sampled_keys}
+
+        # save the assigned user data dict
+        user_dir = path.join(config['output_annotation_dir'], username)
+        assigned_user_data_path =  user_dir + '/assigned_user_data.json'
+
+        if not os.path.exists(user_dir):
+            os.makedirs(user_dir)
+            logger.debug("Created state directory for user \"%s\"" % (username))
+
+        with open(assigned_user_data_path, 'w') as w:
+            json.dump(assigned_user_data, w)
+
+        # return the assigned user data dict
+        return assigned_user_data
+
+
 def lookup_user_state(username):
+    global config
     '''
     Returns the UserAnnotationState for a user, or if that user has not yet
     annotated, creates a new state for them and registers them with the system.
     '''
     global user_to_annotation_state
 
+
     if username not in user_to_annotation_state:
         logger.debug(
             "Previously unknown user \"%s\"; creating new annotation state" % (username))
-        user_state = UserAnnotationState(instance_id_to_data)
-        user_to_annotation_state[username] = user_state
+
+        if "automatic_assignment" in config and config["automatic_assignment"]['on']:
+            #print(type(config["automatic_assignment"]['on']))
+            #assign instances to new user when automatic assignment is turned on
+
+            user_state = UserAnnotationState(assign_instances_to_user(username))
+            user_to_annotation_state[username] = user_state
+        else:
+            #assign all the instance to each user when automatic assignment is turned off
+            user_state = UserAnnotationState(instance_id_to_data)
+            user_to_annotation_state[username] = user_state
     else:
         user_state = user_to_annotation_state[username]
 
@@ -959,7 +1066,11 @@ def save_all_annotations():
         sep = ',' if fmt == 'csv' else '\t'
         df.to_csv(annotated_instances_fname, index=False, sep=sep)
 
-                    
+    # Save the annotation assignment info if automatic task assignment is on.
+    # Jiaxin: we are simply saving this as a json file at this moment
+    if "automatic_assignment" in config and config["automatic_assignment"]['on']:
+        # TODO: write the code here
+        print('saved')
 
 def load_user_state(username):
     '''
@@ -977,17 +1088,29 @@ def load_user_state(username):
     # NB: Do some kind of sanitizing on the username to improve securty
     user_dir = path.join(user_state_dir, username)
 
-    # User has annotated before
+
+    # User has annotated before or has assigned_data
     if os.path.exists(user_dir):
         logger.debug(
             "Found known user \"%s\"; loading annotation state" % (username))
+
+        # if automatic assignment is on, load assigned user data
+        if "automatic_assignment" in config and config["automatic_assignment"]['on']:
+            assigned_user_data_path = user_dir + '/assigned_user_data.json'
+
+            with open(assigned_user_data_path, 'r') as r:
+                assigned_user_data = json.load(r)
+        # otherwise, set the assigned user data as all the instances
+        else:
+            assigned_user_data = instance_id_to_data
+
 
         annotation_order_fname = path.join(user_dir, "annotation_order.txt")
         annotation_order = []
         with open(annotation_order_fname, 'rt') as f:
             for line in f:
                 instance_id = line[:-1]
-                if instance_id not in instance_id_to_data:
+                if instance_id not in assigned_user_data:
                     logger.warning('Annotation state for %s does not match instances in existing dataset at %s'
                                    % (user_dir, ','.join(config['data_files'])))
                     continue
@@ -1001,7 +1124,7 @@ def load_user_state(username):
             for line in f:
                 annotated_instance = json.loads(line)
                 instance_id = annotated_instance['id']
-                if instance_id not in instance_id_to_data:
+                if instance_id not in assigned_user_data:
                     logger.warning('Annotation state for %s does not match instances in existing dataset at %s'
                                    % (user_dir, ','.join(config['data_files'])))
                     continue
@@ -1010,27 +1133,30 @@ def load_user_state(username):
         # Ensure the current data is represented in the annotation order
         # NOTE: this is a hack to be fixed for when old user data is in the same directory
         #
-        for iid in instance_id_to_data.keys():
+        for iid in assigned_user_data.keys():
             if iid not in annotation_order:
                 annotation_order.append(iid)
 
         id_key = config['item_properties']['id_key']
-        user_state = UserAnnotationState(instance_id_to_data)
+        user_state = UserAnnotationState(assigned_user_data)
         user_state.update(id_key, annotation_order, annotated_instances)
 
         # Make sure we keep track of the user throughout the program
         user_to_annotation_state[username] = user_state
 
         logger.info("Loaded %d annotations for known user \"%s\"" %
-                    (user_state.get_annotation_count(), len(instance_id_to_data)))
+                    (user_state.get_annotation_count(), len(assigned_user_data)))
 
     # New user, so initialize state
     else:
 
         logger.debug(
             "Previously unknown user \"%s\"; creating new annotation state" % (username))
-        user_state = UserAnnotationState(instance_id_to_data)
-        user_to_annotation_state[username] = user_state
+        #user_state = UserAnnotationState(instance_id_to_data)
+        #user_to_annotation_state[username] = user_state
+
+        #create new user state with the look up function
+        lookup_user_state(username)
 
 
 def get_cur_instance_for_user(username):
@@ -1192,9 +1318,9 @@ def annotate_page():
         # This is what instance the user is currently on
         instance=text,
         instance_obj=instance,
-        instance_id=instance_id,
+        instance_id=lookup_user_state(username).get_instance_cursor(),
         finished=lookup_user_state(username).get_annotation_count(),
-        total_count=len(instance_id_to_data),
+        total_count=lookup_user_state(username).get_assigned_instance_count(),
         alert_time_each_instance=config['alert_time_each_instance'],
         statistics_nav = all_statistics,
         **kwargs
@@ -2318,12 +2444,13 @@ def main():
     # specification on top of the proto-templates
     generate_site(config)
 
-    # Loads the training data
-    load_all_data(config)
-
     # Generate the output directory if it doesn't exist yet
     if not os.path.exists(config['output_annotation_dir']):
         os.makedirs(config['output_annotation_dir'])
+
+    # Loads the training data
+    load_all_data(config)
+
         
     # load users with annotations to user_to_annotation_state
     users_with_annotations = [f for f in os.listdir(config['output_annotation_dir']) if os.path.isdir(config['output_annotation_dir'] + f)]
