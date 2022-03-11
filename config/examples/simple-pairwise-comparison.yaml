@@ -43,9 +43,11 @@
       "users": [  ],
     },
 
-
-    "workflow": {
-
+    # define the surveyflow of the system, set up the pages before and after the data annotation page
+    "surveyflow": {
+        "on": True,
+        "pre_annotation": ['data/surveyflow/consent.jsonl'],
+        "post_annotation": ['data/surveyflow/demographic_questions.jsonl'],
     },
 
 
