@@ -2193,7 +2193,7 @@ def generate_multiselect_layout(annotation_scheme):
             schematic += \
                 (('  <input class="%s" type="checkbox" id="%s" name="%s" value="%s" onclick="onlyOne(this)">' +
                   '  <label for="%s" %s>%s</label><br/>')
-                 % (class_name, label, name, key_value, name, tooltip, label_content))
+                 % (class_name, name, name, key_value, name, tooltip, label_content))
         else:
             schematic += \
                 (('<label for="%s" %s><input class="%s" type="checkbox" id="%s" name="%s" value="%s" onclick="whetherNone(this)">' +
@@ -2215,7 +2215,7 @@ def generate_multiselect_layout(annotation_scheme):
         schematic += \
         (('<tr><td colspan="%s"><div style="float:left; display:flex; flex-direction:row;">Other? <input class="%s" type="text" id="%s" name="%s">' +
          '  <label for="%s" %s></label></div></td</tr>')
-         % (str(n_columns), class_name, label, name, name, tooltip))
+         % (str(n_columns), class_name, name, name, name, tooltip))
 
 
     schematic += '</table>'
@@ -2308,7 +2308,7 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
         schematic += \
                 (('      <input class="%s" type="radio" id="%s" name="%s" value="%s" onclick="onlyOne(this)">' +
                  '  <label for="%s" %s>%s</label>%s')
-                 % (class_name, label, name, key_value, name, tooltip, label_content, br_label))
+                 % (class_name, name, name, key_value, name, tooltip, label_content, br_label))
 
     if 'has_free_response' in annotation_scheme and annotation_scheme['has_free_response']:
 
@@ -2320,7 +2320,7 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
         schematic += \
         (('Other? <input class="%s" type="text" id="%s" name="%s" >' +
          '  <label for="%s" %s></label><br/>')
-         % (class_name, label, name, name, tooltip))        
+         % (class_name, name, name, name, tooltip))
 
     schematic += '  </fieldset>\n</form>\n'
     return schematic, key_bindings
@@ -2381,7 +2381,7 @@ def generate_likert_layout(annotation_scheme):
         schematic += \
             ((' <li><input class="{class_name}" type="radio" id="{id}" name="{name}" value="{value}" onclick="onlyOne(this)">' + \
               '  <label for="{label_for}" {label_args}>{label_text}</label></li>')).format(
-                  class_name=class_name, id=label, name=name, value=key_value, label_for=name, 
+                  class_name=class_name, id=name, name=name, value=key_value, label_for=name,
                   label_args=tooltip, label_text=label_content)
 
 
