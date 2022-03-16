@@ -1710,6 +1710,11 @@ def generate_site(config):
 
     html_template = html_template.replace("{{ HEADER }}", header)
 
+    if "jumping_to_id_disabled" in config and config["jumping_to_id_disabled"]:
+        html_template = html_template.replace("<input type=\"submit\" value=\"go\">", "<input type=\"submit\" value=\"go\" hidden>")
+        html_template = html_template.replace("<input type=\"number\" name=\"go_to\" id=\"go_to\" value=\"\" onfocusin=\"user_input()\" onfocusout=\"user_input_leave()\" max={{total_count}} min=0 required>",
+                              "<input type=\"number\" name=\"go_to\" id=\"go_to\" value=\"\" onfocusin=\"user_input()\" onfocusout=\"user_input_leave()\" max={{total_count}} min=0 required hidden>")
+
 
     # Once we have the base template constructed, load the user's custom layout for their task
     html_layout_file = config['html_layout']
@@ -1884,6 +1889,11 @@ def generate_surveyflow_pages(config):
         header = ''.join(f.readlines())
 
     html_template = html_template.replace("{{ HEADER }}", header)
+
+    if "jumping_to_id_disabled" in config and config["jumping_to_id_disabled"]:
+        html_template = html_template.replace("<input type=\"submit\" value=\"go\">", "<input type=\"submit\" value=\"go\" hidden>")
+        html_template = html_template.replace("<input type=\"number\" name=\"go_to\" id=\"go_to\" value=\"\" onfocusin=\"user_input()\" onfocusout=\"user_input_leave()\" max={{total_count}} min=0 required>",
+                              "<input type=\"number\" name=\"go_to\" id=\"go_to\" value=\"\" onfocusin=\"user_input()\" onfocusout=\"user_input_leave()\" max={{total_count}} min=0 required hidden>")
 
     # Once we have the base template constructed, load the user's custom layout for their task
     html_layout_file = config['html_layout']

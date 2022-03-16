@@ -43,7 +43,11 @@
       "users": [  ],
     },
 
+    #password requirement will be removed if this is added, the associated function is still under development
     "require_no_password": True,
+
+    #the jumping-to-id function will be disabled if "jumping_to_id_disabled" is True
+    "jumping_to_id_disabled": True,
 
     # define the surveyflow of the system, set up the pages before and after the data annotation page
     "surveyflow": {
@@ -77,7 +81,7 @@
             "description": "Which tweet is more intimate",
 
             # If true, display the labels horizontally
-            "horizontal": True,
+            "horizontal": False,
 
             "labels": [
                "A is more intimate", "B is more intimate", "Hard to tell",
