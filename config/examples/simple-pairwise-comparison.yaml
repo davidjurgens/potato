@@ -23,7 +23,7 @@
     "annotation_codebook_url": "",
 
     "data_files": [
-       "data/pairwise-example.json"
+       "data/intimacy/paired_df_1k.jsonl"
     ],
 
     "item_properties": {
@@ -43,11 +43,13 @@
       "users": [  ],
     },
 
+    "require_no_password": True,
+
     # define the surveyflow of the system, set up the pages before and after the data annotation page
     "surveyflow": {
         "on": True,
-        "pre_annotation": ['data/surveyflow/consent.jsonl'],
-        "post_annotation": ['data/surveyflow/demographic_questions.jsonl'],
+        "pre_annotation": ['data/surveyflow/intro.jsonl', 'data/surveyflow/consent.jsonl'],
+        "post_annotation": ['data/surveyflow/demographic_questions.jsonl','data/surveyflow/end.jsonl'],
     },
 
 
@@ -57,7 +59,7 @@
       "output_filename": 'task_assignment.json',
       "sampling_strategy:": 'random',
       "labels_per_instance": 2,
-      "instance_per_annotator": 3,
+      "instance_per_annotator": 50,
 
       "users": [  ],
     },

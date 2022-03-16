@@ -451,6 +451,24 @@ def load_all_data(config):
             line_no = len(df)
                 
         logger.debug('Loaded %d instances from %s' % (line_no, data_fname))
+
+    # insert survey questions into instance_id_to_data
+    #if "surveyflow" in config and config["survey"]['on']:
+    if "pre_annotation_pages" in config:
+        for page in config["pre_annotation_pages"]:
+            item = {"id":page,"text":page[:-5]}
+            instance_id_to_data.update({page:item})
+            instance_id_to_data.move_to_end(page, last=False)
+            items_to_annotate.insert(0, item)
+
+    if "post_annotation_pages" in config:
+        for page in config["post_annotation_pages"]:
+            item = {"id":page,"text":page[:-5]}
+            instance_id_to_data.update({page:item})
+            instance_id_to_data.move_to_end(page, last=True)
+            items_to_annotate.append(item)
+
+
     all_data["items_to_annotate"] = items_to_annotate
 
     # TODO: make this fully configurable somehow...
@@ -483,7 +501,14 @@ def load_all_data(config):
         else:
             # Otherwise generate a new task assignment dict
             task_assignment = {'assigned':{}, 'unassigned':{}}
+            for it in ['pre', 'post']:
+                if it + '_annotation_pages' in config:
+                    task_assignment[it] = config[it + '_annotation_pages']
+                    for p in config[it + '_annotation_pages']:
+                        task_assignment['assigned'][p] = 0
             for id in instance_id_to_data:
+                if id in task_assignment['assigned']:
+                    continue
                 # set the total labels per instance, if not specified, default to 3
                 task_assignment['unassigned'][id] = config["automatic_assignment"]["labels_per_instance"] if "labels_per_instance" in config["automatic_assignment"] else 3
                 #task_assignment['assigned'][id] = []
@@ -792,9 +817,14 @@ def write_data(username):
 @app.route("/")
 def home():
     global config
+    global user_config
     
     if config['__debug__']:
         return annotate_page()
+    elif config['require_no_password']:
+        username = request.args.get('PROLIFIC_PID')
+        password = 'require_no_password'
+        return annotate_page(username)#render_template("id_login_home.html", title=config['annotation_task_name'])
     else:
         return render_template("home.html", title=config['annotation_task_name'])
 
@@ -809,6 +839,10 @@ def login():
         action = 'login'
         usenrame = 'debug_user'
         password = 'debug'
+    elif config['require_no_password'] == True:
+        action = request.form.get("action")
+        username = request.form.get("email")
+        password = 'require_no_password'
     else:
         # Jiaxin: currently we are just using email as the username
         action = request.form.get("action")
@@ -816,12 +850,9 @@ def login():
         password = request.form.get("pass")
         
     if action == 'login':
-        if config['__debug__'] or user_config.is_valid_password(username, password):
+        if config['__debug__'] or config['require_no_password'] or user_config.is_valid_password(username, password):
             #if surveyflow is setup, jump to the page before annotation
-            if "automatic_assignment" in config and config["automatic_assignment"]['on']:
-                return pre_annotation_pages(username)
-            else:
-                return annotate_page()
+            annotate_page()
         else:
             data = {
                 'username':username,
@@ -868,19 +899,43 @@ def signup():
 def new_user():
     return render_template("newuser.html")
 
-
+'''
 pre_annotation_page_cursor = 0
 @app.route("/surveyflow", methods=['GET', 'POST'])
 def pre_annotation_pages(username):
     global config
     page_order = config['pre_annotation_pages']
+    username = request.form.get("email")
     print(config['site_file'],page_order)
+
+
+    rendered_html = render_template(
+        config['site_file'],
+        username=username,
+        # This is what instance the user is currently on
+        instance=text,
+        instance_obj=instance,
+        instance_id=lookup_user_state(username).get_instance_cursor(),
+        finished=lookup_user_state(username).get_annotation_count(),
+        total_count=lookup_user_state(username).get_assigned_instance_count(),
+        alert_time_each_instance=config['alert_time_each_instance'],
+        statistics_nav = all_statistics,
+        **kwargs
+        # amount=len(all_data["annotated_data"]),
+        # annotated_amount=user_dict[username]["current_display"]["annotated_amount"],
+    )
+
+
+
     return render_template(page_order[pre_annotation_page_cursor], title=config['annotation_task_name'], login_email=username)
 
-    while pre_annotation_page_cursor < len(page_order):
-        render_template(page_order[pre_annotation_page_cursor], title=config['annotation_task_name'], login_email = username)
+    #while pre_annotation_page_cursor < len(page_order):
+    #    render_template(page_order[pre_annotation_page_cursor], title=config['annotation_task_name'], login_email = username)
 
     return annotate_page()
+'''
+
+
 
 
 
@@ -934,6 +989,14 @@ def assign_instances_to_user(username):
         task_assignment_path = config['output_annotation_dir'] + config["automatic_assignment"]["output_filename"]
         with open(task_assignment_path, 'w') as w:
             json.dump(task_assignment, w)
+
+        if 'pre' in task_assignment:
+            sampled_keys = task_assignment['pre'] + sampled_keys
+
+        if 'post' in task_assignment:
+            sampled_keys =  sampled_keys + task_assignment['post']
+
+        print(sampled_keys)
 
         assigned_user_data = {key:instance_id_to_data[key] for key in sampled_keys}
 
@@ -1123,31 +1186,32 @@ def load_user_state(username):
         else:
             assigned_user_data = instance_id_to_data
 
-
-        annotation_order_fname = path.join(user_dir, "annotation_order.txt")
         annotation_order = []
-        with open(annotation_order_fname, 'rt') as f:
-            for line in f:
-                instance_id = line[:-1]
-                if instance_id not in assigned_user_data:
-                    logger.warning('Annotation state for %s does not match instances in existing dataset at %s'
-                                   % (user_dir, ','.join(config['data_files'])))
-                    continue
-                annotation_order.append(line[:-1])
+        annotation_order_fname = path.join(user_dir, "annotation_order.txt")
+        if os.path.exists(annotation_order_fname):
+            with open(annotation_order_fname, 'rt') as f:
+                for line in f:
+                    instance_id = line[:-1]
+                    if instance_id not in assigned_user_data:
+                        logger.warning('Annotation state for %s does not match instances in existing dataset at %s'
+                                       % (user_dir, ','.join(config['data_files'])))
+                        continue
+                    annotation_order.append(line[:-1])
 
-        annotated_instances_fname = path.join(
-            user_dir, "annotated_instances.jsonl")
         annotated_instances = []
+        annotated_instances_fname = path.join(user_dir, "annotated_instances.jsonl")
+        if os.path.exists(annotated_instances_fname):
 
-        with open(annotated_instances_fname, 'rt') as f:
-            for line in f:
-                annotated_instance = json.loads(line)
-                instance_id = annotated_instance['id']
-                if instance_id not in assigned_user_data:
-                    logger.warning('Annotation state for %s does not match instances in existing dataset at %s'
-                                   % (user_dir, ','.join(config['data_files'])))
-                    continue
-                annotated_instances.append(annotated_instance)
+
+            with open(annotated_instances_fname, 'rt') as f:
+                for line in f:
+                    annotated_instance = json.loads(line)
+                    instance_id = annotated_instance['id']
+                    if instance_id not in assigned_user_data:
+                        logger.warning('Annotation state for %s does not match instances in existing dataset at %s'
+                                       % (user_dir, ','.join(config['data_files'])))
+                        continue
+                    annotated_instances.append(annotated_instance)
 
         # Ensure the current data is represented in the annotation order
         # NOTE: this is a hack to be fixed for when old user data is in the same directory
@@ -1204,7 +1268,7 @@ def previous_response(user, file_path):
 
 
 @app.route("/annotate", methods=["GET", "POST"])
-def annotate_page():
+def annotate_page(username = None):
     '''
     Parses the input received from the user's annotation and takes some action
     based on what was clicked/typed. This method is the main switch for changing
@@ -1213,8 +1277,8 @@ def annotate_page():
     
     global user_config
 
-    
-    username = request.form.get("email")
+    #use the provided username when the username is given
+    username = request.form.get("email") if username == None else username
 
     # Check if the user is authorized. If not, go to the login page
     #if not user_config.is_valid_username(username):
@@ -1308,7 +1372,8 @@ def annotate_page():
                 text = [str(i) + '. ' + text[i] for i in range(len(text))]
             text = '<br>'.join(text)
         else:
-            raise Exception('list_as_text is used when input column %s is not a list' % config['item_properties']['text_key'])
+            text = text
+            #raise Exception('list_as_text is used when input column %s is not a list' % config['item_properties']['text_key'])
     instance_id = instance[id_key]
     
     
@@ -1326,13 +1391,20 @@ def annotate_page():
     all_statistics = lookup_user_state(username).generate_user_statistics()
 
     #TODO: Display plots for agreement scores instead of only the overall score in the statistics sidebar
-    all_statistics['Agreement'] = get_agreement_score('all', 'all', return_type='overall_average')
+    #all_statistics['Agreement'] = get_agreement_score('all', 'all', return_type='overall_average')
     #print(all_statistics)
+
+    # set the html file as surveyflow pages when the instance is a survey page
+    if instance_id in config['pre_annotation_pages'] + config['post_annotation_pages']:
+        html_file = instance_id
+    #otherwise set the page as the normal annotation page
+    else:
+        html_file = config['site_file']
         
     # Flask will fill in the things we need into the HTML template we've created,
     # replacing {{variable_name}} with the associated text for keyword arguments
     rendered_html = render_template(
-        config['site_file'],
+        html_file,
         username=username,
         # This is what instance the user is currently on
         instance=text,
@@ -1847,7 +1919,6 @@ def generate_surveyflow_pages(config):
         codebook_html = codebook_html.replace(
             "{{annotation_codebook_url}}", annotation_codebook)
 
-
     html_template = html_template.replace(
         "{{annotation_codebook}}", codebook_html)
 
@@ -1911,7 +1982,6 @@ def generate_surveyflow_pages(config):
     else:
         # If we don't have a custom layout, accumulate all the tasks into a
         # single HTML element
-
         for page in surveyflow_pages:
             schema_layouts = ""
             #for annotation_scheme in annotation_schemes:
@@ -1929,19 +1999,20 @@ def generate_surveyflow_pages(config):
                 schema_layouts += schema_layout + "<br>" + "\n"
                 #all_keybindings.extend(keybindings)
 
-            task_html_layout = task_html_layout.replace(
+            cur_task_html_layout = task_html_layout.replace(
                 "{{annotation_schematic}}", schema_layouts)
 
+
             # Swap in the task's layout
-            html_template = html_template.replace("{{ TASK_LAYOUT }}", task_html_layout)
+            cur_html_template = html_template.replace("{{ TASK_LAYOUT }}", cur_task_html_layout)
 
             # TODO: Maybe remove input instances for survey questions?
-            #html_template  = html_template .replace("<div class=\"annotation_schema\">",
+            #cur_html_template  = cur_html_template .replace("<div class=\"annotation_schema\">",
             #                                            "<div class=\"annotation_schema\" style=\"flex-direction:column;\">")
 
-            keybindings_desc = generate_keybidings_sidebar(all_keybindings)
-            html_template = html_template.replace(
-                "{{keybindings}}", keybindings_desc)
+            #keybindings_desc = generate_keybidings_sidebar(all_keybindings)
+            #cur_html_template = cur_html_template.replace(
+            #    "{{keybindings}}", keybindings_desc)
             # Jiaxin: change the basename from the template name to the project name +
             # template name, to allow multiple annotation tasks using the same template
             site_name = '%s.html'%page
@@ -1959,7 +2030,7 @@ def generate_surveyflow_pages(config):
 
             # Write the file
             with open(output_html_fname, 'wt') as outf:
-                outf.write(html_template)
+                outf.write(cur_html_template)
 
             logger.debug('writing annotation html to %s%s.html' % (output_html_fname,page))
 
@@ -2017,6 +2088,9 @@ def generate_schematic(annotation_scheme):
         
     elif annotation_type == "text":
         return generate_textbox_layout(annotation_scheme)
+
+    elif annotation_type == "pure_display":
+        return generate_pure_display_layout(annotation_scheme)
 
     else:
         raise Exception("unsupported annotation type: %s" % annotation_type)
@@ -2309,7 +2383,7 @@ def generate_likert_layout(annotation_scheme):
 
 
 def generate_textbox_layout(annotation_scheme):
-    
+
     #'<div style="border:1px solid black; border-radius: 25px;">' + \
     schematic = \
         '<form action="/action_page.php">' + \
@@ -2384,7 +2458,13 @@ def generate_textbox_layout(annotation_scheme):
 
     
     return schematic, key_bindings
-    
+
+
+def generate_pure_display_layout(annotation_scheme):
+    schematic = '<Strong>%s</Strong> %s' % (annotation_scheme['description'], '<br>'.join(annotation_scheme['labels']))
+
+    return schematic, None
+
 
 @app.route('/files/<path:filename>')
 def get_file(filename):
