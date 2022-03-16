@@ -1,0 +1,4 @@
+{"id":"1","text":"What gender do you most closely identify with?","schema": "radio", "choices": ["Male", "Female", "Non-binary"]}
+{"id":"2","text":"What is your current age?","schema": "radio", "choices": ["Under 18 years old", "18-24 years old", "25-34 years old", "35-44 years old", "45-54 years old", "55+years old"]}
+{"id":"3","text":"What is your occupation?","schema": "radio", "choices": ["Employed", "Unemployed", "Student", "Retired", "Homemaker", "Self-employed", "Other"]}
+{"id":"4","text":"What is your education level?","schema": "radio", "choices": ["Less than a high school diploma", "High school degree or equivalent", "College degree", "Graduate degree", "Other"]}
