@@ -1746,8 +1746,8 @@ def generate_site(config):
 
     # Keep track of all the keybindings we have
     all_keybindings = [
-        ('&#8594;', "Next Instance"),
         ('&#8592;', "Previous Instance"),
+        ('&#8594;', "Next Instance"),
     ]
     
     # Potato admin can specify a custom HTML layout that allows variable-named
@@ -1806,7 +1806,6 @@ def generate_site(config):
         
     html_template = html_template.replace(
         "{{annotation_task_name}}", config['annotation_task_name'])
-
 
     keybindings_desc = generate_keybidings_sidebar(all_keybindings)
     html_template = html_template.replace(
@@ -1963,8 +1962,8 @@ def generate_surveyflow_pages(config):
 
     # Keep track of all the keybindings we have
     all_keybindings = [
-        ('&#8594;', "Next Instance"),
         ('&#8592;', "Previous Instance"),
+        ('&#8594;', "Next Instance"),
     ]
 
     # Potato admin can specify a custom HTML layout that allows variable-named
@@ -1998,12 +1997,13 @@ def generate_surveyflow_pages(config):
             for line in surveyflow_pages[page]:
                 annotation_scheme = {
                     "annotation_type": line['schema'],
-                    "name": line['id'] + '_' + line['filename'],
+                    "name": line['text'],
                     "description": line['text'],
                     # If true, display the labels horizontally
                     "horizontal": False,
                     "labels": line['choices'],
-                    "sequential_key_binding": True,
+                    "label_requirement": line['label_requirement'] if 'label_requirement' in line else None,
+                    "sequential_key_binding": False,
                 }
                 schema_layout, keybindings = generate_schematic(annotation_scheme)
                 schema_layouts += schema_layout + "<br>" + "\n"
@@ -2020,9 +2020,9 @@ def generate_surveyflow_pages(config):
             #cur_html_template  = cur_html_template .replace("<div class=\"annotation_schema\">",
             #                                            "<div class=\"annotation_schema\" style=\"flex-direction:column;\">")
 
-            #keybindings_desc = generate_keybidings_sidebar(all_keybindings)
-            #cur_html_template = cur_html_template.replace(
-            #    "{{keybindings}}", keybindings_desc)
+            keybindings_desc = generate_keybidings_sidebar(all_keybindings)
+            cur_html_template = cur_html_template.replace(
+                "{{keybindings}}", keybindings_desc)
             # Jiaxin: change the basename from the template name to the project name +
             # template name, to allow multiple annotation tasks using the same template
             site_name = '%s.html'%page
@@ -2064,16 +2064,33 @@ def generate_statistics_sidebar(statistics):
     return layout
 
 
-def generate_keybidings_sidebar(keybindings):
+def generate_keybidings_sidebar(keybindings, horizontal = False):
     '''
     Generate an HTML layout for the end-user of the keybindings for the current
     task. The layout is intended to be displayed in a side bar
     '''
+    global config
+    if "horizontal_key_bindings" in config and config["horizontal_key_bindings"]:
+        horizontal = True
 
-    layout = '<table><tr><th>Key</th><th>Description</th></tr>'
-    for key, desc in keybindings:
-        layout += '<tr><td style="text-align: center;">%s</td><td>%s</td></tr>' % (key, desc)
-    layout += '</table>'
+    if not keybindings:
+        return ''
+    #keybindings.insert(0, ('key', 'description'))
+    if horizontal:
+        keybindings = [[it[0], it[1].split(':')[-1]] for it in keybindings]
+        lines = list(zip(*keybindings))
+        print(lines)
+        layout = '<table style="border:1px solid black;margin-left:auto;margin-right:auto;">'
+        for line in lines:
+            layout += "<tr>" + ''.join(['<td>&nbsp;&nbsp;%s&nbsp;&nbsp;</td>'%it for it in line]) + "</tr>"
+        layout += '</table>'
+
+    else:
+        layout = '<table><tr><th>Key</th><th>Description</th></tr>'
+        for key, desc in keybindings:
+            layout += '<tr><td style="text-align: center;">%s</td><td>%s</td></tr>' % (key, desc)
+        layout += '</table>'
+
     return layout
         
 
@@ -2125,7 +2142,26 @@ def generate_multiselect_layout(annotation_scheme):
     n_columns = display_info['num_columns'] if 'num_columns' in display_info else 1
 
     schematic += '<table>'
-    
+
+    # setting up label validation for each label, if "required" is True, the annotators will be asked to finish the current instance to proceed
+    validation = ''
+    label_requirement = annotation_scheme['label_requirement'] if 'label_requirement' in annotation_scheme else None
+    if label_requirement and label_requirement['required']:
+        validation = 'required'
+
+    # if right_label is provided, the associated label has to be clicked to proceed. This is normally used for consent questions at the beginning of a survey.
+    right_label = set()
+    if label_requirement and "right_label" in label_requirement:
+        if type(label_requirement["right_label"]) == str:
+            right_label.add(label_requirement["right_label"])
+        elif type(label_requirement["right_label"]) == list:
+            right_label = set(label_requirement["right_label"])
+        else:
+            logger.warning(
+                "Incorrect format of right_label %s" % label_requirement["right_label"])
+            #quit()
+
+
     for i, label_data in enumerate(annotation_scheme['labels'], 1):
 
         
@@ -2187,18 +2223,23 @@ def generate_multiselect_layout(annotation_scheme):
         #if label in label2key:
         #    label_content = label_content + \
         #        ' [' + label2key[label].upper() + ']'
+
+        final_validation = 'right_label' if label in right_label else validation
+
         
         if ("single_select" in annotation_scheme) and (annotation_scheme["single_select"] == "True"):
             logger.warning("single_select is Depricated and will be removed soon. Use \"radio\" instead.")
             schematic += \
-                (('  <input class="%s" type="checkbox" id="%s" name="%s" value="%s" onclick="onlyOne(this)">' +
+                (('  <input class="%s" type="checkbox" id="%s" name="%s" value="%s" onclick="onlyOne(this)" validation="%s">' +
                   '  <label for="%s" %s>%s</label><br/>')
-                 % (class_name, name, name, key_value, name, tooltip, label_content))
+                 % (class_name, name, name, key_value, final_validation,
+                    name, tooltip, label_content))
         else:
             schematic += \
-                (('<label for="%s" %s><input class="%s" type="checkbox" id="%s" name="%s" value="%s" onclick="whetherNone(this)">' +
+                (('<label for="%s" %s><input class="%s" type="checkbox" id="%s" name="%s" value="%s" onclick="whetherNone(this)" validation="%s">' +
                  '  %s</label><br/>')
-                 % (name, tooltip, class_name, name, name, key_value, label_content))
+                 % (name, tooltip, class_name, name, name, key_value, final_validation,
+                    label_content))
 
         schematic += '</td>'
         if i % n_columns == 0:
@@ -2239,6 +2280,25 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
     key2label = {}
     label2key = {}
     key_bindings = []
+
+    # setting up label validation for each label, if "required" is True, the annotators will be asked to finish the current instance to proceed
+    validation = ''
+    label_requirement = annotation_scheme['label_requirement'] if 'label_requirement' in annotation_scheme else None
+    if label_requirement and ('required' in label_requirement) and label_requirement['required']:
+        validation = 'required'
+
+    #print(annotation_scheme)
+    # if right_label is provided, the associated label has to be clicked to proceed. This is normally used for consent questions at the beginning of a survey.
+    right_label = set()
+    if label_requirement and "right_label" in label_requirement:
+        if type(label_requirement["right_label"]) == str:
+            right_label.add(label_requirement["right_label"])
+        elif type(label_requirement["right_label"]) == list:
+            right_label = set(label_requirement["right_label"])
+        else:
+            logger.warning(
+                "Incorrect format of right_label %s" % label_requirement["right_label"])
+            #quit()
     
     for i, label_data in enumerate(annotation_scheme['labels'], 1):
 
@@ -2281,7 +2341,8 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
            and len(annotation_scheme['labels']) <= 10:
             key_value = str(i % 10)
             key2label[key_value] = label
-            label2key[label] = key_value            
+            label2key[label] = key_value
+            key_bindings.append((key_value, class_name + ': ' + label))
             
 
         label_content = label
@@ -2301,14 +2362,19 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
         #    label_content = label_content + \
         #        ' [' + label2key[label].upper() + ']'
 
+
+        final_validation = 'right_label' if label in right_label else validation
+
+
         #add support for horizontal layout
         br_label = "<br/>"
         if horizontal:
             br_label = ''
         schematic += \
-                (('      <input class="%s" type="radio" id="%s" name="%s" value="%s" onclick="onlyOne(this)">' +
+                (('      <input class="%s" type="radio" id="%s" name="%s" value="%s" onclick="onlyOne(this)" validation="%s">' +
                  '  <label for="%s" %s>%s</label>%s')
-                 % (class_name, name, name, key_value, name, tooltip, label_content, br_label))
+                 % (class_name, name, name, key_value, 'right_label' if label in right_label else final_validation,
+                    name, tooltip, label_content, br_label))
 
     if 'has_free_response' in annotation_scheme and annotation_scheme['has_free_response']:
 

@@ -74,6 +74,8 @@
     # that, an alert will be sent per alert_time_each_instance seconds.
     "alert_time_each_instance": 10000000,
 
+    "horizontal_key_bindings": True,
+
     "annotation_schemes": [      
         {
             "annotation_type": "radio",
@@ -87,6 +89,9 @@
                "A is more intimate", "B is more intimate", "Hard to tell",
             ],
 
+            # adding requirements for labels, when "required" is True, the annotators will be asked to finish the current instance to proceed
+            "label_requirement": {"required":True},
+
             # If true, numbers [1-len(labels)] will be bound to each
             # label. Aannotations with more than 10 are not supported with this
             # simple keybinding and will need to use the full item specification
@@ -99,7 +104,7 @@
     # The html that changes the visualiztation for your task. Change this file
     # to influence the layout and description of your task. This is not a full
     # HTML page, just the piece that does lays out your task's pieces
-    "html_layout": "templates/examples/plain_layout.html",
+    "html_layout": "templates/examples/fixed_keybinding_layout.html",
 
     # The core UI files for Potato. You should not need to change these normally.
     #

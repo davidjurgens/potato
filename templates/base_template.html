@@ -232,12 +232,65 @@
       }
 
 
-      /**  
+       /**
+       * Validate if the input answers meet certain rules
+       * along with any relevant key presses to request a new instance to
+       * annotate.
+       */
+      function validate_answers() {
+          /*
+          //alert({{instance_obj|tojson}}['id'])
+          var inputs = document.getElementsByTagName('input');
+          for (var i = 0; i < inputs.length; ++i) {
+            if (inputs[i].getAttribute('validation') == 'right_label' && inputs[i].checked == false){
+                alert(inputs[i].name + " must be selected to proceed");
+                //alert(instance_obj.id)
+                return false;
+            }
+          }
+          */
+
+          // identify all the fieldsets
+          var fields = document.getElementsByTagName('fieldset');
+          for (var i = 0; i < fields.length; ++i) {
+                var inputs = fields[i].getElementsByTagName('input');
+                var required = false;
+                // check if the current form requires inputs
+                if (inputs[0].getAttribute('validation') == 'required'){
+                    required= true;
+                }
+
+                checked_flag = false;
+                for (var j = 0; j < inputs.length; ++j) {
+                    // if a right_label is not selected, display an error msg and return false
+                    if (inputs[j].getAttribute('validation') == 'right_label' && inputs[j].checked == false) {
+                        alert(inputs[j].name + " must be selected to proceed");
+                        //alert(instance_obj.id)
+                        return false;
+                    }
+                    // if any of the labels is checked, set checked_flag as true;
+                    if (inputs[j].checked == true) {
+                        checked_flag = true;
+                        break;
+                    }
+                }
+                // if this form requires inputs, but nothing is checked, display an error msg and return false
+                if (required && checked_flag == false){
+                    alert("You must complete the current instance to proceed");
+                    return false;
+                }
+                //alert(instance_obj.id)
+          }
+          return true;
+      }
+
+
+      /**
        * Sends the current state of the instance's annotation to the server,
        * along with any relevant key presses to request a new instance to
        * annotate.
-       */     
-      function get_new_instance(event) { 
+       */
+      function get_new_instance(event) {
           var x = event.key;
           var action = ""
           var ism = ""
@@ -249,7 +302,12 @@
               action = "prev_instance";
           }
           else if (x == "ArrowRight") {
-              action = "next_instance";
+              if (validate_answers() == true) {
+                  action = "next_instance";
+              }
+              else{
+                  return;
+              }
           }
           else {
               // console.log("Unknown key press", event)
@@ -333,7 +391,7 @@
           </div>
         </p>        
       </div>
-      
+
       <hr>
       <footer>
         <div class="row">
