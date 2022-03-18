@@ -3,12 +3,12 @@
 
     "server_name": "potato annotator",
 
-    "annotation_task_name": "Simple Pairwise Comparison Example",
+    "annotation_task_name": "Intimacy likert",
 
     # Potato will write the annotation file for all annotations to this
     # directory, as well as per-annotator output files and state information
     # necessary to restart annotation.
-    "output_annotation_dir": "annotation_output/simple-pairwise/",
+    "output_annotation_dir": "annotation_output/intimacy-likert/",
 
     # The output format for the all-annotator data. Allowed formats are:
     # * jsonl
@@ -78,16 +78,19 @@
 
     "annotation_schemes": [      
         {
-            "annotation_type": "radio",
-            "name": "pairwise_comparison",
-            "description": "Which tweet is more intimate",
+            "annotation_type": "likert",
+            "name": "intimacy_likert",
+            "description": "How intimate do you think the given tweet is?",
 
             # If true, display the labels horizontally
-            "horizontal": False,
+            "horizontal": True,
 
-            "labels": [
-               "A is more intimate", "B is more intimate", "Hard to tell",
-            ],
+            # The min and max labels are text shown at each end of the scale
+            "min_label": "Not Intimate at all",
+            "max_label": "Super Intimate",
+
+            # How many scale points to show
+            "size": 7,
 
             # adding requirements for labels, when "required" is True, the annotators will be asked to finish the current instance to proceed
             "label_requirement": {"required":True},

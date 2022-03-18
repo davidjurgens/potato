@@ -238,9 +238,10 @@
        * annotate.
        */
       function validate_answers() {
-          /*
+
+          // check if all the right labels are checked
           //alert({{instance_obj|tojson}}['id'])
-          var inputs = document.getElementsByTagName('input');
+          var inputs =  document.querySelectorAll('input[validation=right_label]');
           for (var i = 0; i < inputs.length; ++i) {
             if (inputs[i].getAttribute('validation') == 'right_label' && inputs[i].checked == false){
                 alert(inputs[i].name + " must be selected to proceed");
@@ -248,35 +249,51 @@
                 return false;
             }
           }
-          */
 
-          // identify all the fieldsets
+
+          // identify all the fieldsets and check if all the required forms are filled
           var fields = document.getElementsByTagName('fieldset');
           for (var i = 0; i < fields.length; ++i) {
-                var inputs = fields[i].getElementsByTagName('input');
-                var required = false;
-                // check if the current form requires inputs
-                if (inputs[0].getAttribute('validation') == 'required'){
-                    required= true;
+                var inputs = fields[i].querySelectorAll('input[validation=required]');
+                // continue if all there's no required inputs in the current field set
+                if (inputs.length == 0){
+                    continue;
                 }
+                //var required = true;
+                // check if the current form requires inputs
+                //if (inputs[0].getAttribute('validation') == 'required'){
+                //    required= true;
+                //}
 
                 checked_flag = false;
                 for (var j = 0; j < inputs.length; ++j) {
                     // if a right_label is not selected, display an error msg and return false
-                    if (inputs[j].getAttribute('validation') == 'right_label' && inputs[j].checked == false) {
-                        alert(inputs[j].name + " must be selected to proceed");
+                    //if (inputs[j].getAttribute('validation') == 'right_label' && inputs[j].checked == false) {
+                    //    alert(inputs[j].name + " must be selected to proceed");
                         //alert(instance_obj.id)
-                        return false;
-                    }
+                    //    return false;
+                    //}
                     // if any of the labels is checked, set checked_flag as true;
                     if (inputs[j].checked == true) {
                         checked_flag = true;
                         break;
                     }
+                    // if the input_type is number of text, check if it's empty
+                    // todo: the current way might not work well if there are mixed textinput and radio buttons under a sample fieldset
+                    if (inputs[j].type == "text" || inputs[j].type == "number") {
+                        if (inputs[j].value.length == 0){
+                            alert(inputs[j].name + " must be completed to proceed");
+                            return false;
+                        }
+                        else{
+                            checked_flag = true;
+                        }
+                    }
+
                 }
                 // if this form requires inputs, but nothing is checked, display an error msg and return false
-                if (required && checked_flag == false){
-                    alert("You must complete the current instance to proceed");
+                if (checked_flag == false){
+                    alert("You must answer the following item to proceed: " + inputs[0].className);
                     return false;
                 }
                 //alert(instance_obj.id)
