@@ -2420,6 +2420,12 @@ def generate_likert_layout(annotation_scheme):
     key2label = {}
     label2key = {}    
     key_bindings = []
+
+    # setting up label validation for each label, if "required" is True, the annotators will be asked to finish the current instance to proceed
+    validation = ''
+    label_requirement = annotation_scheme['label_requirement'] if 'label_requirement' in annotation_scheme else None
+    if label_requirement and ('required' in label_requirement) and label_requirement['required']:
+        validation = 'required'
     
     for i in range(1, annotation_scheme['size']+1):
 
@@ -2448,10 +2454,10 @@ def generate_likert_layout(annotation_scheme):
         #         % (class_name, label, name, key_value, name, tooltip, label_content))
 
         schematic += \
-            ((' <li><input class="{class_name}" type="radio" id="{id}" name="{name}" value="{value}" onclick="onlyOne(this)">' + \
+            ((' <li><input class="{class_name}" type="radio" id="{id}" name="{name}" value="{value}" onclick="onlyOne(this)" validation="{validation}">' + \
               '  <label for="{label_for}" {label_args}>{label_text}</label></li>')).format(
-                  class_name=class_name, id=name, name=name, value=key_value, label_for=name,
-                  label_args=tooltip, label_text=label_content)
+                  class_name=class_name, id=name, name=name, value=key_value, validation=validation,
+                label_for=name, label_args=tooltip, label_text=label_content)
 
 
     schematic += ('  <li>%s</li> </ul></fieldset>\n</form></div>\n' \
