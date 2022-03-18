@@ -49,10 +49,13 @@
     #the jumping-to-id function will be disabled if "jumping_to_id_disabled" is True
     "jumping_to_id_disabled": True,
 
+    #the navigation bar will be hidden to the annotators if "hide_navbar" is True
+    "hide_navbar": True,
+
     # define the surveyflow of the system, set up the pages before and after the data annotation page
     "surveyflow": {
         "on": True,
-        "pre_annotation": ['data/surveyflow/intro.jsonl', 'data/surveyflow/consent.jsonl'],
+        "pre_annotation": ['data/surveyflow/intro.jsonl', 'data/surveyflow/consent.jsonl', 'data/surveyflow/instruction.jsonl'],
         "post_annotation": ['data/surveyflow/demographic_questions.jsonl','data/surveyflow/end.jsonl'],
     },
 
@@ -90,7 +93,10 @@
             "max_label": "Super Intimate",
 
             # How many scale points to show
-            "size": 7,
+            "size": 5,
+
+            # whether show the likert score
+            "displaying_score": True,
 
             # adding requirements for labels, when "required" is True, the annotators will be asked to finish the current instance to proceed
             "label_requirement": {"required":True},

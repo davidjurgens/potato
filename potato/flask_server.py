@@ -1715,6 +1715,10 @@ def generate_site(config):
         html_template = html_template.replace("<input type=\"number\" name=\"go_to\" id=\"go_to\" value=\"\" onfocusin=\"user_input()\" onfocusout=\"user_input_leave()\" max={{total_count}} min=0 required>",
                               "<input type=\"number\" name=\"go_to\" id=\"go_to\" value=\"\" onfocusin=\"user_input()\" onfocusout=\"user_input_leave()\" max={{total_count}} min=0 required hidden>")
 
+    if "hide_navbar" in config and config["hide_navbar"]:
+        html_template = html_template.replace('<div class="navbar-nav">',
+                                              '<div class="navbar-nav" hidden>')
+
 
     # Once we have the base template constructed, load the user's custom layout for their task
     html_layout_file = config['html_layout']
@@ -1893,6 +1897,10 @@ def generate_surveyflow_pages(config):
         html_template = html_template.replace("<input type=\"submit\" value=\"go\">", "<input type=\"submit\" value=\"go\" hidden>")
         html_template = html_template.replace("<input type=\"number\" name=\"go_to\" id=\"go_to\" value=\"\" onfocusin=\"user_input()\" onfocusout=\"user_input_leave()\" max={{total_count}} min=0 required>",
                               "<input type=\"number\" name=\"go_to\" id=\"go_to\" value=\"\" onfocusin=\"user_input()\" onfocusout=\"user_input_leave()\" max={{total_count}} min=0 required hidden>")
+
+    if "hide_navbar" in config and config["hide_navbar"]:
+        html_template = html_template.replace('<div class="navbar-nav">',
+                                              '<div class="navbar-nav" hidden>')
 
     # Once we have the base template constructed, load the user's custom layout for their task
     html_layout_file = config['html_layout']
@@ -2080,7 +2088,7 @@ def generate_keybidings_sidebar(keybindings, horizontal = False):
         keybindings = [[it[0], it[1].split(':')[-1]] for it in keybindings]
         lines = list(zip(*keybindings))
         print(lines)
-        layout = '<table style="border:1px solid black;margin-left:auto;margin-right:auto;">'
+        layout = '<table style="border:1px solid black;margin-left:auto;margin-right:auto;text-align: center;">'
         for line in lines:
             layout += "<tr>" + ''.join(['<td>&nbsp;&nbsp;%s&nbsp;&nbsp;</td>'%it for it in line]) + "</tr>"
         layout += '</table>'
@@ -2414,7 +2422,7 @@ def generate_likert_layout(annotation_scheme):
 
     schematic = \
         ('<div><form action="/action_page.php">' + \
-        '  <fieldset> <legend>%s</legend> <ul class="likert"> <li> %s </li>') \
+        '  <fieldset> <legend>%s</legend> <ul class="likert" style="text-align: center;"> <li> %s </li>') \
         % (annotation_scheme['description'], annotation_scheme['min_label'])
     
     key2label = {}
@@ -2445,9 +2453,12 @@ def generate_likert_layout(annotation_scheme):
 
             
         # In the collapsed version of the likert scale, no label is shown.
-        label_content = ''
+        label_content = str(i) if ('displaying_score' in annotation_scheme and annotation_scheme['displaying_score']) else ''
         tooltip = ''        
 
+        # displaying the label content in a different line if it is not empty
+        if label_content != '':
+            line_break = '<br>'
         #schematic += \
         #        ((' <li><input class="%s" type="radio" id="%s" name="%s" value="%s" onclick="onlyOne(this)">' +
         #         '  <label for="%s" %s>%s</label></li>')
@@ -2455,9 +2466,9 @@ def generate_likert_layout(annotation_scheme):
 
         schematic += \
             ((' <li><input class="{class_name}" type="radio" id="{id}" name="{name}" value="{value}" onclick="onlyOne(this)" validation="{validation}">' + \
-              '  <label for="{label_for}" {label_args}>{label_text}</label></li>')).format(
+              ' {line_break} <label for="{label_for}" {label_args}>{label_text}</label></li>')).format(
                   class_name=class_name, id=name, name=name, value=key_value, validation=validation,
-                label_for=name, label_args=tooltip, label_text=label_content)
+                line_break=line_break, label_for=name, label_args=tooltip, label_text=" " + label_content)
 
 
     schematic += ('  <li>%s</li> </ul></fieldset>\n</form></div>\n' \
