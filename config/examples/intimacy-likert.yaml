@@ -23,7 +23,7 @@
     "annotation_codebook_url": "",
 
     "data_files": [
-       "data/intimacy/paired_df_1k.jsonl"
+       "data/intimacy/likert_pilot_100.jsonl"
     ],
 
     "item_properties": {
