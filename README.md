@@ -6,7 +6,8 @@ Potato is an easy-to-use  web-based annotation tool to let you quickly mock-up a
 
 Potato is driven by a single configuration file that specifies the type of task and data you want to use. Potato does not require any coding to get up and running. For most tasks, no additional web design is needed, though Potato is easily customizable so you can tweak the interface and elements your annotators see.
 
-Potato 
+Please check out our [official documentation](https://potato-annotation-tutorial.readthedocs.io/) for detailed instructions.
+
 
 
 ### Quick Start
@@ -26,7 +27,7 @@ This will launch the webserver on port 8000 which can be accessed at [http://loc
 
 Clicking "Submit" will autoadvance to the next instance and you can navigate between items using the arrow keys.
 
-The `config/examples` folder contains example `.yaml` configuration files that match many common simple use-cases. See the full [documentation](link pls) for all configuration options.
+The `config/examples` folder contains example `.yaml` configuration files that match many common simple use-cases. See the full [documentation](https://potato-annotation-tutorial.readthedocs.io/en/latest/usage.html) for all configuration options.
 
 
 ### Versions
