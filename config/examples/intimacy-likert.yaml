@@ -65,8 +65,8 @@
       "on": True,
       "output_filename": 'task_assignment.json',
       "sampling_strategy:": 'random',
-      "labels_per_instance": 2,
-      "instance_per_annotator": 5,
+      "labels_per_instance": 10,
+      "instance_per_annotator": 50,
 
       "users": [  ],
     },
