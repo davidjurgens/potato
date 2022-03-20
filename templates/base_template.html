@@ -215,7 +215,7 @@
                           form.appendChild(hiddenField);
                       }
                   }
-                  else if (input.attr('type') == 'text') {
+                  else if (input.attr('type') == 'text' || input.attr('type') == 'number') {
                       var hiddenField = document.createElement("input");
                       hiddenField.setAttribute("type", "hidden");
                       hiddenField.setAttribute("name", input.attr('name'));
@@ -404,7 +404,8 @@
       <div>
         <p>
           <div class="text-center">
-            <a class="btn btn-secondary" href="#" role="button" onclick="click_to_next()">Submit</a>
+            <a class="btn btn-secondary" href="#" role="button" onclick="click_to_prev()">Move backward</a>
+            <a class="btn btn-secondary" href="#" role="button" onclick="click_to_next()">Move forward</a>
           </div>
         </p>        
       </div>

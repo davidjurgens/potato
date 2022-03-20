@@ -1278,7 +1278,13 @@ def annotate_page(username = None):
     global user_config
 
     #use the provided username when the username is given
-    username = request.form.get("email") if username == None else username
+    if not username:
+        username_from_last_page = request.form.get("email")
+        #print(username_on_page)
+        if username_from_last_page == None:
+            return render_template("error.html")
+        else:
+            username = username_from_last_page
 
     # Check if the user is authorized. If not, go to the login page
     #if not user_config.is_valid_username(username):
@@ -1999,7 +2005,7 @@ def generate_surveyflow_pages(config):
     else:
         # If we don't have a custom layout, accumulate all the tasks into a
         # single HTML element
-        for page in surveyflow_pages:
+        for i, page in enumerate(surveyflow_pages):
             schema_layouts = ""
             #for annotation_scheme in annotation_schemes:
             for line in surveyflow_pages[page]:
@@ -2028,7 +2034,20 @@ def generate_surveyflow_pages(config):
             #cur_html_template  = cur_html_template .replace("<div class=\"annotation_schema\">",
             #                                            "<div class=\"annotation_schema\" style=\"flex-direction:column;\">")
 
-            keybindings_desc = generate_keybidings_sidebar(all_keybindings)
+            # Do not display keybindings for the first and last page
+            if i == 0:
+                keybindings_desc = generate_keybidings_sidebar(all_keybindings[1:])
+                cur_html_template = cur_html_template.replace(
+                    '<a class="btn btn-secondary" href="#" role="button" onclick="click_to_prev()">Move backward</a>',
+                    '<a class="btn btn-secondary" href="#" role="button" onclick="click_to_prev()" hidden>Move backward</a>')
+            elif i == len(surveyflow_pages) - 1:
+                keybindings_desc = generate_keybidings_sidebar(all_keybindings[:-1])
+                cur_html_template = cur_html_template.replace(
+                    '<a class="btn btn-secondary" href="#" role="button" onclick="click_to_next()">Move forward</a>',
+                    '<a class="btn btn-secondary" href="#" role="button" onclick="click_to_next()" hidden>Move forward</a>')
+            else:
+                keybindings_desc = generate_keybidings_sidebar(all_keybindings)
+
             cur_html_template = cur_html_template.replace(
                 "{{keybindings}}", keybindings_desc)
             # Jiaxin: change the basename from the template name to the project name +

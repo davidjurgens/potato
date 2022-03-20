@@ -2,3 +2,4 @@
 {"id":"2","text":"What is your current age?","schema": "number", "label_requirement": {"required":true}}
 {"id":"3","text":"What is your occupation?","schema": "radio", "choices": ["Employed", "Unemployed", "Student", "Retired", "Homemaker", "Self-employed", "Other"], "label_requirement": {"required":true}}
 {"id":"4","text":"What is your education level?","schema": "radio", "choices": ["Less than a high school diploma", "High school diploma or equivalent", "College degree", "Graduate degree", "Other"], "label_requirement": {"required":true}}
+{"id":"5","text":"Please feel free to leave any comments about our study (optional)","schema": "text"}
