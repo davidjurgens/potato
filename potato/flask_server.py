@@ -452,6 +452,22 @@ def load_all_data(config):
                 
         logger.debug('Loaded %d instances from %s' % (line_no, data_fname))
 
+
+    #todo setup automatic test questions for each annotation schema, currently we are doing it similar to survey flow to allow multilingual test questions
+    if "surveyflow" in config and config["surveyflow"]['on']:
+        if "testing" in config["surveyflow"] and len(config["surveyflow"]["testing"]) > 0:
+            for test_file in config["surveyflow"]["testing"]:
+                with open(test_file, 'r') as r:
+                    for line in r:
+                        line = json.loads(line.strip())
+                        for l in line['choices']:
+                            item = {"id": line['id'] + '_testing_' + l, "text": line['text'] + l}
+                            # currently we simply move all these test questions to the end of the instance list
+                            instance_id_to_data.update({item['id']: item})
+                            instance_id_to_data.move_to_end(item['id'], last=True)
+                            items_to_annotate.append(item)
+
+
     # insert survey questions into instance_id_to_data
     #if "surveyflow" in config and config["survey"]['on']:
     if "pre_annotation_pages" in config:
@@ -467,6 +483,8 @@ def load_all_data(config):
             instance_id_to_data.update({page:item})
             instance_id_to_data.move_to_end(page, last=True)
             items_to_annotate.append(item)
+
+
 
 
     all_data["items_to_annotate"] = items_to_annotate
@@ -500,14 +518,23 @@ def load_all_data(config):
                 task_assignment = json.load(r)
         else:
             # Otherwise generate a new task assignment dict
-            task_assignment = {'assigned':{}, 'unassigned':{}}
+            task_assignment = {'assigned':{}, 'unassigned':{}, 'testing': {'test_question_per_annotator': 0, 'ids': []}}
+            # setting test_question_per_annotator if it is defined in automatic_assignment, otherwise it is default to 0 and no test question will be used
+            if "test_question_per_annotator" in config["automatic_assignment"]:
+                task_assignment['testing']['test_question_per_annotator'] = config["automatic_assignment"]["test_question_per_annotator"]
+
             for it in ['pre', 'post']:
                 if it + '_annotation_pages' in config:
                     task_assignment[it] = config[it + '_annotation_pages']
                     for p in config[it + '_annotation_pages']:
                         task_assignment['assigned'][p] = 0
+
             for id in instance_id_to_data:
                 if id in task_assignment['assigned']:
+                    continue
+                # add test questions to the assignment dict
+                if re.search('testing', id):
+                    task_assignment['testing']['ids'].append(id)
                     continue
                 # set the total labels per instance, if not specified, default to 3
                 task_assignment['unassigned'][id] = config["automatic_assignment"]["labels_per_instance"] if "labels_per_instance" in config["automatic_assignment"] else 3
@@ -985,10 +1012,21 @@ def assign_instances_to_user(username):
             if task_assignment['unassigned'][key] == 0:
                 del task_assignment['unassigned'][key]
 
+        # sample and insert test questions
+        if task_assignment['testing']['test_question_per_annotator'] > 0:
+            sampled_testing_ids = random.choices(task_assignment['testing']['ids'], k = task_assignment['testing']['test_question_per_annotator'])
+            # adding test question sampling status to the task assignment
+            for key in sampled_testing_ids:
+                if key not in task_assignment['assigned']:
+                    task_assignment['assigned'][key] = []
+                task_assignment['assigned'][key].append(username)
+                sampled_keys.insert(random.randint(0,len(sampled_keys)-1), key)
+
         # save task assignment status
         task_assignment_path = config['output_annotation_dir'] + config["automatic_assignment"]["output_filename"]
         with open(task_assignment_path, 'w') as w:
             json.dump(task_assignment, w)
+
 
         if 'pre' in task_assignment:
             sampled_keys = task_assignment['pre'] + sampled_keys

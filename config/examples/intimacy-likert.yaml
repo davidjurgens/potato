@@ -57,6 +57,8 @@
         "on": True,
         "pre_annotation": ['data/surveyflow/intro.jsonl', 'data/surveyflow/consent.jsonl', 'data/surveyflow/instruction.jsonl'],
         "post_annotation": ['data/surveyflow/demographic_questions.jsonl','data/surveyflow/end.jsonl'],
+        # If set, we will automatically generate testing questions similar to the annotation instances, but explicitly ask the annotator to choose one option
+        "testing": ['data/surveyflow/testing.jsonl'],
     },
 
 
@@ -67,6 +69,7 @@
       "sampling_strategy:": 'random',
       "labels_per_instance": 10,
       "instance_per_annotator": 50,
+      "test_question_per_annotator": 1, # you must set up the test question in surveyflow to use this function
 
       "users": [  ],
     },
@@ -82,6 +85,7 @@
     "annotation_schemes": [      
         {
             "annotation_type": "likert",
+            "id": "intimacy_likert",
             "name": "How intimate do you think the given tweet is?",
             "description": "How intimate do you think the given tweet is?",
 
@@ -97,7 +101,7 @@
             "max_label": "Very intimate",
 
             # How many scale points to show
-            "size": 5,
+            "size": 7,
 
             # whether show the likert score
             "displaying_score": True,
@@ -109,7 +113,7 @@
             # label. Aannotations with more than 10 are not supported with this
             # simple keybinding and will need to use the full item specification
             # to bind all labels to keys.
-            "sequential_key_binding": True,                        
+            "sequential_key_binding": True,
         },
 
     ],
