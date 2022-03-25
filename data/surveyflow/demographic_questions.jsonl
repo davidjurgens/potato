@@ -6,5 +6,5 @@
 {"id":"6","text":"In which country did you spend most of your time before you turned 18?","schema": "select", "use_predefined_labels": "country", "label_requirement": {"required":true}}
 {"id":"7","text":"Which country are you currently living in?", "schema": "select", "use_predefined_labels": "country", "label_requirement": {"required":true}}
 {"id":"8","text":"What ethnic group do you belong to?","schema": "select", "use_predefined_labels": "ethnicity", "label_requirement": {"required":true}}
-{"id":"9","text":"What is your present religion, if any? (You can write in 'prefer not to answer')","schema": "text", "label_requirement": {"required":true}}
+{"id":"9","text":"What is your present religion, if any?","schema": "select", "use_predefined_labels": "religion", "label_requirement": {"required":true}}
 {"id":"10","text":"Please feel free to leave any comments about our study (optional)","schema": "text"}
