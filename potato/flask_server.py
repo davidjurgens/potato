@@ -779,7 +779,8 @@ def update_annotation_state(username, form):
             continue
 
         schema_to_label_to_value[annotation_schema][annotation_label] = annotation_value
-        
+
+    print(schema_to_label_to_value)
         #schema_to_labels[annotation_schema].append(annotation_label)
 
     # print("-- for user %s, instance %s -> %s" % (username, instance_id, str(schema_to_labels)))
@@ -1496,17 +1497,20 @@ def annotate_page(username = None):
     # did
     annotations = get_annotations_for_user_on(username, instance_id)
     if annotations is not None:
-
         # Reset the state
         for schema, labels in annotations.items():
             for label, value in labels.items():
                 name = schema + ":::" + label
-                input_field = soup.find("input", {"name": name})
+                input_field = soup.find_all(["input", "select"], {"name": name})[0] #select both input and select tags
                 if input_field is None:
                     print('No input for ', name)
                     continue
                 input_field['checked'] = True
                 input_field['value'] = value
+                #find the right option and set it as selected if the current annotation schema is a select box
+                if label == 'select-one':
+                    option = input_field.findChildren('option', {"value": value})[0]
+                    option['selected'] = "selected"
 
 
     rendered_html = str(soup)  # soup.prettify()
@@ -2049,6 +2053,10 @@ def generate_surveyflow_pages(config):
             for line in surveyflow_pages[page]:
                 annotation_scheme = {
                     "annotation_type": line['schema'],
+                    #todo: pack select type in to a dict with the key 'schema'
+                    #whether use predefined labels for select type, if so, define it, currently we support country, religion, ethnicity
+                    "use_predefined_labels": line["use_predefined_labels"] if "use_predefined_labels" in line else None,
+                    "id": line['id'],
                     "name": line['text'],
                     "description": line['text'],
                     # If true, display the labels horizontally
@@ -2186,6 +2194,9 @@ def generate_schematic(annotation_scheme):
 
     elif annotation_type == "pure_display":
         return generate_pure_display_layout(annotation_scheme)
+
+    elif annotation_type == "select":
+        return generate_select_layout(annotation_scheme)
 
     else:
         raise Exception("unsupported annotation type: %s" % annotation_type)
@@ -2702,6 +2713,60 @@ def generate_pure_display_layout(annotation_scheme):
     schematic = '<Strong>%s</Strong> %s' % (annotation_scheme['description'], '<br>'.join(annotation_scheme['labels']))
 
     return schematic, None
+
+
+def generate_select_layout(annotation_scheme):
+
+    # setting up label validation for each label, if "required" is True, the annotators will be asked to finish the current instance to proceed
+    validation = ''
+    label_requirement = annotation_scheme['label_requirement'] if 'label_requirement' in annotation_scheme else None
+    if label_requirement and ('required' in label_requirement) and label_requirement['required']:
+        validation = 'required'
+
+    schematic = \
+        '<form action="/action_page.php">' + \
+        '  <fieldset>' + \
+        ('  <legend>%s</legend>' % annotation_scheme['description']) + \
+        ('  <select type="select-one" class="%s" id="%s" name="%s" validation="%s">' % (annotation_scheme['description'], annotation_scheme['id'], annotation_scheme['name'] + ':::select-one', validation))
+
+    #todo move this to the config file
+    predefined_labels_dict = {
+        'country': 'potato/static/survey_assets/country_dropdown_list.html',
+        'ethnicity': 'potato/static/survey_assets/ethnicity_dropdown_list.html',
+        'religion': 'potato/static/survey_assets/religion_dropdown_list.html'
+    }
+
+    # directly use the predefined labels if annotation_scheme["use_predefined_labels"] is defined
+    if "use_predefined_labels" in annotation_scheme and annotation_scheme["use_predefined_labels"] in predefined_labels_dict:
+        with open(predefined_labels_dict[annotation_scheme["use_predefined_labels"]]) as r:
+            schematic += r.read()
+
+    else:
+        # if annotation_scheme['labels'] is defined as a path
+        if type(annotation_scheme['labels']) == str and os.path.exists(annotation_scheme['labels']):
+            with open(annotation_scheme['labels'], 'r') as r:
+                labels = [it.strip() for it in r.readlines()]
+        else:
+            labels = annotation_scheme['labels']
+
+        for i, label_data in enumerate(labels, 1):
+
+            label = label_data if isinstance(
+                label_data, str) else label_data['name']
+
+            name = annotation_scheme['name'] + ':::' + label
+            class_name = annotation_scheme['name']
+            key_value = name
+            label_content = label
+
+            schematic += \
+                ((
+                     '<option class="%s" id="%s" name="%s" value="%s">%s</option>')
+                 % (class_name, name, name, label_content, label_content))
+
+
+    schematic += '  </select>\n</fieldset>\n</form>\n'
+    return schematic, []
 
 
 @app.route('/files/<path:filename>')

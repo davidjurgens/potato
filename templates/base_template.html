@@ -222,6 +222,14 @@
                       hiddenField.setAttribute("value", input[0].value);
                       form.appendChild(hiddenField);                                        
                   }
+                  else if (input.attr('type') == 'select-one') {
+                      //alert(input[0].value)
+                      var hiddenField = document.createElement("input");
+                      hiddenField.setAttribute("type", "hidden");
+                      hiddenField.setAttribute("name", input.attr('name'));
+                      hiddenField.setAttribute("value", input[0].value);
+                      form.appendChild(hiddenField);
+                  }
                   else {
                       console.log("unknown form type: \"" + input.attr('type') + "\"")
                   }
@@ -254,7 +262,7 @@
           // identify all the fieldsets and check if all the required forms are filled
           var fields = document.getElementsByTagName('fieldset');
           for (var i = 0; i < fields.length; ++i) {
-                var inputs = fields[i].querySelectorAll('input[validation=required]');
+                var inputs = fields[i].querySelectorAll('input[validation=required], select[validation=required]');
                 // continue if all there's no required inputs in the current field set
                 if (inputs.length == 0){
                     continue;
@@ -264,6 +272,7 @@
                 //if (inputs[0].getAttribute('validation') == 'required'){
                 //    required= true;
                 //}
+
 
                 checked_flag = false;
                 for (var j = 0; j < inputs.length; ++j) {
@@ -280,7 +289,7 @@
                     }
                     // if the input_type is number of text, check if it's empty
                     // todo: the current way might not work well if there are mixed textinput and radio buttons under a sample fieldset
-                    if (inputs[j].type == "text" || inputs[j].type == "number") {
+                    if (inputs[j].type == "text" || inputs[j].type == "number" || inputs[j].type == "select-one") {
                         if (inputs[j].value.length == 0){
                             alert(inputs[j].name + " must be completed to proceed");
                             return false;
@@ -289,8 +298,9 @@
                             checked_flag = true;
                         }
                     }
-
                 }
+
+
                 // if this form requires inputs, but nothing is checked, display an error msg and return false
                 if (checked_flag == false){
                     alert("You must answer the following item to proceed: " + inputs[0].className);
