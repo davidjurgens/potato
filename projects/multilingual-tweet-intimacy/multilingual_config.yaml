@@ -1,6 +1,8 @@
 {
     "languages": ["English", "Spanish", "Italian", "Dutch", "Portuguese", "Chinese"],
 
+    "annotation_task_name": "Intimacy likert [LANGUAGE]",
+
     "base_language": "English",
 
     "base_config_file": "config/examples/intimacy-likert.yaml",

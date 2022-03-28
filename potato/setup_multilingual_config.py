@@ -62,6 +62,7 @@ def main():
         if not os.path.exists(config["output_annotation_dir"]):
             os.makedirs(config["output_annotation_dir"])
 
+        config["annotation_task_name"] = multilingual_config['annotation_task_name'].replace("[LANGUAGE]", lang)
         config["data_files"] = [it.replace("[LANGUAGE]", lang) for it in multilingual_config['data_files']]
 
         with open(multilingual_config["base_dir"] + "configs/%s.yaml"%lang, 'wt') as f:
