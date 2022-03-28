@@ -18,8 +18,6 @@
 
     "multilingual_guideline_file": "projects/multilingual-tweet-intimacy/Multilingual_Intimacy_Guideline.csv",
 
-    "output_annotation_dir": "projects/multilingual-tweet-intimacy/annotation_output/pilot/[LANGUAGE]/",
-
-    "site_dir": "projects/multilingual-tweet-intimacy/htmls/[LANGUAGE]/"
+    "output_annotation_dir": "projects/multilingual-tweet-intimacy/annotation_output/pilot/[LANGUAGE]/"
 
 }

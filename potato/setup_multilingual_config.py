@@ -54,7 +54,7 @@ def main():
                 page = page.replace(key, key2text[key][lang])
 
             surveyflow_output_path = multilingual_config["surveyflow_output_path"].replace("[LANGUAGE]", lang)
-            page = page.replace(multilingual_config["surveyflow_path"], surveyflow_output_path)
+            page = page.replace(multilingual_config["surveyflow_path"], surveyflow_output_path + lang + '-')
 
             config = yaml.safe_load(page)
 
@@ -62,9 +62,13 @@ def main():
         if not os.path.exists(config["output_annotation_dir"]):
             os.makedirs(config["output_annotation_dir"])
 
-        config["site_dir"] = multilingual_config['site_dir'].replace("[LANGUAGE]", lang)
+        '''
+        # setup the site_dir path for each language
+        config['path_under_site_dir'] = multilingual_config['path_under_site_dir'].replace("[LANGUAGE]", lang)
+        config["site_dir"] += config['path_under_site_dir']
         if not os.path.exists(config["site_dir"]):
             os.makedirs(config["site_dir"])
+        '''
 
         config["annotation_task_name"] = multilingual_config['annotation_task_name'].replace("[LANGUAGE]", lang)
         config["data_files"] = [it.replace("[LANGUAGE]", lang) for it in multilingual_config['data_files']]
@@ -84,7 +88,7 @@ def main():
             for key in key2text:
                 page = page.replace(key, key2text[key][lang])
             #print(surveyflow_output_path)
-            with open(surveyflow_output_path + file, 'wt') as f:
+            with open(surveyflow_output_path + lang + '-' +file, 'wt') as f:
                 f.write(page)
 
         #for key in ["surveyflow_output_path", ]
