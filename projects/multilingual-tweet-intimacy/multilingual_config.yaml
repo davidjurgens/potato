@@ -1,7 +1,7 @@
 {
     "languages": ["English", "Spanish", "Italian", "Dutch", "Portuguese", "Chinese"],
 
-    "annotation_task_name": "Intimacy likert [LANGUAGE]",
+    "annotation_task_name": "Perception of Tweet Intimacy ([LANGUAGE])",
 
     "base_language": "English",
 
@@ -18,6 +18,8 @@
 
     "multilingual_guideline_file": "projects/multilingual-tweet-intimacy/Multilingual_Intimacy_Guideline.csv",
 
-    "output_annotation_dir": "projects/multilingual-tweet-intimacy/annotation_output/pilot/[LANGUAGE]/"
+    "output_annotation_dir": "projects/multilingual-tweet-intimacy/annotation_output/pilot/[LANGUAGE]/",
+
+    "site_dir": "projects/multilingual-tweet-intimacy/htmls/[LANGUAGE]/"
 
 }

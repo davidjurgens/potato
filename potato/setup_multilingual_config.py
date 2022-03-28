@@ -28,7 +28,7 @@ def main():
 
 
     #create basic folders
-    for folder in ["surveyflow", "annotation_output", "data_files", "configs"]:
+    for folder in ["surveyflow", "annotation_output", "data_files", "configs", "htmls"]:
       cur_path = multilingual_config["base_dir"] + folder
       if not os.path.exists(cur_path):
           os.makedirs(cur_path)
@@ -61,6 +61,10 @@ def main():
         config["output_annotation_dir"] = multilingual_config['output_annotation_dir'].replace("[LANGUAGE]", lang)
         if not os.path.exists(config["output_annotation_dir"]):
             os.makedirs(config["output_annotation_dir"])
+
+        config["site_dir"] = multilingual_config['site_dir'].replace("[LANGUAGE]", lang)
+        if not os.path.exists(config["site_dir"]):
+            os.makedirs(config["site_dir"])
 
         config["annotation_task_name"] = multilingual_config['annotation_task_name'].replace("[LANGUAGE]", lang)
         config["data_files"] = [it.replace("[LANGUAGE]", lang) for it in multilingual_config['data_files']]
