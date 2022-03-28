@@ -461,7 +461,7 @@ def load_all_data(config):
                     for line in r:
                         line = json.loads(line.strip())
                         for l in line['choices']:
-                            item = {"id": line['id'] + '_testing_' + l, "text": line['text'] + l}
+                            item = {"id": line['id'] + '_testing_' + l, "text": line['text'].replace('[test_question_choice]', l)}
                             # currently we simply move all these test questions to the end of the instance list
                             instance_id_to_data.update({item['id']: item})
                             instance_id_to_data.move_to_end(item['id'], last=True)

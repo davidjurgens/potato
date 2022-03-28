@@ -1,0 +1,21 @@
+{
+    "languages": ["English", "Spanish", "Italian", "Dutch", "Portuguese", "Chinese"],
+
+    "base_language": "English",
+
+    "base_config_file": "config/examples/intimacy-likert.yaml",
+
+    "base_dir": "projects/multilingual-tweet-intimacy/",
+
+    "data_files": [
+            "projects/multilingual-tweet-intimacy/data_files/likert_pilot_100_[LANGUAGE].jsonl"
+    ],
+
+    "surveyflow_path": "data/surveyflow/",
+    "surveyflow_output_path": "projects/multilingual-tweet-intimacy/surveyflow/[LANGUAGE]/",
+
+    "multilingual_guideline_file": "projects/multilingual-tweet-intimacy/Multilingual_Intimacy_Guideline.csv",
+
+    "output_annotation_dir": "projects/multilingual-tweet-intimacy/annotation_output/pilot/[LANGUAGE]/"
+
+}

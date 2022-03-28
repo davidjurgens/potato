@@ -86,8 +86,8 @@
         {
             "annotation_type": "likert",
             "id": "intimacy_likert",
-            "name": "How intimate do you think the given tweet is?",
-            "description": "How intimate do you think the given tweet is?",
+            "name": "[task_question]",
+            "description": "[task_question]",
 
             # If true, display the labels horizontally
             "horizontal": True,
@@ -97,8 +97,8 @@
             #],
 
             # The min and max labels are text shown at each end of the scale
-            "min_label": "Not intimate at all",
-            "max_label": "Very intimate",
+            "min_label": "[min_label]",
+            "max_label": "[max_label]",
 
             # How many scale points to show
             "size": 5,
