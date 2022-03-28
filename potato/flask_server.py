@@ -472,14 +472,15 @@ def load_all_data(config):
     #if "surveyflow" in config and config["survey"]['on']:
     if "pre_annotation_pages" in config:
         for page in config["pre_annotation_pages"]:
-            item = {"id":page,"text":page[:-5]}
+            #todo currently we simply remove the language type before -, but we need a more elegant way for this in the future
+            item = {"id":page,"text":page.split('-')[-1][:-5]}
             instance_id_to_data.update({page:item})
             instance_id_to_data.move_to_end(page, last=False)
             items_to_annotate.insert(0, item)
 
     if "post_annotation_pages" in config:
         for page in config["post_annotation_pages"]:
-            item = {"id":page,"text":page[:-5]}
+            item = {"id":page,"text":page.split('-')[-1][:-5]}
             instance_id_to_data.update({page:item})
             instance_id_to_data.move_to_end(page, last=True)
             items_to_annotate.append(item)
