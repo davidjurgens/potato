@@ -68,7 +68,7 @@
       "output_filename": 'task_assignment.json',
       "sampling_strategy:": 'random',
       "labels_per_instance": 10,
-      "instance_per_annotator": 5,
+      "instance_per_annotator": 50,
       "test_question_per_annotator": 2, # you must set up the test question in surveyflow to use this function
 
       "users": [  ],
