@@ -1016,7 +1016,7 @@ def assign_instances_to_user(username):
 
         # sample and insert test questions
         if task_assignment['testing']['test_question_per_annotator'] > 0:
-            sampled_testing_ids = random.choices(task_assignment['testing']['ids'], k = task_assignment['testing']['test_question_per_annotator'])
+            sampled_testing_ids = random.sample(task_assignment['testing']['ids'], k = task_assignment['testing']['test_question_per_annotator'])
             # adding test question sampling status to the task assignment
             for key in sampled_testing_ids:
                 if key not in task_assignment['assigned']:
