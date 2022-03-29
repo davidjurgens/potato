@@ -109,6 +109,11 @@
             # adding requirements for labels, when "required" is True, the annotators will be asked to finish the current instance to proceed
             "label_requirement": {"required":True},
 
+            # whether add a special button for bad text
+            "bad_text_label": {
+                  "label_content": "[invalid_tweet]"
+            },
+
             # If true, numbers [1-len(labels)] will be bound to each
             # label. Aannotations with more than 10 are not supported with this
             # simple keybinding and will need to use the full item specification

@@ -44,7 +44,7 @@ def main():
         if type(row['key']) != str or row['key'][0] != '[' or row['key'][-1] != ']':
             continue
         for lang in multilingual_config["languages"]:
-            key2text[row['key']][lang] = row[lang]
+            key2text[row['key']][lang] = row[lang] if type(row[lang]) == str else row[multilingual_config["base_language"]]
 
     for lang in multilingual_config["languages"]:
         # load basic config file
@@ -55,6 +55,7 @@ def main():
 
             surveyflow_output_path = multilingual_config["surveyflow_output_path"].replace("[LANGUAGE]", lang)
             page = page.replace(multilingual_config["surveyflow_path"], surveyflow_output_path + lang + '-')
+            page = page.replace('[LANGUAGE]', lang)
 
             config = yaml.safe_load(page)
 
@@ -87,6 +88,7 @@ def main():
                 page = f.read()
             for key in key2text:
                 page = page.replace(key, key2text[key][lang])
+            page = page.replace('[LANGUAGE]', lang)
             #print(surveyflow_output_path)
             with open(surveyflow_output_path + lang + '-' +file, 'wt') as f:
                 f.write(page)

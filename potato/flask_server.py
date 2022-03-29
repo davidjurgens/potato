@@ -2539,9 +2539,19 @@ def generate_likert_layout(annotation_scheme):
                   class_name=class_name, id=name, name=name, value=key_value, validation=validation,
                 line_break=line_break, label_for=name, label_args=tooltip, label_text=" " + label_content)
 
+    # allow annotators to choose bad_text label
+    bad_text_schematic = ''
+    if 'bad_text_label' in annotation_scheme and 'label_content' in annotation_scheme['bad_text_label']:
+        name = annotation_scheme['name'] + ':::' + 'bad_text'
+        bad_text_schematic = \
+            ((' <li><input class="{class_name}" type="radio" id="{id}" name="{name}" value="{value}" onclick="onlyOne(this)" validation="{validation}">' + \
+                        ' {line_break} <label for="{label_for}" {label_args}>{label_text}</label></li>')).format(
+                class_name=annotation_scheme['name'], id=name, name=name, value=0, validation=validation,
+                line_break='<br>', label_for=name, label_args='', label_text=annotation_scheme['bad_text_label']['label_content'])
+        key_bindings.append((0, class_name + ': ' + annotation_scheme['bad_text_label']['label_content']))
 
-    schematic += ('  <li>%s</li> </ul></fieldset>\n</form></div>\n' \
-                  % (annotation_scheme['max_label']))
+    schematic += ('  <li>%s</li> %s </ul></fieldset>\n</form></div>\n' \
+                  % (annotation_scheme['max_label'], bad_text_schematic))
     
     return schematic, key_bindings
 
