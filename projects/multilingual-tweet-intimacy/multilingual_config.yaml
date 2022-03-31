@@ -1,5 +1,5 @@
 {
-    "languages": ["English", "Spanish", "Italian", "Dutch", "Portuguese", "Chinese"],
+    "languages": ["English", "Spanish", "Italian", "Dutch", "Portuguese", "Chinese", "Amharic", "Esperanto", "Kurdish"],
 
     "annotation_task_name": "Perception of Tweet Intimacy ([LANGUAGE])",
 
