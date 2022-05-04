@@ -506,12 +506,14 @@ def load_all_data(config):
         logger.debug('Loaded %d regexes to map to %d labels for dynamic highlighting'
                      % (len(re_to_highlights), i))
 
-    # path to save task assignment information
-    task_assignment_path = config['output_annotation_dir'] + config["automatic_assignment"]["output_filename"]
+
 
     # Load the annotation assignment info if automatic task assignment is on.
     # Jiaxin: we are simply saving this as a json file at this moment
     if "automatic_assignment" in config and config["automatic_assignment"]['on']:
+
+        # path to save task assignment information
+        task_assignment_path = config['output_annotation_dir'] + config["automatic_assignment"]["output_filename"]
 
         if os.path.exists(task_assignment_path):
             # load the task assignment if it has been generated and saved
@@ -850,7 +852,7 @@ def home():
     
     if config['__debug__']:
         return annotate_page()
-    elif config['require_no_password']:
+    elif 'require_no_password' in config and config['require_no_password']:
         username = request.args.get('PROLIFIC_PID')
         password = 'require_no_password'
         return annotate_page(username)#render_template("id_login_home.html", title=config['annotation_task_name'])
@@ -868,7 +870,7 @@ def login():
         action = 'login'
         usenrame = 'debug_user'
         password = 'debug'
-    elif config['require_no_password'] == True:
+    elif 'require_no_password' in config and config['require_no_password'] == True:
         action = request.form.get("action")
         username = request.form.get("email")
         password = 'require_no_password'
@@ -877,11 +879,13 @@ def login():
         action = request.form.get("action")
         username = request.form.get("email")
         password = request.form.get("pass")
-        
+
+
     if action == 'login':
-        if config['__debug__'] or config['require_no_password'] or user_config.is_valid_password(username, password):
+        if config['__debug__'] or ('require_no_password' in config and config['require_no_password']) or user_config.is_valid_password(username, password):
             #if surveyflow is setup, jump to the page before annotation
-            annotate_page()
+            print('%s login successful'%username)
+            return annotate_page(username)
         else:
             data = {
                 'username':username,
@@ -1441,7 +1445,7 @@ def annotate_page(username = None):
     #print(all_statistics)
 
     # set the html file as surveyflow pages when the instance is a survey page
-    if instance_id in config['pre_annotation_pages'] + config['post_annotation_pages']:
+    if 'pre_annotation_pages' in config and 'post_annotation_pages' in config and (instance_id in config['pre_annotation_pages'] + config['post_annotation_pages']):
         html_file = instance_id
     #otherwise set the page as the normal annotation page
     else:
@@ -3066,7 +3070,8 @@ def main():
     # Creates the templates we'll use in flask by mashing annotation
     # specification on top of the proto-templates
     generate_site(config)
-    generate_surveyflow_pages(config)
+    if "surveyflow" in config and config["surveyflow"]["on"]:
+        generate_surveyflow_pages(config)
     #quit()
 
     # Generate the output directory if it doesn't exist yet
