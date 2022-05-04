@@ -32,9 +32,7 @@
     },
 
     #list_as_text is used when the input text is actually a list of texts, usually used for best-worst-scaling
-    "list_as_text": {
-      "text_list_prefix_type": 'alphabet'
-    },
+    "list_as_text": False,
 
     "user_config": {
 
@@ -119,6 +117,36 @@
             # simple keybinding and will need to use the full item specification
             # to bind all labels to keys.
             "sequential_key_binding": True,
+        },
+
+        {
+          "annotation_type": "radio",
+          "id": "sexually_explicit",
+          "name": "Is this tweet sexually explicit?",
+          "description": "Is this tweet sexually explicit?",
+
+          # If true, display the labels horizontally
+          "horizontal": True,
+
+          "labels": [
+          {
+            "name":"Yes",
+            "key_value":"q",
+          },
+          {
+            "name":"No",
+            "key_value":"w",
+          }
+          ],
+
+          # adding requirements for labels, when "required" is True, the annotators will be asked to finish the current instance to proceed
+          "label_requirement": {"required":True},
+
+          # If true, numbers [1-len(labels)] will be bound to each
+          # label. Aannotations with more than 10 are not supported with this
+          # simple keybinding and will need to use the full item specification
+          # to bind all labels to keys.
+          "sequential_key_binding": False,
         },
 
     ],
