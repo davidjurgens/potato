@@ -1414,6 +1414,7 @@ def annotate_page(username = None):
 
     # automatically unfold the text list when input text is a list (e.g. best-worst-scaling).
     if 'list_as_text' in config and config['list_as_text']:
+        text = eval(text)
         if type(text) == list:
             if config['list_as_text']['text_list_prefix_type'] == 'alphabet':
                 prefix_list = list(string.ascii_uppercase)
@@ -1421,6 +1422,13 @@ def annotate_page(username = None):
             elif config['list_as_text']['text_list_prefix_type'] == 'number':
                 text = [str(i) + '. ' + text[i] for i in range(len(text))]
             text = '<br>'.join(text)
+        #unfolding dict into different sections 
+        elif type(text) == dict:
+            block = []
+            for key in text:
+                block.append('<div name="instance_text"> <legend> %s </legend> %s <br/> </div>'%(key, text[key]))
+                #instance[key] = text[key]
+            text = '<br>'.join(block)
         else:
             text = text
             #raise Exception('list_as_text is used when input column %s is not a list' % config['item_properties']['text_key'])
