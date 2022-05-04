@@ -1422,7 +1422,7 @@ def annotate_page(username = None):
             elif config['list_as_text']['text_list_prefix_type'] == 'number':
                 text = [str(i) + '. ' + text[i] for i in range(len(text))]
             text = '<br>'.join(text)
-        #unfolding dict into different sections 
+        #unfolding dict into different sections
         elif type(text) == dict:
             block = []
             for key in text:
@@ -2345,11 +2345,12 @@ def generate_multiselect_layout(annotation_scheme):
         name = annotation_scheme['name'] + ':::free_response' 
         class_name = annotation_scheme['name']
         tooltip = 'Entire a label not listed here'
+        instruction = "Other" if "instruction" not in annotation_scheme['has_free_response'] else annotation_scheme['has_free_response']["instruction"]
 
         schematic += \
-        (('<tr><td colspan="%s"><div style="float:left; display:flex; flex-direction:row;">Other? <input class="%s" type="text" id="%s" name="%s">' +
+        (('<tr><td colspan="%s"><div style="float:left; display:flex; flex-direction:row;">%s <input class="%s" type="text" id="%s" name="%s">' +
          '  <label for="%s" %s></label></div></td</tr>')
-         % (str(n_columns), class_name, name, name, name, tooltip))
+         % (str(n_columns), instruction, class_name, name, name, name, tooltip))
 
 
     schematic += '</table>'
@@ -2475,11 +2476,12 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
         name = annotation_scheme['name'] + ':::free_response' 
         class_name = annotation_scheme['name']
         tooltip = 'Entire a label not listed here'
+        instruction = "Other" if "instruction" not in annotation_scheme['has_free_response'] else annotation_scheme['has_free_response']["instruction"]
 
         schematic += \
-        (('Other? <input class="%s" type="text" id="%s" name="%s" >' +
+        (('%s <input class="%s" type="text" id="%s" name="%s" >' +
          '  <label for="%s" %s></label><br/>')
-         % (class_name, name, name, name, tooltip))
+         % (instruction, class_name, name, name, name, tooltip))
 
     schematic += '  </fieldset>\n</form>\n'
     return schematic, key_bindings
