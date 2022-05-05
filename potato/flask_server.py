@@ -1425,10 +1425,14 @@ def annotate_page(username = None):
         #unfolding dict into different sections
         elif type(text) == dict:
             block = []
-            for key in text:
-                block.append('<div name="instance_text"> <legend> %s </legend> %s <br/> </div>'%(key, text[key]))
-                #instance[key] = text[key]
-            text = '<br>'.join(block)
+            if "horizontal" in config['list_as_text'] and config['list_as_text']["horizontal"]:
+                for key in text:
+                    block.append('<div name="instance_text" style="float:left;width:%s;padding:5px;" class="column"> <legend> %s </legend> %s </div>' % ("%d"%int(100/len(text))+"%", key, text[key]))
+                text = '<div class="row" style="display: table"> %s </div>' % (''.join(block))
+            else:
+                for key in text:
+                    block.append('<div name="instance_text"> <legend> %s </legend> %s <br/> </div>'%(key, text[key]))
+                text = ''.join(block)
         else:
             text = text
             #raise Exception('list_as_text is used when input column %s is not a list' % config['item_properties']['text_key'])
