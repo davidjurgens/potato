@@ -35,16 +35,19 @@ def main():
           print("Created directory: %s" % (cur_path))
 
 
-    #load multilingual annotation guideline
-    multilingual_guideline_df = pd.read_csv(multilingual_config["multilingual_guideline_file"])
-
     #build mapping dict
     key2text = defaultdict(dict)
-    for i, row in multilingual_guideline_df.iterrows():
-        if type(row['key']) != str or row['key'][0] != '[' or row['key'][-1] != ']':
-            continue
-        for lang in multilingual_config["languages"]:
-            key2text[row['key']][lang] = row[lang] if type(row[lang]) == str else row[multilingual_config["base_language"]]
+
+
+    if "multilingual_guideline_file" in multilingual_config and os.path.exists(multilingual_config["multilingual_guideline_file"]):
+        #load multilingual annotation guideline
+        multilingual_guideline_df = pd.read_csv(multilingual_config["multilingual_guideline_file"])
+        for i, row in multilingual_guideline_df.iterrows():
+            if type(row['key']) != str or row['key'][0] != '[' or row['key'][-1] != ']':
+                continue
+            for lang in multilingual_config["languages"]:
+                key2text[row['key']][lang] = row[lang] if type(row[lang]) == str else row[multilingual_config["base_language"]]
+
 
     for lang in multilingual_config["languages"]:
         # load basic config file
@@ -84,6 +87,8 @@ def main():
         #setup surveyflow pages
         surveyflow_files = os.listdir(multilingual_config["surveyflow_path"])
         for file in surveyflow_files:
+            if os.path.isdir(multilingual_config["surveyflow_path"] + file):
+                continue
             with open(multilingual_config["surveyflow_path"] + file, 'r') as f:
                 page = f.read()
             for key in key2text:

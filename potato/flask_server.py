@@ -1414,7 +1414,10 @@ def annotate_page(username = None):
 
     # automatically unfold the text list when input text is a list (e.g. best-worst-scaling).
     if 'list_as_text' in config and config['list_as_text']:
-        text = eval(text)
+        try:
+            text = eval(text)
+        except:
+            text = str(text)
         if type(text) == list:
             if config['list_as_text']['text_list_prefix_type'] == 'alphabet':
                 prefix_list = list(string.ascii_uppercase)
