@@ -559,7 +559,7 @@ def load_all_data(config):
                 task_assignment = json.load(r)
         else:
             # Otherwise generate a new task assignment dict
-            task_assignment = {'assigned':{}, 'unassigned':{}, 'testing': {'test_question_per_annotator': 0, 'ids': []}, 'prestudy_ids': [], 'passed_user':[], 'failed_user':[]}
+            task_assignment = {'assigned':{}, 'unassigned':{}, 'testing': {'test_question_per_annotator': 0, 'ids': []}, 'prestudy_ids': [], 'prestudy_passed_users':[], 'prestudy_failed_users':[]}
             # setting test_question_per_annotator if it is defined in automatic_assignment, otherwise it is default to 0 and no test question will be used
             if "test_question_per_annotator" in config["automatic_assignment"]:
                 task_assignment['testing']['test_question_per_annotator'] = config["automatic_assignment"]["test_question_per_annotator"]
@@ -1032,6 +1032,14 @@ def get_prestudy_label(label):
     return config['prestudy']['answer_mapping'][label]
 
 
+def print_prestudy_result():
+    global task_assignment
+    print('----- prestudy test restult -----')
+    print('passed annotators: ', task_assignment['prestudy_passed_users'])
+    print('failed annotators: ', task_assignment['prestudy_failed_users'])
+    print('pass rate: ', len(task_assignment['prestudy_passed_users']) / len(task_assignment['prestudy_passed_users'] + task_assignment['prestudy_failed_users']))
+
+
 def check_prestudy_status(username):
     '''
     Check whether a user has passed the prestudy test (this function will only be used )
@@ -1065,10 +1073,14 @@ def check_prestudy_status(username):
     #check if the score is higher than the minimum defined in config
     if (sum(res) / len(res)) < config['prestudy']['minimum_score']:
         user_state.set_prestudy_status(False)
+        task_assignment['prestudy_failed_users'].append(username)
         prestudy_result = 'prestudy just failed'
     else:
         user_state.set_prestudy_status(True)
+        task_assignment['prestudy_passed_users'].append(username)
         prestudy_result = 'prestudy just passed'
+
+    print_prestudy_result()
 
     # update the annotation list according the prestudy test result
     assign_instances_to_user(username)
@@ -1144,7 +1156,6 @@ def assign_instances_to_user(username):
         logging.warning("Trying to assign instances to user when the prestudy test is not completed, assigning process stoppped")
         return False
     elif prestudy_status == False:
-        task_assignment['failed_user'].append(username)
         sampled_keys = task_assignment['prestudy_failed_pages']
     else:
 
@@ -2340,7 +2351,7 @@ def generate_surveyflow_pages(config):
                 cur_html_template = cur_html_template.replace(
                     '<a class="btn btn-secondary" href="#" role="button" onclick="click_to_prev()">Move backward</a>',
                     '<a class="btn btn-secondary" href="#" role="button" onclick="click_to_prev()" hidden>Move backward</a>')
-            elif i == len(surveyflow_pages) - 1:
+            elif i == len(surveyflow_pages) - 1 or re.search('prestudy_fail', page):
                 keybindings_desc = generate_keybidings_sidebar(all_keybindings[:-1])
                 cur_html_template = cur_html_template.replace(
                     '<a class="btn btn-secondary" href="#" role="button" onclick="click_to_next()">Move forward</a>',
