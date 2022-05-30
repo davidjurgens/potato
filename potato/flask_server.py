@@ -220,11 +220,24 @@ class UserAnnotationState:
 
         self.instance_cursor = 0
 
+        #Indicator of whether the user has passed the prestudy, None means no prestudy or prestudy not complete, True means passed and False means failed
+        self.prestudy_passed = None
+
     def generate_id_order_mapping(self,instance_id_ordering):
         id_order_mapping = {}
         for i in range(len(instance_id_ordering)):
             id_order_mapping[instance_id_ordering[i]] = i
         return id_order_mapping
+
+    # add new assigned data to the user state
+    def add_new_assigned_data(self, new_assigned_data):
+        for key in new_assigned_data:
+            self.instance_id_to_data[key] = new_assigned_data[key]
+            self.instance_id_ordering.append(key)
+        self.instance_id_to_order = self.generate_id_order_mapping(self.instance_id_ordering)
+
+    def get_assigned_data(self):
+        return self.instance_id_to_data
 
     def current_instance(self):
         #print("current_instance(): cursor is now ", self.instance_cursor)
@@ -238,8 +251,13 @@ class UserAnnotationState:
     def cursor_to_real_instance_id(self, cursor):
         return self.instance_id_ordering[cursor]
 
+    def is_prestudy_question(self, cursor):
+        return self.instance_id_ordering[cursor][:8] == 'prestudy'
+
     def go_back(self):
         if self.instance_cursor > 0:
+            if self.prestudy_passed != None and self.is_prestudy_question(self.instance_cursor - 1):
+                return
             self.instance_cursor -= 1
 
     def go_forward(self):
@@ -264,6 +282,16 @@ class UserAnnotationState:
 
     def get_assigned_instance_count(self):
         return len(self.instance_id_ordering)
+
+    def set_prestudy_status(self, whether_passed):
+        if self.prestudy_passed != None:
+            return False
+        self.prestudy_passed = whether_passed
+        return True
+
+
+    def get_prestudy_status(self):
+        return  self.prestudy_passed
 
     def set_annotation(self, instance_id, schema_to_label_to_value, behavioral_data_dict):
         '''
@@ -402,6 +430,7 @@ def load_all_data(config):
     text_key = config['item_properties']['text_key']
     id_key = config['item_properties']['id_key']
 
+    # todo: depreciate this variable since it's not actively used
     items_to_annotate = []
 
     # Keep the data in the same order we read it in
@@ -478,6 +507,15 @@ def load_all_data(config):
             instance_id_to_data.move_to_end(page, last=False)
             items_to_annotate.insert(0, item)
 
+    for it in ['prestudy_failed_pages', 'prestudy_passed_pages']:
+        if it in config:
+            for page in config[it]:
+                #todo currently we simply remove the language type before -, but we need a more elegant way for this in the future
+                item = {"id":page,"text":page.split('-')[-1][:-5]}
+                instance_id_to_data.update({page:item})
+                instance_id_to_data.move_to_end(page, last=False)
+                items_to_annotate.insert(0, item)
+
     if "post_annotation_pages" in config:
         for page in config["post_annotation_pages"]:
             item = {"id":page,"text":page.split('-')[-1][:-5]}
@@ -521,15 +559,15 @@ def load_all_data(config):
                 task_assignment = json.load(r)
         else:
             # Otherwise generate a new task assignment dict
-            task_assignment = {'assigned':{}, 'unassigned':{}, 'testing': {'test_question_per_annotator': 0, 'ids': []}}
+            task_assignment = {'assigned':{}, 'unassigned':{}, 'testing': {'test_question_per_annotator': 0, 'ids': []}, 'prestudy_ids': [], 'passed_user':[], 'failed_user':[]}
             # setting test_question_per_annotator if it is defined in automatic_assignment, otherwise it is default to 0 and no test question will be used
             if "test_question_per_annotator" in config["automatic_assignment"]:
                 task_assignment['testing']['test_question_per_annotator'] = config["automatic_assignment"]["test_question_per_annotator"]
 
-            for it in ['pre', 'post']:
-                if it + '_annotation_pages' in config:
-                    task_assignment[it] = config[it + '_annotation_pages']
-                    for p in config[it + '_annotation_pages']:
+            for it in ['pre_annotation', 'prestudy_passed', 'prestudy_failed', 'post_annotation']:
+                if it + '_pages' in config:
+                    task_assignment[it + '_pages'] = config[it + '_pages']
+                    for p in config[it + '_pages']:
                         task_assignment['assigned'][p] = 0
 
             for id in instance_id_to_data:
@@ -538,6 +576,9 @@ def load_all_data(config):
                 # add test questions to the assignment dict
                 if re.search('testing', id):
                     task_assignment['testing']['ids'].append(id)
+                    continue
+                elif re.search('prestudy', id):
+                    task_assignment['prestudy_ids'].append(id)
                     continue
                 # set the total labels per instance, if not specified, default to 3
                 task_assignment['unassigned'][id] = config["automatic_assignment"]["labels_per_instance"] if "labels_per_instance" in config["automatic_assignment"] else 3
@@ -981,11 +1022,194 @@ def get_users():
     return user_to_annotation_state.keys()
 
 
+def get_prestudy_label(label):
+    global config
 
+    for schema in config["annotation_schemes"]:
+        if schema['name'] == config['prestudy']['question_key']:
+            cur_schema = schema['annotation_type']
+    label = convert_labels(label[config['prestudy']['question_key']], cur_schema)
+    return config['prestudy']['answer_mapping'][label]
+
+
+def check_prestudy_status(username):
+    '''
+    Check whether a user has passed the prestudy test (this function will only be used )
+    :return:
+    '''
+    global task_assignment
+    global config
+    global instance_id_to_data
+
+    if 'prestudy' not in config:
+        return 'no prestudy test'
+    user_state = lookup_user_state(username)
+
+    #directly return the status if the user has passed/failed the prestudy before
+    if user_state.get_prestudy_status() == False:
+        return 'prestudy failed'
+    elif user_state.get_prestudy_status() == True:
+        return 'prestudy passed'
+
+    res = []
+    for id in task_assignment['prestudy_ids']:
+        label = user_state.get_annotations(id)
+        if label == None:
+            return 'prestudy not complete'
+        groundtruth = instance_id_to_data[id][config['prestudy']['groundtruth_key']]
+        label = get_prestudy_label(label)
+        print(label, groundtruth)
+        res.append(label == groundtruth)
+
+    print(res, sum(res) / len(res))
+    #check if the score is higher than the minimum defined in config
+    if (sum(res) / len(res)) < config['prestudy']['minimum_score']:
+        user_state.set_prestudy_status(False)
+        prestudy_result = 'prestudy just failed'
+    else:
+        user_state.set_prestudy_status(True)
+        prestudy_result = 'prestudy just passed'
+
+    # update the annotation list according the prestudy test result
+    assign_instances_to_user(username)
+
+    return prestudy_result
+
+
+
+def check_annotation_progress():
+    '''
+    check the current progress of annotation.
+    :return:
+    '''
+
+
+
+
+def generate_initial_user_dataflow(username):
+    '''
+       Generate initial dataflow for a new annotator including surveyflows and prestudy
+       :return: UserAnnotationState
+       '''
+
+    global user_to_annotation_state
+    global config
+    global instance_id_to_data
+
+    sampled_keys = []
+    for it in ['pre_annotation_pages', 'prestudy_ids']:
+        if it in task_assignment:
+            sampled_keys += task_assignment[it]
+        print(it, task_assignment[it])
+
+    print(sampled_keys)
+
+    assigned_user_data = {key: instance_id_to_data[key] for key in sampled_keys}
+
+    # save the assigned user data dict
+    user_dir = path.join(config['output_annotation_dir'], username)
+    assigned_user_data_path = user_dir + '/assigned_user_data.json'
+
+    if not os.path.exists(user_dir):
+        os.makedirs(user_dir)
+        logger.debug("Created state directory for user \"%s\"" % (username))
+
+    with open(assigned_user_data_path, 'w') as w:
+        json.dump(assigned_user_data, w)
+
+    # return the assigned user data dict
+    return assigned_user_data
 
 
 
 def assign_instances_to_user(username):
+    '''
+    Assign instances to a user
+    :return: UserAnnotationState
+    '''
+
+    global user_to_annotation_state
+    global config
+    global instance_id_to_data
+
+    #"sampling_strategy:": 'random',
+
+   # "instance_per_annotator": 50,
+
+
+    user_state = lookup_user_state(username)
+    prestudy_status = user_state.get_prestudy_status()
+
+    if prestudy_status == None:
+        logging.warning("Trying to assign instances to user when the prestudy test is not completed, assigning process stoppped")
+        return False
+    elif prestudy_status == False:
+        task_assignment['failed_user'].append(username)
+        sampled_keys = task_assignment['prestudy_failed_pages']
+    else:
+
+        if "sampling_strategy:" not in config["automatic_assignment"]:
+            logger.debug(
+                "Undefined sampling strategy, default to random assignment")
+            config["automatic_assignment"]["sampling_strategy"] = 'random'
+
+        # Force the sampling strategy to be random at this moment, will change this when more sampling strategies are created
+        config["automatic_assignment"]["sampling_strategy"] = 'random'
+
+        if config["automatic_assignment"]["sampling_strategy"] == 'random':
+            sampled_keys = random.sample(list(task_assignment['unassigned'].keys()), config["automatic_assignment"]["instance_per_annotator"])
+            # update task_assignment to keep track of task assignment status globally
+            for key in sampled_keys:
+                if key not in task_assignment['assigned']:
+                    task_assignment['assigned'][key] = []
+                task_assignment['assigned'][key].append(username)
+                task_assignment['unassigned'][key] -= 1
+                if task_assignment['unassigned'][key] == 0:
+                    del task_assignment['unassigned'][key]
+
+            # sample and insert test questions
+            if task_assignment['testing']['test_question_per_annotator'] > 0:
+                sampled_testing_ids = random.sample(task_assignment['testing']['ids'], k = task_assignment['testing']['test_question_per_annotator'])
+                # adding test question sampling status to the task assignment
+                for key in sampled_testing_ids:
+                    if key not in task_assignment['assigned']:
+                        task_assignment['assigned'][key] = []
+                    task_assignment['assigned'][key].append(username)
+                    sampled_keys.insert(random.randint(0,len(sampled_keys)-1), key)
+
+        sampled_keys = task_assignment['prestudy_passed_pages'] + sampled_keys
+
+        if 'post_annotation_pages' in task_assignment:
+            sampled_keys =  sampled_keys + task_assignment['post_annotation_pages']
+
+    print(sampled_keys)
+
+    assigned_user_data = {key:instance_id_to_data[key] for key in sampled_keys}
+    user_state.add_new_assigned_data(assigned_user_data)
+
+
+    # save the assigned user data dict
+    user_dir = path.join(config['output_annotation_dir'], username)
+    assigned_user_data_path =  user_dir + '/assigned_user_data.json'
+
+    if not os.path.exists(user_dir):
+        os.makedirs(user_dir)
+        logger.debug("Created state directory for user \"%s\"" % (username))
+
+    with open(assigned_user_data_path, 'w') as w:
+        json.dump(user_state.get_assigned_data(), w)
+
+    # save task assignment status
+    task_assignment_path = config['output_annotation_dir'] + config["automatic_assignment"]["output_filename"]
+    with open(task_assignment_path, 'w') as w:
+        json.dump(task_assignment, w)
+
+    # return the assigned user data dict
+    return assigned_user_data
+
+
+
+def generate_full_user_dataflow(username):
     '''
     Assign instances to a user
     :return: UserAnnotationState
@@ -1028,17 +1252,18 @@ def assign_instances_to_user(username):
                 task_assignment['assigned'][key].append(username)
                 sampled_keys.insert(random.randint(0,len(sampled_keys)-1), key)
 
+
         # save task assignment status
         task_assignment_path = config['output_annotation_dir'] + config["automatic_assignment"]["output_filename"]
         with open(task_assignment_path, 'w') as w:
             json.dump(task_assignment, w)
 
 
-        if 'pre' in task_assignment:
-            sampled_keys = task_assignment['pre'] + sampled_keys
+        if 'pre_annotation_pages' in task_assignment:
+            sampled_keys = task_assignment['pre_annotation_pages'] + sampled_keys
 
-        if 'post' in task_assignment:
-            sampled_keys =  sampled_keys + task_assignment['post']
+        if 'post_annotation_pages' in task_assignment:
+            sampled_keys =  sampled_keys + task_assignment['post_annotation_pages']
 
         print(sampled_keys)
 
@@ -1076,7 +1301,10 @@ def lookup_user_state(username):
             #print(type(config["automatic_assignment"]['on']))
             #assign instances to new user when automatic assignment is turned on
 
-            user_state = UserAnnotationState(assign_instances_to_user(username))
+            if 'prestudy' in config and config["prestudy"]['on']:
+                user_state = UserAnnotationState(generate_initial_user_dataflow(username))
+            else:
+                user_state = UserAnnotationState(generate_full_user_dataflow(username))
             user_to_annotation_state[username] = user_state
         else:
             #assign all the instance to each user when automatic assignment is turned off
@@ -1383,6 +1611,8 @@ def annotate_page(username = None):
     ism = request.form.get("label")
     action = request.form.get("src")
 
+    print(check_prestudy_status(username))
+
     if action == "home":
         load_user_state(username)
         # gprint("session recovered")
@@ -1459,8 +1689,8 @@ def annotate_page(username = None):
     #all_statistics['Agreement'] = get_agreement_score('all', 'all', return_type='overall_average')
     #print(all_statistics)
 
-    # set the html file as surveyflow pages when the instance is a survey page
-    if 'pre_annotation_pages' in config and 'post_annotation_pages' in config and (instance_id in config['pre_annotation_pages'] + config['post_annotation_pages']):
+    # set the html file as surveyflow pages when the instance is a not an annotation page (survey pages, prestudy pass or fail page)
+    if 'non_annotation_pages' in config and (instance_id in config['non_annotation_pages']):
         html_file = instance_id
     #otherwise set the page as the normal annotation page
     else:
@@ -2024,7 +2254,10 @@ def generate_surveyflow_pages(config):
     #grab survey flow files
     surveyflow_pages = defaultdict(list)
     surveyflow = config['surveyflow']
-    for file in surveyflow['pre_annotation'] + surveyflow['post_annotation']:
+    surveyflow_list = []
+    for key in surveyflow['order']:
+        surveyflow_list += surveyflow[key]
+    for file in surveyflow_list:
         if file.split('.')[-1] == 'jsonl':
             with open(file, 'r') as r:
                 for line in r:
@@ -2138,8 +2371,11 @@ def generate_surveyflow_pages(config):
 
             logger.debug('writing annotation html to %s%s.html' % (output_html_fname,page))
 
-    config['pre_annotation_pages'] = [config['surveyflow_site_file'][it.split('.')[0].split('/')[-1]] for it in config['surveyflow']['pre_annotation']]
-    config['post_annotation_pages'] = [config['surveyflow_site_file'][it.split('.')[0].split('/')[-1]] for it in config['surveyflow']['post_annotation']]
+    config['non_annotation_pages'] = []
+    for key in surveyflow['order']:
+        config['%s_pages'%key] = [config['surveyflow_site_file'][it.split('.')[0].split('/')[-1]] for it in config['surveyflow'][key]]
+        config['non_annotation_pages'] += config['%s_pages'%key]
+        #config['post_annotation_pages'] = [config['surveyflow_site_file'][it.split('.')[0].split('/')[-1]] for it in config['surveyflow']['post_annotation']]
 
 
 
@@ -3089,6 +3325,8 @@ def main():
     generate_site(config)
     if "surveyflow" in config and config["surveyflow"]["on"]:
         generate_surveyflow_pages(config)
+
+
     #quit()
 
     # Generate the output directory if it doesn't exist yet
