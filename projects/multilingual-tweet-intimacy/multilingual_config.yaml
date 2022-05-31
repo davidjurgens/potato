@@ -10,7 +10,7 @@
     "base_dir": "projects/multilingual-tweet-intimacy/",
 
     "data_files": [
-            "projects/multilingual-tweet-intimacy/data_files/likert_pilot_100_[LANGUAGE].jsonl"
+            "../intimacy-in-public-messages/shared_data/data4ann/[LANGUAGE]/batch_1_500.jsonl"
     ],
 
     "surveyflow_path": "data/surveyflow/",
@@ -18,6 +18,6 @@
 
     "multilingual_guideline_file": "projects/multilingual-tweet-intimacy/Multilingual_Intimacy_Guideline.csv",
 
-    "output_annotation_dir": "projects/multilingual-tweet-intimacy/annotation_output/pilot/[LANGUAGE]/"
+    "output_annotation_dir": "projects/multilingual-tweet-intimacy/annotation_output/full/[LANGUAGE]/"
 
 }
