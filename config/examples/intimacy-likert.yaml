@@ -53,6 +53,7 @@
     # define the surveyflow of the system, set up the pages before and after the data annotation page
     "surveyflow": {
         "on": True,
+        "order" : ['pre_annotation', 'post_annotation'],
         "pre_annotation": ['data/surveyflow/intro.jsonl', 'data/surveyflow/consent.jsonl', 'data/surveyflow/instruction.jsonl'],
         "post_annotation": ['data/surveyflow/demographic_questions.jsonl','data/surveyflow/end.jsonl'],
         # If set, we will automatically generate testing questions similar to the annotation instances, but explicitly ask the annotator to choose one option
