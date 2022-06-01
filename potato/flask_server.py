@@ -2691,9 +2691,9 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
             key2label[key_value] = label
             label2key[label] = key_value
             key_bindings.append((key_value, class_name + ': ' + label))
-            
 
-        label_content = label
+        label_content = label_data['key_value'] + '.' + label if ('displaying_score' in annotation_scheme and annotation_scheme['displaying_score']) else label
+        #label_content = label
         if annotation_scheme.get("video_as_label", None) == "True":
             assert "videopath" in label_data, "Video path should in each label_data when video_as_label is True."
             video_path = label_data["videopath"]
