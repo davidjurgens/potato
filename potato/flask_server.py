@@ -222,6 +222,10 @@ class UserAnnotationState:
 
         #Indicator of whether the user has passed the prestudy, None means no prestudy or prestudy not complete, True means passed and False means failed
         self.prestudy_passed = None
+        #Indicator of whether the user has agreed to participate this study, None means consent not complete, True means yes and False measn no
+        self.consent_agreed = None
+        #Total annotation instances assigned to a user
+        self.real_instance_assigned_count = 0
 
     def generate_id_order_mapping(self,instance_id_ordering):
         id_order_mapping = {}
@@ -289,9 +293,17 @@ class UserAnnotationState:
         self.prestudy_passed = whether_passed
         return True
 
-
+    # check if the user has passed the prestudy test
     def get_prestudy_status(self):
         return  self.prestudy_passed
+
+    # check if the user has agreed to participate this study
+    def get_consent_status(self):
+        return  self.consent_agreed
+
+    # check the number of assigned instances for a user (only the core annotation parts)
+    def get_real_assigned_instance_count(self):
+        return  self.real_instance_assigned_count
 
     def set_annotation(self, instance_id, schema_to_label_to_value, behavioral_data_dict):
         '''
@@ -330,6 +342,13 @@ class UserAnnotationState:
             if 'behavioral_data' in inst:
                 behavior_dict = inst['behavioral_data']
                 #print(behavior_dict)
+
+            if re.search('consent', inst_id):
+                consent_key = 'I want to participate in this research and continue with the study.'
+                if 'Yes' in annotation[consent_key] and annotation[consent_key]['Yes'] == 'true':
+                    self.consent_agreed = True
+                else:
+                    self.consent_agreed = False
 
             self.instance_id_to_labeling[inst_id] = annotation
             self.instance_id_to_behavioral_data[inst_id] = behavior_dict
@@ -824,7 +843,7 @@ def update_annotation_state(username, form):
 
         schema_to_label_to_value[annotation_schema][annotation_label] = annotation_value
 
-    print(schema_to_label_to_value)
+    print(username, schema_to_label_to_value)
         #schema_to_labels[annotation_schema].append(annotation_label)
 
     # print("-- for user %s, instance %s -> %s" % (username, instance_id, str(schema_to_labels)))
@@ -835,10 +854,25 @@ def update_annotation_state(username, form):
 
     did_change = user_state.set_annotation(instance_id, schema_to_label_to_value, behavioral_data_dict)
 
+
     # update the behavioral information regarding time only when the annotations are changed
     if did_change:
         user_state.instance_id_to_behavioral_data[instance_id] = behavioral_data_dict
         # print('misc information updated')
+
+        # todo: we probably need a more elegant way to check the status of user consent
+        # when the user agreed to participate, try to assign
+        if re.search('consent', instance_id):
+            consent_key = 'I want to participate in this research and continue with the study.'
+            if 'Yes' in schema_to_label_to_value[consent_key] and schema_to_label_to_value[consent_key]['Yes'] == 'true':
+                user_state.consent_agreed = True
+            else:
+                user_state.consent_agreed = False
+            assign_instances_to_user(username)
+
+        #when the user is working on prestudy, check the status
+        if re.search('prestudy', instance_id):
+            print(check_prestudy_status(username))
 
     return did_change
 
@@ -1049,7 +1083,7 @@ def check_prestudy_status(username):
     global config
     global instance_id_to_data
 
-    if 'prestudy' not in config:
+    if 'prestudy' not in config or config['prestudy']['on'] == False:
         return 'no prestudy test'
     user_state = lookup_user_state(username)
 
@@ -1086,6 +1120,9 @@ def check_prestudy_status(username):
     assign_instances_to_user(username)
 
     return prestudy_result
+
+
+
 
 
 
@@ -1134,6 +1171,47 @@ def generate_initial_user_dataflow(username):
 
 
 
+def sample_instances(username):
+    global user_to_annotation_state
+    global config
+    global instance_id_to_data
+
+    if "sampling_strategy:" not in config["automatic_assignment"]:
+        logger.debug(
+            "Undefined sampling strategy, default to random assignment")
+        config["automatic_assignment"]["sampling_strategy"] = 'random'
+
+    # Force the sampling strategy to be random at this moment, will change this when more sampling strategies are created
+    config["automatic_assignment"]["sampling_strategy"] = 'random'
+
+    if config["automatic_assignment"]["sampling_strategy"] == 'random':
+        sampled_keys = random.sample(list(task_assignment['unassigned'].keys()),
+                                     config["automatic_assignment"]["instance_per_annotator"])
+        # update task_assignment to keep track of task assignment status globally
+        for key in sampled_keys:
+            if key not in task_assignment['assigned']:
+                task_assignment['assigned'][key] = []
+            task_assignment['assigned'][key].append(username)
+            task_assignment['unassigned'][key] -= 1
+            if task_assignment['unassigned'][key] == 0:
+                del task_assignment['unassigned'][key]
+
+        # sample and insert test questions
+        if task_assignment['testing']['test_question_per_annotator'] > 0:
+            sampled_testing_ids = random.sample(task_assignment['testing']['ids'],
+                                                k=task_assignment['testing']['test_question_per_annotator'])
+            # adding test question sampling status to the task assignment
+            for key in sampled_testing_ids:
+                if key not in task_assignment['assigned']:
+                    task_assignment['assigned'][key] = []
+                task_assignment['assigned'][key].append(username)
+                sampled_keys.insert(random.randint(0, len(sampled_keys) - 1), key)
+
+    return sampled_keys
+
+
+
+
 def assign_instances_to_user(username):
     '''
     Assign instances to a user
@@ -1150,54 +1228,45 @@ def assign_instances_to_user(username):
 
 
     user_state = lookup_user_state(username)
+
+    #check if the user has already been assigned with instances to annotate
+    #Currently we are just assigning once, but we might chance this later
+    if user_state.get_real_assigned_instance_count() > 0:
+        logging.warning(
+            "Instance already assigned to user %s, assigning process stoppped"%username)
+        return False
+
     prestudy_status = user_state.get_prestudy_status()
+    consent_status = user_state.get_consent_status()
 
     if prestudy_status == None:
-        logging.warning("Trying to assign instances to user when the prestudy test is not completed, assigning process stoppped")
-        return False
+        if 'prestudy' in config and config['prestudy']['on']:
+            logging.warning("Trying to assign instances to user when the prestudy test is not completed, assigning process stoppped")
+            return False
+        else:
+            if consent_status:
+                sampled_keys = sample_instances(username)
+                user_state.real_instance_assigned_count += len(sampled_keys)
+                if 'post_annotation_pages' in task_assignment:
+                    sampled_keys = sampled_keys + task_assignment['post_annotation_pages']
+            else:
+                logging.warning(
+                    "Trying to assign instances to user when the user has yet agreed to participate. assigning process stoppped")
+                return False
     elif prestudy_status == False:
         sampled_keys = task_assignment['prestudy_failed_pages']
     else:
-
-        if "sampling_strategy:" not in config["automatic_assignment"]:
-            logger.debug(
-                "Undefined sampling strategy, default to random assignment")
-            config["automatic_assignment"]["sampling_strategy"] = 'random'
-
-        # Force the sampling strategy to be random at this moment, will change this when more sampling strategies are created
-        config["automatic_assignment"]["sampling_strategy"] = 'random'
-
-        if config["automatic_assignment"]["sampling_strategy"] == 'random':
-            sampled_keys = random.sample(list(task_assignment['unassigned'].keys()), config["automatic_assignment"]["instance_per_annotator"])
-            # update task_assignment to keep track of task assignment status globally
-            for key in sampled_keys:
-                if key not in task_assignment['assigned']:
-                    task_assignment['assigned'][key] = []
-                task_assignment['assigned'][key].append(username)
-                task_assignment['unassigned'][key] -= 1
-                if task_assignment['unassigned'][key] == 0:
-                    del task_assignment['unassigned'][key]
-
-            # sample and insert test questions
-            if task_assignment['testing']['test_question_per_annotator'] > 0:
-                sampled_testing_ids = random.sample(task_assignment['testing']['ids'], k = task_assignment['testing']['test_question_per_annotator'])
-                # adding test question sampling status to the task assignment
-                for key in sampled_testing_ids:
-                    if key not in task_assignment['assigned']:
-                        task_assignment['assigned'][key] = []
-                    task_assignment['assigned'][key].append(username)
-                    sampled_keys.insert(random.randint(0,len(sampled_keys)-1), key)
-
+        sampled_keys = sample_instances(username)
+        user_state.real_instance_assigned_count += len(sampled_keys)
         sampled_keys = task_assignment['prestudy_passed_pages'] + sampled_keys
-
         if 'post_annotation_pages' in task_assignment:
-            sampled_keys =  sampled_keys + task_assignment['post_annotation_pages']
+            sampled_keys = sampled_keys + task_assignment['post_annotation_pages']
 
     print(sampled_keys)
-
     assigned_user_data = {key:instance_id_to_data[key] for key in sampled_keys}
     user_state.add_new_assigned_data(assigned_user_data)
 
+    print('assinged %d instances to %s, total pages: %s'%(user_state.get_real_assigned_instance_count(), username, user_state.get_assigned_instance_count()))
 
     # save the assigned user data dict
     user_dir = path.join(config['output_annotation_dir'], username)
@@ -1215,6 +1284,8 @@ def assign_instances_to_user(username):
     with open(task_assignment_path, 'w') as w:
         json.dump(task_assignment, w)
 
+    user_state.instance_assigned = True
+
     # return the assigned user data dict
     return assigned_user_data
 
@@ -1222,7 +1293,7 @@ def assign_instances_to_user(username):
 
 def generate_full_user_dataflow(username):
     '''
-    Assign instances to a user
+    Directly assign all the instances to a user at the beginning of the study
     :return: UserAnnotationState
     '''
 
@@ -1269,6 +1340,8 @@ def generate_full_user_dataflow(username):
         with open(task_assignment_path, 'w') as w:
             json.dump(task_assignment, w)
 
+        #add the amount of sampled instances
+        real_assigned_instance_count = len(sampled_keys)
 
         if 'pre_annotation_pages' in task_assignment:
             sampled_keys = task_assignment['pre_annotation_pages'] + sampled_keys
@@ -1292,7 +1365,7 @@ def generate_full_user_dataflow(username):
             json.dump(assigned_user_data, w)
 
         # return the assigned user data dict
-        return assigned_user_data
+        return assigned_user_data, real_assigned_instance_count
 
 
 def lookup_user_state(username):
@@ -1315,7 +1388,10 @@ def lookup_user_state(username):
             if 'prestudy' in config and config["prestudy"]['on']:
                 user_state = UserAnnotationState(generate_initial_user_dataflow(username))
             else:
-                user_state = UserAnnotationState(generate_full_user_dataflow(username))
+                #assinged_data, real_assigned_instance_count = generate_full_user_dataflow(username)
+                #user_state = UserAnnotationState(assinged_data)
+                #user_state.real_instance_assigned_count = real_assigned_instance_count
+                user_state = UserAnnotationState(generate_initial_user_dataflow(username))
             user_to_annotation_state[username] = user_state
         else:
             #assign all the instance to each user when automatic assignment is turned off
@@ -1622,7 +1698,6 @@ def annotate_page(username = None):
     ism = request.form.get("label")
     action = request.form.get("src")
 
-    print(check_prestudy_status(username))
 
     if action == "home":
         load_user_state(username)
