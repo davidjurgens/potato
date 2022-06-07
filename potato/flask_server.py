@@ -930,7 +930,7 @@ def home():
     elif 'require_no_password' in config and config['require_no_password']:
         username = request.args.get('PROLIFIC_PID')
         password = 'require_no_password'
-        return annotate_page(username)#render_template("id_login_home.html", title=config['annotation_task_name'])
+        return annotate_page(username, action='home')#render_template("id_login_home.html", title=config['annotation_task_name'])
     else:
         return render_template("home.html", title=config['annotation_task_name'])
 
@@ -1368,6 +1368,14 @@ def generate_full_user_dataflow(username):
         return assigned_user_data, real_assigned_instance_count
 
 
+def instances_all_assigned():
+    global task_assignment
+    if 'unassigned' in task_assignment and len(task_assignment['unassigned']) == 0:
+        return True
+    return False
+
+
+
 def lookup_user_state(username):
     global config
     '''
@@ -1589,6 +1597,7 @@ def load_user_state(username):
         logger.info("Loaded %d annotations for known user \"%s\"" %
                     (user_state.get_annotation_count(), len(assigned_user_data)))
 
+        return 'old user loaded'
     # New user, so initialize state
     else:
 
@@ -1598,7 +1607,11 @@ def load_user_state(username):
         #user_to_annotation_state[username] = user_state
 
         #create new user state with the look up function
+        if instances_all_assigned():
+            return 'all instances have been assigned'
+
         lookup_user_state(username)
+        return 'new user initialized'
 
 
 def get_cur_instance_for_user(username):
@@ -1627,7 +1640,7 @@ def previous_response(user, file_path):
 
 
 @app.route("/annotate", methods=["GET", "POST"])
-def annotate_page(username = None):
+def annotate_page(username = None, action=None):
     '''
     Parses the input received from the user's annotation and takes some action
     based on what was clicked/typed. This method is the main switch for changing
@@ -1641,7 +1654,7 @@ def annotate_page(username = None):
         username_from_last_page = request.form.get("email")
         #print(username_on_page)
         if username_from_last_page == None:
-            return render_template("error.html")
+            return render_template("error.html", error_message='You must use the link provided by prolific to work on this study')
         else:
             username = username_from_last_page
 
@@ -1696,11 +1709,14 @@ def annotate_page(username = None):
             th.start()
 
     ism = request.form.get("label")
-    action = request.form.get("src")
+    action = request.form.get("src") if action == None else action
 
 
     if action == "home":
-        load_user_state(username)
+        result_code = load_user_state(username)
+        print(result_code)
+        if result_code == 'all instances have been assigned':
+            return render_template('error.html', error_message='Sorry that you come a bit late. We have collected enough responses for our study. However, prolific sometimes will recruit more participants than we expected. We are sorry for the inconvenience!')
         # gprint("session recovered")
 
     elif action == "prev_instance":
