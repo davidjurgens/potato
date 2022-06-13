@@ -1185,8 +1185,20 @@ def sample_instances(username):
     config["automatic_assignment"]["sampling_strategy"] = 'random'
 
     if config["automatic_assignment"]["sampling_strategy"] == 'random':
-        sampled_keys = random.sample(list(task_assignment['unassigned'].keys()),
-                                     config["automatic_assignment"]["instance_per_annotator"])
+        #previously we were doing random sample directly, however, when there are a large amount of instances and users, it is possible that some instances are rarely sampled and some are oversampled at the end of the sampling process
+        #sampled_keys = random.sample(list(task_assignment['unassigned'].keys()),
+        #                             config["automatic_assignment"]["instance_per_annotator"])
+
+        #Currently we will shuffle the unassinged keys first, and then rank the dict based on the availability of each instance, and they directly get the first N instances
+        unassigned_dict = task_assignment['unassigned']
+        #print('before', unassigned_dict)
+        unassigned_dict = {k:unassigned_dict[k] for k in random.sample(list(unassigned_dict.keys()), len(unassigned_dict))}
+        sorted_keys = [it[0] for it in sorted(unassigned_dict.items(), key=lambda item: item[1], reverse=True)]
+        #print('sorted', sorted(unassigned_dict.items(), key=lambda item: item[1], reverse=True))
+        sampled_keys = sorted_keys[:min(config["automatic_assignment"]["instance_per_annotator"], len(sorted_keys))]
+        #print(sorted_keys)
+
+
         # update task_assignment to keep track of task assignment status globally
         for key in sampled_keys:
             if key not in task_assignment['assigned']:
@@ -1370,7 +1382,8 @@ def generate_full_user_dataflow(username):
 
 def instances_all_assigned():
     global task_assignment
-    if 'unassigned' in task_assignment and len(task_assignment['unassigned']) == 0:
+
+    if 'unassigned' in task_assignment and len(task_assignment['unassigned']) <= int(config["automatic_assignment"]["instance_per_annotator"] % 0.8):
         return True
     return False
 
@@ -3443,6 +3456,13 @@ def main():
     users_with_annotations = [f for f in os.listdir(config['output_annotation_dir']) if os.path.isdir(config['output_annotation_dir'] + f)]
     for user in users_with_annotations:
         load_user_state(user)
+
+    # test the sampling strategy for all users
+    #for user in range(100):
+    #    print(user)
+    #    print(sample_instances(str(user)))
+    #    print(len(task_assignment['unassigned']))
+    #    print(instances_all_assigned())
 
     # TODO: load previous annotation state
     # load_annotation_state(config)
