@@ -1383,7 +1383,7 @@ def generate_full_user_dataflow(username):
 def instances_all_assigned():
     global task_assignment
 
-    if 'unassigned' in task_assignment and len(task_assignment['unassigned']) <= int(config["automatic_assignment"]["instance_per_annotator"] % 0.8):
+    if 'unassigned' in task_assignment and len(task_assignment['unassigned']) <= int(config["automatic_assignment"]["instance_per_annotator"] * 0.7):
         return True
     return False
 
@@ -3457,12 +3457,9 @@ def main():
     for user in users_with_annotations:
         load_user_state(user)
 
-    # test the sampling strategy for all users
-    #for user in range(100):
-    #    print(user)
-    #    print(sample_instances(str(user)))
-    #    print(len(task_assignment['unassigned']))
-    #    print(instances_all_assigned())
+    #test the sampling strategy for all users
+    #for user in range(50):
+    #    print(user, len(sample_instances(str(user))), len(task_assignment['unassigned']), instances_all_assigned())
 
     # TODO: load previous annotation state
     # load_annotation_state(config)
