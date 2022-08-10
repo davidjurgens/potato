@@ -1,4 +1,4 @@
-# Potato: the POrtable Text Annotation TOol
+# 🥔Potato: the POrtable Text Annotation TOol
 
 ##
 
