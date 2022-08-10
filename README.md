@@ -46,6 +46,3 @@ The `config/examples` folder contains example `.yaml` configuration files that m
 
 Potato is run by a small and engergetic team of academics doing the best they can. For support, please leave a issue on this git repo. Feature requests and issues are both welcomed!
    
-### Citing Potato
-
-Oh I sure hope we get to this.
