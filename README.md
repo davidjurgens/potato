@@ -1,4 +1,4 @@
-# Potato: the POrtable Text Annotation TOol
+# 🥔Potato: the POrtable Text Annotation TOol
 
 ##
 
@@ -8,9 +8,20 @@ Potato is driven by a single configuration file that specifies the type of task 
 
 Please check out our [official documentation](https://potato-annotation-tutorial.readthedocs.io/) for detailed instructions.
 
+## Feature hightlights 
+Potato supports a wide ranges of features that can make your data annotation easier:
+
+### Easy setup
+Potato can be easily set up with simply editing a configuration file. You don't need to write any codes to set up your annotation webpage. Please check out our full [documentation](https://potato-annotation-tutorial.readthedocs.io/en/latest/schemas_and_templates.html) for all configuration options. Potato comes with a series of built-in [templates](https://potato-annotation-tutorial.readthedocs.io/en/latest/schemas_and_templates.html#existing-task-templates) which allows you to easily setup common forms of annotation tasks like Question Answering, Sentiment Analyisis, Text Classification, ...
+
+### Improving Annotator Productivity
+Potato is carefully desinged with a series of features that can make your annotators experience better and help you get your annotations faster. You can easily set up 
+- [Keyboard Shortcuts](https://potato-annotation-tutorial.readthedocs.io/en/latest/productivity.html#keyboard-shortcuts): Annotators can direcly type in their answers with keyboards
+- [Dynamic Highlighting](https://potato-annotation-tutorial.readthedocs.io/en/latest/productivity.html#dynamic-highlighting): For tasks that have a lot of labels or super long documents, you can setup dynamic highlighting which will smartly highlight the potential association between labels and keywords in the document (as defined by you). 
+- [Label Tooltips](https://potato-annotation-tutorial.readthedocs.io/en/latest/productivity.html#tooltips): When you have a lot of labels (e.g. 30 labels in 4 categories), it'd be extremely hard for annotators to remember all the detailed descriptions of each of them. Potato allows you to set up label tooltips and annotators can hover the mouse over labels to view the description.
 
 
-### Quick Start
+## Quick Start
 Clone the github repo to your computer
 
     git clone https://github.com/davidjurgens/potato.git
@@ -30,22 +41,9 @@ Clicking "Submit" will autoadvance to the next instance and you can navigate bet
 The `config/examples` folder contains example `.yaml` configuration files that match many common simple use-cases. See the full [documentation](https://potato-annotation-tutorial.readthedocs.io/en/latest/usage.html) for all configuration options.
 
 
-### Versions
-
-  Partial version/commit log so far: 
-  
-    [2022.01.24 David] Initial public release
-    [2021.06.19 David] Overhaul of rendering engine and support for new annotation schemes
-    [2021.03.16 Jiaxin] count and display the time spent on each instance
-    [2021.03.08 Xingyao] video/image as labels
-    [2021.03.08 Jiaxin] keyboard shortcut 
-    [2021.03.08 Jiaxin] quick jump to the specific instance
-    [2021.02.17 Jiaxin] single-choice scheme supporting likert scales
-   
-### Design Team and Support
+    
+## Design Team and Support
 
 Potato is run by a small and engergetic team of academics doing the best they can. For support, please leave a issue on this git repo. Feature requests and issues are both welcomed!
+If you have any questions or want to collaborate on this project, please email pedropei@umich.edu
    
-### Citing Potato
-
-Oh I sure hope we get to this.
