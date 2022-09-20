@@ -926,7 +926,7 @@ def home():
     global user_config
     
     if config['__debug__']:
-        return annotate_page()
+        return annotate_page('debug_user', action='home')
     elif 'require_no_password' in config and config['require_no_password']:
         username = request.args.get('PROLIFIC_PID')
         password = 'require_no_password'
