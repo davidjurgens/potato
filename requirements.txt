@@ -17,5 +17,5 @@ six==1.16.0
 soupsieve==2.3.1
 threadpoolctl==3.0.0
 tqdm==4.62.3
-ujson==5.1.0
+ujson==5.4.0
 Werkzeug==2.0.2
