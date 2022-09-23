@@ -103,6 +103,7 @@ COLOR_PALETTE = ['rgb(179,226,205)', 'rgb(253,205,172)', 'rgb(203,213,232)', 'rg
 
 app = Flask(__name__)
 
+SPAN_COLOR_PALETTE = ['(230, 25, 75)', '(60, 180, 75)', '(255, 225, 25)', '(0, 130, 200)', '(245, 130, 48)', '(145, 30, 180)', '(70, 240, 240)', '(240, 50, 230)', '(210, 245, 60)', '(250, 190, 212)', '(0, 128, 128)', '(220, 190, 255)', '(170, 110, 40)', '(255, 250, 200)', '(128, 0, 0)', '(170, 255, 195)', '(128, 128, 0)', '(255, 215, 180)', '(0, 0, 128)', '(128, 128, 128)', '(255, 255, 255)', '(0, 0, 0)']
 
 class UserConfig:
     '''
@@ -195,17 +196,23 @@ class UserAnnotationState:
     
     def __init__(self, assigned_user_data):
 
-        # This data structure keeps the annotations the user has completed so far
+        # This data structure keeps the label-based annotations the user has
+        # completed so far
         self.instance_id_to_labeling = {}
 
+        # This data structure keeps the span-based annotations the user has
+        # completed so far
+        self.instance_id_to_span_annotations = {}
+        
         # This is a reference to the data
         #
         # NB: do we need this as a field?
         self.instance_id_to_data = assigned_user_data
 
-        # TODO: Put behavioral information of each instance with the labels together
-        # however, that requires too many changes of the data structure
-        # therefore, we contruct a separate dictionary to save all the behavioral information (e.g. time, click, ..)
+        # TODO: Put behavioral information of each instance with the labels
+        # together however, that requires too many changes of the data structure
+        # therefore, we contruct a separate dictionary to save all the
+        # behavioral information (e.g. time, click, ..)
         self.instance_id_to_behavioral_data = {}
 
         # NOTE: this might be dumb but at the moment, we cache the order in
@@ -220,11 +227,16 @@ class UserAnnotationState:
 
         self.instance_cursor = 0
 
-        #Indicator of whether the user has passed the prestudy, None means no prestudy or prestudy not complete, True means passed and False means failed
+        # Indicator of whether the user has passed the prestudy, None means no
+        # prestudy or prestudy not complete, True means passed and False means
+        # failed
         self.prestudy_passed = None
-        #Indicator of whether the user has agreed to participate this study, None means consent not complete, True means yes and False measn no
+        
+        # Indicator of whether the user has agreed to participate this study,
+        # None means consent not complete, True means yes and False measn no
         self.consent_agreed = None
-        #Total annotation instances assigned to a user
+
+        # Total annotation instances assigned to a user
         self.real_instance_assigned_count = 0
 
     def generate_id_order_mapping(self,instance_id_ordering):
@@ -274,15 +286,49 @@ class UserAnnotationState:
         if id < len(self.instance_id_to_data) and id >= 0:
             self.instance_cursor = id
 
-    def get_annotations(self, instance_id):
+    def get_all_annotations(self):
+        '''
+        Returns all annotations (label and span) for all annotated instances
+        '''
+        labeled = set(self.instance_id_to_labeling.keys()) | \
+            set(self.instance_id_to_span_annotations.keys())
+
+        anns = {}
+        for iid in labeled:
+            labels = {}
+            if iid in self.instance_id_to_labeling:
+                labels = self.instance_id_to_labeling[iid]
+            spans = {}
+            if iid in self.instance_id_to_span_annotations:
+                spans = self.instance_id_to_span_annotations[iid]
+
+            anns[iid] = { 'labels': labels, 'spans': spans }
+
+        return anns
+            
+    def get_label_annotations(self, instance_id):
+        '''
+        Returns the label-based annotations for the instance.
+        '''
         if instance_id not in self.instance_id_to_labeling:
             return None
         else:
             # NB: Should this be a view/copy?
             return self.instance_id_to_labeling[instance_id]
 
+    def get_span_annotations(self, instance_id):
+        '''
+        Returns the span annotations for this instance.
+        '''
+        if instance_id not in self.instance_id_to_span_annotations:
+            return None
+        else:
+            # NB: Should this be a view/copy?
+            return self.instance_id_to_span_annotations[instance_id]
+        
     def get_annotation_count(self):
-        return len(self.instance_id_to_labeling)
+        return len(self.instance_id_to_labeling) + \
+            len(self.instance_id_to_span_annotations)
 
     def get_assigned_instance_count(self):
         return len(self.instance_id_ordering)
@@ -305,53 +351,94 @@ class UserAnnotationState:
     def get_real_assigned_instance_count(self):
         return  self.real_instance_assigned_count
 
-    def set_annotation(self, instance_id, schema_to_label_to_value, behavioral_data_dict):
+    def set_annotation(self, instance_id, schema_to_label_to_value,
+                       span_annotations, behavioral_data_dict):
         '''
-        Based on a user's actions, updates the annotation for this particular instance. 
+        Based on a user's actions, updates the annotation for this particular instance.
+
+        :span_annotations: a list of span annotations, which are each
+          represented as dictionary objects/
+        :return: True if setting these annotation values changes the previous
+          annotation of this instance.
         '''
-        
-        old_annotation = defaultdict(dict)
+
+        # Get whatever annotations were present for this instance, or, if the
+        # item has not been annotated represent that with empty data structures
+        # so we can keep track of whether the state changes
         if instance_id in self.instance_id_to_labeling:
             old_annotation = self.instance_id_to_labeling[instance_id]
+        else:
+            old_annotation = defaultdict(dict)
+            
+        if instance_id in self.instance_id_to_span_annotations:
+            old_span_annotations = self.instance_id_to_span_annotations[instance_id]
+        else:
+            old_span_annotations = []
             
         # Avoid updating with no entries
         if len(schema_to_label_to_value) > 0:
             self.instance_id_to_labeling[instance_id] = schema_to_label_to_value
-            
-            # TODO: keep track of all the annotation behaviors instead of only
-            # keeping the latest one each time when new annotation is updated,
-            # we also update the behavioral_data_dict (currently done in the
-            # update_annotation_state function)
-            #
-            #self.instance_id_to_behavioral_data[instance_id] = behavioral_data_dict
-            
+        # If the user didn't label anything (e.g. they unselected items), then
+        # we delete the old annotation state
         elif instance_id in self.instance_id_to_labeling:
             del self.instance_id_to_labeling[instance_id]
 
-        return old_annotation != schema_to_label_to_value
+        # Avoid updating with no entries
+        if len(span_annotations) > 0:
+            self.instance_id_to_span_annotations[instance_id] = span_annotations
+        # If the user didn't label anything (e.g. they unselected items), then
+        # we delete the old annotation state
+        elif instance_id in self.instance_id_to_span_annotations:
+            del self.instance_id_to_span_annotations[instance_id]
+
+        # TODO: keep track of all the annotation behaviors instead of only
+        # keeping the latest one each time when new annotation is updated,
+        # we also update the behavioral_data_dict (currently done in the
+        # update_annotation_state function)
+        #
+        #self.instance_id_to_behavioral_data[instance_id] = behavioral_data_dict           
+        
+        return old_annotation != schema_to_label_to_value or \
+            old_span_annotations != span_annotations
 
     # This is only used to update the entire list of annotations,
     # normally when loading all the saved data
-    def update(self, id_key, annotation_order, annotated_instances):
+    def update(self, annotation_order, annotated_instances):
+        '''
+        Updates the entire state of annotations for this user by inserting
+        all the data in annotated_instances into this user's state. Typically
+        this data is loaded from a file
+
+        :annotation_order: a list of string instance IDs in the order that this
+        user should see those instances.
+        :annotated_instances: a list of dictionary objects detailing the
+        annotations on each item.
+        '''
+        
         self.instance_id_to_labeling = {}
         for inst in annotated_instances:
 
             inst_id = inst['id']
-            annotation = inst['annotation']
+            label_annotations = inst['label_annotations']
+            span_annotations = inst['span_annotations']
+
+            self.instance_id_to_labeling[inst_id] = label_annotations
+            self.instance_id_to_span_annotations[inst_id] = span_annotations
+
             behavior_dict = {}
             if 'behavioral_data' in inst:
                 behavior_dict = inst['behavioral_data']
-                #print(behavior_dict)
-
+            self.instance_id_to_behavioral_data[inst_id] = behavior_dict
+            
+            # TODO: move this code somewhere else so consent is organized
+            # separately
             if re.search('consent', inst_id):
                 consent_key = 'I want to participate in this research and continue with the study.'
                 if 'Yes' in annotation[consent_key] and annotation[consent_key]['Yes'] == 'true':
                     self.consent_agreed = True
                 else:
                     self.consent_agreed = False
-
-            self.instance_id_to_labeling[inst_id] = annotation
-            self.instance_id_to_behavioral_data[inst_id] = behavior_dict
+            
 
         self.instance_id_ordering = annotation_order
         self.instance_id_to_order = self.generate_id_order_mapping(self.instance_id_ordering)
@@ -823,36 +910,46 @@ def update_annotation_state(username, form):
     
     did_change = False
     for key in form:
+
+
         # look for behavioral information regarding time, click, ...
         if key[:9] == 'behavior_':
             behavioral_data_dict[key[9:]] = form[key]
             continue
+       
+        # Look for the marker that indicates an annotation label.
+        #
+        # NOTE: The span annotation uses radio buttons as well to figure out
+        # which label. These inputs are labeled with "span_label" so we can skip
+        # them as being actual annotatins (the spans are saved below though).
+        if ':::' in key and 'span_label' not in key:
 
-        # Look for the marker that indicates an annotation label
-        if ':::' not in key:
-            continue
+            cols = key.split(':::')
+            annotation_schema = cols[0]
+            annotation_label = cols[1]
+            annotation_value = form[key]
 
-        cols = key.split(':::')
-        annotation_schema = cols[0]
-        annotation_label = cols[1]
-        annotation_value = form[key]
+            #skip the input when it is an empty string (from a text-box)
+            if annotation_value == '':
+                continue
 
-        #skip the input when it is an empty string (from a text-box)
-        if annotation_value == '':
-            continue
+            schema_to_label_to_value[annotation_schema][annotation_label] = annotation_value
 
-        schema_to_label_to_value[annotation_schema][annotation_label] = annotation_value
-
-    print(username, schema_to_label_to_value)
-        #schema_to_labels[annotation_schema].append(annotation_label)
+    # Span annotations are a bit funkier since we're getting raw HTML that
+    # we need to post-process on the server side.
+    span_annotations = []
+    if 'span-annotation' in form:
+        span_annotation_html = form['span-annotation']
+        span_text, span_annotations = parse_html_span_annotation(span_annotation_html)
+        # print('span_annotations:' , span_annotations)            
+            
+    # print("Received annotations from %s" % username, schema_to_label_to_value)
 
     # print("-- for user %s, instance %s -> %s" % (username, instance_id, str(schema_to_labels)))
 
-    #for schema, labels in schema_to_labels.items():
-    #    for label in labels:          
-    #        did_change |= user_state.set_annotation(instance_id, schema, label, value, behavioral_data_dict)
 
-    did_change = user_state.set_annotation(instance_id, schema_to_label_to_value, behavioral_data_dict)
+    did_change = user_state.set_annotation(instance_id, schema_to_label_to_value,
+                                           span_annotations, behavioral_data_dict)
 
 
     # update the behavioral information regarding time only when the annotations are changed
@@ -878,9 +975,21 @@ def update_annotation_state(username, form):
 
 
 def get_annotations_for_user_on(username, instance_id):
+    '''
+    Returns the label-based annotations made by this user on the instance.
+    '''
     user_state = lookup_user_state(username)
-    annotations = user_state.get_annotations(instance_id)
+    annotations = user_state.get_label_annotations(instance_id)
     return annotations
+
+
+def get_span_annotations_for_user_on(username, instance_id):
+    '''
+    Returns the span annotations made by this user on the instance.
+    '''
+    user_state = lookup_user_state(username)
+    span_annotations = user_state.get_span_annotations(instance_id)
+    return span_annotations
 
 # This was used to merge annotated instances in previous annotations.  For
 # example, you had some annotations from google sheet, and want to merge it with
@@ -943,7 +1052,7 @@ def login():
 
     if config['__debug__'] == True:
         action = 'login'
-        usenrame = 'debug_user'
+        username = 'debug_user'
         password = 'debug'
     elif 'require_no_password' in config and config['require_no_password'] == True:
         action = request.form.get("action")
@@ -976,9 +1085,11 @@ def login():
 def signup():
     global user_config
     global config
+    
     # TODO: add in logic for checking/hashing passwords, safe password
     # management, etc. For now just #yolo and log in people regardless.
     action = request.form.get("action")
+
     # Jiaxin: currently we are just using email as the username
     username = request.form.get("email")
     email = request.form.get("email")
@@ -993,15 +1104,20 @@ def signup():
         }
         result = user_config.add_single_user(single_user)
         print(single_user['username'], result)
+
         if result == 'Success':
             user_config.save_user_config()
-            return render_template("home.html", title=config['annotation_task_name'], login_email = username, login_error = 'User registration success for ' + username + ', please login now')
+            return render_template("home.html", title=config['annotation_task_name'],
+                                   login_email = username,
+                                   login_error = 'User registration success for ' + username + ', please login now')
         else:
             #TODO: return to the signup page and display error message
-            return render_template("home.html", title=config['annotation_task_name'], login_error = result + ', please try again or log in')
+            return render_template("home.html", title=config['annotation_task_name'],
+                                   login_error = result + ', please try again or log in')
     else:
         print('unknown action at home page')
-        return render_template("home.html", title=config['annotation_task_name'], login_email = username, login_error = 'Invalid username or password')
+        return render_template("home.html", title=config['annotation_task_name'],
+                               login_email = username, login_error = 'Invalid username or password')
 
 @app.route("/newuser")
 def new_user():
@@ -1095,7 +1211,7 @@ def check_prestudy_status(username):
 
     res = []
     for id in task_assignment['prestudy_ids']:
-        label = user_state.get_annotations(id)
+        label = user_state.get_label_annotations(id)
         if label == None:
             return 'prestudy not complete'
         groundtruth = instance_id_to_data[id][config['prestudy']['groundtruth_key']]
@@ -1429,6 +1545,8 @@ def save_user_state(username, save_order=False):
     global config
     global instance_id_to_data
 
+    # print("username: ", username)
+    
     # Figure out where this user's data would be stored on disk
     output_annotation_dir = config['output_annotation_dir']
 
@@ -1452,9 +1570,17 @@ def save_user_state(username, save_order=False):
         user_dir, "annotated_instances.jsonl")
     
     with open(annotated_instances_fname, 'wt') as outf:
-        for inst_id, data in user_state.instance_id_to_labeling.items():
-            bd_dict = user_state.instance_id_to_behavioral_data[inst_id] if inst_id in user_state.instance_id_to_behavioral_data else {}
-            output = {'id': inst_id, 'annotation': data, 'behavioral_data': bd_dict}
+        for inst_id, data in user_state.get_all_annotations().items():
+            bd_dict = {}
+            if inst_id in user_state.instance_id_to_behavioral_data:
+                bd_dict = user_state.instance_id_to_behavioral_data[inst_id]
+                
+            output = {
+                'id': inst_id,
+                'label_annotations': data['labels'],
+                'span_annotations': data['spans'],
+                'behavioral_data': bd_dict
+            }
             json.dump(output, outf)
             outf.write('\n')
 
@@ -1481,10 +1607,18 @@ def save_all_annotations():
     if fmt == 'json' or fmt == 'jsonl':
         with open(annotated_instances_fname, 'wt') as outf:
             for user_id, user_state in user_to_annotation_state.items():
-                for inst_id, data in user_state.instance_id_to_labeling.items():
+                for inst_id, data in user_state.get_all_annotations().items():
                     
-                    bd_dict = user_state.instance_id_to_behavioral_data[inst_id] if inst_id in user_state.instance_id_to_behavioral_data else {}
-                    output = {'id': inst_id, 'annotation': data, 'behavioral_data': bd_dict}
+                    bd_dict = {}
+                    if inst_id in user_state.instance_id_to_behavioral_data:
+                        bd_dict = user_state.instance_id_to_behavioral_data[inst_id]
+
+                    output = {
+                        'id': inst_id,
+                        'label_annotations': data['labels'],
+                        'span_annotations': data['spans'],
+                        'behavioral_data': bd_dict,
+                    }
                     json.dump(output, outf)
                     outf.write('\n')
     
@@ -1493,26 +1627,37 @@ def save_all_annotations():
     elif fmt == 'csv' or fmt == 'tsv':
         df = defaultdict(list)
 
-        # Loop 1, figure out which schemas/labels have values
+        # Loop 1, figure out which schemas/labels have values so we know which
+        # things will need to be columns in each row
         schema_to_labels = defaultdict(set)
+        span_labels = set()
 
         for user_id, user_state in user_to_annotation_state.items():
-            for inst_id, annotation in user_state.instance_id_to_labeling.items():
-                for schema, label_vals in annotation.items():
+            for inst_id, annotations in user_state.get_all_annotations().items():
+                # Columns for each label-based annotation
+                for schema, label_vals in annotations['labels'].items():
                     for label, val in label_vals.items():
                         schema_to_labels[schema].add(label)
+
+                # Columns for each span type too 
+                for span in annotations['spans']:
+                    span_labels.add(span['annotation'])
+                    
                 # TODO: figure out what's in the behavioral dict and how to format it
 
         # Loop 2, report everything that's been annotated
         for user_id, user_state in user_to_annotation_state.items():
-            for inst_id, annotation in user_state.instance_id_to_labeling.items():
+            for inst_id, annotations in user_state.get_all_annotations().items():
 
                 df['user'].append(user_id)
                 df['instance_id'].append(inst_id)
 
+                label_annotations = annotations['labels']
+                span_annotations = annotations['spans']
+                
                 for schema, labels in schema_to_labels.items():
-                    if schema in annotation:
-                        label_vals = annotation[schema]
+                    if schema in label_annotations:
+                        label_vals = label_annotations[schema]
                         for label in labels:
                             val = label_vals[label] if label in label_vals else None
                             # For some sanity, combine the schema and label it a single column
@@ -1521,7 +1666,14 @@ def save_all_annotations():
                     else:
                         for label in labels:
                             df[schema + ':::' + label].append(None)
-                            
+
+                # We bunch spans by their label to make it slightly easier to
+                # process, but it's still kind of messy compared with the JSON
+                # format.
+                for span_label in span_labels:
+                    anns = [sa for sa in span_annotations if sa['annotation'] == span_label]
+                    df['span_annotation:::' + span_label].append(anns)
+                
                 # TODO: figure out what's in the behavioral dict and how to format it
                 
         df = pd.DataFrame(df)
@@ -1573,7 +1725,8 @@ def load_user_state(username):
                 for line in f:
                     instance_id = line[:-1]
                     if instance_id not in assigned_user_data:
-                        logger.warning('Annotation state for %s does not match instances in existing dataset at %s'
+                        logger.warning(('Annotation state for %s does not match ' +
+                                        'instances in existing dataset at %s')
                                        % (user_dir, ','.join(config['data_files'])))
                         continue
                     annotation_order.append(line[:-1])
@@ -1582,13 +1735,13 @@ def load_user_state(username):
         annotated_instances_fname = path.join(user_dir, "annotated_instances.jsonl")
         if os.path.exists(annotated_instances_fname):
 
-
             with open(annotated_instances_fname, 'rt') as f:
                 for line in f:
                     annotated_instance = json.loads(line)
                     instance_id = annotated_instance['id']
                     if instance_id not in assigned_user_data:
-                        logger.warning('Annotation state for %s does not match instances in existing dataset at %s'
+                        logger.warning(('Annotation state for %s does not match ' +
+                                        'instances in existing dataset at %s')
                                        % (user_dir, ','.join(config['data_files'])))
                         continue
                     annotated_instances.append(annotated_instance)
@@ -1600,15 +1753,16 @@ def load_user_state(username):
             if iid not in annotation_order:
                 annotation_order.append(iid)
 
-        id_key = config['item_properties']['id_key']
+        # NOTE: I'm unsure what id_key is even doing here, so I'm commenting it out for now
+        #id_key = config['item_properties']['id_key']
         user_state = UserAnnotationState(assigned_user_data)
-        user_state.update(id_key, annotation_order, annotated_instances)
+        user_state.update(annotation_order, annotated_instances)
 
         # Make sure we keep track of the user throughout the program
         user_to_annotation_state[username] = user_state
 
         logger.info("Loaded %d annotations for known user \"%s\"" %
-                    (user_state.get_annotation_count(), len(assigned_user_data)))
+                    (user_state.get_annotation_count(), username))
 
         return 'old user loaded'
     # New user, so initialize state
@@ -1661,15 +1815,20 @@ def annotate_page(username = None, action=None):
     '''
     
     global user_config
+    global config
 
     #use the provided username when the username is given
     if not username:
-        username_from_last_page = request.form.get("email")
-        #print(username_on_page)
-        if username_from_last_page == None:
-            return render_template("error.html", error_message='You must use the link provided by prolific to work on this study')
+        if config['__debug__']:
+            username = 'debug_user'
         else:
-            username = username_from_last_page
+            username_from_last_page = request.form.get("email")
+            
+        #print(username_on_page)
+        #if username_from_last_page == None:
+        #    return render_template("error.html", error_message='You must use the link provided by prolific to work on this study')
+        #else:
+        #    username = username_from_last_page
 
     # Check if the user is authorized. If not, go to the login page
     #if not user_config.is_valid_username(username):
@@ -1785,8 +1944,32 @@ def annotate_page(username = None, action=None):
             text = text
             #raise Exception('list_as_text is used when input column %s is not a list' % config['item_properties']['text_key'])
     instance_id = instance[id_key]
-    
-    
+
+    # If the user has labeled spans within this instance before, replace the
+    # current instance text with pre-annotated mark-up. We do this here before
+    # the render_template call so that we can directly insert the span-marked-up
+    # HTML into the template.
+    #
+    # NOTE: This currently requires a very tight (and kludgy) binding between
+    # the UI code for how Potato represents span annotations and how the
+    # back-end displays these. Future work when we are better programmers will
+    # pass this info to client side for rendering, rather than doing
+    # pre-rendering here. This also means that any changes to the UI code for
+    # rendering need to be updated here too.
+    #
+    # NOTE2: We have to this here to account for any keyword highlighting before
+    # the instance text gets marked up in the post-processing below
+    span_annotations = get_span_annotations_for_user_on(username, instance_id)
+    if span_annotations is not None and len(span_annotations) > 0:
+        # Mark up the instance text where the annotated spans were
+        text = render_span_annotations(text, span_annotations)       
+
+    # If the admin has specified that certain keywords need to be highlighted,
+    # post-process the selected instance so that it now also has colored span
+    # overlays for keywords.
+    #
+    # NOTE: this code is probably going to break the span annotation's
+    # understanding of the instance. Need to check this...
     if "keyword_highlights_file" in config:
         updated_text, schema_labels_to_highlight = post_process(config, text)
     else:
@@ -1800,11 +1983,13 @@ def annotate_page(username = None, action=None):
 
     all_statistics = lookup_user_state(username).generate_user_statistics()
 
-    #TODO: Display plots for agreement scores instead of only the overall score in the statistics sidebar
+    # TODO: Display plots for agreement scores instead of only the overall score
+    # in the statistics sidebar   
     #all_statistics['Agreement'] = get_agreement_score('all', 'all', return_type='overall_average')
     #print(all_statistics)
 
-    # set the html file as surveyflow pages when the instance is a not an annotation page (survey pages, prestudy pass or fail page)
+    # Set the html file as surveyflow pages when the instance is a not an
+    # annotation page (survey pages, prestudy pass or fail page)
     if 'non_annotation_pages' in config and (instance_id in config['non_annotation_pages']):
         html_file = instance_id
     #otherwise set the page as the normal annotation page
@@ -1829,8 +2014,10 @@ def annotate_page(username = None, action=None):
         # amount=len(all_data["annotated_data"]),
         # annotated_amount=user_dict[username]["current_display"]["annotated_amount"],
     )
-   
 
+    with open('debug-pre.html', 'wt') as outf:
+        outf.write(rendered_html)
+    
     # UGHGHGHGH the tempalte does unusual escaping, which makes it a PAIN to do
     # the replacement later
     #m = re.search('<div name="instance_text">(.*?)</div>', rendered_html,
@@ -1841,7 +2028,10 @@ def annotate_page(username = None, action=None):
     # embedded HTML to get escaped, so we just do a wholesale replacement here.
     #print(text, updated_text)
     rendered_html = rendered_html.replace(text, updated_text)
-    
+
+    with open('debug-pre.html', 'wt') as outf:
+        outf.write(rendered_html)
+        
     # Parse the page so we can programmatically reset the annotation state
     # to what it was before
     soup = BeautifulSoup(rendered_html, 'html.parser')
@@ -1859,7 +2049,7 @@ def annotate_page(username = None, action=None):
         if label_elem:
             label_elem['style'] = ("background-color: %s" % c)
             
-    # If the user has annotated this before, wall the DOM and fill out what they
+    # If the user has annotated this before, walk the DOM and fill out what they
     # did
     annotations = get_annotations_for_user_on(username, instance_id)
     if annotations is not None:
@@ -1878,8 +2068,11 @@ def annotate_page(username = None, action=None):
                     option = input_field.findChildren('option', {"value": value})[0]
                     option['selected'] = "selected"
 
-
+                    
     rendered_html = str(soup)  # soup.prettify()
+
+    with open('debug.html', 'wt') as outf:
+        outf.write(rendered_html)
 
     return rendered_html
 
@@ -1895,6 +2088,152 @@ def get_color_for_schema_label(schema, label):
         schema_label_to_color[t] = c
         return c
 
+def render_span_annotations(text, span_annotations):
+    '''    
+    Retuns a modified version of the text with span annotation overlays inserted
+    into the text.
+
+    :text: some instance to be annotated
+    :span_annotations: annotations already made by the user that need to be
+       re-inserted into the text
+    '''
+    global config
+    
+    # This code is synchronized with the javascript function
+    # surroundSelection(selectionLabel) function in base_template.html which
+    # wraps any labeled text with a <div> element indicating its label. We
+    # replicate this code here (in python).
+    #
+    # This synchrony also means that any changes to the UI code for rendering
+    # need to be updated here too.
+
+
+    # We need to go in reverse order to make the string update in the right
+    # places, so make sure things are ordered in reverse of start
+
+    rev_order_sa = sorted(span_annotations, key=lambda d: d['start'], reverse=True) 
+
+    ann_wrapper = ('<span class="span_container" selection_label="{annotation}" ' +
+                      'style="background-color:rgb{bg_color};">' +
+                   '{span}' +
+                   '<div class="span_label" ' +
+                       'style="background-color:white;border:2px solid rgb{color};">' +
+                   '{annotation}</div></span>')
+    for a in rev_order_sa:
+
+        # Spans are colored according to their order in the list and we need to
+        # retrofit the color
+        color = get_span_color(a['annotation'])
+        # The color is an RGB triple like (1,2,3) and we want the background for
+        # the text to be somewhat transparent so we switch to RGBA for bg
+        bg_color = color.replace(')', ',0.25)')
+        
+        ann = ann_wrapper.format(annotation=a['annotation'], span=a['span'],
+                                 color=color, bg_color=bg_color)    
+        text = text[:a['start']] + ann + text[a['end']:]
+
+    return text
+
+def get_span_color(span_label):
+    '''
+    Returns the color of a span with this label as a string with an RGB triple
+    in parentheses, or None if the span is unmapped.
+    '''
+    global config
+
+    if 'ui' not in config or 'spans' not in config['ui']:
+        return None
+    span_ui = config['ui']['spans']
+
+    if 'span_colors' not in span_ui:
+        return None
+
+    if span_label in span_ui['span_colors']:
+        return span_ui['span_colors'][span_label]
+    else:
+        return None
+
+
+def set_span_color(span_label, color):
+    '''
+    Sets the color of a span with this label as a string with an RGB triple in parentheses.
+
+    :color: a string containing an RGB triple in parentheses
+    '''
+    global config
+
+    if 'ui' not in config:
+        ui = {}
+        config['ui'] = ui
+    else:
+        ui = config['ui']
+
+    if 'spans' not in ui:
+        span_ui = {}
+        ui['spans'] = span_ui
+    else:
+        span_ui = ui['spans']
+
+    if 'span_colors' not in span_ui:
+        span_colors = {}
+        span_ui['span_colors'] = span_colors
+    else:
+        span_colors = span_ui['span_colors']
+
+    span_colors[span_label] = color
+    
+
+def parse_html_span_annotation(html_span_annotation):
+    '''
+    Parses the span annotations produced in raw HTML by Potato's front end
+    and extracts out the precise spans and labels annotated by users.
+
+    :returns: a tuple of (1) the annotated string without annotation HTML
+              and a list of annotations    
+    '''
+    
+    s = html_span_annotation.strip()
+    init_tag_regex = re.compile(r'(<span.+?>)')
+    end_tag_regex = re.compile(r'(</span>)')
+    anno_regex = re.compile(r'<div class="span_label".+?>(.+)</div>')
+    no_html_s = ''
+    start = 0
+
+    annotations = []
+
+    while True:
+        m = init_tag_regex.search(s, start)
+        if not m:
+            break
+
+        # find the end tag
+        m2 = end_tag_regex.search(s, m.end())
+
+        middle = s[m.end():m2.start()]
+
+        # Get the annotation label from the middle text
+        m3 = anno_regex.search(middle)
+
+        middle_text = middle[:m3.start()]
+        annotation = m3.group(1)
+
+        no_html_s += s[start:m.start()] 
+
+        ann = {
+            'start': len(no_html_s),
+            'end': len(no_html_s) + len(middle_text),
+            'span': middle_text,
+            'annotation': annotation
+        }
+        annotations.append(ann)
+
+        no_html_s += middle_text
+        start = m2.end(0) 
+
+    # Add whatever trailing text exists
+    no_html_s += s[start:]
+    
+    return no_html_s, annotations    
 
 def post_process(config, text):
     global schema_label_to_color
@@ -2005,7 +2344,6 @@ def post_process(config, text):
         schema_labels_to_highlight.add((schema, label))
 
         # Figure out where this word occurs
-
         c = get_color_for_schema_label(schema, label)
 
         search_from = 0
@@ -2079,7 +2417,7 @@ def generate_site(config):
     '''
     global logger
 
-    logger.info("Generating anntoation site at %s" % config['site_dir'])
+    logger.info("Generating anntotation site at %s" % config['site_dir'])
 
     #
     # Stage 1: Construct the core HTML file devoid the annotation-specific content
@@ -2555,6 +2893,9 @@ def generate_schematic(annotation_scheme):
     elif annotation_type == "radio":
         return generate_radio_layout(annotation_scheme)
 
+    elif annotation_type == "highlight":
+        return generate_span_layout(annotation_scheme)
+    
     elif annotation_type == "likert":
         return generate_likert_layout(annotation_scheme)
         
@@ -2733,14 +3074,18 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
     label2key = {}
     key_bindings = []
 
-    # setting up label validation for each label, if "required" is True, the annotators will be asked to finish the current instance to proceed
+    # Setting up label validation for each label, if "required" is True, the
+    # annotators will be asked to finish the current instance to proceed
     validation = ''
     label_requirement = annotation_scheme['label_requirement'] if 'label_requirement' in annotation_scheme else None
     if label_requirement and ('required' in label_requirement) and label_requirement['required']:
         validation = 'required'
 
     #print(annotation_scheme)
-    # if right_label is provided, the associated label has to be clicked to proceed. This is normally used for consent questions at the beginning of a survey.
+
+    # If right_label is provided, the associated label has to be clicked to
+    # proceed. This is normally used for consent questions at the beginning of a
+    # survey.
     right_label = set()
     if label_requirement and "right_label" in label_requirement:
         if type(label_requirement["right_label"]) == str:
@@ -2840,6 +3185,129 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
         (('%s <input class="%s" type="text" id="%s" name="%s" >' +
          '  <label for="%s" %s></label><br/>')
          % (instruction, class_name, name, name, name, tooltip))
+
+    schematic += '  </fieldset>\n</form>\n'
+    return schematic, key_bindings
+
+
+def generate_span_layout(annotation_scheme, horizontal=False):
+    '''
+    Renders a span annotation option selection in the annotation panel and
+    returns the HTML code
+    '''
+    
+    #when horizontal is specified in the annotation_scheme, set horizontal = True
+    if "horizontal" in annotation_scheme and annotation_scheme['horizontal']:
+        horizontal = True
+
+    schematic = \
+        '<form action="/action_page.php">' + \
+        '  <fieldset>' + \
+        ('  <legend>%s</legend>' % annotation_scheme['description'])
+
+    # TODO: display keyboard shortcuts on the annotation page
+    key2label = {}
+    label2key = {}
+    key_bindings = []
+
+    # setting up label validation for each label, if "required" is True, the annotators will be asked to finish the current instance to proceed
+    validation = ''
+    label_requirement = annotation_scheme['label_requirement'] if 'label_requirement' in annotation_scheme else None
+    if label_requirement and ('required' in label_requirement) and label_requirement['required']:
+        validation = 'required'
+    
+    for i, label_data in enumerate(annotation_scheme['labels'], 1):
+
+        label = label_data if isinstance(
+            label_data, str) else label_data['name']
+        
+        name = annotation_scheme['name'] + ':::' + label
+        class_name = annotation_scheme['name']
+        key_value = name
+        
+        span_color = get_span_color(label)
+        if span_color is None:
+            span_color = SPAN_COLOR_PALETTE[(i-1) % len(SPAN_COLOR_PALETTE)]
+            set_span_color(label, span_color)
+
+        # For better or worse, we need to cache these label-color pairings
+        # somewhere so that we can render them in the colored instances later in
+        # render_span_annotations(). The config object seems like a reasonable
+        # place to do since it's global and the colors are persistent 
+        config['ui']
+
+        
+        tooltip = ''
+        if isinstance(label_data, Mapping):
+            tooltip_text = ''
+            if 'tooltip' in label_data:
+                tooltip_text = label_data['tooltip']
+                # print('direct: ', tooltip_text)
+            elif 'tooltip_file' in label_data:
+                with open(label_data['tooltip_file'], 'rt') as f:
+                    lines = f.readlines()
+                tooltip_text = ''.join(lines)
+                # print('file: ', tooltip_text)
+            if len(tooltip_text) > 0:
+                tooltip = 'data-toggle="tooltip" data-html="true" data-placement="top" title="%s"' \
+                    % tooltip_text
+
+            # Bind the keys
+            if 'key_value' in label_data:
+                key_value = label_data['key_value']
+                if key_value in key2label:
+                    logger.warning(
+                        "Keyboard input conflict: %s" % key_value)
+                    quit()
+                key2label[key_value] = label
+                label2key[label] = key_value
+                key_bindings.append((key_value, class_name +': ' + label))
+            # print(key_value)
+            
+        if "sequential_key_binding" in annotation_scheme \
+           and annotation_scheme["sequential_key_binding"] \
+           and len(annotation_scheme['labels']) <= 10:
+            key_value = str(i % 10)
+            key2label[key_value] = label
+            label2key[label] = key_value
+            key_bindings.append((key_value, class_name + ': ' + label))
+
+        if ('displaying_score' in annotation_scheme and annotation_scheme['displaying_score']):
+            label_content = label_data['key_value'] + '.' + label
+        else:          
+            label_content = label
+
+        # Check the first radio
+        if i == 1:
+            is_checked = 'xchecked="checked"'
+        else:
+            is_checked = ''
+        
+        # TODO: add support for horizontal layout
+        br_label = "<br/>"
+        if horizontal:
+            br_label = ''
+
+        # We want to mark that this input isn't actually an annotation (unlike,
+        # say, checkboxes) so we prefix the name with span_label so that the
+        # answer ingestion code in update_annotation_state() can skip over which
+        # radio was checked as being annotations that need saving (while the
+        # spans themselves are saved)
+        name_with_span = 'span_label:::' + name
+            
+        schematic += \
+            ('      <input class="{class_name}" type="radio" id="{name}" name="{name_with_span}" ' +
+             ' value="{key_value}" {is_checked} ' +
+             'onclick="onlyOne(this); changeSpanLabel(\'{label_content}\', \'{span_color}\');">' +
+             '  <label for="{name}" {tooltip}>' +
+             '<span style="background-color:rgb{bg_color};">{label_content}</span></label>{br_label}').format(
+                 class_name=class_name, name=name, key_value=key_value,
+                 label_content=label_content, tooltip=tooltip, br_label=br_label,
+                 is_checked=is_checked, name_with_span=name_with_span,
+                 bg_color=span_color.replace(")", ",0.25)"),
+                 span_color=span_color)
+             
+            
 
     schematic += '  </fieldset>\n</form>\n'
     return schematic, key_bindings

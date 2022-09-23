@@ -58,6 +58,85 @@
           // it by grabbing the hidden firstname and lastname fields
           get_new_instance(event);          
       });
+
+      function getSelectedText() {
+          var text = "";
+          if (typeof window.getSelection != "undefined") {
+              text = window.getSelection().toString();
+          } else if (typeof document.selection != "undefined" && document.selection.type == "Text") {
+              text = document.selection.createRange().text;
+          }
+          return text;
+      }
+
+      function surroundSelection(selectionLabel, selectionColor)  {
+          //var span = document.createElement("span");
+          //span.style.fontWeight = "bold";
+          //span.style.color = "green";
+   
+          if (window.getSelection) {
+              var sel = window.getSelection();
+
+              // Check that we're labeling something in the instance text that
+              // we want to annotate
+              if (sel.anchorNode.parentElement) {
+
+                  if (sel.anchorNode.parentElement.getAttribute("name") != "instance_text") {
+                      
+                      // See if this text was already wrapped with the currently
+                      // selected class label and if so, remove it
+                      var parentOfSelection = sel.anchorNode.parentElement
+
+                      if (parentOfSelection.getAttribute("selection_label") == selectionLabel) {
+                          // Remove the div tag that has the span's annotation label
+                          $( parentOfSelection ).find("div").remove();
+                          // Remove the span tag that has the highlight box
+                          $( parentOfSelection.firstChild ).unwrap();
+                      }
+
+                      return;
+                  }
+              }
+              else {
+                  // alert("no parent element");
+                  return;
+              }
+              
+              // Otherwise, we're going to be adding a new span annotation, if
+              // the user has selected some non-empty part of th text
+              if (sel.rangeCount && sel.toString().trim().length > 0) {                 
+
+                  tsc = selectionColor.replace(")", ", 0.25)")
+                  
+                  var span = document.createElement("span");
+                  span.className = "span_container";
+                  span.setAttribute("selection_label", selectionLabel);
+                  span.setAttribute("style", "background-color:rgb" + tsc + ";");
+                  console.log(selectionColor);
+                  
+                  var label = document.createElement("div");
+                  label.className = "span_label";
+                  label.textContent = selectionLabel;
+                  label.setAttribute("style", "background-color:white;"
+                                    + "border:2px solid rgb" + selectionColor + ";");
+                  
+                  var range = sel.getRangeAt(0).cloneRange();
+                  range.surroundContents(span);
+                  sel.removeAllRanges();
+                  sel.addRange(range);
+                  span.appendChild(label);
+              }
+          }
+      }
+
+      function changeSpanLabel(spanLabel, spanColor) {
+          // Listen for when the user has highlighted some text
+          document.onmouseup = function() { surroundSelection(spanLabel, spanColor); } 
+      }
+
+      // Listen for when the user has highlighted some text
+      // document.onmouseup = function() { surroundSelection("Undefined"); } 
+
     </script>
     <script>
       function barValue(range,sibling) {
@@ -235,6 +314,31 @@
                   }
               }
           );
+
+          // Get all the highlighted text for this instance and marshall that
+          // into some kind of representation for the server side
+          $(".span_container").first().each(
+              function(index) {
+
+                  // We'll use the raw HTML of what has been annotated as the
+                  // set of labels to pass over to the server.
+                  var annotated_spans = $(this).parent().html();
+
+                  // Due to the DJ's inability to write decent Javascript, we're
+                  // fully punting on the idea of doing label preprocessing here
+                  // and instead shuttling the entire HTML of the instance to
+                  // the server for python-based processing. The main issue is
+                  // figuring out the precise text offsets of the annotated
+                  // spans while dealing with nested DOM elements.
+                  var hiddenField = document.createElement("input");
+                  hiddenField.setAttribute("type", "hidden");
+                  hiddenField.setAttribute("name", "span-annotation");
+                  hiddenField.setAttribute("value", annotated_spans);
+                  form.appendChild(hiddenField);
+                  //console.log(annotated_spans)
+              }
+          );
+          
           document.body.appendChild(form);
           form.submit();
       }
@@ -365,7 +469,7 @@
     </script>
     
     
-    
+   
     <nav class="navbar navbar-expand-md navbar-dark bg-dark mb-3">
       <div class="container-fluid">
         <a href="#" class="navbar-brand mr-3">{{annotation_task_name}}</a>
@@ -465,11 +569,13 @@
          what the user had selected */      
       window.onload = function() {
           var show = localStorage.getItem('show_instructions');
-          if (show === 'true'){
-              document.getElementById('instructions').style.display = "block";
-          }
-          else {
-              document.getElementById('instructions').style.display = "none";
+          if (document.getElementById('instructions')) {
+              if (show === 'true') {
+                  document.getElementById('instructions').style.display = "block";
+              }
+              else {
+                  document.getElementById('instructions').style.display = "none";
+              }
           }
       }      
       
