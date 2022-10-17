@@ -41,6 +41,18 @@ Clicking "Submit" will autoadvance to the next instance and you can navigate bet
 The `config/examples` folder contains example `.yaml` configuration files that match many common simple use-cases. See the full [documentation](https://potato-annotation-tutorial.readthedocs.io/en/latest/usage.html) for all configuration options.
 
 
+
+## Example projects
+Potato comes with a list of predefined example projects:
+Dialogue analysis
+    python3 potato/flask_server.py example-projects/dialogue_analysis/configs/dialogue-analysis.yaml -p 8000
+
+Sentiment analysis
+    python3 potato/flask_server.py example-projects/sentiment_analysis/configs/sentiment-analysis.yaml -p 8000
+    
+Summarization evaluation
+    python3 potato/flask_server.py example-projects/summarization_evaluation/configs/summ-eval.yaml -p 8000
+
     
 ## Design Team and Support
 
