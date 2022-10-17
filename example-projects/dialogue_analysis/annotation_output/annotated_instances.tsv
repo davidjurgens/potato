@@ -1,2 +1,3 @@
-user	instance_id	displayed_text	sentiment:::neutral
-pedropei@umich.edu	1	Tom: Isn't this awesome?!<br><strong>Sam: Yes!I like you!</strong><br>Tom: great!<br>Sam: Awesome! Let's party!	true
+user	instance_id	displayed_text	sentiment:::neutral	span_annotation:::certain
+pedropei@umich.edu	1	Tom: Isn't this awesome?!<br><strong>Sam: Yes!I like you!</strong><br>Tom: great!<br>Sam: Awesome! Let's party!	true	[]
+example@potato.com	1	Tom: Isn't this awesome?!<br><strong>Sam: Yes!I like you!</strong><br>Tom: great!<br>Sam: Awesome! Let's party!		[{'start': 72, 'end': 75, 'span': 'm: ', 'annotation': 'certain'}]
