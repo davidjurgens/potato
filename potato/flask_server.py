@@ -1825,10 +1825,11 @@ def annotate_page(username = None, action=None):
             username_from_last_page = request.form.get("email")
             
         #print(username_on_page)
-        #if username_from_last_page == None:
-        #    return render_template("error.html", error_message='You must use the link provided by prolific to work on this study')
-        #else:
-        #    username = username_from_last_page
+        if username_from_last_page == None:
+            #return render_template("error.html", error_message='You must use the link provided by prolific to work on this study')
+            return render_template("error.html", error_message='Please login to annotate or you are using the wrong link')
+        else:
+            username = username_from_last_page
 
     # Check if the user is authorized. If not, go to the login page
     #if not user_config.is_valid_username(username):
