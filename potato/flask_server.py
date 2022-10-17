@@ -1265,7 +1265,7 @@ def generate_initial_user_dataflow(username):
     for it in ['pre_annotation_pages', 'prestudy_ids']:
         if it in task_assignment:
             sampled_keys += task_assignment[it]
-        print(it, task_assignment[it])
+            print(it, task_assignment[it])
 
     print(sampled_keys)
 
