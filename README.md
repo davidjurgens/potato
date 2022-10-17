@@ -47,21 +47,21 @@ Potato comes with a list of predefined example projects:
 ###Dialogue analysis
 
     [launch] python3 potato/flask_server.py example-projects/dialogue_analysis/configs/dialogue-analysis.yaml -p 8000
-    [Annotate] [localhost:8000](http://localhost:8000)
+    [Annotate] http://localhost:8000
 
 ![plot](./images/dialogue_analysis.png)
 
 ###Sentiment analysis
 
     [launch] python3 potato/flask_server.py example-projects/sentiment_analysis/configs/sentiment-analysis.yaml -p 8000
-    [Annotate] [localhost:8000](http://localhost:8000)
+    [Annotate] http://localhost:8000
     
 ![plot](./images/sentiment_analysis.png)
     
 ###Summarization evaluation
 
     [launch]python3 potato/flask_server.py example-projects/summarization_evaluation/configs/summ-eval.yaml -p 8000
-    [Annotate] [localhost:8000](http://localhost:8000/?PROLIFIC_PID=user)
+    [Annotate] http://localhost:8000/?PROLIFIC_PID=user
     
 ![plot](./images/summ_eval.png)
     
