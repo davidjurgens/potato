@@ -1577,6 +1577,7 @@ def save_user_state(username, save_order=False):
                 
             output = {
                 'id': inst_id,
+                'displayed_text': instance_id_to_data[inst_id]['displayed_text'],
                 'label_annotations': data['labels'],
                 'span_annotations': data['spans'],
                 'behavioral_data': bd_dict
@@ -1615,6 +1616,7 @@ def save_all_annotations():
 
                     output = {
                         'id': inst_id,
+                        'displayed_text': instance_id_to_data[inst_id]['displayed_text'],
                         'label_annotations': data['labels'],
                         'span_annotations': data['spans'],
                         'behavioral_data': bd_dict,
@@ -1651,6 +1653,7 @@ def save_all_annotations():
 
                 df['user'].append(user_id)
                 df['instance_id'].append(inst_id)
+                df['displayed_text'].append(instance_id_to_data[inst_id]['displayed_text'])
 
                 label_annotations = annotations['labels']
                 span_annotations = annotations['spans']
@@ -1930,6 +1933,7 @@ def annotate_page(username = None, action=None):
             elif config['list_as_text']['text_list_prefix_type'] == 'number':
                 text = [str(i) + '. ' + text[i] for i in range(len(text))]
             text = '<br>'.join(text)
+
         #unfolding dict into different sections
         elif type(text) == dict:
             block = []
@@ -1945,6 +1949,8 @@ def annotate_page(username = None, action=None):
             text = text
             #raise Exception('list_as_text is used when input column %s is not a list' % config['item_properties']['text_key'])
     instance_id = instance[id_key]
+    # also save the displayed text in the metadata dict
+    instance_id_to_data[instance_id]['displayed_text'] = text
 
     # If the user has labeled spans within this instance before, replace the
     # current instance text with pre-annotated mark-up. We do this here before
