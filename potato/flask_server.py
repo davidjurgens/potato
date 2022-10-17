@@ -1035,12 +1035,20 @@ def home():
     global user_config
     
     if config['__debug__']:
+        print('debug user logging in')
         return annotate_page('debug_user', action='home')
-    elif 'require_no_password' in config and config['require_no_password']:
-        username = request.args.get('PROLIFIC_PID')
-        password = 'require_no_password'
-        return annotate_page(username, action='home')#render_template("id_login_home.html", title=config['annotation_task_name'])
+    elif 'login' in config:
+        if config['login']['type'] == 'url_direct':
+            url_argument = config['login']['url_argument'] if 'url_argument' in config['login'] else 'username'
+            username = request.args.get(url_argument)
+            password = 'require_no_password'
+            print('url direct logging in with %s'%url_argument)
+            return annotate_page(username, action='home')#render_template("id_login_home.html", title=config['annotation_task_name'])
+        else:
+            print('password logging in')
+            return render_template("home.html", title=config['annotation_task_name'])
     else:
+        print('password logging in')
         return render_template("home.html", title=config['annotation_task_name'])
 
 
@@ -1054,7 +1062,7 @@ def login():
         action = 'login'
         username = 'debug_user'
         password = 'debug'
-    elif 'require_no_password' in config and config['require_no_password'] == True:
+    elif 'login' in config and config['login']['type'] == 'url_direct':
         action = request.form.get("action")
         username = request.form.get("email")
         password = 'require_no_password'
@@ -1064,9 +1072,8 @@ def login():
         username = request.form.get("email")
         password = request.form.get("pass")
 
-
     if action == 'login':
-        if config['__debug__'] or ('require_no_password' in config and config['require_no_password']) or user_config.is_valid_password(username, password):
+        if config['__debug__'] or ('login' in config and config['login']['type']=='url_direct') or user_config.is_valid_password(username, password):
             #if surveyflow is setup, jump to the page before annotation
             print('%s login successful'%username)
             return annotate_page(username)
@@ -1251,7 +1258,7 @@ def check_annotation_progress():
 
 
 
-def generate_initial_user_dataflow(username):
+def generate_initial_user_dataflow(username, assign_instances=False):
     '''
        Generate initial dataflow for a new annotator including surveyflows and prestudy
        :return: UserAnnotationState
@@ -1355,7 +1362,7 @@ def assign_instances_to_user(username):
    # "instance_per_annotator": 50,
 
 
-    user_state = lookup_user_state(username)
+    user_state = user_to_annotation_state[username]#lookup_user_state(username)
 
     #check if the user has already been assigned with instances to annotate
     #Currently we are just assigning once, but we might chance this later
@@ -1372,7 +1379,7 @@ def assign_instances_to_user(username):
             logging.warning("Trying to assign instances to user when the prestudy test is not completed, assigning process stoppped")
             return False
         else:
-            if consent_status:
+            if ('surveyflow' not in config or not config['prestudy']['on']) or consent_status:
                 sampled_keys = sample_instances(username)
                 user_state.real_instance_assigned_count += len(sampled_keys)
                 if 'post_annotation_pages' in task_assignment:
@@ -1524,12 +1531,15 @@ def lookup_user_state(username):
 
             if 'prestudy' in config and config["prestudy"]['on']:
                 user_state = UserAnnotationState(generate_initial_user_dataflow(username))
+                user_to_annotation_state[username] = user_state
             else:
                 #assinged_data, real_assigned_instance_count = generate_full_user_dataflow(username)
                 #user_state = UserAnnotationState(assinged_data)
                 #user_state.real_instance_assigned_count = real_assigned_instance_count
                 user_state = UserAnnotationState(generate_initial_user_dataflow(username))
-            user_to_annotation_state[username] = user_state
+                user_to_annotation_state[username] = user_state
+                assign_instances_to_user(username)
+
         else:
             #assign all the instance to each user when automatic assignment is turned off
             user_state = UserAnnotationState(instance_id_to_data)
