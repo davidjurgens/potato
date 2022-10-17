@@ -3376,6 +3376,8 @@ def generate_likert_layout(annotation_scheme):
         # displaying the label content in a different line if it is not empty
         if label_content != '':
             line_break = '<br>'
+        else:
+            line_break = ''
         #schematic += \
         #        ((' <li><input class="%s" type="radio" id="%s" name="%s" value="%s" onclick="onlyOne(this)">' +
         #         '  <label for="%s" %s>%s</label></li>')
