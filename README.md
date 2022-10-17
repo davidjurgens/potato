@@ -61,7 +61,7 @@ Potato comes with a list of predefined example projects:
     
 ### Summarization evaluation
 
-    [launch]python3 potato/flask_server.py example-projects/summarization_evaluation/configs/summ-eval.yaml -p 8000
+    [launch] python3 potato/flask_server.py example-projects/summarization_evaluation/configs/summ-eval.yaml -p 8000
     [Annotate] http://localhost:8000/?PROLIFIC_PID=user
     
 ![plot](./images/summ_eval.png)
