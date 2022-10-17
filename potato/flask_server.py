@@ -1823,13 +1823,12 @@ def annotate_page(username = None, action=None):
             username = 'debug_user'
         else:
             username_from_last_page = request.form.get("email")
-            
-        #print(username_on_page)
-        if username_from_last_page == None:
-            #return render_template("error.html", error_message='You must use the link provided by prolific to work on this study')
-            return render_template("error.html", error_message='Please login to annotate or you are using the wrong link')
-        else:
-            username = username_from_last_page
+            #print(username_on_page)
+            if username_from_last_page == None:
+                #return render_template("error.html", error_message='You must use the link provided by prolific to work on this study')
+                return render_template("error.html", error_message='Please login to annotate or you are using the wrong link')
+            else:
+                username = username_from_last_page
 
     # Check if the user is authorized. If not, go to the login page
     #if not user_config.is_valid_username(username):
@@ -1919,10 +1918,11 @@ def annotate_page(username = None, action=None):
 
     # automatically unfold the text list when input text is a list (e.g. best-worst-scaling).
     if 'list_as_text' in config and config['list_as_text']:
-        try:
-            text = eval(text)
-        except:
-            text = str(text)
+        if type(text) == str:
+            try:
+                text = eval(text)
+            except:
+                text = str(text)
         if type(text) == list:
             if config['list_as_text']['text_list_prefix_type'] == 'alphabet':
                 prefix_list = list(string.ascii_uppercase)
