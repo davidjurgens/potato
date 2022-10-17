@@ -48,16 +48,18 @@ Dialogue analysis
 
     python3 potato/flask_server.py example-projects/dialogue_analysis/configs/dialogue-analysis.yaml -p 8000
 
-![plot](./images/summ_eval.png)
+![plot](./images/dialogue_analysis.png)
 
 Sentiment analysis
 
     python3 potato/flask_server.py example-projects/sentiment_analysis/configs/sentiment-analysis.yaml -p 8000
     
+![plot](./images/sentiment_analysis.png)
+    
 Summarization evaluation
 
     python3 potato/flask_server.py example-projects/summarization_evaluation/configs/summ-eval.yaml -p 8000
-
+![plot](./images/summ_eval.png)
     
 ## Design Team and Support
 
