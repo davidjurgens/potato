@@ -44,20 +44,27 @@ The `config/examples` folder contains example `.yaml` configuration files that m
 
 ## Example projects
 Potato comes with a list of predefined example projects:
-Dialogue analysis
 
-    python3 potato/flask_server.py example-projects/dialogue_analysis/configs/dialogue-analysis.yaml -p 8000
+### Dialogue analysis
 
-![plot](./images/summ_eval.png)
+    [launch] python3 potato/flask_server.py example-projects/dialogue_analysis/configs/dialogue-analysis.yaml -p 8000
+    [Annotate] http://localhost:8000
 
-Sentiment analysis
+![plot](./images/dialogue_analysis.png)
 
-    python3 potato/flask_server.py example-projects/sentiment_analysis/configs/sentiment-analysis.yaml -p 8000
+### Sentiment analysis
+
+    [launch] python3 potato/flask_server.py example-projects/sentiment_analysis/configs/sentiment-analysis.yaml -p 8000
+    [Annotate] http://localhost:8000
     
-Summarization evaluation
+![plot](./images/sentiment_analysis.png)
+    
+### Summarization evaluation
 
-    python3 potato/flask_server.py example-projects/summarization_evaluation/configs/summ-eval.yaml -p 8000
-
+    [launch]python3 potato/flask_server.py example-projects/summarization_evaluation/configs/summ-eval.yaml -p 8000
+    [Annotate] http://localhost:8000/?PROLIFIC_PID=user
+    
+![plot](./images/summ_eval.png)
     
 ## Design Team and Support
 
