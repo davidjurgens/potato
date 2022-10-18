@@ -75,6 +75,14 @@ Potato comes with a list of predefined example projects:
     [Annotate] http://localhost:8000/?PROLIFIC_PID=user
     
 ![plot](./images/summ_eval.png)
+
+### Match findings in papers and news (likert + prescreening questions + multi-task)
+
+    [Setup configuration files for multiple similar tasks] python3 potato/setup_multitask_config.py example-projects/match_finding/multitask_config.yaml
+    [launch] python3 potato/flask_server.py example-projects/match_finding/configs/Computer_Science.yaml -p 8000
+    [Annotate] http://localhost:8000/?PROLIFIC_PID=user
+    
+![plot](./images/match_finding.gif)
     
 ## Design Team and Support
 
