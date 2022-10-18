@@ -20,6 +20,16 @@ Potato is carefully desinged with a series of features that can make your annota
 - [Dynamic Highlighting](https://potato-annotation-tutorial.readthedocs.io/en/latest/productivity.html#dynamic-highlighting): For tasks that have a lot of labels or super long documents, you can setup dynamic highlighting which will smartly highlight the potential association between labels and keywords in the document (as defined by you). 
 - [Label Tooltips](https://potato-annotation-tutorial.readthedocs.io/en/latest/productivity.html#tooltips): When you have a lot of labels (e.g. 30 labels in 4 categories), it'd be extremely hard for annotators to remember all the detailed descriptions of each of them. Potato allows you to set up label tooltips and annotators can hover the mouse over labels to view the description.
 
+### Knowing better about your annotators
+Potato allows a series of features that can help you to better understand the background of annotators and identify potential data biases in your data.
+- [Pre and Post screening questions](https://potato-annotation-tutorial.readthedocs.io/en/latest/surveyflow.html#pre-study-survey): Potato allows you to easily set up prescreening and postscreening questions and can help you to better understand the backgrounds of your annotators. Potato comes with a seires of question templates that allows you to easily setup common prescreening questions like [demographics](https://potato-annotation-tutorial.readthedocs.io/en/latest/surveyflow.html#built-in-demographic-questions).
+
+### Better quality control
+Potato comes with features that allows you to collect more reliable annotations and identify potential spammers.
+- [Attention Test](https://potato-annotation-tutorial.readthedocs.io/en/latest/surveyflow.html#attention-test): Potato allows you to easily set up attention test questions and will randomly insert them into the annotation queue, allowing you to better identify potential spammers.
+- [Qualification Test](https://potato-annotation-tutorial.readthedocs.io/en/latest/surveyflow.html#pre-study-test): Potato allows you to easily set up qualification test before the full data labeling and allows you to easily identify disqualified annotators.
+- [Built-in time check](https://potato-annotation-tutorial.readthedocs.io/en/latest/annotator_stats.html#annotation-time): Potato automatically keeps track of the time annotators spend on each instance and allows you to better analyze annotator behaviors.
+
 
 ## Quick Start
 Clone the github repo to your computer
