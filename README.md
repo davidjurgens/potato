@@ -60,7 +60,7 @@ Potato comes with a list of predefined example projects:
     [launch] python3 potato/flask_server.py example-projects/dialogue_analysis/configs/dialogue-analysis.yaml -p 8000
     [Annotate] http://localhost:8000
 
-![plot](./images/dialogue_analysis.png)
+![plot](./images/dialogue_analysis.gif)
 
 ### Sentiment analysis (categorization)
 
