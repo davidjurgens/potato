@@ -11,8 +11,11 @@ Please check out our [official documentation](https://potato-annotation-tutorial
 ## Feature hightlights 
 Potato supports a wide ranges of features that can make your data annotation easier:
 
-### Easy setup
-Potato can be easily set up with simply editing a configuration file. You don't need to write any codes to set up your annotation webpage. Please check out our full [documentation](https://potato-annotation-tutorial.readthedocs.io/en/latest/schemas_and_templates.html) for all configuration options. Potato comes with a series of built-in [templates](https://potato-annotation-tutorial.readthedocs.io/en/latest/schemas_and_templates.html#existing-task-templates) which allows you to easily setup common forms of annotation tasks like Question Answering, Sentiment Analyisis, Text Classification, ...
+### Easy setup and flexible for diverse needs
+Potato can be easily set up with simply editing a configuration file. You don't need to write any codes to set up your annotation webpage. Potato also comes with a series of features for diverse needs.
+- [Built-in schemas and templates](https://potato-annotation-tutorial.readthedocs.io/en/latest/schemas_and_templates.html): Potato supports a wide range of annotation schemas including radio, likert, checkbox, textbox, span, pairwise comparison, best-worst-scaling, image/video-as-label, etc. All these schemas can be 
+- [Flexible data types](https://potato-annotation-tutorial.readthedocs.io/en/latest/schemas_and_templates.html): Potato supports displaying short documents, long documents, dialogue, comparisons, etc.. 
+- [Multi-task setup](https://potato-annotation-tutorial.readthedocs.io/en/latest/schemas_and_templates.html): NLP researchers may need to set up a series of similar but different tasks (e.g. multilingual annotation). Potato allows you to easily generate configuration files for all the tasks with minimum configurations and has supported the [SemEval 2023 Task 9: Multilingual Tweet Intimacy Analysis](https://sites.google.com/umich.edu/semeval-2023-tweet-intimacy/home)
 
 ### Improving Annotator Productivity
 Potato is carefully desinged with a series of features that can make your annotators experience better and help you get your annotations faster. You can easily set up 
