@@ -55,8 +55,8 @@ The `config/examples` folder contains example `.yaml` configuration files that m
 
 
 
-## Example projects
-Potato comes with a list of predefined example projects:
+## Example projects (project hub)
+Potato aims to improve the replicability of data annotation and reduce the cost for researchers to set up new annotation tasks. Therefore, Potato comes with a list of predefined example projects, and welcome public contribution to the project hub. If you have used potato for your own annotation, you are encouraged to create a pull request and release your annotation setup. 
 
 ### Dialogue analysis (span + categorization)
 
