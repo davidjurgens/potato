@@ -23,7 +23,7 @@
     "annotation_codebook_url": "",
 
     "data_files": [
-       "data/intimacy/paired_df_1k.jsonl"
+       "data/pairwise-example.json"
     ],
 
     "item_properties": {
@@ -43,15 +43,14 @@
       "users": [  ],
     },
 
-    #password requirement will be removed if this is added, the associated function is still under development
-    "require_no_password": True,
 
     #the jumping-to-id function will be disabled if "jumping_to_id_disabled" is True
     "jumping_to_id_disabled": True,
 
     # define the surveyflow of the system, set up the pages before and after the data annotation page
     "surveyflow": {
-        "on": True,
+        "on": False,
+        "order": ["pre_annotation","post_annotation"],
         "pre_annotation": ['data/surveyflow/intro.jsonl', 'data/surveyflow/consent.jsonl'],
         "post_annotation": ['data/surveyflow/demographic_questions.jsonl','data/surveyflow/end.jsonl'],
     },
@@ -59,15 +58,14 @@
 
     "automatic_assignment": {
       #whether do automatic task assignment for annotators, default False.
-      "on": True,
+      "on": False,
       "output_filename": 'task_assignment.json',
       "sampling_strategy:": 'random',
       "labels_per_instance": 2,
-      "instance_per_annotator": 5,
+      "instance_per_annotator": 1,
 
       "users": [  ],
     },
-
 
 
     # How many seconds do you want the annotators spend on each instance, after

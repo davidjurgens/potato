@@ -1379,7 +1379,7 @@ def assign_instances_to_user(username):
             logging.warning("Trying to assign instances to user when the prestudy test is not completed, assigning process stoppped")
             return False
         else:
-            if ('surveyflow' not in config or not config['prestudy']['on']) or consent_status:
+            if ('surveyflow' not in config or not config['surveyflow']['on'] or 'prestudy' not in config or not config['prestudy']['on']) or consent_status:
                 sampled_keys = sample_instances(username)
                 user_state.real_instance_assigned_count += len(sampled_keys)
                 if 'post_annotation_pages' in task_assignment:
@@ -3921,7 +3921,7 @@ def main():
     config['__debug__'] = False
     if args.debug:
         config['__debug__'] = True
-    
+
     # Creates the templates we'll use in flask by mashing annotation
     # specification on top of the proto-templates
     generate_site(config)
