@@ -53,8 +53,10 @@
                "blue", "maize", "green", "white"
             ],
 
-            # If true, the field will have an optional text box the user can 
-            'has_free_response': True,
+            # If true, the field will have an optional text box the user can
+            'has_free_response': {
+               "instruction": 'Comments (optional):',
+            },
             
             # If true, numbers [1-len(labels)] will be bound to each
             # label. Check box annotations with more than 10 are not supported
