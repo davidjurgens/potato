@@ -92,3 +92,13 @@ Potato aims to improve the replicability of data annotation and reduce the cost 
 Potato is run by a small and engergetic team of academics doing the best they can. For support, please leave a issue on this git repo. Feature requests and issues are both welcomed!
 If you have any questions or want to collaborate on this project, please email pedropei@umich.edu
    
+## Cite us
+Please use the following bibtex when referencing this work:
+```
+@inproceedings{pei2022potato,
+  title={POTATO: The Portable Text Annotation Tool},
+  author={Pei, Jiaxin and Ananthasubramaniam, Aparna and Wang, Xingyao and Zhou, Naitian and Dedeloudis, Apostolos and Sargent, Jackson and Jurgens, David},
+  booktitle={Proceedings of the 2022 Conference on Empirical Methods in Natural Language Processing: System Demonstrations},
+  year={2022}
+}
+```
