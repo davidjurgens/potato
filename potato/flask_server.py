@@ -434,7 +434,7 @@ class UserAnnotationState:
             # separately
             if re.search('consent', inst_id):
                 consent_key = 'I want to participate in this research and continue with the study.'
-                if 'Yes' in annotation[consent_key] and annotation[consent_key]['Yes'] == 'true':
+                if 'Yes' in label_annotations[consent_key] and label_annotations[consent_key]['Yes'] == 'true':
                     self.consent_agreed = True
                 else:
                     self.consent_agreed = False
@@ -629,8 +629,9 @@ def load_all_data(config):
             instance_id_to_data.move_to_end(page, last=True)
             items_to_annotate.append(item)
 
-
-
+    # Generate the text to display in instance_id_to_data
+    for inst_id in instance_id_to_data:
+        instance_id_to_data[inst_id]['displayed_text'] = get_displayed_text(instance_id_to_data[inst_id][config["item_properties"]['text_key']])
 
     all_data["items_to_annotate"] = items_to_annotate
 
@@ -1819,6 +1820,40 @@ def previous_response(user, file_path):
             f.write(line)
 
 
+def get_displayed_text(text):
+    # automatically unfold the text list when input text is a list (e.g. best-worst-scaling).
+    if 'list_as_text' in config and config['list_as_text']:
+        if type(text) == str:
+            try:
+                text = eval(text)
+            except:
+                text = str(text)
+        if type(text) == list:
+            if config['list_as_text']['text_list_prefix_type'] == 'alphabet':
+                prefix_list = list(string.ascii_uppercase)
+                text = [prefix_list[i] + '. ' + text[i] for i in range(len(text))]
+            elif config['list_as_text']['text_list_prefix_type'] == 'number':
+                text = [str(i) + '. ' + text[i] for i in range(len(text))]
+            text = '<br>'.join(text)
+
+        # unfolding dict into different sections
+        elif type(text) == dict:
+            block = []
+            if "horizontal" in config['list_as_text'] and config['list_as_text']["horizontal"]:
+                for key in text:
+                    block.append(
+                        '<div name="instance_text" style="float:left;width:%s;padding:5px;" class="column"> <legend> %s </legend> %s </div>' % (
+                        "%d" % int(100 / len(text)) + "%", key, text[key]))
+                text = '<div class="row" style="display: table"> %s </div>' % (''.join(block))
+            else:
+                for key in text:
+                    block.append('<div name="instance_text"> <legend> %s </legend> %s <br/> </div>' % (key, text[key]))
+                text = ''.join(block)
+        else:
+            text = text
+            # raise Exception('list_as_text is used when input column %s is not a list' % config['item_properties']['text_key'])
+    return text
+
 @app.route("/annotate", methods=["GET", "POST"])
 def annotate_page(username = None, action=None):
     '''
@@ -1926,41 +1961,13 @@ def annotate_page(username = None, action=None):
         context_key = config['item_properties']['context_key']
         context = instance[context_key]
 
-
-    text = instance[text_key]
-
-    # automatically unfold the text list when input text is a list (e.g. best-worst-scaling).
-    if 'list_as_text' in config and config['list_as_text']:
-        if type(text) == str:
-            try:
-                text = eval(text)
-            except:
-                text = str(text)
-        if type(text) == list:
-            if config['list_as_text']['text_list_prefix_type'] == 'alphabet':
-                prefix_list = list(string.ascii_uppercase)
-                text = [prefix_list[i] + '. ' + text[i] for i in range(len(text))]
-            elif config['list_as_text']['text_list_prefix_type'] == 'number':
-                text = [str(i) + '. ' + text[i] for i in range(len(text))]
-            text = '<br>'.join(text)
-
-        #unfolding dict into different sections
-        elif type(text) == dict:
-            block = []
-            if "horizontal" in config['list_as_text'] and config['list_as_text']["horizontal"]:
-                for key in text:
-                    block.append('<div name="instance_text" style="float:left;width:%s;padding:5px;" class="column"> <legend> %s </legend> %s </div>' % ("%d"%int(100/len(text))+"%", key, text[key]))
-                text = '<div class="row" style="display: table"> %s </div>' % (''.join(block))
-            else:
-                for key in text:
-                    block.append('<div name="instance_text"> <legend> %s </legend> %s <br/> </div>'%(key, text[key]))
-                text = ''.join(block)
-        else:
-            text = text
-            #raise Exception('list_as_text is used when input column %s is not a list' % config['item_properties']['text_key'])
+    #directly display the prepared displayed_text
     instance_id = instance[id_key]
+    text = instance['displayed_text']
+    #text = get_displayed_text(text)
+
     # also save the displayed text in the metadata dict
-    instance_id_to_data[instance_id]['displayed_text'] = text
+    #instance_id_to_data[instance_id]['displayed_text'] = text
 
     # If the user has labeled spans within this instance before, replace the
     # current instance text with pre-annotated mark-up. We do this here before
