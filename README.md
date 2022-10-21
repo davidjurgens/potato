@@ -8,6 +8,9 @@ Potato is driven by a single configuration file that specifies the type of task 
 
 Please check out our [official documentation](https://potato-annotation-tutorial.readthedocs.io/) for detailed instructions.
 
+>Jiaxin Pei, Aparna Ananthasubramaniam, Xingyao Wang, Naitian Zhou, Jackson Sargent, Apostolos Dedeloudis and David Jurgens
+The 2022 Conference on Empirical Methods on Natural Language Processing (EMNLP'22 demo)
+
 ## Feature hightlights 
 Potato supports a wide ranges of features that can make your data annotation easier:
 
