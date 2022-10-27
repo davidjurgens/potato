@@ -280,7 +280,7 @@
           }
 
           // Stuff all the current annotations into attributes for processing on the server side
-          $('form input, form select').each(
+          $('form input, form select, form textarea').each(
               function(index){  
                   var input = $(this);
                   
@@ -338,6 +338,7 @@
                   //console.log(annotated_spans)
               }
           );
+
           
           document.body.appendChild(form);
           form.submit();

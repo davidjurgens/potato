@@ -54,6 +54,14 @@
             "annotation_type": "text",
             "name": "textbox_input",
             "description": "How does this text make you feel?",
+            # you could easily define a list of textboxes within one schema with a list of labels
+            "labels": ['happy?','sad?'],
+            # if you want to use multi-line textbox, turn on the text area and set the desired rows and cols of the textbox
+            "textarea": {
+              "on": False,
+              "rows": 2,
+              "cols": 40
+            }
         }       
     ],
 

@@ -2080,13 +2080,17 @@ def annotate_page(username = None, action=None):
         # Reset the state
         for schema, labels in annotations.items():
             for label, value in labels.items():
+                #print(schema, label, value)
                 name = schema + ":::" + label
-                input_field = soup.find_all(["input", "select"], {"name": name})[0] #select both input and select tags
+                input_field = soup.find_all(["input", "select", "textarea"], {"name": name})[0] #select input, select and textarea tags
                 if input_field is None:
                     print('No input for ', name)
                     continue
                 input_field['checked'] = True
                 input_field['value'] = value
+                #set the input value for textarea input
+                if input_field.name == 'textarea':
+                    input_field.string = value
                 #find the right option and set it as selected if the current annotation schema is a select box
                 if label == 'select-one':
                     option = input_field.findChildren('option', {"value": value})[0]
@@ -3430,18 +3434,11 @@ def generate_textbox_layout(annotation_scheme):
     schematic = \
         '<form action="/action_page.php">' + \
         '  <fieldset>' + \
-        ('  <legend>%s</legend>' % annotation_scheme['description'])
+        ('  <legend>%s</legend> <ul class="likert" style="text-align: center;">' % annotation_scheme['description'])
 
     # TODO: display keyboard shortcuts on the annotation page
     key2label = {}
     label2key = {}
-
-    # TODO: decide whether text boxes need labels
-    label = 'text_box'
-
-    name = annotation_scheme['name'] + ':::' + label
-    class_name = annotation_scheme['name']
-    key_value = name
 
     # Technically, text boxes don't have these but we define it anyway
     key_bindings = []
@@ -3455,7 +3452,44 @@ def generate_textbox_layout(annotation_scheme):
         for k, v in display_info['custom_css'].items():
             custom_css += k + ":" + v + ";"
         custom_css += '"'
-    
+
+    tooltip = ""
+
+    # supporting multiple textboxes with different labels
+    if 'labels' not in annotation_scheme:
+        labels = ['text_box']
+    else:
+        labels = annotation_scheme['labels']
+    for label in labels:
+        name = annotation_scheme['name'] + ':::' + label
+        class_name = annotation_scheme['name']
+        key_value = name
+
+        # setting up label validation for each label, if "required" is True, the annotators will be asked to finish the current instance to proceed
+        validation = ''
+        label_requirement = annotation_scheme['label_requirement'] if 'label_requirement' in annotation_scheme else None
+        if label_requirement and 'required' in label_requirement and label_requirement['required']:
+            validation = 'required'
+
+        #set up textarea to allow multiline text input
+        if "textarea" in annotation_scheme and annotation_scheme["textarea"]['on']:
+            rows = annotation_scheme["textarea"]['rows'] if 'rows' in annotation_scheme["textarea"] else '3'
+            cols = annotation_scheme["textarea"]['cols'] if 'rows' in annotation_scheme["textarea"] else '40'
+            schematic += \
+                (('  <li><label for="%s" %s>%s</label> ' +
+                  '<textarea rows="%s" cols="%s" class="%s" style=%s type="text" id="%s" name="%s" validation="%s"></textarea></li> <br/>')
+                 % (name, tooltip, label if label != 'text_box' else '',
+                    rows, cols, class_name, custom_css, name, name, validation))
+        else:
+            schematic += \
+                (('  <li><label for="%s" %s>%s</label> <input class="%s" style=%s type="text" id="%s" name="%s" validation="%s"> </li> <br/>')
+                 % (name, tooltip, label if label != 'text_box' else '', class_name, custom_css, name, name, validation))
+
+        # schematic += '  </fieldset>\n</form></div>\n'
+    schematic += ' </ul> </fieldset>\n</form>\n'
+
+
+    '''
     tooltip = ''
     if False:
         if 'tooltip' in annotation_scheme:
@@ -3478,7 +3512,7 @@ def generate_textbox_layout(annotation_scheme):
             key2label[key_value] = label
             label2key[label] = key_value
 
-
+    
     label_content = label
 
     #add shortkey to the label so that the annotators will know how to use it
@@ -3487,21 +3521,7 @@ def generate_textbox_layout(annotation_scheme):
     if label in label2key:
         label_content = label_content + \
             ' [' + label2key[label].upper() + ']'
-
-    # setting up label validation for each label, if "required" is True, the annotators will be asked to finish the current instance to proceed
-    validation = ''
-    label_requirement = annotation_scheme['label_requirement'] if 'label_requirement' in annotation_scheme else None
-    if label_requirement and 'required' in label_requirement and label_requirement['required']:
-        validation = 'required'
-
-    schematic += \
-            (('  <input class="%s" style=%s type="text" id="%s" name="%s" validation="%s">' +
-             '  <label for="%s" %s></label><br/>')
-             % (class_name, custom_css, name, name, validation,
-                name, tooltip))
-
-    #schematic += '  </fieldset>\n</form></div>\n'
-    schematic += '  </fieldset>\n</form>\n'
+    '''
 
     
     return schematic, key_bindings
