@@ -3324,9 +3324,9 @@ def generate_span_layout(annotation_scheme, horizontal=False):
         name_with_span = 'span_label:::' + name
             
         schematic += \
-            ('      <input class="{class_name}" type="radio" id="{name}" name="{name_with_span}" ' +
+            ('      <input class="{class_name}" type="checkbox" id="{name}" name="{name_with_span}" ' +
              ' value="{key_value}" {is_checked} ' +
-             'onclick="onlyOne(this); changeSpanLabel(\'{label_content}\', \'{span_color}\');">' +
+             'onclick="onlyOne(this); changeSpanLabel(this, \'{label_content}\', \'{span_color}\');">' +
              '  <label for="{name}" {tooltip}>' +
              '<span style="background-color:rgb{bg_color};">{label_content}</span></label>{br_label}').format(
                  class_name=class_name, name=name, key_value=key_value,

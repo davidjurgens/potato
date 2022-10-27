@@ -129,9 +129,13 @@
           }
       }
 
-      function changeSpanLabel(spanLabel, spanColor) {
-          // Listen for when the user has highlighted some text
-          document.onmouseup = function() { surroundSelection(spanLabel, spanColor); } 
+      function changeSpanLabel(checkbox, spanLabel, spanColor) {
+          // Listen for when the user has highlighted some text (only when the label is checked)
+          document.onmouseup = function() {
+              if (checkbox.checked){
+                  surroundSelection(spanLabel, spanColor);
+              }
+          }
       }
 
       // Listen for when the user has highlighted some text
