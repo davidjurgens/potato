@@ -3456,7 +3456,7 @@ def generate_textbox_layout(annotation_scheme):
     tooltip = ""
 
     # supporting multiple textboxes with different labels
-    if 'labels' not in annotation_scheme:
+    if 'labels' not in annotation_scheme or annotation_scheme['labels'] == None:
         labels = ['text_box']
     else:
         labels = annotation_scheme['labels']
