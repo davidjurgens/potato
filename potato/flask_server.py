@@ -1,52 +1,37 @@
+"""
+Driver to run a flask server.
+"""
 import os
-import numpy as np
-import flask
-from flask import Flask, render_template, request
-import sys
-import pandas as pd
-
-import yaml
 import re
-from os.path import basename
-
-from os import path
-
-from bs4 import BeautifulSoup
-
-from tqdm import tqdm
-
-import threading
-
-
+import sys
 import logging
-
-# import requests
 import random
-random.seed(0)
 import json
 from collections import deque, defaultdict, Counter, OrderedDict
-from collections.abc import Mapping
-from argparse import ArgumentParser
-
-from sklearn.pipeline import Pipeline
-
 from itertools import zip_longest
-import krippendorff
 import string
+import threading
 
-import webbrowser
+import numpy as np
+import pandas as pd
+from tqdm import tqdm
+from sklearn.pipeline import Pipeline
+import krippendorff
+
+import flask
+from flask import Flask, render_template, request
+from bs4 import BeautifulSoup
 
 from create_task_cli import create_task_cli, yes_or_no
-from server_utils.config_module import init_config, config
 from server_utils.arg_utils import arguments
+from server_utils.config_module import init_config, config
+from server_utils.front_end import generate_site, generate_surveyflow_pages
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logging.basicConfig()
 
-# import choix
-# import networkx as nx
-
+random.seed(0)
 
 domain_file_path = ""
 file_list = []
@@ -89,10 +74,6 @@ task_assignment = {}
 # path to save user information
 USER_CONFIG_PATH = 'potato/user_config.json'
 
-#TODO: Move this to config.yaml files
-#Items which will be displayed in the popup statistics sidebar
-STATS_KEYS = {'Annotated instances':'Annotated instances','Total working time':'Total working time', 'Average time on each instance':'Average time on each instance', 'Agreement':'Agreement'}
-
 
 # This variable of tyep ActiveLearningState keeps track of information on active
 # learning, such as which instances were sampled according to each strategy
@@ -106,7 +87,6 @@ COLOR_PALETTE = ['rgb(179,226,205)', 'rgb(253,205,172)', 'rgb(203,213,232)', 'rg
 
 app = Flask(__name__)
 
-SPAN_COLOR_PALETTE = ['(230, 25, 75)', '(60, 180, 75)', '(255, 225, 25)', '(0, 130, 200)', '(245, 130, 48)', '(145, 30, 180)', '(70, 240, 240)', '(240, 50, 230)', '(210, 245, 60)', '(250, 190, 212)', '(0, 128, 128)', '(220, 190, 255)', '(170, 110, 40)', '(255, 250, 200)', '(128, 0, 0)', '(170, 255, 195)', '(128, 128, 0)', '(255, 215, 180)', '(0, 0, 128)', '(128, 128, 128)', '(255, 255, 255)', '(0, 0, 0)']
 
 class UserConfig:
     '''
@@ -1272,7 +1252,7 @@ def generate_initial_user_dataflow(username, assign_instances=False):
     assigned_user_data = {key: instance_id_to_data[key] for key in sampled_keys}
 
     # save the assigned user data dict
-    user_dir = path.join(config['output_annotation_dir'], username)
+    user_dir = os.path.join(config['output_annotation_dir'], username)
     assigned_user_data_path = user_dir + '/assigned_user_data.json'
 
     if not os.path.exists(user_dir):
@@ -1395,7 +1375,7 @@ def assign_instances_to_user(username):
     print('assinged %d instances to %s, total pages: %s'%(user_state.get_real_assigned_instance_count(), username, user_state.get_assigned_instance_count()))
 
     # save the assigned user data dict
-    user_dir = path.join(config['output_annotation_dir'], username)
+    user_dir = os.path.join(config['output_annotation_dir'], username)
     assigned_user_data_path =  user_dir + '/assigned_user_data.json'
 
     if not os.path.exists(user_dir):
@@ -1479,7 +1459,7 @@ def generate_full_user_dataflow(username):
         assigned_user_data = {key:instance_id_to_data[key] for key in sampled_keys}
 
         # save the assigned user data dict
-        user_dir = path.join(config['output_annotation_dir'], username)
+        user_dir = os.path.join(config['output_annotation_dir'], username)
         assigned_user_data_path =  user_dir + '/assigned_user_data.json'
 
         if not os.path.exists(user_dir):
@@ -1549,7 +1529,7 @@ def save_user_state(username, save_order=False):
     output_annotation_dir = config['output_annotation_dir']
 
     # NB: Do some kind of sanitizing on the username to improve security
-    user_dir = path.join(output_annotation_dir, username)
+    user_dir = os.path.join(output_annotation_dir, username)
 
     user_state = lookup_user_state(username)
 
@@ -1557,14 +1537,14 @@ def save_user_state(username, save_order=False):
         os.makedirs(user_dir)
         logger.debug("Created state directory for user \"%s\"" % (username))
 
-    annotation_order_fname = path.join(user_dir, "annotation_order.txt")
+    annotation_order_fname = os.path.join(user_dir, "annotation_order.txt")
     if not os.path.exists(annotation_order_fname) or save_order:
         with open(annotation_order_fname, 'wt') as outf:
             for inst in user_state.instance_id_ordering:
                 # JIAXIN: output id has to be str
                 outf.write(str(inst) + '\n')
 
-    annotated_instances_fname = path.join(
+    annotated_instances_fname = os.path.join(
         user_dir, "annotated_instances.jsonl")
     
     with open(annotated_instances_fname, 'wt') as outf:
@@ -1599,7 +1579,7 @@ def save_all_annotations():
         os.makedirs(output_annotation_dir)
         logger.debug("Created state directory for annotations: %s" % (output_annotation_dir))
         
-    annotated_instances_fname = path.join(output_annotation_dir, "annotated_instances." + fmt)
+    annotated_instances_fname = os.path.join(output_annotation_dir, "annotated_instances." + fmt)
     
     # We write jsonl format regardless        
     if fmt == 'json' or fmt == 'jsonl':
@@ -1698,7 +1678,7 @@ def load_user_state(username):
     user_state_dir = config['output_annotation_dir']
 
     # NB: Do some kind of sanitizing on the username to improve securty
-    user_dir = path.join(user_state_dir, username)
+    user_dir = os.path.join(user_state_dir, username)
 
 
     # User has annotated before or has assigned_data
@@ -1717,7 +1697,7 @@ def load_user_state(username):
             assigned_user_data = instance_id_to_data
 
         annotation_order = []
-        annotation_order_fname = path.join(user_dir, "annotation_order.txt")
+        annotation_order_fname = os.path.join(user_dir, "annotation_order.txt")
         if os.path.exists(annotation_order_fname):
             with open(annotation_order_fname, 'rt') as f:
                 for line in f:
@@ -1730,7 +1710,7 @@ def load_user_state(username):
                     annotation_order.append(line[:-1])
 
         annotated_instances = []
-        annotated_instances_fname = path.join(user_dir, "annotated_instances.jsonl")
+        annotated_instances_fname = os.path.join(user_dir, "annotated_instances.jsonl")
         if os.path.exists(annotated_instances_fname):
 
             with open(annotated_instances_fname, 'rt') as f:
@@ -2140,50 +2120,6 @@ def render_span_annotations(text, span_annotations):
         text = text[:a['start']] + ann + text[a['end']:]
 
     return text
-
-def get_span_color(span_label):
-    '''
-    Returns the color of a span with this label as a string with an RGB triple
-    in parentheses, or None if the span is unmapped.
-    '''
-    if 'ui' not in config or 'spans' not in config['ui']:
-        return None
-    span_ui = config['ui']['spans']
-
-    if 'span_colors' not in span_ui:
-        return None
-
-    if span_label in span_ui['span_colors']:
-        return span_ui['span_colors'][span_label]
-    else:
-        return None
-
-
-def set_span_color(span_label, color):
-    '''
-    Sets the color of a span with this label as a string with an RGB triple in parentheses.
-
-    :color: a string containing an RGB triple in parentheses
-    '''
-    if 'ui' not in config:
-        ui = {}
-        config['ui'] = ui
-    else:
-        ui = config['ui']
-
-    if 'spans' not in ui:
-        span_ui = {}
-        ui['spans'] = span_ui
-    else:
-        span_ui = ui['spans']
-
-    if 'span_colors' not in span_ui:
-        span_colors = {}
-        span_ui['span_colors'] = span_colors
-    else:
-        span_colors = span_ui['span_colors']
-
-    span_colors[span_label] = color
     
 
 def parse_html_span_annotation(html_span_annotation):
@@ -2387,1226 +2323,6 @@ def parse_story_pair_from_file(filepath):
     # random.shuffle(lines)
     return lines
 
-
-def generate_site(config):
-    '''
-    Generates the full HTML file in site/ for annotating this tasks data,
-    combining the various templates with the annotation specification in
-    the yaml file.
-    '''
-    logger.info("Generating anntotation site at %s" % config['site_dir'])
-
-    #
-    # Stage 1: Construct the core HTML file devoid the annotation-specific content
-    #    
-    
-    # Load the core template that has all the UI controls and non-task layout. 
-    html_template_file = config['base_html_template']
-    logger.debug("Reading html annotation template %s" % html_template_file)
-    
-    if not os.path.exists(html_template_file):
-
-        real_path = os.path.realpath(config['__config_file__'])
-        dir_path = os.path.dirname(real_path)
-        abs_html_template_file = dir_path + '/' + html_template_file
-        
-        if not os.path.exists(abs_html_template_file):
-            raise FileNotFoundError("html_template_file not found: %s" % html_template_file)
-        else:
-            html_template_file = abs_html_template_file
-    
-    with open(html_template_file, 'rt') as f:
-        html_template = ''.join(f.readlines())
-
-    # Load the header content we'll stuff in the template, which has scripts and assets we'll need
-    header_file = config['header_file']
-    logger.debug("Reading html header %s" % header_file)
-    
-    if not os.path.exists(header_file):
-
-        # See if we can get it from the relative path
-        real_path = os.path.realpath(config['__config_file__'])
-        dir_path = os.path.dirname(real_path)
-        abs_header_file = dir_path + '/' + header_file
-
-        if not os.path.exists(abs_header_file):
-            raise FileNotFoundError("header_file not found: %s" % header_file)
-        else:
-            header_file = abs_header_file
-    
-    with open(header_file, 'rt') as f:
-        header = ''.join(f.readlines())
-
-    html_template = html_template.replace("{{ HEADER }}", header)
-
-    if "jumping_to_id_disabled" in config and config["jumping_to_id_disabled"]:
-        html_template = html_template.replace("<input type=\"submit\" value=\"go\">", "<input type=\"submit\" value=\"go\" hidden>")
-        html_template = html_template.replace("<input type=\"number\" name=\"go_to\" id=\"go_to\" value=\"\" onfocusin=\"user_input()\" onfocusout=\"user_input_leave()\" max={{total_count}} min=0 required>",
-                              "<input type=\"number\" name=\"go_to\" id=\"go_to\" value=\"\" onfocusin=\"user_input()\" onfocusout=\"user_input_leave()\" max={{total_count}} min=0 required hidden>")
-
-    if "hide_navbar" in config and config["hide_navbar"]:
-        html_template = html_template.replace('<div class="navbar-nav">',
-                                              '<div class="navbar-nav" hidden>')
-
-
-    # Once we have the base template constructed, load the user's custom layout for their task
-    html_layout_file = config['html_layout']
-    logger.debug("Reading task layout html %s" % html_layout_file)
-
-    if not os.path.exists(html_layout_file):
-
-        # See if we can get it from the relative path
-        real_path = os.path.realpath(config['__config_file__'])
-        dir_path = os.path.dirname(real_path)
-        abs_html_layout_file = dir_path + '/' + html_layout_file
-
-        if not os.path.exists(abs_html_layout_file):        
-            raise FileNotFoundError("html_layout not found: %s" % html_layout_file)
-        else:
-            html_layout_file = abs_html_layout_file
-            
-    with open(html_layout_file, 'rt') as f:
-        task_html_layout = ''.join(f.readlines())
-    
-
-    #
-    # Stage 2: Fill in the annotation-specific pieces in the layout
-    #    
-    
-    # Grab the annotation schemes
-    annotation_schemes = config['annotation_schemes']
-    logger.debug("Saw %d annotation scheme(s)" % len(annotation_schemes))
-
-    # Keep track of all the keybindings we have
-    all_keybindings = [
-        ('&#8592;', "Move backward"),
-        ('&#8594;', "Move forward"),
-    ]
-    
-    # Potato admin can specify a custom HTML layout that allows variable-named
-    # placement of task elements
-    if 'custom_layout' in config and config['custom_layout']:
-        
-        for annotation_scheme in annotation_schemes:
-            schema_layout, keybindings = generate_schematic(annotation_scheme)
-            all_keybindings.extend(keybindings)
-            schema_name = annotation_scheme['name']
-
-            updated_layout = task_html_layout.replace(
-            "{{" + schema_name + "}}", schema_layout)
-
-            # Check that we actually updated the template
-            if task_html_layout == updated_layout:
-                raise Exception(
-                    ('%s indicated a custom layout but a corresponding layout ' +
-                     'was not found for {{%s}} in %s. Check to ensure the ' +
-                     'config.yaml and layout.html files have matching names') %
-                    (config['__config_file__'], schema_name, config['html_layout']))
-
-            task_html_layout = updated_layout
-    # If the admin doesn't specify a custom layout, use the default layout
-    else:        
-        # If we don't have a custom layout, accumulate all the tasks into a
-        # single HTML element 
-        schema_layouts = ""
-        for annotation_scheme in annotation_schemes:
-            schema_layout, keybindings = generate_schematic(annotation_scheme)
-            schema_layouts += schema_layout + "\n"
-            all_keybindings.extend(keybindings)
-            
-        task_html_layout = task_html_layout.replace(
-            "{{annotation_schematic}}", schema_layouts)
-
-    # Add in a codebook link if the admin specified one
-    codebook_html = ''
-    if 'annotation_codebook_url' in config and len(config['annotation_codebook_url']) > 0:
-        annotation_codebook = config['annotation_codebook_url']
-        codebook_html = '<a href="{{annotation_codebook_url}}" class="nav-item nav-link">Annotation Codebook</a>'        
-        codebook_html = codebook_html.replace(
-            "{{annotation_codebook_url}}", annotation_codebook)
-
-
-    #
-    # Step 3, drop in the annotation layout and insert the rest of the task-specific variables
-    #
-
-
-    # Swap in the task's layout
-    html_template = html_template.replace("{{ TASK_LAYOUT }}", task_html_layout)            
-    
-    html_template = html_template.replace(
-        "{{annotation_codebook}}", codebook_html)
-        
-    html_template = html_template.replace(
-        "{{annotation_task_name}}", config['annotation_task_name'])
-
-    keybindings_desc = generate_keybidings_sidebar(all_keybindings)
-    html_template = html_template.replace(
-        "{{keybindings}}", keybindings_desc)
-
-    statistics_layout = generate_statistics_sidebar(STATS_KEYS)
-    html_template = html_template.replace(
-        "{{statistics_nav}}", statistics_layout)
-    
-    
-    # Jiaxin: change the basename from the template name to the project name +
-    # template name, to allow multiple annotation tasks using the same template
-    site_name = '-'.join(config['annotation_task_name'].split(' ')
-                         ) + '-' + basename(html_template_file)
-    
-    output_html_fname = os.path.join(config['site_dir'], site_name)
-
-    # print(basename(html_template_file))
-    # print(output_html_fname)
-
-    # Cache this path as a shortcut to figure out which page to render
-    config['site_file'] = site_name
-
-    # Write the file
-    with open(output_html_fname, 'wt') as outf:
-        outf.write(html_template)
-
-    logger.debug('writing annotation html to %s' % output_html_fname)
-
-
-def generate_surveyflow_pages(config):
-    '''
-        Generates the full HTML file in site/ for annotating this tasks data,
-        combining the various templates with the annotation specification in
-        the yaml file.
-        '''
-    logger.info("Generating anntoation site at %s" % config['site_dir'])
-
-    #
-    # Stage 1: Construct the core HTML file devoid the annotation-specific content
-    #
-
-    # Load the core template that has all the UI controls and non-task layout.
-    html_template_file = config['base_html_template']
-    logger.debug("Reading html annotation template %s" % html_template_file)
-
-    if not os.path.exists(html_template_file):
-
-        real_path = os.path.realpath(config['__config_file__'])
-        dir_path = os.path.dirname(real_path)
-        abs_html_template_file = dir_path + '/' + html_template_file
-
-        if not os.path.exists(abs_html_template_file):
-            raise FileNotFoundError("html_template_file not found: %s" % html_template_file)
-        else:
-            html_template_file = abs_html_template_file
-
-    with open(html_template_file, 'rt') as f:
-        html_template = ''.join(f.readlines())
-
-    # Load the header content we'll stuff in the template, which has scripts and assets we'll need
-    header_file = config['header_file']
-    logger.debug("Reading html header %s" % header_file)
-
-    if not os.path.exists(header_file):
-
-        # See if we can get it from the relative path
-        real_path = os.path.realpath(config['__config_file__'])
-        dir_path = os.path.dirname(real_path)
-        abs_header_file = dir_path + '/' + header_file
-
-        if not os.path.exists(abs_header_file):
-            raise FileNotFoundError("header_file not found: %s" % header_file)
-        else:
-            header_file = abs_header_file
-
-    with open(header_file, 'rt') as f:
-        header = ''.join(f.readlines())
-
-    html_template = html_template.replace("{{ HEADER }}", header)
-
-    if "jumping_to_id_disabled" in config and config["jumping_to_id_disabled"]:
-        html_template = html_template.replace("<input type=\"submit\" value=\"go\">", "<input type=\"submit\" value=\"go\" hidden>")
-        html_template = html_template.replace("<input type=\"number\" name=\"go_to\" id=\"go_to\" value=\"\" onfocusin=\"user_input()\" onfocusout=\"user_input_leave()\" max={{total_count}} min=0 required>",
-                              "<input type=\"number\" name=\"go_to\" id=\"go_to\" value=\"\" onfocusin=\"user_input()\" onfocusout=\"user_input_leave()\" max={{total_count}} min=0 required hidden>")
-
-    if "hide_navbar" in config and config["hide_navbar"]:
-        html_template = html_template.replace('<div class="navbar-nav">',
-                                              '<div class="navbar-nav" hidden>')
-
-    # Once we have the base template constructed, load the user's custom layout for their task
-    html_layout_file = config['html_layout']
-    logger.debug("Reading task layout html %s" % html_layout_file)
-
-    if not os.path.exists(html_layout_file):
-
-        # See if we can get it from the relative path
-        real_path = os.path.realpath(config['__config_file__'])
-        dir_path = os.path.dirname(real_path)
-        abs_html_layout_file = dir_path + '/' + html_layout_file
-
-        if not os.path.exists(abs_html_layout_file):
-            raise FileNotFoundError("html_layout not found: %s" % html_layout_file)
-        else:
-            html_layout_file = abs_html_layout_file
-
-    with open(html_layout_file, 'rt') as f:
-        task_html_layout = ''.join(f.readlines())
-
-    # put forms in rows for survey questions
-    task_html_layout = task_html_layout.replace("<div class=\"annotation_schema\">", "<div class=\"annotation_schema\" style=\"flex-direction:column;\">")
-
-    #
-    # Stage 2: drop in the annotation layout and insertthe task-specific variables
-    #
-
-    # Add in a codebook link if the admin specified one
-    codebook_html = ''
-    if 'annotation_codebook_url' in config and len(config['annotation_codebook_url']) > 0:
-        annotation_codebook = config['annotation_codebook_url']
-        codebook_html = '<a href="{{annotation_codebook_url}}" class="nav-item nav-link">Annotation Codebook</a>'
-        codebook_html = codebook_html.replace(
-            "{{annotation_codebook_url}}", annotation_codebook)
-
-    html_template = html_template.replace(
-        "{{annotation_codebook}}", codebook_html)
-
-    html_template = html_template.replace(
-        "{{annotation_task_name}}", config['annotation_task_name'])
-
-    statistics_layout = generate_statistics_sidebar(STATS_KEYS)
-    html_template = html_template.replace(
-        "{{statistics_nav}}", ' ')
-
-
-
-    #
-    # Step 3, Fill in the annotation-specific pieces in the layout and save the page
-    #
-
-    #grab survey flow files
-    surveyflow_pages = defaultdict(list)
-    surveyflow = config['surveyflow']
-    surveyflow_list = []
-    for key in surveyflow['order']:
-        surveyflow_list += surveyflow[key]
-    for file in surveyflow_list:
-        if file.split('.')[-1] == 'jsonl':
-            with open(file, 'r') as r:
-                for line in r:
-                    line = json.loads(line.strip())
-                    line['filename'] = file
-                    line['pagename'] = file.split('.')[0].split('/')[-1]
-                    surveyflow_pages[line['pagename']].append(line)
-
-    # Grab the annotation schemes
-    annotation_schemes = config['annotation_schemes']
-    logger.debug("Saw %d annotation scheme(s)" % len(annotation_schemes))
-
-    # Keep track of all the keybindings we have
-    all_keybindings = [
-        ('&#8592;', "Move backward"),
-        ('&#8594;', "Move forward"),
-    ]
-
-    # Potato admin can specify a custom HTML layout that allows variable-named
-    # placement of task elements
-    if 'custom_layout' in config and config['custom_layout']:
-
-        for annotation_scheme in annotation_schemes:
-            schema_layout, keybindings = generate_schematic(annotation_scheme)
-            all_keybindings.extend(keybindings)
-            schema_name = annotation_scheme['name']
-
-            updated_layout = task_html_layout.replace(
-                "{{" + schema_name + "}}", schema_layout)
-
-            # Check that we actually updated the template
-            if task_html_layout == updated_layout:
-                raise Exception(
-                    ('%s indicated a custom layout but a corresponding layout ' +
-                     'was not found for {{%s}} in %s. Check to ensure the ' +
-                     'config.yaml and layout.html files have matching names') %
-                    (config['__config_file__'], schema_name, config['html_layout']))
-
-            task_html_layout = updated_layout
-    # If the admin doesn't specify a custom layout, use the default layout
-    else:
-        # If we don't have a custom layout, accumulate all the tasks into a
-        # single HTML element
-        for i, page in enumerate(surveyflow_pages):
-            schema_layouts = ""
-            #for annotation_scheme in annotation_schemes:
-            for line in surveyflow_pages[page]:
-                annotation_scheme = {
-                    "annotation_type": line['schema'],
-                    #todo: pack select type in to a dict with the key 'schema'
-                    #whether use predefined labels for select type, if so, define it, currently we support country, religion, ethnicity
-                    "use_predefined_labels": line["use_predefined_labels"] if "use_predefined_labels" in line else None,
-                    "id": line['id'],
-                    "name": line['text'],
-                    "description": line['text'],
-                    # If true, display the labels horizontally
-                    "horizontal": False,
-                    "labels": line['choices'] if 'choices' in line else None,
-                    "label_requirement": line['label_requirement'] if 'label_requirement' in line else None,
-                    "sequential_key_binding": False,
-                }
-                schema_layout, keybindings = generate_schematic(annotation_scheme)
-                schema_layouts += schema_layout + "<br>" + "\n"
-                #all_keybindings.extend(keybindings)
-
-            cur_task_html_layout = task_html_layout.replace(
-                "{{annotation_schematic}}", schema_layouts)
-
-
-            # Swap in the task's layout
-            cur_html_template = html_template.replace("{{ TASK_LAYOUT }}", cur_task_html_layout)
-
-            # TODO: Maybe remove input instances for survey questions?
-            #cur_html_template  = cur_html_template .replace("<div class=\"annotation_schema\">",
-            #                                            "<div class=\"annotation_schema\" style=\"flex-direction:column;\">")
-
-            # Do not display keybindings for the first and last page
-            if i == 0:
-                keybindings_desc = generate_keybidings_sidebar(all_keybindings[1:])
-                cur_html_template = cur_html_template.replace(
-                    '<a class="btn btn-secondary" href="#" role="button" onclick="click_to_prev()">Move backward</a>',
-                    '<a class="btn btn-secondary" href="#" role="button" onclick="click_to_prev()" hidden>Move backward</a>')
-            elif i == len(surveyflow_pages) - 1 or re.search('prestudy_fail', page):
-                keybindings_desc = generate_keybidings_sidebar(all_keybindings[:-1])
-                cur_html_template = cur_html_template.replace(
-                    '<a class="btn btn-secondary" href="#" role="button" onclick="click_to_next()">Move forward</a>',
-                    '<a class="btn btn-secondary" href="#" role="button" onclick="click_to_next()" hidden>Move forward</a>')
-            else:
-                keybindings_desc = generate_keybidings_sidebar(all_keybindings)
-
-            cur_html_template = cur_html_template.replace(
-                "{{keybindings}}", keybindings_desc)
-            # Jiaxin: change the basename from the template name to the project name +
-            # template name, to allow multiple annotation tasks using the same template
-            site_name = '%s.html'%page
-
-            output_html_fname = os.path.join(config['site_dir'], site_name)
-
-            # print(basename(html_template_file))
-            # print(output_html_fname)
-
-            # Cache this path as a shortcut to figure out which page to render
-            if 'surveyflow_site_file' not in config:
-                config['surveyflow_site_file'] = {}
-            config['surveyflow_site_file'][page] = site_name
-
-
-            # Write the file
-            with open(output_html_fname, 'wt') as outf:
-                outf.write(cur_html_template)
-
-            logger.debug('writing annotation html to %s%s.html' % (output_html_fname,page))
-
-    config['non_annotation_pages'] = []
-    for key in surveyflow['order']:
-        config['%s_pages'%key] = [config['surveyflow_site_file'][it.split('.')[0].split('/')[-1]] for it in config['surveyflow'][key]]
-        config['non_annotation_pages'] += config['%s_pages'%key]
-        #config['post_annotation_pages'] = [config['surveyflow_site_file'][it.split('.')[0].split('/')[-1]] for it in config['surveyflow']['post_annotation']]
-
-
-
-
-def generate_statistics_sidebar(statistics):
-    '''
-    Generate an HTML layout for the end-user of the statistics for the current
-    task. The layout is intended to be displayed in a side bar
-    '''
-
-    layout = '<table><tr><th> </th><th> </th></tr>'
-    for key in statistics:
-        desc = "{{statistics_nav[\'%s\']}}" % statistics[key]
-        layout += '<tr><td style="text-align: center;">%s</td><td>%s</td></tr>' % (key, desc)
-    layout += '</table>'
-    return layout
-
-
-def generate_keybidings_sidebar(keybindings, horizontal = False):
-    '''
-    Generate an HTML layout for the end-user of the keybindings for the current
-    task. The layout is intended to be displayed in a side bar
-    '''
-    if "horizontal_key_bindings" in config and config["horizontal_key_bindings"]:
-        horizontal = True
-
-    if not keybindings:
-        return ''
-    #keybindings.insert(0, ('key', 'description'))
-    if horizontal:
-        keybindings = [[it[0], it[1].split(':')[-1]] for it in keybindings]
-        lines = list(zip(*keybindings))
-        print(lines)
-        layout = '<table style="border:1px solid black;margin-left:auto;margin-right:auto;text-align: center;">'
-        for line in lines:
-            layout += "<tr>" + ''.join(['<td>&nbsp;&nbsp;%s&nbsp;&nbsp;</td>'%it for it in line]) + "</tr>"
-        layout += '</table>'
-
-    else:
-        layout = '<table><tr><th>Key</th><th>Description</th></tr>'
-        for key, desc in keybindings:
-            layout += '<tr><td style="text-align: center;">%s</td><td>%s</td></tr>' % (key, desc)
-        layout += '</table>'
-
-    return layout
-        
-
-def generate_schematic(annotation_scheme):
-    '''
-    Based on the task's yaml configuration, generate the full HTML site needed
-    to annotate the tasks's data.
-    '''
-    # Figure out which kind of tasks we're doing and build the input frame
-    annotation_type = annotation_scheme['annotation_type']
-
-    if annotation_type == "multiselect":
-        return generate_multiselect_layout(annotation_scheme)
-    
-    elif annotation_type == "radio":
-        return generate_radio_layout(annotation_scheme)
-
-    elif annotation_type == "highlight":
-        return generate_span_layout(annotation_scheme)
-    
-    elif annotation_type == "likert":
-        return generate_likert_layout(annotation_scheme)
-        
-    elif annotation_type == "text":
-        return generate_textbox_layout(annotation_scheme)
-
-    elif annotation_type == "number":
-        return generate_number_layout(annotation_scheme)
-
-    elif annotation_type == "pure_display":
-        return generate_pure_display_layout(annotation_scheme)
-
-    elif annotation_type == "select":
-        return generate_select_layout(annotation_scheme)
-
-    else:
-        raise Exception("unsupported annotation type: %s" % annotation_type)
-
-
-def generate_multiselect_layout(annotation_scheme):
-    schematic = \
-        '<form action="/action_page.php">' + \
-        '  <fieldset>' + \
-        ('  <legend>%s</legend>' % annotation_scheme['description'])
-
-    # TODO: display keyboard shortcuts on the annotation page
-    key2label = {}
-    label2key = {}
-
-    key_bindings = []
-
-    display_info = annotation_scheme['display_config'] if 'display_config' in annotation_scheme else {}
-    
-    n_columns = display_info['num_columns'] if 'num_columns' in display_info else 1
-
-    schematic += '<table>'
-
-    # setting up label validation for each label, if "required" is True, the annotators will be asked to finish the current instance to proceed
-    validation = ''
-    label_requirement = annotation_scheme['label_requirement'] if 'label_requirement' in annotation_scheme else None
-    if label_requirement and label_requirement['required']:
-        validation = 'required'
-
-    # if right_label is provided, the associated label has to be clicked to proceed. This is normally used for consent questions at the beginning of a survey.
-    right_label = set()
-    if label_requirement and "right_label" in label_requirement:
-        if type(label_requirement["right_label"]) == str:
-            right_label.add(label_requirement["right_label"])
-        elif type(label_requirement["right_label"]) == list:
-            right_label = set(label_requirement["right_label"])
-        else:
-            logger.warning(
-                "Incorrect format of right_label %s" % label_requirement["right_label"])
-            #quit()
-
-
-    for i, label_data in enumerate(annotation_scheme['labels'], 1):
-
-        
-        if (i-1) % n_columns == 0:
-            schematic += '<tr>'
-        schematic += '<td>'
-        
-        label = label_data if isinstance(
-            label_data, str) else label_data['name']
-
-        name = annotation_scheme['name'] + ':::' + label
-        class_name = annotation_scheme['name']
-        key_value = name
-
-        tooltip = ''
-        if isinstance(label_data, Mapping):
-            tooltip_text = ''
-            if 'tooltip' in label_data:
-                tooltip_text = label_data['tooltip']
-                # print('direct: ', tooltip_text)
-            elif 'tooltip_file' in label_data:
-                with open(label_data['tooltip_file'], 'rt') as f:
-                    lines = f.readlines()
-                tooltip_text = ''.join(lines)
-                # print('file: ', tooltip_text)
-            if len(tooltip_text) > 0:
-                tooltip = 'data-toggle="tooltip" data-html="true" data-placement="top" title="%s"' \
-                    % tooltip_text
-                
-            if 'key_value' in label_data:
-                key_value = label_data['key_value']
-                if key_value in key2label:
-                    logger.warning(
-                        "Keyboard input conflict: %s" % key_value)
-                    quit()
-                key2label[key_value] = label
-                label2key[label] = key_value
-                key_bindings.append((key_value, class_name +': ' + label))
-
-        if "sequential_key_binding" in annotation_scheme \
-           and  annotation_scheme["sequential_key_binding"] \
-           and len(annotation_scheme['labels']) <= 10:
-            key_value = str(i % 10)
-            key2label[key_value] = label
-            label2key[label] = key_value            
-
-        label_content = label
-        if annotation_scheme.get("video_as_label", None) == "True":
-            assert "videopath" in label_data, "Video path should in each label_data when video_as_label is True."
-            video_path = label_data["videopath"]
-            label_content = f'''
-            <video width="320" height="240" autoplay loop muted>
-                <source src="{video_path}" type="video/mp4" />
-            </video>'''
-            
-        #add shortkey to the label so that the annotators will know how to use it
-        #when the shortkey is "None", this will not displayed as we do not allow short key for None category
-        #if label in label2key and label2key[label] != 'None':
-        #if label in label2key:
-        #    label_content = label_content + \
-        #        ' [' + label2key[label].upper() + ']'
-
-        final_validation = 'right_label' if label in right_label else validation
-
-        
-        if ("single_select" in annotation_scheme) and (annotation_scheme["single_select"] == "True"):
-            logger.warning("single_select is Depricated and will be removed soon. Use \"radio\" instead.")
-            schematic += \
-                (('  <input class="%s" type="checkbox" id="%s" name="%s" value="%s" onclick="onlyOne(this)" validation="%s">' +
-                  '  <label for="%s" %s>%s</label><br/>')
-                 % (class_name, name, name, key_value, final_validation,
-                    name, tooltip, label_content))
-        else:
-            schematic += \
-                (('<label for="%s" %s><input class="%s" type="checkbox" id="%s" name="%s" value="%s" onclick="whetherNone(this)" validation="%s">' +
-                 '  %s</label><br/>')
-                 % (name, tooltip, class_name, name, name, key_value, final_validation,
-                    label_content))
-
-        schematic += '</td>'
-        if i % n_columns == 0:
-            schematic += '</tr>'
-
-
-    if 'has_free_response' in annotation_scheme and annotation_scheme['has_free_response']:
-
-        label='free_response'
-        name = annotation_scheme['name'] + ':::free_response' 
-        class_name = annotation_scheme['name']
-        tooltip = 'Entire a label not listed here'
-        instruction = "Other" if "instruction" not in annotation_scheme['has_free_response'] else annotation_scheme['has_free_response']["instruction"]
-
-        schematic += \
-        (('<tr><td colspan="%s"><div style="float:left; display:flex; flex-direction:row;">%s <input class="%s" type="text" id="%s" name="%s">' +
-         '  <label for="%s" %s></label></div></td</tr>')
-         % (str(n_columns), instruction, class_name, name, name, name, tooltip))
-
-
-    schematic += '</table>'
-    schematic += '  </fieldset>\n</form>\n'
-
-    return schematic, key_bindings
-
-
-def generate_radio_layout(annotation_scheme, horizontal=False):
-
-    #when horizontal is specified in the annotation_scheme, set horizontal = True
-    if "horizontal" in annotation_scheme and annotation_scheme['horizontal']:
-        horizontal = True
-
-    schematic = \
-        '<form action="/action_page.php">' + \
-        '  <fieldset>' + \
-        ('  <legend>%s</legend>' % annotation_scheme['description'])
-
-    # TODO: display keyboard shortcuts on the annotation page
-    key2label = {}
-    label2key = {}
-    key_bindings = []
-
-    # Setting up label validation for each label, if "required" is True, the
-    # annotators will be asked to finish the current instance to proceed
-    validation = ''
-    label_requirement = annotation_scheme['label_requirement'] if 'label_requirement' in annotation_scheme else None
-    if label_requirement and ('required' in label_requirement) and label_requirement['required']:
-        validation = 'required'
-
-    #print(annotation_scheme)
-
-    # If right_label is provided, the associated label has to be clicked to
-    # proceed. This is normally used for consent questions at the beginning of a
-    # survey.
-    right_label = set()
-    if label_requirement and "right_label" in label_requirement:
-        if type(label_requirement["right_label"]) == str:
-            right_label.add(label_requirement["right_label"])
-        elif type(label_requirement["right_label"]) == list:
-            right_label = set(label_requirement["right_label"])
-        else:
-            logger.warning(
-                "Incorrect format of right_label %s" % label_requirement["right_label"])
-            #quit()
-    
-    for i, label_data in enumerate(annotation_scheme['labels'], 1):
-
-        label = label_data if isinstance(
-            label_data, str) else label_data['name']
-
-        name = annotation_scheme['name'] + ':::' + label
-        class_name = annotation_scheme['name']
-        key_value = name
-
-        tooltip = ''
-        if isinstance(label_data, Mapping):
-            tooltip_text = ''
-            if 'tooltip' in label_data:
-                tooltip_text = label_data['tooltip']
-                # print('direct: ', tooltip_text)
-            elif 'tooltip_file' in label_data:
-                with open(label_data['tooltip_file'], 'rt') as f:
-                    lines = f.readlines()
-                tooltip_text = ''.join(lines)
-                # print('file: ', tooltip_text)
-            if len(tooltip_text) > 0:
-                tooltip = 'data-toggle="tooltip" data-html="true" data-placement="top" title="%s"' \
-                    % tooltip_text
-
-            # Bind the keys
-            if 'key_value' in label_data:
-                key_value = label_data['key_value']
-                if key_value in key2label:
-                    logger.warning(
-                        "Keyboard input conflict: %s" % key_value)
-                    quit()
-                key2label[key_value] = label
-                label2key[label] = key_value
-                key_bindings.append((key_value, class_name +': ' + label))
-            # print(key_value)
-            
-        if "sequential_key_binding" in annotation_scheme \
-           and annotation_scheme["sequential_key_binding"] \
-           and len(annotation_scheme['labels']) <= 10:
-            key_value = str(i % 10)
-            key2label[key_value] = label
-            label2key[label] = key_value
-            key_bindings.append((key_value, class_name + ': ' + label))
-
-        label_content = label_data['key_value'] + '.' + label if ('displaying_score' in annotation_scheme and annotation_scheme['displaying_score']) else label
-        #label_content = label
-        if annotation_scheme.get("video_as_label", None) == "True":
-            assert "videopath" in label_data, "Video path should in each label_data when video_as_label is True."
-            video_path = label_data["videopath"]
-            label_content = f'''
-            <video width="320" height="240" autoplay loop muted>
-                <source src="{video_path}" type="video/mp4" />
-            </video>'''
-
-        # Add shortkey to the label so that the annotators will know how to use
-        # it when the shortkey is "None", this will not displayed as we do not
-        # allow short key for None category if label in label2key and
-        # label2key[label] != 'None':
-        #if label in label2key:
-        #    label_content = label_content + \
-        #        ' [' + label2key[label].upper() + ']'
-
-
-        final_validation = 'right_label' if label in right_label else validation
-
-
-        #add support for horizontal layout
-        br_label = "<br/>"
-        if horizontal:
-            br_label = ''
-        schematic += \
-                (('      <input class="%s" type="radio" id="%s" name="%s" value="%s" onclick="onlyOne(this)" validation="%s">' +
-                 '  <label for="%s" %s>%s</label>%s')
-                 % (class_name, name, name, key_value, 'right_label' if label in right_label else final_validation,
-                    name, tooltip, label_content, br_label))
-
-    if 'has_free_response' in annotation_scheme and annotation_scheme['has_free_response']:
-
-        label='free_response'
-        name = annotation_scheme['name'] + ':::free_response' 
-        class_name = annotation_scheme['name']
-        tooltip = 'Entire a label not listed here'
-        instruction = "Other" if "instruction" not in annotation_scheme['has_free_response'] else annotation_scheme['has_free_response']["instruction"]
-
-        schematic += \
-        (('%s <input class="%s" type="text" id="%s" name="%s" >' +
-         '  <label for="%s" %s></label><br/>')
-         % (instruction, class_name, name, name, name, tooltip))
-
-    schematic += '  </fieldset>\n</form>\n'
-    return schematic, key_bindings
-
-
-def generate_span_layout(annotation_scheme, horizontal=False):
-    '''
-    Renders a span annotation option selection in the annotation panel and
-    returns the HTML code
-    '''
-    
-    #when horizontal is specified in the annotation_scheme, set horizontal = True
-    if "horizontal" in annotation_scheme and annotation_scheme['horizontal']:
-        horizontal = True
-
-    schematic = \
-        '<form action="/action_page.php">' + \
-        '  <fieldset>' + \
-        ('  <legend>%s</legend>' % annotation_scheme['description'])
-
-    # TODO: display keyboard shortcuts on the annotation page
-    key2label = {}
-    label2key = {}
-    key_bindings = []
-
-    # setting up label validation for each label, if "required" is True, the annotators will be asked to finish the current instance to proceed
-    validation = ''
-    label_requirement = annotation_scheme['label_requirement'] if 'label_requirement' in annotation_scheme else None
-    if label_requirement and ('required' in label_requirement) and label_requirement['required']:
-        validation = 'required'
-    
-    for i, label_data in enumerate(annotation_scheme['labels'], 1):
-
-        label = label_data if isinstance(
-            label_data, str) else label_data['name']
-        
-        name = annotation_scheme['name'] + ':::' + label
-        class_name = annotation_scheme['name']
-        key_value = name
-        
-        span_color = get_span_color(label)
-        if span_color is None:
-            span_color = SPAN_COLOR_PALETTE[(i-1) % len(SPAN_COLOR_PALETTE)]
-            set_span_color(label, span_color)
-
-        # For better or worse, we need to cache these label-color pairings
-        # somewhere so that we can render them in the colored instances later in
-        # render_span_annotations(). The config object seems like a reasonable
-        # place to do since it's global and the colors are persistent 
-        config['ui']
-
-        
-        tooltip = ''
-        if isinstance(label_data, Mapping):
-            tooltip_text = ''
-            if 'tooltip' in label_data:
-                tooltip_text = label_data['tooltip']
-                # print('direct: ', tooltip_text)
-            elif 'tooltip_file' in label_data:
-                with open(label_data['tooltip_file'], 'rt') as f:
-                    lines = f.readlines()
-                tooltip_text = ''.join(lines)
-                # print('file: ', tooltip_text)
-            if len(tooltip_text) > 0:
-                tooltip = 'data-toggle="tooltip" data-html="true" data-placement="top" title="%s"' \
-                    % tooltip_text
-
-            # Bind the keys
-            if 'key_value' in label_data:
-                key_value = label_data['key_value']
-                if key_value in key2label:
-                    logger.warning(
-                        "Keyboard input conflict: %s" % key_value)
-                    quit()
-                key2label[key_value] = label
-                label2key[label] = key_value
-                key_bindings.append((key_value, class_name +': ' + label))
-            # print(key_value)
-            
-        if "sequential_key_binding" in annotation_scheme \
-           and annotation_scheme["sequential_key_binding"] \
-           and len(annotation_scheme['labels']) <= 10:
-            key_value = str(i % 10)
-            key2label[key_value] = label
-            label2key[label] = key_value
-            key_bindings.append((key_value, class_name + ': ' + label))
-
-        if ('displaying_score' in annotation_scheme and annotation_scheme['displaying_score']):
-            label_content = label_data['key_value'] + '.' + label
-        else:          
-            label_content = label
-
-        # Check the first radio
-        if i == 1:
-            is_checked = 'xchecked="checked"'
-        else:
-            is_checked = ''
-        
-        # TODO: add support for horizontal layout
-        br_label = "<br/>"
-        if horizontal:
-            br_label = ''
-
-        # We want to mark that this input isn't actually an annotation (unlike,
-        # say, checkboxes) so we prefix the name with span_label so that the
-        # answer ingestion code in update_annotation_state() can skip over which
-        # radio was checked as being annotations that need saving (while the
-        # spans themselves are saved)
-        name_with_span = 'span_label:::' + name
-            
-        schematic += \
-            ('      <input class="{class_name}" type="checkbox" id="{name}" name="{name_with_span}" ' +
-             ' value="{key_value}" {is_checked} ' +
-             'onclick="onlyOne(this); changeSpanLabel(this, \'{label_content}\', \'{span_color}\');">' +
-             '  <label for="{name}" {tooltip}>' +
-             '<span style="background-color:rgb{bg_color};">{label_content}</span></label>{br_label}').format(
-                 class_name=class_name, name=name, key_value=key_value,
-                 label_content=label_content, tooltip=tooltip, br_label=br_label,
-                 is_checked=is_checked, name_with_span=name_with_span,
-                 bg_color=span_color.replace(")", ",0.25)"),
-                 span_color=span_color)
-             
-            
-
-    schematic += '  </fieldset>\n</form>\n'
-    return schematic, key_bindings
-
-
-def generate_likert_layout(annotation_scheme):
-
-    # If the user specified the more complicated likert layout, default to the
-    # radio layout
-    if 'labels' in annotation_scheme:
-        return generate_radio_layout(annotation_scheme, horizontal=False)
-
-    if 'size' not in annotation_scheme:
-        raise Exception('Likert scale for "%s" did not include size' \
-                        % annotation_scheme['name'])
-    if 'min_label' not in annotation_scheme:
-        raise Exception('Likert scale for "%s" did not include min_label' \
-                        % annotation_scheme['name'])
-    if 'max_label' not in annotation_scheme:
-        raise Exception('Likert scale for "%s" did not include max_label' \
-                        % annotation_scheme['name'])
-
-    schematic = \
-        ('<div><form action="/action_page.php">' + \
-        '  <fieldset> <legend>%s</legend> <ul class="likert" style="text-align: center;"> <li> %s </li>') \
-        % (annotation_scheme['description'], annotation_scheme['min_label'])
-    
-    key2label = {}
-    label2key = {}    
-    key_bindings = []
-
-    # setting up label validation for each label, if "required" is True, the annotators will be asked to finish the current instance to proceed
-    validation = ''
-    label_requirement = annotation_scheme['label_requirement'] if 'label_requirement' in annotation_scheme else None
-    if label_requirement and ('required' in label_requirement) and label_requirement['required']:
-        validation = 'required'
-    
-    for i in range(1, annotation_scheme['size']+1):
-
-        label = 'scale_' + str(i)
-        name = annotation_scheme['name'] + ':::' + label
-        class_name = annotation_scheme['name']
-
-        key_value = str(i % 10)
-        
-        # if the user wants us to add in easy key bindings
-        if "sequential_key_binding" in annotation_scheme \
-           and annotation_scheme["sequential_key_binding"] \
-           and annotation_scheme['size'] <= 10: 
-            key2label[key_value] = label
-            label2key[label] = key_value
-            key_bindings.append((key_value, class_name + ': ' + key_value))
-
-            
-        # In the collapsed version of the likert scale, no label is shown.
-        label_content = str(i) if ('displaying_score' in annotation_scheme and annotation_scheme['displaying_score']) else ''
-        tooltip = ''        
-
-        # displaying the label content in a different line if it is not empty
-        if label_content != '':
-            line_break = '<br>'
-        else:
-            line_break = ''
-        #schematic += \
-        #        ((' <li><input class="%s" type="radio" id="%s" name="%s" value="%s" onclick="onlyOne(this)">' +
-        #         '  <label for="%s" %s>%s</label></li>')
-        #         % (class_name, label, name, key_value, name, tooltip, label_content))
-
-        schematic += \
-            ((' <li><input class="{class_name}" type="radio" id="{id}" name="{name}" value="{value}" onclick="onlyOne(this)" validation="{validation}">' + \
-              ' {line_break} <label for="{label_for}" {label_args}>{label_text}</label></li>')).format(
-                  class_name=class_name, id=name, name=name, value=key_value, validation=validation,
-                line_break=line_break, label_for=name, label_args=tooltip, label_text=" " + label_content)
-
-    # allow annotators to choose bad_text label
-    bad_text_schematic = ''
-    if 'bad_text_label' in annotation_scheme and 'label_content' in annotation_scheme['bad_text_label']:
-        name = annotation_scheme['name'] + ':::' + 'bad_text'
-        bad_text_schematic = \
-            ((' <li><input class="{class_name}" type="radio" id="{id}" name="{name}" value="{value}" onclick="onlyOne(this)" validation="{validation}">' + \
-                        ' {line_break} <label for="{label_for}" {label_args}>{label_text}</label></li>')).format(
-                class_name=annotation_scheme['name'], id=name, name=name, value=0, validation=validation,
-                line_break='<br>', label_for=name, label_args='', label_text=annotation_scheme['bad_text_label']['label_content'])
-        key_bindings.append((0, class_name + ': ' + annotation_scheme['bad_text_label']['label_content']))
-
-    schematic += ('  <li>%s</li> %s </ul></fieldset>\n</form></div>\n' \
-                  % (annotation_scheme['max_label'], bad_text_schematic))
-    
-    return schematic, key_bindings
-
-
-
-def generate_textbox_layout(annotation_scheme):
-
-    #'<div style="border:1px solid black; border-radius: 25px;">' + \
-    schematic = \
-        '<form action="/action_page.php">' + \
-        '  <fieldset>' + \
-        ('  <legend>%s</legend> <ul class="likert" style="text-align: center;">' % annotation_scheme['description'])
-
-    # TODO: display keyboard shortcuts on the annotation page
-    key2label = {}
-    label2key = {}
-
-    # Technically, text boxes don't have these but we define it anyway
-    key_bindings = []
-
-    display_info = annotation_scheme['display_config'] if 'display_config' in annotation_scheme else {}
-
-    # TODO: pull this out into a separate method that does some sanity checks
-    custom_css = '""'
-    if 'custom_css' in display_info:
-        custom_css = '"'
-        for k, v in display_info['custom_css'].items():
-            custom_css += k + ":" + v + ";"
-        custom_css += '"'
-
-    tooltip = ""
-
-    # supporting multiple textboxes with different labels
-    if 'labels' not in annotation_scheme or annotation_scheme['labels'] == None:
-        labels = ['text_box']
-    else:
-        labels = annotation_scheme['labels']
-    for label in labels:
-        name = annotation_scheme['name'] + ':::' + label
-        class_name = annotation_scheme['name']
-        key_value = name
-
-        # setting up label validation for each label, if "required" is True, the annotators will be asked to finish the current instance to proceed
-        validation = ''
-        label_requirement = annotation_scheme['label_requirement'] if 'label_requirement' in annotation_scheme else None
-        if label_requirement and 'required' in label_requirement and label_requirement['required']:
-            validation = 'required'
-
-        #set up textarea to allow multiline text input
-        if "textarea" in annotation_scheme and annotation_scheme["textarea"]['on']:
-            rows = annotation_scheme["textarea"]['rows'] if 'rows' in annotation_scheme["textarea"] else '3'
-            cols = annotation_scheme["textarea"]['cols'] if 'rows' in annotation_scheme["textarea"] else '40'
-            schematic += \
-                (('  <li><label for="%s" %s>%s</label> ' +
-                  '<textarea rows="%s" cols="%s" class="%s" style=%s type="text" id="%s" name="%s" validation="%s"></textarea></li> <br/>')
-                 % (name, tooltip, label if label != 'text_box' else '',
-                    rows, cols, class_name, custom_css, name, name, validation))
-        else:
-            schematic += \
-                (('  <li><label for="%s" %s>%s</label> <input class="%s" style=%s type="text" id="%s" name="%s" validation="%s"> </li> <br/>')
-                 % (name, tooltip, label if label != 'text_box' else '', class_name, custom_css, name, name, validation))
-
-        # schematic += '  </fieldset>\n</form></div>\n'
-    schematic += ' </ul> </fieldset>\n</form>\n'
-
-
-    '''
-    tooltip = ''
-    if False:
-        if 'tooltip' in annotation_scheme:
-            tooltip_text = annotation_scheme['tooltip']
-            # print('direct: ', tooltip_text)
-        elif 'tooltip_file' in annotation_scheme:
-            with open(annotation_scheme['tooltip_file'], 'rt') as f:
-                lines = f.readlines()
-            tooltip_text = ''.join(lines)
-            # print('file: ', tooltip_text)
-        if len(tooltip_text) > 0:
-            tooltip = 'data-toggle="tooltip" data-html="true" data-placement="top" title="%s"' \
-                % tooltip_text
-        if 'key_value' in label_data:
-            key_value = label_data['key_value']
-            if key_value in key2label:
-                logger.warning(
-                    "Keyboard input conflict: %s" % key_value)
-                quit()
-            key2label[key_value] = label
-            label2key[label] = key_value
-
-    
-    label_content = label
-
-    #add shortkey to the label so that the annotators will know how to use it
-    #when the shortkey is "None", this will not displayed as we do not allow short key for None category
-    #if label in label2key and label2key[label] != 'None':
-    if label in label2key:
-        label_content = label_content + \
-            ' [' + label2key[label].upper() + ']'
-    '''
-
-    
-    return schematic, key_bindings
-
-
-def generate_number_layout(annotation_scheme):
-    # '<div style="border:1px solid black; border-radius: 25px;">' + \
-    schematic = \
-        '<form action="/action_page.php">' + \
-        '  <fieldset>' + \
-        ('  <legend>%s</legend>' % annotation_scheme['description'])
-
-    # TODO: display keyboard shortcuts on the annotation page
-    key2label = {}
-    label2key = {}
-
-    # TODO: decide whether text boxes need labels
-    label = 'text_box'
-
-    name = annotation_scheme['name'] + ':::' + label
-    class_name = annotation_scheme['name']
-    key_value = name
-
-    # Technically, text boxes don't have these but we define it anyway
-    key_bindings = []
-
-    display_info = annotation_scheme['display_config'] if 'display_config' in annotation_scheme else {}
-
-    # TODO: pull this out into a separate method that does some sanity checks
-    custom_css = '""'
-    if 'custom_css' in display_info:
-        custom_css = '"'
-        for k, v in display_info['custom_css'].items():
-            custom_css += k + ":" + v + ";"
-        custom_css += '"'
-
-    tooltip = ''
-    if False:
-        if 'tooltip' in annotation_scheme:
-            tooltip_text = annotation_scheme['tooltip']
-            # print('direct: ', tooltip_text)
-        elif 'tooltip_file' in annotation_scheme:
-            with open(annotation_scheme['tooltip_file'], 'rt') as f:
-                lines = f.readlines()
-            tooltip_text = ''.join(lines)
-            # print('file: ', tooltip_text)
-        if len(tooltip_text) > 0:
-            tooltip = 'data-toggle="tooltip" data-html="true" data-placement="top" title="%s"' \
-                      % tooltip_text
-        if 'key_value' in label_data:
-            key_value = label_data['key_value']
-            if key_value in key2label:
-                logger.warning(
-                    "Keyboard input conflict: %s" % key_value)
-                quit()
-            key2label[key_value] = label
-            label2key[label] = key_value
-
-    label_content = label
-
-    # add shortkey to the label so that the annotators will know how to use it
-    # when the shortkey is "None", this will not displayed as we do not allow short key for None category
-    # if label in label2key and label2key[label] != 'None':
-    if label in label2key:
-        label_content = label_content + \
-                        ' [' + label2key[label].upper() + ']'
-
-    # setting up label validation for each label, if "required" is True, the annotators will be asked to finish the current instance to proceed
-    validation = ''
-    label_requirement = annotation_scheme['label_requirement'] if 'label_requirement' in annotation_scheme else None
-    if label_requirement and 'required' in label_requirement and label_requirement['required']:
-        validation = 'required'
-
-    schematic += \
-        (('  <input class="%s" style=%s type="number" id="%s" name="%s" validation="%s">' +
-          '  <label for="%s" %s></label><br/>')
-         % (class_name, custom_css, name, name, validation,
-            name, tooltip))
-
-    # schematic += '  </fieldset>\n</form></div>\n'
-    schematic += '  </fieldset>\n</form>\n'
-
-    return schematic, key_bindings
-
-
-def generate_pure_display_layout(annotation_scheme):
-    schematic = '<Strong>%s</Strong> %s' % (annotation_scheme['description'], '<br>'.join(annotation_scheme['labels']))
-
-    return schematic, None
-
-
-def generate_select_layout(annotation_scheme):
-
-    # setting up label validation for each label, if "required" is True, the annotators will be asked to finish the current instance to proceed
-    validation = ''
-    label_requirement = annotation_scheme['label_requirement'] if 'label_requirement' in annotation_scheme else None
-    if label_requirement and ('required' in label_requirement) and label_requirement['required']:
-        validation = 'required'
-
-    schematic = \
-        '<form action="/action_page.php">' + \
-        '  <fieldset>' + \
-        ('  <legend>%s</legend>' % annotation_scheme['description']) + \
-        ('  <select type="select-one" class="%s" id="%s" name="%s" validation="%s">' % (annotation_scheme['description'], annotation_scheme['id'], annotation_scheme['name'] + ':::select-one', validation))
-
-    #todo move this to the config file
-    predefined_labels_dict = {
-        'country': 'potato/static/survey_assets/country_dropdown_list.html',
-        'ethnicity': 'potato/static/survey_assets/ethnicity_dropdown_list.html',
-        'religion': 'potato/static/survey_assets/religion_dropdown_list.html'
-    }
-
-    # directly use the predefined labels if annotation_scheme["use_predefined_labels"] is defined
-    if "use_predefined_labels" in annotation_scheme and annotation_scheme["use_predefined_labels"] in predefined_labels_dict:
-        with open(predefined_labels_dict[annotation_scheme["use_predefined_labels"]]) as r:
-            schematic += r.read()
-
-    else:
-        # if annotation_scheme['labels'] is defined as a path
-        if type(annotation_scheme['labels']) == str and os.path.exists(annotation_scheme['labels']):
-            with open(annotation_scheme['labels'], 'r') as r:
-                labels = [it.strip() for it in r.readlines()]
-        else:
-            labels = annotation_scheme['labels']
-
-        for i, label_data in enumerate(labels, 1):
-
-            label = label_data if isinstance(
-                label_data, str) else label_data['name']
-
-            name = annotation_scheme['name'] + ':::' + label
-            class_name = annotation_scheme['name']
-            key_value = name
-            label_content = label
-
-            schematic += \
-                ((
-                     '<option class="%s" id="%s" name="%s" value="%s">%s</option>')
-                 % (class_name, name, name, label_content, label_content))
-
-
-    schematic += '  </select>\n</fieldset>\n</form>\n'
-    return schematic, []
 
 
 @app.route('/files/<path:filename>')
@@ -3818,6 +2534,7 @@ def run_create_task_cli():
     """
     Run create_task_cli().
     """
+    import webbrowser
     if yes_or_no("Launch task creation process?"):
         if yes_or_no("Launch on command line?"):
             config_file = create_task_cli()
@@ -3865,9 +2582,6 @@ def run_server():
     generate_site(config)
     if "surveyflow" in config and config["surveyflow"]["on"]:
         generate_surveyflow_pages(config)
-
-
-    #quit()
 
     # Generate the output directory if it doesn't exist yet
     if not os.path.exists(config['output_annotation_dir']):
