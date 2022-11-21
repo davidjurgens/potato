@@ -37,6 +37,7 @@ import string
 import webbrowser
 
 from create_task_cli import create_task_cli
+from server_utils.config_module import init_config, config
 
 # import choix
 # import networkx as nx
@@ -79,9 +80,6 @@ task_assignment = {}
 #FIRST_LOAD = True
 # QUESTION_START = True
 #closed = False
-
-# Config is the Potation configuration the user has passed in as a .yaml file
-config = None
 
 # path to save user information
 USER_CONFIG_PATH = 'potato/user_config.json'
@@ -707,7 +705,6 @@ def convert_labels(annotation, schema_type):
 #get the final agreement score for selected users and schemas
 def get_agreement_score(user_list, schema_name, return_type = 'overall_average'):
     global user_to_annotation_state
-    global config
 
     if user_list == 'all':
         user_list = user_to_annotation_state.keys()
@@ -741,7 +738,6 @@ def get_agreement_score(user_list, schema_name, return_type = 'overall_average')
 # calculate the krippendorff's alpha for selected users and schema
 def cal_agreement(user_list, schema_name, schema_type = None, selected_keys = None):
     global user_to_annotation_state
-    global config
 
     #get the schema_type/annotation_type from the config file
     for i in range(len(config['annotation_schemes'])):
@@ -1032,7 +1028,6 @@ def write_data(username):
 
 @app.route("/")
 def home():
-    global config
     global user_config
     
     if config['__debug__']:
@@ -1056,7 +1051,6 @@ def home():
 @app.route("/login", methods=['GET', 'POST'])
 def login():
     global user_config
-    global config
 
 
     if config['__debug__'] == True:
@@ -1092,7 +1086,6 @@ def login():
 @app.route("/signup", methods=['GET', 'POST'])
 def signup():
     global user_config
-    global config
     
     # TODO: add in logic for checking/hashing passwords, safe password
     # management, etc. For now just #yolo and log in people regardless.
@@ -1135,7 +1128,6 @@ def new_user():
 pre_annotation_page_cursor = 0
 @app.route("/surveyflow", methods=['GET', 'POST'])
 def pre_annotation_pages(username):
-    global config
     page_order = config['pre_annotation_pages']
     username = request.form.get("email")
     print(config['site_file'],page_order)
@@ -1181,8 +1173,6 @@ def get_users():
 
 
 def get_prestudy_label(label):
-    global config
-
     for schema in config["annotation_schemes"]:
         if schema['name'] == config['prestudy']['question_key']:
             cur_schema = schema['annotation_type']
@@ -1204,7 +1194,6 @@ def check_prestudy_status(username):
     :return:
     '''
     global task_assignment
-    global config
     global instance_id_to_data
 
     if 'prestudy' not in config or config['prestudy']['on'] == False:
@@ -1266,7 +1255,6 @@ def generate_initial_user_dataflow(username, assign_instances=False):
        '''
 
     global user_to_annotation_state
-    global config
     global instance_id_to_data
 
     sampled_keys = []
@@ -1297,7 +1285,6 @@ def generate_initial_user_dataflow(username, assign_instances=False):
 
 def sample_instances(username):
     global user_to_annotation_state
-    global config
     global instance_id_to_data
 
     if "sampling_strategy:" not in config["automatic_assignment"]:
@@ -1355,7 +1342,6 @@ def assign_instances_to_user(username):
     '''
 
     global user_to_annotation_state
-    global config
     global instance_id_to_data
 
     #"sampling_strategy:": 'random',
@@ -1434,7 +1420,6 @@ def generate_full_user_dataflow(username):
     '''
 
     global user_to_annotation_state
-    global config
     global instance_id_to_data
 
     #"sampling_strategy:": 'random',
@@ -1514,7 +1499,6 @@ def instances_all_assigned():
 
 
 def lookup_user_state(username):
-    global config
     '''
     Returns the UserAnnotationState for a user, or if that user has not yet
     annotated, creates a new state for them and registers them with the system.
@@ -1553,7 +1537,6 @@ def lookup_user_state(username):
 
 def save_user_state(username, save_order=False):
     global user_to_annotation_state
-    global config
     global instance_id_to_data
 
     # print("username: ", username)
@@ -1599,7 +1582,6 @@ def save_user_state(username, save_order=False):
 
 def save_all_annotations():
     global user_to_annotation_state
-    global config
     global instance_id_to_data
 
     # Figure out where this user's data would be stored on disk
@@ -1706,7 +1688,6 @@ def load_user_state(username):
     have annotated and the order in which they are expected to see instances.
     '''
     global user_to_annotation_state
-    global config
     global instance_id_to_data
     global logger
 
@@ -1861,9 +1842,7 @@ def annotate_page(username = None, action=None):
     based on what was clicked/typed. This method is the main switch for changing
     the state of the server for this user.
     '''
-    
     global user_config
-    global config
 
     #use the provided username when the username is given
     if not username:
@@ -2125,8 +2104,6 @@ def render_span_annotations(text, span_annotations):
     :span_annotations: annotations already made by the user that need to be
        re-inserted into the text
     '''
-    global config
-    
     # This code is synchronized with the javascript function
     # surroundSelection(selectionLabel) function in base_template.html which
     # wraps any labeled text with a <div> element indicating its label. We
@@ -2167,8 +2144,6 @@ def get_span_color(span_label):
     Returns the color of a span with this label as a string with an RGB triple
     in parentheses, or None if the span is unmapped.
     '''
-    global config
-
     if 'ui' not in config or 'spans' not in config['ui']:
         return None
     span_ui = config['ui']['spans']
@@ -2188,8 +2163,6 @@ def set_span_color(span_label, color):
 
     :color: a string containing an RGB triple in parentheses
     '''
-    global config
-
     if 'ui' not in config:
         ui = {}
         config['ui'] = ui
@@ -2880,7 +2853,6 @@ def generate_keybidings_sidebar(keybindings, horizontal = False):
     Generate an HTML layout for the end-user of the keybindings for the current
     task. The layout is intended to be displayed in a side bar
     '''
-    global config
     if "horizontal_key_bindings" in config and config["horizontal_key_bindings"]:
         horizontal = True
 
@@ -3690,7 +3662,6 @@ def get_class( kls ):
 
 
 def actively_learn():
-    global config
     global logger
     global user_to_annotation_state
     global instance_id_to_data
@@ -3884,7 +3855,6 @@ def yes_or_no(question):
 
         
 def main():
-    global config
     global logger
     global user_config
     global user_to_annotation_state
@@ -3906,9 +3876,7 @@ def main():
             return
     
     args = arguments()
-
-    with open(args.config_file, 'rt') as f:
-        config = yaml.safe_load(f)
+    init_config(args.config_file)
 
     user_config = UserConfig(USER_CONFIG_PATH)
 
