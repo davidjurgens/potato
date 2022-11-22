@@ -39,7 +39,10 @@ import webbrowser
 from create_task_cli import create_task_cli, yes_or_no
 from server_utils.config_module import init_config, config
 from server_utils.arg_utils import arguments
-from server_utils.logger import init_logger
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logging.basicConfig()
 
 # import choix
 # import networkx as nx
@@ -100,17 +103,6 @@ schema_label_to_color = {}
 
 COLOR_PALETTE = ['rgb(179,226,205)', 'rgb(253,205,172)', 'rgb(203,213,232)', 'rgb(244,202,228)', 'rgb(230,245,201)', 'rgb(255,242,174)', 'rgb(241,226,204)', 'rgb(204,204,204)', 'rgb(102, 197, 204)', 'rgb(246, 207, 113)',
                  'rgb(248, 156, 116)', 'rgb(220, 176, 242)', 'rgb(135, 197, 95)', 'rgb(158, 185, 243)', 'rgb(254, 136, 177)', 'rgb(201, 219, 116)', 'rgb(139, 224, 164)', 'rgb(180, 151, 231)', 'rgb(179, 179, 179)']
-
-args = arguments()
-init_config(args.config_file)
-config.update({
-    "verbose": args.verbose,
-    "very_verbose": args.very_verbose,
-    "__debug__": args.debug,
-    "__config_file__": args.config_file,
-})
-init_logger(config)
-logger = logging.getLogger(config.get("logger_name", "potato"))
 
 app = Flask(__name__)
 
@@ -3843,6 +3835,14 @@ def run_server():
     """
     global user_config
     global user_to_annotation_state
+
+    args = arguments()
+    init_config(args)
+    if config.get("verbose"):
+        logger.setLevel(logging.DEBUG)
+    if config.get("very_verbose"):
+        logger.setLevel(logging.NOTSET)
+
     user_config = UserConfig(USER_CONFIG_PATH)
 
     #Jiaxin: commenting the following lines since we will have a seperate
