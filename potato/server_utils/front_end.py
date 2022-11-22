@@ -4,6 +4,9 @@ Handle all front-end related functionalities.
 
 import os
 import logging
+import json
+import re
+from collections import defaultdict
 from potato.server_utils.config_module import config
 from potato.server_utils.schemas import (
     generate_multiselect_layout,
@@ -13,29 +16,29 @@ from potato.server_utils.schemas import (
     generate_textbox_layout,
     generate_number_layout,
     generate_pure_display_layout,
-    generate_select_layout
+    generate_select_layout,
 )
 
 logger = logging.getLogger(__name__)
 
 
-#TODO: Move this to config.yaml files
-#Items which will be displayed in the popup statistics sidebar
+# TODO: Move this to config.yaml files
+# Items which will be displayed in the popup statistics sidebar
 STATS_KEYS = {
-    'Annotated instances': 'Annotated instances',
-    'Total working time': 'Total working time',
-    'Average time on each instance': 'Average time on each instance',
-    'Agreement': 'Agreement'
+    "Annotated instances": "Annotated instances",
+    "Total working time": "Total working time",
+    "Average time on each instance": "Average time on each instance",
+    "Agreement": "Agreement",
 }
 
 
 def generate_schematic(annotation_scheme):
-    '''
+    """
     Based on the task's yaml configuration, generate the full HTML site needed
     to annotate the tasks's data.
-    '''
+    """
     # Figure out which kind of tasks we're doing and build the input frame
-    annotation_type = annotation_scheme['annotation_type']
+    annotation_type = annotation_scheme["annotation_type"]
     annotation_func = {
         "multiselect": generate_multiselect_layout,
         "radio": generate_radio_layout,
@@ -53,48 +56,62 @@ def generate_schematic(annotation_scheme):
     return annotation_func(annotation_scheme)
 
 
-def generate_keybindings_sidebar(keybindings, horizontal = False):
-    '''
+def generate_keybindings_sidebar(keybindings, horizontal=False):
+    """
     Generate an HTML layout for the end-user of the keybindings for the current
     task. The layout is intended to be displayed in a side bar
-    '''
-    if "horizontal_key_bindings" in config and config["horizontal_key_bindings"]:
+    """
+    if (
+        "horizontal_key_bindings" in config
+        and config["horizontal_key_bindings"]
+    ):
         horizontal = True
 
     if not keybindings:
-        return ''
-    #keybindings.insert(0, ('key', 'description'))
+        return ""
+    # keybindings.insert(0, ('key', 'description'))
     if horizontal:
-        keybindings = [[it[0], it[1].split(':')[-1]] for it in keybindings]
+        keybindings = [[it[0], it[1].split(":")[-1]] for it in keybindings]
         lines = list(zip(*keybindings))
         print(lines)
         layout = '<table style="border:1px solid black;margin-left:auto;margin-right:auto;text-align: center;">'
         for line in lines:
-            layout += "<tr>" + ''.join(['<td>&nbsp;&nbsp;%s&nbsp;&nbsp;</td>'%it for it in line]) + "</tr>"
-        layout += '</table>'
+            layout += (
+                "<tr>"
+                + "".join(
+                    ["<td>&nbsp;&nbsp;%s&nbsp;&nbsp;</td>" % it for it in line]
+                )
+                + "</tr>"
+            )
+        layout += "</table>"
 
     else:
-        layout = '<table><tr><th>Key</th><th>Description</th></tr>'
+        layout = "<table><tr><th>Key</th><th>Description</th></tr>"
         for key, desc in keybindings:
-            layout += '<tr><td style="text-align: center;">%s</td><td>%s</td></tr>' % (key, desc)
-        layout += '</table>'
+            layout += (
+                '<tr><td style="text-align: center;">%s</td><td>%s</td></tr>'
+                % (key, desc)
+            )
+        layout += "</table>"
 
     return layout
+
 
 def generate_statistics_sidebar(statistics):
-    '''
+    """
     Generate an HTML layout for the end-user of the statistics for the current
     task. The layout is intended to be displayed in a side bar
-    '''
+    """
 
-    layout = '<table><tr><th> </th><th> </th></tr>'
+    layout = "<table><tr><th> </th><th> </th></tr>"
     for key in statistics:
-        desc = "{{statistics_nav[\'%s\']}}" % statistics[key]
-        layout += '<tr><td style="text-align: center;">%s</td><td>%s</td></tr>' % (key, desc)
-    layout += '</table>'
+        desc = "{{statistics_nav['%s']}}" % statistics[key]
+        layout += (
+            '<tr><td style="text-align: center;">%s</td><td>%s</td></tr>'
+            % (key, desc)
+        )
+    layout += "</table>"
     return layout
-
-
 
 
 def generate_site(config):
@@ -306,10 +323,6 @@ def generate_surveyflow_pages(config):
     combining the various templates with the annotation specification in
     the yaml file.
     """
-    # TODO (AJYL): Hmm, must be a better way to grab the logger.
-    logger = logging.getLogger(config.get("logger_name", "potato"))
-    logger.info("Generating anntoation site at %s" % config["site_dir"])
-
     #
     # Stage 1: Construct the core HTML file devoid the annotation-specific content
     #
@@ -422,7 +435,7 @@ def generate_surveyflow_pages(config):
         "{{annotation_task_name}}", config["annotation_task_name"]
     )
 
-    statistics_layout = generate_statistics_sidebar(STATS_KEYS)
+    _ = generate_statistics_sidebar(STATS_KEYS)
     html_template = html_template.replace("{{statistics_nav}}", " ")
 
     #
@@ -548,7 +561,9 @@ def generate_surveyflow_pages(config):
                     '<a class="btn btn-secondary" href="#" role="button" onclick="click_to_next()" hidden>Move forward</a>',
                 )
             else:
-                keybindings_desc = generate_keybindings_sidebar(all_keybindings)
+                keybindings_desc = generate_keybindings_sidebar(
+                    all_keybindings
+                )
 
             cur_html_template = cur_html_template.replace(
                 "{{keybindings}}", keybindings_desc

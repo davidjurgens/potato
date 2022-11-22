@@ -79,6 +79,52 @@ def set_span_color(span_label, color):
     span_colors[span_label] = color
 
 
+def render_span_annotations(text, span_annotations):
+    '''    
+    Retuns a modified version of the text with span annotation overlays inserted
+    into the text.
+
+    :text: some instance to be annotated
+    :span_annotations: annotations already made by the user that need to be
+       re-inserted into the text
+    '''
+    # This code is synchronized with the javascript function
+    # surroundSelection(selectionLabel) function in base_template.html which
+    # wraps any labeled text with a <div> element indicating its label. We
+    # replicate this code here (in python).
+    #
+    # This synchrony also means that any changes to the UI code for rendering
+    # need to be updated here too.
+
+
+    # We need to go in reverse order to make the string update in the right
+    # places, so make sure things are ordered in reverse of start
+
+    rev_order_sa = sorted(span_annotations, key=lambda d: d['start'], reverse=True) 
+
+    ann_wrapper = ('<span class="span_container" selection_label="{annotation}" ' +
+                      'style="background-color:rgb{bg_color};">' +
+                   '{span}' +
+                   '<div class="span_label" ' +
+                       'style="background-color:white;border:2px solid rgb{color};">' +
+                   '{annotation}</div></span>')
+    for a in rev_order_sa:
+
+        # Spans are colored according to their order in the list and we need to
+        # retrofit the color
+        color = get_span_color(a['annotation'])
+        # The color is an RGB triple like (1,2,3) and we want the background for
+        # the text to be somewhat transparent so we switch to RGBA for bg
+        bg_color = color.replace(')', ',0.25)')
+        
+        ann = ann_wrapper.format(annotation=a['annotation'], span=a['span'],
+                                 color=color, bg_color=bg_color)    
+        text = text[:a['start']] + ann + text[a['end']:]
+
+    return text
+    
+
+
 def generate_span_layout(annotation_scheme, horizontal=False):
     '''
     Renders a span annotation option selection in the annotation panel and
