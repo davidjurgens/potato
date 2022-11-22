@@ -111,7 +111,6 @@ config.update({
 })
 init_logger(config)
 logger = logging.getLogger(config.get("logger_name", "potato"))
-breakpoint()
 
 app = Flask(__name__)
 
