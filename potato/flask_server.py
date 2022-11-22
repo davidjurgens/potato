@@ -36,8 +36,13 @@ import string
 
 import webbrowser
 
-from create_task_cli import create_task_cli
+from create_task_cli import create_task_cli, yes_or_no
 from server_utils.config_module import init_config, config
+from server_utils.arg_utils import arguments
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logging.basicConfig()
 
 # import choix
 # import networkx as nx
@@ -522,7 +527,6 @@ class UserAnnotationState:
 def load_all_data(config):
     global annotate_state  # formerly known as user_state
     global all_data
-    global logger
     global instance_id_to_data
     global unassigned_ids
     global task_assignment
@@ -1689,7 +1693,6 @@ def load_user_state(username):
     '''
     global user_to_annotation_state
     global instance_id_to_data
-    global logger
 
     # Figure out where this user's data would be stored on disk
     user_state_dir = config['output_annotation_dir']
@@ -1779,7 +1782,6 @@ def load_user_state(username):
 def get_cur_instance_for_user(username):
     global user_to_annotation_state
     global instance_id_to_data
-    global logger
 
     user_state = lookup_user_state(username)
 
@@ -2386,38 +2388,12 @@ def parse_story_pair_from_file(filepath):
     return lines
 
 
-def arguments():
-    '''
-    Creates and returns the arg parser for Potato on the command line
-    '''
-    parser = ArgumentParser()
-    parser.set_defaults(show_path=False, show_similarity=False)
-
-    parser.add_argument("config_file")
-
-    parser.add_argument("-p", "--port", action="store", type=int, dest="port",
-                        help="The port to run on", default=None)
-
-    parser.add_argument("-v", "--verbose", action="store_true",
-                        help="Report verbose output", default=False)
-
-    parser.add_argument("--debug", action="store_true",
-                        help="Launch in debug mode with no login", default=False)
-    
-    parser.add_argument("--veryVerbose", action="store_true", dest="very_verbose",
-                        help="Report very verbose output", default=False)
-
-    return parser.parse_args()
-
-
 def generate_site(config):
     '''
     Generates the full HTML file in site/ for annotating this tasks data,
     combining the various templates with the annotation specification in
     the yaml file.
     '''
-    global logger
-
     logger.info("Generating anntotation site at %s" % config['site_dir'])
 
     #
@@ -2599,8 +2575,6 @@ def generate_surveyflow_pages(config):
         combining the various templates with the annotation specification in
         the yaml file.
         '''
-    global logger
-
     logger.info("Generating anntoation site at %s" % config['site_dir'])
 
     #
@@ -2882,8 +2856,6 @@ def generate_schematic(annotation_scheme):
     Based on the task's yaml configuration, generate the full HTML site needed
     to annotate the tasks's data.
     '''
-    global logger
-
     # Figure out which kind of tasks we're doing and build the input frame
     annotation_type = annotation_scheme['annotation_type']
 
@@ -2916,8 +2888,6 @@ def generate_schematic(annotation_scheme):
 
 
 def generate_multiselect_layout(annotation_scheme):
-    global logger
-    
     schematic = \
         '<form action="/action_page.php">' + \
         '  <fieldset>' + \
@@ -3662,7 +3632,6 @@ def get_class( kls ):
 
 
 def actively_learn():
-    global logger
     global user_to_annotation_state
     global instance_id_to_data
 
@@ -3845,38 +3814,34 @@ def resolve(annotations, strategy):
         raise Exception("Unknonwn annotation resolution strategy: \"%s\"" % (strategy))
 
 
-def yes_or_no(question):
-    while "the answer is invalid":
-        reply = str(input(question+' (y/n): ')).lower().strip()
-        if reply[:1] == 'y':
-            return True
-        if reply[:1] == 'n':
-            return False    
+def run_create_task_cli():
+    """
+    Run create_task_cli().
+    """
+    if yes_or_no("Launch task creation process?"):
+        if yes_or_no("Launch on command line?"):
+            config_file = create_task_cli()
+        else:
+            # Probably need to launch the Flask server to accept form inputs
+            webbrowser.open('file://' + TODO + 'potato/static/create-task.html', new=1)
 
-        
-def main():
-    global logger
+            # TODO: figure out how to capture the config file
+            config_file = 'unknown'
+
+
+def run_server():
+    """
+    Run Flask server.
+    """
     global user_config
     global user_to_annotation_state
 
-
-    # Check if the user launched with no arguments and if so, launch the task
-    # configuration script for them
-    if len(sys.argv) == 1:
-        if yes_or_no("Launch task creation process?"):
-            if yes_or_no("Launch on command line?"):
-                config_file = create_task_cli()
-            else:
-                # Probably need to launch the Flask server to accept form inputs
-                webbrowser.open('file://' + TODO + 'potato/static/create-task.html', new=1)
-
-                # TODO: figure out how to capture the config file
-                config_file = 'unknown'
-            
-            return
-    
     args = arguments()
-    init_config(args.config_file)
+    init_config(args)
+    if config.get("verbose"):
+        logger.setLevel(logging.DEBUG)
+    if config.get("very_verbose"):
+        logger.setLevel(logging.NOTSET)
 
     user_config = UserConfig(USER_CONFIG_PATH)
 
@@ -3894,28 +3859,6 @@ def main():
                 username = user['firstname'] + '_' + user['lastname']
                 user_config.add_user(username)
     '''
-
-    logger_name = 'potato'
-    if 'logger_name' in config:
-        logger_name = config['logger_name']
-                
-    logger = logging.getLogger(logger_name)
-
-    logger.setLevel(logging.INFO)
-    logging.basicConfig()
-
-    if args.verbose:
-        logger.setLevel(logging.DEBUG)
-
-    if args.very_verbose:
-        logger.setLevel(logging.NOTSET)
-
-    # For helping in debugging, stuff in the config file name
-    config['__config_file__'] = args.config_file
-
-    config['__debug__'] = False
-    if args.debug:
-        config['__debug__'] = True
 
     # Creates the templates we'll use in flask by mashing annotation
     # specification on top of the proto-templates
@@ -3952,6 +3895,14 @@ def main():
     port = args.port or config.get('port', default_port)
     print('running at:\nlocalhost:'+str(port))
     app.run(debug=args.very_verbose, host="0.0.0.0", port=port)
+
+
+def main():
+    if len(sys.argv) == 1:
+        # Run task configuration script if no arguments are given.
+        return run_create_task_cli()
+
+    run_server()
 
 
 if __name__ == "__main__":
