@@ -16,6 +16,8 @@ from potato.server_utils.schemas import (
     generate_select_layout
 )
 
+logger = logging.getLogger(__name__)
+
 
 #TODO: Move this to config.yaml files
 #Items which will be displayed in the popup statistics sidebar
@@ -51,7 +53,7 @@ def generate_schematic(annotation_scheme):
     return annotation_func(annotation_scheme)
 
 
-def generate_keybidings_sidebar(keybindings, horizontal = False):
+def generate_keybindings_sidebar(keybindings, horizontal = False):
     '''
     Generate an HTML layout for the end-user of the keybindings for the current
     task. The layout is intended to be displayed in a side bar
@@ -101,8 +103,6 @@ def generate_site(config):
     combining the various templates with the annotation specification in
     the yaml file.
     """
-    # TODO (AJYL): Hmm, must be a better way to grab the logger.
-    logger = logging.getLogger(config.get("logger_name", "potato"))
     logger.info("Generating anntotation site at %s" % config["site_dir"])
 
     #
@@ -272,7 +272,7 @@ def generate_site(config):
         "{{annotation_task_name}}", config["annotation_task_name"]
     )
 
-    keybindings_desc = generate_keybidings_sidebar(all_keybindings)
+    keybindings_desc = generate_keybindings_sidebar(all_keybindings)
     html_template = html_template.replace("{{keybindings}}", keybindings_desc)
 
     statistics_layout = generate_statistics_sidebar(STATS_KEYS)
@@ -530,7 +530,7 @@ def generate_surveyflow_pages(config):
 
             # Do not display keybindings for the first and last page
             if i == 0:
-                keybindings_desc = generate_keybidings_sidebar(
+                keybindings_desc = generate_keybindings_sidebar(
                     all_keybindings[1:]
                 )
                 cur_html_template = cur_html_template.replace(
@@ -540,7 +540,7 @@ def generate_surveyflow_pages(config):
             elif i == len(surveyflow_pages) - 1 or re.search(
                 "prestudy_fail", page
             ):
-                keybindings_desc = generate_keybidings_sidebar(
+                keybindings_desc = generate_keybindings_sidebar(
                     all_keybindings[:-1]
                 )
                 cur_html_template = cur_html_template.replace(
@@ -548,7 +548,7 @@ def generate_surveyflow_pages(config):
                     '<a class="btn btn-secondary" href="#" role="button" onclick="click_to_next()" hidden>Move forward</a>',
                 )
             else:
-                keybindings_desc = generate_keybidings_sidebar(all_keybindings)
+                keybindings_desc = generate_keybindings_sidebar(all_keybindings)
 
             cur_html_template = cur_html_template.replace(
                 "{{keybindings}}", keybindings_desc
