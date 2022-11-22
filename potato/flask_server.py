@@ -36,10 +36,15 @@ import string
 
 import webbrowser
 
-from create_task_cli import create_task_cli, yes_or_no
-from server_utils.config_module import init_config, config
-from server_utils.arg_utils import arguments
-from server_utils.logger import init_logger
+from potato.create_task_cli import create_task_cli, yes_or_no
+from potato.server_utils.config_module import init_config, config
+from potato.server_utils.arg_utils import arguments
+from potato.server_utils.messages import LOGIN_ERROR_MSG
+#from potato.server_utils.logger import init_logger
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logging.basicConfig()
 
 # import choix
 # import networkx as nx
@@ -100,17 +105,6 @@ schema_label_to_color = {}
 
 COLOR_PALETTE = ['rgb(179,226,205)', 'rgb(253,205,172)', 'rgb(203,213,232)', 'rgb(244,202,228)', 'rgb(230,245,201)', 'rgb(255,242,174)', 'rgb(241,226,204)', 'rgb(204,204,204)', 'rgb(102, 197, 204)', 'rgb(246, 207, 113)',
                  'rgb(248, 156, 116)', 'rgb(220, 176, 242)', 'rgb(135, 197, 95)', 'rgb(158, 185, 243)', 'rgb(254, 136, 177)', 'rgb(201, 219, 116)', 'rgb(139, 224, 164)', 'rgb(180, 151, 231)', 'rgb(179, 179, 179)']
-
-args = arguments()
-init_config(args.config_file)
-config.update({
-    "verbose": args.verbose,
-    "very_verbose": args.very_verbose,
-    "__debug__": args.debug,
-    "__config_file__": args.config_file,
-})
-init_logger(config)
-logger = logging.getLogger(config.get("logger_name", "potato"))
 
 app = Flask(__name__)
 
@@ -661,8 +655,6 @@ def load_all_data(config):
         logger.debug('Loaded %d regexes to map to %d labels for dynamic highlighting'
                      % (len(re_to_highlights), i))
 
-
-
     # Load the annotation assignment info if automatic task assignment is on.
     # Jiaxin: we are simply saving this as a json file at this moment
     if "automatic_assignment" in config and config["automatic_assignment"]['on']:
@@ -906,12 +898,11 @@ def update_annotation_state(username, form):
     Parses the state of the HTML form (what the user did to the instance) and
     updates the state of the instance's annotations accordingly.
     '''
-
     # Get what the user has already annotated, which might include this instance too
     user_state = lookup_user_state(username)
 
     # Jiaxin: the instance_id are changed to the user's local instance cursor
-    instance_id = user_state.cursor_to_real_instance_id(int(request.form['instance_id']))
+    instance_id = user_state.cursor_to_real_instance_id(int(form['instance_id']))
 
     schema_to_label_to_value = defaultdict(dict)
 
@@ -1042,7 +1033,7 @@ def write_data(username):
 def home():
     global user_config
     
-    if config['__debug__']:
+    if config.get('__debug__'):
         print('debug user logging in')
         return annotate_page('debug_user', action='home')
     elif 'login' in config:
@@ -1856,14 +1847,14 @@ def annotate_page(username = None, action=None):
 
     #use the provided username when the username is given
     if not username:
-        if config['__debug__']:
+        if config.get('__debug__'):
             username = 'debug_user'
         else:
             username_from_last_page = request.form.get("email")
             #print(username_on_page)
-            if username_from_last_page == None:
+            if username_from_last_page is None:
                 #return render_template("error.html", error_message='You must use the link provided by prolific to work on this study')
-                return render_template("error.html", error_message='Please login to annotate or you are using the wrong link')
+                return render_template("error.html", error_message=LOGIN_ERROR_MSG)
             else:
                 username = username_from_last_page
 
@@ -1918,7 +1909,7 @@ def annotate_page(username = None, action=None):
             th.start()
 
     ism = request.form.get("label")
-    action = request.form.get("src") if action == None else action
+    action = request.form.get("src") if action is None else action
 
 
     if action == "home":
@@ -3843,6 +3834,20 @@ def run_server():
     """
     global user_config
     global user_to_annotation_state
+
+    args = arguments()
+    init_config(args.config_file)
+    config.update({
+        "verbose": args.verbose,
+        "very_verbose": args.very_verbose,
+        "__debug__": args.debug,
+        "__config_file__": args.config_file,
+    })
+    if args.verbose:
+        logger.setLevel(logging.DEBUG)
+    if args.very_verbose:
+        logger.setLevel(logging.NOTSET)
+
     user_config = UserConfig(USER_CONFIG_PATH)
 
     #Jiaxin: commenting the following lines since we will have a seperate
