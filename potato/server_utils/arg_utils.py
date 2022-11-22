@@ -25,18 +25,11 @@ def arguments():
     )
 
     parser.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Report verbose output",
-        default=False,
+        "-v", "--verbose", action="store_true", help="Report verbose output", default=False
     )
 
     parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Launch in debug mode with no login",
-        default=False,
+        "--debug", action="store_true", help="Launch in debug mode with no login", default=False
     )
 
     parser.add_argument(
