@@ -2,8 +2,10 @@
 Span Layout
 """
 
+import logging
 from collections.abc import Mapping
 from potato.server_utils.config_module import config
+logger = logging.getLogger(__name__)
 
 
 SPAN_COLOR_PALETTE = [

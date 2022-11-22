@@ -2,6 +2,10 @@
 Multiselect Layout
 """
 
+import logging
+from collections.abc import Mapping
+logger = logging.getLogger(__name__)
+
 
 def generate_multiselect_layout(annotation_scheme):
     schematic = \

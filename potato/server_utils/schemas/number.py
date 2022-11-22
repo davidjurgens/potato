@@ -1,6 +1,8 @@
 """
 Number Layout
 """
+import logging
+logger = logging.getLogger(__name__)
 
 
 def generate_number_layout(annotation_scheme):

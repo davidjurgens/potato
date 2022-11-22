@@ -2534,16 +2534,12 @@ def run_create_task_cli():
     """
     Run create_task_cli().
     """
-    import webbrowser
     if yes_or_no("Launch task creation process?"):
         if yes_or_no("Launch on command line?"):
             config_file = create_task_cli()
         else:
             # Probably need to launch the Flask server to accept form inputs
-            webbrowser.open('file://' + TODO + 'potato/static/create-task.html', new=1)
-
-            # TODO: figure out how to capture the config file
-            config_file = 'unknown'
+            raise Exception("Gui-based design not supported yet.")
 
 
 def run_server():
