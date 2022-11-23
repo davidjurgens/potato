@@ -30,7 +30,7 @@ from server_utils.annotation_state_utils import (
     save_all_annotations,
     update_annotation_state,
 )
-from app import app, db
+from app import create_app, db
 from db_utils.user_manager import UserManager
 from server_utils.arg_utils import arguments
 from server_utils.config_module import init_config, config
@@ -47,6 +47,8 @@ from server_utils.user_state_utils import (
 )
 import state
 from scripts.init_user_db import init_user_db
+
+POTATO_HOME = os.environ.get("POTATO_HOME")
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -95,15 +97,16 @@ COLOR_PALETTE = [
 ]
 
 
-def init_db():
-    """
-    Initialize DB.
-    """
-    with app.app_context():
-        db.create_all()
+
+args = arguments()
+init_config(args)
+if config.get("verbose"):
+    logger.setLevel(logging.DEBUG)
+if config.get("very_verbose"):
+    logger.setLevel(logging.NOTSET)
 
 
-init_db()
+app = create_app(os.path.join(POTATO_HOME, config["db_path"]))
 user_manager = UserManager(db)
 
 
@@ -1245,28 +1248,6 @@ def run_server():
     """
     Run Flask server.
     """
-    args = arguments()
-    init_config(args)
-    if config.get("verbose"):
-        logger.setLevel(logging.DEBUG)
-    if config.get("very_verbose"):
-        logger.setLevel(logging.NOTSET)
-
-    # Jiaxin: commenting the following lines since we will have a seperate
-    #        user_config file to save user info.  This is necessary since we
-    #        cannot directly write to the global config file for user
-    #        registration
-    """
-    user_config_data = config['user_config']
-    if 'allow_all_users' in user_config_data:
-        user_config.allow_all_users = user_config_data['allow_all_users']
-
-        if 'users' in user_config_data:       
-            for user in user_config_data["users"]:
-                username = user['firstname'] + '_' + user['lastname']
-                user_config.add_user(username)
-    """
-
     # Creates the templates we'll use in flask by mashing annotation
     # specification on top of the proto-templates
     generate_site(config)

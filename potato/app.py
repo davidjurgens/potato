@@ -2,17 +2,18 @@
 Main Flask app
 """
 
-import os
 from flask import Flask, render_template, request
 from potato.db import db
 
-app = Flask(__name__)
 
-basedir = os.path.abspath(os.path.dirname(__file__))
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(
-    basedir, "database.db"
-)
+def create_app(db_path):
+    """ App factory """
+    app = Flask(__name__)
 
-db.init_app(app)
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + db_path
+    db.init_app(app)
 
-from potato.db_utils.models import User
+    with app.app_context():
+        db.create_all()
+
+    return app
