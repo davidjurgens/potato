@@ -12,16 +12,11 @@ def generate_likert_layout(annotation_scheme):
     if "labels" in annotation_scheme:
         return generate_radio_layout(annotation_scheme, horizontal=False)
 
-    if "size" not in annotation_scheme:
-        raise Exception('Likert scale for "%s" did not include size' % annotation_scheme["name"])
-    if "min_label" not in annotation_scheme:
-        raise Exception(
-            'Likert scale for "%s" did not include min_label' % annotation_scheme["name"]
-        )
-    if "max_label" not in annotation_scheme:
-        raise Exception(
-            'Likert scale for "%s" did not include max_label' % annotation_scheme["name"]
-        )
+    for required in ["size", "min_label", "max_label"]:
+        if required not in annotation_scheme:
+            raise Exception(
+                'Likert scale for "%s" did not include %s' % (annotation_scheme["name"], required)
+            )
 
     schematic = (
         '<div><form action="/action_page.php">'
@@ -32,14 +27,11 @@ def generate_likert_layout(annotation_scheme):
     label2key = {}
     key_bindings = []
 
-    # setting up label validation for each label, if "required" is True, the annotators will be asked to finish the current instance to proceed
+    # Setting up label validation for each label, if "required" is True,
+    # the annotators will be asked to finish the current instance to proceed
     validation = ""
-    label_requirement = (
-        annotation_scheme["label_requirement"]
-        if "label_requirement" in annotation_scheme
-        else None
-    )
-    if label_requirement and ("required" in label_requirement) and label_requirement["required"]:
+    label_requirement = annotation_scheme.get("label_requirement")
+    if label_requirement and label_requirement.get("required"):
         validation = "required"
 
     for i in range(1, annotation_scheme["size"] + 1):
@@ -51,21 +43,13 @@ def generate_likert_layout(annotation_scheme):
         key_value = str(i % 10)
 
         # if the user wants us to add in easy key bindings
-        if (
-            "sequential_key_binding" in annotation_scheme
-            and annotation_scheme["sequential_key_binding"]
-            and annotation_scheme["size"] <= 10
-        ):
+        if annotation_scheme.get("sequential_key_binding") and annotation_scheme["size"] <= 10:
             key2label[key_value] = label
             label2key[label] = key_value
             key_bindings.append((key_value, class_name + ": " + key_value))
 
         # In the collapsed version of the likert scale, no label is shown.
-        label_content = (
-            str(i)
-            if ("displaying_score" in annotation_scheme and annotation_scheme["displaying_score"])
-            else ""
-        )
+        label_content = str(i) if annotation_scheme.get("displaying_score") else ""
         tooltip = ""
 
         # displaying the label content in a different line if it is not empty
@@ -97,10 +81,7 @@ def generate_likert_layout(annotation_scheme):
 
     # allow annotators to choose bad_text label
     bad_text_schematic = ""
-    if (
-        "bad_text_label" in annotation_scheme
-        and "label_content" in annotation_scheme["bad_text_label"]
-    ):
+    if "label_content" in annotation_scheme.get("bad_text_label", {}):
         name = annotation_scheme["name"] + ":::" + "bad_text"
         bad_text_schematic = (
             (
