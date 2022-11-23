@@ -10,9 +10,7 @@ def generate_select_layout(annotation_scheme):
     # setting up label validation for each label, if "required" is True, the annotators will be asked to finish the current instance to proceed
     validation = ""
     label_requirement = (
-        annotation_scheme["label_requirement"]
-        if "label_requirement" in annotation_scheme
-        else None
+        annotation_scheme["label_requirement"] if "label_requirement" in annotation_scheme else None
     )
     if label_requirement and ("required" in label_requirement) and label_requirement["required"]:
         validation = "required"
@@ -49,9 +47,7 @@ def generate_select_layout(annotation_scheme):
 
     else:
         # if annotation_scheme['labels'] is defined as a path
-        if type(annotation_scheme["labels"]) == str and os.path.exists(
-            annotation_scheme["labels"]
-        ):
+        if type(annotation_scheme["labels"]) == str and os.path.exists(annotation_scheme["labels"]):
             with open(annotation_scheme["labels"], "r") as r:
                 labels = [it.strip() for it in r.readlines()]
         else:

@@ -27,9 +27,7 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
     # annotators will be asked to finish the current instance to proceed
     validation = ""
     label_requirement = (
-        annotation_scheme["label_requirement"]
-        if "label_requirement" in annotation_scheme
-        else None
+        annotation_scheme["label_requirement"] if "label_requirement" in annotation_scheme else None
     )
     if label_requirement and ("required" in label_requirement) and label_requirement["required"]:
         validation = "required"

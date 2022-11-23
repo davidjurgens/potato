@@ -61,16 +61,15 @@ def generate_keybindings_sidebar(keybindings, horizontal=False):
     Generate an HTML layout for the end-user of the keybindings for the current
     task. The layout is intended to be displayed in a side bar
     """
-    if "horizontal_key_bindings" in config and config["horizontal_key_bindings"]:
+    if config.get("horizontal_key_bindings"):
         horizontal = True
 
     if not keybindings:
         return ""
-    # keybindings.insert(0, ('key', 'description'))
+
     if horizontal:
         keybindings = [[it[0], it[1].split(":")[-1]] for it in keybindings]
         lines = list(zip(*keybindings))
-        print(lines)
         layout = '<table style="border:1px solid black;margin-left:auto;margin-right:auto;text-align: center;">'
         for line in lines:
             layout += (
@@ -94,7 +93,6 @@ def generate_statistics_sidebar(statistics):
     Generate an HTML layout for the end-user of the statistics for the current
     task. The layout is intended to be displayed in a side bar
     """
-
     layout = "<table><tr><th> </th><th> </th></tr>"
     for key in statistics:
         desc = "{{statistics_nav['%s']}}" % statistics[key]
@@ -154,7 +152,7 @@ def generate_site(config):
 
     html_template = html_template.replace("{{ HEADER }}", header)
 
-    if "jumping_to_id_disabled" in config and config["jumping_to_id_disabled"]:
+    if config.get("jumping_to_id_disabled"):
         html_template = html_template.replace(
             '<input type="submit" value="go">', '<input type="submit" value="go" hidden>'
         )
@@ -163,7 +161,7 @@ def generate_site(config):
             '<input type="number" name="go_to" id="go_to" value="" onfocusin="user_input()" onfocusout="user_input_leave()" max={{total_count}} min=0 required hidden>',
         )
 
-    if "hide_navbar" in config and config["hide_navbar"]:
+    if config.get("hide_navbar"):
         html_template = html_template.replace(
             '<div class="navbar-nav">', '<div class="navbar-nav" hidden>'
         )
@@ -200,8 +198,7 @@ def generate_site(config):
 
     # Potato admin can specify a custom HTML layout that allows variable-named
     # placement of task elements
-    if "custom_layout" in config and config["custom_layout"]:
-
+    if config.get("custom_layout"):
         for annotation_scheme in annotation_schemes:
             schema_layout, keybindings = generate_schematic(annotation_scheme)
             all_keybindings.extend(keybindings)
@@ -235,7 +232,7 @@ def generate_site(config):
 
     # Add in a codebook link if the admin specified one
     codebook_html = ""
-    if "annotation_codebook_url" in config and len(config["annotation_codebook_url"]) > 0:
+    if len(config.get("annotation_codebook_url", "")) > 0:
         annotation_codebook = config["annotation_codebook_url"]
         codebook_html = '<a href="{{annotation_codebook_url}}" class="nav-item nav-link">Annotation Codebook</a>'
         codebook_html = codebook_html.replace("{{annotation_codebook_url}}", annotation_codebook)
@@ -246,9 +243,7 @@ def generate_site(config):
 
     # Swap in the task's layout
     html_template = html_template.replace("{{ TASK_LAYOUT }}", task_html_layout)
-
     html_template = html_template.replace("{{annotation_codebook}}", codebook_html)
-
     html_template = html_template.replace(
         "{{annotation_task_name}}", config["annotation_task_name"]
     )
@@ -328,7 +323,7 @@ def generate_surveyflow_pages(config):
 
     html_template = html_template.replace("{{ HEADER }}", header)
 
-    if "jumping_to_id_disabled" in config and config["jumping_to_id_disabled"]:
+    if config.get("jumping_to_id_disabled"):
         html_template = html_template.replace(
             '<input type="submit" value="go">', '<input type="submit" value="go" hidden>'
         )
@@ -337,7 +332,7 @@ def generate_surveyflow_pages(config):
             '<input type="number" name="go_to" id="go_to" value="" onfocusin="user_input()" onfocusout="user_input_leave()" max={{total_count}} min=0 required hidden>',
         )
 
-    if "hide_navbar" in config and config["hide_navbar"]:
+    if config.get("hide_navbar"):
         html_template = html_template.replace(
             '<div class="navbar-nav">', '<div class="navbar-nav" hidden>'
         )
@@ -355,8 +350,7 @@ def generate_surveyflow_pages(config):
 
         if not os.path.exists(abs_html_layout_file):
             raise FileNotFoundError("html_layout not found: %s" % html_layout_file)
-        else:
-            html_layout_file = abs_html_layout_file
+        html_layout_file = abs_html_layout_file
 
     with open(html_layout_file, "rt") as f:
         task_html_layout = "".join(f.readlines())
@@ -374,7 +368,7 @@ def generate_surveyflow_pages(config):
 
     # Add in a codebook link if the admin specified one
     codebook_html = ""
-    if "annotation_codebook_url" in config and len(config["annotation_codebook_url"]) > 0:
+    if len(config.get("annotation_codebook_url", "")) > 0:
         annotation_codebook = config["annotation_codebook_url"]
         codebook_html = '<a href="{{annotation_codebook_url}}" class="nav-item nav-link">Annotation Codebook</a>'
         codebook_html = codebook_html.replace("{{annotation_codebook_url}}", annotation_codebook)
@@ -398,13 +392,13 @@ def generate_surveyflow_pages(config):
     surveyflow_list = []
     for key in surveyflow["order"]:
         surveyflow_list += surveyflow[key]
-    for file in surveyflow_list:
-        if file.split(".")[-1] == "jsonl":
-            with open(file, "r") as r:
+    for _file in surveyflow_list:
+        if _file.split(".")[-1] == "jsonl":
+            with open(_file, "r") as r:
                 for line in r:
                     line = json.loads(line.strip())
-                    line["filename"] = file
-                    line["pagename"] = file.split(".")[0].split("/")[-1]
+                    line["filename"] = _file
+                    line["pagename"] = _file.split(".")[0].split("/")[-1]
                     surveyflow_pages[line["pagename"]].append(line)
 
     # Grab the annotation schemes
@@ -416,7 +410,7 @@ def generate_surveyflow_pages(config):
 
     # Potato admin can specify a custom HTML layout that allows variable-named
     # placement of task elements
-    if "custom_layout" in config and config["custom_layout"]:
+    if config.get("custom_layout"):
 
         for annotation_scheme in annotation_schemes:
             schema_layout, keybindings = generate_schematic(annotation_scheme)
@@ -448,24 +442,19 @@ def generate_surveyflow_pages(config):
                 annotation_scheme = {
                     "annotation_type": line["schema"],
                     # todo: pack select type in to a dict with the key 'schema'
-                    # whether use predefined labels for select type, if so, define it, currently we support country, religion, ethnicity
-                    "use_predefined_labels": line["use_predefined_labels"]
-                    if "use_predefined_labels" in line
-                    else None,
+                    # whether use predefined labels for select type, if so,
+                    # define it, currently we support country, religion, ethnicity
+                    "use_predefined_labels": line.get("use_predefined_labels"),
                     "id": line["id"],
                     "name": line["text"],
                     "description": line["text"],
-                    # If true, display the labels horizontally
                     "horizontal": False,
-                    "labels": line["choices"] if "choices" in line else None,
-                    "label_requirement": line["label_requirement"]
-                    if "label_requirement" in line
-                    else None,
+                    "labels": line.get("choices"),
+                    "label_requirement": line.get("label_requirement"),
                     "sequential_key_binding": False,
                 }
                 schema_layout, keybindings = generate_schematic(annotation_scheme)
                 schema_layouts += schema_layout + "<br>" + "\n"
-                # all_keybindings.extend(keybindings)
 
             cur_task_html_layout = task_html_layout.replace(
                 "{{annotation_schematic}}", schema_layouts
@@ -519,4 +508,3 @@ def generate_surveyflow_pages(config):
             for it in config["surveyflow"][key]
         ]
         config["non_annotation_pages"] += config["%s_pages" % key]
-        # config['post_annotation_pages'] = [config['surveyflow_site_file'][it.split('.')[0].split('/')[-1]] for it in config['surveyflow']['post_annotation']]
