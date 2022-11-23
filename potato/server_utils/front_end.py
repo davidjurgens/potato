@@ -61,10 +61,7 @@ def generate_keybindings_sidebar(keybindings, horizontal=False):
     Generate an HTML layout for the end-user of the keybindings for the current
     task. The layout is intended to be displayed in a side bar
     """
-    if (
-        "horizontal_key_bindings" in config
-        and config["horizontal_key_bindings"]
-    ):
+    if "horizontal_key_bindings" in config and config["horizontal_key_bindings"]:
         horizontal = True
 
     if not keybindings:
@@ -78,9 +75,7 @@ def generate_keybindings_sidebar(keybindings, horizontal=False):
         for line in lines:
             layout += (
                 "<tr>"
-                + "".join(
-                    ["<td>&nbsp;&nbsp;%s&nbsp;&nbsp;</td>" % it for it in line]
-                )
+                + "".join(["<td>&nbsp;&nbsp;%s&nbsp;&nbsp;</td>" % it for it in line])
                 + "</tr>"
             )
         layout += "</table>"
@@ -88,10 +83,7 @@ def generate_keybindings_sidebar(keybindings, horizontal=False):
     else:
         layout = "<table><tr><th>Key</th><th>Description</th></tr>"
         for key, desc in keybindings:
-            layout += (
-                '<tr><td style="text-align: center;">%s</td><td>%s</td></tr>'
-                % (key, desc)
-            )
+            layout += '<tr><td style="text-align: center;">%s</td><td>%s</td></tr>' % (key, desc)
         layout += "</table>"
 
     return layout
@@ -106,10 +98,7 @@ def generate_statistics_sidebar(statistics):
     layout = "<table><tr><th> </th><th> </th></tr>"
     for key in statistics:
         desc = "{{statistics_nav['%s']}}" % statistics[key]
-        layout += (
-            '<tr><td style="text-align: center;">%s</td><td>%s</td></tr>'
-            % (key, desc)
-        )
+        layout += '<tr><td style="text-align: center;">%s</td><td>%s</td></tr>' % (key, desc)
     layout += "</table>"
     return layout
 
@@ -137,9 +126,7 @@ def generate_site(config):
         abs_html_template_file = dir_path + "/" + html_template_file
 
         if not os.path.exists(abs_html_template_file):
-            raise FileNotFoundError(
-                "html_template_file not found: %s" % html_template_file
-            )
+            raise FileNotFoundError("html_template_file not found: %s" % html_template_file)
         html_template_file = abs_html_template_file
 
     with open(html_template_file, "rt") as file_p:
@@ -169,8 +156,7 @@ def generate_site(config):
 
     if "jumping_to_id_disabled" in config and config["jumping_to_id_disabled"]:
         html_template = html_template.replace(
-            '<input type="submit" value="go">',
-            '<input type="submit" value="go" hidden>',
+            '<input type="submit" value="go">', '<input type="submit" value="go" hidden>'
         )
         html_template = html_template.replace(
             '<input type="number" name="go_to" id="go_to" value="" onfocusin="user_input()" onfocusout="user_input_leave()" max={{total_count}} min=0 required>',
@@ -194,9 +180,7 @@ def generate_site(config):
         abs_html_layout_file = dir_path + "/" + html_layout_file
 
         if not os.path.exists(abs_html_layout_file):
-            raise FileNotFoundError(
-                "html_layout not found: %s" % html_layout_file
-            )
+            raise FileNotFoundError("html_layout not found: %s" % html_layout_file)
         else:
             html_layout_file = abs_html_layout_file
 
@@ -212,10 +196,7 @@ def generate_site(config):
     logger.debug("Saw %d annotation scheme(s)" % len(annotation_schemes))
 
     # Keep track of all the keybindings we have
-    all_keybindings = [
-        ("&#8592;", "Move backward"),
-        ("&#8594;", "Move forward"),
-    ]
+    all_keybindings = [("&#8592;", "Move backward"), ("&#8594;", "Move forward")]
 
     # Potato admin can specify a custom HTML layout that allows variable-named
     # placement of task elements
@@ -226,9 +207,7 @@ def generate_site(config):
             all_keybindings.extend(keybindings)
             schema_name = annotation_scheme["name"]
 
-            updated_layout = task_html_layout.replace(
-                "{{" + schema_name + "}}", schema_layout
-            )
+            updated_layout = task_html_layout.replace("{{" + schema_name + "}}", schema_layout)
 
             # Check that we actually updated the template
             if task_html_layout == updated_layout:
@@ -238,11 +217,7 @@ def generate_site(config):
                         + "was not found for {{%s}} in %s. Check to ensure the "
                         + "config.yaml and layout.html files have matching names"
                     )
-                    % (
-                        config["__config_file__"],
-                        schema_name,
-                        config["html_layout"],
-                    )
+                    % (config["__config_file__"], schema_name, config["html_layout"])
                 )
 
             task_html_layout = updated_layout
@@ -256,34 +231,23 @@ def generate_site(config):
             schema_layouts += schema_layout + "\n"
             all_keybindings.extend(keybindings)
 
-        task_html_layout = task_html_layout.replace(
-            "{{annotation_schematic}}", schema_layouts
-        )
+        task_html_layout = task_html_layout.replace("{{annotation_schematic}}", schema_layouts)
 
     # Add in a codebook link if the admin specified one
     codebook_html = ""
-    if (
-        "annotation_codebook_url" in config
-        and len(config["annotation_codebook_url"]) > 0
-    ):
+    if "annotation_codebook_url" in config and len(config["annotation_codebook_url"]) > 0:
         annotation_codebook = config["annotation_codebook_url"]
         codebook_html = '<a href="{{annotation_codebook_url}}" class="nav-item nav-link">Annotation Codebook</a>'
-        codebook_html = codebook_html.replace(
-            "{{annotation_codebook_url}}", annotation_codebook
-        )
+        codebook_html = codebook_html.replace("{{annotation_codebook_url}}", annotation_codebook)
 
     #
     # Step 3, drop in the annotation layout and insert the rest of the task-specific variables
     #
 
     # Swap in the task's layout
-    html_template = html_template.replace(
-        "{{ TASK_LAYOUT }}", task_html_layout
-    )
+    html_template = html_template.replace("{{ TASK_LAYOUT }}", task_html_layout)
 
-    html_template = html_template.replace(
-        "{{annotation_codebook}}", codebook_html
-    )
+    html_template = html_template.replace("{{annotation_codebook}}", codebook_html)
 
     html_template = html_template.replace(
         "{{annotation_task_name}}", config["annotation_task_name"]
@@ -293,9 +257,7 @@ def generate_site(config):
     html_template = html_template.replace("{{keybindings}}", keybindings_desc)
 
     statistics_layout = generate_statistics_sidebar(STATS_KEYS)
-    html_template = html_template.replace(
-        "{{statistics_nav}}", statistics_layout
-    )
+    html_template = html_template.replace("{{statistics_nav}}", statistics_layout)
 
     # Jiaxin: change the basename from the template name to the project name +
     # template name, to allow multiple annotation tasks using the same template
@@ -338,9 +300,7 @@ def generate_surveyflow_pages(config):
         abs_html_template_file = dir_path + "/" + html_template_file
 
         if not os.path.exists(abs_html_template_file):
-            raise FileNotFoundError(
-                "html_template_file not found: %s" % html_template_file
-            )
+            raise FileNotFoundError("html_template_file not found: %s" % html_template_file)
         else:
             html_template_file = abs_html_template_file
 
@@ -370,8 +330,7 @@ def generate_surveyflow_pages(config):
 
     if "jumping_to_id_disabled" in config and config["jumping_to_id_disabled"]:
         html_template = html_template.replace(
-            '<input type="submit" value="go">',
-            '<input type="submit" value="go" hidden>',
+            '<input type="submit" value="go">', '<input type="submit" value="go" hidden>'
         )
         html_template = html_template.replace(
             '<input type="number" name="go_to" id="go_to" value="" onfocusin="user_input()" onfocusout="user_input_leave()" max={{total_count}} min=0 required>',
@@ -395,9 +354,7 @@ def generate_surveyflow_pages(config):
         abs_html_layout_file = dir_path + "/" + html_layout_file
 
         if not os.path.exists(abs_html_layout_file):
-            raise FileNotFoundError(
-                "html_layout not found: %s" % html_layout_file
-            )
+            raise FileNotFoundError("html_layout not found: %s" % html_layout_file)
         else:
             html_layout_file = abs_html_layout_file
 
@@ -417,19 +374,12 @@ def generate_surveyflow_pages(config):
 
     # Add in a codebook link if the admin specified one
     codebook_html = ""
-    if (
-        "annotation_codebook_url" in config
-        and len(config["annotation_codebook_url"]) > 0
-    ):
+    if "annotation_codebook_url" in config and len(config["annotation_codebook_url"]) > 0:
         annotation_codebook = config["annotation_codebook_url"]
         codebook_html = '<a href="{{annotation_codebook_url}}" class="nav-item nav-link">Annotation Codebook</a>'
-        codebook_html = codebook_html.replace(
-            "{{annotation_codebook_url}}", annotation_codebook
-        )
+        codebook_html = codebook_html.replace("{{annotation_codebook_url}}", annotation_codebook)
 
-    html_template = html_template.replace(
-        "{{annotation_codebook}}", codebook_html
-    )
+    html_template = html_template.replace("{{annotation_codebook}}", codebook_html)
 
     html_template = html_template.replace(
         "{{annotation_task_name}}", config["annotation_task_name"]
@@ -462,10 +412,7 @@ def generate_surveyflow_pages(config):
     logger.debug("Saw %d annotation scheme(s)" % len(annotation_schemes))
 
     # Keep track of all the keybindings we have
-    all_keybindings = [
-        ("&#8592;", "Move backward"),
-        ("&#8594;", "Move forward"),
-    ]
+    all_keybindings = [("&#8592;", "Move backward"), ("&#8594;", "Move forward")]
 
     # Potato admin can specify a custom HTML layout that allows variable-named
     # placement of task elements
@@ -476,9 +423,7 @@ def generate_surveyflow_pages(config):
             all_keybindings.extend(keybindings)
             schema_name = annotation_scheme["name"]
 
-            updated_layout = task_html_layout.replace(
-                "{{" + schema_name + "}}", schema_layout
-            )
+            updated_layout = task_html_layout.replace("{{" + schema_name + "}}", schema_layout)
 
             # Check that we actually updated the template
             if task_html_layout == updated_layout:
@@ -488,11 +433,7 @@ def generate_surveyflow_pages(config):
                         + "was not found for {{%s}} in %s. Check to ensure the "
                         + "config.yaml and layout.html files have matching names"
                     )
-                    % (
-                        config["__config_file__"],
-                        schema_name,
-                        config["html_layout"],
-                    )
+                    % (config["__config_file__"], schema_name, config["html_layout"])
                 )
 
             task_html_layout = updated_layout
@@ -522,9 +463,7 @@ def generate_surveyflow_pages(config):
                     else None,
                     "sequential_key_binding": False,
                 }
-                schema_layout, keybindings = generate_schematic(
-                    annotation_scheme
-                )
+                schema_layout, keybindings = generate_schematic(annotation_scheme)
                 schema_layouts += schema_layout + "<br>" + "\n"
                 # all_keybindings.extend(keybindings)
 
@@ -533,9 +472,7 @@ def generate_surveyflow_pages(config):
             )
 
             # Swap in the task's layout
-            cur_html_template = html_template.replace(
-                "{{ TASK_LAYOUT }}", cur_task_html_layout
-            )
+            cur_html_template = html_template.replace("{{ TASK_LAYOUT }}", cur_task_html_layout)
 
             # TODO: Maybe remove input instances for survey questions?
             # cur_html_template  = cur_html_template .replace("<div class=\"annotation_schema\">",
@@ -543,31 +480,21 @@ def generate_surveyflow_pages(config):
 
             # Do not display keybindings for the first and last page
             if i == 0:
-                keybindings_desc = generate_keybindings_sidebar(
-                    all_keybindings[1:]
-                )
+                keybindings_desc = generate_keybindings_sidebar(all_keybindings[1:])
                 cur_html_template = cur_html_template.replace(
                     '<a class="btn btn-secondary" href="#" role="button" onclick="click_to_prev()">Move backward</a>',
                     '<a class="btn btn-secondary" href="#" role="button" onclick="click_to_prev()" hidden>Move backward</a>',
                 )
-            elif i == len(surveyflow_pages) - 1 or re.search(
-                "prestudy_fail", page
-            ):
-                keybindings_desc = generate_keybindings_sidebar(
-                    all_keybindings[:-1]
-                )
+            elif i == len(surveyflow_pages) - 1 or re.search("prestudy_fail", page):
+                keybindings_desc = generate_keybindings_sidebar(all_keybindings[:-1])
                 cur_html_template = cur_html_template.replace(
                     '<a class="btn btn-secondary" href="#" role="button" onclick="click_to_next()">Move forward</a>',
                     '<a class="btn btn-secondary" href="#" role="button" onclick="click_to_next()" hidden>Move forward</a>',
                 )
             else:
-                keybindings_desc = generate_keybindings_sidebar(
-                    all_keybindings
-                )
+                keybindings_desc = generate_keybindings_sidebar(all_keybindings)
 
-            cur_html_template = cur_html_template.replace(
-                "{{keybindings}}", keybindings_desc
-            )
+            cur_html_template = cur_html_template.replace("{{keybindings}}", keybindings_desc)
             # Jiaxin: change the basename from the template name to the project name +
             # template name, to allow multiple annotation tasks using the same template
             site_name = "%s.html" % page
@@ -583,10 +510,7 @@ def generate_surveyflow_pages(config):
             with open(output_html_fname, "wt") as outf:
                 outf.write(cur_html_template)
 
-            logger.debug(
-                "writing annotation html to %s%s.html"
-                % (output_html_fname, page)
-            )
+            logger.debug("writing annotation html to %s%s.html" % (output_html_fname, page))
 
     config["non_annotation_pages"] = []
     for key in surveyflow["order"]:

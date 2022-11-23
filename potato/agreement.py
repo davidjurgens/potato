@@ -22,10 +22,17 @@ def main(args):
     users = set([a["user"] for ann in annotations for a in ann])
     annotations = flatten(annotations)
     annotations = annotations[:385]
-    data = [[ np.nan if user not in a or int(a[user]) == -1 else int(a[user]) for a in annotations ] for user in users]
-    skip_data = [[ np.nan if user not in a else int(a[user]) < 0 for a in annotations ] for user in users]
+    data = [
+        [np.nan if user not in a or int(a[user]) == -1 else int(a[user]) for a in annotations]
+        for user in users
+    ]
+    skip_data = [
+        [np.nan if user not in a else int(a[user]) < 0 for a in annotations] for user in users
+    ]
     labeled = ~np.isnan(data)
-    skipped = [[ False if user not in a else int(a[user]) < 0 for a in annotations ] for user in users]
+    skipped = [
+        [False if user not in a else int(a[user]) < 0 for a in annotations] for user in users
+    ]
     print("calculating over:")
     for user, skip in zip(labeled, skipped):
         print("labeled:", sum(user))
@@ -38,6 +45,7 @@ def main(args):
     with open(args.outfile, "w") as f:
         for row in zip(*data):
             f.write(",".join([str(a) for a in row]) + "\n")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
