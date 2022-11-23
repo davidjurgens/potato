@@ -19,7 +19,7 @@ from sklearn.pipeline import Pipeline
 import krippendorff
 
 import flask
-from flask import Flask, render_template, request
+from flask import render_template, request, current_app
 from bs4 import BeautifulSoup
 
 from create_task_cli import create_task_cli, yes_or_no
@@ -30,12 +30,13 @@ from server_utils.annotation_state_utils import (
     save_all_annotations,
     update_annotation_state,
 )
+from app import app, db
+from db_utils.user_manager import UserManager
 from server_utils.arg_utils import arguments
 from server_utils.config_module import init_config, config
 from server_utils.front_end import generate_site, generate_surveyflow_pages
 from server_utils.prestudy import convert_labels
 from server_utils.schemas.span import render_span_annotations
-from server_utils.user_config import UserConfig
 from server_utils.user_state_utils import (
     lookup_user_state,
     save_user_state,
@@ -45,6 +46,7 @@ from server_utils.user_state_utils import (
     go_to_id,
 )
 import state
+from scripts.init_user_db import init_user_db
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -60,7 +62,6 @@ user_response_dicts_queue = defaultdict(deque)
 
 
 # path to save user information
-USER_CONFIG_PATH = "potato/user_config.json"
 DEFAULT_LABELS_PER_INSTANCE = 3
 
 
@@ -93,7 +94,17 @@ COLOR_PALETTE = [
     "rgb(179, 179, 179)",
 ]
 
-app = Flask(__name__)
+
+def init_db():
+    """
+    Initialize DB.
+    """
+    with app.app_context():
+        db.create_all()
+
+
+init_db()
+user_manager = UserManager(db)
 
 
 class ActiveLearningState:
@@ -479,8 +490,6 @@ def write_data(username):
 
 @app.route("/")
 def home():
-    global user_config
-
     if config["__debug__"]:
         print("debug user logging in")
         return annotate_page("debug_user", action="home")
@@ -492,16 +501,13 @@ def home():
             username = request.args.get(url_argument)
             print("url direct logging in with %s" % url_argument)
             return annotate_page(username, action="home")
-        print("password logging in")
-        return render_template("home.html", title=config["annotation_task_name"])
+
     print("password logging in")
     return render_template("home.html", title=config["annotation_task_name"])
 
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    global user_config
-
     if config["__debug__"]:
         action = "login"
         username = "debug_user"
@@ -517,14 +523,17 @@ def login():
         password = request.form.get("pass")
 
     if action == "login":
-        if (
-            config["__debug__"]
-            or ("login" in config and config["login"]["type"] == "url_direct")
-            or user_config.is_valid_password(username, password)
-        ):
-            # if surveyflow is setup, jump to the page before annotation
-            print("%s login successful" % username)
-            return annotate_page(username)
+
+        with current_app.app_context():
+            if (
+                config["__debug__"]
+                or ("login" in config and config["login"]["type"] == "url_direct")
+                or user_manager.is_valid_password(username, password)
+            ):
+                # if surveyflow is setup, jump to the page before annotation
+                print("%s login successful" % username)
+                return annotate_page(username)
+
         return render_template(
             "home.html",
             title=config["annotation_task_name"],
@@ -537,8 +546,6 @@ def login():
 
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
-    global user_config
-
     # TODO: add in logic for checking/hashing passwords, safe password
     # management, etc. For now just #yolo and log in people regardless.
     action = request.form.get("action")
@@ -551,23 +558,22 @@ def signup():
 
     if action == "signup":
         single_user = {"username": username, "email": email, "password": password}
-        result = user_config.add_single_user(single_user)
-        print(single_user["username"], result)
+        with current_app.app_context():
+            try:
+                user_manager.add_single_user(single_user)
+            except ValueError as err:
+                # TODO: return to the signup page and display error message
+                return render_template(
+                    "home.html",
+                    title=config["annotation_task_name"],
+                    login_error=str(err) + " Please try again or log in",
+                )
 
-        if result == "Success":
-            user_config.save_user_config()
-            return render_template(
-                "home.html",
-                title=config["annotation_task_name"],
-                login_email=username,
-                login_error="User registration success for " + username + ", please login now",
-            )
-
-        # TODO: return to the signup page and display error message
         return render_template(
             "home.html",
             title=config["annotation_task_name"],
-            login_error=result + ", please try again or log in",
+            login_email=username,
+            login_error="User registration success for " + username + ", please login now",
         )
 
     print("unknown action at home page")
@@ -650,8 +656,6 @@ def annotate_page(username=None, action=None):
     based on what was clicked/typed. This method is the main switch for changing
     the state of the server for this user.
     """
-    global user_config
-
     # use the provided username when the username is given
     if not username:
         if config["__debug__"]:
@@ -666,7 +670,7 @@ def annotate_page(username=None, action=None):
             username = username_from_last_page
 
     # Check if the user is authorized. If not, go to the login page
-    # if not user_config.is_valid_username(username):
+    # if not user_manager.is_valid_username(username):
     #    return render_template("home.html")
 
     # Based on what the user did to the instance, update the annotate state for
@@ -1241,16 +1245,12 @@ def run_server():
     """
     Run Flask server.
     """
-    global user_config
-
     args = arguments()
     init_config(args)
     if config.get("verbose"):
         logger.setLevel(logging.DEBUG)
     if config.get("very_verbose"):
         logger.setLevel(logging.NOTSET)
-
-    user_config = UserConfig(USER_CONFIG_PATH)
 
     # Jiaxin: commenting the following lines since we will have a seperate
     #        user_config file to save user info.  This is necessary since we

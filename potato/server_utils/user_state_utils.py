@@ -27,16 +27,26 @@ def lookup_user_state(username):
     annotated, creates a new state for them and registers them with the system.
     """
     if username not in state.user_to_annotation_state:
-        logger.debug('Previously unknown user "%s"; creating new annotation state' % (username))
+        logger.debug(
+            'Previously unknown user "%s"; creating new annotation state'
+            % (username)
+        )
 
-        if "automatic_assignment" in config and config["automatic_assignment"]["on"]:
+        if (
+            "automatic_assignment" in config
+            and config["automatic_assignment"]["on"]
+        ):
             # assign instances to new user when automatic assignment is on.
             if "prestudy" in config and config["prestudy"]["on"]:
-                user_state = UserAnnotationState(generate_initial_user_dataflow(username))
+                user_state = UserAnnotationState(
+                    generate_initial_user_dataflow(username)
+                )
                 state.user_to_annotation_state[username] = user_state
 
             else:
-                user_state = UserAnnotationState(generate_initial_user_dataflow(username))
+                user_state = UserAnnotationState(
+                    generate_initial_user_dataflow(username)
+                )
                 state.user_to_annotation_state[username] = user_state
                 assign_instances_to_user(username)
 
@@ -74,7 +84,9 @@ def save_user_state(username, save_order=False):
                 # JIAXIN: output id has to be str
                 outf.write(str(inst) + "\n")
 
-    annotated_instances_fname = os.path.join(user_dir, "annotated_instances.jsonl")
+    annotated_instances_fname = os.path.join(
+        user_dir, "annotated_instances.jsonl"
+    )
 
     with open(annotated_instances_fname, "wt") as outf:
         for inst_id, data in user_state.get_all_annotations().items():
@@ -84,7 +96,9 @@ def save_user_state(username, save_order=False):
 
             output = {
                 "id": inst_id,
-                "displayed_text": state.instance_id_to_data[inst_id]["displayed_text"],
+                "displayed_text": state.instance_id_to_data[inst_id][
+                    "displayed_text"
+                ],
                 "label_annotations": data["labels"],
                 "span_annotations": data["spans"],
                 "behavioral_data": bd_dict,
@@ -106,10 +120,15 @@ def load_user_state(username):
 
     # User has annotated before or has assigned_data
     if os.path.exists(user_dir):
-        logger.debug('Found known user "%s"; loading annotation state' % (username))
+        logger.debug(
+            'Found known user "%s"; loading annotation state' % (username)
+        )
 
         # if automatic assignment is on, load assigned user data
-        if "automatic_assignment" in config and config["automatic_assignment"]["on"]:
+        if (
+            "automatic_assignment" in config
+            and config["automatic_assignment"]["on"]
+        ):
             assigned_user_data_path = user_dir + "/assigned_user_data.json"
 
             with open(assigned_user_data_path, "r") as file_p:
@@ -136,7 +155,9 @@ def load_user_state(username):
                     annotation_order.append(line[:-1])
 
         annotated_instances = []
-        annotated_instances_fname = os.path.join(user_dir, "annotated_instances.jsonl")
+        annotated_instances_fname = os.path.join(
+            user_dir, "annotated_instances.jsonl"
+        )
         if os.path.exists(annotated_instances_fname):
 
             with open(annotated_instances_fname, "rt") as file_p:
@@ -175,7 +196,10 @@ def load_user_state(username):
         return "old user loaded"
 
     # New user, so initialize state
-    logger.debug('Previously unknown user "%s"; creating new annotation state' % (username))
+    logger.debug(
+        'Previously unknown user "%s"; creating new annotation state'
+        % (username)
+    )
 
     # create new user state with the look up function
     if instances_all_assigned():
@@ -212,7 +236,8 @@ def assign_instances_to_user(username):
     # Currently we are just assigning once, but we might chance this later
     if user_state.get_real_assigned_instance_count() > 0:
         logger.warning(
-            "Instance already assigned to user %s, assigning process stoppped" % username
+            "Instance already assigned to user %s, assigning process stoppped"
+            % username
         )
         return False
 
@@ -235,7 +260,10 @@ def assign_instances_to_user(username):
             sampled_keys = _sample_instances(username)
             user_state.real_instance_assigned_count += len(sampled_keys)
             if "post_annotation_pages" in state.task_assignment:
-                sampled_keys = sampled_keys + state.task_assignment["post_annotation_pages"]
+                sampled_keys = (
+                    sampled_keys
+                    + state.task_assignment["post_annotation_pages"]
+                )
         else:
             logger.warning(
                 "Trying to assign instances to user when the user has yet agreed to participate. assigning process stoppped"
@@ -248,11 +276,17 @@ def assign_instances_to_user(username):
     else:
         sampled_keys = _sample_instances(username)
         user_state.real_instance_assigned_count += len(sampled_keys)
-        sampled_keys = state.task_assignment["prestudy_passed_pages"] + sampled_keys
+        sampled_keys = (
+            state.task_assignment["prestudy_passed_pages"] + sampled_keys
+        )
         if "post_annotation_pages" in state.task_assignment:
-            sampled_keys = sampled_keys + state.task_assignment["post_annotation_pages"]
+            sampled_keys = (
+                sampled_keys + state.task_assignment["post_annotation_pages"]
+            )
 
-    assigned_user_data = {key: state.instance_id_to_data[key] for key in sampled_keys}
+    assigned_user_data = {
+        key: state.instance_id_to_data[key] for key in sampled_keys
+    }
     user_state.add_new_assigned_data(assigned_user_data)
 
     print(
@@ -277,7 +311,8 @@ def assign_instances_to_user(username):
 
     # save task assignment status
     task_assignment_path = (
-        config["output_annotation_dir"] + config["automatic_assignment"]["output_filename"]
+        config["output_annotation_dir"]
+        + config["automatic_assignment"]["output_filename"]
     )
     with open(task_assignment_path, "w") as file_p:
         json.dump(state.task_assignment, file_p)
@@ -294,7 +329,9 @@ def generate_full_user_dataflow(username):
     :return: UserAnnotationState
     """
     if "sampling_strategy" not in config["automatic_assignment"]:
-        logger.debug("Undefined sampling strategy, default to random assignment")
+        logger.debug(
+            "Undefined sampling strategy, default to random assignment"
+        )
         config["automatic_assignment"]["sampling_strategy"] = "random"
 
     # Force the sampling strategy to be random at this moment, will change this
@@ -319,18 +356,23 @@ def generate_full_user_dataflow(username):
         if state.task_assignment["testing"]["test_question_per_annotator"] > 0:
             sampled_testing_ids = random.sample(
                 state.task_assignment["testing"]["ids"],
-                k=state.task_assignment["testing"]["test_question_per_annotator"],
+                k=state.task_assignment["testing"][
+                    "test_question_per_annotator"
+                ],
             )
             # adding test question sampling status to the task assignment
             for key in sampled_testing_ids:
                 if key not in state.task_assignment["assigned"]:
                     state.task_assignment["assigned"][key] = []
                 state.task_assignment["assigned"][key].append(username)
-                sampled_keys.insert(random.randint(0, len(sampled_keys) - 1), key)
+                sampled_keys.insert(
+                    random.randint(0, len(sampled_keys) - 1), key
+                )
 
         # save task assignment status
         task_assignment_path = os.path.join(
-            config["output_annotation_dir"], config["automatic_assignment"]["output_filename"]
+            config["output_annotation_dir"],
+            config["automatic_assignment"]["output_filename"],
         )
         with open(task_assignment_path, "w") as file_p:
             json.dump(state.task_assignment, file_p)
@@ -339,12 +381,18 @@ def generate_full_user_dataflow(username):
         real_assigned_instance_count = len(sampled_keys)
 
         if "pre_annotation_pages" in state.task_assignment:
-            sampled_keys = state.task_assignment["pre_annotation_pages"] + sampled_keys
+            sampled_keys = (
+                state.task_assignment["pre_annotation_pages"] + sampled_keys
+            )
 
         if "post_annotation_pages" in state.task_assignment:
-            sampled_keys = sampled_keys + state.task_assignment["post_annotation_pages"]
+            sampled_keys = (
+                sampled_keys + state.task_assignment["post_annotation_pages"]
+            )
 
-        assigned_user_data = {key: state.instance_id_to_data[key] for key in sampled_keys}
+        assigned_user_data = {
+            key: state.instance_id_to_data[key] for key in sampled_keys
+        }
 
         # save the assigned user data dict
         user_dir = os.path.join(config["output_annotation_dir"], username)
@@ -363,7 +411,9 @@ def generate_full_user_dataflow(username):
 
 def _sample_instances(username):
     if "sampling_strategy" not in config["automatic_assignment"]:
-        logger.debug("Undefined sampling strategy, default to random assignment")
+        logger.debug(
+            "Undefined sampling strategy, default to random assignment"
+        )
         config["automatic_assignment"]["sampling_strategy"] = "random"
 
     # Force the sampling strategy to be random at this moment, will change this
@@ -384,13 +434,21 @@ def _sample_instances(username):
         unassigned_dict = state.task_assignment["unassigned"]
         unassigned_dict = {
             k: unassigned_dict[k]
-            for k in random.sample(list(unassigned_dict.keys()), len(unassigned_dict))
+            for k in random.sample(
+                list(unassigned_dict.keys()), len(unassigned_dict)
+            )
         }
         sorted_keys = [
-            it[0] for it in sorted(unassigned_dict.items(), key=lambda item: item[1], reverse=True)
+            it[0]
+            for it in sorted(
+                unassigned_dict.items(), key=lambda item: item[1], reverse=True
+            )
         ]
         sampled_keys = sorted_keys[
-            : min(config["automatic_assignment"]["instance_per_annotator"], len(sorted_keys))
+            : min(
+                config["automatic_assignment"]["instance_per_annotator"],
+                len(sorted_keys),
+            )
         ]
 
         # update state.task_assignment to keep track of task assignment status globally
@@ -406,14 +464,18 @@ def _sample_instances(username):
         if state.task_assignment["testing"]["test_question_per_annotator"] > 0:
             sampled_testing_ids = random.sample(
                 state.task_assignment["testing"]["ids"],
-                k=state.task_assignment["testing"]["test_question_per_annotator"],
+                k=state.task_assignment["testing"][
+                    "test_question_per_annotator"
+                ],
             )
             # adding test question sampling status to the task assignment
             for key in sampled_testing_ids:
                 if key not in state.task_assignment["assigned"]:
                     state.task_assignment["assigned"][key] = []
                 state.task_assignment["assigned"][key].append(username)
-                sampled_keys.insert(random.randint(0, len(sampled_keys) - 1), key)
+                sampled_keys.insert(
+                    random.randint(0, len(sampled_keys) - 1), key
+                )
 
     return sampled_keys
 
@@ -429,7 +491,9 @@ def generate_initial_user_dataflow(username):
         if _it in state.task_assignment:
             sampled_keys += state.task_assignment[_it]
 
-    assigned_user_data = {key: state.instance_id_to_data[key] for key in sampled_keys}
+    assigned_user_data = {
+        key: state.instance_id_to_data[key] for key in sampled_keys
+    }
 
     # save the assigned user data dict
     user_dir = os.path.join(config["output_annotation_dir"], username)
@@ -450,6 +514,9 @@ def instances_all_assigned():
     """
     Check if all instances are assigned.
     """
-    return len(state.task_assignment.get("unassigned", [])) <= int(
+    if "unassigned" not in state.task_assignment:
+        return False
+
+    return len(state.task_assignment["unassigned"]) <= int(
         config["automatic_assignment"]["instance_per_annotator"] * 0.7
     )
