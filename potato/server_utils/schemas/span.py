@@ -49,8 +49,7 @@ def get_span_color(span_label):
 
     if span_label in span_ui["span_colors"]:
         return span_ui["span_colors"][span_label]
-    else:
-        return None
+    return None
 
 
 def set_span_color(span_label, color):
@@ -133,7 +132,7 @@ def generate_span_layout(annotation_scheme, horizontal=False):
     returns the HTML code
     """
     # when horizontal is specified in the annotation_scheme, set horizontal = True
-    if "horizontal" in annotation_scheme and annotation_scheme["horizontal"]:
+    if annotation_scheme.get("horizontal"):
         horizontal = True
 
     schematic = (
@@ -146,14 +145,6 @@ def generate_span_layout(annotation_scheme, horizontal=False):
     key2label = {}
     label2key = {}
     key_bindings = []
-
-    # setting up label validation for each label, if "required" is True, the annotators will be asked to finish the current instance to proceed
-    validation = ""
-    label_requirement = (
-        annotation_scheme["label_requirement"] if "label_requirement" in annotation_scheme else None
-    )
-    if label_requirement and ("required" in label_requirement) and label_requirement["required"]:
-        validation = "required"
 
     for i, label_data in enumerate(annotation_scheme["labels"], 1):
 
@@ -172,7 +163,6 @@ def generate_span_layout(annotation_scheme, horizontal=False):
         # somewhere so that we can render them in the colored instances later in
         # render_span_annotations(). The config object seems like a reasonable
         # place to do since it's global and the colors are persistent
-        config["ui"]
 
         tooltip = ""
         if isinstance(label_data, Mapping):

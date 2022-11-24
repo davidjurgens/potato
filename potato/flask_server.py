@@ -46,8 +46,8 @@ from potato.server_utils.user_state_utils import (
     go_to_id,
 )
 import potato.state as state
+from potato.constants import POTATO_HOME
 
-POTATO_HOME = os.environ.get("POTATO_HOME")
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -1256,6 +1256,8 @@ def run_server():
     generate_site(config)
     if "surveyflow" in config and config["surveyflow"]["on"]:
         generate_surveyflow_pages(config)
+
+    validate_config(config)
 
     # Generate the output directory if it doesn't exist yet
     if not os.path.exists(config["output_annotation_dir"]):
