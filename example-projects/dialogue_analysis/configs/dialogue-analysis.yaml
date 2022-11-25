@@ -98,5 +98,6 @@
 
     # This is where the actual HTML files will be generated
     "site_dir": "potato/templates/",
+    "db_path": "example-projects/dialogue_analysis/database.db"
 
 }

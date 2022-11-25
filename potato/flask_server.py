@@ -46,7 +46,6 @@ from server_utils.user_state_utils import (
     go_to_id,
 )
 import state
-from scripts.init_user_db import init_user_db
 
 POTATO_HOME = os.environ.get("POTATO_HOME")
 
