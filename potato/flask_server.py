@@ -23,10 +23,28 @@ from flask import Flask, render_template, request
 from bs4 import BeautifulSoup
 
 from create_task_cli import create_task_cli, yes_or_no
+from server_utils.annotation_state_utils import (
+    get_span_annotations_for_user_on,
+    get_total_annotations,
+    get_annotations_for_user_on,
+    save_all_annotations,
+    update_annotation_state,
+)
 from server_utils.arg_utils import arguments
 from server_utils.config_module import init_config, config
 from server_utils.front_end import generate_site, generate_surveyflow_pages
+from server_utils.prestudy import convert_labels
 from server_utils.schemas.span import render_span_annotations
+from server_utils.user_config import UserConfig
+from server_utils.user_state_utils import (
+    lookup_user_state,
+    save_user_state,
+    load_user_state,
+    move_to_prev_instance,
+    move_to_next_instance,
+    go_to_id,
+)
+import state
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -34,26 +52,12 @@ logging.basicConfig()
 
 random.seed(0)
 
-domain_file_path = ""
-file_list = []
-file_list_size = 0
-default_port = 8000
+DEFAULT_PORT = 8000
 user_dict = {}
-
-file_to_read_from = ""
 
 user_story_pos = defaultdict(lambda: 0, dict())
 user_response_dicts_queue = defaultdict(deque)
 
-# A global mapping from username to the annotator's
-user_to_annotation_state = {}
-
-# A global mapping from an instance's id to its data. This is filled by
-# load_all_data()
-instance_id_to_data = {}
-
-# A global dict to keep tracking of the task assignment status
-task_assignment = {}
 
 # path to save user information
 USER_CONFIG_PATH = "potato/user_config.json"
@@ -92,74 +96,6 @@ COLOR_PALETTE = [
 app = Flask(__name__)
 
 
-class UserConfig:
-    """
-    A class for maintaining state on which users are allowed to use the system
-    """
-
-    def __init__(self, user_config_path="potato/user_config.json"):
-        self.allow_all_users = False
-        self.user_config_path = user_config_path
-        self.userlist = []
-        self.usernames = set()
-        self.users = {}
-        self.required_user_info_keys = ["username", "password"]
-
-        if os.path.isfile(self.user_config_path):
-            print("Loading users from" + self.user_config_path)
-            with open(self.user_config_path, "rt") as f:
-                for line in f.readlines():
-                    single_user = json.loads(line.strip())
-                    self.add_single_user(single_user)
-
-    # Jiaxin: this function will be depreciate since we will save the full user dict with password
-    def add_user(self, username):
-        if username in self.usernames:
-            print("Duplicate user in list: %s" % username)
-        self.usernames.add(username)
-
-    def add_single_user(self, single_user):
-        """
-        Add a single user to the full user dict
-        """
-        for key in self.required_user_info_keys:
-            if key not in single_user:
-                print("Missing %s in user info" % key)
-                return "Missing %s in user info" % key
-        if single_user["username"] in self.users:
-            print("Duplicate user in list: %s" % single_user["username"])
-            return "Duplicate user in list: %s" % single_user["username"]
-        self.users[single_user["username"]] = single_user
-        self.userlist.append(single_user["username"])
-        return "Success"
-
-    def save_user_config(self):
-        if self.user_config_path:
-            with open(self.user_config_path, "wt") as f:
-                for k in self.userlist:
-                    f.writelines(json.dumps(self.users[k]) + "\n")
-            print("user info file saved at:", self.user_config_path)
-        else:
-            print("WARNING: user_config_path not specified, user registration info are not saved")
-
-    def is_valid_username(self, username):
-        """
-        Check if a user name is in the current user list.
-        """
-        return username in self.users
-
-    # TODO: Currently we are just doing simple plaintext verification,
-    # but we will need ciphertext verification in the long run
-    def is_valid_password(self, username, password):
-        """
-        Check if the password is correct for a given (username, password) pair.
-        """
-        return self.is_valid_username(username) and self.users[username]["password"] == password
-
-    def is_valid_user(self, username):
-        return self.allow_all_users or username in self.usernames
-
-
 class ActiveLearningState:
     """
     A class for maintaining state on active learning.
@@ -178,347 +114,7 @@ class ActiveLearningState:
             self.id_to_update_round[iid] = self.cur_round
 
 
-class UserAnnotationState:
-    """
-    A class for maintaining state on which annotations users have completed.
-    """
-
-    def __init__(self, assigned_user_data):
-
-        # This data structure keeps the label-based annotations the user has
-        # completed so far
-        self.instance_id_to_labeling = {}
-
-        # This data structure keeps the span-based annotations the user has
-        # completed so far
-        self.instance_id_to_span_annotations = {}
-
-        # This is a reference to the data
-        #
-        # NB: do we need this as a field?
-        self.instance_id_to_data = assigned_user_data
-
-        # TODO: Put behavioral information of each instance with the labels
-        # together however, that requires too many changes of the data structure
-        # therefore, we contruct a separate dictionary to save all the
-        # behavioral information (e.g. time, click, ..)
-        self.instance_id_to_behavioral_data = {}
-
-        # NOTE: this might be dumb but at the moment, we cache the order in
-        # which this user will walk the instances. This might not work if we're
-        # annotating a ton of things with a lot of people, but hopefully it's
-        # not too bad. The underlying motivation is to programmatically change
-        # this ordering later
-        self.instance_id_ordering = list(assigned_user_data.keys())
-
-        # initialize the mapping from instance id to order
-        self.instance_id_to_order = self.generate_id_order_mapping(self.instance_id_ordering)
-
-        self.instance_cursor = 0
-
-        # Indicator of whether the user has passed the prestudy, None means no
-        # prestudy or prestudy not complete, True means passed and False means
-        # failed
-        self.prestudy_passed = None
-
-        # Indicator of whether the user has agreed to participate this study,
-        # None means consent not complete, True means yes and False measn no
-        self.consent_agreed = None
-
-        # Total annotation instances assigned to a user
-        self.real_instance_assigned_count = 0
-
-    def generate_id_order_mapping(self, instance_id_ordering):
-        id_order_mapping = {}
-        for i in range(len(instance_id_ordering)):
-            id_order_mapping[instance_id_ordering[i]] = i
-        return id_order_mapping
-
-    def add_new_assigned_data(self, new_assigned_data):
-        """
-        Add new assigned data to the user state
-        """
-        for key in new_assigned_data:
-            self.instance_id_to_data[key] = new_assigned_data[key]
-            self.instance_id_ordering.append(key)
-        self.instance_id_to_order = self.generate_id_order_mapping(self.instance_id_ordering)
-
-    def get_assigned_data(self):
-        return self.instance_id_to_data
-
-    def current_instance(self):
-        inst_id = self.instance_id_ordering[self.instance_cursor]
-        instance = self.instance_id_to_data[inst_id]
-        return instance
-
-    def get_instance_cursor(self):
-        return self.instance_cursor
-
-    def cursor_to_real_instance_id(self, cursor):
-        return self.instance_id_ordering[cursor]
-
-    def is_prestudy_question(self, cursor):
-        return self.instance_id_ordering[cursor][:8] == "prestudy"
-
-    def go_back(self):
-        if self.instance_cursor > 0:
-            if self.prestudy_passed is not None and self.is_prestudy_question(
-                self.instance_cursor - 1
-            ):
-                return
-            self.instance_cursor -= 1
-
-    def go_forward(self):
-        if self.instance_cursor < len(self.instance_id_to_data) - 1:
-            self.instance_cursor += 1
-
-    def go_to_id(self, _id):
-        if _id < len(self.instance_id_to_data) and _id >= 0:
-            self.instance_cursor = _id
-
-    def get_all_annotations(self):
-        """
-        Returns all annotations (label and span) for all annotated instances
-        """
-        labeled = set(self.instance_id_to_labeling.keys()) | set(
-            self.instance_id_to_span_annotations.keys()
-        )
-
-        anns = {}
-        for iid in labeled:
-            labels = {}
-            if iid in self.instance_id_to_labeling:
-                labels = self.instance_id_to_labeling[iid]
-            spans = {}
-            if iid in self.instance_id_to_span_annotations:
-                spans = self.instance_id_to_span_annotations[iid]
-
-            anns[iid] = {"labels": labels, "spans": spans}
-
-        return anns
-
-    def get_label_annotations(self, instance_id):
-        """
-        Returns the label-based annotations for the instance.
-        """
-        if instance_id not in self.instance_id_to_labeling:
-            return None
-        # NB: Should this be a view/copy?
-        return self.instance_id_to_labeling[instance_id]
-
-    def get_span_annotations(self, instance_id):
-        """
-        Returns the span annotations for this instance.
-        """
-        if instance_id not in self.instance_id_to_span_annotations:
-            return None
-        # NB: Should this be a view/copy?
-        return self.instance_id_to_span_annotations[instance_id]
-
-    def get_annotation_count(self):
-        return len(self.instance_id_to_labeling) + len(self.instance_id_to_span_annotations)
-
-    def get_assigned_instance_count(self):
-        return len(self.instance_id_ordering)
-
-    def set_prestudy_status(self, whether_passed):
-        if self.prestudy_passed is not None:
-            return False
-        self.prestudy_passed = whether_passed
-        return True
-
-    def get_prestudy_status(self):
-        """
-        Check if the user has passed the prestudy test.
-        """
-        return self.prestudy_passed
-
-    def get_consent_status(self):
-        """
-        Check if the user has agreed to participate this study.
-        """
-        return self.consent_agreed
-
-    def get_real_assigned_instance_count(self):
-        """
-        Check the number of assigned instances for a user (only the core annotation parts)
-        """
-        return self.real_instance_assigned_count
-
-    def set_annotation(
-        self, instance_id, schema_to_label_to_value, span_annotations, behavioral_data_dict
-    ):
-        """
-        Based on a user's actions, updates the annotation for this particular instance.
-
-        :span_annotations: a list of span annotations, which are each
-          represented as dictionary objects/
-        :return: True if setting these annotation values changes the previous
-          annotation of this instance.
-        """
-
-        # Get whatever annotations were present for this instance, or, if the
-        # item has not been annotated represent that with empty data structures
-        # so we can keep track of whether the state changes
-        old_annotation = defaultdict(dict)
-        if instance_id in self.instance_id_to_labeling:
-            old_annotation = self.instance_id_to_labeling[instance_id]
-
-        old_span_annotations = []
-        if instance_id in self.instance_id_to_span_annotations:
-            old_span_annotations = self.instance_id_to_span_annotations[instance_id]
-
-        # Avoid updating with no entries
-        if len(schema_to_label_to_value) > 0:
-            self.instance_id_to_labeling[instance_id] = schema_to_label_to_value
-        # If the user didn't label anything (e.g. they unselected items), then
-        # we delete the old annotation state
-        elif instance_id in self.instance_id_to_labeling:
-            del self.instance_id_to_labeling[instance_id]
-
-        # Avoid updating with no entries
-        if len(span_annotations) > 0:
-            self.instance_id_to_span_annotations[instance_id] = span_annotations
-        # If the user didn't label anything (e.g. they unselected items), then
-        # we delete the old annotation state
-        elif instance_id in self.instance_id_to_span_annotations:
-            del self.instance_id_to_span_annotations[instance_id]
-
-        # TODO: keep track of all the annotation behaviors instead of only
-        # keeping the latest one each time when new annotation is updated,
-        # we also update the behavioral_data_dict (currently done in the
-        # update_annotation_state function)
-        #
-        # self.instance_id_to_behavioral_data[instance_id] = behavioral_data_dict
-
-        return (
-            old_annotation != schema_to_label_to_value or old_span_annotations != span_annotations
-        )
-
-    def update(self, annotation_order, annotated_instances):
-        """
-        Updates the entire state of annotations for this user by inserting
-        all the data in annotated_instances into this user's state. Typically
-        this data is loaded from a file
-
-        NOTE: This is only used to update the entire list of annotations,
-        normally when loading all the saved data
-
-        :annotation_order: a list of string instance IDs in the order that this
-        user should see those instances.
-        :annotated_instances: a list of dictionary objects detailing the
-        annotations on each item.
-        """
-
-        self.instance_id_to_labeling = {}
-        for inst in annotated_instances:
-
-            inst_id = inst["id"]
-            label_annotations = inst["label_annotations"]
-            span_annotations = inst["span_annotations"]
-
-            self.instance_id_to_labeling[inst_id] = label_annotations
-            self.instance_id_to_span_annotations[inst_id] = span_annotations
-
-            behavior_dict = inst.get("behavioral_data", {})
-            self.instance_id_to_behavioral_data[inst_id] = behavior_dict
-
-            # TODO: move this code somewhere else so consent is organized
-            # separately
-            if re.search("consent", inst_id):
-                consent_key = "I want to participate in this research and continue with the study."
-                self.consent_agreed = False
-                if label_annotations[consent_key].get("Yes") == "true":
-                    self.consent_agreed = True
-
-        self.instance_id_ordering = annotation_order
-        self.instance_id_to_order = self.generate_id_order_mapping(self.instance_id_ordering)
-
-        # Set the current item to be the one after the last thing that was
-        # annotated
-        # self.instance_cursor = min(len(self.instance_id_to_labeling),
-        #                           len(self.instance_id_ordering)-1)
-        if len(annotated_instances) > 0:
-            self.instance_cursor = self.instance_id_to_order[annotated_instances[-1]["id"]]
-
-    def reorder_remaining_instances(self, new_id_order, preserve_order):
-
-        # Preserve the ordering the user has seen so far for data they've
-        # annotated. This also includes items that *other* users have annotated
-        # to ensure all items get the same number of annotations (otherwise
-        # these items might get re-ordered farther away)
-        new_order = [iid for iid in self.instance_id_ordering if iid in preserve_order]
-
-        # Now add all the other IDs
-        for iid in new_id_order:
-            if iid not in self.instance_id_to_labeling:
-                new_order.append(iid)
-
-        assert len(new_order) == len(self.instance_id_ordering)
-
-        # Update the user's state
-        self.instance_id_ordering = new_order
-        self.instance_id_to_order = self.generate_id_order_mapping(self.instance_id_ordering)
-
-    def parse_time_string(self, time_string):
-        """
-        Parse the time string generated by front end,
-        e.g., 'time_string': 'Time spent: 0d 0h 0m 5s '
-        """
-        time_dict = {}
-        items = time_string.strip().split(" ")
-        if len(items) != 6:
-            return None
-        time_dict["day"] = int(items[2][:-1])
-        time_dict["hour"] = int(items[3][:-1])
-        time_dict["minute"] = int(items[4][:-1])
-        time_dict["second"] = int(items[5][:-1])
-        time_dict["total_seconds"] = (
-            time_dict["second"] + 60 * time_dict["minute"] + 3600 * time_dict["hour"]
-        )
-
-        return time_dict
-
-    def total_working_time(self):
-        """
-        Calculate the amount of time a user have spend on annotation
-        """
-        total_working_seconds = 0
-        for inst_id in self.instance_id_to_behavioral_data:
-            time_string = self.instance_id_to_behavioral_data[inst_id].get("time_string")
-            if time_string:
-                total_working_seconds += (
-                    self.parse_time_string(time_string)["total_seconds"]
-                    if self.parse_time_string(time_string)
-                    else 0
-                )
-
-        if total_working_seconds < 60:
-            total_working_time_str = str(total_working_seconds) + " seconds"
-        elif total_working_seconds < 3600:
-            total_working_time_str = str(int(total_working_seconds) / 60) + " minutes"
-        else:
-            total_working_time_str = str(int(total_working_seconds) / 3600) + " hours"
-
-        return (total_working_seconds, total_working_time_str)
-
-    def generate_user_statistics(self):
-        statistics = {
-            "Annotated instances": len(self.instance_id_to_labeling),
-            "Total working time": self.total_working_time()[1],
-            "Average time on each instance": "N/A",
-        }
-        if statistics["Annotated instances"] != 0:
-            statistics["Average time on each instance"] = "%s seconds" % str(
-                round(self.total_working_time()[0] / statistics["Annotated instances"], 1)
-            )
-        return statistics
-
-
 def load_all_data(config):
-    global instance_id_to_data
-    global task_assignment
-
     # Hacky nonsense
     global re_to_highlights
 
@@ -527,7 +123,7 @@ def load_all_data(config):
     id_key = config["item_properties"]["id_key"]
 
     # Keep the data in the same order we read it in
-    instance_id_to_data = OrderedDict()
+    state.instance_id_to_data = OrderedDict()
 
     data_files = config["data_files"]
     logger.debug("Loading data from %d files" % (len(data_files)))
@@ -551,7 +147,7 @@ def load_all_data(config):
                     instance_id = item[id_key]
 
                     # TODO: check for duplicate instance_id
-                    instance_id_to_data[instance_id] = item
+                    state.instance_id_to_data[instance_id] = item
 
         else:
             sep = "," if fmt == "csv" else "\t"
@@ -566,7 +162,7 @@ def load_all_data(config):
                 instance_id = row[id_key]
 
                 # TODO: check for duplicate instance_id
-                instance_id_to_data[instance_id] = item
+                state.instance_id_to_data[instance_id] = item
             line_no = len(df)
 
         logger.debug("Loaded %d instances from %s" % (line_no, data_fname))
@@ -584,34 +180,34 @@ def load_all_data(config):
                             "text": line["text"].replace("[test_question_choice]", l),
                         }
                         # currently we simply move all these test questions to the end of the instance list
-                        instance_id_to_data.update({item["id"]: item})
-                        instance_id_to_data.move_to_end(item["id"], last=True)
+                        state.instance_id_to_data.update({item["id"]: item})
+                        state.instance_id_to_data.move_to_end(item["id"], last=True)
 
-    # insert survey questions into instance_id_to_data
+    # insert survey questions into state.instance_id_to_data
     for page in config.get("pre_annotation_pages", []):
-        # TODO Currently we simply remove the language type before -,
+        # TODO Currently we simply remove the language type before,
         # but we need a more elegant way for this in the future
         item = {"id": page, "text": page.split("-")[-1][:-5]}
-        instance_id_to_data.update({page: item})
-        instance_id_to_data.move_to_end(page, last=False)
+        state.instance_id_to_data.update({page: item})
+        state.instance_id_to_data.move_to_end(page, last=False)
 
     for it in ["prestudy_failed_pages", "prestudy_passed_pages"]:
         for page in config.get(it, []):
             # TODO Currently we simply remove the language type before -,
             # but we need a more elegant way for this in the future
             item = {"id": page, "text": page.split("-")[-1][:-5]}
-            instance_id_to_data.update({page: item})
-            instance_id_to_data.move_to_end(page, last=False)
+            state.instance_id_to_data.update({page: item})
+            state.instance_id_to_data.move_to_end(page, last=False)
 
     for page in config.get("post_annotation_pages", []):
         item = {"id": page, "text": page.split("-")[-1][:-5]}
-        instance_id_to_data.update({page: item})
-        instance_id_to_data.move_to_end(page, last=True)
+        state.instance_id_to_data.update({page: item})
+        state.instance_id_to_data.move_to_end(page, last=True)
 
-    # Generate the text to display in instance_id_to_data
-    for inst_id in instance_id_to_data:
-        instance_id_to_data[inst_id]["displayed_text"] = get_displayed_text(
-            instance_id_to_data[inst_id][config["item_properties"]["text_key"]]
+    # Generate the text to display in state.instance_id_to_data
+    for inst_id in state.instance_id_to_data:
+        state.instance_id_to_data[inst_id]["displayed_text"] = get_displayed_text(
+            state.instance_id_to_data[inst_id][config["item_properties"]["text_key"]]
         )
 
     # TODO: make this fully configurable somehow...
@@ -644,10 +240,10 @@ def load_all_data(config):
         if os.path.exists(task_assignment_path):
             # load the task assignment if it has been generated and saved
             with open(task_assignment_path, "r") as r:
-                task_assignment = json.load(r)
+                state.task_assignment = json.load(r)
         else:
             # Otherwise generate a new task assignment dict
-            task_assignment = {
+            state.task_assignment = {
                 "assigned": {},
                 "unassigned": {},
                 "testing": {"test_question_per_annotator": 0, "ids": []},
@@ -658,53 +254,40 @@ def load_all_data(config):
             # Setting test_question_per_annotator if it is defined in automatic_assignment,
             # otherwise it is default to 0 and no test question will be used
             if "test_question_per_annotator" in config["automatic_assignment"]:
-                task_assignment["testing"]["test_question_per_annotator"] = config[
+                state.task_assignment["testing"]["test_question_per_annotator"] = config[
                     "automatic_assignment"
                 ]["test_question_per_annotator"]
 
             for it in ["pre_annotation", "prestudy_passed", "prestudy_failed", "post_annotation"]:
                 if it + "_pages" in config:
-                    task_assignment[it + "_pages"] = config[it + "_pages"]
+                    state.task_assignment[it + "_pages"] = config[it + "_pages"]
                     for p in config[it + "_pages"]:
-                        task_assignment["assigned"][p] = 0
+                        state.task_assignment["assigned"][p] = 0
 
-            for _id in instance_id_to_data:
-                if _id in task_assignment["assigned"]:
+            for _id in state.instance_id_to_data:
+                if _id in state.task_assignment["assigned"]:
                     continue
                 # add test questions to the assignment dict
                 if re.search("testing", _id):
-                    task_assignment["testing"]["ids"].append(_id)
+                    state.task_assignment["testing"]["ids"].append(_id)
                     continue
                 if re.search("prestudy", _id):
-                    task_assignment["prestudy_ids"].append(_id)
+                    state.task_assignment["prestudy_ids"].append(_id)
                     continue
                 # set the total labels per instance, if not specified, default to 3
-                task_assignment["unassigned"][_id] = (
+                state.task_assignment["unassigned"][_id] = (
                     config["automatic_assignment"]["labels_per_instance"]
                     if "labels_per_instance" in config["automatic_assignment"]
                     else DEFAULT_LABELS_PER_INSTANCE
                 )
 
 
-def convert_labels(annotation, schema_type):
-    if schema_type == "likert":
-        return int(list(annotation.keys())[0][6:])
-    if schema_type == "radio":
-        return list(annotation.keys())[0]
-    if schema_type == "multiselect":
-        return list(annotation.keys())
-    print("Unrecognized schema_type %s" % schema_type)
-    return None
-
-
 def get_agreement_score(user_list, schema_name, return_type="overall_average"):
     """
     Get the final agreement score for selected users and schemas.
     """
-    global user_to_annotation_state
-
     if user_list == "all":
-        user_list = user_to_annotation_state.keys()
+        user_list = state.user_to_annotation_state.keys()
 
     name2alpha = {}
     if schema_name == "all":
@@ -735,8 +318,6 @@ def cal_agreement(user_list, schema_name, schema_type=None, selected_keys=None):
     """
     Calculate the krippendorff's alpha for selected users and schema.
     """
-    global user_to_annotation_state
-
     # get the schema_type/annotation_type from the config file
     for i in range(len(config["annotation_schemes"])):
         schema = config["annotation_schemes"][i]
@@ -748,11 +329,11 @@ def cal_agreement(user_list, schema_name, schema_type=None, selected_keys=None):
     union_keys = set()
     user_annotation_list = []
     for user in user_list:
-        if user not in user_to_annotation_state:
-            print("%s not found in user_to_annotation_state" % user)
-        user_annotated_ids = user_to_annotation_state[user].instance_id_to_labeling.keys()
+        if user not in state.user_to_annotation_state:
+            print("%s not found in state.user_to_annotation_state" % user)
+        user_annotated_ids = state.user_to_annotation_state[user].instance_id_to_labeling.keys()
         union_keys = union_keys | user_annotated_ids
-        user_annotation_list.append(user_to_annotation_state[user].instance_id_to_labeling)
+        user_annotation_list.append(state.user_to_annotation_state[user].instance_id_to_labeling)
 
     if len(user_annotation_list) < 2:
         print("Cannot calculate agreement score for less than 2 users")
@@ -851,125 +432,6 @@ def find_start_id(user):
     # user_dict[user]['user_data'] = user_data
     """
     raise RuntimeError("This function is deprecated?")
-
-
-def move_to_prev_instance(username):
-    user_state = lookup_user_state(username)
-    user_state.go_back()
-
-
-def move_to_next_instance(username):
-    user_state = lookup_user_state(username)
-    user_state.go_forward()
-
-
-def go_to_id(username, _id):
-    # go to specific item
-    user_state = lookup_user_state(username)
-    user_state.go_to_id(int(_id))
-
-
-def get_total_annotations():
-    """
-    Returns the total number of unique annotations done across all users.
-    """
-    total = 0
-    for username in get_users():
-        user_state = lookup_user_state(username)
-        total += user_state.get_annotation_count()
-
-    return total
-
-
-def update_annotation_state(username, form):
-    """
-    Parses the state of the HTML form (what the user did to the instance) and
-    updates the state of the instance's annotations accordingly.
-    """
-
-    # Get what the user has already annotated, which might include this instance too
-    user_state = lookup_user_state(username)
-
-    # Jiaxin: the instance_id are changed to the user's local instance cursor
-    instance_id = user_state.cursor_to_real_instance_id(int(request.form["instance_id"]))
-
-    schema_to_label_to_value = defaultdict(dict)
-
-    behavioral_data_dict = {}
-
-    did_change = False
-    for key in form:
-
-        # look for behavioral information regarding time, click, ...
-        if key[:9] == "behavior_":
-            behavioral_data_dict[key[9:]] = form[key]
-            continue
-
-        # Look for the marker that indicates an annotation label.
-        #
-        # NOTE: The span annotation uses radio buttons as well to figure out
-        # which label. These inputs are labeled with "span_label" so we can skip
-        # them as being actual annotatins (the spans are saved below though).
-        if ":::" in key and "span_label" not in key:
-
-            cols = key.split(":::")
-            annotation_schema = cols[0]
-            annotation_label = cols[1]
-            annotation_value = form[key]
-
-            # skip the input when it is an empty string (from a text-box)
-            if annotation_value == "":
-                continue
-
-            schema_to_label_to_value[annotation_schema][annotation_label] = annotation_value
-
-    # Span annotations are a bit funkier since we're getting raw HTML that
-    # we need to post-process on the server side.
-    span_annotations = []
-    if "span-annotation" in form:
-        span_annotation_html = form["span-annotation"]
-        span_text, span_annotations = parse_html_span_annotation(span_annotation_html)
-
-    did_change = user_state.set_annotation(
-        instance_id, schema_to_label_to_value, span_annotations, behavioral_data_dict
-    )
-
-    # update the behavioral information regarding time only when the annotations are changed
-    if did_change:
-        user_state.instance_id_to_behavioral_data[instance_id] = behavioral_data_dict
-
-        # todo: we probably need a more elegant way to check the status of user consent
-        # when the user agreed to participate, try to assign
-        if re.search("consent", instance_id):
-            consent_key = "I want to participate in this research and continue with the study."
-            user_state.consent_agreed = False
-            if schema_to_label_to_value[consent_key].get("Yes") == "true":
-                user_state.consent_agreed = True
-            assign_instances_to_user(username)
-
-        # when the user is working on prestudy, check the status
-        if re.search("prestudy", instance_id):
-            print(check_prestudy_status(username))
-
-    return did_change
-
-
-def get_annotations_for_user_on(username, instance_id):
-    """
-    Returns the label-based annotations made by this user on the instance.
-    """
-    user_state = lookup_user_state(username)
-    annotations = user_state.get_label_annotations(instance_id)
-    return annotations
-
-
-def get_span_annotations_for_user_on(username, instance_id):
-    """
-    Returns the span annotations made by this user on the instance.
-    """
-    user_state = lookup_user_state(username)
-    span_annotations = user_state.get_span_annotations(instance_id)
-    return span_annotations
 
 
 # This was used to merge annotated instances in previous annotations.  For
@@ -1122,620 +584,7 @@ def new_user():
     return render_template("newuser.html")
 
 
-def get_users():
-    """
-    Returns an iterable over the usernames of all users who have annotated in
-    the system so far
-    """
-    global user_to_annotation_state
-    return list(user_to_annotation_state.keys())
-
-
-def get_prestudy_label(label):
-    for schema in config["annotation_schemes"]:
-        if schema["name"] == config["prestudy"]["question_key"]:
-            cur_schema = schema["annotation_type"]
-    label = convert_labels(label[config["prestudy"]["question_key"]], cur_schema)
-    return config["prestudy"]["answer_mapping"][label]
-
-
-def print_prestudy_result():
-    global task_assignment
-    print("----- prestudy test restult -----")
-    print("passed annotators: ", task_assignment["prestudy_passed_users"])
-    print("failed annotators: ", task_assignment["prestudy_failed_users"])
-    print(
-        "pass rate: ",
-        len(task_assignment["prestudy_passed_users"])
-        / len(task_assignment["prestudy_passed_users"] + task_assignment["prestudy_failed_users"]),
-    )
-
-
-def check_prestudy_status(username):
-    """
-    Check whether a user has passed the prestudy test (this function will only be used )
-    :return:
-    """
-    global task_assignment
-    global instance_id_to_data
-
-    if "prestudy" not in config or config["prestudy"]["on"] is False:
-        return "no prestudy test"
-
-    user_state = lookup_user_state(username)
-
-    # directly return the status if the user has passed/failed the prestudy before
-    if not user_state.get_prestudy_status():
-        return "prestudy failed"
-    if user_state.get_prestudy_status():
-        return "prestudy passed"
-
-    res = []
-    for _id in task_assignment["prestudy_ids"]:
-        label = user_state.get_label_annotations(_id)
-        if label is None:
-            return "prestudy not complete"
-        groundtruth = instance_id_to_data[_id][config["prestudy"]["groundtruth_key"]]
-        label = get_prestudy_label(label)
-        print(label, groundtruth)
-        res.append(label == groundtruth)
-
-    print(res, sum(res) / len(res))
-    # check if the score is higher than the minimum defined in config
-    if (sum(res) / len(res)) < config["prestudy"]["minimum_score"]:
-        user_state.set_prestudy_status(False)
-        task_assignment["prestudy_failed_users"].append(username)
-        prestudy_result = "prestudy just failed"
-    else:
-        user_state.set_prestudy_status(True)
-        task_assignment["prestudy_passed_users"].append(username)
-        prestudy_result = "prestudy just passed"
-
-    print_prestudy_result()
-
-    # update the annotation list according the prestudy test result
-    assign_instances_to_user(username)
-
-    return prestudy_result
-
-
-def generate_initial_user_dataflow(username):
-    """
-    Generate initial dataflow for a new annotator including surveyflows and prestudy.
-    :return: UserAnnotationState
-    """
-    global user_to_annotation_state
-    global instance_id_to_data
-
-    sampled_keys = []
-    for it in ["pre_annotation_pages", "prestudy_ids"]:
-        if it in task_assignment:
-            sampled_keys += task_assignment[it]
-
-    assigned_user_data = {key: instance_id_to_data[key] for key in sampled_keys}
-
-    # save the assigned user data dict
-    user_dir = os.path.join(config["output_annotation_dir"], username)
-    assigned_user_data_path = user_dir + "/assigned_user_data.json"
-
-    if not os.path.exists(user_dir):
-        os.makedirs(user_dir)
-        logger.debug('Created state directory for user "%s"' % (username))
-
-    with open(assigned_user_data_path, "w") as w:
-        json.dump(assigned_user_data, w)
-
-    # return the assigned user data dict
-    return assigned_user_data
-
-
-def sample_instances(username):
-    global user_to_annotation_state
-    global instance_id_to_data
-
-    if "sampling_strategy" not in config["automatic_assignment"]:
-        logger.debug("Undefined sampling strategy, default to random assignment")
-        config["automatic_assignment"]["sampling_strategy"] = "random"
-
-    # Force the sampling strategy to be random at this moment, will change this
-    # when more sampling strategies are created
-    config["automatic_assignment"]["sampling_strategy"] = "random"
-
-    if config["automatic_assignment"]["sampling_strategy"] == "random":
-        # previously we were doing random sample directly, however, when there
-        # are a large amount of instances and users, it is possible that some
-        # instances are rarely sampled and some are oversampled at the end of
-        # the sampling process
-        # sampled_keys = random.sample(list(task_assignment['unassigned'].keys()),
-        #                             config["automatic_assignment"]["instance_per_annotator"])
-
-        # Currently we will shuffle the unassinged keys first, and then rank
-        # the dict based on the availability of each instance, and they directly
-        # get the first N instances
-        unassigned_dict = task_assignment["unassigned"]
-        unassigned_dict = {
-            k: unassigned_dict[k]
-            for k in random.sample(list(unassigned_dict.keys()), len(unassigned_dict))
-        }
-        sorted_keys = [
-            it[0] for it in sorted(unassigned_dict.items(), key=lambda item: item[1], reverse=True)
-        ]
-        sampled_keys = sorted_keys[
-            : min(config["automatic_assignment"]["instance_per_annotator"], len(sorted_keys))
-        ]
-
-        # update task_assignment to keep track of task assignment status globally
-        for key in sampled_keys:
-            if key not in task_assignment["assigned"]:
-                task_assignment["assigned"][key] = []
-            task_assignment["assigned"][key].append(username)
-            task_assignment["unassigned"][key] -= 1
-            if task_assignment["unassigned"][key] == 0:
-                del task_assignment["unassigned"][key]
-
-        # sample and insert test questions
-        if task_assignment["testing"]["test_question_per_annotator"] > 0:
-            sampled_testing_ids = random.sample(
-                task_assignment["testing"]["ids"],
-                k=task_assignment["testing"]["test_question_per_annotator"],
-            )
-            # adding test question sampling status to the task assignment
-            for key in sampled_testing_ids:
-                if key not in task_assignment["assigned"]:
-                    task_assignment["assigned"][key] = []
-                task_assignment["assigned"][key].append(username)
-                sampled_keys.insert(random.randint(0, len(sampled_keys) - 1), key)
-
-    return sampled_keys
-
-
-def assign_instances_to_user(username):
-    """
-    Assign instances to a user
-    :return: UserAnnotationState
-    """
-    global user_to_annotation_state
-    global instance_id_to_data
-
-    user_state = user_to_annotation_state[username]
-
-    # check if the user has already been assigned with instances to annotate
-    # Currently we are just assigning once, but we might chance this later
-    if user_state.get_real_assigned_instance_count() > 0:
-        logging.warning(
-            "Instance already assigned to user %s, assigning process stoppped" % username
-        )
-        return False
-
-    prestudy_status = user_state.get_prestudy_status()
-    consent_status = user_state.get_consent_status()
-
-    if prestudy_status is None:
-        if "prestudy" in config and config["prestudy"]["on"]:
-            logging.warning(
-                "Trying to assign instances to user when the prestudy test is not completed, assigning process stoppped"
-            )
-            return False
-
-        if (
-            "surveyflow" not in config
-            or not config["surveyflow"]["on"]
-            or "prestudy" not in config
-            or not config["prestudy"]["on"]
-        ) or consent_status:
-            sampled_keys = sample_instances(username)
-            user_state.real_instance_assigned_count += len(sampled_keys)
-            if "post_annotation_pages" in task_assignment:
-                sampled_keys = sampled_keys + task_assignment["post_annotation_pages"]
-        else:
-            logging.warning(
-                "Trying to assign instances to user when the user has yet agreed to participate. assigning process stoppped"
-            )
-            return False
-
-    elif prestudy_status is False:
-        sampled_keys = task_assignment["prestudy_failed_pages"]
-
-    else:
-        sampled_keys = sample_instances(username)
-        user_state.real_instance_assigned_count += len(sampled_keys)
-        sampled_keys = task_assignment["prestudy_passed_pages"] + sampled_keys
-        if "post_annotation_pages" in task_assignment:
-            sampled_keys = sampled_keys + task_assignment["post_annotation_pages"]
-
-    assigned_user_data = {key: instance_id_to_data[key] for key in sampled_keys}
-    user_state.add_new_assigned_data(assigned_user_data)
-
-    print(
-        "assinged %d instances to %s, total pages: %s"
-        % (
-            user_state.get_real_assigned_instance_count(),
-            username,
-            user_state.get_assigned_instance_count(),
-        )
-    )
-
-    # save the assigned user data dict
-    user_dir = os.path.join(config["output_annotation_dir"], username)
-    assigned_user_data_path = user_dir + "/assigned_user_data.json"
-
-    if not os.path.exists(user_dir):
-        os.makedirs(user_dir)
-        logger.debug('Created state directory for user "%s"' % (username))
-
-    with open(assigned_user_data_path, "w") as w:
-        json.dump(user_state.get_assigned_data(), w)
-
-    # save task assignment status
-    task_assignment_path = (
-        config["output_annotation_dir"] + config["automatic_assignment"]["output_filename"]
-    )
-    with open(task_assignment_path, "w") as w:
-        json.dump(task_assignment, w)
-
-    user_state.instance_assigned = True
-
-    # return the assigned user data dict
-    return assigned_user_data
-
-
-def generate_full_user_dataflow(username):
-    """
-    Directly assign all the instances to a user at the beginning of the study
-    :return: UserAnnotationState
-    """
-    global user_to_annotation_state
-    global instance_id_to_data
-
-    if "sampling_strategy" not in config["automatic_assignment"]:
-        logger.debug("Undefined sampling strategy, default to random assignment")
-        config["automatic_assignment"]["sampling_strategy"] = "random"
-
-    # Force the sampling strategy to be random at this moment, will change this
-    # when more sampling strategies are created
-    config["automatic_assignment"]["sampling_strategy"] = "random"
-
-    if config["automatic_assignment"]["sampling_strategy"] == "random":
-        sampled_keys = random.sample(
-            list(task_assignment["unassigned"].keys()),
-            config["automatic_assignment"]["instance_per_annotator"],
-        )
-        # update task_assignment to keep track of task assignment status globally
-        for key in sampled_keys:
-            if key not in task_assignment["assigned"]:
-                task_assignment["assigned"][key] = []
-            task_assignment["assigned"][key].append(username)
-            task_assignment["unassigned"][key] -= 1
-            if task_assignment["unassigned"][key] == 0:
-                del task_assignment["unassigned"][key]
-
-        # sample and insert test questions
-        if task_assignment["testing"]["test_question_per_annotator"] > 0:
-            sampled_testing_ids = random.sample(
-                task_assignment["testing"]["ids"],
-                k=task_assignment["testing"]["test_question_per_annotator"],
-            )
-            # adding test question sampling status to the task assignment
-            for key in sampled_testing_ids:
-                if key not in task_assignment["assigned"]:
-                    task_assignment["assigned"][key] = []
-                task_assignment["assigned"][key].append(username)
-                sampled_keys.insert(random.randint(0, len(sampled_keys) - 1), key)
-
-        # save task assignment status
-        task_assignment_path = os.path.join(
-            config["output_annotation_dir"], config["automatic_assignment"]["output_filename"]
-        )
-        with open(task_assignment_path, "w") as w:
-            json.dump(task_assignment, w)
-
-        # add the amount of sampled instances
-        real_assigned_instance_count = len(sampled_keys)
-
-        if "pre_annotation_pages" in task_assignment:
-            sampled_keys = task_assignment["pre_annotation_pages"] + sampled_keys
-
-        if "post_annotation_pages" in task_assignment:
-            sampled_keys = sampled_keys + task_assignment["post_annotation_pages"]
-
-        assigned_user_data = {key: instance_id_to_data[key] for key in sampled_keys}
-
-        # save the assigned user data dict
-        user_dir = os.path.join(config["output_annotation_dir"], username)
-        assigned_user_data_path = user_dir + "/assigned_user_data.json"
-
-        if not os.path.exists(user_dir):
-            os.makedirs(user_dir)
-            logger.debug('Created state directory for user "%s"' % (username))
-
-        with open(assigned_user_data_path, "w") as w:
-            json.dump(assigned_user_data, w)
-
-        # return the assigned user data dict
-        return assigned_user_data, real_assigned_instance_count
-
-
-def instances_all_assigned():
-    global task_assignment
-
-    return len(task_assignment.get("unassigned", [])) <= int(
-        config["automatic_assignment"]["instance_per_annotator"] * 0.7
-    )
-
-
-def lookup_user_state(username):
-    """
-    Returns the UserAnnotationState for a user, or if that user has not yet
-    annotated, creates a new state for them and registers them with the system.
-    """
-    global user_to_annotation_state
-
-    if username not in user_to_annotation_state:
-        logger.debug('Previously unknown user "%s"; creating new annotation state' % (username))
-
-        if "automatic_assignment" in config and config["automatic_assignment"]["on"]:
-            # assign instances to new user when automatic assignment is turned on
-            if "prestudy" in config and config["prestudy"]["on"]:
-                user_state = UserAnnotationState(generate_initial_user_dataflow(username))
-                user_to_annotation_state[username] = user_state
-
-            else:
-                user_state = UserAnnotationState(generate_initial_user_dataflow(username))
-                user_to_annotation_state[username] = user_state
-                assign_instances_to_user(username)
-
-        else:
-            # assign all the instance to each user when automatic assignment is turned off
-            user_state = UserAnnotationState(instance_id_to_data)
-            user_to_annotation_state[username] = user_state
-    else:
-        user_state = user_to_annotation_state[username]
-
-    return user_state
-
-
-def save_user_state(username, save_order=False):
-    global user_to_annotation_state
-    global instance_id_to_data
-
-    # Figure out where this user's data would be stored on disk
-    output_annotation_dir = config["output_annotation_dir"]
-
-    # NB: Do some kind of sanitizing on the username to improve security
-    user_dir = os.path.join(output_annotation_dir, username)
-
-    user_state = lookup_user_state(username)
-
-    if not os.path.exists(user_dir):
-        os.makedirs(user_dir)
-        logger.debug('Created state directory for user "%s"' % (username))
-
-    annotation_order_fname = os.path.join(user_dir, "annotation_order.txt")
-    if not os.path.exists(annotation_order_fname) or save_order:
-        with open(annotation_order_fname, "wt") as outf:
-            for inst in user_state.instance_id_ordering:
-                # JIAXIN: output id has to be str
-                outf.write(str(inst) + "\n")
-
-    annotated_instances_fname = os.path.join(user_dir, "annotated_instances.jsonl")
-
-    with open(annotated_instances_fname, "wt") as outf:
-        for inst_id, data in user_state.get_all_annotations().items():
-            bd_dict = {}
-            if inst_id in user_state.instance_id_to_behavioral_data:
-                bd_dict = user_state.instance_id_to_behavioral_data[inst_id]
-
-            output = {
-                "id": inst_id,
-                "displayed_text": instance_id_to_data[inst_id]["displayed_text"],
-                "label_annotations": data["labels"],
-                "span_annotations": data["spans"],
-                "behavioral_data": bd_dict,
-            }
-            json.dump(output, outf)
-            outf.write("\n")
-
-
-def save_all_annotations():
-    global user_to_annotation_state
-    global instance_id_to_data
-
-    # Figure out where this user's data would be stored on disk
-    output_annotation_dir = config["output_annotation_dir"]
-    fmt = config["output_annotation_format"]
-
-    if fmt not in ["csv", "tsv", "json", "jsonl"]:
-        raise Exception("Unsupported output format: " + fmt)
-
-    if not os.path.exists(output_annotation_dir):
-        os.makedirs(output_annotation_dir)
-        logger.debug("Created state directory for annotations: %s" % (output_annotation_dir))
-
-    annotated_instances_fname = os.path.join(output_annotation_dir, "annotated_instances." + fmt)
-
-    # We write jsonl format regardless
-    if fmt in ["json", "jsonl"]:
-        with open(annotated_instances_fname, "wt") as outf:
-            for user_state in user_to_annotation_state.values():
-                for inst_id, data in user_state.get_all_annotations().items():
-
-                    bd_dict = user_state.instance_id_to_behavioral_data.get(inst_id, {})
-
-                    output = {
-                        "id": inst_id,
-                        "displayed_text": instance_id_to_data[inst_id]["displayed_text"],
-                        "label_annotations": data["labels"],
-                        "span_annotations": data["spans"],
-                        "behavioral_data": bd_dict,
-                    }
-                    json.dump(output, outf)
-                    outf.write("\n")
-
-    # Convert to Pandas and then dump
-    elif fmt in ["csv", "tsv"]:
-        df = defaultdict(list)
-
-        # Loop 1, figure out which schemas/labels have values so we know which
-        # things will need to be columns in each row
-        schema_to_labels = defaultdict(set)
-        span_labels = set()
-
-        for user_state in user_to_annotation_state.values():
-            for annotations in user_state.get_all_annotations().values():
-                # Columns for each label-based annotation
-                for schema, label_vals in annotations["labels"].items():
-                    for label in label_vals.keys():
-                        schema_to_labels[schema].add(label)
-
-                # Columns for each span type too
-                for span in annotations["spans"]:
-                    span_labels.add(span["annotation"])
-
-                # TODO: figure out what's in the behavioral dict and how to format it
-
-        # Loop 2, report everything that's been annotated
-        for user_id, user_state in user_to_annotation_state.items():
-            for inst_id, annotations in user_state.get_all_annotations().items():
-
-                df["user"].append(user_id)
-                df["instance_id"].append(inst_id)
-                df["displayed_text"].append(instance_id_to_data[inst_id]["displayed_text"])
-
-                label_annotations = annotations["labels"]
-                span_annotations = annotations["spans"]
-
-                for schema, labels in schema_to_labels.items():
-                    if schema in label_annotations:
-                        label_vals = label_annotations[schema]
-                        for label in labels:
-                            val = label_vals[label] if label in label_vals else None
-                            # For some sanity, combine the schema and label it a single column
-                            df[schema + ":::" + label].append(val)
-                    # If the user did label this schema at all, fill it with None values
-                    else:
-                        for label in labels:
-                            df[schema + ":::" + label].append(None)
-
-                # We bunch spans by their label to make it slightly easier to
-                # process, but it's still kind of messy compared with the JSON
-                # format.
-                for span_label in span_labels:
-                    anns = [sa for sa in span_annotations if sa["annotation"] == span_label]
-                    df["span_annotation:::" + span_label].append(anns)
-
-                # TODO: figure out what's in the behavioral dict and how to format it
-
-        df = pd.DataFrame(df)
-        sep = "," if fmt == "csv" else "\t"
-        df.to_csv(annotated_instances_fname, index=False, sep=sep)
-
-    # Save the annotation assignment info if automatic task assignment is on.
-    # Jiaxin: we are simply saving this as a json file at this moment
-    if "automatic_assignment" in config and config["automatic_assignment"]["on"]:
-        # TODO: write the code here
-        print("saved")
-
-
-def load_user_state(username):
-    """
-    Loads the user's state from disk. The state includes which instances they
-    have annotated and the order in which they are expected to see instances.
-    """
-    global user_to_annotation_state
-    global instance_id_to_data
-
-    # Figure out where this user's data would be stored on disk
-    user_state_dir = config["output_annotation_dir"]
-
-    # NB: Do some kind of sanitizing on the username to improve securty
-    user_dir = os.path.join(user_state_dir, username)
-
-    # User has annotated before or has assigned_data
-    if os.path.exists(user_dir):
-        logger.debug('Found known user "%s"; loading annotation state' % (username))
-
-        # if automatic assignment is on, load assigned user data
-        if "automatic_assignment" in config and config["automatic_assignment"]["on"]:
-            assigned_user_data_path = user_dir + "/assigned_user_data.json"
-
-            with open(assigned_user_data_path, "r") as r:
-                assigned_user_data = json.load(r)
-        # otherwise, set the assigned user data as all the instances
-        else:
-            assigned_user_data = instance_id_to_data
-
-        annotation_order = []
-        annotation_order_fname = os.path.join(user_dir, "annotation_order.txt")
-        if os.path.exists(annotation_order_fname):
-            with open(annotation_order_fname, "rt") as f:
-                for line in f:
-                    instance_id = line[:-1]
-                    if instance_id not in assigned_user_data:
-                        logger.warning(
-                            (
-                                "Annotation state for %s does not match "
-                                + "instances in existing dataset at %s"
-                            )
-                            % (user_dir, ",".join(config["data_files"]))
-                        )
-                        continue
-                    annotation_order.append(line[:-1])
-
-        annotated_instances = []
-        annotated_instances_fname = os.path.join(user_dir, "annotated_instances.jsonl")
-        if os.path.exists(annotated_instances_fname):
-
-            with open(annotated_instances_fname, "rt") as f:
-                for line in f:
-                    annotated_instance = json.loads(line)
-                    instance_id = annotated_instance["id"]
-                    if instance_id not in assigned_user_data:
-                        logger.warning(
-                            (
-                                "Annotation state for %s does not match "
-                                + "instances in existing dataset at %s"
-                            )
-                            % (user_dir, ",".join(config["data_files"]))
-                        )
-                        continue
-                    annotated_instances.append(annotated_instance)
-
-        # Ensure the current data is represented in the annotation order
-        # NOTE: this is a hack to be fixed for when old user data is in the same directory
-        for iid in assigned_user_data.keys():
-            if iid not in annotation_order:
-                annotation_order.append(iid)
-
-        user_state = UserAnnotationState(assigned_user_data)
-        user_state.update(annotation_order, annotated_instances)
-
-        # Make sure we keep track of the user throughout the program
-        user_to_annotation_state[username] = user_state
-
-        logger.info(
-            'Loaded %d annotations for known user "%s"'
-            % (user_state.get_annotation_count(), username)
-        )
-
-        return "old user loaded"
-
-    # New user, so initialize state
-    else:
-
-        logger.debug('Previously unknown user "%s"; creating new annotation state' % (username))
-
-        # create new user state with the look up function
-        if instances_all_assigned():
-            return "all instances have been assigned"
-
-        lookup_user_state(username)
-        return "new user initialized"
-
-
 def get_cur_instance_for_user(username):
-    global user_to_annotation_state
-    global instance_id_to_data
-
     user_state = lookup_user_state(username)
 
     return user_state.current_instance()
@@ -1892,15 +741,13 @@ def annotate_page(username=None, action=None):
     instance = get_cur_instance_for_user(username)
 
     id_key = config["item_properties"]["id_key"]
-    if config["annotation_task_name"] == "Contextual Acceptability":
-        context_key = config["item_properties"]["context_key"]
 
     # directly display the prepared displayed_text
     instance_id = instance[id_key]
     text = instance["displayed_text"]
 
     # also save the displayed text in the metadata dict
-    # instance_id_to_data[instance_id]['displayed_text'] = text
+    # state.instance_id_to_data[instance_id]['displayed_text'] = text
 
     # If the user has labeled spans within this instance before, replace the
     # current instance text with pre-annotated mark-up. We do this here before
@@ -1933,8 +780,8 @@ def annotate_page(username=None, action=None):
 
     # Fill in the kwargs that the user wanted us to include when rendering the page
     kwargs = {}
-    for kw in config["item_properties"].get("kwargs", []):
-        kwargs[kw] = instance[kw]
+    for _kw in config["item_properties"].get("kwargs", []):
+        kwargs[_kw] = instance[_kw]
 
     all_statistics = lookup_user_state(username).generate_user_statistics()
 
@@ -2041,58 +888,6 @@ def get_color_for_schema_label(schema, label):
     c = COLOR_PALETTE[len(schema_label_to_color)]
     schema_label_to_color[t] = c
     return c
-
-
-def parse_html_span_annotation(html_span_annotation):
-    """
-    Parses the span annotations produced in raw HTML by Potato's front end
-    and extracts out the precise spans and labels annotated by users.
-
-    :returns: a tuple of (1) the annotated string without annotation HTML
-              and a list of annotations    
-    """
-    s = html_span_annotation.strip()
-    init_tag_regex = re.compile(r"(<span.+?>)")
-    end_tag_regex = re.compile(r"(</span>)")
-    anno_regex = re.compile(r'<div class="span_label".+?>(.+)</div>')
-    no_html_s = ""
-    start = 0
-
-    annotations = []
-
-    while True:
-        m = init_tag_regex.search(s, start)
-        if not m:
-            break
-
-        # find the end tag
-        m2 = end_tag_regex.search(s, m.end())
-
-        middle = s[m.end() : m2.start()]
-
-        # Get the annotation label from the middle text
-        m3 = anno_regex.search(middle)
-
-        middle_text = middle[: m3.start()]
-        annotation = m3.group(1)
-
-        no_html_s += s[start : m.start()]
-
-        ann = {
-            "start": len(no_html_s),
-            "end": len(no_html_s) + len(middle_text),
-            "span": middle_text,
-            "annotation": annotation,
-        }
-        annotations.append(ann)
-
-        no_html_s += middle_text
-        start = m2.end(0)
-
-    # Add whatever trailing text exists
-    no_html_s += s[start:]
-
-    return no_html_s, annotations
 
 
 def post_process(config, text):
@@ -2253,9 +1048,6 @@ def get_class(kls):
 
 
 def actively_learn():
-    global user_to_annotation_state
-    global instance_id_to_data
-
     if "active_learning_config" not in config:
         logger.warning(
             "the server is trying to do active learning " + "but this hasn't been configured"
@@ -2291,7 +1083,7 @@ def actively_learn():
 
     # Collect all the current labels
     instance_to_labels = defaultdict(list)
-    for uas in user_to_annotation_state.values():
+    for uas in state.user_to_annotation_state.values():
         for iid, annotation in uas.instance_id_to_labeling.items():
             instance_to_labels[iid].append(annotation)
 
@@ -2317,7 +1109,7 @@ def actively_learn():
     text_key = config["item_properties"]["text_key"]
     for iid, schema_to_label in instance_to_label.items():
         # get the text
-        text = instance_id_to_data[iid][text_key]
+        text = state.instance_id_to_data[iid][text_key]
         texts.append(text)
         for s in schema_seen:
             # In some cases where the user has not selected anything but somehow
@@ -2359,7 +1151,7 @@ def actively_learn():
         scheme_to_classifier[scheme] = clf
 
     # Get the remaining unlabeled instances and start predicting
-    unlabeled_ids = [iid for iid in instance_id_to_data if iid not in instance_to_label]
+    unlabeled_ids = [iid for iid in state.instance_id_to_data if iid not in instance_to_label]
     random.shuffle(unlabeled_ids)
 
     perc_random = al_config["random_sample_percent"] / 100
@@ -2377,7 +1169,7 @@ def actively_learn():
 
     # For each scheme, use its classifier to label the data
     scheme_to_predictions = {}
-    unlabeled_texts = [instance_id_to_data[iid][text_key] for iid in unlabeled_ids]
+    unlabeled_texts = [state.instance_id_to_data[iid][text_key] for iid in unlabeled_ids]
     for scheme, clf in scheme_to_classifier.items():
         logger.info("Inferring labels for %s" % scheme)
         preds = clf.predict_proba(unlabeled_texts)
@@ -2421,7 +1213,7 @@ def actively_learn():
     # any annotation so that it stays in the front of the users' queues even if
     # they haven't gotten to it yet (but others have)
     already_annotated = list(instance_to_labels.keys())
-    for annotation_state in user_to_annotation_state.values():
+    for annotation_state in state.user_to_annotation_state.values():
         annotation_state.reorder_remaining_instances(new_id_order, already_annotated)
 
     logger.info("Finished reording instances")
@@ -2450,7 +1242,6 @@ def run_server():
     Run Flask server.
     """
     global user_config
-    global user_to_annotation_state
 
     args = arguments()
     init_config(args)
@@ -2489,7 +1280,7 @@ def run_server():
     # Loads the training data
     load_all_data(config)
 
-    # load users with annotations to user_to_annotation_state
+    # load users with annotations to state.user_to_annotation_state
     users_with_annotations = [
         f
         for f in os.listdir(config["output_annotation_dir"])
@@ -2504,7 +1295,7 @@ def run_server():
     flask_logger = logging.getLogger("werkzeug")
     flask_logger.setLevel(logging.ERROR)
 
-    port = args.port or config.get("port", default_port)
+    port = args.port or config.get("port", DEFAULT_PORT)
     print("running at:\nlocalhost:" + str(port))
     app.run(debug=args.very_verbose, host="0.0.0.0", port=port)
 
