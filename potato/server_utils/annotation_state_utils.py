@@ -159,6 +159,7 @@ def update_annotation_state(username, form):
     did_change = user_state.set_annotation(
         instance_id, schema_to_label_to_value, span_annotations, behavioral_data_dict
     )
+    breakpoint()
 
     # update the behavioral information regarding time only when
     # the annotations are changed

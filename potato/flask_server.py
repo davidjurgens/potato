@@ -1273,7 +1273,8 @@ def run_server():
         if os.path.isdir(config["output_annotation_dir"] + f)
     ]
     for user in users_with_annotations:
-        load_user_state(user)
+        with app.app_context():
+            load_user_state(user)
 
     # TODO: load previous annotation state
     # load_annotation_state(config)

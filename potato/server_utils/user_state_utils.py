@@ -15,10 +15,16 @@ import json
 import random
 import logging
 from potato.server_utils.config_module import config
-from potato.server_utils.user_annotation_state import UserAnnotationState
 import potato.state as state
+from potato.db import db
+from potato.server_utils.config_module import config
+
+from potato.db_utils.user_annotation_state_manager import (
+    UserAnnotationStateManager,
+)
 
 logger = logging.getLogger(__name__)
+user_state_manager = UserAnnotationStateManager(db)
 
 
 def lookup_user_state(username):
@@ -43,7 +49,7 @@ def lookup_user_state(username):
         else:
             # assign all the instance to each user when automatic assignment
             # is turned off
-            user_state = UserAnnotationState(state.instance_id_to_data)
+            user_state = user_state_manager.add(state.instance_id_to_data)
             state.user_to_annotation_state[username] = user_state
     else:
         user_state = state.user_to_annotation_state[username]
@@ -161,7 +167,7 @@ def load_user_state(username):
             if iid not in annotation_order:
                 annotation_order.append(iid)
 
-        user_state = UserAnnotationState(assigned_user_data)
+        user_state = user_state_manager.add(assigned_user_data)
         user_state.update(annotation_order, annotated_instances)
 
         # Make sure we keep track of the user throughout the program
@@ -182,6 +188,7 @@ def load_user_state(username):
         return "all instances have been assigned"
 
     lookup_user_state(username)
+    breakpoint()
     return "new user initialized"
 
 
@@ -206,6 +213,7 @@ def assign_instances_to_user(username):
     Assign instances to a user
     :return: UserAnnotationState
     """
+    breakpoint()
     user_state = state.user_to_annotation_state[username]
 
     # check if the user has already been assigned with instances to annotate
@@ -254,6 +262,7 @@ def assign_instances_to_user(username):
 
     assigned_user_data = {key: state.instance_id_to_data[key] for key in sampled_keys}
     user_state.add_new_assigned_data(assigned_user_data)
+    breakpoint()
 
     print(
         "assinged %d instances to %s, total pages: %s"
