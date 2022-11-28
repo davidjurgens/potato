@@ -18,14 +18,18 @@ from sklearn.pipeline import Pipeline
 import krippendorff
 
 import flask
-from flask import Flask, render_template, request, current_app
+from flask import render_template, request, current_app
 from bs4 import BeautifulSoup
 
 from potato.create_task_cli import create_task_cli, yes_or_no
 from potato.app import create_app, db
 from potato.server_utils.arg_utils import arguments
-from potato.server_utils.config_module import init_config, config
-from potato.server_utils.front_end import generate_site, generate_surveyflow_pages, get_displayed_text
+from potato.server_utils.config_module import init_config, config, validate_config
+from potato.server_utils.front_end import (
+    generate_site,
+    generate_surveyflow_pages,
+    get_displayed_text,
+)
 from potato.server_utils.prestudy import convert_labels
 from potato.server_utils.schemas.span import render_span_annotations
 import potato.state as state
@@ -79,20 +83,25 @@ COLOR_PALETTE = [
 ]
 
 
+if os.environ.get("UNDER_TEST"):
+    from types import SimpleNamespace
 
-if __name__ == "__main__":
-    args = arguments()
-    init_config(args)
-    if config.get("verbose"):
-        logger.setLevel(logging.DEBUG)
-    if config.get("very_verbose"):
-        logger.setLevel(logging.NOTSET)
-
-    app, user_manager, user_state_manager = create_app(config)
-
+    args = SimpleNamespace(
+        config_file=os.path.join(POTATO_HOME, "tests/test_project/config.yaml"),
+        verbose=False,
+        very_verbose=False,
+        debug=False,
+    )
 else:
-    app = Flask(__name__)
+    args = arguments()
 
+init_config(args)
+if config.get("verbose"):
+    logger.setLevel(logging.DEBUG)
+if config.get("very_verbose"):
+    logger.setLevel(logging.NOTSET)
+
+app, user_manager, user_state_manager = create_app(config)
 
 
 class ActiveLearningState:
@@ -598,7 +607,6 @@ def previous_response(user, file_path):
             f.write(line)
 
 
-
 @app.route("/annotate", methods=["GET", "POST"])
 def annotate_page(username=None, action=None):
     """
@@ -665,7 +673,6 @@ def annotate_page(username=None, action=None):
             user_state_manager.dump_user_state_to_file(username)
             user_state_manager.dump_annotations_to_file()
 
-
     # AJYL: Note that action can still be None, if "src" not in request.form.
     # Not sure if this is intended.
     action = request.form.get("src") if action is None else action
@@ -698,6 +705,7 @@ def annotate_page(username=None, action=None):
     # directly display the prepared displayed_text
     instance_id = instance[id_key]
     text = instance["displayed_text"]
+    breakpoint()
 
     # also save the displayed text in the metadata dict
     # state.instance_id_to_data[instance_id]['displayed_text'] = text
@@ -719,6 +727,7 @@ def annotate_page(username=None, action=None):
     span_annotations = user_state_manager.get_span_annotations_for_user_on(username, instance_id)
     if span_annotations is not None and len(span_annotations) > 0:
         # Mark up the instance text where the annotated spans were
+        breakpoint()
         text = render_span_annotations(text, span_annotations)
 
     # If the admin has specified that certain keywords need to be highlighted,
@@ -1228,7 +1237,6 @@ def run_create_task_cli():
         else:
             # Probably need to launch the Flask server to accept form inputs
             raise Exception("Gui-based design not supported yet.")
-
 
 
 def main():

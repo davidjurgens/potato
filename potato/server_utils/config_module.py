@@ -4,7 +4,7 @@ Config module.
 from typing import Mapping, List, Any, Union
 import os
 import yaml
-from constants import POTATO_HOME
+from potato.constants import POTATO_HOME
 
 
 config = {}

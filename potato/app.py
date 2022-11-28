@@ -13,6 +13,7 @@ from potato.db_utils.user_manager import UserManager
 from potato.db_utils.user_annotation_state_manager import UserAnnotationStateManager
 from potato.constants import POTATO_HOME
 
+
 def create_app(config):
     """ App factory """
     app = Flask(__name__)

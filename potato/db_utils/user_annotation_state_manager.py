@@ -409,11 +409,11 @@ class UserAnnotationStateManager:
                     # Columns for each label-based annotation
                     for schema, label_vals in annotations["labels"].items():
                         for label in label_vals.keys():
-                            schema_to_labels[schema]._add(label)
+                            schema_to_labels[schema].add(label)
 
                     # Columns for each span type too
                     for span in annotations["spans"]:
-                        span_labels._add(span["annotation"])
+                        span_labels.add(span["annotation"])
 
                     # TODO: figure out what's in the behavioral dict and how to format it
 

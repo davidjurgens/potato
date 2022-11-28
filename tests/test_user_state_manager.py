@@ -46,10 +46,17 @@ class TestUserAnnotationStateManager:
         with open(config_filepath, "r") as file_p:
             config = yaml.safe_load(file_p)
 
-        db_path = os.path.join(POTATO_HOME, config["db_path"])
-        shutil.copy(INIT_DB_PATH, db_path)
+        cls.db_path = os.path.join(POTATO_HOME, config["db_path"])
+        shutil.copy(INIT_DB_PATH, cls.db_path)
         cls.app, cls.user_manager, cls.user_state_manager = create_app(config)
         cls.data = load_data(config["data_files"][0])
+
+    @classmethod
+    def teardown_class(cls):
+        """
+        tear down test instance.
+        """
+        os.remove(cls.db_path)
 
     def test_initial_state(self):
         """

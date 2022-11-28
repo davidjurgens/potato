@@ -33,8 +33,7 @@ class TestUserManager:
 
         cls.db_path = os.path.join(POTATO_HOME, config["db_path"])
         shutil.copy(INIT_DB_PATH, cls.db_path)
-        cls.app = create_app(cls.db_path)
-        cls.user_manager = UserManager(db)
+        cls.app, cls.user_manager, cls.user_state_manager = create_app(config)
 
     @classmethod
     def teardown_class(cls):
