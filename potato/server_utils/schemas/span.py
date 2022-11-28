@@ -49,8 +49,7 @@ def get_span_color(span_label):
 
     if span_label in span_ui["span_colors"]:
         return span_ui["span_colors"][span_label]
-    else:
-        return None
+    return None
 
 
 def set_span_color(span_label, color):
@@ -81,7 +80,7 @@ def set_span_color(span_label, color):
 
 
 def render_span_annotations(text, span_annotations):
-    """    
+    """
     Retuns a modified version of the text with span annotation overlays inserted
     into the text.
 
@@ -100,7 +99,9 @@ def render_span_annotations(text, span_annotations):
     # We need to go in reverse order to make the string update in the right
     # places, so make sure things are ordered in reverse of start
 
-    rev_order_sa = sorted(span_annotations, key=lambda d: d["start"], reverse=True)
+    rev_order_sa = sorted(
+        span_annotations, key=lambda d: d["start"], reverse=True
+    )
 
     ann_wrapper = (
         '<span class="span_container" selection_label="{annotation}" '
@@ -110,19 +111,26 @@ def render_span_annotations(text, span_annotations):
         + 'style="background-color:white;border:2px solid rgb{color};">'
         + "{annotation}</div></span>"
     )
-    for a in rev_order_sa:
+    for span_annotation in rev_order_sa:
 
         # Spans are colored according to their order in the list and we need to
         # retrofit the color
-        color = get_span_color(a["annotation"])
+        color = get_span_color(span_annotation["annotation"])
         # The color is an RGB triple like (1,2,3) and we want the background for
         # the text to be somewhat transparent so we switch to RGBA for bg
         bg_color = color.replace(")", ",0.25)")
 
         ann = ann_wrapper.format(
-            annotation=a["annotation"], span=a["span"], color=color, bg_color=bg_color
+            annotation=span_annotation["annotation"],
+            span=span_annotation["span"],
+            color=color,
+            bg_color=bg_color,
         )
-        text = text[: a["start"]] + ann + text[a["end"] :]
+        text = (
+            text[: span_annotation["start"]]
+            + ann
+            + text[span_annotation["end"] :]
+        )
 
     return text
 
@@ -133,7 +141,7 @@ def generate_span_layout(annotation_scheme, horizontal=False):
     returns the HTML code
     """
     # when horizontal is specified in the annotation_scheme, set horizontal = True
-    if "horizontal" in annotation_scheme and annotation_scheme["horizontal"]:
+    if annotation_scheme.get("horizontal"):
         horizontal = True
 
     schematic = (
@@ -147,17 +155,11 @@ def generate_span_layout(annotation_scheme, horizontal=False):
     label2key = {}
     key_bindings = []
 
-    # setting up label validation for each label, if "required" is True, the annotators will be asked to finish the current instance to proceed
-    validation = ""
-    label_requirement = (
-        annotation_scheme["label_requirement"] if "label_requirement" in annotation_scheme else None
-    )
-    if label_requirement and ("required" in label_requirement) and label_requirement["required"]:
-        validation = "required"
-
     for i, label_data in enumerate(annotation_scheme["labels"], 1):
 
-        label = label_data if isinstance(label_data, str) else label_data["name"]
+        label = (
+            label_data if isinstance(label_data, str) else label_data["name"]
+        )
 
         name = annotation_scheme["name"] + ":::" + label
         class_name = annotation_scheme["name"]
@@ -172,7 +174,6 @@ def generate_span_layout(annotation_scheme, horizontal=False):
         # somewhere so that we can render them in the colored instances later in
         # render_span_annotations(). The config object seems like a reasonable
         # place to do since it's global and the colors are persistent
-        config["ui"]
 
         tooltip = ""
         if isinstance(label_data, Mapping):
@@ -212,7 +213,10 @@ def generate_span_layout(annotation_scheme, horizontal=False):
             label2key[label] = key_value
             key_bindings.append((key_value, class_name + ": " + label))
 
-        if "displaying_score" in annotation_scheme and annotation_scheme["displaying_score"]:
+        if (
+            "displaying_score" in annotation_scheme
+            and annotation_scheme["displaying_score"]
+        ):
             label_content = label_data["key_value"] + "." + label
         else:
             label_content = label

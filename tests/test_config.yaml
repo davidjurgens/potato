@@ -1,9 +1,7 @@
 {
     "port": 9001,
-
     "server_name": "potato annotator",
-
-    "annotation_task_name": "Dialogue Analysis",
+    "annotation_task_name": "Tests",
 
     # Potato will write the annotation file for all annotations to this
     # directory, as well as per-annotator output files and state information
@@ -21,22 +19,16 @@
     # If annotators are using a codebook, this will be linked at the top to the
     # instance for easy access
     "annotation_codebook_url": "",
-
     "data_files": [
-       "example-projects/dialogue_analysis/data_files/dialogue-example.json"
+       "example-projects/dialogue_analysis/data_files/dialogue-example.jsonl"
     ],
-
     "item_properties": {
         "id_key": "id",
         "text_key": "text",
         "context_key": "context"
     },
-
-
     "user_config": {
-
       "allow_all_users": True,
-      
       "users": [  ],
     },
 
@@ -49,7 +41,6 @@
     # How many seconds do you want the annotators spend on each instance, after
     # that, an alert will be sent per alert_time_each_instance seconds.
     "alert_time_each_instance": 10000000,
-
     "annotation_schemes": [
         {
           "annotation_type": "highlight",
@@ -98,6 +89,4 @@
 
     # This is where the actual HTML files will be generated
     "site_dir": "potato/templates/",
-    "db_path": "example-projects/dialogue_analysis/database.db"
-
 }

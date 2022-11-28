@@ -9,7 +9,6 @@ import random
 import json
 from collections import deque, defaultdict, Counter, OrderedDict
 from itertools import zip_longest
-import string
 import threading
 
 import numpy as np
@@ -19,32 +18,23 @@ from sklearn.pipeline import Pipeline
 import krippendorff
 
 import flask
-from flask import Flask, render_template, request
+from flask import render_template, request, current_app
 from bs4 import BeautifulSoup
 
-from create_task_cli import create_task_cli, yes_or_no
-from server_utils.annotation_state_utils import (
-    get_span_annotations_for_user_on,
-    get_total_annotations,
-    get_annotations_for_user_on,
-    save_all_annotations,
-    update_annotation_state,
+from potato.create_task_cli import create_task_cli, yes_or_no
+from potato.app import create_app, db
+from potato.server_utils.arg_utils import arguments
+from potato.server_utils.config_module import init_config, config, validate_config
+from potato.server_utils.front_end import (
+    generate_site,
+    generate_surveyflow_pages,
+    get_displayed_text,
 )
-from server_utils.arg_utils import arguments
-from server_utils.config_module import init_config, config
-from server_utils.front_end import generate_site, generate_surveyflow_pages
-from server_utils.prestudy import convert_labels
-from server_utils.schemas.span import render_span_annotations
-from server_utils.user_config import UserConfig
-from server_utils.user_state_utils import (
-    lookup_user_state,
-    save_user_state,
-    load_user_state,
-    move_to_prev_instance,
-    move_to_next_instance,
-    go_to_id,
-)
-import state
+from potato.server_utils.prestudy import convert_labels
+from potato.server_utils.schemas.span import render_span_annotations
+import potato.state as state
+from potato.constants import POTATO_HOME
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -60,7 +50,6 @@ user_response_dicts_queue = defaultdict(deque)
 
 
 # path to save user information
-USER_CONFIG_PATH = "potato/user_config.json"
 DEFAULT_LABELS_PER_INSTANCE = 3
 
 
@@ -93,7 +82,26 @@ COLOR_PALETTE = [
     "rgb(179, 179, 179)",
 ]
 
-app = Flask(__name__)
+
+if os.environ.get("UNDER_TEST"):
+    from types import SimpleNamespace
+
+    args = SimpleNamespace(
+        config_file=os.path.join(POTATO_HOME, "tests/test_project/config.yaml"),
+        verbose=False,
+        very_verbose=False,
+        debug=False,
+    )
+else:
+    args = arguments()
+
+init_config(args)
+if config.get("verbose"):
+    logger.setLevel(logging.DEBUG)
+if config.get("very_verbose"):
+    logger.setLevel(logging.NOTSET)
+
+app, user_manager, user_state_manager = create_app(config)
 
 
 class ActiveLearningState:
@@ -479,8 +487,6 @@ def write_data(username):
 
 @app.route("/")
 def home():
-    global user_config
-
     if config["__debug__"]:
         print("debug user logging in")
         return annotate_page("debug_user", action="home")
@@ -492,16 +498,13 @@ def home():
             username = request.args.get(url_argument)
             print("url direct logging in with %s" % url_argument)
             return annotate_page(username, action="home")
-        print("password logging in")
-        return render_template("home.html", title=config["annotation_task_name"])
+
     print("password logging in")
     return render_template("home.html", title=config["annotation_task_name"])
 
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    global user_config
-
     if config["__debug__"]:
         action = "login"
         username = "debug_user"
@@ -517,14 +520,17 @@ def login():
         password = request.form.get("pass")
 
     if action == "login":
-        if (
-            config["__debug__"]
-            or ("login" in config and config["login"]["type"] == "url_direct")
-            or user_config.is_valid_password(username, password)
-        ):
-            # if surveyflow is setup, jump to the page before annotation
-            print("%s login successful" % username)
-            return annotate_page(username)
+
+        with current_app.app_context():
+            if (
+                config["__debug__"]
+                or ("login" in config and config["login"]["type"] == "url_direct")
+                or user_manager.is_valid_password(username, password)
+            ):
+                # if surveyflow is setup, jump to the page before annotation
+                print("%s login successful" % username)
+                return annotate_page(username)
+
         return render_template(
             "home.html",
             title=config["annotation_task_name"],
@@ -537,8 +543,6 @@ def login():
 
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
-    global user_config
-
     # TODO: add in logic for checking/hashing passwords, safe password
     # management, etc. For now just #yolo and log in people regardless.
     action = request.form.get("action")
@@ -551,23 +555,22 @@ def signup():
 
     if action == "signup":
         single_user = {"username": username, "email": email, "password": password}
-        result = user_config.add_single_user(single_user)
-        print(single_user["username"], result)
+        with current_app.app_context():
+            try:
+                user_manager.add_single_user(single_user)
+            except ValueError as err:
+                # TODO: return to the signup page and display error message
+                return render_template(
+                    "home.html",
+                    title=config["annotation_task_name"],
+                    login_error=str(err) + " Please try again or log in",
+                )
 
-        if result == "Success":
-            user_config.save_user_config()
-            return render_template(
-                "home.html",
-                title=config["annotation_task_name"],
-                login_email=username,
-                login_error="User registration success for " + username + ", please login now",
-            )
-
-        # TODO: return to the signup page and display error message
         return render_template(
             "home.html",
             title=config["annotation_task_name"],
-            login_error=result + ", please try again or log in",
+            login_email=username,
+            login_error="User registration success for " + username + ", please login now",
         )
 
     print("unknown action at home page")
@@ -585,8 +588,7 @@ def new_user():
 
 
 def get_cur_instance_for_user(username):
-    user_state = lookup_user_state(username)
-
+    user_state = user_state_manager.get_user_state(username)
     return user_state.current_instance()
 
 
@@ -605,44 +607,6 @@ def previous_response(user, file_path):
             f.write(line)
 
 
-def get_displayed_text(text):
-    # automatically unfold the text list when input text is a list (e.g. best-worst-scaling).
-    if "list_as_text" in config and config["list_as_text"]:
-        if isinstance(text, str):
-            try:
-                text = eval(text)
-            except:
-                text = str(text)
-        if isinstance(text, list):
-            if config["list_as_text"]["text_list_prefix_type"] == "alphabet":
-                prefix_list = list(string.ascii_uppercase)
-                text = [prefix_list[i] + ". " + text[i] for i in range(len(text))]
-            elif config["list_as_text"]["text_list_prefix_type"] == "number":
-                text = [str(i) + ". " + text[i] for i in range(len(text))]
-            text = "<br>".join(text)
-
-        # unfolding dict into different sections
-        elif isinstance(text, dict):
-            block = []
-            if config["list_as_text"].get("horizontal"):
-                for key in text:
-                    block.append(
-                        '<div name="instance_text" style="float:left;width:%s;padding:5px;" class="column"> <legend> %s </legend> %s </div>'
-                        % ("%d" % int(100 / len(text)) + "%", key, text[key])
-                    )
-                text = '<div class="row" style="display: table"> %s </div>' % ("".join(block))
-            else:
-                for key in text:
-                    block.append(
-                        '<div name="instance_text"> <legend> %s </legend> %s <br/> </div>'
-                        % (key, text[key])
-                    )
-                text = "".join(block)
-        else:
-            text = text
-    return text
-
-
 @app.route("/annotate", methods=["GET", "POST"])
 def annotate_page(username=None, action=None):
     """
@@ -650,8 +614,6 @@ def annotate_page(username=None, action=None):
     based on what was clicked/typed. This method is the main switch for changing
     the state of the server for this user.
     """
-    global user_config
-
     # use the provided username when the username is given
     if not username:
         if config["__debug__"]:
@@ -666,7 +628,7 @@ def annotate_page(username=None, action=None):
             username = username_from_last_page
 
     # Check if the user is authorized. If not, go to the login page
-    # if not user_config.is_valid_username(username):
+    # if not user_manager.username_is_available(username):
     #    return render_template("home.html")
 
     # Based on what the user did to the instance, update the annotate state for
@@ -680,7 +642,7 @@ def annotate_page(username=None, action=None):
     # is running in a single thread, but it's probably good to check on this at
     # some point if we scale to having lots of concurrent users.
     if "instance_id" in request.form:
-        did_change = update_annotation_state(username, request.form)
+        did_change = user_state_manager.update_annotation_state(username, request.form)
 
         if did_change:
 
@@ -703,23 +665,21 @@ def annotate_page(username=None, action=None):
 
                 # How many total annotations do we need to have
                 update_rate = al_config["update_rate"]
-                total_annotations = get_total_annotations()
+                total_annotations = user_state_manager.get_total_annotations()
 
                 if total_annotations % update_rate == 0:
                     actively_learn()
 
-            save_user_state(username)
-
-            # Save everything in a separate thread to avoid I/O issues
-            th = threading.Thread(target=save_all_annotations)
-            th.start()
+            user_state_manager.dump_user_state_to_file(username)
+            user_state_manager.dump_annotations_to_file()
 
     # AJYL: Note that action can still be None, if "src" not in request.form.
     # Not sure if this is intended.
     action = request.form.get("src") if action is None else action
+    print("action = ", action)
 
     if action == "home":
-        result_code = load_user_state(username)
+        result_code = user_state_manager.load_user_state(username)
         if result_code == "all instances have been assigned":
             return render_template(
                 "error.html",
@@ -727,13 +687,13 @@ def annotate_page(username=None, action=None):
             )
 
     elif action == "prev_instance":
-        move_to_prev_instance(username)
+        user_state_manager.move_to_prev_instance(username)
 
     elif action == "next_instance":
-        move_to_next_instance(username)
+        user_state_manager.move_to_next_instance(username)
 
     elif action == "go_to":
-        go_to_id(username, request.form.get("go_to"))
+        user_state_manager.go_to_id(username, request.form.get("go_to"))
 
     else:
         print('unrecognized action request: "%s"' % action)
@@ -763,7 +723,7 @@ def annotate_page(username=None, action=None):
     #
     # NOTE2: We have to this here to account for any keyword highlighting before
     # the instance text gets marked up in the post-processing below
-    span_annotations = get_span_annotations_for_user_on(username, instance_id)
+    span_annotations = user_state_manager.get_span_annotations_for_user_on(username, instance_id)
     if span_annotations is not None and len(span_annotations) > 0:
         # Mark up the instance text where the annotated spans were
         text = render_span_annotations(text, span_annotations)
@@ -783,7 +743,7 @@ def annotate_page(username=None, action=None):
     for _kw in config["item_properties"].get("kwargs", []):
         kwargs[_kw] = instance[_kw]
 
-    all_statistics = lookup_user_state(username).generate_user_statistics()
+    all_statistics = user_state_manager.get_user_state(username).generate_user_statistics()
 
     # TODO: Display plots for agreement scores instead of only the overall score
     # in the statistics sidebar
@@ -806,9 +766,9 @@ def annotate_page(username=None, action=None):
         # This is what instance the user is currently on
         instance=text,
         instance_obj=instance,
-        instance_id=lookup_user_state(username).get_instance_cursor(),
-        finished=lookup_user_state(username).get_instance_cursor(),
-        total_count=lookup_user_state(username).get_assigned_instance_count(),
+        instance_id=user_state_manager.get_user_state(username).get_instance_cursor(),
+        finished=user_state_manager.get_user_state(username).get_instance_cursor(),
+        total_count=user_state_manager.get_user_state(username).get_assigned_instance_count(),
         alert_time_each_instance=config["alert_time_each_instance"],
         statistics_nav=all_statistics,
         **kwargs
@@ -849,7 +809,7 @@ def annotate_page(username=None, action=None):
 
     # If the user has annotated this before, walk the DOM and fill out what they
     # did
-    annotations = get_annotations_for_user_on(username, instance_id)
+    annotations = user_state_manager.get_annotations_for_user_on(username, instance_id)
     if annotations is not None:
         # Reset the state
         for schema, labels in annotations.items():
@@ -1225,53 +1185,17 @@ def resolve(annotations, strategy):
     raise Exception('Unknonwn annotation resolution strategy: "%s"' % (strategy))
 
 
-def run_create_task_cli():
-    """
-    Run create_task_cli().
-    """
-    if yes_or_no("Launch task creation process?"):
-        if yes_or_no("Launch on command line?"):
-            create_task_cli()
-        else:
-            # Probably need to launch the Flask server to accept form inputs
-            raise Exception("Gui-based design not supported yet.")
-
-
 def run_server():
     """
     Run Flask server.
     """
-    global user_config
-
-    args = arguments()
-    init_config(args)
-    if config.get("verbose"):
-        logger.setLevel(logging.DEBUG)
-    if config.get("very_verbose"):
-        logger.setLevel(logging.NOTSET)
-
-    user_config = UserConfig(USER_CONFIG_PATH)
-
-    # Jiaxin: commenting the following lines since we will have a seperate
-    #        user_config file to save user info.  This is necessary since we
-    #        cannot directly write to the global config file for user
-    #        registration
-    """
-    user_config_data = config['user_config']
-    if 'allow_all_users' in user_config_data:
-        user_config.allow_all_users = user_config_data['allow_all_users']
-
-        if 'users' in user_config_data:       
-            for user in user_config_data["users"]:
-                username = user['firstname'] + '_' + user['lastname']
-                user_config.add_user(username)
-    """
-
     # Creates the templates we'll use in flask by mashing annotation
     # specification on top of the proto-templates
     generate_site(config)
     if "surveyflow" in config and config["surveyflow"]["on"]:
         generate_surveyflow_pages(config)
+
+    validate_config(config)
 
     # Generate the output directory if it doesn't exist yet
     if not os.path.exists(config["output_annotation_dir"]):
@@ -1287,7 +1211,8 @@ def run_server():
         if os.path.isdir(config["output_annotation_dir"] + f)
     ]
     for user in users_with_annotations:
-        load_user_state(user)
+        with app.app_context():
+            user_state_manager.load_user_state(user)
 
     # TODO: load previous annotation state
     # load_annotation_state(config)
@@ -1298,6 +1223,18 @@ def run_server():
     port = args.port or config.get("port", DEFAULT_PORT)
     print("running at:\nlocalhost:" + str(port))
     app.run(debug=args.very_verbose, host="0.0.0.0", port=port)
+
+
+def run_create_task_cli():
+    """
+    Run create_task_cli().
+    """
+    if yes_or_no("Launch task creation process?"):
+        if yes_or_no("Launch on command line?"):
+            create_task_cli()
+        else:
+            # Probably need to launch the Flask server to accept form inputs
+            raise Exception("Gui-based design not supported yet.")
 
 
 def main():
