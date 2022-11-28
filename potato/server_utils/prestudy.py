@@ -2,9 +2,9 @@
 Utility functions surrounding pre-study.
 """
 
-from server_utils.config_module import config
-from server_utils.user_state_utils import lookup_user_state, assign_instances_to_user
-import state
+from potato.server_utils.config_module import config
+from potato.server_utils.user_state_utils import lookup_user_state, assign_instances_to_user
+import potato.state as state
 
 
 def convert_labels(annotation, schema_type):
