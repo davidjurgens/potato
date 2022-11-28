@@ -2,16 +2,14 @@
 Interface for user db.
 """
 from typing import Mapping
-from potato.db_utils.models import User
+from potato.db_utils.models.user import User
 
 
 class UserManager:
-    def __init__(self, db, prefetch=False):
+    def __init__(self, db):
         self.db = db
         self.allow_all_users = False
         self.required_info = ["username", "email", "password"]
-        if prefetch:
-            self.users = self._get_all_users()
 
     def add_single_user(self, new_user: Mapping):
         """
@@ -32,7 +30,7 @@ class UserManager:
         self.db.session.add(user)
         self.db.session.commit()
 
-    def is_valid_username(self, username: str):
+    def username_is_available(self, username: str):
         """
         Check if username already exists.
         """

@@ -19,25 +19,25 @@ from sklearn.pipeline import Pipeline
 import krippendorff
 
 import flask
-from flask import render_template, request, current_app
+from flask import Flask, render_template, request, current_app
 from bs4 import BeautifulSoup
 
-from create_task_cli import create_task_cli, yes_or_no
-from server_utils.annotation_state_utils import (
+from potato.create_task_cli import create_task_cli, yes_or_no
+from potato.server_utils.annotation_state_utils import (
     get_span_annotations_for_user_on,
     get_total_annotations,
     get_annotations_for_user_on,
     save_all_annotations,
     update_annotation_state,
 )
-from app import create_app, db
-from db_utils.user_manager import UserManager
-from server_utils.arg_utils import arguments
-from server_utils.config_module import init_config, config
-from server_utils.front_end import generate_site, generate_surveyflow_pages
-from server_utils.prestudy import convert_labels
-from server_utils.schemas.span import render_span_annotations
-from server_utils.user_state_utils import (
+from potato.app import create_app, db
+from potato.db_utils.user_manager import UserManager
+from potato.server_utils.arg_utils import arguments
+from potato.server_utils.config_module import init_config, config
+from potato.server_utils.front_end import generate_site, generate_surveyflow_pages
+from potato.server_utils.prestudy import convert_labels
+from potato.server_utils.schemas.span import render_span_annotations
+from potato.server_utils.user_state_utils import (
     lookup_user_state,
     save_user_state,
     load_user_state,
@@ -45,7 +45,7 @@ from server_utils.user_state_utils import (
     move_to_next_instance,
     go_to_id,
 )
-import state
+import potato.state as state
 
 POTATO_HOME = os.environ.get("POTATO_HOME")
 
@@ -97,15 +97,19 @@ COLOR_PALETTE = [
 
 
 
-args = arguments()
-init_config(args)
-if config.get("verbose"):
-    logger.setLevel(logging.DEBUG)
-if config.get("very_verbose"):
-    logger.setLevel(logging.NOTSET)
+if __name__ == "__main__":
+    args = arguments()
+    init_config(args)
+    if config.get("verbose"):
+        logger.setLevel(logging.DEBUG)
+    if config.get("very_verbose"):
+        logger.setLevel(logging.NOTSET)
 
+    app = create_app(os.path.join(POTATO_HOME, config["db_path"]))
 
-app = create_app(os.path.join(POTATO_HOME, config["db_path"]))
+else:
+    app = Flask(__name__)
+
 user_manager = UserManager(db)
 
 
@@ -672,7 +676,7 @@ def annotate_page(username=None, action=None):
             username = username_from_last_page
 
     # Check if the user is authorized. If not, go to the login page
-    # if not user_manager.is_valid_username(username):
+    # if not user_manager.username_is_available(username):
     #    return render_template("home.html")
 
     # Based on what the user did to the instance, update the annotate state for

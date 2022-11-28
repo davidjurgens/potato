@@ -14,9 +14,9 @@ import os
 import json
 import random
 import logging
-import state
-from server_utils.config_module import config
-from server_utils.user_annotation_state import UserAnnotationState
+from potato.server_utils.config_module import config
+from potato.server_utils.user_annotation_state import UserAnnotationState
+import potato.state as state
 
 logger = logging.getLogger(__name__)
 

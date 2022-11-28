@@ -1,0 +1,4 @@
+user	instance_id	displayed_text	sentiment:::neutral	sentiment:::positive	sentiment:::negative	span_annotation:::uncertain	span_annotation:::certain
+zxcv@zxcv.com	5	E: one two three.<br>F: 1, 2, 3.			true	[]	[]
+zxcv@zxcv.com	6	G: Happy thanksgiving.<br>H: Merry Christmas.			true	[]	[]
+zxcv@zxcv.com	3	A: I like potatos.<br>B: Me too!		true		[]	[]
