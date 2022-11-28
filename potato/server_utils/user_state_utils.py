@@ -14,9 +14,9 @@ import os
 import json
 import random
 import logging
-import state
-from server_utils.config_module import config
-from server_utils.user_annotation_state import UserAnnotationState
+from potato.server_utils.config_module import config
+from potato.server_utils.user_annotation_state import UserAnnotationState
+import potato.state as state
 
 logger = logging.getLogger(__name__)
 
@@ -450,6 +450,9 @@ def instances_all_assigned():
     """
     Check if all instances are assigned.
     """
-    return len(state.task_assignment.get("unassigned", [])) <= int(
+    if "unassigned" not in state.task_assignment:
+        return False
+
+    return len(state.task_assignment["unassigned"]) <= int(
         config["automatic_assignment"]["instance_per_annotator"] * 0.7
     )
