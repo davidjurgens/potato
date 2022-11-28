@@ -169,21 +169,33 @@ class UserAnnotationState(db.Model):
         """
         Returns the label-based annotations for the instance.
         """
-        if instance_id not in self.instance_id_to_labeling:
-            return None
         # NB: Should this be a view/copy?
-        return self.instance_id_to_labeling[instance_id]
+        return self.instance_id_to_labeling.get(instance_id)
 
     def get_span_annotations(self, instance_id):
         """
         Returns the span annotations for this instance.
         """
-        if instance_id not in self.instance_id_to_span_annotations:
-            return None
         # NB: Should this be a view/copy?
-        return self.instance_id_to_span_annotations[instance_id]
+        return self.instance_id_to_span_annotations.get(instance_id)
 
     def get_annotation_count(self):
+        """
+        Get annotation count.
+        """
+        # TODO: This function does not take into consideration the case when
+        # there are different annotations for labels and spans.
+        # ex: label: {"1": True, "2": False}, spans: {"1": [...]}
+        # Then the total count of annotations should be 2 ("1" and "2").
+        # However, it will currently return 3 ("1", "2", "1").
+        # 2) Secondly, using the same example as above, there is no
+        # span annotation for instance "2". However, when dumping data
+        # to file, these missing holes are filled in.
+        # (see db_utils.models.user_annotation_state.get_all_annotations())
+        # Therefore in the annotations file, the span annotations will show
+        # up as {"1": [...], "2": []}. Because these files were used to
+        # initialize our test db, these holes will show up in our db, which
+        # should not be counted towards the total annotation count.
         return len(self.instance_id_to_labeling) + len(
             self.instance_id_to_span_annotations
         )
@@ -195,7 +207,6 @@ class UserAnnotationState(db.Model):
         if not self.prestudy_passed:
             return False
         self.prestudy_passed = whether_passed
-        db.session.commit()
         return True
 
     def get_prestudy_status(self):
@@ -271,7 +282,6 @@ class UserAnnotationState(db.Model):
                 annotated_instances[-1]["id"]
             ]
 
-        db.session.commit()
 
     def _reorder_remaining_instances(self, new_id_order, preserve_order):
         """
@@ -296,6 +306,10 @@ class UserAnnotationState(db.Model):
         self.instance_id_to_order = _generate_id_order_mapping(
             self.instance_id_ordering
         )
+
+        # TODO (AJYL)
+        # This commit should be done by UserAnnotationStateManager,
+        # but it's not clear where this function is being called.
         db.session.commit()
 
 

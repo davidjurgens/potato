@@ -9,7 +9,6 @@ import random
 import json
 from collections import deque, defaultdict, Counter, OrderedDict
 from itertools import zip_longest
-import string
 import threading
 
 import numpy as np
@@ -26,7 +25,7 @@ from potato.create_task_cli import create_task_cli, yes_or_no
 from potato.app import create_app, db
 from potato.server_utils.arg_utils import arguments
 from potato.server_utils.config_module import init_config, config
-from potato.server_utils.front_end import generate_site, generate_surveyflow_pages
+from potato.server_utils.front_end import generate_site, generate_surveyflow_pages, get_displayed_text
 from potato.server_utils.prestudy import convert_labels
 from potato.server_utils.schemas.span import render_span_annotations
 import potato.state as state
@@ -599,43 +598,6 @@ def previous_response(user, file_path):
             f.write(line)
 
 
-def get_displayed_text(text):
-    # automatically unfold the text list when input text is a list (e.g. best-worst-scaling).
-    if "list_as_text" in config and config["list_as_text"]:
-        if isinstance(text, str):
-            try:
-                text = eval(text)
-            except:
-                text = str(text)
-        if isinstance(text, list):
-            if config["list_as_text"]["text_list_prefix_type"] == "alphabet":
-                prefix_list = list(string.ascii_uppercase)
-                text = [prefix_list[i] + ". " + text[i] for i in range(len(text))]
-            elif config["list_as_text"]["text_list_prefix_type"] == "number":
-                text = [str(i) + ". " + text[i] for i in range(len(text))]
-            text = "<br>".join(text)
-
-        # unfolding dict into different sections
-        elif isinstance(text, dict):
-            block = []
-            if config["list_as_text"].get("horizontal"):
-                for key in text:
-                    block.append(
-                        '<div name="instance_text" style="float:left;width:%s;padding:5px;" class="column"> <legend> %s </legend> %s </div>'
-                        % ("%d" % int(100 / len(text)) + "%", key, text[key])
-                    )
-                text = '<div class="row" style="display: table"> %s </div>' % ("".join(block))
-            else:
-                for key in text:
-                    block.append(
-                        '<div name="instance_text"> <legend> %s </legend> %s <br/> </div>'
-                        % (key, text[key])
-                    )
-                text = "".join(block)
-        else:
-            text = text
-    return text
-
 
 @app.route("/annotate", methods=["GET", "POST"])
 def annotate_page(username=None, action=None):
@@ -700,8 +662,8 @@ def annotate_page(username=None, action=None):
                 if total_annotations % update_rate == 0:
                     actively_learn()
 
-            user_state_manager.save_user_state(username)
-            user_state_manager.save_all_annotations()
+            user_state_manager.dump_user_state_to_file(username)
+            user_state_manager.dump_annotations_to_file()
 
 
     # AJYL: Note that action can still be None, if "src" not in request.form.
@@ -1216,18 +1178,6 @@ def resolve(annotations, strategy):
     raise Exception('Unknonwn annotation resolution strategy: "%s"' % (strategy))
 
 
-def run_create_task_cli():
-    """
-    Run create_task_cli().
-    """
-    if yes_or_no("Launch task creation process?"):
-        if yes_or_no("Launch on command line?"):
-            create_task_cli()
-        else:
-            # Probably need to launch the Flask server to accept form inputs
-            raise Exception("Gui-based design not supported yet.")
-
-
 def run_server():
     """
     Run Flask server.
@@ -1266,6 +1216,19 @@ def run_server():
     port = args.port or config.get("port", DEFAULT_PORT)
     print("running at:\nlocalhost:" + str(port))
     app.run(debug=args.very_verbose, host="0.0.0.0", port=port)
+
+
+def run_create_task_cli():
+    """
+    Run create_task_cli().
+    """
+    if yes_or_no("Launch task creation process?"):
+        if yes_or_no("Launch on command line?"):
+            create_task_cli()
+        else:
+            # Probably need to launch the Flask server to accept form inputs
+            raise Exception("Gui-based design not supported yet.")
+
 
 
 def main():

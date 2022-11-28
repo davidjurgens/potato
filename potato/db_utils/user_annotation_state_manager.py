@@ -92,18 +92,6 @@ class UserAnnotationStateManager:
         self.db = db
         self.config = config
 
-    def add(self, username, assigned_user_data):
-        """
-        Add user annotation state.
-        """
-        user_annotation_state = UserAnnotationState(
-            username, assigned_user_data
-        )
-
-        self.db.session.add(user_annotation_state)
-        self.db.session.commit()
-        return user_annotation_state
-
     def get_user_state(self, username):
         """
         Returns the UserAnnotationState for a user, or if that user has not yet
@@ -124,20 +112,20 @@ class UserAnnotationStateManager:
         ):
             # assign instances to new user when automatic assignment is on.
             if "prestudy" in self.config and self.config["prestudy"]["on"]:
-                user_state = self.add(
+                user_state = self._add(
                     username, generate_initial_user_dataflow(username)
                 )
 
             else:
-                user_state = self.add(
+                user_state = self._add(
                     username, generate_initial_user_dataflow(username)
                 )
-                self.assign_instances_to_user(username)
+                self._assign_instances_to_user(username)
 
         else:
             # assign all the instance to each user when automatic assignment
             # is turned off
-            user_state = self.add(username, state.instance_id_to_data)
+            user_state = self._add(username, state.instance_id_to_data)
 
         return user_state
 
@@ -166,201 +154,16 @@ class UserAnnotationStateManager:
 
         # Old user
         user_state = self._get_user_state(username)
-        if user_state:
-            # Old user with previous annotations.
-            logger.info(
-                'Loaded %d annotations for known user "%s"'
-                % (user_state.get_annotation_count(), username)
-            )
-            return "old user loaded"
-
-        # Old user but no annotated data.
-        assigned_user_data = state.instance_id_to_data
-        annotated_instances = []
-        annotation_order = [iid for iid in assigned_user_data.keys()]
-        user_state = self.add(username, state.instance_id_to_data)
-        user_state.update(annotation_order, annotated_instances)
-        return "old user loaded with new annotation state"
-
-    def save_user_state(self, username, save_order=False):
-        """
-        Dump user state to file.
-        """
-        # Figure out where this user's data would be stored on disk
-        output_annotation_dir = self.config["output_annotation_dir"]
-
-        # NB: Do some kind of sanitizing on the username to improve security
-        user_dir = os.path.join(output_annotation_dir, username)
-
-        user_state = self.get_user_state(username)
-
-        if not os.path.exists(user_dir):
-            os.makedirs(user_dir)
-            logger.debug('Created state directory for user "%s"' % (username))
-
-        annotation_order_fname = os.path.join(user_dir, "annotation_order.txt")
-        if not os.path.exists(annotation_order_fname) or save_order:
-            with open(annotation_order_fname, "wt") as outf:
-                for inst in user_state.instance_id_ordering:
-                    # JIAXIN: output id has to be str
-                    outf.write(str(inst) + "\n")
-
-        annotated_instances_fname = os.path.join(
-            user_dir, "annotated_instances.jsonl"
-        )
-
-        with open(annotated_instances_fname, "wt") as outf:
-            for inst_id, data in user_state.get_all_annotations().items():
-                bd_dict = {}
-                if inst_id in user_state.instance_id_to_behavioral_data:
-                    bd_dict = user_state.instance_id_to_behavioral_data[
-                        inst_id
-                    ]
-
-                output = {
-                    "id": inst_id,
-                    "displayed_text": state.instance_id_to_data[inst_id][
-                        "displayed_text"
-                    ],
-                    "label_annotations": data["labels"],
-                    "span_annotations": data["spans"],
-                    "behavioral_data": bd_dict,
-                }
-                json.dump(output, outf)
-                outf.write("\n")
-
-    def _set_annotation(
-        self,
-        username,
-        instance_id,
-        schema_to_label_to_value,
-        span_annotations,
-        behavioral_data_dict,
-    ):
-        """
-        Based on a user's actions, updates the annotation for this particular instance.
-
-        :span_annotations: a list of span annotations, which are each
-          represented as dictionary objects/
-        :return: True if setting these annotation values changes the previous
-          annotation of this instance.
-
-        """
-        user_state = self._get_user_state(username)
         if not user_state:
-            raise RuntimeError("Could not find user-state for %s." % username)
+            raise RuntimeError("Could not find user-state for user %s!" % username)
 
-        # Get whatever annotations were present for this instance, or, if the
-        # item has not been annotated represent that with empty data structures
-        # so we can keep track of whether the state changes
-        old_annotation = defaultdict(dict)
-        if instance_id in user_state.instance_id_to_labeling:
-            old_annotation = user_state.instance_id_to_labeling[instance_id]
-
-        old_span_annotations = []
-        if instance_id in user_state.instance_id_to_span_annotations:
-            old_span_annotations = user_state.instance_id_to_span_annotations[
-                instance_id
-            ]
-
-        # Avoid updating with no entries
-        if len(schema_to_label_to_value) > 0:
-            user_state.instance_id_to_labeling[
-                instance_id
-            ] = schema_to_label_to_value
-
-        # If the user didn't label anything (e.g. they unselected items), then
-        # we delete the old annotation state
-        elif instance_id in user_state.instance_id_to_labeling:
-            del user_state.instance_id_to_labeling[instance_id]
-
-        # Avoid updating with no entries
-        if len(span_annotations) > 0:
-            user_state.instance_id_to_span_annotations[
-                instance_id
-            ] = span_annotations
-        # If the user didn't label anything (e.g. they unselected items), then
-        # we delete the old annotation state
-        elif instance_id in user_state.instance_id_to_span_annotations:
-            del user_state.instance_id_to_span_annotations[instance_id]
-
-        # TODO: keep track of all the annotation behaviors instead of only
-        # keeping the latest one each time when new annotation is updated,
-        # we also update the behavioral_data_dict (currently done in the
-        # update_annotation_state function)
-        did_change = (
-            old_annotation != schema_to_label_to_value
-            or old_span_annotations != span_annotations
+        # Old user with previous annotations.
+        logger.info(
+            'Loaded %d annotations for known user "%s"'
+            % (user_state.get_annotation_count(), username)
         )
-        if did_change:
-            self.db.session.commit()
+        return "old user loaded"
 
-        return did_change
-
-    def move_to_prev_instance(self, username):
-        user_state = self.get_user_state(username)
-        user_state.go_back()
-        self.db.session.commit()
-
-    def move_to_next_instance(self, username):
-        user_state = self.get_user_state(username)
-        user_state.go_forward()
-        self.db.session.commit()
-
-    def go_to_id(self, username, _id):
-        # go to specific item
-        user_state = self.get_user_state(username)
-        user_state.go_to_id(int(_id))
-        self.db.session.commit()
-
-    def _get_user_state(self, username):
-        """
-        Return UserAnnotationState for :username:
-        """
-        return UserAnnotationState.query.filter_by(username=username).first()
-
-    def _get_all_user_states(self):
-        """
-        Return UserAnnotationState for :username:
-        """
-        return UserAnnotationState.query.all()
-
-    def _get_user(self, username):
-        """
-        Return User with :username:
-        """
-        return User.query.filter_by(username=username).first()
-
-    def _get_all_users(self):
-        """
-        Return User with :username:
-        """
-        return User.query.all()
-
-    def get_total_annotations(self):
-        """
-        Returns the total number of unique annotations done across all users.
-        """
-        total = 0
-        for user_state in self._get_all_user_states():
-            total += user_state.get_annotation_count()
-        return total
-
-    def get_annotations_for_user_on(self, username, instance_id):
-        """
-        Returns the label-based annotations made by this user on the instance.
-        """
-        user_state = self.get_user_state(username)
-        annotations = user_state.get_label_annotations(instance_id)
-        return annotations
-
-    def get_span_annotations_for_user_on(self, username, instance_id):
-        """
-        Returns the span annotations made by this user on the instance.
-        """
-        user_state = self.get_user_state(username)
-        span_annotations = user_state.get_span_annotations(instance_id)
-        return span_annotations
 
     def update_annotation_state(self, username, form):
         """
@@ -449,7 +252,7 @@ class UserAnnotationStateManager:
                 if schema_to_label_to_value[consent_key].get("Yes") == "true":
                     user_state.consent_agreed = True
 
-                self.assign_instances_to_user(username)
+                self._assign_instances_to_user(username)
 
             # when the user is working on prestudy, check the status
             if re.search("prestudy", instance_id):
@@ -458,7 +261,95 @@ class UserAnnotationStateManager:
         self.db.session.commit()
         return did_change
 
-    def save_all_annotations(self):
+    def get_total_annotations(self):
+        """
+        Returns the total number of unique annotations done across all users.
+        """
+        total = 0
+        for user_state in self._get_all_user_states():
+            total += user_state.get_annotation_count()
+        return total
+
+    def get_annotations_for_user_on(self, username, instance_id):
+        """
+        Returns the label-based annotations made by this user on the instance.
+        """
+        user_state = self.get_user_state(username)
+        annotations = user_state.get_label_annotations(instance_id)
+        return annotations
+
+    def get_span_annotations_for_user_on(self, username, instance_id):
+        """
+        Returns the span annotations made by this user on the instance.
+        """
+        user_state = self.get_user_state(username)
+        span_annotations = user_state.get_span_annotations(instance_id)
+        return span_annotations
+
+    def move_to_prev_instance(self, username):
+        user_state = self.get_user_state(username)
+        user_state.go_back()
+        self.db.session.commit()
+
+    def move_to_next_instance(self, username):
+        user_state = self.get_user_state(username)
+        user_state.go_forward()
+        self.db.session.commit()
+
+    def go_to_id(self, username, _id):
+        # go to specific item
+        user_state = self.get_user_state(username)
+        user_state.go_to_id(int(_id))
+        self.db.session.commit()
+
+    def dump_user_state_to_file(self, username, save_order=False):
+        """
+        Dump user state to file.
+        """
+        # Figure out where this user's data would be stored on disk
+        output_annotation_dir = self.config["output_annotation_dir"]
+
+        # NB: Do some kind of sanitizing on the username to improve security
+        user_dir = os.path.join(output_annotation_dir, username)
+
+        user_state = self.get_user_state(username)
+
+        if not os.path.exists(user_dir):
+            os.makedirs(user_dir)
+            logger.debug('Created state directory for user "%s"' % (username))
+
+        annotation_order_fname = os.path.join(user_dir, "annotation_order.txt")
+        if not os.path.exists(annotation_order_fname) or save_order:
+            with open(annotation_order_fname, "wt") as outf:
+                for inst in user_state.instance_id_ordering:
+                    # JIAXIN: output id has to be str
+                    outf.write(str(inst) + "\n")
+
+        annotated_instances_fname = os.path.join(
+            user_dir, "annotated_instances.jsonl"
+        )
+
+        with open(annotated_instances_fname, "wt") as outf:
+            for inst_id, data in user_state.get_all_annotations().items():
+                bd_dict = {}
+                if inst_id in user_state.instance_id_to_behavioral_data:
+                    bd_dict = user_state.instance_id_to_behavioral_data[
+                        inst_id
+                    ]
+
+                output = {
+                    "id": inst_id,
+                    "displayed_text": state.instance_id_to_data[inst_id][
+                        "displayed_text"
+                    ],
+                    "label_annotations": data["labels"],
+                    "span_annotations": data["spans"],
+                    "behavioral_data": bd_dict,
+                }
+                json.dump(output, outf)
+                outf.write("\n")
+
+    def dump_annotations_to_file(self):
         # Figure out where this user's data would be stored on disk
         output_annotation_dir = config["output_annotation_dir"]
         fmt = config["output_annotation_format"]
@@ -518,11 +409,11 @@ class UserAnnotationStateManager:
                     # Columns for each label-based annotation
                     for schema, label_vals in annotations["labels"].items():
                         for label in label_vals.keys():
-                            schema_to_labels[schema].add(label)
+                            schema_to_labels[schema]._add(label)
 
                     # Columns for each span type too
                     for span in annotations["spans"]:
-                        span_labels.add(span["annotation"])
+                        span_labels._add(span["annotation"])
 
                     # TODO: figure out what's in the behavioral dict and how to format it
 
@@ -580,6 +471,111 @@ class UserAnnotationStateManager:
             # TODO: write the code here
             print("saved")
 
+
+    def _set_annotation(
+        self,
+        username,
+        instance_id,
+        schema_to_label_to_value,
+        span_annotations,
+        behavioral_data_dict,
+    ):
+        """
+        Based on a user's actions, updates the annotation for this particular instance.
+
+        :span_annotations: a list of span annotations, which are each
+          represented as dictionary objects/
+        :return: True if setting these annotation values changes the previous
+          annotation of this instance.
+
+        """
+        user_state = self._get_user_state(username)
+        if not user_state:
+            raise RuntimeError("Could not find user-state for %s." % username)
+
+        # Get whatever annotations were present for this instance, or, if the
+        # item has not been annotated represent that with empty data structures
+        # so we can keep track of whether the state changes
+        old_annotation = defaultdict(dict)
+        if instance_id in user_state.instance_id_to_labeling:
+            old_annotation = user_state.instance_id_to_labeling[instance_id]
+
+        old_span_annotations = []
+        if instance_id in user_state.instance_id_to_span_annotations:
+            old_span_annotations = user_state.instance_id_to_span_annotations[
+                instance_id
+            ]
+
+        # Avoid updating with no entries
+        if len(schema_to_label_to_value) > 0:
+            user_state.instance_id_to_labeling[
+                instance_id
+            ] = schema_to_label_to_value
+
+        # If the user didn't label anything (e.g. they unselected items), then
+        # we delete the old annotation state
+        elif instance_id in user_state.instance_id_to_labeling:
+            del user_state.instance_id_to_labeling[instance_id]
+
+        # Avoid updating with no entries
+        if len(span_annotations) > 0:
+            user_state.instance_id_to_span_annotations[
+                instance_id
+            ] = span_annotations
+        # If the user didn't label anything (e.g. they unselected items), then
+        # we delete the old annotation state
+        elif instance_id in user_state.instance_id_to_span_annotations:
+            del user_state.instance_id_to_span_annotations[instance_id]
+
+        # TODO: keep track of all the annotation behaviors instead of only
+        # keeping the latest one each time when new annotation is updated,
+        # we also update the behavioral_data_dict (currently done in the
+        # update_annotation_state function)
+        did_change = (
+            old_annotation != schema_to_label_to_value
+            or old_span_annotations != span_annotations
+        )
+        if did_change:
+            self.db.session.commit()
+
+        return did_change
+
+    def _add(self, username, assigned_user_data):
+        """
+        Add user annotation state.
+        """
+        user_annotation_state = UserAnnotationState(
+            username, assigned_user_data
+        )
+
+        self.db.session.add(user_annotation_state)
+        self.db.session.commit()
+        return user_annotation_state
+
+    def _get_user_state(self, username):
+        """
+        Return UserAnnotationState for :username:
+        """
+        return UserAnnotationState.query.filter_by(username=username).first()
+
+    def _get_all_user_states(self):
+        """
+        Return UserAnnotationState for :username:
+        """
+        return UserAnnotationState.query.all()
+
+    def _get_user(self, username):
+        """
+        Return User with :username:
+        """
+        return User.query.filter_by(username=username).first()
+
+    def _get_all_users(self):
+        """
+        Return User with :username:
+        """
+        return User.query.all()
+
     def check_prestudy_status(self, username):
         """
         Check whether a user has passed the prestudy test
@@ -622,10 +618,11 @@ class UserAnnotationStateManager:
         print_prestudy_result()
 
         # update the annotation list according the prestudy test result
-        self.assign_instances_to_user(username)
+        self._assign_instances_to_user(username)
+        self.db.session.commit()
         return prestudy_result
 
-    def assign_instances_to_user(self, username):
+    def _assign_instances_to_user(self, username):
         """
         Assign instances to a user
         :return: UserAnnotationState

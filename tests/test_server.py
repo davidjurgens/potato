@@ -5,7 +5,6 @@ Unit tests for each end point.
 import json
 from types import SimpleNamespace
 import pytest
-
 from potato.server_utils.config_module import init_config, config
 from potato.flask_server import (
     app,

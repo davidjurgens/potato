@@ -6,6 +6,7 @@ import os
 import logging
 import json
 import re
+import string
 from collections import defaultdict
 from potato.server_utils.config_module import config
 from potato.server_utils.schemas import (
@@ -54,6 +55,44 @@ def generate_schematic(annotation_scheme):
         raise Exception("unsupported annotation type: %s" % annotation_type)
 
     return annotation_func(annotation_scheme)
+
+
+def get_displayed_text(text):
+    # automatically unfold the text list when input text is a list (e.g. best-worst-scaling).
+    if "list_as_text" in config and config["list_as_text"]:
+        if isinstance(text, str):
+            try:
+                text = eval(text)
+            except:
+                text = str(text)
+        if isinstance(text, list):
+            if config["list_as_text"]["text_list_prefix_type"] == "alphabet":
+                prefix_list = list(string.ascii_uppercase)
+                text = [prefix_list[i] + ". " + text[i] for i in range(len(text))]
+            elif config["list_as_text"]["text_list_prefix_type"] == "number":
+                text = [str(i) + ". " + text[i] for i in range(len(text))]
+            text = "<br>".join(text)
+
+        # unfolding dict into different sections
+        elif isinstance(text, dict):
+            block = []
+            if config["list_as_text"].get("horizontal"):
+                for key in text:
+                    block.append(
+                        '<div name="instance_text" style="float:left;width:%s;padding:5px;" class="column"> <legend> %s </legend> %s </div>'
+                        % ("%d" % int(100 / len(text)) + "%", key, text[key])
+                    )
+                text = '<div class="row" style="display: table"> %s </div>' % ("".join(block))
+            else:
+                for key in text:
+                    block.append(
+                        '<div name="instance_text"> <legend> %s </legend> %s <br/> </div>'
+                        % (key, text[key])
+                    )
+                text = "".join(block)
+        else:
+            text = text
+    return text
 
 
 def generate_keybindings_sidebar(keybindings, horizontal=False):

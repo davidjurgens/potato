@@ -13,8 +13,8 @@ from sqlalchemy.orm import Session
 
 from potato.db_utils.models.user import User
 from potato.db_utils.models.user_annotation_state import UserAnnotationState
-from potato.flask_server import get_displayed_text
-from constants import POTATO_HOME
+from potato.server_utils.front_end import get_displayed_text
+from potato.constants import POTATO_HOME
 
 Base = declarative_base()
 
@@ -200,21 +200,20 @@ def init_db(config, user_config_path, project_dir, instance_id_to_data):
                 username, assigned_user_data
             )
             user_annotation_state.update(annotation_order, annotated_instances)
-            breakpoint()
             session.add(user_annotation_state)
             session.commit()
 
 
 def main():
-    """ Driver """
+    """ Example of how to run this script. """
 
     project_dir = os.path.join(
-        POTATO_HOME, "example-projects/dialogue_analysis"
+        POTATO_HOME, "tests/test_project/"
     )
     config_filepath = os.path.join(
-        project_dir, "configs/dialogue-analysis.yaml"
+        project_dir, "configs/config.yaml"
     )
-    user_config_path = os.path.join(POTATO_HOME, "potato/user_config.json")
+    user_config_path = os.path.join(project_dir, "user_config.json")
 
     with open(config_filepath, "r") as file_p:
         config = yaml.safe_load(file_p)
