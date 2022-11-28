@@ -14,9 +14,19 @@ from sqlalchemy.orm import Session
 from potato.db_utils.models.user import User
 from potato.db_utils.models.user_annotation_state import UserAnnotationState
 from potato.server_utils.front_end import get_displayed_text
+from potato.server_utils.config_module import init_config, config
 from potato.constants import POTATO_HOME
 
 Base = declarative_base()
+
+from types import SimpleNamespace
+args = SimpleNamespace(
+    config_file=os.path.join(POTATO_HOME, "tests/test_project/config.yaml"),
+    verbose=False,
+    very_verbose=False,
+    debug=False,
+)
+init_config(args)
 
 
 def load_all_data(config):
@@ -210,13 +220,10 @@ def main():
     project_dir = os.path.join(
         POTATO_HOME, "tests/test_project/"
     )
-    config_filepath = os.path.join(
-        project_dir, "configs/config.yaml"
-    )
     user_config_path = os.path.join(project_dir, "user_config.json")
 
-    with open(config_filepath, "r") as file_p:
-        config = yaml.safe_load(file_p)
+    #with open(config_filepath, "r") as file_p:
+    #    config = yaml.safe_load(file_p)
 
     instance_id_to_data = load_all_data(config)
     init_db(config, user_config_path, project_dir, instance_id_to_data)

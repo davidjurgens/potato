@@ -12,6 +12,7 @@ from potato.flask_server import (
     app, user_state_manager,
     generate_site,
     load_all_data,
+    config,
 )
 from potato.constants import POTATO_HOME
 
@@ -30,10 +31,6 @@ class TestServer:
         """
         Set up config.
         """
-        config_filepath = os.path.join(PROJECT_DIR, "config.yaml")
-        with open(config_filepath, "r") as file_p:
-            config = yaml.safe_load(file_p)
-
         cls.db_path = os.path.join(POTATO_HOME, config["db_path"])
         shutil.copy(INIT_DB_PATH, cls.db_path)
 
@@ -86,7 +83,7 @@ class TestServer:
                 },
             )
 
-            test_data = self.test_data[0]
+            test_data = self.test_data[1]
             for text in test_data["text"]:
                 assert str.encode(text) in response.data
 

@@ -126,7 +126,6 @@ def render_span_annotations(text, span_annotations):
             color=color,
             bg_color=bg_color,
         )
-        breakpoint()
         text = (
             text[: span_annotation["start"]]
             + ann

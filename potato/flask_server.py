@@ -705,7 +705,6 @@ def annotate_page(username=None, action=None):
     # directly display the prepared displayed_text
     instance_id = instance[id_key]
     text = instance["displayed_text"]
-    breakpoint()
 
     # also save the displayed text in the metadata dict
     # state.instance_id_to_data[instance_id]['displayed_text'] = text
@@ -727,7 +726,6 @@ def annotate_page(username=None, action=None):
     span_annotations = user_state_manager.get_span_annotations_for_user_on(username, instance_id)
     if span_annotations is not None and len(span_annotations) > 0:
         # Mark up the instance text where the annotated spans were
-        breakpoint()
         text = render_span_annotations(text, span_annotations)
 
     # If the admin has specified that certain keywords need to be highlighted,
