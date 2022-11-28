@@ -23,28 +23,12 @@ from flask import Flask, render_template, request, current_app
 from bs4 import BeautifulSoup
 
 from potato.create_task_cli import create_task_cli, yes_or_no
-from potato.server_utils.annotation_state_utils import (
-    get_span_annotations_for_user_on,
-    get_total_annotations,
-    get_annotations_for_user_on,
-    save_all_annotations,
-    update_annotation_state,
-)
 from potato.app import create_app, db
-from potato.db_utils.user_manager import UserManager
 from potato.server_utils.arg_utils import arguments
 from potato.server_utils.config_module import init_config, config
 from potato.server_utils.front_end import generate_site, generate_surveyflow_pages
 from potato.server_utils.prestudy import convert_labels
 from potato.server_utils.schemas.span import render_span_annotations
-from potato.server_utils.user_state_utils import (
-    lookup_user_state,
-    save_user_state,
-    load_user_state,
-    move_to_prev_instance,
-    move_to_next_instance,
-    go_to_id,
-)
 import potato.state as state
 from potato.constants import POTATO_HOME
 
@@ -105,12 +89,11 @@ if __name__ == "__main__":
     if config.get("very_verbose"):
         logger.setLevel(logging.NOTSET)
 
-    app = create_app(os.path.join(POTATO_HOME, config["db_path"]))
+    app, user_manager, user_state_manager = create_app(config)
 
 else:
     app = Flask(__name__)
 
-user_manager = UserManager(db)
 
 
 class ActiveLearningState:
@@ -597,8 +580,7 @@ def new_user():
 
 
 def get_cur_instance_for_user(username):
-    user_state = lookup_user_state(username)
-
+    user_state = user_state_manager.get_user_state(username)
     return user_state.current_instance()
 
 
@@ -690,7 +672,7 @@ def annotate_page(username=None, action=None):
     # is running in a single thread, but it's probably good to check on this at
     # some point if we scale to having lots of concurrent users.
     if "instance_id" in request.form:
-        did_change = update_annotation_state(username, request.form)
+        did_change = user_state_manager.update_annotation_state(username, request.form)
 
         if did_change:
 
@@ -713,23 +695,22 @@ def annotate_page(username=None, action=None):
 
                 # How many total annotations do we need to have
                 update_rate = al_config["update_rate"]
-                total_annotations = get_total_annotations()
+                total_annotations = user_state_manager.get_total_annotations()
 
                 if total_annotations % update_rate == 0:
                     actively_learn()
 
-            save_user_state(username)
+            user_state_manager.save_user_state(username)
+            user_state_manager.save_all_annotations()
 
-            # Save everything in a separate thread to avoid I/O issues
-            th = threading.Thread(target=save_all_annotations)
-            th.start()
 
     # AJYL: Note that action can still be None, if "src" not in request.form.
     # Not sure if this is intended.
     action = request.form.get("src") if action is None else action
+    print("action = ", action)
 
     if action == "home":
-        result_code = load_user_state(username)
+        result_code = user_state_manager.load_user_state(username)
         if result_code == "all instances have been assigned":
             return render_template(
                 "error.html",
@@ -737,13 +718,13 @@ def annotate_page(username=None, action=None):
             )
 
     elif action == "prev_instance":
-        move_to_prev_instance(username)
+        user_state_manager.move_to_prev_instance(username)
 
     elif action == "next_instance":
-        move_to_next_instance(username)
+        user_state_manager.move_to_next_instance(username)
 
     elif action == "go_to":
-        go_to_id(username, request.form.get("go_to"))
+        user_state_manager.go_to_id(username, request.form.get("go_to"))
 
     else:
         print('unrecognized action request: "%s"' % action)
@@ -773,7 +754,7 @@ def annotate_page(username=None, action=None):
     #
     # NOTE2: We have to this here to account for any keyword highlighting before
     # the instance text gets marked up in the post-processing below
-    span_annotations = get_span_annotations_for_user_on(username, instance_id)
+    span_annotations = user_state_manager.get_span_annotations_for_user_on(username, instance_id)
     if span_annotations is not None and len(span_annotations) > 0:
         # Mark up the instance text where the annotated spans were
         text = render_span_annotations(text, span_annotations)
@@ -793,7 +774,7 @@ def annotate_page(username=None, action=None):
     for _kw in config["item_properties"].get("kwargs", []):
         kwargs[_kw] = instance[_kw]
 
-    all_statistics = lookup_user_state(username).generate_user_statistics()
+    all_statistics = user_state_manager.get_user_state(username).generate_user_statistics()
 
     # TODO: Display plots for agreement scores instead of only the overall score
     # in the statistics sidebar
@@ -816,9 +797,9 @@ def annotate_page(username=None, action=None):
         # This is what instance the user is currently on
         instance=text,
         instance_obj=instance,
-        instance_id=lookup_user_state(username).get_instance_cursor(),
-        finished=lookup_user_state(username).get_instance_cursor(),
-        total_count=lookup_user_state(username).get_assigned_instance_count(),
+        instance_id=user_state_manager.get_user_state(username).get_instance_cursor(),
+        finished=user_state_manager.get_user_state(username).get_instance_cursor(),
+        total_count=user_state_manager.get_user_state(username).get_assigned_instance_count(),
         alert_time_each_instance=config["alert_time_each_instance"],
         statistics_nav=all_statistics,
         **kwargs
@@ -859,7 +840,7 @@ def annotate_page(username=None, action=None):
 
     # If the user has annotated this before, walk the DOM and fill out what they
     # did
-    annotations = get_annotations_for_user_on(username, instance_id)
+    annotations = user_state_manager.get_annotations_for_user_on(username, instance_id)
     if annotations is not None:
         # Reset the state
         for schema, labels in annotations.items():
@@ -1274,7 +1255,7 @@ def run_server():
     ]
     for user in users_with_annotations:
         with app.app_context():
-            load_user_state(user)
+            user_state_manager.load_user_state(user)
 
     # TODO: load previous annotation state
     # load_annotation_state(config)

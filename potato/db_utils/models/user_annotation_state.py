@@ -5,6 +5,8 @@ from typing import Mapping, Any
 
 import re
 from collections import defaultdict
+from sqlalchemy.ext.mutable import MutableDict, MutableList
+from sqlalchemy import JSON
 from sqlalchemy.types import PickleType
 from potato.db import db
 
@@ -20,28 +22,30 @@ class UserAnnotationState(db.Model):
     # NOTE: This id is NOT equivalent to instance id!
     id = db.Column(db.Integer, primary_key=True)
 
-    username = db.Column(db.String, db.ForeignKey("user.username"), nullable=False)
+    username = db.Column(
+        db.String, db.ForeignKey("user.username"), nullable=False
+    )
 
     # id (str) --> "label_annotations" (Dict)
-    instance_id_to_labeling = db.Column(PickleType)
+    instance_id_to_labeling = db.Column(MutableDict.as_mutable(JSON))
 
     # This data structure keeps the span-based annotations the user has
     # completed so far
     # id (str) --> "span_annotations" (List)
-    instance_id_to_span_annotations = db.Column(PickleType)
+    instance_id_to_span_annotations = db.Column(MutableDict.as_mutable(JSON))
 
     # This is a reference to the data
     # Mapping from instance id to data.
     # id (str) --> data (Dict)
     # NB: do we need this as a field?
-    instance_id_to_data = db.Column(PickleType)
+    instance_id_to_data = db.Column(MutableDict.as_mutable(JSON))
 
     # TODO: Put behavioral information of each instance with the labels
     # together however, that requires too many changes of the data structure
     # therefore, we contruct a separate dictionary to save all the
     # behavioral information (e.g. time, click, ..)
     # id (str) --> "behavior_data" (Dict)
-    instance_id_to_behavioral_data = db.Column(PickleType)
+    instance_id_to_behavioral_data = db.Column(MutableDict.as_mutable(JSON))
 
     # NOTE: this might be dumb but at the moment, we cache the order in
     # which this user will walk the instances. This might not work if we're
@@ -49,11 +53,11 @@ class UserAnnotationState(db.Model):
     # not too bad. The underlying motivation is to programmatically change
     # this ordering later
     # List[id (str)]
-    instance_id_ordering = db.Column(PickleType)
+    instance_id_ordering = db.Column(MutableList.as_mutable(JSON))
 
     # initialize the mapping from instance id to order
     # Dict[id (str), int]
-    instance_id_to_order = db.Column(PickleType)
+    instance_id_to_order = db.Column(MutableDict.as_mutable(JSON))
 
     instance_cursor = db.Column(db.Integer, default=0)
 
@@ -69,12 +73,13 @@ class UserAnnotationState(db.Model):
     # Total annotation instances assigned to a user
     real_instance_assigned_count = db.Column(db.Integer, default=0)
 
-    def __init__(self, assigned_user_data):
+    def __init__(self, username, assigned_user_data):
         """
         Initialize instance.
         :assigned_user_data: Mapping[str, Dict]
             (instance_id (str) --> data object
         """
+        self.username = username
         self.instance_id_to_data = assigned_user_data
         self.instance_id_to_labeling = {}
         self.instance_id_to_span_annotations = {}
@@ -99,18 +104,13 @@ class UserAnnotationState(db.Model):
         self.instance_id_to_order = _generate_id_order_mapping(
             self.instance_id_ordering
         )
-        breakpoint()
-        db.session.commit()
-        breakpoint()
 
     def get_assigned_data(self):
         return self.instance_id_to_data
 
     def current_instance(self):
-        breakpoint()
         inst_id = self.instance_id_ordering[self.instance_cursor]
         instance = self.instance_id_to_data[inst_id]
-        breakpoint()
         return instance
 
     def get_instance_cursor(self):
@@ -123,28 +123,26 @@ class UserAnnotationState(db.Model):
         return self.instance_id_ordering[cursor].startswith("prestudy")
 
     def go_back(self):
-        if self.instance_cursor > 0:
-            if self.prestudy_passed and self.is_prestudy_question(
-                self.instance_cursor - 1
-            ):
-                return
+        if self.instance_cursor < 1:
+            return
+        if self.prestudy_passed and self.is_prestudy_question(
+            self.instance_cursor - 1
+        ):
+            return
 
-            # Should avoid += or -= operations in SQLAlchemy land:
-            # see https://stackoverflow.com/questions/9667138/how-to-update-sqlalchemy-row-entry#57743964
-            self.instance_cursor = self.instance_cursor - 1
-            db.session.commit()
+        # Should avoid += or -= operations in SQLAlchemy land:
+        # see https://stackoverflow.com/questions/9667138/how-to-update-sqlalchemy-row-entry#57743964
+        self.instance_cursor = self.instance_cursor - 1
 
     def go_forward(self):
         if self.instance_cursor < len(self.instance_id_to_data) - 1:
             # Should avoid += or -= operations in SQLAlchemy land:
             # see https://stackoverflow.com/questions/9667138/how-to-update-sqlalchemy-row-entry#57743964
             self.instance_cursor = self.instance_cursor + 1
-            db.session.commit()
 
     def go_to_id(self, _id):
         if _id < len(self.instance_id_to_data) and _id >= 0:
             self.instance_cursor = _id
-            db.session.commit()
 
     def get_all_annotations(self):
         """
@@ -197,6 +195,7 @@ class UserAnnotationState(db.Model):
         if not self.prestudy_passed:
             return False
         self.prestudy_passed = whether_passed
+        db.session.commit()
         return True
 
     def get_prestudy_status(self):
@@ -216,71 +215,6 @@ class UserAnnotationState(db.Model):
         Check the number of assigned instances for a user (only the core annotation parts)
         """
         return self.real_instance_assigned_count
-
-    def set_annotation(
-        self,
-        instance_id,
-        schema_to_label_to_value,
-        span_annotations,
-        behavioral_data_dict,
-    ):
-        """
-        Based on a user's actions, updates the annotation for this particular instance.
-
-        :span_annotations: a list of span annotations, which are each
-          represented as dictionary objects/
-        :return: True if setting these annotation values changes the previous
-          annotation of this instance.
-        """
-
-        # Get whatever annotations were present for this instance, or, if the
-        # item has not been annotated represent that with empty data structures
-        # so we can keep track of whether the state changes
-        breakpoint()
-        old_annotation = defaultdict(dict)
-        if instance_id in self.instance_id_to_labeling:
-            old_annotation = self.instance_id_to_labeling[instance_id]
-
-        old_span_annotations = []
-        if instance_id in self.instance_id_to_span_annotations:
-            old_span_annotations = self.instance_id_to_span_annotations[
-                instance_id
-            ]
-
-        # Avoid updating with no entries
-        if len(schema_to_label_to_value) > 0:
-            self.instance_id_to_labeling[
-                instance_id
-            ] = schema_to_label_to_value
-
-        # If the user didn't label anything (e.g. they unselected items), then
-        # we delete the old annotation state
-        elif instance_id in self.instance_id_to_labeling:
-            breakpoint()
-            del self.instance_id_to_labeling[instance_id]
-            breakpoint()
-
-        # Avoid updating with no entries
-        if len(span_annotations) > 0:
-            self.instance_id_to_span_annotations[
-                instance_id
-            ] = span_annotations
-        # If the user didn't label anything (e.g. they unselected items), then
-        # we delete the old annotation state
-        elif instance_id in self.instance_id_to_span_annotations:
-            del self.instance_id_to_span_annotations[instance_id]
-
-        # TODO: keep track of all the annotation behaviors instead of only
-        # keeping the latest one each time when new annotation is updated,
-        # we also update the behavioral_data_dict (currently done in the
-        # update_annotation_state function)
-        breakpoint()
-        db.session.commit()
-        breakpoint()
-        return (
-            old_annotation != schema_to_label_to_value
-            or old_span_annotations != span_annotations
-        )
 
     def update(self, annotation_order, annotated_instances):
         """
@@ -339,12 +273,13 @@ class UserAnnotationState(db.Model):
 
         db.session.commit()
 
-
-    def reorder_remaining_instances(self, new_id_order, preserve_order):
-        # Preserve the ordering the user has seen so far for data they've
-        # annotated. This also includes items that *other* users have annotated
-        # to ensure all items get the same number of annotations (otherwise
-        # these items might get re-ordered farther away)
+    def _reorder_remaining_instances(self, new_id_order, preserve_order):
+        """
+        Preserve the ordering the user has seen so far for data they've
+        annotated. This also includes items that *other* users have annotated
+        to ensure all items get the same number of annotations (otherwise
+        these items might get re-ordered farther away)
+        """
         new_order = [
             iid for iid in self.instance_id_ordering if iid in preserve_order
         ]
@@ -362,6 +297,7 @@ class UserAnnotationState(db.Model):
             self.instance_id_ordering
         )
         db.session.commit()
+
 
     @staticmethod
     def parse_time_string(time_string):
@@ -428,3 +364,6 @@ class UserAnnotationState(db.Model):
                 )
             )
         return statistics
+
+    def __repr__(self):
+        return f"<UserAnnotationState '{self.username}, instance_cursor: '{self.instance_cursor}'...>"

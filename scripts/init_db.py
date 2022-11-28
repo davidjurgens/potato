@@ -1,5 +1,5 @@
 """
-Initialize DB with user_config.json file.
+Module Doc String
 """
 
 import os
@@ -10,16 +10,16 @@ import yaml
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+
+from potato.db_utils.models.user import User
 from potato.db_utils.models.user_annotation_state import UserAnnotationState
 from potato.flask_server import get_displayed_text
+from constants import POTATO_HOME
 
 Base = declarative_base()
 
 
 def load_all_data(config):
-    # Hacky nonsense
-    global re_to_highlights
-
     # Where to look in the JSON item object for the text to annotate
     text_key = config["item_properties"]["text_key"]
     id_key = config["item_properties"]["id_key"]
@@ -66,7 +66,6 @@ def load_all_data(config):
 
                 # TODO: check for duplicate instance_id
                 instance_id_to_data[instance_id] = item
-            line_no = len(df)
 
     # TODO Setup automatic test questions for each annotation schema,
     # currently we are doing it similar to survey flow to allow multilingual test questions
@@ -116,85 +115,112 @@ def load_all_data(config):
     return instance_id_to_data
 
 
-# Modified version of potato.server_utils.user_state_utils.load_user_state()
-def dump_to_db(username, user_dir, instance_id_to_data, config, db_path):
+def init_db(config, user_config_path, project_dir, instance_id_to_data):
     """
-    Loads the user's state from disk. The state includes which instances they
-    have annotated and the order in which they are expected to see instances.
+    Initialize DB.
     """
-    # User has NOT annotated before or has assigned_data
-    if not os.path.exists(user_dir):
-        return
+    db_path = config["db_path"]
 
-    # if automatic assignment is on, load assigned user data
-    if (
-        "automatic_assignment" in config
-        and config["automatic_assignment"]["on"]
-    ):
-        assigned_user_data_path = user_dir + "/assigned_user_data.json"
+    json_users = []
+    with open(user_config_path, "r") as file_p:
+        for line in file_p:
+            json_users.append(json.loads(line))
 
-        with open(assigned_user_data_path, "r") as file_p:
-            assigned_user_data = json.load(file_p)
-    # otherwise, set the assigned user data as all the instances
-    else:
-        assigned_user_data = instance_id_to_data
-
-    annotation_order = []
-    annotation_order_fname = os.path.join(user_dir, "annotation_order.txt")
-    if os.path.exists(annotation_order_fname):
-        with open(annotation_order_fname, "rt") as file_p:
-            for line in file_p:
-                instance_id = line[:-1]
-                annotation_order.append(line[:-1])
-
-    annotated_instances = []
-    annotated_instances_fname = os.path.join(
-        user_dir, "annotated_instances.jsonl"
-    )
-    if os.path.exists(annotated_instances_fname):
-
-        with open(annotated_instances_fname, "rt") as file_p:
-            for line in file_p:
-                annotated_instance = json.loads(line)
-                instance_id = annotated_instance["id"]
-                annotated_instances.append(annotated_instance)
-
-    # Ensure the current data is represented in the annotation order
-    # NOTE: this is a hack to be fixed for when old user data is in the
-    # same directory
-    for iid in assigned_user_data.keys():
-        if iid not in annotation_order:
-            annotation_order.append(iid)
+    users = [
+        User(
+            username=json_user["username"],
+            email=json_user["email"],
+            password=json_user["password"],
+            annotation_state=None,
+        )
+        for json_user in json_users
+    ]
 
     engine = create_engine("sqlite:///" + db_path)
     Base.metadata.drop_all(engine)
-    Base.metadata.create_all(engine, tables=[UserAnnotationState.__table__])
+    Base.metadata.create_all(engine, tables=[User.__table__, UserAnnotationState.__table__])
     with Session(engine) as session:
-        user_annotation_state = UserAnnotationState(assigned_user_data)
-        user_annotation_state.update(annotation_order, annotated_instances)
-        session.add(user_annotation_state)
+        session.add_all(users)
         session.commit()
+
+        for user in users:
+            username = user.username
+            annotation_dir = os.path.join(
+                project_dir, "annotation_output/%s" % username
+            )
+
+            # User has NOT annotated before or has assigned_data
+            if not os.path.exists(annotation_dir):
+                print("Continuing")
+                continue
+
+            # if automatic assignment is on, load assigned user data
+            if (
+                "automatic_assignment" in config
+                and config["automatic_assignment"]["on"]
+            ):
+                assigned_user_data_path = (
+                    annotation_dir + "/assigned_user_data.json"
+                )
+
+                with open(assigned_user_data_path, "r") as file_p:
+                    assigned_user_data = json.load(file_p)
+            # otherwise, set the assigned user data as all the instances
+            else:
+                assigned_user_data = instance_id_to_data
+
+            annotation_order = []
+            annotation_order_fname = os.path.join(
+                annotation_dir, "annotation_order.txt"
+            )
+            if os.path.exists(annotation_order_fname):
+                with open(annotation_order_fname, "rt") as file_p:
+                    for line in file_p:
+                        annotation_order.append(line[:-1])
+
+            annotated_instances = []
+            annotated_instances_fname = os.path.join(
+                annotation_dir, "annotated_instances.jsonl"
+            )
+            if os.path.exists(annotated_instances_fname):
+
+                with open(annotated_instances_fname, "rt") as file_p:
+                    for line in file_p:
+                        annotated_instance = json.loads(line)
+                        annotated_instances.append(annotated_instance)
+
+            # Ensure the current data is represented in the annotation order
+            # NOTE: this is a hack to be fixed for when old user data is in the
+            # same directory
+            for iid in assigned_user_data.keys():
+                if iid not in annotation_order:
+                    annotation_order.append(iid)
+
+            user_annotation_state = UserAnnotationState(
+                username, assigned_user_data
+            )
+            user_annotation_state.update(annotation_order, annotated_instances)
+            breakpoint()
+            session.add(user_annotation_state)
+            session.commit()
 
 
 def main():
     """ Driver """
-    config_filepath = "/home/repos/potato/example-projects/dialogue_analysis/configs/dialogue-analysis.yaml"
+
+    project_dir = os.path.join(
+        POTATO_HOME, "example-projects/dialogue_analysis"
+    )
+    config_filepath = os.path.join(
+        project_dir, "configs/dialogue-analysis.yaml"
+    )
+    user_config_path = os.path.join(POTATO_HOME, "potato/user_config.json")
+
     with open(config_filepath, "r") as file_p:
         config = yaml.safe_load(file_p)
 
     instance_id_to_data = load_all_data(config)
-
-    project_dir = "/home/repos/potato/example-projects/dialogue_analysis"
-    db_path = os.path.join(project_dir, "database.db")
-    users = ["zxcv@zxcv.com"]
-
-    for _user in users:
-        annotations_dir = os.path.join(
-            project_dir, "annotation_output/%s" % _user
-        )
-        dump_to_db(
-            _user, annotations_dir, instance_id_to_data, config, db_path
-        )
+    init_db(config, user_config_path, project_dir, instance_id_to_data)
 
 
 if __name__ == "__main__":

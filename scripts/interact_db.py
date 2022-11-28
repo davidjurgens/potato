@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
-from potato.db_utils.models.users import User
+from potato.db_utils.models.user import User
 from potato.db_utils.models.user_annotation_state import UserAnnotationState
 
 

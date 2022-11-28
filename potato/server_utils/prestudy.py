@@ -2,8 +2,8 @@
 Utility functions surrounding pre-study.
 """
 
+from potato.app import db
 from potato.server_utils.config_module import config
-from potato.server_utils.user_state_utils import lookup_user_state, assign_instances_to_user
 import potato.state as state
 
 
@@ -49,46 +49,3 @@ def print_prestudy_result():
     )
 
 
-def check_prestudy_status(username):
-    """
-    Check whether a user has passed the prestudy test
-    (this function will only be used)
-    :return:
-    """
-    if "prestudy" not in config or config["prestudy"]["on"] is False:
-        return "no prestudy test"
-
-    user_state = lookup_user_state(username)
-
-    # directly return the status if the user has passed/failed
-    # the prestudy before
-    if not user_state.get_prestudy_status():
-        return "prestudy failed"
-    if user_state.get_prestudy_status():
-        return "prestudy passed"
-
-    res = []
-    for _id in state.task_assignment["prestudy_ids"]:
-        label = user_state.get_label_annotations(_id)
-        if label is None:
-            return "prestudy not complete"
-        groundtruth = state.instance_id_to_data[_id][config["prestudy"]["groundtruth_key"]]
-        label = get_prestudy_label(label)
-        res.append(label == groundtruth)
-
-    # check if the score is higher than the minimum defined in config
-    if (sum(res) / len(res)) < config["prestudy"]["minimum_score"]:
-        user_state.set_prestudy_status(False)
-        state.task_assignment["prestudy_failed_users"].append(username)
-        prestudy_result = "prestudy just failed"
-    else:
-        user_state.set_prestudy_status(True)
-        state.task_assignment["prestudy_passed_users"].append(username)
-        prestudy_result = "prestudy just passed"
-
-    print_prestudy_result()
-
-    # update the annotation list according the prestudy test result
-    assign_instances_to_user(username)
-
-    return prestudy_result
