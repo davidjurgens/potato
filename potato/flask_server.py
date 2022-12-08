@@ -1960,7 +1960,7 @@ def annotate_page(username=None, action=None):
         instance=text,
         instance_obj=instance,
         instance_id=lookup_user_state(username).get_instance_cursor(),
-        finished=lookup_user_state(username).get_instance_cursor(),
+        finished=lookup_user_state(username).get_annotation_count(),
         total_count=lookup_user_state(username).get_assigned_instance_count(),
         alert_time_each_instance=config["alert_time_each_instance"],
         statistics_nav=all_statistics,
