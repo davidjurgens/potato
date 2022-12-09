@@ -1458,9 +1458,9 @@ def generate_full_user_dataflow(username):
 def instances_all_assigned():
     global task_assignment
 
-    return len(task_assignment.get("unassigned", [])) <= int(
-        config["automatic_assignment"]["instance_per_annotator"] * 0.7
-    )
+    if 'unassigned' in task_assignment and len(task_assignment['unassigned']) <= int(config["automatic_assignment"]["instance_per_annotator"] * 0.7):
+        return True
+    return False
 
 
 def lookup_user_state(username):
