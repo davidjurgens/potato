@@ -7,6 +7,13 @@ import logging
 import json
 import re
 from collections import defaultdict
+
+#add local module
+from pathlib import Path
+import sys
+path_root = Path(__file__).parents[2]
+sys.path.append(str(path_root))
+
 from potato.server_utils.config_module import config
 from potato.server_utils.schemas import (
     generate_multiselect_layout,
