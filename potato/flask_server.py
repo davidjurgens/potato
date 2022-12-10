@@ -2026,7 +2026,7 @@ def annotate_page(username=None, action=None):
 
     rendered_html = str(soup)  # soup.prettify()
 
-    with open("debug.html", "wt") as outf:
+    with open("debug.html", "wt", encoding='utf-8') as outf:
         outf.write(rendered_html)
 
     return rendered_html
