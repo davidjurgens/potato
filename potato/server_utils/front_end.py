@@ -68,7 +68,8 @@ def generate_keybindings_sidebar(keybindings, horizontal=False):
     Generate an HTML layout for the end-user of the keybindings for the current
     task. The layout is intended to be displayed in a side bar or on the annotation page if fixed_keybinding_layout.html is used as the layout
     """
-    if config.get("horizontal_key_bindings"):
+    global config
+    if "horizontal_key_bindings" in config and config["horizontal_key_bindings"]:
         horizontal = True
 
     if not keybindings:
