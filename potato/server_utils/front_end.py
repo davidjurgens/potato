@@ -363,11 +363,9 @@ def generate_surveyflow_pages(config):
         task_html_layout = "".join(f.readlines())
 
     # put forms in rows for survey questions
-    # task_html_layout = task_html_layout.replace(
-    #    '<div class="annotation_schema">',
-    #'<div class="annotation_schema" style="flex-direction:column;">',
-    #    '<div class="annotation_schema" style="flex-direction:column;">',
-    # )
+    task_html_layout = task_html_layout.replace(
+        '<div class="annotation_schema">',
+    '<div class="annotation_schema" style="flex-direction:column;">')
 
     #
     # Stage 2: drop in the annotation layout and insertthe task-specific variables
