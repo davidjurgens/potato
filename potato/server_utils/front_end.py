@@ -63,13 +63,12 @@ def generate_schematic(annotation_scheme):
     return annotation_func(annotation_scheme)
 
 
-def generate_keybindings_sidebar(keybindings, horizontal=False):
+def generate_keybindings_sidebar(config, keybindings, horizontal=False):
     """
     Generate an HTML layout for the end-user of the keybindings for the current
     task. The layout is intended to be displayed in a side bar or on the annotation page if fixed_keybinding_layout.html is used as the layout
     """
-    global config
-    if "horizontal_key_bindings" in config and config["horizontal_key_bindings"]:
+    if config.get("horizontal_key_bindings"):
         horizontal = True
 
     if not keybindings:
@@ -256,7 +255,7 @@ def generate_site(config):
         "{{annotation_task_name}}", config["annotation_task_name"]
     )
 
-    keybindings_desc = generate_keybindings_sidebar(all_keybindings)
+    keybindings_desc = generate_keybindings_sidebar(config, all_keybindings)
     html_template = html_template.replace("{{keybindings}}", keybindings_desc)
 
     statistics_layout = generate_statistics_sidebar(STATS_KEYS)
@@ -475,19 +474,19 @@ def generate_surveyflow_pages(config):
 
             # Do not display keybindings for the first and last page
             if i == 0:
-                keybindings_desc = generate_keybindings_sidebar(all_keybindings[1:])
+                keybindings_desc = generate_keybindings_sidebar(config, all_keybindings[1:])
                 cur_html_template = cur_html_template.replace(
                     '<a class="btn btn-secondary" href="#" role="button" onclick="click_to_prev()">Move backward</a>',
                     '<a class="btn btn-secondary" href="#" role="button" onclick="click_to_prev()" hidden>Move backward</a>',
                 )
             elif i == len(surveyflow_pages) - 1 or re.search("prestudy_fail", page):
-                keybindings_desc = generate_keybindings_sidebar(all_keybindings[:-1])
+                keybindings_desc = generate_keybindings_sidebar(config, all_keybindings[:-1])
                 cur_html_template = cur_html_template.replace(
                     '<a class="btn btn-secondary" href="#" role="button" onclick="click_to_next()">Move forward</a>',
                     '<a class="btn btn-secondary" href="#" role="button" onclick="click_to_next()" hidden>Move forward</a>',
                 )
             else:
-                keybindings_desc = generate_keybindings_sidebar(all_keybindings)
+                keybindings_desc = generate_keybindings_sidebar(config, all_keybindings)
 
             cur_html_template = cur_html_template.replace("{{keybindings}}", keybindings_desc)
             # Jiaxin: change the basename from the template name to the project name +
