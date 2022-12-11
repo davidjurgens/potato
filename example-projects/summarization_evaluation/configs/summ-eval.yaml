@@ -57,7 +57,7 @@
       #whether do automatic task assignment for annotators, default False.
       "on": False,
       "output_filename": 'task_assignment.json',
-      "sampling_strategy:": 'random',
+      "sampling_strategy": 'random',
       "labels_per_instance": 3,
       "instance_per_annotator": 3,
       "test_question_per_annotator": 0, # you must set up the test question in surveyflow to use this function

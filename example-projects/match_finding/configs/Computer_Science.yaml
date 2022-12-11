@@ -71,7 +71,7 @@
     "automatic_assignment": {
         "on": true,
         "output_filename": "task_assignment.json",
-        "sampling_strategy:": "random",
+        "sampling_strategy": "random",
         "labels_per_instance": 3,
         "instance_per_annotator": 5,
         "test_question_per_annotator": 0,
