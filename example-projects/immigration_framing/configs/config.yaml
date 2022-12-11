@@ -160,8 +160,7 @@
     # The html that changes the visualiztation for your task. Change this file
     # to influence the layout and description of your task. This is not a full
     # HTML page, just the piece that does lays out your task's pieces
-    #"html_layout": "templates/examples/fixed_keybinding_layout.html",
-    "html_layout": "example-projects/match_finding/templates/layout.html",
+    "html_layout": "templates/examples/fixed_keybinding_layout.html",
 
     # The core UI files for Potato. You should not need to change these normally.
     #
