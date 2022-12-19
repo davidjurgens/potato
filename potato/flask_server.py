@@ -2512,7 +2512,7 @@ def run_server():
     users_with_annotations = [
         f
         for f in os.listdir(config["output_annotation_dir"])
-        if os.path.isdir(config["output_annotation_dir"] + f)
+        if os.path.isdir(config["output_annotation_dir"] + f) and f != 'archived_users'
     ]
     for user in users_with_annotations:
         load_user_state(user)
