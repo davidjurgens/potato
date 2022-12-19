@@ -42,7 +42,7 @@ if not os.path.exists(bad_user_dir):
     os.mkdir(bad_user_dir)
 for u in users:
     shutil.move(os.path.join(args.annotation_data_dir, u), os.path.join(bad_user_dir, u))
-print('bad users moved to %s ', bad_user_dir)
+print('bad users moved to %s'%bad_user_dir)
 
 # remove users from the task assignment
 if os.path.exists(args.task_assignment_path):
