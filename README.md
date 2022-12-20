@@ -91,7 +91,7 @@ Potato aims to improve the replicability of data annotation and reduce the cost 
 ![plot](./images/match_finding.gif)
 
 ### Immigration framing in tweets (Multi-schema categorization)
-[yaml config](https://github.com/davidjurgens/potato/tree/master/example-projects/immigration_framing) | [Paper](https://aclanthology.org/2021.naacl-main.179/) | [Dataset](<https://github.com/juliamendelsohn/framing)
+[yaml config](https://github.com/davidjurgens/potato/tree/master/example-projects/immigration_framing) | [Paper](https://aclanthology.org/2021.naacl-main.179/) | [Dataset](https://github.com/juliamendelsohn/framing)
 
     [launch] python3 potato/flask_server.py example-projects/immigration_framing/configs/config.yaml -p 8000
     [Annotate] http://localhost:8000/
