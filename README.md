@@ -97,6 +97,7 @@ Potato aims to improve the replicability of data annotation and reduce the cost 
 ![plot](./images/immigration-framing.gif)
 
 ### GIF Reply Appropriateness (video as label)
+[yaml config](https://github.com/davidjurgens/potato/tree/master/example-projects/gif_reply) | [Paper](https://aclanthology.org/2021.findings-emnlp.276/) | Dataset](<https://github.com/xingyaoww/gif-reply)
 
     [launch] python3 potato/flask_server.py example-projects/gif_reply/configs/gif-reply.yaml -p 8000
     [Annotate] http://localhost:8000/
