@@ -83,6 +83,7 @@ Potato aims to improve the replicability of data annotation and reduce the cost 
 
 ### Match findings in papers and news (likert + prescreening questions + multi-task)
 [yaml config](https://github.com/davidjurgens/potato/tree/master/example-projects/match_finding) | [Paper](http://www.copenlu.com/publication/2022_emnlp_wright/) | [Dataset](https://huggingface.co/datasets/copenlu/spiced)
+
     [Setup configuration files for multiple similar tasks] python3 potato/setup_multitask_config.py example-projects/match_finding/multitask_config.yaml
     [launch] python3 potato/flask_server.py example-projects/match_finding/configs/Computer_Science.yaml -p 8000
     [Annotate] http://localhost:8000/?PROLIFIC_PID=user
