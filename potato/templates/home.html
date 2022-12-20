@@ -198,7 +198,7 @@
 
      // check confirmation password
     function confirmPassword(action) {
-
+      if (action == "signup") {
           var msg_key = action + "_error";
           var pw1 = document.getElementById("signup_pass").value;
           var pw2 = document.getElementById("pass_again").value;
@@ -209,6 +209,7 @@
           }
           document.getElementById(msg_key).innerHTML = "";
           return true;
+      }
     }
 
     // Display error message when registration failed
