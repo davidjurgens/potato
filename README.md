@@ -106,6 +106,14 @@ Potato aims to improve the replicability of data annotation and reduce the cost 
 
 ![plot](./images/gif_reply.gif)
 
+### GIF Reply Appropriateness (video as label)
+[yaml config](https://github.com/davidjurgens/potato/tree/master/example-projects/empathy) | [Paper](https://aclanthology.org/2020.emnlp-main.45.pdf)
+
+    [launch] python3 potato/flask_server.py example-projects/empathy/configs/empathy.yaml -p 8000
+    [Annotate] http://localhost:8000/
+![plot](./images/empathy.png)
+
+
 ## Design Team and Support
 
 Potato is run by a small and engergetic team of academics doing the best they can. For support, please leave a issue on this git repo. Feature requests and issues are both welcomed!
