@@ -106,7 +106,7 @@ Potato aims to improve the replicability of data annotation and reduce the cost 
 
 ![plot](./images/gif_reply.gif)
 
-### GIF Reply Appropriateness (video as label)
+### Empathy as Appraisal (paired texts + likert)
 [yaml config](https://github.com/davidjurgens/potato/tree/master/example-projects/empathy) | [Paper](https://aclanthology.org/2020.emnlp-main.45.pdf)
 
     [launch] python3 potato/flask_server.py example-projects/empathy/configs/empathy.yaml -p 8000
