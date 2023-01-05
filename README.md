@@ -11,7 +11,7 @@ Please check out our [official documentation](https://potato-annotation-tutorial
 >Jiaxin Pei, Aparna Ananthasubramaniam, Xingyao Wang, Naitian Zhou, Jackson Sargent, Apostolos Dedeloudis and David Jurgens. 🥔Potato: the POrtable Text Annotation TOol. In Proceedings of the 2022 Conference on Empirical Methods on Natural Language Processing (EMNLP'22 demo)
 
 ## Feature hightlights 
-Potato supports a wide ranges of features that can make your data annotation easier:
+Potato supports a wide range of features that can make your data annotation easier:
 
 ### Easy setup and flexible for diverse needs
 Potato can be easily set up with simply editing a configuration file. You don't need to write any codes to set up your annotation webpage. Potato also comes with a series of features for diverse needs.
