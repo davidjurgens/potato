@@ -904,7 +904,7 @@ def update_annotation_state(username, form):
         if key[:9] == "behavior_":
             behavioral_data_dict[key[9:]] = form[key]
             continue
-
+        
         # Look for the marker that indicates an annotation label.
         #
         # NOTE: The span annotation uses radio buttons as well to figure out
@@ -916,7 +916,7 @@ def update_annotation_state(username, form):
             annotation_schema = cols[0]
             annotation_label = cols[1]
             annotation_value = form[key]
-
+            
             # skip the input when it is an empty string (from a text-box)
             if annotation_value == "":
                 continue
@@ -1986,10 +1986,7 @@ def annotate_page(username=None, action=None):
         **kwargs
     )
 
-    with open("debug-pre.html", "wt") as outf:
-        outf.write(rendered_html)
-
-    # UGHGHGHGH the tempalte does unusual escaping, which makes it a PAIN to do
+    # UGHGHGHGH the template does unusual escaping, which makes it a PAIN to do
     # the replacement later
     # m = re.search('<div name="instance_text">(.*?)</div>', rendered_html,
     #              flags=(re.DOTALL|re.MULTILINE))
@@ -1998,9 +1995,6 @@ def annotate_page(username=None, action=None):
     # For whatever reason, doing this before the render_template causes the
     # embedded HTML to get escaped, so we just do a wholesale replacement here.
     rendered_html = rendered_html.replace(text, updated_text)
-
-    with open("debug-pre.html", "wt") as outf:
-        outf.write(rendered_html)
 
     # Parse the page so we can programmatically reset the annotation state
     # to what it was before
@@ -2022,31 +2016,40 @@ def annotate_page(username=None, action=None):
     # If the user has annotated this before, walk the DOM and fill out what they
     # did
     annotations = get_annotations_for_user_on(username, instance_id)
+
     if annotations is not None:
         # Reset the state
         for schema, labels in annotations.items():
             for label, value in labels.items():
+
                 name = schema + ":::" + label
-                # select input, select and textarea tags
-                input_field = soup.find_all(["input", "select", "textarea"], {"name": name})[0]
-                if input_field is None:
-                    print("No input for ", name)
-                    continue
-                input_field["checked"] = True
-                input_field["value"] = value
-                # set the input value for textarea input
-                if input_field.name == "textarea":
-                    input_field.string = value
-                # find the right option and set it as selected if the current
-                # annotation schema is a select box
-                if label == "select-one":
-                    option = input_field.findChildren("option", {"value": value})[0]
-                    option["selected"] = "selected"
+
+                # Find all the input, select, and textarea tags with this name
+                # (which was annotated) and figure out which one to fill in
+                input_fields = soup.find_all(["input", "select", "textarea"], {"name": name})
+                for input_field in input_fields:
+                    if input_field is None:
+                        print("No input for ", name)
+                        continue
+
+                    # If it's not a text area, let's see if this is the button
+                    # that was checked, and if so mark it as checked
+                    if input_field.name != "textarea" and input_field["value"] != value:
+                        continue
+                    else:
+                        input_field["checked"] = True
+                
+                    # Set the input value for textarea input
+                    if input_field.name == "textarea":
+                        input_field.string = value
+
+                    # Find the right option and set it as selected if the current
+                    # annotation schema is a select box
+                    if label == "select-one":
+                        option = input_field.findChildren("option", {"value": value})[0]
+                        option["selected"] = "selected"
 
     rendered_html = str(soup)  # soup.prettify()
-
-    with open("debug.html", "wt", encoding='utf-8') as outf:
-        outf.write(rendered_html)
 
     return rendered_html
 

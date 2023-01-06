@@ -17,6 +17,7 @@ sys.path.append(str(path_root))
 from potato.server_utils.config_module import config
 from potato.server_utils.schemas import (
     generate_multiselect_layout,
+    generate_multirate_layout,
     generate_radio_layout,
     generate_span_layout,
     generate_likert_layout,
@@ -48,6 +49,7 @@ def generate_schematic(annotation_scheme):
     annotation_type = annotation_scheme["annotation_type"]
     annotation_func = {
         "multiselect": generate_multiselect_layout,
+        "multirate": generate_multirate_layout,
         "radio": generate_radio_layout,
         "highlight": generate_span_layout,
         "likert": generate_likert_layout,

@@ -294,7 +294,7 @@
                           var hiddenField = document.createElement("input");
                           hiddenField.setAttribute("type", "hidden");
                           hiddenField.setAttribute("name", input.attr('name'));
-                          hiddenField.setAttribute("value", input.is(":checked"));
+                          hiddenField.setAttribute("value", input.attr('value'));
                           form.appendChild(hiddenField);
                       }
                   }
