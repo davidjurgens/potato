@@ -1,6 +1,8 @@
 import argparse
-import krippendorff
+import simpledorff
+from simpledorff.metrics import *
 import ujson
+import pandas as pd
 
 from collections import defaultdict
 import numpy as np
@@ -39,9 +41,9 @@ def main(args):
         print("skipped:", sum(skip))
     print(np.all(labeled, axis=0).sum())
     print("rating agreement:")
-    print(krippendorff.alpha(data, level_of_measurement="ordinal"))
+    print(simpledorff.calculate_krippendorffs_alpha(pd.DataFrame(data),metric_fn=interval_metric)) #use interval for rating for now
     print("skip agreement:")
-    print(krippendorff.alpha(skip_data, level_of_measurement="nominal"))
+    print(simpledorff.calculate_krippendorffs_alpha(pd.DataFrame(data),metric_fn=nominal_metric))
     with open(args.outfile, "w") as f:
         for row in zip(*data):
             f.write(",".join([str(a) for a in row]) + "\n")
