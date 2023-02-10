@@ -41,8 +41,33 @@ def generate_multirate_layout(annotation_scheme):
     schematic += "</tr>"
     
 
+    options = annotation_scheme["options"]
+
+    if 'arrangement' in annotation_scheme and annotation_scheme['arrangement'] == 'vertical':
+        cols = [[] for _ in range(n_columns)]
+        n_rows = len(options) // n_columns 
+        if (len(options) % n_columns) > 0:
+            n_rows += 1
+        wc = 0
+        #print('n_rows', n_rows)
+        for i, opt in enumerate(options, 1):
+            #print(opt)
+            if i % n_rows == 0:
+                wc += 1
+            cols[wc].append(opt)
+
+        for c in cols[0]:
+            print(c)
+        reordered_options = []
+        for r in range(n_rows):
+            for c in cols:
+                if r < len(c):
+                    reordered_options.append(c[r])
+        options = reordered_options
+            
+    
     #schematic += "<tr>"    
-    for i, label_data in enumerate(annotation_scheme["options"], 1):
+    for i, label_data in enumerate(options, 1):
 
         if (i - 1) % n_columns == 0:
             schematic += "<tr>"
