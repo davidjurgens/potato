@@ -16,7 +16,8 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from sklearn.pipeline import Pipeline
-import krippendorff
+import simpledorff
+from simpledorff.metrics import nominal_metric, interval_metric
 
 import flask
 from flask import Flask, render_template, request
@@ -769,7 +770,7 @@ def cal_agreement(user_list, schema_name, schema_type=None, selected_keys=None):
         return None
 
     if schema_type in ["radio", "likert"]:
-        distance_metric_dict = {"radio": "nominal", "likert": "ordinal"}
+        distance_metric_dict = {"radio": nominal_metric, "likert": interval_metric}
         # initialize agreement data matrix
         l = []
         for _ in range(len(user_annotation_list)):
@@ -781,9 +782,8 @@ def cal_agreement(user_list, schema_name, schema_type=None, selected_keys=None):
                     l[j][i] = convert_labels(
                         user_annotation_list[j][_selected_key][schema_name], schema_type
                     )
-        alpha = krippendorff.alpha(
-            np.array(l), level_of_measurement=distance_metric_dict[schema_type]
-        )
+        alpha = simpledorff.calculate_krippendorffs_alpha(pd.DataFrame(np.array(l)),metric_fn=distance_metric_dict[schema_type])
+
         return alpha
 
     # When multiple labels are annotated for each instance, calculate the IAA for each label
@@ -820,9 +820,7 @@ def cal_agreement(user_list, schema_name, schema_type=None, selected_keys=None):
 
         alpha_dict = {}
         for key in labels:
-            alpha_dict[key] = krippendorff.alpha(
-                np.array(l_dict[key]), level_of_measurement="nominal"
-            )
+            alpha_dict[key] = simpledorff.calculate_krippendorffs_alpha(pd.DataFrame(np.array(l_dict[key])),metric_fn=nominal_metric)
         return alpha_dict
 
 
@@ -1216,7 +1214,7 @@ def generate_initial_user_dataflow(username):
 
     # save the assigned user data dict
     user_dir = os.path.join(config["output_annotation_dir"], username)
-    assigned_user_data_path = user_dir + "/assigned_user_data.json"
+    assigned_user_data_path = os.path.join(user_dir, "/assigned_user_data.json")
 
     if not os.path.exists(user_dir):
         os.makedirs(user_dir)
@@ -1367,7 +1365,7 @@ def assign_instances_to_user(username):
 
     # save the assigned user data dict
     user_dir = os.path.join(config["output_annotation_dir"], username)
-    assigned_user_data_path = user_dir + "/assigned_user_data.json"
+    assigned_user_data_path = os.path.join(user_dir, "/assigned_user_data.json")
 
     if not os.path.exists(user_dir):
         os.makedirs(user_dir)
@@ -1461,7 +1459,7 @@ def generate_full_user_dataflow(username):
 
     # save the assigned user data dict
     user_dir = os.path.join(config["output_annotation_dir"], username)
-    assigned_user_data_path = user_dir + "/assigned_user_data.json"
+    assigned_user_data_path = os.path.join(user_dir, "/assigned_user_data.json")
 
     if not os.path.exists(user_dir):
         os.makedirs(user_dir)
@@ -1675,7 +1673,7 @@ def load_user_state(username):
 
         # if automatic assignment is on, load assigned user data
         if "automatic_assignment" in config and config["automatic_assignment"]["on"]:
-            assigned_user_data_path = user_dir + "/assigned_user_data.json"
+            assigned_user_data_path = os.path.join(user_dir, "/assigned_user_data.json")
 
             with open(assigned_user_data_path, "r") as r:
                 assigned_user_data = json.load(r)
@@ -2515,7 +2513,7 @@ def run_server():
     users_with_annotations = [
         f
         for f in os.listdir(config["output_annotation_dir"])
-        if os.path.isdir(config["output_annotation_dir"] + f) and f != 'archived_users'
+        if os.path.isdir(os.path.join(config["output_annotation_dir"],f)) and f != 'archived_users'
     ]
     for user in users_with_annotations:
         load_user_state(user)
