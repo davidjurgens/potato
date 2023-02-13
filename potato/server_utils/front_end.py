@@ -347,7 +347,8 @@ def generate_surveyflow_pages(config):
         )
 
     # Once we have the base template constructed, load the user's custom layout for their task
-    html_layout_file = config["html_layout"]
+    # Use the surveyflow layout if it is specified, otherwise stick with the html_layout
+    html_layout_file = config["surveyflow_html_layout"] if "surveyflow_html_layout" in config else config["html_layout"]
     logger.debug("Reading task layout html %s" % html_layout_file)
 
     if not os.path.exists(html_layout_file):
