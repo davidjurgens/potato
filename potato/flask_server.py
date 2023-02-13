@@ -1214,7 +1214,7 @@ def generate_initial_user_dataflow(username):
 
     # save the assigned user data dict
     user_dir = os.path.join(config["output_annotation_dir"], username)
-    assigned_user_data_path = os.path.join(user_dir, "/assigned_user_data.json")
+    assigned_user_data_path = os.path.join(user_dir, "assigned_user_data.json")
 
     if not os.path.exists(user_dir):
         os.makedirs(user_dir)
@@ -1365,7 +1365,7 @@ def assign_instances_to_user(username):
 
     # save the assigned user data dict
     user_dir = os.path.join(config["output_annotation_dir"], username)
-    assigned_user_data_path = os.path.join(user_dir, "/assigned_user_data.json")
+    assigned_user_data_path = os.path.join(user_dir, "assigned_user_data.json")
 
     if not os.path.exists(user_dir):
         os.makedirs(user_dir)
@@ -1459,7 +1459,7 @@ def generate_full_user_dataflow(username):
 
     # save the assigned user data dict
     user_dir = os.path.join(config["output_annotation_dir"], username)
-    assigned_user_data_path = os.path.join(user_dir, "/assigned_user_data.json")
+    assigned_user_data_path = os.path.join(user_dir, "assigned_user_data.json")
 
     if not os.path.exists(user_dir):
         os.makedirs(user_dir)
@@ -1673,7 +1673,7 @@ def load_user_state(username):
 
         # if automatic assignment is on, load assigned user data
         if "automatic_assignment" in config and config["automatic_assignment"]["on"]:
-            assigned_user_data_path = os.path.join(user_dir, "/assigned_user_data.json")
+            assigned_user_data_path = os.path.join(user_dir, "assigned_user_data.json")
 
             with open(assigned_user_data_path, "r") as r:
                 assigned_user_data = json.load(r)
