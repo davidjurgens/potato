@@ -23,7 +23,7 @@
     "annotation_codebook_url": "",
 
     "data_files": [
-       "example-example-projects/match_finding/data_files/pilot_data.csv"
+       "example-projects/match_finding/data_files/pilot_data.csv"
     ],
 
     "item_properties": {
