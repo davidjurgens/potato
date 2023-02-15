@@ -50,12 +50,12 @@
             "name": "favorite_color", 
             "description": "What colors are mentioned in the text?",
             "labels": [
-               "blue", "maize", "green", "white"
+               "blue", "maize", "green", "white", "Others (Please specify in the following textbox)"
             ],
 
             # If true, the field will have an optional text box the user can
             'has_free_response': {
-               "instruction": 'Comments (optional):',
+               "instruction": '',
             },
             
             # If true, numbers [1-len(labels)] will be bound to each
