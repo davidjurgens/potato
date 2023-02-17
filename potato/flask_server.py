@@ -1163,9 +1163,9 @@ def check_prestudy_status(username):
     user_state = lookup_user_state(username)
 
     # directly return the status if the user has passed/failed the prestudy before
-    if not user_state.get_prestudy_status():
+    if user_state.get_prestudy_status() == False:
         return "prestudy failed"
-    if user_state.get_prestudy_status():
+    elif user_state.get_prestudy_status() == True:
         return "prestudy passed"
 
     res = []
