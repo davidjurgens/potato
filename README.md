@@ -118,7 +118,39 @@ Potato aims to improve the replicability of data annotation and reduce the cost 
 
 Potato is run by a small and engergetic team of academics doing the best they can. For support, please leave a issue on this git repo. Feature requests and issues are both welcomed!
 If you have any questions or want to collaborate on this project, please email pedropei@umich.edu
+
+
+## License
+Potato is dual-licensed. All use cases are covered by Polyform Shield but a commercial license is available for those use cases not allowed by Polyform Shield. Please contact us for details on commercial licensing.
+
+FAQ:
+1. If I am an open-source developer, can I fork potato and work on it separately?
+    
+    Yes, this is allowed with the license
+2. If I am an open-source developer, can I fork potato and publicly release a new version with my own features?
+    
+    No, this is not allowed with the license; such a product would be considered as a “competitor” (see the license for details)
+3. If I am working for a company, can I use potato to annotate my data?
+    
+    Yes, this is allowed with the license
+4. If I am working for a company, can I use potato within my company’s pipelines for data annotation (e.g., integrate potato within my company’s internal infrastructure)?
+    
+    Yes, this is allowed with the license—we’d love to hear about these to advertise, so please contact us at pedropei@umich.edu.
+5. Can I integrate potato within a larger annotation pipeline and release that pipeline as an open-source library or service for others to use?
+    
+    Yes, this is allowed with the license—we’d love to hear about these to advertise, so please contact us
+6. Can I integrate potato within a larger annotation pipeline and release that publicly as commercial software/service/resource for others to use?
    
+   No, this is not allowed by Polyform Shield but commercial licensing of potato for this purpose is available. Please reach out to us at pedropei@umich.edu for details.
+7. I am working for a crowdsourcing platform, can I combine potato in our platform to provide better service for my customers?
+   
+   No, this is not allowed by Polyform Shield but commercial licensing of potato for this purpose is available. Please reach out to us at pedropei@umich.edu for details.
+
+Have a question or case not covered by the above? Please reach out to us and we’ll add it to the list!
+
+
+
+
 ## Cite us
 Please use the following bibtex when referencing this work:
 ```
