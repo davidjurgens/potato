@@ -100,6 +100,23 @@ COLOR_PALETTE = [
     "rgb(179, 179, 179)",
 ]
 
+#mapping the base html template str to the real file
+template_dict = {
+    "base_html_template":{
+        'base': os.path.join(cur_program_dir, 'base_htmls/base_template.html'),
+        'default': os.path.join(cur_program_dir, 'base_htmls/base_template.html'),
+    },
+    "header_file":{
+        'default': os.path.join(cur_program_dir, 'base_htmls/header.html'),
+    },
+    "html_layout":{
+        'default': os.path.join(cur_program_dir, 'base_htmls/examples/plain_layout.html'),
+        'plain': os.path.join(cur_program_dir, 'base_htmls/examples/plain_layout.html'),
+        'kwargs': os.path.join(cur_program_dir, 'base_htmls/examples/kwargs_example.html'),
+        'fixed_keybinding': os.path.join(cur_program_dir, 'base_htmls/examples/fixed_keybinding_layout.html')
+    }
+}
+
 app = Flask(__name__)
 
 
@@ -2505,6 +2522,19 @@ def run_server():
                 username = user['firstname'] + '_' + user['lastname']
                 user_config.add_user(username)
     """
+
+    # set up the template file path
+    for key in ["html_layout", "base_html_template", "header_file"]:
+        # if template not set in the configuration file, use the default version
+        if key not in config:
+            logger.warning("%s not configured, use default template at %s"%(key, template_dict[key]['default']))
+            config[key] = template_dict[key]['default']
+        # if user uses a template in the lib, replace the key with the file location
+        elif config[key] in template_dict[key]:
+            config[key] = template_dict[key][config[key]]
+        # if user uses a self defined file, directly use it as the template
+        else:
+            logger.info("%s will be loaded from user-defined file %s" % (key,config[key]))
 
     #overwrite the site_dir to the default path, this will not be shown to the users
     #todo: remove all the site_dir key from the configuration files or figure out a way to handle render flask templates from different dirs

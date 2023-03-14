@@ -1,0 +1,33 @@
+<style>
+table, th, td {
+  border:1px solid black;
+}
+td {
+  text-align: center;
+}
+</style>
+
+<div class="row">
+  <div class="col-md-12">
+    <div class="row">
+      <div class="col-md-12">
+
+        <div name="context_text" class="instance">
+          <div name="instance_text">
+            {{instance | safe}}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    
+    <div style="height: 15px;" />
+    
+  </div>
+  <div class="col-md-12">
+    <div class="annotation_schema">
+      {{annotation_schematic}}
+    </div>
+  </div>
+</div>
+<div style="text-align:center"> Keyboard Input: {{keybindings}} </div>
