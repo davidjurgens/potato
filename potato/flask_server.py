@@ -23,6 +23,14 @@ import flask
 from flask import Flask, render_template, request
 from bs4 import BeautifulSoup
 
+cur_working_dir = os.getcwd() #get the current working dir
+cur_program_dir = os.path.dirname(os.path.abspath(__file__)) #get the current program dir (for the case of pypi, it will be the path where potato is installed)
+flask_templates_dir = os.path.join(cur_program_dir,'templates') #get the dir where the flask templates are saved
+base_html_dir = os.path.join(cur_program_dir,'base_htmls') #get the dir where the the base_html templates files are saved
+
+#insert the current program dir into sys path
+sys.path.insert(0, cur_program_dir)
+
 from create_task_cli import create_task_cli, yes_or_no
 from server_utils.arg_utils import arguments
 from server_utils.config_module import init_config, config
@@ -32,6 +40,8 @@ from server_utils.schemas.span import render_span_annotations
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logging.basicConfig()
+
+
 
 random.seed(0)
 
@@ -2496,6 +2506,11 @@ def run_server():
                 user_config.add_user(username)
     """
 
+    #overwrite the site_dir to the default path, this will not be shown to the users
+    #todo: remove all the site_dir key from the configuration files or figure out a way to handle render flask templates from different dirs
+    #todo: having the flask templates in the user-defined project folder would be neccessary in the long run due to potential conflicts of projects with the same name
+    # each project dir should be self-contained, even for the flask template files
+    config["site_dir"] = flask_templates_dir
     # Creates the templates we'll use in flask by mashing annotation
     # specification on top of the proto-templates
     generate_site(config)
