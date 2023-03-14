@@ -54,7 +54,7 @@ def init_config(args):
         print("configuration file not found under %s, please make sure .yaml file exists in the given directory, or please directly give the path of the .yaml file" % config_folder)
         quit()
 
-    print("starting server from %s" % args.config_file)
+    print("starting server from %s" % config_file)
     with open(config_file, "r") as file_p:
         config.update(yaml.safe_load(file_p))
 
