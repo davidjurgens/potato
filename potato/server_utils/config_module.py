@@ -11,16 +11,19 @@ config = {}
 def init_config(args):
     global config
 
+    project_dir = os.getcwd() #get the current working dir as the default project_dir
     config_file = None
     # if the .yaml config file is given, directly use it
     if args.config_file[-5:] == '.yaml':
         if os.path.exists(args.config_file):
             config_file = args.config_file
+            print("Warning: when you run the server directly from a .yaml file, you must first go the the proper directory before running it")
         else:
             print("%s not found, please make sure the .yaml config file is setup correctly" % args.config_file)
             quit()
     # if the user gives a directory, check if config.yaml or configs/config.yaml exists
     elif os.path.isdir(args.config_file):
+        project_dir = args.config_file if os.path.isabs(args.config_file) else os.path.join(project_dir, args.config_file)
         config_folder = os.path.join(args.config_file, 'configs')
         if not os.path.isdir(config_folder):
             print(".yaml file must be put in the configs/ folder under the main project directory when you try to start the project with the project directory, otherwise please directly give the path of the .yaml file")
@@ -66,3 +69,7 @@ def init_config(args):
             "__config_file__": args.config_file,
         }
     )
+
+    # update the current working dir for the server
+    os.chdir(project_dir)
+    print("the current working directory is: %s"%project_dir)
