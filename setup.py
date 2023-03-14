@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='potato-annotation',
-    version='1.2.0.18',
+    version='1.2.0.19',
     packages=find_packages(),
     entry_points={
         'console_scripts': [
