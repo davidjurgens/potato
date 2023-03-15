@@ -38,18 +38,36 @@ Potato comes with features that allows you to collect more reliable annotations 
 - [Built-in time check](https://potato-annotation-tutorial.readthedocs.io/en/latest/annotator_stats.html#annotation-time): Potato automatically keeps track of the time annotators spend on each instance and allows you to better analyze annotator behaviors.
 
 
-## Quick Start
+## Quick start
+install potato [pypi package](https://pypi.org/project/potato-annotation/)
+
+    pip install potato-annotation
+
+Check all the available project templates
+
+    potato list all
+
+Get one from the project hub
+
+    potato get sentiment_analysis
+
+Start the project
+
+    potato start sentiment_analysis
+
+
+## Start directly from the github repo
 Clone the github repo to your computer
 
     git clone https://github.com/davidjurgens/potato.git
 
 Install all the required dependencies
 
-    pip3 install -r requirements.txt
+    pip install -r requirements.txt
 
 To run a simple check-box style annotation on text data, run
 
-    python3 potato/flask_server.py config/examples/simple-check-box.yaml -p 8000
+    python potato/flask_server.py start config/examples/simple-check-box.yaml -p 8000
         
 This will launch the webserver on port 8000 which can be accessed at [http://localhost:8000](http://localhost:8000). 
 
@@ -64,21 +82,24 @@ Potato aims to improve the replicability of data annotation and reduce the cost 
 
 ### Dialogue analysis (span + categorization)
 
-    [launch] python3 potato/flask_server.py example-projects/dialogue_analysis/configs/dialogue-analysis.yaml -p 8000
+    [fetch] potato get dialogue_analysis
+    [launch] potato start dialogue_analysis -p 8000
     [Annotate] http://localhost:8000
 
 ![plot](./images/dialogue_analysis.gif)
 
 ### Sentiment analysis (categorization)
-
-    [launch] python3 potato/flask_server.py example-projects/sentiment_analysis/configs/sentiment-analysis.yaml -p 8000
+   
+    [fetch] potato get sentiment_analysis
+    [launch] potato start sentiment_analysis -p 8000
     [Annotate] http://localhost:8000
     
 ![plot](./images/sentiment_analysis.png)
     
 ### Summarization evaluation (likert + categorization)
 
-    [launch] python3 potato/flask_server.py example-projects/summarization_evaluation/configs/summ-eval.yaml -p 8000
+    [fetch] potato get summarization_evaluation
+    [launch] potato start summarization_evaluation -p 8000
     [Annotate] http://localhost:8000/?PROLIFIC_PID=user
     
 ![plot](./images/summ_eval.png)
@@ -86,8 +107,8 @@ Potato aims to improve the replicability of data annotation and reduce the cost 
 ### Match findings in papers and news (likert + prescreening questions + multi-task)
 [yaml config](https://github.com/davidjurgens/potato/tree/master/example-projects/match_finding) | [Paper](http://www.copenlu.com/publication/2022_emnlp_wright/) | [Dataset](https://huggingface.co/datasets/copenlu/spiced)
 
-    [Setup configuration files for multiple similar tasks] python3 potato/setup_multitask_config.py example-projects/match_finding/multitask_config.yaml
-    [launch] python3 potato/flask_server.py example-projects/match_finding/configs/Computer_Science.yaml -p 8000
+    [fetch] potato get match_finding
+    [launch] potato start match_finding -p 8000
     [Annotate] http://localhost:8000/?PROLIFIC_PID=user
     
 ![plot](./images/match_finding.gif)
@@ -95,7 +116,8 @@ Potato aims to improve the replicability of data annotation and reduce the cost 
 ### Immigration framing in tweets (Multi-schema categorization)
 [yaml config](https://github.com/davidjurgens/potato/tree/master/example-projects/immigration_framing) | [Paper](https://aclanthology.org/2021.naacl-main.179/) | [Dataset](https://github.com/juliamendelsohn/framing)
 
-    [launch] python3 potato/flask_server.py example-projects/immigration_framing/configs/config.yaml -p 8000
+    [fetch] potato get immigration_framing
+    [launch] potato start immigration_framing -p 8000
     [Annotate] http://localhost:8000/
     
 ![plot](./images/immigration-framing.gif)
@@ -103,7 +125,8 @@ Potato aims to improve the replicability of data annotation and reduce the cost 
 ### GIF Reply Appropriateness (video as label)
 [yaml config](https://github.com/davidjurgens/potato/tree/master/example-projects/gif_reply) | [Paper](https://aclanthology.org/2021.findings-emnlp.276/) | [Dataset](https://github.com/xingyaoww/gif-reply)
 
-    [launch] python3 potato/flask_server.py example-projects/gif_reply/configs/gif-reply.yaml -p 8000
+    [fetch] potato get gif_reply
+    [launch] potato start gif_reply -p 8000
     [Annotate] http://localhost:8000/
 
 ![plot](./images/gif_reply.gif)
@@ -111,7 +134,8 @@ Potato aims to improve the replicability of data annotation and reduce the cost 
 ### Empathy as Appraisal (paired texts + likert)
 [yaml config](https://github.com/davidjurgens/potato/tree/master/example-projects/empathy) | [Paper](https://aclanthology.org/2020.emnlp-main.45.pdf)
 
-    [launch] python3 potato/flask_server.py example-projects/empathy/configs/empathy.yaml -p 8000
+    [fetch] potato get empathy
+    [launch] potato start empathy -p 8000
     [Annotate] http://localhost:8000/
 ![plot](./images/empathy.png)
 
