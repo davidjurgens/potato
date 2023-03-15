@@ -4,18 +4,19 @@
 **Potato** is a **fully free** data annotation tool supporting a wide
 range of features throughout your entire annotation pipeline.
 
-::: note
-::: title
-Note
-:::
-
-This project is under active development.
-:::
 
 # Contents
 
-::: toctree
-quick-start example-projects configuration usage data_format
-schemas_and_templates user_and_collaboration task_assignment
-productivity surveyflow crowdsourcing annotator_stats open-sourcing
-:::
+- [Quick Start](quick-start.md)
+- [Example Projects](example-projects.md)
+- [Configuration](configuration.md)
+- [Usage](usage.md)
+- [Data Format](data_format.md)
+- [Schemas and Templates](schemas_and_templates.md)
+- [User and Collaboration](user_and_collaboration.md)
+- [Task Assignment](task_assignment.md)
+- [Productivity](productivity.md)
+- [Surveyflow](surveyflow.md)
+- [Crowdsourcing](crowdsourcing.md)
+- [Annotator Stats](annotator_stats.md)
+- [Open Sourcing](open_sourcing.md)
