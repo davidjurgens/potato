@@ -5,7 +5,7 @@ predefined example projects, and welcome public contribution to the
 project hub. If you have used potato for your own annotation, you are
 encouraged to create a pull request and release your annotation setup.
 
-Dialogue analysis (span + categorization) \-\-\-\-\-\-\-\-\-\-\--
+### Dialogue analysis (span + categorization) 
 
 [yaml
 config](https://github.com/davidjurgens/potato/tree/master/example-projects/dialogue_analysis)
@@ -15,9 +15,9 @@ config](https://github.com/davidjurgens/potato/tree/master/example-projects/dial
 [Annotate] http://localhost:8000
 ```
 
-![The log-in screen has an account creation button on the bottom right, circled in red.](../img/dialogue_analysis.gif){width="1000px"}
+![Alt text](img/dialogue_analysis.gif)
 
-Sentiment analysis (categorization) \-\-\-\-\-\-\-\-\-\-\--
+### Sentiment analysis (categorization) 
 
 [yaml
 config](https://github.com/davidjurgens/potato/tree/master/example-projects/sentiment_analysis)
@@ -27,20 +27,19 @@ config](https://github.com/davidjurgens/potato/tree/master/example-projects/sent
 [Annotate] http://localhost:8000
 ```
 
-![The log-in screen has an account creation button on the bottom right, circled in red.](../img/sentiment_analysis.png){width="1000px"}
+![Alt text](img/sentiment_analysis.png)
 
-Summarization evaluation (likert + categorization)
-\-\-\-\-\-\-\-\-\-\-\--
+### Summarization evaluation (likert + categorization)
 
 ``` 
 [launch] python3 potato/flask_server.py example-projects/summarization_evaluation/configs/summ-eval.yaml -p 8000
 [Annotate] http://localhost:8000/?PROLIFIC_PID=user
 ```
 
-![The log-in screen has an account creation button on the bottom right, circled in red.](../img/summ_eval.png){width="1000px"}
+![Alt text](img/summ_eval.png)
 
-Match findings in papers and news (likert + prescreening questions +
-multi-task) \-\-\-\-\-\-\-\-\-\-\--
+### Match findings in papers and news (likert + prescreening questions +
+multi-task) 
 
 [yaml
 config](https://github.com/davidjurgens/potato/tree/master/example-projects/match_finding)
@@ -53,10 +52,9 @@ config](https://github.com/davidjurgens/potato/tree/master/example-projects/matc
 [Annotate] http://localhost:8000/?PROLIFIC_PID=user
 ```
 
-![The log-in screen has an account creation button on the bottom right, circled in red.](../img/match_finding.gif){width="1000px"}
+![Alt text](img/match_finding.gif)
 
-Match findings in papers and news (prestudy test)
-\-\-\-\-\-\-\-\-\-\-\--
+### Match findings in papers and news (prestudy test)
 
 [yaml
 config](https://github.com/davidjurgens/potato/tree/master/example-projects/match_finding_with_prestudy)
@@ -66,9 +64,9 @@ config](https://github.com/davidjurgens/potato/tree/master/example-projects/matc
 [Annotate] http://localhost:8000/?PROLIFIC_PID=user
 ```
 
-![The log-in screen has an account creation button on the bottom right, circled in red.](../img/match_finding.gif){width="1000px"}
+![Alt text](img/match_finding.gif)
 
-Textual uncertainty (likert + categorization) \-\-\-\-\-\-\-\-\-\-\--
+### Textual uncertainty (likert + categorization) 
 
 [yaml
 config](https://github.com/davidjurgens/potato/tree/master/example-projects/textual_uncertainty)
@@ -83,10 +81,9 @@ config](https://github.com/davidjurgens/potato/tree/master/example-projects/text
 [Annotate] http://localhost:8000
 ```
 
-![The log-in screen has an account creation button on the bottom right, circled in red.](../img/textual_uncertainty.gif){width="1000px"}
+![Alt text](img/textual_uncertainty.gif)
 
-Immigration framing in tweets (Multi-schema categorization)
-\-\-\-\-\-\-\-\-\-\-\--
+### Immigration framing in tweets (Multi-schema categorization)
 
 [yaml
 config](https://github.com/davidjurgens/potato/tree/master/example-projects/immigration_framing)
@@ -98,9 +95,9 @@ config](https://github.com/davidjurgens/potato/tree/master/example-projects/immi
 [Annotate] http://localhost:8000/
 ```
 
-![The log-in screen has an account creation button on the bottom right, circled in red.](../img/screenshots/immigration-framing.gif){width="1000px"}
+![Alt text](img/screenshots/immigration-framing.gif)
 
-GIF Reply Appropriateness (video as label) \-\-\-\-\-\-\-\-\-\-\--
+### GIF Reply Appropriateness (video as label)
 
 [yaml
 config](https://github.com/davidjurgens/potato/tree/master/example-projects/gif_reply)
@@ -112,4 +109,4 @@ config](https://github.com/davidjurgens/potato/tree/master/example-projects/gif_
 [Annotate] http://localhost:8000/
 ```
 
-![The log-in screen has an account creation button on the bottom right, circled in red.](../img/gif_reply.gif){width="1000px"}
+![Alt text](img/gif_reply.gif)

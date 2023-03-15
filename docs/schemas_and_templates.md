@@ -42,7 +42,7 @@ config](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861
 [data
 example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/data/toy-example.json)):
 
-![image](../img/screenshots/simple_checkbox.gif){.align-center
+![image](img/screenshots/simple_checkbox.gif){.align-center
 width="400px"}
 
 ``` YAML
@@ -70,7 +70,7 @@ config](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861
 [data
 example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/data/video-label-example.json)):
 
-![image](../img/screenshots/gif_reply_screenshot.jpg){.align-center
+![image](img/screenshots/gif_reply_screenshot.jpg){.align-center
 width="400px"}
 
 ``` YAML
@@ -102,7 +102,7 @@ config](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861
 [data
 example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/data/toy-example.csv)):
 
-![image](../img/screenshots/simple-chechbox-freeresponse.gif){.align-center
+![image](img/screenshots/simple-chechbox-freeresponse.gif){.align-center
 width="400px"}
 
 ``` YAML
@@ -157,7 +157,7 @@ config](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861
 [data
 example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/data/bws-example.json)):
 
-![image](../img/screenshots/bws-screenshot.jpg){.align-center
+![image](img/screenshots/bws-screenshot.jpg){.align-center
 width="400px"}
 
 ``` YAML
@@ -199,7 +199,7 @@ config](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861
 [data
 example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/data/toy-example.json)):
 
-![image](../img/screenshots/likert_example.jpg){.align-center
+![image](img/screenshots/likert_example.jpg){.align-center
 width="400px"}
 
 ``` YAML
@@ -236,7 +236,7 @@ config](https://github.com/davidjurgens/potato/edit/master/config/examples/simpl
 [data
 example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/data/toy-example.json)):
 
-![image](../img/screenshots/simple-span.gif){.align-center
+![image](img/screenshots/simple-span.gif){.align-center
 width="400px"}
 
 ``` YAML
@@ -265,7 +265,7 @@ config](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861
 [data
 example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/data/toy-example.json)):
 
-![image](../img/screenshots/text-box-screenshot.jpg){.align-center
+![image](img/screenshots/text-box-screenshot.jpg){.align-center
 width="400px"}
 
 ``` YAML
@@ -285,7 +285,7 @@ config](https://github.com/davidjurgens/potato/blob/master/config/examples/simpl
 [data
 example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/data/pairwise-example.json)):
 
-![image](../img/screenshots/simple-pairwise.gif){.align-center
+![image](img/screenshots/simple-pairwise.gif){.align-center
 width="400px"}
 
 ``` YAML
@@ -307,7 +307,7 @@ Tasks with multiple schemas \-\-\-\-\-\-\-\-\-\-\-\-\-\-\--`potato` also
 support using multiple (different) schemas per annotation task as shown
 below:
 
-![image](../img/screenshots/immigration-framing.jpg){.align-center
+![image](img/screenshots/immigration-framing.jpg){.align-center
 width="700px"}
 
 ``` YAML

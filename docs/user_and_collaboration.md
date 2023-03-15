@@ -5,7 +5,7 @@ self-registration by default. A new user can register for the annotation
 task by navigating to the annotation server, then selecting \"Create
 your account\".
 
-![The log-in screen has an account creation button on the bottom right, circled in red.](../img/login-button.png){.align-center
+![The log-in screen has an account creation button on the bottom right, circled in red.](img/login-button.png){.align-center
 width="400px"}
 
 After creating an account, you can log in with the email and password
@@ -13,7 +13,7 @@ used in the account creation step.
 
 Direct login with URL arguement \-\-\-\-\-\-\-\-\-\-\--
 
-![image](../img/screenshots/direct_login.gif){.align-center
+![image](img/screenshots/direct_login.gif){.align-center
 width="1000px"}
 
 Potato also supports direct login through URL arguements, for example:

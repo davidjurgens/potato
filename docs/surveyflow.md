@@ -9,7 +9,7 @@ built-in schemas: likert, radio, checkbox, textbox, drop-down list.
 Potato also provide templates for setting up task instructions and user
 consents.
 
-![image](../img/screenshots/prescreening_questions.gif){.align-center
+![image](img/screenshots/prescreening_questions.gif){.align-center
 width="1000px"}
 
 Step 1, prepare a .jsonl file for the survey questions you want to
@@ -81,7 +81,7 @@ and edit the surveyflow section in the configuration file:
 
 Post-screening questions \-\-\-\-\-\-\-\-\-\-\-\-\-\--
 
-![image](../img/screenshots/postscreening_questions.gif){.align-center
+![image](img/screenshots/postscreening_questions.gif){.align-center
 width="1000px"}
 
 You can also insert post study surveys just like the prestudy survey:

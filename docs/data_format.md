@@ -1,6 +1,6 @@
-Data Formats =====
+# Data Formats 
 
-Prepare your input data \-\-\-\-\-\-\-\-\-\-\--
+## Prepare your input data 
 
 Upload one or more files containing documents to be annotated in the
 `data` folder.
@@ -63,8 +63,7 @@ file as follows:
 },
 ```
 
-Update output data preferences on the YAML config file
-\-\-\-\-\-\-\-\-\-\-\--
+## Update output data preferences on the YAML config file
 
 The output file will include each labeled document\'s id and
 annotations; the header will consist of the question and answer labels
