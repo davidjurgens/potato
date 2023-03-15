@@ -5,13 +5,13 @@ nav:
     - Quick Start: quick-start.md
     - Example Projects: example-projects.md
     - Usage: usage.md
-    - Data Format: data-format.md
+    - Data Format: data_format.md
     - Schemas and Templates: schemas_and_templates.md
     - User and Collaboration: user_and_collaboration.md
     - Task Assignment: task_assignment.md
     - Productivity: productivity.md
     - Surveyflow: surveyflow.md
     - Crowdsourcing: crowdsourcing.md
-    - Annotator Stats: annotator-stats.md
+    - Annotator Stats: annotator_stats.md
     - Open Sourcing: open-sourcing.md
 theme: readthedocs

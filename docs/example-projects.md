@@ -1,5 +1,6 @@
-Example projects (project hub) ===== Potato aims to improve the
-replicability of data annotation and reduce the cost for researchers to
+# Example projects (project hub)
+
+Potato aims to improve the replicability of data annotation and reduce the cost for researchers to
 set up new annotation tasks. Therefore, Potato comes with a list of
 predefined example projects, and welcome public contribution to the
 project hub. If you have used potato for your own annotation, you are

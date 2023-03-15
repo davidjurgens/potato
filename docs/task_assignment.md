@@ -1,5 +1,6 @@
-Automatic task assignment ===== Potato can automatically assign
-instances to annotators based on figurations.
+# Automatic task assignment
+
+Potato can automatically assign instances to annotators based on figurations.
 
 ``` YAML
 "automatic_assignment": {

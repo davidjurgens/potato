@@ -1,4 +1,4 @@
-Quick start =====
+# Quick start
 
 Clone the github repo to your computer
 
