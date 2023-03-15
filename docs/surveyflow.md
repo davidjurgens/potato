@@ -1,16 +1,15 @@
-Surveyflow =====
+# Surveyflow
 
 Potato allows you to easily set up a series of modules traditionally
 used in social science surveys.
 
-Pre-screening questions \-\-\-\-\-\-\-\-\-\-\-\-\-\--You could easily
-insert any survey questions before the annotation instances using our
+## Pre-screening questions
+You could easily insert any survey questions before the annotation instances using our
 built-in schemas: likert, radio, checkbox, textbox, drop-down list.
 Potato also provide templates for setting up task instructions and user
 consents.
 
-![image](img/screenshots/prescreening_questions.gif){.align-center
-width="1000px"}
+![image](img/screenshots/prescreening_questions.gif)
 
 Step 1, prepare a .jsonl file for the survey questions you want to
 insert. For example, if you want to insert a page of censent questions,
@@ -47,7 +46,7 @@ Step 2, insert the file path into the configuration file:
 Potato will automatically create a consent page for all the annotators
 when you launch it.
 
-Pre-study qualification test \-\-\-\-\-\-\-\-\-\-\-\-\-\--
+## Pre-study qualification test 
 
 # Attention test
 
@@ -79,7 +78,7 @@ and edit the surveyflow section in the configuration file:
 },
 ```
 
-Post-screening questions \-\-\-\-\-\-\-\-\-\-\-\-\-\--
+## Post-screening questions 
 
 ![image](img/screenshots/postscreening_questions.gif){.align-center
 width="1000px"}
@@ -112,8 +111,8 @@ file:
 },
 ```
 
-Built-in demographic questions \-\-\-\-\-\-\-\-\-\-\-\-\-\--Potato
-provides a list of basic demographic questions covering common needs:
+## Built-in demographic questions 
+Potato provides a list of basic demographic questions covering common needs:
 
 ``` YAML
 {"id":"1","text":"What gender do you most closely identify with?","schema": "radio", "choices": ["Male", "Female", "Non-binary"], "label_requirement": {"required":true}}
@@ -128,8 +127,8 @@ provides a list of basic demographic questions covering common needs:
 {"id":"10","text":"Please feel free to leave any comments about our study (optional)","schema": "text"}
 ```
 
-Built-in study experience survey: \-\-\-\-\-\-\-\-\-\-\-\-\-\--Potato
-also supports you to survey the user annotation experience with the
+## Built-in study experience survey:
+Potato also supports you to survey the user annotation experience with the
 following questions:
 
 ``` YAML

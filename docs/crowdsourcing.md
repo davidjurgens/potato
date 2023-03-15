@@ -1,5 +1,6 @@
-Crowdsourcing setting ===== Potato can be seamlessly deployed online to
-collect annotations from common crowdsourcing platforms like Prolifc.com
+# Crowdsourcing setting
+
+Potato can be seamlessly deployed online to collect annotations from common crowdsourcing platforms like Prolifc.com
 
 Setup potato on a server with open ports \-\-\-\-\-\-\-\-\-\-\--To run
 potato in a crowdsourcing setup, you need to setup potato on a server
@@ -8,7 +9,7 @@ start the potato server, simply change to default port to the openly
 accessible ports and you should be able to access the annotation page
 via you_ip_address:the_port
 
-# Prolific
+## Prolific
 
 Prolific is a platform where you can easily recruit task participants
 and Potato can be used seamlessly with prolific.co. To used potato with

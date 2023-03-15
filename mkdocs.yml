@@ -1,4 +1,4 @@
-site_name: MkLorum
+site_name: potato annotation
 site_url: https://github.com/davidjurgens/potato
 nav:
     - Home: index.md
@@ -15,4 +15,3 @@ nav:
     - Annotator Stats: annotator-stats.md
     - Open Sourcing: open-sourcing.md
 theme: readthedocs
-Markdown<3.2:

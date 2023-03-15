@@ -2,7 +2,7 @@
 
 Getting started with Potato is easy! Here\'s what you need to do:
 
-Install Potato to your machine \-\-\-\-\-\-\-\-\-\-\-\-\-\--
+## Install Potato to your machine 
 
 Potato has a Python-based server architecture that can be run locally or
 hosted on any device. In order to install Potato:
@@ -11,7 +11,7 @@ hosted on any device. In order to install Potato:
 -   Follow the quickstart instructions
     [here](https://potato-annotation-tutorial.readthedocs.io/en/latest/quick-start.html).
 
-Set up the project data \-\-\-\-\-\-\-\-\-\-\--
+## Set up the project data 
 
 In order to input document and specify:
 
@@ -27,7 +27,7 @@ In order to input document and specify:
     [output](https://potato-annotation-tutorial.readthedocs.io/en/latest/data_format.html#update-output-data-preferences-on-the-yaml-config-file)
     data preferences
 
-Create your codebook and schema \-\-\-\-\-\-\-\-\-\-\-\-\-\-\--
+## Create your codebook and schema 
 
 Next, you\'ll need to specify what annotators annotate:
 
@@ -58,7 +58,7 @@ Next, you\'ll need to specify what annotators annotate:
     [advanced
     examples](https://potato-annotation-tutorial.readthedocs.io/en/latest/productivity.html))
 
-Define annotation settings \-\-\-\-\-\-\-\-\-\-\-\-\-\-\--
+## Define annotation settings 
 
 There are a few other settings you can play with:
 
@@ -73,7 +73,7 @@ There are a few other settings you can play with:
 -   Optional: Set up [active
     learning](https://potato-annotation-tutorial.readthedocs.io/en/latest/productivity.html#active-learning)
 
-Launch potato locally \-\-\-\-\-\-\-\-\-\-\-\-\-\--
+## Launch potato locally 
 
 And that\'s it! You can go ahead and get started labeling data in one of
 two ways:

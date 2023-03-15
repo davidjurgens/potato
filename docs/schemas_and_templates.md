@@ -9,7 +9,7 @@ rendered into HTML upon the completion of loading data. These schema
 configurations allow deployers to quickly add keyboard shortcuts to
 specific options or tooltips to help annotators.
 
-Existing Task templates \-\-\-\-\-\-\-\-\-\-\-\-\-\-\--
+## Existing Task templates
 
 Templates for some existing tasks are available:
 
@@ -30,7 +30,7 @@ Templates for some existing tasks are available:
     [data
     example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/data/toy-example.json)
 
-Supported Schemas \-\-\-\-\-\-\-\-\-\-\--
+## Supported Schemas
 
 `potato` currently support 4 customizable schemas with examples are
 shown below.
@@ -42,8 +42,7 @@ config](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861
 [data
 example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/data/toy-example.json)):
 
-![image](img/screenshots/simple_checkbox.gif){.align-center
-width="400px"}
+![image](img/screenshots/simple_checkbox.gif)
 
 ``` YAML
 "annotation_schemes": [      
@@ -70,8 +69,7 @@ config](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861
 [data
 example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/data/video-label-example.json)):
 
-![image](img/screenshots/gif_reply_screenshot.jpg){.align-center
-width="400px"}
+![image](img/screenshots/gif_reply_screenshot.jpg)
 
 ``` YAML
 "annotation_schemes": [ 
@@ -102,8 +100,7 @@ config](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861
 [data
 example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/data/toy-example.csv)):
 
-![image](img/screenshots/simple-chechbox-freeresponse.gif){.align-center
-width="400px"}
+![image](img/screenshots/simple-chechbox-freeresponse.gif)
 
 ``` YAML
 "annotation_schemes": [      
@@ -127,7 +124,7 @@ width="400px"}
   ],
 ```
 
-Single Choice (Radio) \*\*\*\*\*\*\*\*\*\*\*\*\*\*\*
+## Single Choice (Radio)
 
 **Simple Single (radio) Choice Example** ([yaml
 config](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/config/examples/simple-single-choice-selection.yaml#L49),
@@ -157,8 +154,7 @@ config](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861
 [data
 example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/data/bws-example.json)):
 
-![image](img/screenshots/bws-screenshot.jpg){.align-center
-width="400px"}
+![image](img/screenshots/bws-screenshot.jpg)
 
 ``` YAML
 "annotation_schemes": [      
@@ -199,8 +195,7 @@ config](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861
 [data
 example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/data/toy-example.json)):
 
-![image](img/screenshots/likert_example.jpg){.align-center
-width="400px"}
+![image](img/screenshots/likert_example.jpg)
 
 ``` YAML
 "annotation_schemes": [      
@@ -236,8 +231,7 @@ config](https://github.com/davidjurgens/potato/edit/master/config/examples/simpl
 [data
 example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/data/toy-example.json)):
 
-![image](img/screenshots/simple-span.gif){.align-center
-width="400px"}
+![image](img/screenshots/simple-span.gif)
 
 ``` YAML
 "annotation_schemes": [      
@@ -265,8 +259,7 @@ config](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861
 [data
 example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/data/toy-example.json)):
 
-![image](img/screenshots/text-box-screenshot.jpg){.align-center
-width="400px"}
+![image](img/screenshots/text-box-screenshot.jpg)
 
 ``` YAML
 "annotation_schemes": [      
@@ -278,15 +271,14 @@ width="400px"}
 ]
 ```
 
-Pairwise comparison \*\*\*\*\*\*\*\*\*
+## Pairwise comparison
 
 **Simple Pairwise Example** ([yaml
 config](https://github.com/davidjurgens/potato/blob/master/config/examples/simple-pairwise-comparison.yaml#L34),
 [data
 example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/data/pairwise-example.json)):
 
-![image](img/screenshots/simple-pairwise.gif){.align-center
-width="400px"}
+![image](img/screenshots/simple-pairwise.gif)
 
 ``` YAML
 #setting up list_as_text input, where the pairs will be inputed as a list of texts and potato will automatically unfold them 
@@ -303,12 +295,12 @@ width="400px"}
 ]
 ```
 
-Tasks with multiple schemas \-\-\-\-\-\-\-\-\-\-\-\-\-\-\--`potato` also
-support using multiple (different) schemas per annotation task as shown
+## Tasks with multiple schemas
+
+`potato` also support using multiple (different) schemas per annotation task as shown
 below:
 
-![image](img/screenshots/immigration-framing.jpg){.align-center
-width="700px"}
+![image](img/screenshots/immigration-framing.jpg)
 
 ``` YAML
 "annotation_schemes": [
@@ -342,7 +334,7 @@ width="700px"}
   ],
 ```
 
-Add the codebook to the page \-\-\-\-\-\-\-\-\-\-\-\-\-\-\--
+## Add the codebook to the page
 
 If you have a url to a codebook (e.g., in Google Docs), you can add it
 to the page by setting the `annotation_codebook_url` field in the YAML
@@ -358,7 +350,7 @@ file. You can also add the task name as the page title using the
 "annotation_codebook_url": "https://www.codebook.com",
 ```
 
-Choose (or create) your HTML template \-\-\-\-\-\-\-\-\-\-\-\-\-\-\--
+## Choose (or create) your HTML template
 
 Set up the annotation interface by picking an existing HTML template
 ([examples](https://github.com/davidjurgens/potato/tree/master/templates/examples))
@@ -387,7 +379,7 @@ or creating a custom template:
     [custom example
     2](https://github.com/davidjurgens/potato/tree/master/templates/quotes.html))
 
-Update YAML file with look and feel \-\-\-\-\-\-\-\-\-\-\-\-\-\-\--
+## Update YAML file with look and feel
 
 In the YAML file, you\'ll need to specify what the annotation interface
 looks like. The `html_layout` field can be updated per the prior

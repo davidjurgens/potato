@@ -1,6 +1,6 @@
-Productivity features =====
+# Productivity features
 
-Keyboard shortcuts \-\-\-\-\-\-\-\-\-\-\--
+## Keyboard shortcuts
 
 *Sequential keybindings:* Some annotation schemes provide keybindings
 for selecting options. For tasks where there are at most 10 options,
@@ -35,7 +35,7 @@ For example,
 ]
 ```
 
-Dynamic highlighting \-\-\-\-\-\-\-\-\-\-\-\-\-\-\--
+## Dynamic highlighting
 
 Potato also includes randomized keyword highlights to aid in the
 annotation process. To enable dynamic highlighting, just provide a path
@@ -60,7 +60,7 @@ Provide the path to the keywords file as the value to the
 There is currently no way to specify the colors used through the
 configuration file.
 
-# Tooltips
+## Tooltips
 
 For radio and multiselect question types, you have the option to add
 tooltips with more details about each response option. You can do this
@@ -105,7 +105,7 @@ your mouse over the response option.
 ]
 ```
 
-# Active learning
+## Active learning
 
 Active learning can be enabled and configured by providing the
 `active_learning_config` key to the configuration file. See below for a
@@ -168,7 +168,7 @@ basic example of the active learning configuration.
 },
 ```
 
-Automatic task assignent \-\-\-\-\-\-\-\-\-\-\--
+## Automatic task assignent
 
 Potato allows you to easily assign annotation tasks to different
 annotators, this is especially userful for crowdsourcing setting where
