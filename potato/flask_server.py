@@ -36,6 +36,7 @@ from server_utils.arg_utils import arguments
 from server_utils.config_module import init_config, config
 from server_utils.front_end import generate_site, generate_surveyflow_pages
 from server_utils.schemas.span import render_span_annotations
+from server_utils.cli_utlis import get_project_from_hub, show_project_hub
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -116,6 +117,7 @@ template_dict = {
         'fixed_keybinding': os.path.join(cur_program_dir, 'base_htmls/examples/fixed_keybinding_layout.html')
     }
 }
+
 
 app = Flask(__name__)
 
@@ -2492,14 +2494,14 @@ def run_create_task_cli():
             raise Exception("Gui-based design not supported yet.")
 
 
-def run_server():
+def run_server(args):
     """
     Run Flask server.
     """
     global user_config
     global user_to_annotation_state
 
-    args = arguments()
+
     init_config(args)
     if config.get("verbose"):
         logger.setLevel(logging.DEBUG)
@@ -2579,7 +2581,15 @@ def main():
         # Run task configuration script if no arguments are given.
         return run_create_task_cli()
 
-    run_server()
+    args = arguments()
+    if args.mode == 'start':
+        run_server(args)
+    elif args.mode == 'get':
+        get_project_from_hub(args.config_file)
+
+    # currently config_file is still an required arg, so when potato list is used, users must add all after it: potato list all
+    elif args.mode == 'list':
+        show_project_hub(args.config_file)
 
 
 if __name__ == "__main__":

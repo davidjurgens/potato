@@ -1,0 +1,35 @@
+import requests
+import zipfile
+import io
+
+# all the available examples in the project hub
+project_hub = {
+    'dialogue_analysis': 'https://github.com/davidjurgens/potato/raw/pypi/project-hub/dialogue_analysis.zip',
+    'empathy': 'https://github.com/davidjurgens/potato/raw/pypi/project-hub/empathy.zip',
+    'gif_reply': 'https://github.com/davidjurgens/potato/raw/pypi/project-hub/gif_reply.zip',
+    'immigration_framing': 'https://github.com/davidjurgens/potato/raw/pypi/project-hub/immigration_framing.zip',
+    'match_finding': 'https://github.com/davidjurgens/potato/raw/pypi/project-hub/match_finding.zip',
+    'match_finding_with_prestudy': 'https://github.com/davidjurgens/potato/raw/pypi/project-hub/match_finding_with_prestudy.zip',
+    'sentiment_analysis': 'https://github.com/davidjurgens/potato/raw/pypi/project-hub/sentiment_analysis.zip',
+    'summarization_evaluation': 'https://github.com/davidjurgens/potato/raw/pypi/project-hub/summarization_evaluation.zip',
+    'textual_uncertainty': 'https://github.com/davidjurgens/potato/raw/pypi/project-hub/textual_uncertainty.zip'
+}
+
+# get a speicific project from the hub
+def get_project_from_hub(name):
+    if name not in project_hub:
+        print("%s not found in the project_hub"%name)
+        return
+    response = requests.get(project_hub[name])
+    # Extract the contents of the ZIP archive
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        # Extract the contents of the archive to a directory
+        archive.extractall('%s/'%name)
+    print("successfully fetched %s"%name)
+
+# show all the available projects in the hub
+def show_project_hub(type):
+    if type == 'all':
+        print("all the available example projects that you can directly fetch")
+        for key in project_hub:
+            print(key)
