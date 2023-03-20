@@ -43,10 +43,10 @@ def init_config(args):
         # if multiple yaml files found, ask the user to choose which one to use
         else:
             while True:
-                print("multiple config files found, please select the one you want to use")
+                print("multiple config files found, please select the one you want to use (number 0-%d)"%len(yamlfiles))
                 for i,it in enumerate(yamlfiles):
                     print("[%d] %s"%(i, it))
-                input_id = input()
+                input_id = input("number: ")
                 try:
                     config_file = os.path.join(config_folder, yamlfiles[int(input_id)])
                     break
