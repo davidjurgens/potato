@@ -77,67 +77,24 @@ The `config/examples` folder contains example `.yaml` configuration files that m
 
 
 
-## Example projects (project hub)
+## Baked potatoes
 Potato aims to improve the replicability of data annotation and reduce the cost for researchers to set up new annotation tasks. Therefore, Potato comes with a list of predefined example projects, and welcome public contribution to the project hub. If you have used potato for your own annotation, you are encouraged to create a pull request and release your annotation setup. 
 
-### Dialogue analysis (span + categorization)
+Potato currently include the following example projects:
 
-    [fetch] potato get dialogue_analysis
-    [launch] potato start dialogue_analysis -p 8000
-    [Annotate] http://localhost:8000
+- [simple_schema_examples](https://potato-annotation.readthedocs.io/en/latest/example-projects/#simple-schema-examples)
+- [dialogue_analysis](https://potato-annotation.readthedocs.io/en/latest/example-projects/#dialogue-analysis-span-categorization)
+- [empathy](https://potato-annotation.readthedocs.io/en/latest/example-projects/#empathy)
+- [gif_reply](https://potato-annotation.readthedocs.io/en/latest/example-projects/#gif-reply)
+- [immigration_framing](https://potato-annotation.readthedocs.io/en/latest/example-projects/#immigration-framing)
+- [match_finding](https://potato-annotation.readthedocs.io/en/latest/example-projects/#match-finding)
+- [match_finding_with_prestudy](https://potato-annotation.readthedocs.io/en/latest/example-projects/#match-findings-in-papers-and-news-prestudy-test)
+- [sentiment_analysis](https://potato-annotation.readthedocs.io/en/latest/example-projects/#sentiment-analysis)
+- [summarization_evaluation](https://potato-annotation.readthedocs.io/en/latest/example-projects/#summarization-evaluation)
+- [textual_uncertainty](https://potato-annotation.readthedocs.io/en/latest/example-projects/#textual-uncertainty)
+- [question_answering](https://potato-annotation.readthedocs.io/en/latest/example-projects/#question-answering)
 
-![plot](./images/dialogue_analysis.gif)
-
-### Sentiment analysis (categorization)
-   
-    [fetch] potato get sentiment_analysis
-    [launch] potato start sentiment_analysis -p 8000
-    [Annotate] http://localhost:8000
-    
-![plot](./images/sentiment_analysis.png)
-    
-### Summarization evaluation (likert + categorization)
-
-    [fetch] potato get summarization_evaluation
-    [launch] potato start summarization_evaluation -p 8000
-    [Annotate] http://localhost:8000/?PROLIFIC_PID=user
-    
-![plot](./images/summ_eval.png)
-
-### Match findings in papers and news (likert + prescreening questions + multi-task)
-[yaml config](https://github.com/davidjurgens/potato/tree/master/example-projects/match_finding) | [Paper](http://www.copenlu.com/publication/2022_emnlp_wright/) | [Dataset](https://huggingface.co/datasets/copenlu/spiced)
-
-    [fetch] potato get match_finding
-    [launch] potato start match_finding -p 8000
-    [Annotate] http://localhost:8000/?PROLIFIC_PID=user
-    
-![plot](./images/match_finding.gif)
-
-### Immigration framing in tweets (Multi-schema categorization)
-[yaml config](https://github.com/davidjurgens/potato/tree/master/example-projects/immigration_framing) | [Paper](https://aclanthology.org/2021.naacl-main.179/) | [Dataset](https://github.com/juliamendelsohn/framing)
-
-    [fetch] potato get immigration_framing
-    [launch] potato start immigration_framing -p 8000
-    [Annotate] http://localhost:8000/
-    
-![plot](./images/immigration-framing.gif)
-
-### GIF Reply Appropriateness (video as label)
-[yaml config](https://github.com/davidjurgens/potato/tree/master/example-projects/gif_reply) | [Paper](https://aclanthology.org/2021.findings-emnlp.276/) | [Dataset](https://github.com/xingyaoww/gif-reply)
-
-    [fetch] potato get gif_reply
-    [launch] potato start gif_reply -p 8000
-    [Annotate] http://localhost:8000/
-
-![plot](./images/gif_reply.gif)
-
-### Empathy as Appraisal (paired texts + likert)
-[yaml config](https://github.com/davidjurgens/potato/tree/master/example-projects/empathy) | [Paper](https://aclanthology.org/2020.emnlp-main.45.pdf)
-
-    [fetch] potato get empathy
-    [launch] potato start empathy -p 8000
-    [Annotate] http://localhost:8000/
-![plot](./images/empathy.png)
+Please check full list of [baked potatoes](https://potato-annotation.readthedocs.io/en/latest/example-projects/) for more details!
 
 
 ## Design Team and Support
