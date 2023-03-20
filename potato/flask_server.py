@@ -2280,11 +2280,11 @@ def parse_story_pair_from_file(filepath):
     return lines
 
 
-@app.route("/files/<path:filename>")
+@app.route("/<path:filename>")
 def get_file(filename):
-    """Make files available for annotation access from a folder."""
+    """Make files available for annotation access from a folder"""
     try:
-        return flask.send_from_directory("../data/files/", filename)
+        return flask.send_from_directory(os.getcwd(), filename)
     except FileNotFoundError:
         flask.abort(404)
 
