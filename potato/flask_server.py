@@ -104,17 +104,17 @@ COLOR_PALETTE = [
 #mapping the base html template str to the real file
 template_dict = {
     "base_html_template":{
-        'base': os.path.join(cur_program_dir, 'base_htmls/base_template.html'),
-        'default': os.path.join(cur_program_dir, 'base_htmls/base_template.html'),
+        'base': os.path.join(cur_program_dir, 'base_html/base_template.html'),
+        'default': os.path.join(cur_program_dir, 'base_html/base_template.html'),
     },
     "header_file":{
-        'default': os.path.join(cur_program_dir, 'base_htmls/header.html'),
+        'default': os.path.join(cur_program_dir, 'base_html/header.html'),
     },
     "html_layout":{
-        'default': os.path.join(cur_program_dir, 'base_htmls/examples/plain_layout.html'),
-        'plain': os.path.join(cur_program_dir, 'base_htmls/examples/plain_layout.html'),
-        'kwargs': os.path.join(cur_program_dir, 'base_htmls/examples/kwargs_example.html'),
-        'fixed_keybinding': os.path.join(cur_program_dir, 'base_htmls/examples/fixed_keybinding_layout.html')
+        'default': os.path.join(cur_program_dir, 'base_html/examples/plain_layout.html'),
+        'plain': os.path.join(cur_program_dir, 'base_html/examples/plain_layout.html'),
+        'kwargs': os.path.join(cur_program_dir, 'base_html/examples/kwargs_example.html'),
+        'fixed_keybinding': os.path.join(cur_program_dir, 'base_html/examples/fixed_keybinding_layout.html')
     }
 }
 
