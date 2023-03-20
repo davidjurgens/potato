@@ -1,30 +1,34 @@
 {
     "port": 9001,
-    "__debug___": true,
 
     "server_name": "potato annotator",
 
-    "annotation_task_name": "Gif Reply Appropriateness Annotation",
+    "annotation_task_name": "Question Answering",
 
+    #
     # Potato will write the annotation file for all annotations to this
     # directory, as well as per-annotator output files and state information
     # necessary to restart annotation.
-    "output_annotation_dir": "annotation_output/gif-reply-appropriateness/",
+    #
+    "output_annotation_dir": "annotation_output/question-answering/",
 
+    #
     # The output format for the all-annotator data. Allowed formats are:
     # * jsonl
     # * json (same output as jsonl)
     # * csv
     # * tsv
     #
-    "output_annotation_format": "json", 
+    "output_annotation_format": "csv", 
 
+    #
     # If annotators are using a codebook, this will be linked at the top to the
     # instance for easy access
+    #
     "annotation_codebook_url": "",
 
     "data_files": [
-       "data_files/video-label-example.json"
+       "data_files/toy-example.json"
     ],
 
     "item_properties": {
@@ -45,26 +49,12 @@
     # that, an alert will be sent per alert_time_each_instance seconds.
     "alert_time_each_instance": 10000000,
 
-    "annotation_schemes": [ 
+    "annotation_schemes": [      
         {
-            "annotation_type": "multiselect",
-            "name": "GIF Reply Appropriateness",
-            "video_as_label": "True",
-            "description": "Select all appropriate GIF replies.",
-
-            # Files http://[server]:[port]/data/* will be forwarded from directory data/files/*
-            "labels": [
-               {"name": "{{instance_obj.gifs[0]}}", "videopath": "data_files/files/{{instance_obj.gifs_path[0]}}"},
-               {"name": "{{instance_obj.gifs[1]}}", "videopath": "data_files/files/{{instance_obj.gifs_path[1]}}"},
-               {"name": "{{instance_obj.gifs[2]}}", "videopath": "data_files/files/{{instance_obj.gifs_path[2]}}"},
-            ],
-
-            # If true, numbers [1-len(labels)] will be bound to each
-            # label. Check box annotations with more than 10 are not supported
-            # with this simple keybinding and will need to use the full item
-            # specification to bind all labels to keys.
-            "sequential_key_binding": True,            
-        },       
+            "annotation_type": "text",
+            "name": "textbox_input",
+            "description": "Please write your own reply to the given sentence",
+        }       
     ],
 
     # The html that changes the visualiztation for your task. Change this file

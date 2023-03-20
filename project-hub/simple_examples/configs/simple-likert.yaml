@@ -1,15 +1,10 @@
 {
-    "port": 9001,
-    "__debug___": true,
-
-    "server_name": "potato annotator",
-
-    "annotation_task_name": "Gif Reply Appropriateness Annotation",
+    "annotation_task_name": "Simple Likert Scale Example",
 
     # Potato will write the annotation file for all annotations to this
     # directory, as well as per-annotator output files and state information
     # necessary to restart annotation.
-    "output_annotation_dir": "annotation_output/gif-reply-appropriateness/",
+    "output_annotation_dir": "annotation_output/simple-likert/",
 
     # The output format for the all-annotator data. Allowed formats are:
     # * jsonl
@@ -17,27 +12,24 @@
     # * csv
     # * tsv
     #
-    "output_annotation_format": "json", 
+    "output_annotation_format": "csv", 
 
     # If annotators are using a codebook, this will be linked at the top to the
     # instance for easy access
     "annotation_codebook_url": "",
 
     "data_files": [
-       "data_files/video-label-example.json"
+       "data/toy-example.json"
     ],
 
     "item_properties": {
         "id_key": "id",
         "text_key": "text",
-        "context_key": "context"
     },
 
 
     "user_config": {
-
-      "allow_all_users": True,
-      
+      "allow_all_users": True,     
       "users": [  ],
     },
 
@@ -45,26 +37,29 @@
     # that, an alert will be sent per alert_time_each_instance seconds.
     "alert_time_each_instance": 10000000,
 
-    "annotation_schemes": [ 
+    "annotation_schemes": [      
         {
-            "annotation_type": "multiselect",
-            "name": "GIF Reply Appropriateness",
-            "video_as_label": "True",
-            "description": "Select all appropriate GIF replies.",
+            "annotation_type": "likert",
 
-            # Files http://[server]:[port]/data/* will be forwarded from directory data/files/*
-            "labels": [
-               {"name": "{{instance_obj.gifs[0]}}", "videopath": "data_files/files/{{instance_obj.gifs_path[0]}}"},
-               {"name": "{{instance_obj.gifs[1]}}", "videopath": "data_files/files/{{instance_obj.gifs_path[1]}}"},
-               {"name": "{{instance_obj.gifs[2]}}", "videopath": "data_files/files/{{instance_obj.gifs_path[2]}}"},
-            ],
+            # This name gets used in reporting the annotation results
+            "name": "awesomeness",
 
-            # If true, numbers [1-len(labels)] will be bound to each
-            # label. Check box annotations with more than 10 are not supported
-            # with this simple keybinding and will need to use the full item
-            # specification to bind all labels to keys.
-            "sequential_key_binding": True,            
-        },       
+            # This text is shown to the user and can be a longer statement
+            "description": "How awesome is this?",
+
+            # The min and max labels are text shown at each end of the scale
+            "min_label": "Not Awesome",
+            "max_label": "Compeletely Awesome",
+
+            # How many scale points to show
+            "size": 5,
+
+            # If true, keys [1-size] will be bound to scale responses. Likert
+            # scales larger than 10 are not supported with this simple
+            # keybinding and will need to use the full item specification to
+            # bind all scale points to keys.
+            "sequential_key_binding": True,
+        }       
     ],
 
     # The html that changes the visualiztation for your task. Change this file

@@ -1,15 +1,14 @@
 {
     "port": 9001,
-    "__debug___": true,
 
     "server_name": "potato annotator",
 
-    "annotation_task_name": "Gif Reply Appropriateness Annotation",
+    "annotation_task_name": "Simple Best-Worst-Scaling Example",
 
     # Potato will write the annotation file for all annotations to this
     # directory, as well as per-annotator output files and state information
     # necessary to restart annotation.
-    "output_annotation_dir": "annotation_output/gif-reply-appropriateness/",
+    "output_annotation_dir": "annotation_output/simple-bws/",
 
     # The output format for the all-annotator data. Allowed formats are:
     # * jsonl
@@ -17,22 +16,25 @@
     # * csv
     # * tsv
     #
-    "output_annotation_format": "json", 
+    "output_annotation_format": "tsv", 
 
     # If annotators are using a codebook, this will be linked at the top to the
     # instance for easy access
     "annotation_codebook_url": "",
 
     "data_files": [
-       "data_files/video-label-example.json"
+       "data/bws-example.json"
     ],
 
     "item_properties": {
         "id_key": "id",
-        "text_key": "text",
-        "context_key": "context"
+        "text_key": "text"
     },
 
+    #list_as_text is used when the input text is actually a list of texts, usually used for best-worst-scaling
+    "list_as_text": {
+      "text_list_prefix_type": 'alphabet'
+    },
 
     "user_config": {
 
@@ -45,26 +47,45 @@
     # that, an alert will be sent per alert_time_each_instance seconds.
     "alert_time_each_instance": 10000000,
 
-    "annotation_schemes": [ 
+    "annotation_schemes": [      
         {
-            "annotation_type": "multiselect",
-            "name": "GIF Reply Appropriateness",
-            "video_as_label": "True",
-            "description": "Select all appropriate GIF replies.",
+            "annotation_type": "radio",
+            "name": "bws_best",
+            "description": "Which is the most positive sentence?",
 
-            # Files http://[server]:[port]/data/* will be forwarded from directory data/files/*
+            # If true, display the labels horizontally
+            "horizontal": True,
+
             "labels": [
-               {"name": "{{instance_obj.gifs[0]}}", "videopath": "data_files/files/{{instance_obj.gifs_path[0]}}"},
-               {"name": "{{instance_obj.gifs[1]}}", "videopath": "data_files/files/{{instance_obj.gifs_path[1]}}"},
-               {"name": "{{instance_obj.gifs[2]}}", "videopath": "data_files/files/{{instance_obj.gifs_path[2]}}"},
+               "A", "B", "C", "D", "E",
             ],
 
             # If true, numbers [1-len(labels)] will be bound to each
-            # label. Check box annotations with more than 10 are not supported
-            # with this simple keybinding and will need to use the full item
-            # specification to bind all labels to keys.
-            "sequential_key_binding": True,            
-        },       
+            # label. Aannotations with more than 10 are not supported with this
+            # simple keybinding and will need to use the full item specification
+            # to bind all labels to keys.
+            "sequential_key_binding": True,                        
+        },
+
+        {
+          "annotation_type": "radio",
+          "name": "bws_worst",
+          "description": "Which is the most negative sentence?",
+
+          # If true, display the labels horizontally
+          "horizontal": True,
+
+          "labels": [
+            "A", "B", "C", "D", "E",
+          ],
+
+          # If true, numbers [1-len(labels)] will be bound to each
+          # label. Aannotations with more than 10 are not supported with this
+          # simple keybinding and will need to use the full item specification
+          # to bind all labels to keys.
+          "sequential_key_binding": True,
+        },
+
     ],
 
     # The html that changes the visualiztation for your task. Change this file

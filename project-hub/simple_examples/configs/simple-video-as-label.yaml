@@ -1,15 +1,14 @@
 {
     "port": 9001,
-    "__debug___": true,
 
     "server_name": "potato annotator",
 
-    "annotation_task_name": "Gif Reply Appropriateness Annotation",
+    "annotation_task_name": "Simple Video as Label Example",
 
     # Potato will write the annotation file for all annotations to this
     # directory, as well as per-annotator output files and state information
     # necessary to restart annotation.
-    "output_annotation_dir": "annotation_output/gif-reply-appropriateness/",
+    "output_annotation_dir": "annotation_output/simple-video-as-label/",
 
     # The output format for the all-annotator data. Allowed formats are:
     # * jsonl
@@ -24,7 +23,7 @@
     "annotation_codebook_url": "",
 
     "data_files": [
-       "data_files/video-label-example.json"
+       "data/video-label-example.json"
     ],
 
     "item_properties": {
@@ -54,9 +53,9 @@
 
             # Files http://[server]:[port]/data/* will be forwarded from directory data/files/*
             "labels": [
-               {"name": "{{instance_obj.gifs[0]}}", "videopath": "data_files/files/{{instance_obj.gifs_path[0]}}"},
-               {"name": "{{instance_obj.gifs[1]}}", "videopath": "data_files/files/{{instance_obj.gifs_path[1]}}"},
-               {"name": "{{instance_obj.gifs[2]}}", "videopath": "data_files/files/{{instance_obj.gifs_path[2]}}"},
+               {"name": "{{instance_obj.gifs[0]}}", "videopath": "data/files/{{instance_obj.gifs_path[0]}}"},
+               {"name": "{{instance_obj.gifs[1]}}", "videopath": "data/files/{{instance_obj.gifs_path[1]}}"},
+               {"name": "{{instance_obj.gifs[2]}}", "videopath": "data/files/{{instance_obj.gifs_path[2]}}"},
             ],
 
             # If true, numbers [1-len(labels)] will be bound to each
