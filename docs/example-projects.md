@@ -12,7 +12,8 @@ encouraged to create a pull request and release your annotation setup.
 config](https://github.com/davidjurgens/potato/tree/master/example-projects/dialogue_analysis)
 
 ``` 
-[launch] python3 potato/flask_server.py example-projects/dialogue_analysis/configs/dialogue-analysis.yaml -p 8000
+[fetch] potato get dialogue_analysis
+[launch] potato start dialogue_analysis -p 8000
 [Annotate] http://localhost:8000
 ```
 
@@ -24,7 +25,8 @@ config](https://github.com/davidjurgens/potato/tree/master/example-projects/dial
 config](https://github.com/davidjurgens/potato/tree/master/example-projects/sentiment_analysis)
 
 ``` 
-[launch] python3 potato/flask_server.py example-projects/sentiment_analysis/configs/sentiment-analysis.yaml -p 8000
+[fetch] potato get sentiment_analysis
+[launch] potato start sentiment_analysis -p 8000
 [Annotate] http://localhost:8000
 ```
 
@@ -33,7 +35,8 @@ config](https://github.com/davidjurgens/potato/tree/master/example-projects/sent
 ### Summarization evaluation (likert + categorization)
 
 ``` 
-[launch] python3 potato/flask_server.py example-projects/summarization_evaluation/configs/summ-eval.yaml -p 8000
+[fetch] potato get summarization_evaluation
+[launch] potato start summarization_evaluation -p 8000
 [Annotate] http://localhost:8000/?PROLIFIC_PID=user
 ```
 
@@ -48,8 +51,8 @@ config](https://github.com/davidjurgens/potato/tree/master/example-projects/matc
 [Dataset](https://huggingface.co/datasets/copenlu/spiced)
 
 ``` 
-[Setup configuration files for multiple similar tasks] python3 potato/setup_multitask_config.py example-projects/match_finding/multitask_config.yaml
-[launch] python3 potato/flask_server.py example-projects/match_finding/configs/Computer_Science.yaml -p 8000
+[fetch] potato get match_finding
+[launch] potato start match_finding -p 8000
 [Annotate] http://localhost:8000/?PROLIFIC_PID=user
 ```
 
@@ -61,7 +64,8 @@ config](https://github.com/davidjurgens/potato/tree/master/example-projects/matc
 config](https://github.com/davidjurgens/potato/tree/master/example-projects/match_finding_with_prestudy)
 
 ``` 
-[launch] python3 potato/flask_server.py example-projects/match_finding_with_prestudy/configs/match_finding.yaml -p 8000
+[fetch] potato get match_finding_with_prestudy
+[launch] potato start match_finding_with_prestudy -p 8000
 [Annotate] http://localhost:8000/?PROLIFIC_PID=user
 ```
 
@@ -77,9 +81,9 @@ config](https://github.com/davidjurgens/potato/tree/master/example-projects/text
 [Dataset](https://github.com/Jiaxin-Pei/Certainty-in-Science-Communication/tree/main/data/annotated_data)
 
 ``` 
-[launch sentence-level] python3 potato/flask_server.py example-projects/textual_uncertainty/configs/sentence_level.yaml -p 8000
-[launch aspect-level] python3 potato/flask_server.py example-projects/textual_uncertainty/configs/aspect_level.yaml -p 8000
-[Annotate] http://localhost:8000
+[fetch] potato get textual_uncertainty
+[launch] potato start textual_uncertainty -p 8000
+[Annotate] http://localhost:8000/
 ```
 
 ![Alt text](img/textual_uncertainty.gif)
@@ -92,7 +96,8 @@ config](https://github.com/davidjurgens/potato/tree/master/example-projects/immi
 [Dataset](https://github.com/juliamendelsohn/framing)
 
 ``` 
-[launch] python3 potato/flask_server.py example-projects/immigration_framing/configs/config.yaml -p 8000
+[fetch] potato get immigration_framing
+[launch] potato start immigration_framing -p 8000
 [Annotate] http://localhost:8000/
 ```
 
@@ -106,8 +111,19 @@ config](https://github.com/davidjurgens/potato/tree/master/example-projects/gif_
 [Dataset](https://github.com/xingyaoww/gif-reply)
 
 ``` 
-[launch] python3 potato/flask_server.py example-projects/gif_reply/configs/gif-reply.yaml -p 8000
+[fetch] potato get gif_reply
+[launch] potato start gif_reply -p 8000
 [Annotate] http://localhost:8000/
 ```
 
 ![Alt text](img/gif_reply.gif)
+
+
+### Empathy as Appraisal (paired texts + likert)
+[yaml config](https://github.com/davidjurgens/potato/tree/master/example-projects/empathy) | [Paper](https://aclanthology.org/2020.emnlp-main.45.pdf)
+```
+[fetch] potato get empathy
+[launch] potato start empathy -p 8000
+[Annotate] http://localhost:8000/
+```
+![plot](img/empathy.png)
