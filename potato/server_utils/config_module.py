@@ -16,8 +16,14 @@ def init_config(args):
     # if the .yaml config file is given, directly use it
     if args.config_file[-5:] == '.yaml':
         if os.path.exists(args.config_file):
+            print("INFO: when you run the server directly from a .yaml file, please make sure your config file is put in the annotation project folder")
             config_file = args.config_file
-            print("Warning: when you run the server directly from a .yaml file, you must first go the the proper directory before running it")
+            split_path = os.path.abspath(config_file).split("/")
+            if split_path[-2] == "configs":
+                project_dir = "/".join(split_path[:-2])
+            else:
+                project_dir = "/".join(split_path[:-1])
+            print("project folder set as %s"%project_dir)
         else:
             print("%s not found, please make sure the .yaml config file is setup correctly" % args.config_file)
             quit()
