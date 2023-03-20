@@ -43,8 +43,7 @@ In the [match finding example
 project](https://github.com/davidjurgens/potato/tree/master/example-projects/match_finding),
 html tags are used to create two seperate boxes for the finding pairs.
 
-Update input data formats on the YAML config file
-\-\-\-\-\-\-\-\-\-\-\-\--
+## Update input data formats on the YAML config file
 
 You would pass the input data paths and field names into the YAML config
 file as follows:

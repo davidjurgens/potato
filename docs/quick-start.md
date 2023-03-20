@@ -8,8 +8,9 @@ Check all the available project templates
 
     potato list all
 
-potato currently support 
+potato currently support (check out example-projects page for all the projects)
 
+    simple_schema_examples
     dialogue_analysis
     empathy
     gif_reply
@@ -19,6 +20,7 @@ potato currently support
     sentiment_analysis
     summarization_evaluation
     textual_uncertainty
+    question_answering
 
 Get one from the project hub
 

@@ -6,6 +6,35 @@ predefined example projects, and welcome public contribution to the
 project hub. If you have used potato for your own annotation, you are
 encouraged to create a pull request and release your annotation setup.
 
+
+## Schema examples
+Potato provides a list of example tempaltes for [all the supporting annotation schemas](https://github.com/davidjurgens/potato/tree/pypi/project-hub/simple_examples/configs)
+and you can easily download them from project hub using:
+``` 
+[fetch] potato get simple_schema_examples
+[launch] potato start simple_schema_examples -p 8000
+
+>>> multiple config files found, please select the one you want to use (number 0-13)
+[0] simple-active-learning.yaml
+[1] simple-best-worst-scaling.yaml
+[2] simple-pairwise-comparison.yaml
+[3] simple-check-box-dynamic-labels.yaml
+[4] simple-video-as-label.yaml
+[5] simple-span-labeling.yaml
+[6] simple-likert.yaml
+[7] empty-to-copy.yaml
+[8] simple-single-choice-selection.yaml
+[9] simple-text-box.yaml
+[10] simple-check-box.yaml
+[11] kwargs_example.yaml
+[12] simple-check-box-with-free-response.yaml
+
+[Annotate] http://localhost:8000
+```
+
+
+## Annotation projects
+
 ### Dialogue analysis (span + categorization) 
 
 [yaml
