@@ -68,7 +68,7 @@ instance_id_to_data = {}
 task_assignment = {}
 
 # path to save user information
-USER_CONFIG_PATH = "potato/user_config.json"
+USER_CONFIG_PATH = "user_config.json"
 DEFAULT_LABELS_PER_INSTANCE = 3
 
 
