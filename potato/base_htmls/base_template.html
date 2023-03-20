@@ -324,10 +324,14 @@
           $(".span_container").first().each(
               function(index) {
 
-                  // We'll use the raw HTML of what has been annotated as the
-                  // set of labels to pass over to the server.
-                  // we save the outerHTML to accomadate user-defined HTML inputs
-                  var annotated_spans = $(this).parent().prop('outerHTML');
+                  // we save the outerHTML to accomadate user-defined HTML inputs,
+                  // otherwise we just save the plain text
+                  if ($(this).parent().parent().attr("name") == "instance_text"){
+                      var annotated_spans = $(this).parent().prop('outerHTML');
+                  } else {
+                      var annotated_spans = $(this).parent().prop('innerHTML');
+                  }
+
 
                   // Due to the DJ's inability to write decent Javascript, we're
                   // fully punting on the idea of doing label preprocessing here
