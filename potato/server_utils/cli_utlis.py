@@ -1,3 +1,5 @@
+import os.path
+
 import requests
 import zipfile
 import io
@@ -23,11 +25,21 @@ def get_project_from_hub(name):
         print("%s not found in the project_hub"%name)
         return
     response = requests.get(project_hub[name])
+
+    while os.path.exists('%s/'%name):
+        print("WARNING: %s already exists"%name)
+        answer = input("Overwrite the %s? (y/n) "%name).lower()
+        if answer == 'y':
+            break
+        else:
+            answer = input("Please type in a different project name:")
+            name = answer
+
     # Extract the contents of the ZIP archive
     with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
         # Extract the contents of the archive to a directory
-        archive.extractall('%s/'%name)
-    print("successfully fetched %s"%name)
+        archive.extractall('%s/' % name)
+    print("successfully fetched %s" % name)
 
 # show all the available projects in the hub
 def show_project_hub(type):
