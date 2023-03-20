@@ -8,7 +8,7 @@ Check all the available project templates
 
     potato list all
 
-potato currently support (check out example-projects page for all the projects)
+potato currently supports (check out example-projects page for all the projects)
 
     simple_schema_examples
     dialogue_analysis
