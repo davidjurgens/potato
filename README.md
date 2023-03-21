@@ -38,18 +38,36 @@ Potato comes with features that allows you to collect more reliable annotations 
 - [Built-in time check](https://potato-annotation-tutorial.readthedocs.io/en/latest/annotator_stats.html#annotation-time): Potato automatically keeps track of the time annotators spend on each instance and allows you to better analyze annotator behaviors.
 
 
-## Quick Start
+## Quick start
+install potato [pypi package](https://pypi.org/project/potato-annotation/)
+
+    pip install potato-annotation
+
+Check all the available project templates
+
+    potato list all
+
+Get one from the project hub
+
+    potato get sentiment_analysis
+
+Start the project
+
+    potato start sentiment_analysis
+
+
+## Start directly from the github repo
 Clone the github repo to your computer
 
     git clone https://github.com/davidjurgens/potato.git
 
 Install all the required dependencies
 
-    pip3 install -r requirements.txt
+    pip install -r requirements.txt
 
 To run a simple check-box style annotation on text data, run
 
-    python3 potato/flask_server.py config/examples/simple-check-box.yaml -p 8000
+    python potato/flask_server.py start config/examples/simple-check-box.yaml -p 8000
         
 This will launch the webserver on port 8000 which can be accessed at [http://localhost:8000](http://localhost:8000). 
 
@@ -59,67 +77,30 @@ The `config/examples` folder contains example `.yaml` configuration files that m
 
 
 
-## Example projects (project hub)
+## Baked potatoes
 Potato aims to improve the replicability of data annotation and reduce the cost for researchers to set up new annotation tasks. Therefore, Potato comes with a list of predefined example projects, and welcome public contribution to the project hub. If you have used potato for your own annotation, you are encouraged to create a pull request and release your annotation setup. 
 
-### Dialogue analysis (span + categorization)
+Potato currently include the following example projects:
 
-    [launch] python3 potato/flask_server.py example-projects/dialogue_analysis/configs/dialogue-analysis.yaml -p 8000
-    [Annotate] http://localhost:8000
+- [simple_schema_examples](https://potato-annotation.readthedocs.io/en/latest/example-projects/#simple-schema-examples)
+- [dialogue_analysis](https://potato-annotation.readthedocs.io/en/latest/example-projects/#dialogue-analysis-span-categorization)
+- [empathy](https://potato-annotation.readthedocs.io/en/latest/example-projects/#empathy)
+- [gif_reply](https://potato-annotation.readthedocs.io/en/latest/example-projects/#gif-reply)
+- [immigration_framing](https://potato-annotation.readthedocs.io/en/latest/example-projects/#immigration-framing)
+- [match_finding](https://potato-annotation.readthedocs.io/en/latest/example-projects/#match-finding)
+- [match_finding_with_prestudy](https://potato-annotation.readthedocs.io/en/latest/example-projects/#match-findings-in-papers-and-news-prestudy-test)
+- [sentiment_analysis](https://potato-annotation.readthedocs.io/en/latest/example-projects/#sentiment-analysis)
+- [summarization_evaluation](https://potato-annotation.readthedocs.io/en/latest/example-projects/#summarization-evaluation)
+- [textual_uncertainty](https://potato-annotation.readthedocs.io/en/latest/example-projects/#textual-uncertainty)
+- [question_answering](https://potato-annotation.readthedocs.io/en/latest/example-projects/#question-answering)
 
-![plot](./images/dialogue_analysis.gif)
-
-### Sentiment analysis (categorization)
-
-    [launch] python3 potato/flask_server.py example-projects/sentiment_analysis/configs/sentiment-analysis.yaml -p 8000
-    [Annotate] http://localhost:8000
-    
-![plot](./images/sentiment_analysis.png)
-    
-### Summarization evaluation (likert + categorization)
-
-    [launch] python3 potato/flask_server.py example-projects/summarization_evaluation/configs/summ-eval.yaml -p 8000
-    [Annotate] http://localhost:8000/?PROLIFIC_PID=user
-    
-![plot](./images/summ_eval.png)
-
-### Match findings in papers and news (likert + prescreening questions + multi-task)
-[yaml config](https://github.com/davidjurgens/potato/tree/master/example-projects/match_finding) | [Paper](http://www.copenlu.com/publication/2022_emnlp_wright/) | [Dataset](https://huggingface.co/datasets/copenlu/spiced)
-
-    [Setup configuration files for multiple similar tasks] python3 potato/setup_multitask_config.py example-projects/match_finding/multitask_config.yaml
-    [launch] python3 potato/flask_server.py example-projects/match_finding/configs/Computer_Science.yaml -p 8000
-    [Annotate] http://localhost:8000/?PROLIFIC_PID=user
-    
-![plot](./images/match_finding.gif)
-
-### Immigration framing in tweets (Multi-schema categorization)
-[yaml config](https://github.com/davidjurgens/potato/tree/master/example-projects/immigration_framing) | [Paper](https://aclanthology.org/2021.naacl-main.179/) | [Dataset](https://github.com/juliamendelsohn/framing)
-
-    [launch] python3 potato/flask_server.py example-projects/immigration_framing/configs/config.yaml -p 8000
-    [Annotate] http://localhost:8000/
-    
-![plot](./images/immigration-framing.gif)
-
-### GIF Reply Appropriateness (video as label)
-[yaml config](https://github.com/davidjurgens/potato/tree/master/example-projects/gif_reply) | [Paper](https://aclanthology.org/2021.findings-emnlp.276/) | [Dataset](https://github.com/xingyaoww/gif-reply)
-
-    [launch] python3 potato/flask_server.py example-projects/gif_reply/configs/gif-reply.yaml -p 8000
-    [Annotate] http://localhost:8000/
-
-![plot](./images/gif_reply.gif)
-
-### Empathy as Appraisal (paired texts + likert)
-[yaml config](https://github.com/davidjurgens/potato/tree/master/example-projects/empathy) | [Paper](https://aclanthology.org/2020.emnlp-main.45.pdf)
-
-    [launch] python3 potato/flask_server.py example-projects/empathy/configs/empathy.yaml -p 8000
-    [Annotate] http://localhost:8000/
-![plot](./images/empathy.png)
+Please check full list of [baked potatoes](https://potato-annotation.readthedocs.io/en/latest/example-projects/) for more details!
 
 
 ## Design Team and Support
 
 Potato is run by a small and engergetic team of academics doing the best they can. For support, please leave a issue on this git repo. Feature requests and issues are both welcomed!
-If you have any questions or want to collaborate on this project, please email pedropei@umich.edu
+If you have any questions or want to collaborate on this project, please email pedropei@umich.edu or jurgens@umich.edu
 
 
 ## License
@@ -137,16 +118,16 @@ FAQ:
     Yes, this is allowed with the license
 4. If I am working for a company, can I use potato within my company’s pipelines for data annotation (e.g., integrate potato within my company’s internal infrastructure)?
     
-    Yes, this is allowed with the license—we’d love to hear about these to advertise, so please contact us at pedropei@umich.edu.
+    Yes, this is allowed with the license—we’d love to hear about these to advertise, so please contact us at jurgens@umich.edu.
 5. Can I integrate potato within a larger annotation pipeline and release that pipeline as an open-source library or service for others to use?
     
     Yes, this is allowed with the license—we’d love to hear about these to advertise, so please contact us
 6. Can I integrate potato within a larger annotation pipeline and release that publicly as commercial software/service/resource for others to use?
    
-   No, this is not allowed by Polyform Shield but commercial licensing of potato for this purpose is available. Please reach out to us at pedropei@umich.edu for details.
+   No, this is not allowed by Polyform Shield but commercial licensing of potato for this purpose is available. Please reach out to us at jurgens@umich.edu for details.
 7. I am working for a crowdsourcing platform, can I combine potato in our platform to provide better service for my customers?
    
-   No, this is not allowed by Polyform Shield but commercial licensing of potato for this purpose is available. Please reach out to us at pedropei@umich.edu for details.
+   No, this is not allowed by Polyform Shield but commercial licensing of potato for this purpose is available. Please reach out to us at jurgens@umich.edu for details.
 
 Have a question or case not covered by the above? Please reach out to us and we’ll add it to the list!
 

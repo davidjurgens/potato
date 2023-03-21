@@ -1,0 +1,8 @@
+include potato/templates/congrats.html
+include potato/templates/home.html
+include potato/templates/id_login_home.html
+include potato/templates/signup.html
+include potato/templates/error.html
+recursive-include potato/base_html/ *
+recursive-include potato/static/ *
+global-exclude .DS_Store

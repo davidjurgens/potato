@@ -1,0 +1,127 @@
+{
+    "port": 9001,
+    "server_name": "potato annotator",
+    "annotation_task_name": "Match findings (Computer_Science)",
+    "output_annotation_dir": "annotation_output/pilot/Computer_Science/",
+    "output_annotation_format": "tsv",
+    "annotation_codebook_url": "",
+    "data_files": [
+        "data_files/pilot_data_Computer_Science.csv"
+    ],
+    "item_properties": {
+        "id_key": "id",
+        "text_key": "text"
+    },
+    "list_as_text": {
+        "text_list_prefix_type": "None",
+        "horizontal": true
+    },
+    "user_config": {
+        "allow_all_users": true,
+        "users": []
+    },
+    "login": {
+        "type": "url_direct",
+        "url_argument": "PROLIFIC_PID"
+    },
+    "jumping_to_id_disabled": false,
+    "hide_navbar": true,
+    "surveyflow": {
+        "on": true,
+        "order": [
+            "pre_annotation",
+            "post_annotation"
+        ],
+        "pre_annotation": [
+            "surveyflow/intro.jsonl",
+            "surveyflow/1_Completely_different.jsonl",
+            "surveyflow/2_Mostly_different.jsonl",
+            "surveyflow/3_Somewhat_similar.jsonl",
+            "surveyflow/4_Mostly_the_same.jsonl",
+            "surveyflow/5_Completely_the_same.jsonl",
+            "surveyflow/consent.jsonl",
+            "surveyflow/instruction.jsonl"
+        ],
+        "prestudy_passed": [
+            "surveyflow/prestudy_pass.jsonl"
+        ],
+        "prestudy_failed": [
+            "surveyflow/prestudy_fail.jsonl"
+        ],
+        "post_annotation": [
+            "surveyflow/experience.jsonl",
+            "surveyflow/end.jsonl"
+        ],
+        "testing": [
+            "surveyflow/testing.jsonl"
+        ]
+    },
+    "prestudy": {
+        "on": false,
+        "minimum_score": 0.8,
+        "groundtruth_key": "whether_match",
+        "question_key": "Whether the presented sentences are discussing the same scientific finding",
+        "answer_mapping": {
+            "Yes": true,
+            "No": false
+        },
+        "pass_page": "surveyflow/prestudy_pass.jsonl",
+        "fail_page": "surveyflow/prestudy_fail.jsonl"
+    },
+    "automatic_assignment": {
+        "on": true,
+        "output_filename": "task_assignment.json",
+        "sampling_strategy": "random",
+        "labels_per_instance": 3,
+        "instance_per_annotator": 5,
+        "test_question_per_annotator": 0,
+        "users": []
+    },
+    "alert_time_each_instance": 10000000,
+    "horizontal_key_bindings": true,
+    "annotation_schemes": [
+        {
+            "annotation_type": "likert",
+            "name": "The information conveyed in the findings is",
+            "description": "The information conveyed in the findings is",
+            "labels": [
+                {
+                    "name": "Completely different",
+                    "tooltip": "Sentences in this category have findings which convey completely different information",
+                    "key_value": "1"
+                },
+                {
+                    "name": "Mostly different",
+                    "tooltip": "The findings may talk about the same topic, but the actual information is mostly different; for example, these sentences convey mostly different information even though they talk about the same topic",
+                    "key_value": "2"
+                },
+                {
+                    "name": "Somewhat similar",
+                    "tooltip": "The findings are discussing relevant research outputs but there are some differences in the overall information conveyed",
+                    "key_value": "3"
+                },
+                {
+                    "name": "Mostly the same",
+                    "tooltip": "two sentences are describing the mostly the same information but at different levels of generality, or one could support the other",
+                    "key_value": "4"
+                },
+                {
+                    "name": "Completely the same",
+                    "tooltip": "complete overlap in the information in the findings conveyed by the two sentences",
+                    "key_value": "5"
+                }
+            ],
+            "has_free_response": {
+                "instruction": "Comments (optional):"
+            },
+            "displaying_score": true,
+            "label_requirement": {
+                "required": true
+            }
+        }
+    ],
+    "html_layout": "templates/layout.html",
+    "base_html_template": "default",
+    "header_file": "default",
+    "site_dir": "default"
+}
