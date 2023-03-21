@@ -6,17 +6,17 @@ import io
 
 # all the available examples in the project hub
 project_hub = {
-    'simple_schema_examples': 'https://github.com/davidjurgens/potato/raw/pypi/project-hub/simple_examples.zip',
-    'dialogue_analysis': 'https://github.com/davidjurgens/potato/raw/pypi/project-hub/dialogue_analysis.zip',
-    'empathy': 'https://github.com/davidjurgens/potato/raw/pypi/project-hub/empathy.zip',
-    'gif_reply': 'https://github.com/davidjurgens/potato/raw/pypi/project-hub/gif_reply.zip',
-    'immigration_framing': 'https://github.com/davidjurgens/potato/raw/pypi/project-hub/immigration_framing.zip',
-    'match_finding': 'https://github.com/davidjurgens/potato/raw/pypi/project-hub/match_finding.zip',
-    'match_finding_with_prestudy': 'https://github.com/davidjurgens/potato/raw/pypi/project-hub/match_finding_with_prestudy.zip',
-    'sentiment_analysis': 'https://github.com/davidjurgens/potato/raw/pypi/project-hub/sentiment_analysis.zip',
-    'summarization_evaluation': 'https://github.com/davidjurgens/potato/raw/pypi/project-hub/summarization_evaluation.zip',
-    'textual_uncertainty': 'https://github.com/davidjurgens/potato/raw/pypi/project-hub/textual_uncertainty.zip',
-    'question_answering': 'https://github.com/davidjurgens/potato/raw/pypi/project-hub/question_answering.zip'
+    'simple_schema_examples': 'https://github.com/davidjurgens/potato/raw/master/project-hub/simple_examples.zip',
+    'dialogue_analysis': 'https://github.com/davidjurgens/potato/raw/master/project-hub/dialogue_analysis.zip',
+    'empathy': 'https://github.com/davidjurgens/potato/raw/master/project-hub/empathy.zip',
+    'gif_reply': 'https://github.com/davidjurgens/potato/raw/master/project-hub/gif_reply.zip',
+    'immigration_framing': 'https://github.com/davidjurgens/potato/raw/master/project-hub/immigration_framing.zip',
+    'match_finding': 'https://github.com/davidjurgens/potato/raw/master/project-hub/match_finding.zip',
+    'match_finding_with_prestudy': 'https://github.com/davidjurgens/potato/raw/master/project-hub/match_finding_with_prestudy.zip',
+    'sentiment_analysis': 'https://github.com/davidjurgens/potato/raw/master/project-hub/sentiment_analysis.zip',
+    'summarization_evaluation': 'https://github.com/davidjurgens/potato/raw/master/project-hub/summarization_evaluation.zip',
+    'textual_uncertainty': 'https://github.com/davidjurgens/potato/raw/master/project-hub/textual_uncertainty.zip',
+    'question_answering': 'https://github.com/davidjurgens/potato/raw/master/project-hub/question_answering.zip'
 }
 
 # get a speicific project from the hub
