@@ -23,11 +23,12 @@ and you can easily download them from project hub using:
 [5] simple-span-labeling.yaml
 [6] simple-likert.yaml
 [7] empty-to-copy.yaml
-[8] simple-single-choice-selection.yaml
-[9] simple-text-box.yaml
-[10] simple-check-box.yaml
-[11] kwargs_example.yaml
-[12] simple-check-box-with-free-response.yaml
+[8] simple-video-annotation.yaml
+[9] simple-single-choice-selection.yaml
+[10] simple-text-box.yaml
+[11] simple-check-box.yaml
+[12] kwargs_example.yaml
+[13] simple-check-box-with-free-response.yaml
 
 [Annotate] http://localhost:8000
 ```
@@ -71,12 +72,11 @@ config](https://github.com/davidjurgens/potato/tree/master/example-projects/sent
 
 ![Alt text](img/summ_eval.png)
 
-### Match findings in papers and news (likert + prescreening questions +
-multi-task) 
+### Match findings in papers and news (likert + prescreening questions + multi-task) 
 
 [yaml
 config](https://github.com/davidjurgens/potato/tree/master/example-projects/match_finding)
-\| [Paper](http://www.copenlu.com/publication/2022_emnlp_wright/) \|
+| [Paper](http://www.copenlu.com/publication/2022_emnlp_wright/) |
 [Dataset](https://huggingface.co/datasets/copenlu/spiced)
 
 ``` 
@@ -104,9 +104,9 @@ config](https://github.com/davidjurgens/potato/tree/master/example-projects/matc
 
 [yaml
 config](https://github.com/davidjurgens/potato/tree/master/example-projects/textual_uncertainty)
-\|
+|
 [Paper](https://jiaxin-pei.github.io/project_websites/certainty/Certainty-in-Science-Communication.html)
-\|
+|
 [Dataset](https://github.com/Jiaxin-Pei/Certainty-in-Science-Communication/tree/main/data/annotated_data)
 
 ``` 
@@ -121,7 +121,7 @@ config](https://github.com/davidjurgens/potato/tree/master/example-projects/text
 
 [yaml
 config](https://github.com/davidjurgens/potato/tree/master/example-projects/immigration_framing)
-\| [Paper](https://aclanthology.org/2021.naacl-main.179/) \|
+| [Paper](https://aclanthology.org/2021.naacl-main.179/) |
 [Dataset](https://github.com/juliamendelsohn/framing)
 
 ``` 
@@ -136,7 +136,7 @@ config](https://github.com/davidjurgens/potato/tree/master/example-projects/immi
 
 [yaml
 config](https://github.com/davidjurgens/potato/tree/master/example-projects/gif_reply)
-\| [Paper](https://aclanthology.org/2021.findings-emnlp.276/) \|
+| [Paper](https://aclanthology.org/2021.findings-emnlp.276/) |
 [Dataset](https://github.com/xingyaoww/gif-reply)
 
 ``` 

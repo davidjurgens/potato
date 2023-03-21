@@ -1,0 +1,2 @@
+user	instance_id	displayed_text	span_annotation:::positive	span_annotation:::neutral
+debug_user	1	"<div name=""instance_text"" data-toggle=""tooltip"" data-html=""true"" data-placement=""top"" data-original-title=""test tool tip"">Tom: Isn't this awesome?!</div>"	"[{'start': 129, 'end': 136, 'span': ""n't thi"", 'annotation': 'positive'}]"	[{'start': 138, 'end': 145, 'span': 'awesome', 'annotation': 'neutral'}]
