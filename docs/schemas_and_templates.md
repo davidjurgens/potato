@@ -271,6 +271,26 @@ example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe8086
 ]
 ```
 
+If you wants to use a textarea, simply add a text area field in the annotation_schemas and you can also add multiple input textboxes 
+with "labels":
+``` YAML
+"annotation_schemes": [      
+    {
+        "annotation_type": "text",
+        "name": "textbox_input",
+        "description": "How does this text make you feel?",
+        # you could easily define a list of textboxes within one schema with a list of labels
+        "labels": ['happy?','sad?'],
+        # if you want to use multi-line textbox, turn on the text area and set the desired rows and cols of the textbox
+            "textarea": {
+              "on": False,
+              "rows": 2,
+              "cols": 40
+        }
+    }       
+]
+```
+
 ## Pairwise comparison
 
 **Simple Pairwise Example** ([yaml
