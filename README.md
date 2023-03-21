@@ -2,8 +2,8 @@
  
 [📖Documentation](https://potato-annotation.readthedocs.io/) | [🍎Feature hightlights](#Feature-hightlights)  |  [🛫️Quick Start](#Quick-Start) | [🌰Example projects (project hub)](#Example-projects-project-hub) | [🔥Design Team and Support](#Design-Team-and-Support) | [💰License](#License) | [🍞Cite us](#Cite-us)
 
-<p style="text-align:center;">
-<img src="https://github.com/davidjurgens/potato/raw/master/docs/img/potato-goal.png" width="500" height="280">
+<p align="center">
+<img src="https://github.com/davidjurgens/potato/raw/master/docs/img/potato-goal.png" width="600" height="280">
 </p>
 
 
