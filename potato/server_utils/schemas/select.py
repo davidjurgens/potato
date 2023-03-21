@@ -3,6 +3,7 @@ Select Layout
 """
 
 import os
+from pathlib import Path
 
 
 def generate_select_layout(annotation_scheme):
@@ -30,11 +31,11 @@ def generate_select_layout(annotation_scheme):
         )
     )
 
-    # todo move this to the config file
+    cur_program_dir = Path(os.path.abspath(__file__)).parent.parent.parent.absolute()  # get the current program dir (for the case of pypi, it will be the path where potato is installed)
     predefined_labels_dict = {
-        "country": "potato/static/survey_assets/country_dropdown_list.html",
-        "ethnicity": "potato/static/survey_assets/ethnicity_dropdown_list.html",
-        "religion": "potato/static/survey_assets/religion_dropdown_list.html",
+        "country": os.path.join(cur_program_dir, "static/survey_assets/country_dropdown_list.html"),
+        "ethnicity": os.path.join(cur_program_dir, "static/survey_assets/ethnicity_dropdown_list.html"),
+        "religion": os.path.join(cur_program_dir, "static/survey_assets/religion_dropdown_list.html"),
     }
 
     # directly use the predefined labels if annotation_scheme["use_predefined_labels"] is defined
