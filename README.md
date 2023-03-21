@@ -100,7 +100,7 @@ Please check full list of [baked potatoes](https://potato-annotation.readthedocs
 ## Design Team and Support
 
 Potato is run by a small and engergetic team of academics doing the best they can. For support, please leave a issue on this git repo. Feature requests and issues are both welcomed!
-If you have any questions or want to collaborate on this project, please email pedropei@umich.edu
+If you have any questions or want to collaborate on this project, please email pedropei@umich.edu or jurgens@umich.edu
 
 
 ## License
@@ -118,16 +118,16 @@ FAQ:
     Yes, this is allowed with the license
 4. If I am working for a company, can I use potato within my company’s pipelines for data annotation (e.g., integrate potato within my company’s internal infrastructure)?
     
-    Yes, this is allowed with the license—we’d love to hear about these to advertise, so please contact us at pedropei@umich.edu.
+    Yes, this is allowed with the license—we’d love to hear about these to advertise, so please contact us at jurgens@umich.edu.
 5. Can I integrate potato within a larger annotation pipeline and release that pipeline as an open-source library or service for others to use?
     
     Yes, this is allowed with the license—we’d love to hear about these to advertise, so please contact us
 6. Can I integrate potato within a larger annotation pipeline and release that publicly as commercial software/service/resource for others to use?
    
-   No, this is not allowed by Polyform Shield but commercial licensing of potato for this purpose is available. Please reach out to us at pedropei@umich.edu for details.
+   No, this is not allowed by Polyform Shield but commercial licensing of potato for this purpose is available. Please reach out to us at jurgens@umich.edu for details.
 7. I am working for a crowdsourcing platform, can I combine potato in our platform to provide better service for my customers?
    
-   No, this is not allowed by Polyform Shield but commercial licensing of potato for this purpose is available. Please reach out to us at pedropei@umich.edu for details.
+   No, this is not allowed by Polyform Shield but commercial licensing of potato for this purpose is available. Please reach out to us at jurgens@umich.edu for details.
 
 Have a question or case not covered by the above? Please reach out to us and we’ll add it to the list!
 
