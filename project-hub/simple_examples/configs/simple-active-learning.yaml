@@ -1,0 +1,142 @@
+{
+    "port": 9001,
+
+    "server_name": "potato annotator",
+
+    "annotation_task_name": "Simple Single-Choice Example",
+
+    # Potato will write the annotation file for all annotations to this
+    # directory, as well as per-annotator output files and state information
+    # necessary to restart annotation.
+    "output_annotation_dir": "annotation_output/simple-radio-selection/",
+
+    # The output format for the all-annotator data. Allowed formats are:
+    # * jsonl
+    # * json (same output as jsonl)
+    # * csv
+    # * tsv
+    #
+    "output_annotation_format": "tsv", 
+
+    # If annotators are using a codebook, this will be linked at the top to the
+    # instance for easy access
+    "annotation_codebook_url": "",
+
+    "data_files": [
+       "data/toy-example.json"
+    ],
+
+    "item_properties": {
+        "id_key": "id",
+        "text_key": "text",
+        "context_key": "context"
+    },
+
+
+    "user_config": {
+      "allow_all_users": True,      
+      "users": [  ],
+    },
+
+    # This controls whether Potato will actively re-order unlabeled instances
+    # during annotation after a certain number of items are annotated to
+    # prioritize those that a basic classifier model is most uncertain about. If
+    # you have lots of unlabeled data, active learning can potentially help
+    # maximize the data you get for your "annotation budget", though if you plan
+    # on annotative *all* the data, active learning will have no effect.    
+    "active_learning_config": {
+
+      "enable_active_learning": True,
+
+      # The fully specified name of an sklearn classifier object with packages,
+      # e.g., "sklearn.linear_model.LogisticRegression". This classifier will be
+      # trained on the annotated data and used to re-order the remaining
+      # instances.
+      "classifier_name": "sklearn.linear_model.LogisticRegression",
+
+      # Any kwargs that you want to pass to the classifier during instantiation
+      "classifier_kwargs": { },
+      
+      # The fully specified name of an sklearn tokenizer object with packages,
+      # e.g., "sklearn.feature_extraction.text.CountVectorizer". This tokenizer
+      # will be used to tranform the text instances into features.
+      "vectorizer_name": "sklearn.feature_extraction.text.CountVectorizer", 
+      
+      # Any kwargs that you want to pass to the tokenizer during instantiation.
+      #
+      # NOTE: it's generally a good idea to keep the active learning classifier
+      # "fast" so that annotators aren't waiting long when classifying. This
+      # often meanings capping the number of features
+      "vectorizer_kwargs": { },
+
+      # When multiple annotators have labeled the same data, this option decides
+      # how to resolve the mulitple annotations to a single label for the
+      # purpose of training the active learning classifier. 
+      "resolution_strategy": "random",
+
+      # Some part of the data should still be randomly selected (i.e., not based
+      # on active learning). This ensure the annotation process can still see a
+      # variety of unbiased samples and that the test data can be drawn from an
+      # empirical distribution of the data.
+      "random_sample_percent": 50,
+
+      # The names of all annotation schema that active learning should be run
+      # for. If multiple schema are provided, an instance will be prioritized
+      # based on its lowest certainty across all schema (i.e., the
+      # least-confident items).
+      #
+      # NOTE: if this field is left unset, active learning will use all schema.
+      "active_learning_schema": [ "favorite_food" ],
+
+      "update_rate": 5,
+
+      "max_inferred_predictions": 20,
+      
+    },
+      
+    
+    
+    # How many seconds do you want the annotators spend on each instance, after
+    # that, an alert will be sent per alert_time_each_instance seconds.
+    "alert_time_each_instance": 10000000,
+
+    "annotation_schemes": [      
+        {
+            "annotation_type": "radio",
+            "name": "favorite_food", 
+            "description": "What food does this text make you want to eat?",
+            "labels": [
+               "pizza", "bagels", "burgers", "curry", "tacos",
+            ],
+
+            # If true, numbers [1-len(labels)] will be bound to each
+            # label. Aannotations with more than 10 are not supported with this
+            # simple keybinding and will need to use the full item specification
+            # to bind all labels to keys.
+            "sequential_key_binding": True,                        
+        },       
+    ],
+
+    # The html that changes the visualiztation for your task. Change this file
+    # to influence the layout and description of your task. This is not a full
+    # HTML page, just the piece that does lays out your task's pieces
+    # you may use templates in our lib, if you want to use your own template,
+    # please replace the string as a path to the template
+    "html_layout": "default",
+
+    # The core UI files for Potato. You should not need to change these normally.
+    #
+    # Exceptions to this might include:
+    # 1) You want to add custom CSS/fonts to style your task
+    # 2) Your layout requires additional JS/assets to render
+    # 3) You want to support additional keybinding magic
+    #
+    # if you want to use your own template,
+    # please replace the string as a path to the template
+    "base_html_template": "default",
+    "header_file": "default",
+
+    # This is where the actual HTML files will be generated
+    "site_dir": "default"
+
+}

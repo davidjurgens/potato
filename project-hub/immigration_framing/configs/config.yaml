@@ -1,0 +1,182 @@
+{
+    "port": 9001,
+
+    "server_name": "potato annotator",
+
+    "annotation_task_name": "Immigration Framing",
+
+    # Potato will write the annotation file for all annotations to this
+    # directory, as well as per-annotator output files and state information
+    # necessary to restart annotation.
+    "output_annotation_dir": "annotation_output/",
+
+    # The output format for the all-annotator data. Allowed formats are:
+    # * jsonl
+    # * json (same output as jsonl)
+    # * csv
+    # * tsv
+    #
+    "output_annotation_format": "tsv",
+
+    # If annotators are using a codebook, this will be linked at the top to the
+    # instance for easy access
+    "annotation_codebook_url": "",
+
+    "data_files": [
+       "data_files/framing_tweets.json"
+    ],
+
+    "item_properties": {
+        "id_key": "id",
+        "text_key": "text"
+    },
+
+    "keyword_highlights_file": "frame_keywords.tsv",
+
+    # How many seconds do you want the annotators spend on each instance, after
+    # that, an alert will be sent per alert_time_each_instance seconds.
+    "alert_time_each_instance": 10000000,
+    "horizontal_key_bindings": true,
+
+    "annotation_schemes": [
+        {
+            "annotation_type": "multiselect",
+            "name": "Issue-General",
+            "description": "Issue-General",
+            "labels": [
+                { "name": "Economic",
+                  "tooltip_file": "tooltips/ig_economic.html"
+                },
+                {
+                  "name": "Capacity and Resources",
+                  "tooltip_file": "tooltips/ig_capacity.html"
+                 },
+
+                { "name": "Morality and Ethics",
+                  "tooltip_file": "tooltips/ig_morality.html"
+                },
+
+                { "name": "Fairness and Equality",
+                  "tooltip_file": "tooltips/ig_fairness.html",
+                },
+                { "name": "Legality, Constitutionality, Jurisdiction",
+                  "tooltip_file": "tooltips/ig_legality.html",
+                },
+                { "name": "Crime and Punishment",
+                  "tooltip_file": "tooltips/ig_crime.html",
+                },
+                { "name": "Security and Defense",
+                  "tooltip_file": "tooltips/ig_security.html",
+                },
+                { "name": "Health and Safety",
+                  "tooltip_file": "tooltips/ig_health.html",
+                },
+                { "name": "Quality of Life",
+                  "tooltip_file": "tooltips/ig_quality.html"
+                },
+                { "name": "Cultural Identity",
+                  "tooltip_file": "tooltips/ig_cultural.html"
+                },
+                { "name": "Public Sentiment",
+                  "tooltip_file": "tooltips/ig_public.html"
+                },
+                { "name": "Political Factors and Implications",
+                  "tooltip_file": "tooltips/ig_political.html"
+                },
+                { "name": "Policy Prescription and Evaluation",
+                  "tooltip_file": "tooltips/ig_policy.html"
+                },
+                { "name": "External Regulation and Reputation",
+                  "tooltip_file": "tooltips/ig_external.html"
+                },
+                "None"
+            ]
+        },
+
+        {
+            "annotation_type": "multiselect",
+            "name": "Issue-Specific",
+            "description": "Issue-Specific",
+            "labels": [
+
+                { "name": "Victim: Global Economy",
+                  "tooltip_file": "tooltips/sp_global.html"
+                },
+                { "name": "Victim: Humanitarian",
+                  "tooltip_file": "tooltips/sp_humanitarian.html"
+                },
+                { "name": "Victim: War",
+                  "tooltip_file": "tooltips/sp_war.html"
+                },
+                { "name": "Victim: Discrimination",
+                  "tooltip_file": "tooltips/sp_discrimination.html"
+                },
+                { "name": "Hero: Cultural Diversity",
+                  "tooltip_file": "tooltips/sp_diversity.html"
+                },
+                { "name": "Hero: Integration",
+                  "tooltip_file": "tooltips/sp_integration.html"
+                },
+                { "name": "Hero: Worker",
+                  "tooltip_file": "tooltips/sp_worker.html"
+                },
+                { "name": "Threat: Jobs",
+                  "tooltip_file": "tooltips/sp_jobs.html"
+                },
+                { "name": "Threat: Public Order",
+                  "tooltip_file": "tooltips/sp_order.html"
+                },
+                { "name": "Threat: Fiscal",
+                  "tooltip_file": "tooltips/sp_fiscal.html"
+                },
+                { "name": "Threat: National Cohesion",
+                  "tooltip_file": "tooltips/sp_cohesion.html"
+                },
+                "None"
+            ]
+
+        },
+
+        {
+            "annotation_type": "multiselect",
+            "name": "Narrative",
+            "description": "Narrative",
+            "labels": [
+                {
+                   "name": "Episodic",
+                   "tooltip_file": "tooltips/narr_episodic.html",
+                },
+                {
+                  "name": "Thematic",
+                  "tooltip_file": "tooltips/narr_thematic.html"
+                },
+                "None"
+            ]
+
+        }
+
+    ],
+
+    # The html that changes the visualiztation for your task. Change this file
+    # to influence the layout and description of your task. This is not a full
+    # HTML page, just the piece that does lays out your task's pieces
+    "html_layout": "fixed_keybinding",
+
+
+    # The core UI files for Potato. You should not need to change these normally.
+    #
+    # Exceptions to this might include:
+    # 1) You want to add custom CSS/fonts to style your task
+    # 2) Your layout requires additional JS/assets to render
+    # 3) You want to support additional keybinding magic
+    #
+    # if you want to use your own template,
+    # please replace the string as a path to the template
+    "base_html_template": "default",
+    "header_file": "default",
+
+    # This is where the actual HTML files will be generated
+    "site_dir": "default"
+
+
+}

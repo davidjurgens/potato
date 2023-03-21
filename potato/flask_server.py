@@ -23,15 +23,26 @@ import flask
 from flask import Flask, render_template, request
 from bs4 import BeautifulSoup
 
+cur_working_dir = os.getcwd() #get the current working dir
+cur_program_dir = os.path.dirname(os.path.abspath(__file__)) #get the current program dir (for the case of pypi, it will be the path where potato is installed)
+flask_templates_dir = os.path.join(cur_program_dir,'templates') #get the dir where the flask templates are saved
+base_html_dir = os.path.join(cur_program_dir,'base_htmls') #get the dir where the the base_html templates files are saved
+
+#insert the current program dir into sys path
+sys.path.insert(0, cur_program_dir)
+
 from create_task_cli import create_task_cli, yes_or_no
 from server_utils.arg_utils import arguments
 from server_utils.config_module import init_config, config
 from server_utils.front_end import generate_site, generate_surveyflow_pages
 from server_utils.schemas.span import render_span_annotations
+from server_utils.cli_utlis import get_project_from_hub, show_project_hub
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logging.basicConfig()
+
+
 
 random.seed(0)
 
@@ -57,7 +68,7 @@ instance_id_to_data = {}
 task_assignment = {}
 
 # path to save user information
-USER_CONFIG_PATH = "potato/user_config.json"
+USER_CONFIG_PATH = "user_config.json"
 DEFAULT_LABELS_PER_INSTANCE = 3
 
 
@@ -89,6 +100,24 @@ COLOR_PALETTE = [
     "rgb(180, 151, 231)",
     "rgb(179, 179, 179)",
 ]
+
+#mapping the base html template str to the real file
+template_dict = {
+    "base_html_template":{
+        'base': os.path.join(cur_program_dir, 'base_html/base_template.html'),
+        'default': os.path.join(cur_program_dir, 'base_html/base_template.html'),
+    },
+    "header_file":{
+        'default': os.path.join(cur_program_dir, 'base_html/header.html'),
+    },
+    "html_layout":{
+        'default': os.path.join(cur_program_dir, 'base_html/examples/plain_layout.html'),
+        'plain': os.path.join(cur_program_dir, 'base_html/examples/plain_layout.html'),
+        'kwargs': os.path.join(cur_program_dir, 'base_html/examples/kwargs_example.html'),
+        'fixed_keybinding': os.path.join(cur_program_dir, 'base_html/examples/fixed_keybinding_layout.html')
+    }
+}
+
 
 app = Flask(__name__)
 
@@ -2251,11 +2280,11 @@ def parse_story_pair_from_file(filepath):
     return lines
 
 
-@app.route("/files/<path:filename>")
+@app.route("/<path:filename>")
 def get_file(filename):
-    """Make files available for annotation access from a folder."""
+    """Make files available for annotation access from a folder"""
     try:
-        return flask.send_from_directory("../data/files/", filename)
+        return flask.send_from_directory(os.getcwd(), filename)
     except FileNotFoundError:
         flask.abort(404)
 
@@ -2465,14 +2494,14 @@ def run_create_task_cli():
             raise Exception("Gui-based design not supported yet.")
 
 
-def run_server():
+def run_server(args):
     """
     Run Flask server.
     """
     global user_config
     global user_to_annotation_state
 
-    args = arguments()
+
     init_config(args)
     if config.get("verbose"):
         logger.setLevel(logging.DEBUG)
@@ -2496,6 +2525,24 @@ def run_server():
                 user_config.add_user(username)
     """
 
+    # set up the template file path
+    for key in ["html_layout", "base_html_template", "header_file"]:
+        # if template not set in the configuration file, use the default version
+        if key not in config:
+            logger.warning("%s not configured, use default template at %s"%(key, template_dict[key]['default']))
+            config[key] = template_dict[key]['default']
+        # if user uses a template in the lib, replace the key with the file location
+        elif config[key] in template_dict[key]:
+            config[key] = template_dict[key][config[key]]
+        # if user uses a self defined file, directly use it as the template
+        else:
+            logger.info("%s will be loaded from user-defined file %s" % (key,config[key]))
+
+    #overwrite the site_dir to the default path, this will not be shown to the users
+    #todo: remove all the site_dir key from the configuration files or figure out a way to handle render flask templates from different dirs
+    #todo: having the flask templates in the user-defined project folder would be neccessary in the long run due to potential conflicts of projects with the same name
+    # each project dir should be self-contained, even for the flask template files
+    config["site_dir"] = flask_templates_dir
     # Creates the templates we'll use in flask by mashing annotation
     # specification on top of the proto-templates
     generate_site(config)
@@ -2534,7 +2581,15 @@ def main():
         # Run task configuration script if no arguments are given.
         return run_create_task_cli()
 
-    run_server()
+    args = arguments()
+    if args.mode == 'start':
+        run_server(args)
+    elif args.mode == 'get':
+        get_project_from_hub(args.config_file)
+
+    # currently config_file is still an required arg, so when potato list is used, users must add all after it: potato list all
+    elif args.mode == 'list':
+        show_project_hub(args.config_file)
 
 
 if __name__ == "__main__":
