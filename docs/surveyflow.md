@@ -80,8 +80,7 @@ and edit the surveyflow section in the configuration file:
 
 ## Post-screening questions 
 
-![image](img/screenshots/postscreening_questions.gif){.align-center
-width="1000px"}
+![image](img/screenshots/postscreening_questions.gif)
 
 You can also insert post study surveys just like the prestudy survey:
 

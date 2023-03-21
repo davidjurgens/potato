@@ -1,5 +1,6 @@
 # Quick start
 
+## start with pypi
 install potato [pypi package](https://pypi.org/project/potato-annotation/)
 
     pip install potato-annotation
@@ -48,7 +49,7 @@ pip install -r requirements.txt
 To run a simple check-box style annotation on text data, run
 
 ``` console
-python potato/flask_server.py start config/examples/simple-check-box.yaml -p 8000
+python potato/flask_server.py start project-hub/simple_examples/configs/simple-check-box.yaml -p 8000
 ```
 
 This will launch the webserver on port 8000 which can be accessed at
