@@ -1,3 +1,0 @@
-{"id":"1","text":"Isn't this awesome?!","gifs":["GIF-ID-1", "GIF-ID-2", "GIF-ID-3"],"gifs_path":["1.mp4", "2.mp4", "3.mp4"]}
-{"id":"2","text":"A different set of response gifs!","gifs":["GIF-ID-4", "GIF-ID-3", "GIF-ID-2"],"gifs_path":["4.mp4", "3.mp4", "2.mp4"]}
-{"id":"3","text":"You can also do fewer GIFs!","gifs":["GIF-ID-1", "GIF-ID-2", "[PlaceHolder DoNotSelect]"],"gifs_path":["1.mp4", "2.mp4", "[PlaceHolder DoNotSelect]"]}
