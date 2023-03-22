@@ -46,7 +46,7 @@ html tags are used to create two seperate boxes for the finding pairs.
 ## Update input data formats on the YAML config file
 
 You would pass the input data paths and field names into the YAML config
-file as follows:
+file as follows (please make sure you have "id" and "text" key in your data):
 
 ``` yaml
 # Pass in a comma-separated list of data files containing documents to be annotated in this task

@@ -67,13 +67,13 @@ and edit the surveyflow section in the configuration file:
             "post_annotation"
         ],
         "pre_annotation": [
-            "projects/your-project-name/surveyflow/consent.jsonl",
+            "surveyflow/consent.jsonl",
         ],
         "post_annotation": [
 
         ],
         "testing": [
-             "projects/your-project-name/surveyflow/English/testing.jsonl",
+             "surveyflow/testing.jsonl",
         ]
 },
 ```
@@ -99,13 +99,13 @@ file:
             "post_annotation"
         ],
         "pre_annotation": [
-            "projects/your-project-name/surveyflow/consent.jsonl",
+            "surveyflow/consent.jsonl",
         ],
         "post_annotation": [
-            "projects/your-project-name/surveyflow/demographics.jsonl",
+            "surveyflow/demographics.jsonl",
         ],
         "testing": [
-             "projects/your-project-name/surveyflow/testing.jsonl",
+             "surveyflow/testing.jsonl",
         ]
 },
 ```

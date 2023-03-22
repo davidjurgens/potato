@@ -39,7 +39,7 @@ and you can easily download them from project hub using:
 ### Dialogue analysis (span + categorization) 
 
 [yaml
-config](https://github.com/davidjurgens/potato/tree/master/example-projects/dialogue_analysis)
+config](https://github.com/davidjurgens/potato/tree/master/project-hub/dialogue_analysis)
 
 ``` 
 [fetch] potato get dialogue_analysis
@@ -52,7 +52,7 @@ config](https://github.com/davidjurgens/potato/tree/master/example-projects/dial
 ### Sentiment analysis (categorization) 
 
 [yaml
-config](https://github.com/davidjurgens/potato/tree/master/example-projects/sentiment_analysis)
+config](https://github.com/davidjurgens/potato/tree/master/project-hub/sentiment_analysis)
 
 ``` 
 [fetch] potato get sentiment_analysis
@@ -75,7 +75,7 @@ config](https://github.com/davidjurgens/potato/tree/master/example-projects/sent
 ### Match findings in papers and news (likert + prescreening questions + multi-task) 
 
 [yaml
-config](https://github.com/davidjurgens/potato/tree/master/example-projects/match_finding)
+config](https://github.com/davidjurgens/potato/tree/master/project-hub/match_finding)
 | [Paper](http://www.copenlu.com/publication/2022_emnlp_wright/) |
 [Dataset](https://huggingface.co/datasets/copenlu/spiced)
 
@@ -90,7 +90,7 @@ config](https://github.com/davidjurgens/potato/tree/master/example-projects/matc
 ### Match findings in papers and news (prestudy test)
 
 [yaml
-config](https://github.com/davidjurgens/potato/tree/master/example-projects/match_finding_with_prestudy)
+config](https://github.com/davidjurgens/potato/tree/master/project-hub/match_finding_with_prestudy)
 
 ``` 
 [fetch] potato get match_finding_with_prestudy
@@ -103,7 +103,7 @@ config](https://github.com/davidjurgens/potato/tree/master/example-projects/matc
 ### Textual uncertainty (likert + categorization) 
 
 [yaml
-config](https://github.com/davidjurgens/potato/tree/master/example-projects/textual_uncertainty)
+config](https://github.com/davidjurgens/potato/tree/master/project-hub/textual_uncertainty)
 |
 [Paper](https://jiaxin-pei.github.io/project_websites/certainty/Certainty-in-Science-Communication.html)
 |
@@ -120,7 +120,7 @@ config](https://github.com/davidjurgens/potato/tree/master/example-projects/text
 ### Immigration framing in tweets (Multi-schema categorization)
 
 [yaml
-config](https://github.com/davidjurgens/potato/tree/master/example-projects/immigration_framing)
+config](https://github.com/davidjurgens/potato/tree/master/project-hub/immigration_framing)
 | [Paper](https://aclanthology.org/2021.naacl-main.179/) |
 [Dataset](https://github.com/juliamendelsohn/framing)
 
@@ -135,7 +135,7 @@ config](https://github.com/davidjurgens/potato/tree/master/example-projects/immi
 ### GIF Reply Appropriateness (video as label)
 
 [yaml
-config](https://github.com/davidjurgens/potato/tree/master/example-projects/gif_reply)
+config](https://github.com/davidjurgens/potato/tree/master/project-hub/gif_reply)
 | [Paper](https://aclanthology.org/2021.findings-emnlp.276/) |
 [Dataset](https://github.com/xingyaoww/gif-reply)
 
@@ -149,7 +149,7 @@ config](https://github.com/davidjurgens/potato/tree/master/example-projects/gif_
 
 
 ### Empathy as Appraisal (paired texts + likert)
-[yaml config](https://github.com/davidjurgens/potato/tree/master/example-projects/empathy) | [Paper](https://aclanthology.org/2020.emnlp-main.45.pdf)
+[yaml config](https://github.com/davidjurgens/potato/tree/master/project-hub/empathy) | [Paper](https://aclanthology.org/2020.emnlp-main.45.pdf)
 ```
 [fetch] potato get empathy
 [launch] potato start empathy -p 8000
