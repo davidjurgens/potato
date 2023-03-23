@@ -242,7 +242,9 @@ example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe8086
         "labels": [
            "certain", "uncertain"
         ],
-
+        "bad_text_label": {
+          "label_content": "No answer"
+        },
         # If true, numbers [1-len(labels)] will be bound to each
         # label. Highlight selection annotations with more than 10 are not supported
         # with this simple keybinding and will need to use the full item
@@ -250,6 +252,29 @@ example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe8086
         "sequential_key_binding": True,            
     },       
 ], 
+```
+if you want to add a bad text check box (e.g. the displayed instance is a random string or no answer to the given question), simply add 
+a "bad_text_label" like this will work.
+``` YAML
+"annotation_schemes": [      
+    {
+        "annotation_type": "highlight",
+        "name": "certainty", 
+        "description": "Highlight which phrases make the sentence more or less certain",
+        "labels": [
+           "certain", "uncertain"
+        ],
+        "bad_text_label": {
+          "label_content": "No answer"
+        },
+        # If true, numbers [1-len(labels)] will be bound to each
+        # label. Highlight selection annotations with more than 10 are not supported
+        # with this simple keybinding and will need to use the full item
+        # specification to bind all labels to keys.
+        "sequential_key_binding": True,            
+    },       
+], 
+
 ```
 
 ## Text Box

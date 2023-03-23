@@ -254,5 +254,31 @@ def generate_span_layout(annotation_scheme, horizontal=False):
             span_color=span_color,
         )
 
+    # allow annotators to choose bad_text label
+    bad_text_schematic = ""
+    if "label_content" in annotation_scheme.get("bad_text_label", {}):
+        name = annotation_scheme["name"] + ":::" + "bad_text"
+        bad_text_schematic = (
+            (
+                    ' <input class="{class_name}" type="checkbox" id="{id}" name="{name}" value="{value}" onclick="onlyOne(this)" validation="{validation}">'
+                    + ' {line_break} <label for="{label_for}" {label_args}>{label_text}</label>'
+            )
+        ).format(
+            class_name=annotation_scheme["name"],
+            id=name,
+            name=name,
+            value=0,
+            validation=validation,
+            line_break="",
+            label_for=name,
+            label_args="",
+            label_text=annotation_scheme["bad_text_label"]["label_content"],
+        )
+        key_bindings.append(
+            (0, class_name + ": " + annotation_scheme["bad_text_label"]["label_content"])
+        )
+
+    schematic += bad_text_schematic
+
     schematic += "  </fieldset>\n</form>\n"
     return schematic, key_bindings
