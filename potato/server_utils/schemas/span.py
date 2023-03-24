@@ -236,16 +236,18 @@ def generate_span_layout(annotation_scheme, horizontal=False):
         name_with_span = "span_label:::" + name
 
         schematic += (
-            '      <input class="{class_name}" type="checkbox" id="{name}" name="{name_with_span}" '
+            '      <input class="{class_name}" for_span="{for_span}" type="checkbox" id="{name}" name="{name_with_span}" '
             + ' value="{key_value}" {is_checked} '
-            + "onclick=\"onlyOne(this); changeSpanLabel(this, '{label_content}', '{span_color}');\">"
+            + "onclick=\"onlyOne(this); changeSpanLabel(this, '{label_content}', '{span_color}');\" validation=\"{validation}\">"
             + '  <label for="{name}" {tooltip}>'
             + '<span style="background-color:rgb{bg_color};">{label_content}</span></label>{br_label}'
         ).format(
             class_name=class_name,
+            for_span = True,
             name=name,
             key_value=key_value,
             label_content=label_content,
+            validation=validation,
             tooltip=tooltip,
             br_label=br_label,
             is_checked=is_checked,
@@ -260,11 +262,12 @@ def generate_span_layout(annotation_scheme, horizontal=False):
         name = annotation_scheme["name"] + ":::" + "bad_text"
         bad_text_schematic = (
             (
-                    ' <input class="{class_name}" type="checkbox" id="{id}" name="{name}" value="{value}" onclick="onlyOne(this)" validation="{validation}">'
+                    ' <input class="{class_name}" for_span="{for_span}" type="checkbox" id="{id}" name="{name}" value="{value}" onclick="onlyOne(this)" validation="{validation}">'
                     + ' {line_break} <label for="{label_for}" {label_args}>{label_text}</label>'
             )
         ).format(
             class_name=annotation_scheme["name"],
+            for_span=True,
             id=name,
             name=name,
             value=0,
@@ -274,9 +277,14 @@ def generate_span_layout(annotation_scheme, horizontal=False):
             label_args="",
             label_text=annotation_scheme["bad_text_label"]["label_content"],
         )
-        key_bindings.append(
-            (0, class_name + ": " + annotation_scheme["bad_text_label"]["label_content"])
-        )
+        if (
+                "sequential_key_binding" in annotation_scheme
+                and annotation_scheme["sequential_key_binding"]
+                and len(annotation_scheme["labels"]) <= 10
+        ):
+            key_bindings.append(
+                (0, class_name + ": " + annotation_scheme["bad_text_label"]["label_content"])
+            )
 
     schematic += bad_text_schematic
 

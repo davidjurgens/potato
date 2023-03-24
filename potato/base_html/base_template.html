@@ -376,6 +376,7 @@
           var fields = document.getElementsByTagName('fieldset');
           for (var i = 0; i < fields.length; ++i) {
                 var inputs = fields[i].querySelectorAll('input[validation=required], select[validation=required]');
+
                 // continue if all there's no required inputs in the current field set
                 if (inputs.length == 0){
                     continue;
@@ -395,8 +396,23 @@
                         //alert(instance_obj.id)
                     //    return false;
                     //}
+                    // if the input is for a span annotation schema, check if the at least some span is annotated or if the
+                    // bad_text label is selected
+                    if (inputs[j].getAttribute("for_span") == "True"){
+                        //alert($(".span_container").length);
+                        if ($(".span_container").length > 0) {
+                            checked_flag = true;
+                            break;
+                        } else if (inputs[j].name.slice(-8) == "bad_text" && inputs[j].checked == true){
+                            checked_flag = true;
+                            break;
+                        }
+                    }
+
+
                     // if any of the labels is checked, set checked_flag as true;
-                    if (inputs[j].checked == true) {
+                    if (inputs[j].getAttribute("for_span") != "True" && inputs[j].checked == true) {
+
                         checked_flag = true;
                         break;
                     }
