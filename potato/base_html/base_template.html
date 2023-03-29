@@ -375,7 +375,7 @@
           // identify all the fieldsets and check if all the required forms are filled
           var fields = document.getElementsByTagName('fieldset');
           for (var i = 0; i < fields.length; ++i) {
-                var inputs = fields[i].querySelectorAll('input[validation=required], select[validation=required]');
+                var inputs = fields[i].querySelectorAll('input[validation=required], select[validation=required], textarea[validation=required]');
 
                 // continue if all there's no required inputs in the current field set
                 if (inputs.length == 0){
@@ -416,9 +416,10 @@
                         checked_flag = true;
                         break;
                     }
-                    // if the input_type is number of text, check if it's empty
+
+                    // if the input_type is number, text, select or textarea, check if it's empty
                     // todo: the current way might not work well if there are mixed textinput and radio buttons under a sample fieldset
-                    if (inputs[j].type == "text" || inputs[j].type == "number" || inputs[j].type == "select-one") {
+                    if (inputs[j].type == "text" || inputs[j].tagName == "TEXTAREA" || inputs[j].type == "number" || inputs[j].type == "select-one") {
                         if (inputs[j].value.length == 0){
                             alert(inputs[j].name + " must be completed to proceed");
                             return false;
