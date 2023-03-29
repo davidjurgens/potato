@@ -7,7 +7,7 @@ To run potato in a crowdsourcing setup, you need to setup potato on a server
 with open ports (ports that can be accessed via open internet). When you
 start the potato server, simply change to default port to the openly
 accessible ports and you should be able to access the annotation page
-via you_ip_address:the_port
+via `your_ip_address:the_port`
 
 ## Prolific
 
@@ -29,7 +29,7 @@ To set up your own project for prolific, please follow the steps below:
 
 To use potato with prolific, you need to define the login type as
 `url_direct` and set up the `url_argument` as
-`PROLIFIC_PID`. In this way,
+`PROLIFIC_PID`. 
 
 ``` YAML
 #defining the ways annotators entering the annotation system
@@ -38,6 +38,11 @@ To use potato with prolific, you need to define the login type as
    "url_argument": 'PROLIFIC_PID' # when the login type is set to 'url_direct', 'url_argument' must be setup for a direct url argument login
 },
 ```
+In this way, the participants will be able to access your site with a link looks like: http://your-server-ip-with-port/?PROLIFIC_PID=participant-user-id.
+
+You would also need to use the following setup on prolific.co and user your own study URL.
+
+![Alt text](img/prolific-setup-url.png)
 
 It is also recommended to set the `jumping_to_id_disabled` and `hide_navbar` as True
 
@@ -128,4 +133,10 @@ After this setup, all the instances in your input data will be automatically ass
 Potato allows you to easily insert instruction pages and survey questions before and after the annotation flow, please check
 [setting up surveyflow](https://potato-annotation.readthedocs.io/en/latest/surveyflow/) for more details.
 
+### 5. look and feel 
+After all the steps above, you will be able to preview your study. Simply go to the bottom of your study on prolific.co and click `preview`,
+after seeing the following page, clik `open study link in a new window` and then you will see the annotation site just like your 
+future participants.
 
+
+![Alt text](img/prolific-preview.png)
