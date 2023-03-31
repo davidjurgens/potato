@@ -375,6 +375,13 @@ class UserAnnotationState:
         """
         return self.real_instance_assigned_count
 
+    def get_real_finished_instance_count(self):
+        """
+        Check the number of finished instances for a user (only the core annotation parts)
+        """
+        finished_instances_cnt = len([it for it in self.instance_id_to_labeling if it[-4:]!='html'])
+        return finished_instances_cnt + len(self.instance_id_to_span_annotations)
+
     def set_annotation(
         self, instance_id, schema_to_label_to_value, span_annotations, behavioral_data_dict
     ):
@@ -1533,6 +1540,7 @@ def lookup_user_state(username):
         else:
             # assign all the instance to each user when automatic assignment is turned off
             user_state = UserAnnotationState(instance_id_to_data)
+            user_state.real_instance_assigned_count = user_state.get_assigned_instance_count()
             user_to_annotation_state[username] = user_state
     else:
         user_state = user_to_annotation_state[username]
@@ -2006,8 +2014,8 @@ def annotate_page(username=None, action=None):
         instance=text,
         instance_obj=instance,
         instance_id=lookup_user_state(username).get_instance_cursor(),
-        finished=lookup_user_state(username).get_annotation_count(),
-        total_count=lookup_user_state(username).get_assigned_instance_count(),
+        finished=lookup_user_state(username).get_real_finished_instance_count(),
+        total_count=lookup_user_state(username).get_real_assigned_instance_count(),
         alert_time_each_instance=config["alert_time_each_instance"],
         statistics_nav=all_statistics,
         **kwargs
