@@ -373,7 +373,7 @@ class UserAnnotationState:
         """
         Check the number of assigned instances for a user (only the core annotation parts)
         """
-        return self.real_instance_assigned_count
+        return len([it for it in self.instance_id_ordering if it[-4:] != 'html'])
 
     def get_real_finished_instance_count(self):
         """
@@ -1535,7 +1535,7 @@ def lookup_user_state(username):
             else:
                 user_state = UserAnnotationState(generate_initial_user_dataflow(username))
                 user_to_annotation_state[username] = user_state
-                #assign_instances_to_user(username) #comment out this line of code so that 
+                #assign_instances_to_user(username) #comment out this line of code so that
 
         else:
             # assign all the instance to each user when automatic assignment is turned off
