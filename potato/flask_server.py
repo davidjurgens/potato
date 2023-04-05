@@ -911,7 +911,7 @@ def get_total_annotations():
     total = 0
     for username in get_users():
         user_state = lookup_user_state(username)
-        total += user_state.get_annotation_count()
+        total += user_state.get_real_finished_instance_count()
 
     return total
 
@@ -1769,7 +1769,7 @@ def load_user_state(username):
 
         logger.info(
             'Loaded %d annotations for known user "%s"'
-            % (user_state.get_annotation_count(), username)
+            % (user_state.get_real_finished_instance_count(), username)
         )
 
         return "old user loaded"
