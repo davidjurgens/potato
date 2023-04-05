@@ -380,7 +380,8 @@ class UserAnnotationState:
         Check the number of finished instances for a user (only the core annotation parts)
         """
         finished_instances_cnt = len([it for it in self.instance_id_to_labeling if it[-4:]!='html'])
-        return finished_instances_cnt + len(self.instance_id_to_span_annotations)
+        finished_span_instances_cnt = len([it for it in self.instance_id_to_span_annotations if (it[-4:] != 'html' and len(self.instance_id_to_span_annotations[it])!=0)])
+        return finished_instances_cnt + finished_span_instances_cnt
 
     def set_annotation(
         self, instance_id, schema_to_label_to_value, span_annotations, behavioral_data_dict
