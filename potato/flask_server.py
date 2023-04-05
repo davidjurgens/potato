@@ -1392,11 +1392,12 @@ def assign_instances_to_user(username):
     user_state.add_new_assigned_data(assigned_user_data)
 
     print(
-        "assinged %d instances to %s, total pages: %s"
+        "assinged %d instances to %s, total pages: %s, total users: %s"
         % (
             user_state.get_real_assigned_instance_count(),
             username,
             user_state.get_assigned_instance_count(),
+            get_total_user_count()
         )
     )
 
@@ -1515,6 +1516,14 @@ def instances_all_assigned():
     if 'unassigned' in task_assignment and len(task_assignment['unassigned']) <= int(config["automatic_assignment"]["instance_per_annotator"] * 0.7):
         return True
     return False
+
+def get_total_user_count():
+    """
+    return the number of users
+    """
+    global user_to_annotation_state
+
+    return len(user_to_annotation_state)
 
 
 def lookup_user_state(username):
