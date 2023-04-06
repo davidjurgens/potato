@@ -379,9 +379,10 @@ class UserAnnotationState:
         """
         Check the number of finished instances for a user (only the core annotation parts)
         """
-        finished_instances_cnt = len([it for it in self.instance_id_to_labeling if it[-4:]!='html'])
-        finished_span_instances_cnt = len([it for it in self.instance_id_to_span_annotations if (it[-4:] != 'html' and len(self.instance_id_to_span_annotations[it])!=0)])
-        return finished_instances_cnt + finished_span_instances_cnt
+        finished_instances = [it for it in self.instance_id_to_labeling if it[-4:]!='html']
+        finished_span_instances = [it for it in self.instance_id_to_span_annotations if (it[-4:] != 'html' and len(self.instance_id_to_span_annotations[it])!=0)]
+
+        return len(set(finished_instances + finished_span_instances))
 
     def set_annotation(
         self, instance_id, schema_to_label_to_value, span_annotations, behavioral_data_dict
@@ -476,9 +477,18 @@ class UserAnnotationState:
         # annotated
         # self.instance_cursor = min(len(self.instance_id_to_labeling),
         #                           len(self.instance_id_ordering)-1)
-        if len(annotated_instances) > 0:
-            self.instance_cursor = self.instance_id_to_order[annotated_instances[-1]["id"]]
 
+        #follow the first unannotated instance and set it as the current instance after user re-login
+        if self.get_real_finished_instance_count() > 0:
+            annotated_set = set([it['id'] for it in annotated_instances])
+            self.instance_cursor = self.instance_id_to_order[annotated_instances[-1]['id']]
+            for in_id in self.instance_id_ordering:
+                if in_id[-4:] == 'html':
+                    continue
+                if in_id in annotated_set:
+                    self.instance_cursor = self.instance_id_to_order[in_id]
+                else:
+                    break
     def reorder_remaining_instances(self, new_id_order, preserve_order):
 
         # Preserve the ordering the user has seen so far for data they've
@@ -1063,7 +1073,7 @@ def home():
                 config["login"]["url_argument"] if "url_argument" in config["login"] else "username"
             )
             username = request.args.get(url_argument)
-            print("url direct logging in with %s" % url_argument)
+            print("url direct logging in with %s=%s" % (url_argument,username))
             return annotate_page(username, action="home")
         print("password logging in")
         return render_template("home.html", title=config["annotation_task_name"])
@@ -1392,12 +1402,13 @@ def assign_instances_to_user(username):
     user_state.add_new_assigned_data(assigned_user_data)
 
     print(
-        "assinged %d instances to %s, total pages: %s, total users: %s"
+        "assinged %d instances to %s, total pages: %s, total users: %s, unassigned labels: %s"
         % (
             user_state.get_real_assigned_instance_count(),
             username,
             user_state.get_assigned_instance_count(),
-            get_total_user_count()
+            get_total_user_count(),
+            get_unassigned_count()
         )
     )
 
@@ -1516,6 +1527,17 @@ def instances_all_assigned():
     if 'unassigned' in task_assignment and len(task_assignment['unassigned']) <= int(config["automatic_assignment"]["instance_per_annotator"] * 0.7):
         return True
     return False
+
+
+def get_unassigned_count():
+    """
+    return the number of unassigned instances
+    """
+    global task_assignment
+    if 'unassigned' in task_assignment:
+        return sum(list(task_assignment['unassigned'].values()))
+    else:
+        return 0
 
 def get_total_user_count():
     """
