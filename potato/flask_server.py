@@ -1402,13 +1402,14 @@ def assign_instances_to_user(username):
     user_state.add_new_assigned_data(assigned_user_data)
 
     print(
-        "assinged %d instances to %s, total pages: %s, total users: %s, unassigned labels: %s"
+        "assinged %d instances to %s, total pages: %s, total users: %s, unassigned labels: %s, finished users: %s"
         % (
             user_state.get_real_assigned_instance_count(),
             username,
             user_state.get_assigned_instance_count(),
             get_total_user_count(),
-            get_unassigned_count()
+            get_unassigned_count(),
+            get_finished_user_count()
         )
     )
 
@@ -1538,6 +1539,19 @@ def get_unassigned_count():
         return sum(list(task_assignment['unassigned'].values()))
     else:
         return 0
+
+def get_finished_user_count():
+    """
+        return the number of users who have finished the task
+    """
+    global user_to_annotation_state
+    cnt = 0
+    for user_state in user_to_annotation_state.values():
+        if user_state.get_real_finished_instance_count() >= user_state.get_real_assigned_instance_count():
+            cnt += 1
+
+    return cnt
+
 
 def get_total_user_count():
     """
