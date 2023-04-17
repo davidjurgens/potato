@@ -25,7 +25,7 @@ not qualified to participate your study.
 
 To set up your own project for prolific, please follow the steps below:
 
-### 1. Set up url arguement for prolific
+### 1. Set up url argument for prolific
 
 To use potato with prolific, you need to define the login type as
 `url_direct` and set up the `url_argument` as
