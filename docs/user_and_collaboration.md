@@ -10,11 +10,11 @@ your account\".
 After creating an account, you can log in with the email and password
 used in the account creation step.
 
-## Direct login with URL arguement
+## Direct login with URL argument
 
 ![image](img/screenshots/direct_login.gif)
 
-Potato also supports direct login through URL arguements, for example:
+Potato also supports direct login through URL arguments, for example:
 <http://localhost:8000/?PROLIFIC_PID=user>
 
 You could setup direct login in the YAML configuration file
