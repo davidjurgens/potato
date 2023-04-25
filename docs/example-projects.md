@@ -8,7 +8,7 @@ encouraged to create a pull request and release your annotation setup.
 
 
 ## Schema examples
-Potato provides a list of example tempaltes for [all the supporting annotation schemas](https://github.com/davidjurgens/potato/tree/pypi/project-hub/simple_examples/configs)
+Potato provides a list of example templates for [all the supporting annotation schemas](https://github.com/davidjurgens/potato/tree/pypi/project-hub/simple_examples/configs)
 and you can easily download them from project hub using:
 ``` 
 [fetch] potato get simple_schema_examples
