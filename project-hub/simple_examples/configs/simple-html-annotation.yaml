@@ -3,12 +3,12 @@
 
     "server_name": "potato annotator",
 
-    "annotation_task_name": "Simple Video as Input Example",
+    "annotation_task_name": "Simple html as input Example",
 
     # Potato will write the annotation file for all annotations to this
     # directory, as well as per-annotator output files and state information
     # necessary to restart annotation.
-    "output_annotation_dir": "annotation_output/simple-video-as-input/",
+    "output_annotation_dir": "annotation_output/simple-html-as-input/",
 
     # The output format for the all-annotator data. Allowed formats are:
     # * jsonl
@@ -23,7 +23,7 @@
     "annotation_codebook_url": "",
 
     "data_files": [
-       "data/video-as-input.json"
+       "data/html-as-input.json"
     ],
 
     "item_properties": {
@@ -47,9 +47,9 @@
     "annotation_schemes": [ 
         {
             "annotation_type": "multiselect",
-            "name": "GIF Reply Appropriateness",
+            "name": "html_feeling",
             #"video_as_label": "True",
-            "description": "How do you feel about this video?",
+            "description": "How do you feel about this webpage?",
 
             # Files http://[server]:[port]/data/* will be forwarded from directory data/files/*
             "labels": [

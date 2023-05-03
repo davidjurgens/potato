@@ -22,13 +22,14 @@ and you can easily download them from project hub using:
 [4] simple-video-as-label.yaml
 [5] simple-span-labeling.yaml
 [6] simple-likert.yaml
-[7] empty-to-copy.yaml
-[8] simple-video-annotation.yaml
-[9] simple-single-choice-selection.yaml
-[10] simple-text-box.yaml
-[11] simple-check-box.yaml
-[12] kwargs_example.yaml
-[13] simple-check-box-with-free-response.yaml
+[7] simple-html-annotation.yaml
+[8] empty-to-copy.yaml
+[9] simple-video-annotation.yaml
+[10] simple-single-choice-selection.yaml
+[11] simple-text-box.yaml
+[12] simple-check-box.yaml
+[13] kwargs_example.yaml
+[14] simple-check-box-with-free-response.yaml
 
 [Annotate] http://localhost:8000
 ```
