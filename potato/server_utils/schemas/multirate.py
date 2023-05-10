@@ -50,10 +50,11 @@ def generate_multirate_layout(annotation_scheme):
             n_rows += 1
         wc = 0
         #print('n_rows', n_rows)
-        for i, opt in enumerate(options, 1):
+        for i, opt in enumerate(options):
             #print(opt)
-            if i % n_rows == 0:
+            if i > 0 and i % n_rows == 0:
                 wc += 1
+            print(wc)
             cols[wc].append(opt)
 
         for c in cols[0]:
