@@ -56,7 +56,7 @@ def init_config(args):
                 try:
                     config_file = os.path.join(config_folder, yamlfiles[int(input_id)])
                     break
-                except:
+                except Exception:
                     print("wrong input, please reselect")
 
     if not config_file:
