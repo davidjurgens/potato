@@ -32,7 +32,7 @@ def get_annotation_type():
             + "options w.r.t. some scale\n\n"
         )
 
-        options = ["multiselect", "radio", "text", "likert", "bws"]
+        options = ("multiselect", "radio", "text", "likert", "bws")
 
         reply = _prompt(q).lower().strip()
         if reply in options:
