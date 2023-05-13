@@ -20,20 +20,18 @@ def yes_or_no(question):
 
 
 def get_annotation_type():
+    q = (
+        "What type of annotation is this? Possible types are...\n"
+        + "  multiselect -- checkboxes where users can pick 0 or more\n"
+        + "  radio -- radio buttons where users must pick 1\n"
+        + "  text -- free text entry box\n"
+        + "  likert -- a likert scale with an order list of radio buttons\n"
+        + "  bws -- a set of options where users select the most/least extreme "
+        + "options w.r.t. some scale\n\n"
+    )
+
+    options = ("multiselect", "radio", "text", "likert", "bws")
     while "the answer is invalid":
-
-        q = (
-            "What type of annotation is this? Possible types are...\n"
-            + "  multiselect -- checkboxes where users can pick 0 or more\n"
-            + "  radio -- radio buttons where users must pick 1\n"
-            + "  text -- free text entry box\n"
-            + "  likert -- a likert scale with an order list of radio buttons\n"
-            + "  bws -- a set of options where users select the most/least extreme "
-            + "options w.r.t. some scale\n\n"
-        )
-
-        options = ("multiselect", "radio", "text", "likert", "bws")
-
         reply = _prompt(q).lower().strip()
         if reply in options:
             return reply
