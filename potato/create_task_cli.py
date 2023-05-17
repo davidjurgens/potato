@@ -37,7 +37,7 @@ def get_initial_config():
 
     config["server_name"] = "potato annotator"
 
-    config["user_config"]: {"allow_all_users": True, "users": []}
+    config["user_config"] = {"allow_all_users": True, "users": []}
 
     config["alert_time_each_instance"] = 10000000
 
