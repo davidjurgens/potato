@@ -1862,7 +1862,7 @@ def get_displayed_text(text):
         if isinstance(text, str):
             try:
                 text = eval(text)
-            except:
+            except Exception:
                 text = str(text)
         if isinstance(text, list):
             if config["list_as_text"]["text_list_prefix_type"] == "alphabet":
