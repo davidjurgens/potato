@@ -1,15 +1,7 @@
 import json
 from collections import OrderedDict
 import os
-
-
-def yes_or_no(question):
-    while "the answer is invalid":
-        reply = input(question + " (y/n): ").lower().strip()
-        if reply[:1] == "y":
-            return True
-        if reply[:1] == "n":
-            return False
+import click
 
 
 def get_annotation_type():
@@ -96,7 +88,7 @@ def create_task_cli():
     data_files.append(fname)
 
     # Let the user entire more files
-    while yes_or_no("Do you have more data files?"):
+    while click.prompt("Do you have more data files?", None):
         fname = input("What is the absolute path to another data files? ")
         data_files.append(fname)
     config["data_files"] = data_files
@@ -169,7 +161,7 @@ def create_task_cli():
 
         annotation_schemes.append(scheme)
 
-        if not yes_or_no("Are there more annotation types/tasks to add?"):
+        if not click.confirm("Are there more annotation types/tasks to add?", None):
             break
 
     config["annoation_schemes"] = annotation_schemes
@@ -180,7 +172,7 @@ def create_task_cli():
         )
 
         if os.path.exists(config_file):
-            if not yes_or_no("Config file already exists. Overwrite?"):
+            if not click.confirm("Config file already exists. Overwrite?", None):
                 continue
 
         with open(config_file, "wt") as f:
