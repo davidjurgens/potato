@@ -16,10 +16,7 @@ def get_annotation_type():
     )
 
     options = ("multiselect", "radio", "text", "likert", "bws")
-    while "the answer is invalid":
-        reply = input(q).lower().strip()
-        if reply in options:
-            return reply
+    return click.prompt(q, type=click.Choice(options)).lower().strip()
 
 
 def get_initial_config():
@@ -73,22 +70,16 @@ def create_task_cli():
         "What is the name for your annotation task" + " that will be shown to users?\n"
     )
 
-    while True:
-        port = input("What port do you want the server to run on? ")
-        try:
-            port = int(port)
-            if port > 1 and port < 16000:
-                config["port"] = port
-                break
-        except ValueError:
-            print("%s needs to be a valid numeric port number")
+    port = click.prompt("What port do you want the server to run on?", default=8080, type=int)
+    if port > 1 and port < 16000:
+        config["port"] = port
 
     data_files = []
     fname = input("What is the absolute path to one of your data files? ")
     data_files.append(fname)
 
     # Let the user entire more files
-    while click.prompt("Do you have more data files?", None):
+    while click.confirm("Do you have more data files?", None):
         fname = input("What is the absolute path to another data files? ")
         data_files.append(fname)
     config["data_files"] = data_files
@@ -112,9 +103,9 @@ def create_task_cli():
         + "where the annotations should be written?\n"
     )
 
-    config["output_annotation_format"] = input(
-        "What format do you want the annotations written in?\n"
-        + "Options: csv, tsv, json, jsonl\n\n"
+    config["output_annotation_format"] = click.prompt(
+        "What format do you want the annotations written in?",
+        type=click.Choice(["csv", "tsv", "json", "jsonl"])
     )
 
     print("\nNow we're going to ask about the specific ways you want the data annotated")
@@ -166,15 +157,13 @@ def create_task_cli():
 
     config["annoation_schemes"] = annotation_schemes
 
-    while True:
-        config_file = input(
-            "What is the absolute path for where this config.yaml file should be written?\n"
-        )
+    config_file = input(
+        "What is the absolute path for where this config.yaml file should be written?\n"
+    )
 
-        if os.path.exists(config_file):
-            if not click.confirm("Config file already exists. Overwrite?", None):
-                continue
+    if os.path.exists(config_file):
+        if not click.confirm("Config file already exists. Overwrite?", None):
+            return
 
-        with open(config_file, "wt") as f:
-            json.dump(config, f, indent=4)
-        break
+    with open(config_file, "wt") as f:
+        json.dump(config, f, indent=4)
