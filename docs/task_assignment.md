@@ -19,3 +19,4 @@ If set as `ordered`, the instances will be assigned following the order of your 
 "instance_per_annotator": 5, #the total amount of instances to be assigned to each annotator
 "test_question_per_annotator": 0, # the number of attention test question to be inserted into the annotation queue. you must set up the test question in surveyflow to use this function
 },
+```
