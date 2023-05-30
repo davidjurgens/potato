@@ -2115,7 +2115,7 @@ def annotate_page(username=None, action=None):
 
                     # If it's not a text area, let's see if this is the button
                     # that was checked, and if so mark it as checked
-                    if (input_field.name != "textarea") and ("value" in input_field) and (input_field["value"] != value):
+                    if (input_field.name != "textarea") and (input_field["value"] != value):
                         continue
                     else:
                         input_field["checked"] = True
