@@ -113,13 +113,17 @@ access the interface using their own devices, here are the following steps:
 -   Deploy potato on the server/computer where the data is hosted
 -   Find the local address of your server (this is different from the public id address, it is the address that 
 is only accessible within your local network)
-    -  For linux/mac go to the terminal, type `ifconfig en0` and press enter.
-    -  You will see a list of addresses, and please find the one after inet, for example, you should find
-one line looks like this: `inet 192.168.1.218 netmask 0xffffff00 broadcast 192.168.1.255`
+
+-   For linux/mac go to the terminal, type `ifconfig en0` and press enter.
+    -   You will see a list of addresses, and please find the one after inet, for example, you should find
+    one line looks like this: `inet 192.168.1.218 netmask 0xffffff00 broadcast 192.168.1.255`
     -  Use the address after inet, which is `192.168.1.218` in this case
+
 -   On the annotator end, use `ip:port` in the browser. For example, if you have potato running on 
 port 8000, and in the above case, the final address to access the interface will be `192.168.1.218:8000`
+
 -   Please make sure your annotators are either within the local network (e.g. company or school's net), or are 
 connected to the vpn if they are outside the local network.
+
 -   You can also try the above link on your ipad or smartphones as long as they are connected to the 
 same wifi as the server (could be your own laptop)
