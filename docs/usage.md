@@ -75,16 +75,19 @@ There are a few other settings you can play with:
 
 ## Launch potato locally 
 
-And that\'s it! You can go ahead and get started labeling data in one of
+And that's it! You can go ahead and get started labeling data in one of
 two ways:
 
-**Option 1:** Follow the prompts given above to define a YAML file that
+**Option 1 (recommended):** Follow the prompts given above to define a YAML file that
 specifies the data sources, server configuration, annotation schemes,
 and any custom visualizations
 ([examples](https://github.com/davidjurgens/potato/tree/master/config/examples))
 and then launch potato.
 
-`python3 potato/flask_server.py config/examples/simple-check-box.yaml -p 8000`
+`potato start sentiment_analysis -p 8000`
+
+here sentiment_analysis is a folder with a `configs` subfolder, and put your `.yaml` file into that folder, 
+potato will automatically find all the config files under the `configs` folder
 
 **Option 2:** Launch potato without a YAML. In this case, the server
 will have you follow a series of prompts about the task and
@@ -101,3 +104,22 @@ next instance and you can navigate between items using the arrow keys.
 Potato currently supports one annotation task per server instance,
 though multiple servers may be run on different posts to concurrently
 annotate different data.
+
+
+## Find the right IP address for local usage
+In many cases you might need to use potato within your local network. For example, you have some 
+private data that are not allowed to be uploaded to a public server, and you want your annotators to
+access the interface using their own devices, here are the following steps:
+-   Deploy potato on the server/computer where the data is hosted
+-   Find the local address of your server (this is different from the public id address, it is the address that 
+is only accessible within your local network)
+    -  For linux/mac go to the terminal, type `ifconfig en0` and press enter.
+    -  You will see a list of addresses, and please find the one after inet, for example, you should find
+one line looks like this: `inet 192.168.1.218 netmask 0xffffff00 broadcast 192.168.1.255`
+    -  Use the address after inet, which is `192.168.1.218` in this case
+-   On the annotator end, use `ip:port` in the browser. For example, if you have potato running on 
+port 8000, and in the above case, the final address to access the interface will be `192.168.1.218:8000`
+-   Please make sure your annotators are either within the local network (e.g. company or school's net), or are 
+connected to the vpn if they are outside the local network.
+-   You can also try the above link on your ipad or smartphones as long as they are connected to the 
+same wifi as the server (could be your own laptop)
