@@ -115,7 +115,7 @@ access the interface using their own devices, here are the following steps:
 is only accessible within your local network)
 
 -   For linux/mac go to the terminal, type `ifconfig en0` and press enter.
-    -   You will see a list of addresses, and please find the one after inet, for example, you should find
+    -   You will see a list of addresses, and please find the one after `inet`, for example, you should find
     one line looks like this: `inet 192.168.1.218 netmask 0xffffff00 broadcast 192.168.1.255`
     -  Use the address after inet, which is `192.168.1.218` in this case
 
