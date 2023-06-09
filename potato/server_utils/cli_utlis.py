@@ -16,7 +16,11 @@ project_hub = {
     'sentiment_analysis': 'https://github.com/davidjurgens/potato/raw/master/project-hub/sentiment_analysis.zip',
     'summarization_evaluation': 'https://github.com/davidjurgens/potato/raw/master/project-hub/summarization_evaluation.zip',
     'textual_uncertainty': 'https://github.com/davidjurgens/potato/raw/master/project-hub/textual_uncertainty.zip',
-    'question_answering': 'https://github.com/davidjurgens/potato/raw/master/project-hub/question_answering.zip'
+    'question_answering': 'https://github.com/davidjurgens/potato/raw/master/project-hub/question_answering.zip',
+    'reading_comprehension': 'https://github.com/davidjurgens/potato/raw/master/project-hub/reading_comprehension.zip',
+    'politeness_rating': 'https://github.com/davidjurgens/potato/raw/master/project-hub/politeness_rating.zip',
+    'offfensiveness': 'https://github.com/davidjurgens/potato/raw/master/project-hub/offfensiveness.zip',
+    'text_rewriting': 'https://github.com/davidjurgens/potato/raw/master/project-hub/text_rewriting.zip',
 }
 
 # get a speicific project from the hub
