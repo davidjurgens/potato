@@ -19,7 +19,7 @@ project_hub = {
     'question_answering': 'https://github.com/davidjurgens/potato/raw/master/project-hub/question_answering.zip',
     'reading_comprehension': 'https://github.com/davidjurgens/potato/raw/master/project-hub/reading_comprehension.zip',
     'politeness_rating': 'https://github.com/davidjurgens/potato/raw/master/project-hub/politeness_rating.zip',
-    'offfensiveness': 'https://github.com/davidjurgens/potato/raw/master/project-hub/offfensiveness.zip',
+    'offensiveness': 'https://github.com/davidjurgens/potato/raw/master/project-hub/offfensiveness.zip',
     'text_rewriting': 'https://github.com/davidjurgens/potato/raw/master/project-hub/text_rewriting.zip',
 }
 
