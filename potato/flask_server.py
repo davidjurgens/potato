@@ -1186,7 +1186,7 @@ def get_prestudy_label(label):
 
 def print_prestudy_result():
     global task_assignment
-    print("----- prestudy test restult -----")
+    print("----- prestudy test result -----")
     print("passed annotators: ", task_assignment["prestudy_passed_users"])
     print("failed annotators: ", task_assignment["prestudy_failed_users"])
     print(
@@ -1573,15 +1573,21 @@ def lookup_user_state(username):
         logger.debug('Previously unknown user "%s"; creating new annotation state' % (username))
 
         if "automatic_assignment" in config and config["automatic_assignment"]["on"]:
-            # assign instances to new user when automatic assignment is turned on
+            # when pre_annotation is set up, only assign the instance when consent question is answered
             if "prestudy" in config and config["prestudy"]["on"]:
                 user_state = UserAnnotationState(generate_initial_user_dataflow(username))
                 user_to_annotation_state[username] = user_state
 
+            # when pre_annotation is set up, only assign the instance when consent question is answered
+            elif "pre_annotation" in config["automatic_assignment"] and "pre_annotation" in config["automatic_assignment"]["order"]:
+                user_state = UserAnnotationState(generate_initial_user_dataflow(username))
+                user_to_annotation_state[username] = user_state
+
+            # assign instances to new user when automatic assignment is turned on and there is no pre_annotation or prestudy pages
             else:
                 user_state = UserAnnotationState(generate_initial_user_dataflow(username))
                 user_to_annotation_state[username] = user_state
-                #assign_instances_to_user(username) #comment out this line of code so that
+                assign_instances_to_user(username)
 
         else:
             # assign all the instance to each user when automatic assignment is turned off
