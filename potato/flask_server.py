@@ -1870,33 +1870,64 @@ def get_displayed_text(text):
                 text = eval(text)
             except Exception:
                 text = str(text)
+            if isBionic:      
+                #split the string 
+                words = text.split() 
+                words = ['<b>' + word[0] + '</b>' + word[1:] for word in words]
+                text = ' '.join(words)
         if isinstance(text, list):
             if config["list_as_text"]["text_list_prefix_type"] == "alphabet":
                 prefix_list = list(string.ascii_uppercase)
                 text = [prefix_list[i] + ". " + text[i] for i in range(len(text))]
             elif config["list_as_text"]["text_list_prefix_type"] == "number":
                 text = [str(i) + ". " + text[i] for i in range(len(text))]
-            text = "<br>".join(text)
+            #split the text
+            if isBionic: 
+                modified_sentences = []  
+                for sentence in text:
+                    words = sentence.split()
+                    modified_words = ['<b>' + word[0] + '</b>' + word[1:] for word in words]
+                    modified_sentence = ' '.join(modified_words)
+                    modified_sentences.append(modified_sentence)
+                text = '<br>'.join(modified_sentences)    
+            else:                      
+                text = "<br>".join(text)
 
         # unfolding dict into different sections
         elif isinstance(text, dict):
             block = []
             if config["list_as_text"].get("horizontal"):
                 for key in text:
+                    modified_value = text[key]
+                    if isBionic:
+                        modified_value = ' '.join(['<b>' + word + '</b>' for word in text[key].split()])
                     block.append(
                         '<div name="instance_text" style="float:left;width:%s;padding:5px;" class="column"> <legend> %s </legend> %s </div>'
-                        % ("%d" % int(100 / len(text)) + "%", key, text[key])
+                        % ("%d" % int(100 / len(text)) + "%", key, modified_value)
                     )
                 text = '<div class="row" style="display: table"> %s </div>' % ("".join(block))
             else:
                 for key in text:
+                    modified_value = text[key]
+                    if isBionic:
+                        modified_value = ' '.join(['<b>' + word + '</b>' for word in text[key].split()])
                     block.append(
                         '<div name="instance_text"> <legend> %s </legend> %s <br/> </div>'
-                        % (key, text[key])
+                        % (key, modified_value)
                     )
                 text = "".join(block)
         else:
-            text = text
+            if isBionic:
+                words = text.split()  
+                words = ['<b>' + word[0] + '</b>' + word[1:] for word in words]
+                text = ' '.join(words)
+            else:                   
+                text = text
+    else:
+        if isBionic:
+            words = text.split()  
+            words = ['<b>' + word[0] + '</b>' + word[1:] for word in words]
+            text = ' '.join(words)                  
     return text
 
 
@@ -2561,13 +2592,16 @@ def run_server(args):
     """
     global user_config
     global user_to_annotation_state
-
+    global isBionic
+    isBionic = False
 
     init_config(args)
     if config.get("verbose"):
         logger.setLevel(logging.DEBUG)
     if config.get("very_verbose"):
         logger.setLevel(logging.NOTSET)
+    if "instance_style" in config and config["instance_style"].get("Bionic", True):
+        isBionic = True
 
     user_config = UserConfig(USER_CONFIG_PATH)
 
