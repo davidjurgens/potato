@@ -37,6 +37,69 @@ and you can easily download them from project hub using:
 
 ## Annotation projects
 
+
+
+### Offensiveness rating
+
+[yaml
+config](https://github.com/davidjurgens/potato/tree/master/project-hub/offensiveness)
+|
+[Dataset](https://github.com/Jiaxin-Pei/Potato-Prolific-Dataset/tree/main/dataset/offensiveness)
+
+``` 
+[fetch] potato get offensiveness
+[launch] potato start offensiveness -p 8000
+[Annotate] http://localhost:8000/?PROLIFIC_PID=user
+```
+
+![Alt text](../docs/img/ui_offensiveness.png)
+
+### Question Answering (SQuAD style)
+
+[yaml
+config](https://github.com/davidjurgens/potato/tree/master/project-hub/reading_comprehension)
+|
+[Dataset](https://github.com/Jiaxin-Pei/Potato-Prolific-Dataset/tree/main/dataset/question_answering)
+
+``` 
+[fetch] potato get reading_comprehension
+[launch] potato start reading_comprehension -p 8000
+[Annotate] http://localhost:8000/?PROLIFIC_PID=user
+```
+
+![Alt text](../docs/img/ui_question_answering.png)
+
+
+### Text rewriting
+
+[yaml
+config](https://github.com/davidjurgens/potato/tree/master/project-hub/email_rewriting)
+|
+[Dataset](https://github.com/Jiaxin-Pei/Potato-Prolific-Dataset/tree/main/dataset/text_rewriting)
+
+``` 
+[fetch] potato get text_rewriting
+[launch] potato start text_rewriting -p 8000
+[Annotate] http://localhost:8000/?PROLIFIC_PID=user
+```
+
+![Alt text](../docs/img/ui_text_rewriting.png)
+
+### Politeness rating
+
+[yaml
+config](https://github.com/davidjurgens/potato/tree/master/project-hub/politeness_rating)
+|
+[Dataset](https://github.com/Jiaxin-Pei/Potato-Prolific-Dataset/tree/main/dataset/politeness_rating)
+
+``` 
+[fetch] potato get politeness_rating
+[launch] potato start politeness_rating -p 8000
+[Annotate] http://localhost:8000/?PROLIFIC_PID=user
+```
+
+![Alt text](../docs/img/ui_politeness_rating.png)
+
 ### Dialogue analysis (span + categorization) 
 
 [yaml
