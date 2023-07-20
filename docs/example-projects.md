@@ -52,7 +52,7 @@ config](https://github.com/davidjurgens/potato/tree/master/project-hub/offensive
 [Annotate] http://localhost:8000/?PROLIFIC_PID=user
 ```
 
-![Alt text](../docs/img/ui_offensiveness.png)
+![Alt text](img/ui_offensiveness.png)
 
 ### Question Answering (SQuAD style)
 
@@ -67,7 +67,7 @@ config](https://github.com/davidjurgens/potato/tree/master/project-hub/reading_c
 [Annotate] http://localhost:8000/?PROLIFIC_PID=user
 ```
 
-![Alt text](../docs/img/ui_question_answering.png)
+![Alt text](img/ui_question_answering.png)
 
 
 ### Text rewriting
@@ -83,7 +83,7 @@ config](https://github.com/davidjurgens/potato/tree/master/project-hub/email_rew
 [Annotate] http://localhost:8000/?PROLIFIC_PID=user
 ```
 
-![Alt text](../docs/img/ui_text_rewriting.png)
+![Alt text](img/ui_text_rewriting.png)
 
 ### Politeness rating
 
@@ -98,7 +98,7 @@ config](https://github.com/davidjurgens/potato/tree/master/project-hub/politenes
 [Annotate] http://localhost:8000/?PROLIFIC_PID=user
 ```
 
-![Alt text](../docs/img/ui_politeness_rating.png)
+![Alt text](img/ui_politeness_rating.png)
 
 ### Dialogue analysis (span + categorization) 
 
