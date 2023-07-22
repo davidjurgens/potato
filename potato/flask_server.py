@@ -741,6 +741,10 @@ def convert_labels(annotation, schema_type):
         return list(annotation.keys())[0]
     if schema_type == "multiselect":
         return list(annotation.keys())
+    if schema_type == 'number':
+        return float(annotation['text_box'])
+    if schema_type == 'textbox':
+        return annotation['text_box']
     print("Unrecognized schema_type %s" % schema_type)
     return None
 
@@ -1181,7 +1185,7 @@ def get_prestudy_label(label):
         if schema["name"] == config["prestudy"]["question_key"]:
             cur_schema = schema["annotation_type"]
     label = convert_labels(label[config["prestudy"]["question_key"]], cur_schema)
-    return config["prestudy"]["answer_mapping"][label]
+    return config["prestudy"]["answer_mapping"][label] if "answer_mapping" in config["prestudy"] else label
 
 
 def print_prestudy_result():
