@@ -296,7 +296,7 @@ example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe8086
 ]
 ```
 
-If you wants to use a textarea, simply add a text area field in the annotation_schemas and you can also add multiple input textboxes 
+If you want to use a textarea, simply add a text area field in the annotation_schemas and you can also add multiple input textboxes 
 with "labels":
 ``` YAML
 "annotation_schemes": [      
@@ -312,6 +312,19 @@ with "labels":
               "rows": 2,
               "cols": 40
         }
+    }       
+]
+```
+
+## Number
+
+If you want to use number as the input, simply change the annotation_type to ''number''
+``` YAML
+"annotation_schemes": [      
+    {
+        "annotation_type": "number",
+        "name": "number",
+        "description": "What is your age?",
     }       
 ]
 ```
