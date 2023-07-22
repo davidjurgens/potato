@@ -373,7 +373,7 @@ class UserAnnotationState:
         """
         Check the number of assigned instances for a user (only the core annotation parts)
         """
-        return len([it for it in self.instance_id_ordering if it[-4:] != 'html'])
+        return len([it for it in self.instance_id_ordering if it[-4:] != 'html' and it[:8] != 'prestudy'])
 
     def get_real_finished_instance_count(self):
         """
