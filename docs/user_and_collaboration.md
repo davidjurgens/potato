@@ -10,6 +10,18 @@ your account\".
 After creating an account, you can log in with the email and password
 used in the account creation step.
 
+### Set up authorized users
+Sometimes you might only allow a short list of users to sign up.
+All you need to do is set  `allow_all_users: False` and add a list of authorized
+emails to `authorized_users`. Other users will not be allowed to sign up.
+``` YAML
+"user_config": {
+  "allow_all_users": False,
+  "authorized_users": ["hello@123.com", "good@354.com"],
+},
+```
+
+
 ## Direct login with URL argument
 
 ![image](img/screenshots/direct_login.gif)
