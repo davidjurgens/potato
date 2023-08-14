@@ -128,8 +128,9 @@ class UserConfig:
     """
 
     def __init__(self, user_config_path="potato/user_config.json"):
-        self.allow_all_users = False
+        self.allow_all_users = True
         self.user_config_path = user_config_path
+        self.authorized_users = []
         self.userlist = []
         self.usernames = set()
         self.users = {}
@@ -152,6 +153,9 @@ class UserConfig:
         """
         Add a single user to the full user dict
         """
+        if self.allow_all_users == False and self.is_authorized_user(single_user["username"]) == False:
+            return "Unauthorized user"
+
         for key in self.required_user_info_keys:
             if key not in single_user:
                 print("Missing %s in user info" % key)
@@ -171,6 +175,12 @@ class UserConfig:
             print("user info file saved at:", self.user_config_path)
         else:
             print("WARNING: user_config_path not specified, user registration info are not saved")
+
+    def is_authorized_user(self, username):
+        """
+        Check if a user name is in the authorized user list (as presented in the configuration file).
+        """
+        return username in self.authorized_users
 
     def is_valid_username(self, username):
         """
@@ -1148,6 +1158,12 @@ def signup():
                 title=config["annotation_task_name"],
                 login_email=username,
                 login_error="User registration success for " + username + ", please login now",
+            )
+        elif result == 'Unauthorized user':
+            return render_template(
+                "home.html",
+                title=config["annotation_task_name"],
+                login_error=result + ", please contact your admin",
             )
 
         # TODO: return to the signup page and display error message
@@ -2575,20 +2591,16 @@ def run_server(args):
 
     user_config = UserConfig(USER_CONFIG_PATH)
 
-    # Jiaxin: commenting the following lines since we will have a seperate
-    #        user_config file to save user info.  This is necessary since we
-    #        cannot directly write to the global config file for user
-    #        registration
-    """
+
+    #load user configuration settings and add authorized users
     user_config_data = config['user_config']
     if 'allow_all_users' in user_config_data:
         user_config.allow_all_users = user_config_data['allow_all_users']
 
-        if 'users' in user_config_data:       
-            for user in user_config_data["users"]:
-                username = user['firstname'] + '_' + user['lastname']
-                user_config.add_user(username)
-    """
+        if 'authorized_users' in user_config_data:
+            for user in user_config_data["authorized_users"]:
+                user_config.authorized_users.append(user)
+
 
     # set up the template file path
     for key in ["html_layout", "base_html_template", "header_file"]:
