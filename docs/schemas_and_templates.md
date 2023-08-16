@@ -11,24 +11,7 @@ specific options or tooltips to help annotators.
 
 ## Existing Task templates
 
-Templates for some existing tasks are available:
-
--   Question Answering: [yaml
-    config](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/config/examples/question-answering.yaml),
-    [data
-    example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/data/toy-example.json)
--   Sentiment Analysis: [yaml
-    config](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/config/examples/sentiment-analysis.yaml),
-    [data
-    example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/data/toy-example.json)
--   Animated GIF Appropriateness Annotation: [yaml
-    config](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/config/examples/simple-video-as-label.yaml),
-    [data
-    example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/data/video-label-example.json)
--   Single (Radio) Choice with Active Learning: [yaml
-    config](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/config/examples/simple-active-learning.yaml),
-    [data
-    example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe80861c8187da4d6bf/data/toy-example.json)
+Please check [project-hub](https://potato-annotation.readthedocs.io/en/latest/example-projects/) for the full list of available templates.
 
 ## Supported Schemas
 
@@ -408,57 +391,47 @@ file. You can also add the task name as the page title using the
 "annotation_codebook_url": "https://www.codebook.com",
 ```
 
+Please make sure the `hide_navbar` is set as `false`:
+``` yaml
+# If true, the navigation bar is hidden to the annotators, 
+# usually used in the crowdourcing settings
+"hide_navbar": false,
+```
+
+
 ## Choose (or create) your HTML template
+In the YAML file, `html_layout` defines the layout of your task. 
+``` yaml
+# The html that changes the visualiztation for your task. Change this file
+# to influence the layout and description of your task. This is not a full
+# HTML page, just the piece that does lays out your task's pieces
+# you may use templates in our lib, if you want to use your own template,
+# please replace the string as a path to the template
+"html_layout": "default",
+```
+This is not a full HTML page, just the piece that does lays out your task's pieces you may use the following 
+templates in our lib:
 
-Set up the annotation interface by picking an existing HTML template
-([examples](https://github.com/davidjurgens/potato/tree/master/templates/examples))
-or creating a custom template:
-
--   `templates/examples/plain_layout.html`: this template covers a wide
+-   `default`: this template covers a wide
     range of NLP tasks (e.g., text classification, image or gif
     classification, Likert scales, best-worst scaling, question
     answering, multiple questions), and is designed to minimize
     scrolling and optimize placement of the document and questions on
     the screen.
--   `templates/quotes.html`: this template specifies the layout when you
-    want to annotate, not a standalone document, but a document in
-    context of some other document (e.g., if you\'re annotating replies
-    to a post, and want to show the original post)
--   `templates/examples/kwargs_example.html`: this template specifies
+-   `fixed_keybinding`: almost the same as the default template, but 
+    display all the keyboard shortcuts under the annotation box
+-   `kwargs`: this template specifies
     the layout for a task where each document is rated on some Likert
     scales with differing endpoints (`kwargs` and `other_kwargs`). It\'s
     an example of how to use a custom keyword argument in an HTML file.
--   Custom: Create an HTML file that lays out your task pieces and
-    upload it to `potato/templates/`. The templates can be easily
-    customized using JINJA expressions to specify where parts of the
-    annotation task and data are populated within the user-defined
-    template. ([custom example
-    1](https://github.com/davidjurgens/potato/tree/master/templates/examples/kwargs_example.html),
-    [custom example
-    2](https://github.com/davidjurgens/potato/tree/master/templates/quotes.html))
 
-## Update YAML file with look and feel
+If you want to use custom template, simply create an HTML file that lays out your task pieces and
+upload it to `your-project-dir/templates/`. The templates can be easily
+customized using JINJA expressions to specify where parts of the
+annotation task and data are populated within the user-defined
+template. ([custom example](https://github.com/davidjurgens/potato/blob/master/project-hub/reading_comprehension/templates/layout.html))
 
-In the YAML file, you\'ll need to specify what the annotation interface
-looks like. The `html_layout` field can be updated per the prior
-section. The rest of the fields can generally be left untouched.
-
+And then point it to the new template file in YAML file:
 ``` yaml
-# The html that changes the visualiztation for your task. Change this file
-# to influence the layout and description of your task. This is not a full
-# HTML page, just the piece that does lays out your task's pieces
-"html_layout": "templates/examples/plain_layout.html",
-
-# The core UI files for Potato. You should not need to change these normally.
-#
-# Exceptions to this might include:
-# 1) You want to add custom CSS/fonts to style your task
-# 2) Your layout requires additional JS/assets to render
-# 3) You want to support additional keybinding magic
-#
-"base_html_template": "templates/base_template.html",
-"header_file": "templates/header.html",
-
-# This is where the actual HTML files will be generated. You should not need to change this normally.
-"site_dir": "potato/templates/",
+"html_layout": "templates/layout.html",
 ```

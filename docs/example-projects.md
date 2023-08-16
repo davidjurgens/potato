@@ -54,7 +54,7 @@ config](https://github.com/davidjurgens/potato/tree/master/project-hub/offensive
 
 ![Alt text](img/ui_offensiveness.png)
 
-### Question Answering (SQuAD style)
+### Question Answering / Reading comprehension (SQuAD style)
 
 [yaml
 config](https://github.com/davidjurgens/potato/tree/master/project-hub/reading_comprehension)
