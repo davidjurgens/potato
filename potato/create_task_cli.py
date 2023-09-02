@@ -42,7 +42,7 @@ def get_initial_config():
     # The html that changes the visualiztation for your task. Change this file
     # to influence the layout and description of your task. This is not a full
     # HTML page, just the piece that does lays out your task's pieces
-    config["html_layout"] = "templates/examples/plain_layout.html"
+    config["html_layout"] = "default"
 
     # The core UI files for Potato. You should not need to change these normally.
     #
@@ -51,11 +51,11 @@ def get_initial_config():
     # 2) Your layout requires additional JS/assets to render
     # 3) You want to support additional keybinding magic
     #
-    config["base_html_template"] = "templates/base_template.html"
-    config["header_file"] = "templates/header.html"
+    config["base_html_template"] = "default"
+    config["header_file"] = "default"
 
     # This is where the actual HTML files will be generated
-    config["site_dir"] = "potato/templates/"
+    config["site_dir"] = "default"
 
     return config
 
@@ -151,7 +151,9 @@ def create_task_cli():
             scheme["size"] = size
 
         elif atype == "text":
-            pass
+            scheme["annotation_type"] = "text"
+            scheme["name"] = name
+            scheme["description"] = desc
 
         elif atype == "mutliselect" or atype == "radio":
             # Get the options
@@ -172,7 +174,7 @@ def create_task_cli():
         if not yes_or_no("Are there more annotation types/tasks to add?"):
             break
 
-    config["annoation_schemes"] = annotation_schemes
+    config["annotation_schemes"] = annotation_schemes
 
     while True:
         config_file = input(
