@@ -151,7 +151,9 @@ def create_task_cli():
             scheme["size"] = size
 
         elif atype == "text":
-            pass
+            scheme["annotation_type"] = "text"
+            scheme["name"] = name
+            scheme["description"] = desc
 
         elif atype == "mutliselect" or atype == "radio":
             # Get the options
@@ -172,7 +174,7 @@ def create_task_cli():
         if not yes_or_no("Are there more annotation types/tasks to add?"):
             break
 
-    config["annoation_schemes"] = annotation_schemes
+    config["annotation_schemes"] = annotation_schemes
 
     while True:
         config_file = input(
