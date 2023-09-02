@@ -39,6 +39,24 @@ def get_initial_config():
 
     config["alert_time_each_instance"] = 10000000
 
+    # The html that changes the visualiztation for your task. Change this file
+    # to influence the layout and description of your task. This is not a full
+    # HTML page, just the piece that does lays out your task's pieces
+    config["html_layout"] = "default"
+
+    # The core UI files for Potato. You should not need to change these normally.
+    #
+    # Exceptions to this might include:
+    # 1) You want to add custom CSS/fonts to style your task
+    # 2) Your layout requires additional JS/assets to render
+    # 3) You want to support additional keybinding magic
+    #
+    config["base_html_template"] = "default"
+    config["header_file"] = "default"
+
+    # This is where the actual HTML files will be generated
+    config["site_dir"] = "default"
+
     return config
 
 
