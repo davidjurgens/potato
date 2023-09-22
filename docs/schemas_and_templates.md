@@ -435,3 +435,58 @@ And then point it to the new template file in YAML file:
 ``` yaml
 "html_layout": "templates/layout.html",
 ```
+
+### Example for custom layout
+Sometimes we have multiple annotation schemes and how to display them on the same page could 
+be tricky. Potato aligns the boxes horizontally by default. However, you might
+need to display them in grids or align them vertically. Custom layout is a great solution
+for this.
+
+First, you need to create the custom layout html file as introduced above, then simply copy
+the following content into it:
+
+``` html
+<div class="row">
+  <div class="col-md-12">
+    <div class="row">
+      <div class="col-md-12">
+
+        <div name="context_text" class="instance">
+          <div name="instance_text" style="max-width:400px;">
+            {{instance | safe}}
+          </div>
+        </div>
+          <div class="annotation_schema" style="display: grid;grid-template-columns: repeat(1, 1fr);gap: 20px;grid-auto-rows: auto; max-width:400px;">
+              {{annotation_schematic}}
+          </div>
+      </div>
+    </div>
+    <div style="height: 15px;" />
+
+  </div>
+  <div class="col-md-12">
+  </div>
+</div>
+```
+
+The major change we made to the default layout is: 
+
+``` html
+<div class="annotation_schema" style="display: grid;grid-template-columns: repeat(1, 1fr);gap: 20px;grid-auto-rows: auto; max-width:400px;">
+              {{annotation_schematic}}
+</div>
+```
+
+You could easily change the style of the annotation input boxes via editing the style key
+of the above `div`
+
+If you want to make changes to the instance area, simply edit the corresponding div will work, 
+for example:
+
+``` html
+<div name="instance_text" style="max-width:400px;">
+            {{instance | safe}}
+</div>
+```
+
+This will change the `max-width` of the instance area.
