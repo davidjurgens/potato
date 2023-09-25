@@ -305,6 +305,13 @@
                       hiddenField.setAttribute("value", input[0].value);
                       form.appendChild(hiddenField);                                        
                   }
+                  else if (input.attr('type') == 'range') {
+                      var hiddenField = document.createElement("input");
+                      hiddenField.setAttribute("type", "hidden");
+                      hiddenField.setAttribute("name", input.attr('name'));
+                      hiddenField.setAttribute("value", input[0].value);
+                      form.appendChild(hiddenField);                                        
+                  }
                   else if (input.attr('type') == 'select-one') {
                       //alert(input[0].value)
                       var hiddenField = document.createElement("input");

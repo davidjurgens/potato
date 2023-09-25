@@ -25,6 +25,7 @@ from potato.server_utils.schemas import (
     generate_number_layout,
     generate_pure_display_layout,
     generate_select_layout,
+    generate_slider_layout,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,7 @@ def generate_schematic(annotation_scheme):
         "number": generate_number_layout,
         "pure_display": generate_pure_display_layout,
         "select": generate_select_layout,
+        "slider": generate_slider_layout,
     }.get(annotation_type)
 
     if not annotation_func:

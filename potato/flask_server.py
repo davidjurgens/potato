@@ -894,7 +894,7 @@ def update_annotation_state(username, form):
     schema_to_label_to_value = defaultdict(dict)
 
     behavioral_data_dict = {}
-
+    
     did_change = False
     for key in form:
 
@@ -920,7 +920,8 @@ def update_annotation_state(username, form):
                 continue
 
             schema_to_label_to_value[annotation_schema][annotation_label] = annotation_value
-
+    
+            
     # Span annotations are a bit funkier since we're getting raw HTML that
     # we need to post-process on the server side.
     span_annotations = []
@@ -1082,8 +1083,7 @@ def signup():
     # Jiaxin: currently we are just using email as the username
     username = request.form.get("email")
     email = request.form.get("email")
-    password = request.form.get("pass")
-    print(action, username, password)
+    password = request.form.get("pass")    
 
     if action == "signup":
         single_user = {"username": username, "email": email, "password": password}
@@ -1232,7 +1232,8 @@ def sample_instances(username):
     global instance_id_to_data
 
     # check if sampling strategy is specified in configuration, if not, set it as random
-    if "sampling_strategy" not in config["automatic_assignment"] or config["automatic_assignment"]["sampling_strategy"] not in ['random','ordered']:
+    if "sampling_strategy" not in config["automatic_assignment"] \
+           or config["automatic_assignment"]["sampling_strategy"] not in ['random','ordered']:
         logger.debug("Undefined sampling strategy, default to random assignment")
         config["automatic_assignment"]["sampling_strategy"] = "random"
 
@@ -2025,14 +2026,16 @@ def annotate_page(username=None, action=None):
                 # Find all the input, select, and textarea tags with this name
                 # (which was annotated) and figure out which one to fill in
                 input_fields = soup.find_all(["input", "select", "textarea"], {"name": name})
+                
                 for input_field in input_fields:
                     if input_field is None:
                         print("No input for ", name)
                         continue
 
-                    # If it's not a text area, let's see if this is the button
+                    # If it's not a text area or a slider, let's see if this is the button
                     # that was checked, and if so mark it as checked
-                    if input_field.name != "textarea" and input_field["value"] != value:
+                    if not (input_field.name == "textarea" or input_field['type'] == 'range') \
+                           and input_field["value"] != value:
                         continue
                     else:
                         input_field["checked"] = True
@@ -2043,11 +2046,15 @@ def annotate_page(username=None, action=None):
 
                     # Find the right option and set it as selected if the current
                     # annotation schema is a select box
-                    if label == "select-one":
+                    elif label == "select-one":
                         option = input_field.findChildren("option", {"value": value})[0]
                         option["selected"] = "selected"
 
-    rendered_html = str(soup)  # soup.prettify()
+                    # If it's a slider, set the value for the slider
+                    elif name.startswith('slider:::'):
+                        input_field['value'] = value
+
+    rendered_html = str(soup)
 
     return rendered_html
 

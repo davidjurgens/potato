@@ -7,3 +7,4 @@ from .radio import generate_radio_layout
 from .select import generate_select_layout
 from .span import generate_span_layout
 from .textbox import generate_textbox_layout
+from .slider import generate_slider_layout
