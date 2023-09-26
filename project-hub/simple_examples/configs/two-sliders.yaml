@@ -1,0 +1,93 @@
+{
+    "annotation_task_name": "Two Sliders Example",
+
+    # Potato will write the annotation file for all annotations to this
+    # directory, as well as per-annotator output files and state information
+    # necessary to restart annotation.
+    "output_annotation_dir": "annotation_output/two-sliders/",
+
+    # The output format for the all-annotator data. Allowed formats are:
+    # * jsonl
+    # * json (same output as jsonl)
+    # * csv
+    # * tsv
+    #
+    "output_annotation_format": "csv", 
+
+    # If annotators are using a codebook, this will be linked at the top to the
+    # instance for easy access
+    "annotation_codebook_url": "",
+
+    "data_files": [
+       "data/toy-example.json"
+    ],
+
+    "item_properties": {
+        "id_key": "id",
+        "text_key": "text",
+    },
+
+
+    "user_config": {
+      "allow_all_users": True,     
+      "users": [  ],
+    },
+
+
+    "annotation_schemes": [      
+        {
+            "annotation_type": "slider",
+
+            # This name gets used in reporting the annotation results
+            "name": "awesomeness",
+
+            # This text is shown to the user and can be a longer statement
+            "description": "How awesome is this?",
+
+            # The min and max labels are text shown at each end of the scale
+            "min_value": 0,
+            "max_value": 100,
+            "starting_value": 50,
+        },
+        {
+            "annotation_type": "slider",
+
+            # This name gets used in reporting the annotation results
+            "name": "radical",
+
+            # This text is shown to the user and can be a longer statement
+            "description": "How radical is this?",
+
+            # The min and max labels are text shown at each end of the scale
+            "min_value": 0,
+            "max_value": 10,
+            "starting_value": 5,
+        }       
+        
+    ],
+
+    # The html that changes the visualiztation for your task. Change this file
+    # to influence the layout and description of your task. This is not a full
+    # HTML page, just the piece that does lays out your task's pieces
+    "html_layout": "default",
+ 
+    # The core UI files for Potato. You should not need to change these normally.
+    #
+    # Exceptions to this might include:
+    # 1) You want to add custom CSS/fonts to style your task
+    # 2) Your layout requires additional JS/assets to render
+    # 3) You want to support additional keybinding magic
+    #
+    "base_html_template": "default",
+    "header_file": "default",
+
+
+    # How many seconds do you want the annotators spend on each instance, after
+    # that, an alert will be sent per alert_time_each_instance seconds.
+    "alert_time_each_instance": 10000000,
+
+    
+    # This is where the actual HTML files will be generated
+    "site_dir": "potato/templates/",
+
+}

@@ -37,7 +37,7 @@ def generate_multirate_layout(annotation_scheme):
     for _ in range(num_headers):
         schematic += "<td>&nbsp;</td>"
         for rating in ratings:
-            schematic += "<td>%s</td>" % rating
+            schematic += "<td>&nbsp;%s&nbsp;</td>" % rating
     schematic += "</tr>"
     
 
@@ -50,14 +50,14 @@ def generate_multirate_layout(annotation_scheme):
             n_rows += 1
         wc = 0
         #print('n_rows', n_rows)
-        for i, opt in enumerate(options, 1):
+        for i, opt in enumerate(options):
             #print(opt)
-            if i % n_rows == 0:
+            if i > 0 and i % n_rows == 0:
                 wc += 1
             cols[wc].append(opt)
 
-        for c in cols[0]:
-            print(c)
+        #for c in cols[0]:
+        #    print(c)
         reordered_options = []
         for r in range(n_rows):
             for c in cols:

@@ -1,0 +1,113 @@
+{
+    "port": 9001,
+
+    "server_name": "potato annotator",
+
+    "annotation_task_name": "Sentence-level-Uncertainty",
+
+    # Potato will write the annotation file for all annotations to this
+    # directory, as well as per-annotator output files and state information
+    # necessary to restart annotation.
+    "output_annotation_dir": "annotation_output/sentence_level/",
+
+    "annotation_codebook_url": "",
+
+    "data_files": [
+        "data_files/news_abs_finding_sample.json"
+    ],
+
+    # The output format for the all-annotator data. Allowed formats are:
+    # * jsonl
+    # * json (same output as jsonl)
+    # * csv
+    # * tsv
+    #
+    "output_annotation_format": "tsv",
+
+    "item_properties": {
+        "id_key": "id",
+        "text_key": "finding"
+        
+    },
+
+    "keyword_highlights_file": "configs/uncertainty_keywords.tsv",
+    
+    
+    # How many seconds do you want the annotators spend on each instance, after
+    # that, an alert will be sent per alert_time_each_instance seconds.
+    "alert_time_each_instance": 10000000,
+
+
+    "annotation_schemes": [
+        {
+            "annotation_type": "multiselect",
+            "single_select":"True",
+            "name": "Sentence-Level-Uncertainty",
+            "description": "How certain do you feel about the given scientific finding",
+            "labels": [
+                { "name": "1. Very uncertain ",
+                  "tooltip_file": "uncertainty_tooltips/sentence_level/1.html",
+                  "key_value": '1'
+                },
+                {
+                  "name": "2. Uncertain",
+                  "tooltip_file": "uncertainty_tooltips/sentence_level/2.html",
+                  "key_value": '2'
+                 },
+
+                { "name": "3. Somewhat uncertain",
+                  "tooltip_file": "uncertainty_tooltips/sentence_level/3.html",
+                  "key_value": '3'
+                },
+
+                { "name": "4. Somewhat certain",
+                  "tooltip_file": "uncertainty_tooltips/sentence_level/4.html",
+                  "key_value": '4'
+                },
+
+                { "name": "5. Certain",
+                  "tooltip_file": "uncertainty_tooltips/sentence_level/5.html",
+                  "key_value": '5'
+                },
+
+                { "name": "6. Very certain",
+                  "tooltip_file": "uncertainty_tooltips/sentence_level/6.html",
+                  "key_value": '6'
+                },
+
+                { "name": "7. None",
+                  "tooltip": "This is not a scientific finding",
+                  "exclude_other": "True",
+                  "key_value": 'None'
+                },
+
+            ]
+        },
+
+
+    ],
+
+
+    # The html that changes the visualiztation for your task. Change this file
+    # to influence the layout and description of your task. This is not a full
+    # HTML page, just the piece that does lays out your task's pieces
+    "html_layout": "default",
+
+
+    # The core UI files for Potato. You should not need to change these normally.
+    #
+    # Exceptions to this might include:
+    # 1) You want to add custom CSS/fonts to style your task
+    # 2) Your layout requires additional JS/assets to render
+    # 3) You want to support additional keybinding magic
+    #
+    # if you want to use your own template,
+    # please replace the string as a path to the template
+    "base_html_template": "default",
+    "header_file": "default",
+
+    # This is where the actual HTML files will be generated
+    "site_dir": "default"
+
+}
+        

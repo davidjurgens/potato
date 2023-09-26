@@ -43,7 +43,7 @@ def generate_likert_layout(annotation_scheme):
         key_value = str(i % 10)
 
         # if the user wants us to add in easy key bindings
-        if annotation_scheme.get("sequential_key_binding") and annotation_scheme["size"] <= 10:
+        if "sequential_key_binding" in annotation_scheme and annotation_scheme["sequential_key_binding"] == True and annotation_scheme["size"] < 10:
             key2label[key_value] = label
             label2key[label] = key_value
             key_bindings.append((key_value, class_name + ": " + key_value))
@@ -99,9 +99,10 @@ def generate_likert_layout(annotation_scheme):
             label_args="",
             label_text=annotation_scheme["bad_text_label"]["label_content"],
         )
-        key_bindings.append(
-            (0, class_name + ": " + annotation_scheme["bad_text_label"]["label_content"])
-        )
+        if "sequential_key_binding" in annotation_scheme and annotation_scheme["sequential_key_binding"] == True and annotation_scheme["size"] < 10:
+            key_bindings.append(
+                (0, class_name + ": " + annotation_scheme["bad_text_label"]["label_content"])
+            )
 
     schematic += "  <li>%s</li> %s </ul></fieldset>\n</form></div>\n" % (
         annotation_scheme["max_label"],

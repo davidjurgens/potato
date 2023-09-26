@@ -23,15 +23,26 @@ import flask
 from flask import Flask, render_template, request
 from bs4 import BeautifulSoup
 
+cur_working_dir = os.getcwd() #get the current working dir
+cur_program_dir = os.path.dirname(os.path.abspath(__file__)) #get the current program dir (for the case of pypi, it will be the path where potato is installed)
+flask_templates_dir = os.path.join(cur_program_dir,'templates') #get the dir where the flask templates are saved
+base_html_dir = os.path.join(cur_program_dir,'base_htmls') #get the dir where the the base_html templates files are saved
+
+#insert the current program dir into sys path
+sys.path.insert(0, cur_program_dir)
+
 from create_task_cli import create_task_cli, yes_or_no
 from server_utils.arg_utils import arguments
 from server_utils.config_module import init_config, config
 from server_utils.front_end import generate_site, generate_surveyflow_pages
 from server_utils.schemas.span import render_span_annotations
+from server_utils.cli_utlis import get_project_from_hub, show_project_hub
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logging.basicConfig()
+
+
 
 random.seed(0)
 
@@ -57,7 +68,7 @@ instance_id_to_data = {}
 task_assignment = {}
 
 # path to save user information
-USER_CONFIG_PATH = "potato/user_config.json"
+USER_CONFIG_PATH = "user_config.json"
 DEFAULT_LABELS_PER_INSTANCE = 3
 
 
@@ -90,6 +101,24 @@ COLOR_PALETTE = [
     "rgb(179, 179, 179)",
 ]
 
+#mapping the base html template str to the real file
+template_dict = {
+    "base_html_template":{
+        'base': os.path.join(cur_program_dir, 'base_html/base_template.html'),
+        'default': os.path.join(cur_program_dir, 'base_html/base_template.html'),
+    },
+    "header_file":{
+        'default': os.path.join(cur_program_dir, 'base_html/header.html'),
+    },
+    "html_layout":{
+        'default': os.path.join(cur_program_dir, 'base_html/examples/plain_layout.html'),
+        'plain': os.path.join(cur_program_dir, 'base_html/examples/plain_layout.html'),
+        'kwargs': os.path.join(cur_program_dir, 'base_html/examples/kwargs_example.html'),
+        'fixed_keybinding': os.path.join(cur_program_dir, 'base_html/examples/fixed_keybinding_layout.html')
+    }
+}
+
+
 app = Flask(__name__)
 
 
@@ -99,8 +128,9 @@ class UserConfig:
     """
 
     def __init__(self, user_config_path="potato/user_config.json"):
-        self.allow_all_users = False
+        self.allow_all_users = True
         self.user_config_path = user_config_path
+        self.authorized_users = []
         self.userlist = []
         self.usernames = set()
         self.users = {}
@@ -123,6 +153,9 @@ class UserConfig:
         """
         Add a single user to the full user dict
         """
+        if self.allow_all_users == False and self.is_authorized_user(single_user["username"]) == False:
+            return "Unauthorized user"
+
         for key in self.required_user_info_keys:
             if key not in single_user:
                 print("Missing %s in user info" % key)
@@ -142,6 +175,12 @@ class UserConfig:
             print("user info file saved at:", self.user_config_path)
         else:
             print("WARNING: user_config_path not specified, user registration info are not saved")
+
+    def is_authorized_user(self, username):
+        """
+        Check if a user name is in the authorized user list (as presented in the configuration file).
+        """
+        return username in self.authorized_users
 
     def is_valid_username(self, username):
         """
@@ -344,7 +383,16 @@ class UserAnnotationState:
         """
         Check the number of assigned instances for a user (only the core annotation parts)
         """
-        return self.real_instance_assigned_count
+        return len([it for it in self.instance_id_ordering if it[-4:] != 'html' and it[:8] != 'prestudy'])
+
+    def get_real_finished_instance_count(self):
+        """
+        Check the number of finished instances for a user (only the core annotation parts)
+        """
+        finished_instances = [it for it in self.instance_id_to_labeling if it[-4:]!='html']
+        finished_span_instances = [it for it in self.instance_id_to_span_annotations if (it[-4:] != 'html' and len(self.instance_id_to_span_annotations[it])!=0)]
+
+        return len(set(finished_instances + finished_span_instances))
 
     def set_annotation(
         self, instance_id, schema_to_label_to_value, span_annotations, behavioral_data_dict
@@ -439,9 +487,18 @@ class UserAnnotationState:
         # annotated
         # self.instance_cursor = min(len(self.instance_id_to_labeling),
         #                           len(self.instance_id_ordering)-1)
-        if len(annotated_instances) > 0:
-            self.instance_cursor = self.instance_id_to_order[annotated_instances[-1]["id"]]
 
+        #follow the first unannotated instance and set it as the current instance after user re-login
+        if self.get_real_finished_instance_count() > 0:
+            annotated_set = set([it['id'] for it in annotated_instances])
+            self.instance_cursor = self.instance_id_to_order[annotated_instances[-1]['id']]
+            for in_id in self.instance_id_ordering:
+                if in_id[-4:] == 'html':
+                    continue
+                if in_id in annotated_set:
+                    self.instance_cursor = self.instance_id_to_order[in_id]
+                else:
+                    break
     def reorder_remaining_instances(self, new_id_order, preserve_order):
 
         # Preserve the ordering the user has seen so far for data they've
@@ -694,6 +751,10 @@ def convert_labels(annotation, schema_type):
         return list(annotation.keys())[0]
     if schema_type == "multiselect":
         return list(annotation.keys())
+    if schema_type == 'number':
+        return float(annotation['text_box'])
+    if schema_type == 'textbox':
+        return annotation['text_box']
     print("Unrecognized schema_type %s" % schema_type)
     return None
 
@@ -874,7 +935,7 @@ def get_total_annotations():
     total = 0
     for username in get_users():
         user_state = lookup_user_state(username)
-        total += user_state.get_annotation_count()
+        total += user_state.get_real_finished_instance_count()
 
     return total
 
@@ -1027,7 +1088,7 @@ def home():
                 config["login"]["url_argument"] if "url_argument" in config["login"] else "username"
             )
             username = request.args.get(url_argument)
-            print("url direct logging in with %s" % url_argument)
+            print("url direct logging in with %s=%s" % (url_argument,username))
             return annotate_page(username, action="home")
         print("password logging in")
         return render_template("home.html", title=config["annotation_task_name"])
@@ -1098,6 +1159,12 @@ def signup():
                 login_email=username,
                 login_error="User registration success for " + username + ", please login now",
             )
+        elif result == 'Unauthorized user':
+            return render_template(
+                "home.html",
+                title=config["annotation_task_name"],
+                login_error=result + ", please contact your admin",
+            )
 
         # TODO: return to the signup page and display error message
         return render_template(
@@ -1134,12 +1201,12 @@ def get_prestudy_label(label):
         if schema["name"] == config["prestudy"]["question_key"]:
             cur_schema = schema["annotation_type"]
     label = convert_labels(label[config["prestudy"]["question_key"]], cur_schema)
-    return config["prestudy"]["answer_mapping"][label]
+    return config["prestudy"]["answer_mapping"][label] if "answer_mapping" in config["prestudy"] else label
 
 
 def print_prestudy_result():
     global task_assignment
-    print("----- prestudy test restult -----")
+    print("----- prestudy test result -----")
     print("passed annotators: ", task_assignment["prestudy_passed_users"])
     print("failed annotators: ", task_assignment["prestudy_failed_users"])
     print(
@@ -1356,11 +1423,14 @@ def assign_instances_to_user(username):
     user_state.add_new_assigned_data(assigned_user_data)
 
     print(
-        "assinged %d instances to %s, total pages: %s"
+        "assinged %d instances to %s, total pages: %s, total users: %s, unassigned labels: %s, finished users: %s"
         % (
             user_state.get_real_assigned_instance_count(),
             username,
             user_state.get_assigned_instance_count(),
+            get_total_user_count(),
+            get_unassigned_count(),
+            get_finished_user_count()
         )
     )
 
@@ -1481,6 +1551,38 @@ def instances_all_assigned():
     return False
 
 
+def get_unassigned_count():
+    """
+    return the number of unassigned instances
+    """
+    global task_assignment
+    if 'unassigned' in task_assignment:
+        return sum(list(task_assignment['unassigned'].values()))
+    else:
+        return 0
+
+def get_finished_user_count():
+    """
+        return the number of users who have finished the task
+    """
+    global user_to_annotation_state
+    cnt = 0
+    for user_state in user_to_annotation_state.values():
+        if user_state.get_real_finished_instance_count() >= user_state.get_real_assigned_instance_count():
+            cnt += 1
+
+    return cnt
+
+
+def get_total_user_count():
+    """
+    return the number of users
+    """
+    global user_to_annotation_state
+
+    return len(user_to_annotation_state)
+
+
 def lookup_user_state(username):
     """
     Returns the UserAnnotationState for a user, or if that user has not yet
@@ -1492,11 +1594,17 @@ def lookup_user_state(username):
         logger.debug('Previously unknown user "%s"; creating new annotation state' % (username))
 
         if "automatic_assignment" in config and config["automatic_assignment"]["on"]:
-            # assign instances to new user when automatic assignment is turned on
+            # when pre_annotation is set up, only assign the instance when consent question is answered
             if "prestudy" in config and config["prestudy"]["on"]:
                 user_state = UserAnnotationState(generate_initial_user_dataflow(username))
                 user_to_annotation_state[username] = user_state
 
+            # when pre_annotation is set up, only assign the instance when consent question is answered
+            elif "pre_annotation" in config["automatic_assignment"] and "pre_annotation" in config["automatic_assignment"]["order"]:
+                user_state = UserAnnotationState(generate_initial_user_dataflow(username))
+                user_to_annotation_state[username] = user_state
+
+            # assign instances to new user when automatic assignment is turned on and there is no pre_annotation or prestudy pages
             else:
                 user_state = UserAnnotationState(generate_initial_user_dataflow(username))
                 user_to_annotation_state[username] = user_state
@@ -1505,6 +1613,7 @@ def lookup_user_state(username):
         else:
             # assign all the instance to each user when automatic assignment is turned off
             user_state = UserAnnotationState(instance_id_to_data)
+            user_state.real_instance_assigned_count = user_state.get_assigned_instance_count()
             user_to_annotation_state[username] = user_state
     else:
         user_state = user_to_annotation_state[username]
@@ -1732,7 +1841,7 @@ def load_user_state(username):
 
         logger.info(
             'Loaded %d annotations for known user "%s"'
-            % (user_state.get_annotation_count(), username)
+            % (user_state.get_real_finished_instance_count(), username)
         )
 
         return "old user loaded"
@@ -1780,7 +1889,7 @@ def get_displayed_text(text):
         if isinstance(text, str):
             try:
                 text = eval(text)
-            except:
+            except Exception:
                 text = str(text)
         if isinstance(text, list):
             if config["list_as_text"]["text_list_prefix_type"] == "alphabet":
@@ -1978,8 +2087,8 @@ def annotate_page(username=None, action=None):
         instance=text,
         instance_obj=instance,
         instance_id=lookup_user_state(username).get_instance_cursor(),
-        finished=lookup_user_state(username).get_annotation_count(),
-        total_count=lookup_user_state(username).get_assigned_instance_count(),
+        finished=lookup_user_state(username).get_real_finished_instance_count(),
+        total_count=lookup_user_state(username).get_real_assigned_instance_count(),
         alert_time_each_instance=config["alert_time_each_instance"],
         statistics_nav=all_statistics,
         **kwargs
@@ -2034,12 +2143,13 @@ def annotate_page(username=None, action=None):
 
                     # If it's not a text area or a slider, let's see if this is the button
                     # that was checked, and if so mark it as checked
-                    if not (input_field.name == "textarea" or input_field['type'] == 'range') \
-                           and input_field["value"] != value:
+                    if not (input_field.name != "textarea" or input_field['type'] == 'range') \
+                           and ("value" in input_field) and (input_field["value"] != value):
                         continue
                     else:
                         input_field["checked"] = True
-                
+                        input_field["value"] = value
+
                     # Set the input value for textarea input
                     if input_field.name == "textarea":
                         input_field.string = value
@@ -2258,11 +2368,11 @@ def parse_story_pair_from_file(filepath):
     return lines
 
 
-@app.route("/files/<path:filename>")
+@app.route("/<path:filename>")
 def get_file(filename):
-    """Make files available for annotation access from a folder."""
+    """Make files available for annotation access from a folder"""
     try:
-        return flask.send_from_directory("../data/files/", filename)
+        return flask.send_from_directory(os.getcwd(), filename)
     except FileNotFoundError:
         flask.abort(404)
 
@@ -2472,14 +2582,14 @@ def run_create_task_cli():
             raise Exception("Gui-based design not supported yet.")
 
 
-def run_server():
+def run_server(args):
     """
     Run Flask server.
     """
     global user_config
     global user_to_annotation_state
 
-    args = arguments()
+
     init_config(args)
     if config.get("verbose"):
         logger.setLevel(logging.DEBUG)
@@ -2488,21 +2598,35 @@ def run_server():
 
     user_config = UserConfig(USER_CONFIG_PATH)
 
-    # Jiaxin: commenting the following lines since we will have a seperate
-    #        user_config file to save user info.  This is necessary since we
-    #        cannot directly write to the global config file for user
-    #        registration
-    """
+
+    #load user configuration settings and add authorized users
     user_config_data = config['user_config']
     if 'allow_all_users' in user_config_data:
         user_config.allow_all_users = user_config_data['allow_all_users']
 
-        if 'users' in user_config_data:       
-            for user in user_config_data["users"]:
-                username = user['firstname'] + '_' + user['lastname']
-                user_config.add_user(username)
-    """
+        if 'authorized_users' in user_config_data:
+            for user in user_config_data["authorized_users"]:
+                user_config.authorized_users.append(user)
 
+
+    # set up the template file path
+    for key in ["html_layout", "base_html_template", "header_file"]:
+        # if template not set in the configuration file, use the default version
+        if key not in config:
+            logger.warning("%s not configured, use default template at %s"%(key, template_dict[key]['default']))
+            config[key] = template_dict[key]['default']
+        # if user uses a template in the lib, replace the key with the file location
+        elif config[key] in template_dict[key]:
+            config[key] = template_dict[key][config[key]]
+        # if user uses a self defined file, directly use it as the template
+        else:
+            logger.info("%s will be loaded from user-defined file %s" % (key,config[key]))
+
+    #overwrite the site_dir to the default path, this will not be shown to the users
+    #todo: remove all the site_dir key from the configuration files or figure out a way to handle render flask templates from different dirs
+    #todo: having the flask templates in the user-defined project folder would be neccessary in the long run due to potential conflicts of projects with the same name
+    # each project dir should be self-contained, even for the flask template files
+    config["site_dir"] = flask_templates_dir
     # Creates the templates we'll use in flask by mashing annotation
     # specification on top of the proto-templates
     generate_site(config)
@@ -2541,7 +2665,15 @@ def main():
         # Run task configuration script if no arguments are given.
         return run_create_task_cli()
 
-    run_server()
+    args = arguments()
+    if args.mode == 'start':
+        run_server(args)
+    elif args.mode == 'get':
+        get_project_from_hub(args.config_file)
+
+    # currently config_file is still an required arg, so when potato list is used, users must add all after it: potato list all
+    elif args.mode == 'list':
+        show_project_hub(args.config_file)
 
 
 if __name__ == "__main__":

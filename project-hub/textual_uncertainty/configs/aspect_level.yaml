@@ -1,0 +1,160 @@
+{
+    "port": 9001,
+
+    "server_name": "potato annotator",
+
+    "annotation_task_name": "Aspect-level-Uncertainty",
+
+    # Potato will write the annotation file for all annotations to this
+    # directory, as well as per-annotator output files and state information
+    # necessary to restart annotation.
+    "output_annotation_dir": "annotation_output/aspect_level/",
+
+    "annotation_codebook_url": "",
+
+    "data_files": [
+        "data_files/news_abs_finding_sample.json"
+    ],
+
+    # The output format for the all-annotator data. Allowed formats are:
+    # * jsonl
+    # * json (same output as jsonl)
+    # * csv
+    # * tsv
+    #
+    "output_annotation_format": "tsv",
+
+    "item_properties": {
+        "id_key": "id",
+        "text_key": "finding"
+
+    },
+
+    "keyword_highlights_file": "configs/uncertainty_keywords.tsv",
+
+    # How many seconds do you want the annotators spend on each instance, after
+    # that, an alert will be sent per alert_time_each_instance seconds.
+    "alert_time_each_instance": 10000000,
+
+
+    "annotation_schemes": [
+
+
+        {
+          "annotation_type": "multiselect",
+          "name": "Aspects",
+          "description": "Do the following aspects present in the given finding?",
+          "labels": [
+          { "name": "Number",
+            "tooltip_file": "uncertainty_tooltips/aspect_level/number.html",
+            "key_value": 'q'
+          },
+          {
+            "name": "Extent",
+            "tooltip_file": "uncertainty_tooltips/aspect_level/extent.html",
+            "key_value": 'w'
+          },
+
+          { "name": "Probability/Effect/Connection",
+            "tooltip_file": "uncertainty_tooltips/aspect_level/probability.html",
+            "key_value": 'e'
+          },
+
+          { "name": "Condition",
+            "tooltip_file": "uncertainty_tooltips/aspect_level/condition.html",
+            "key_value": 'r'
+          },
+
+          { "name": "Suggestion/Action",
+            "tooltip_file": "uncertainty_tooltips/aspect_level/suggestion.html",
+            "key_value": 't'
+          },
+          { "name": "Framing",
+            "tooltip_file": "uncertainty_tooltips/aspect_level/framing.html",
+            "key_value": 'y'
+          },
+          { "name": "None",
+            "tooltip": "All the labels do not apply here",
+            "exclude_other": "True",
+            "key_value": 'None'
+          },
+          { "name": "Bad-Text",
+            "tooltip": "This is not a scientific finding",
+            "exclude_other": "True",
+            "key_value": 'BAD'
+          }
+          ]
+        },
+
+        {
+          "annotation_type": "multiselect",
+          "name": "Which-is-uncertain",
+          "description": "Are the presented aspects uncertain?",
+          "labels": [
+          { "name": "Number",
+            "tooltip_file": "uncertainty_tooltips/aspect_level/number.html",
+            "key_value": 'a'
+          },
+          {
+            "name": "Extent",
+            "tooltip_file": "uncertainty_tooltips/aspect_level/extent.html",
+            "key_value": 's'
+          },
+
+          { "name": "Probability/Effect/Connection",
+            "tooltip_file": "uncertainty_tooltips/aspect_level/probability.html",
+            "key_value": 'd'
+          },
+
+          { "name": "Condition",
+            "tooltip_file": "uncertainty_tooltips/aspect_level/condition.html",
+            "key_value": 'f'
+          },
+
+          { "name": "Suggestion/Action",
+            "tooltip_file": "uncertainty_tooltips/aspect_level/suggestion.html",
+            "key_value": 'g'
+          },
+          { "name": "Framing",
+            "tooltip_file": "uncertainty_tooltips/aspect_level/framing.html",
+            "key_value": 'h'
+          },
+          { "name": "None",
+            "tooltip": "All the labels do not apply here",
+            "exclude_other": "True",
+            "key_value": 'None'
+          },
+          { "name": "Bad-Text",
+            "tooltip": "This is not a scientific finding",
+            "exclude_other": "True",
+            "key_value": 'BAD'
+          }
+          ]
+        }
+
+
+    ],
+
+    # The html that changes the visualiztation for your task. Change this file
+    # to influence the layout and description of your task. This is not a full
+    # HTML page, just the piece that does lays out your task's pieces
+    "html_layout": "default",
+
+
+    # The core UI files for Potato. You should not need to change these normally.
+    #
+    # Exceptions to this might include:
+    # 1) You want to add custom CSS/fonts to style your task
+    # 2) Your layout requires additional JS/assets to render
+    # 3) You want to support additional keybinding magic
+    #
+    # if you want to use your own template,
+    # please replace the string as a path to the template
+    "base_html_template": "default",
+    "header_file": "default",
+
+    # This is where the actual HTML files will be generated
+    "site_dir": "default"
+
+}
+

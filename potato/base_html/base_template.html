@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <!--- HEADER GOES BELOW HERE--->
+
+  {{ HEADER }}
+
+  <!--- HEADER GOES ABOVE HERE--->
+  
+  <body>
+
+
+
+    <input type="hidden" name="username" id="username" value="{{username}}">
+    <input type="hidden" name="instance_id" id="instance_id" value="{{instance_id}}">
+    <input type="hidden" name="alert_time_each_instance" id="alert_time_each_instance" value="{{alert_time_each_instance}}">
+    <p id="timecounter" hidden>Time spent:</p>
+
+    <div id="mySidepanel" class="sidepanel">
+      <a href="javascript:void(0)" class="closebtn" target_id="mySidepanel" onclick="closeNav(this.getAttribute('target_id'))">&times;</a>
+      {{keybindings}}
+    </div>
+
+    <div id="Statpanel" class="sidepanel">
+      <a href="javascript:void(0)" class="closebtn" target_id="Statpanel" onclick="closeNav(this.getAttribute('target_id'))">&times;</a>
+      {{statistics_nav}}
+    </div>
+    
+    <script>
+      document.addEventListener('keyup', function (event) {
+          var active_id = document.activeElement.id;
+          var active_type = document.activeElement.getAttribute('type');
+          if (active_id == 'go_to' | active_type == 'text') return;
+
+          //first check whether this keyboard input is a shortcut for checkboxes
+          var checkboxes = document.querySelectorAll('input[type=checkbox]');
+          var radios = document.querySelectorAll('input[type=radio]');
+          var x = event.key.toLowerCase();
+
+          for (var i = 0; i < checkboxes.length; i++) {
+              //alert(checkboxes[i].value)
+              if(x === checkboxes[i].value){
+                  checkboxes[i].checked = !checkboxes[i].checked;
+                  if (checkboxes[i].onclick != null) checkboxes[i].onclick.apply(checkboxes[i]);
+                  return;
+              };
+          }
+          for (var i = 0; i < radios.length; i++) {
+              //alert(checkboxes[i].value)
+              if(x === radios[i].value){
+                  radios[i].checked = !radios[i].checked;
+                  if (radios[i].onclick != null) radios[i].onclick.apply(radios[i]);
+                  return;
+              };
+          }
+
+          // Each time we process a user's key presses, track who is doing
+          // it by grabbing the hidden firstname and lastname fields
+          get_new_instance(event);          
+      });
+
+      function getSelectedText() {
+          var text = "";
+          if (typeof window.getSelection != "undefined") {
+              text = window.getSelection().toString();
+          } else if (typeof document.selection != "undefined" && document.selection.type == "Text") {
+              text = document.selection.createRange().text;
+          }
+          return text;
+      }
+
+      function surroundSelection(selectionLabel, selectionColor)  {
+          //var span = document.createElement("span");
+          //span.style.fontWeight = "bold";
+          //span.style.color = "green";
+   
+          if (window.getSelection) {
+              var sel = window.getSelection();
+
+              // Check that we're labeling something in the instance text that
+              // we want to annotate
+              if (sel.anchorNode.parentElement) {
+
+                  if (sel.anchorNode.parentElement.getAttribute("name") != "instance_text") {
+                      
+                      // See if this text was already wrapped with the currently
+                      // selected class label and if so, remove it
+                      var parentOfSelection = sel.anchorNode.parentElement
+
+                      if (parentOfSelection.getAttribute("selection_label") == selectionLabel) {
+                          // Remove the div tag that has the span's annotation label
+                          $( parentOfSelection ).find("div").remove();
+                          // Remove the span tag that has the highlight box
+                          $( parentOfSelection.firstChild ).unwrap();
+                      }
+
+                      return;
+                  }
+              }
+              else {
+                  // alert("no parent element");
+                  return;
+              }
+              
+              // Otherwise, we're going to be adding a new span annotation, if
+              // the user has selected some non-empty part of th text
+              if (sel.rangeCount && sel.toString().trim().length > 0) {                 
+
+                  tsc = selectionColor.replace(")", ", 0.25)")
+                  
+                  var span = document.createElement("span");
+                  span.className = "span_container";
+                  span.setAttribute("selection_label", selectionLabel);
+                  span.setAttribute("style", "background-color:rgb" + tsc + ";");
+                  console.log(selectionColor);
+                  
+                  var label = document.createElement("div");
+                  label.className = "span_label";
+                  label.textContent = selectionLabel;
+                  label.setAttribute("style", "background-color:white;"
+                                    + "border:2px solid rgb" + selectionColor + ";");
+                  
+                  var range = sel.getRangeAt(0).cloneRange();
+                  range.surroundContents(span);
+                  sel.removeAllRanges();
+                  sel.addRange(range);
+                  span.appendChild(label);
+              }
+          }
+      }
+
+      function changeSpanLabel(checkbox, spanLabel, spanColor) {
+          // Listen for when the user has highlighted some text (only when the label is checked)
+          document.onmouseup = function() {
+              if (checkbox.checked){
+                  surroundSelection(spanLabel, spanColor);
+              }
+          }
+      }
+
+      // Listen for when the user has highlighted some text
+      // document.onmouseup = function() { surroundSelection("Undefined"); } 
+
+    </script>
+    <script>
+      function barValue(range,sibling) {
+          // function used to obtain value for range input
+          sibling.value = range.value;
+          //var x = document.getElementsByClassName(range.className);
+          //var i;
+          //for (i=0: i < x.length; i++) {
+          //    if(x[i].value != range.value) x[i]
+          //}
+      }
+    </script>
+
+    <script>
+      function onlyOne(checkbox) {
+	  // this function is used for the single-choice setting
+	  //alert(checkbox.className)
+	  var x = document.getElementsByClassName(checkbox.className);
+	  var i;
+	  for (i = 0; i < x.length; i++) {
+	      if(x[i].value != checkbox.value) x[i].checked = false;
+	  }
+      }
+    </script>
+
+
+    <script>
+      function whetherNone(checkbox) {
+	  // this function is used to uncheck all the other labels when "None" is checked
+	  //alert(checkbox.className)
+	  var x = document.getElementsByClassName(checkbox.className);
+	  var i;
+	  for (i = 0; i < x.length; i++) {
+              if(checkbox.value == "None" && x[i].value != "None") x[i].checked = false;
+              if(checkbox.value != "None" && x[i].value == "None") x[i].checked = false;
+          }
+
+      }
+    </script>
+
+
+    <script>
+      function click_to_next() {
+          // Gacky code to simulate the submit button as a keyboard event
+          // and not have two separate paths to handle keyboard and mouse
+          // events
+          var e = $.Event('keyup');
+          e.key = "ArrowRight";
+          
+          get_new_instance(e);
+      }
+
+      function click_to_prev() {
+          // Gacky code to simulate the submit button as a keyboard event
+          // and not have two separate paths to handle keyboard and mouse
+          // events
+          var e = $.Event('keyup');
+          e.key = "ArrowLeft";
+          
+          get_new_instance(e);
+      } 
+      
+    </script>
+    
+    {{annotation}}
+    
+    <script>
+      window.onunload = check_close;
+      function check_close() {
+          // console.error("session closed");
+          var post_req = {
+              is_close: "closed"
+          }
+          post(post_req);
+      }
+    </script>
+
+    <script>
+      // Set the date we're counting down to
+      var countDownDate = new Date().getTime();
+
+      // Update the count down every 1 second
+      var x = setInterval(function() {
+
+          // Get today's date and time
+          var now = new Date().getTime();
+
+          // Find the distance between now and the count down date
+          var distance = now - countDownDate;
+
+          // Time calculations for days, hours, minutes and seconds
+          var days = Math.floor(distance / (1000 * 60 * 60 * 24));
+          var hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+          var minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+          var seconds = Math.floor((distance % (1000 * 60)) / 1000);
+          var total_seconds = Math.floor(distance / 1000);
+
+          // Output the result in an element with id="timecounter"
+
+          document.getElementById("timecounter").innerHTML = "Time spent: " + days + "d " + hours + "h "
+              + minutes + "m " + seconds + "s ";
+
+          // TODO: add configurations for alert message and maximum time spent on each instance
+          // If the count down is over, write some text
+
+          var alert_time_each_instance = document.getElementById("alert_time_each_instance").value;
+          if (total_seconds % alert_time_each_instance == 0) {
+              //clearInterval(x);
+              //document.getElementById("timecounter").innerHTML = "EXPIRED";
+              alert("You have spent " + total_seconds + " seconds on this instance")
+          }
+
+      }, 1000);
+    </script>
+    
+    <script>
+      // We submit a new post to the same (user/annotate) endpoint
+      function post(params) {
+          
+          // The rest of this code assumes you are not using a library.
+          // It can be made less wordy if you use one.
+          var form = document.createElement("form");
+          form.setAttribute("method", "post");
+          form.setAttribute("action", "annotate");
+          
+          var hiddenField = document.createElement("input");
+          hiddenField.setAttribute("type", "hidden");
+          hiddenField.setAttribute("name", "email");
+          hiddenField.setAttribute("value", document.getElementById('username').value);
+          form.appendChild(hiddenField);
+          
+          for (var key in params) {
+              if (params.hasOwnProperty(key)) {
+                  var hiddenField = document.createElement("input");
+                  hiddenField.setAttribute("type", "hidden");
+                  hiddenField.setAttribute("name", key);
+                  hiddenField.setAttribute("value", params[key]);
+                  
+                  form.appendChild(hiddenField);
+              }
+          }
+
+          // Stuff all the current annotations into attributes for processing on the server side
+          $('form input, form select, form textarea').each(
+              function(index){  
+                  var input = $(this);
+                  
+                  if (input.attr('type') == 'checkbox' || input.attr('type') == 'radio') {
+                      if (input.is(":checked")) {
+                          // Stuff all the input fields into something for the post
+                          var hiddenField = document.createElement("input");
+                          hiddenField.setAttribute("type", "hidden");
+                          hiddenField.setAttribute("name", input.attr('name'));
+                          hiddenField.setAttribute("value", input.attr('value'));
+                          form.appendChild(hiddenField);
+                      }
+                  }
+                  else if (input.attr('type') == 'text' || input.attr('type') == 'number') {
+                      var hiddenField = document.createElement("input");
+                      hiddenField.setAttribute("type", "hidden");
+                      hiddenField.setAttribute("name", input.attr('name'));
+                      hiddenField.setAttribute("value", input[0].value);
+                      form.appendChild(hiddenField);                                        
+                  }
+                  else if (input.attr('type') == 'range') {
+                      var hiddenField = document.createElement("input");
+                      hiddenField.setAttribute("type", "hidden");
+                      hiddenField.setAttribute("name", input.attr('name'));
+                      hiddenField.setAttribute("value", input[0].value);
+                      form.appendChild(hiddenField);                                        
+                  }
+                  else if (input.attr('type') == 'select-one') {
+                      //alert(input[0].value)
+                      var hiddenField = document.createElement("input");
+                      hiddenField.setAttribute("type", "hidden");
+                      hiddenField.setAttribute("name", input.attr('name'));
+                      hiddenField.setAttribute("value", input[0].value);
+                      form.appendChild(hiddenField);
+                  }
+                  else {
+                      console.log("unknown form type: \"" + input.attr('type') + "\"")
+                  }
+              }
+          );
+
+          // Get all the highlighted text for this instance and marshall that
+          // into some kind of representation for the server side
+          $(".span_container").first().each(
+              function(index) {
+
+                  // we save the outerHTML to accomadate user-defined HTML inputs,
+                  // otherwise we just save the plain text
+                  if ($(this).parent().parent().attr("name") == "instance_text"){
+                      var annotated_spans = $(this).parent().prop('outerHTML');
+                  } else {
+                      var annotated_spans = $(this).parent().prop('innerHTML');
+                  }
+
+                  // Due to the DJ's inability to write decent Javascript, we're
+                  // fully punting on the idea of doing label preprocessing here
+                  // and instead shuttling the entire HTML of the instance to
+                  // the server for python-based processing. The main issue is
+                  // figuring out the precise text offsets of the annotated
+                  // spans while dealing with nested DOM elements.
+                  var hiddenField = document.createElement("input");
+                  hiddenField.setAttribute("type", "hidden");
+                  hiddenField.setAttribute("name", "span-annotation");
+                  hiddenField.setAttribute("value", annotated_spans);
+                  form.appendChild(hiddenField);
+                  //console.log(annotated_spans)
+              }
+          );
+
+          
+          document.body.appendChild(form);
+          form.submit();
+      }
+
+
+       /**
+       * Validate if the input answers meet certain rules
+       * along with any relevant key presses to request a new instance to
+       * annotate.
+       */
+      function validate_answers() {
+
+          // check if all the right labels are checked
+          //alert({{instance_obj|tojson}}['id'])
+          var inputs =  document.querySelectorAll('input[validation=right_label]');
+          for (var i = 0; i < inputs.length; ++i) {
+            if (inputs[i].getAttribute('validation') == 'right_label' && inputs[i].checked == false){
+                alert(inputs[i].name + " must be selected to proceed");
+                //alert(instance_obj.id)
+                return false;
+            }
+          }
+
+
+          // identify all the fieldsets and check if all the required forms are filled
+          var fields = document.getElementsByTagName('fieldset');
+          for (var i = 0; i < fields.length; ++i) {
+                var inputs = fields[i].querySelectorAll('input[validation=required], select[validation=required], textarea[validation=required]');
+
+                // continue if all there's no required inputs in the current field set
+                if (inputs.length == 0){
+                    continue;
+                }
+                //var required = true;
+                // check if the current form requires inputs
+                //if (inputs[0].getAttribute('validation') == 'required'){
+                //    required= true;
+                //}
+
+
+                checked_flag = false;
+                for (var j = 0; j < inputs.length; ++j) {
+                    // if a right_label is not selected, display an error msg and return false
+                    //if (inputs[j].getAttribute('validation') == 'right_label' && inputs[j].checked == false) {
+                    //    alert(inputs[j].name + " must be selected to proceed");
+                        //alert(instance_obj.id)
+                    //    return false;
+                    //}
+                    // if the input is for a span annotation schema, check if the at least some span is annotated or if the
+                    // bad_text label is selected
+                    if (inputs[j].getAttribute("for_span") == "True"){
+                        //alert($(".span_container").length);
+                        if ($(".span_container").length > 0) {
+                            checked_flag = true;
+                            break;
+                        } else if (inputs[j].name.slice(-8) == "bad_text" && inputs[j].checked == true){
+                            checked_flag = true;
+                            break;
+                        }
+                    }
+
+
+                    // if any of the labels is checked, set checked_flag as true;
+                    if (inputs[j].getAttribute("for_span") != "True" && inputs[j].checked == true) {
+
+                        checked_flag = true;
+                        break;
+                    }
+
+                    // if the input_type is number, text, select or textarea, check if it's empty
+                    // todo: the current way might not work well if there are mixed textinput and radio buttons under a sample fieldset
+                    if (inputs[j].type == "text" || inputs[j].tagName == "TEXTAREA" || inputs[j].type == "number" || inputs[j].type == "select-one") {
+                        if (inputs[j].value.length == 0){
+                            alert(inputs[j].name + " must be completed to proceed");
+                            return false;
+                        }
+                        else{
+                            checked_flag = true;
+                        }
+                    }
+                }
+
+
+                // if this form requires inputs, but nothing is checked, display an error msg and return false
+                if (checked_flag == false){
+                    alert("You must answer the following item to proceed: " + inputs[0].className);
+                    return false;
+                }
+                //alert(instance_obj.id)
+          }
+          return true;
+      }
+
+
+      /**
+       * Sends the current state of the instance's annotation to the server,
+       * along with any relevant key presses to request a new instance to
+       * annotate.
+       */
+      function get_new_instance(event) {
+          var x = event.key;
+          var action = ""
+          var ism = ""
+
+          //console.log(x)
+          //console.log(firstname)
+          //console.log(lastname)
+          if (x == "ArrowLeft") { // Spacebar
+              action = "prev_instance";
+          }
+          else if (x == "ArrowRight") {
+              if (validate_answers() == true) {
+                  action = "next_instance";
+              }
+              else{
+                  return;
+              }
+          }
+          else {
+              // console.log("Unknown key press", event)
+              return
+          }
+          
+          var instance_id = document.getElementById('instance_id').value
+          var time_string = document.getElementById("timecounter").innerHTML //get time spent on this instance
+          //time_string = '-1'
+          var post_req = {
+              label: ism,
+              src: action,
+              instance_id: instance_id,
+              behavior_time_string: time_string
+          }
+
+          // Sends the post message to the server which will let us update the
+          // currently displayed content
+          post(post_req)
+      }
+
+    </script>
+
+    <script>
+      $(document).ready(function(){
+          $('[data-toggle="tooltip"]').tooltip();
+      });
+    </script>
+
+
+   
+    <nav class="navbar navbar-expand-md navbar-dark bg-dark mb-3">
+      <div class="container-fluid">
+        <a href="#" class="navbar-brand mr-3">{{annotation_task_name}}</a>
+        <button type="button" class="navbar-toggler" data-toggle="collapse" data-target="#navbarCollapse">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarCollapse">
+          <div class="navbar-nav">
+            <a href="#" class="nav-item nav-link active">Home</a>
+            {{annotation_codebook}}
+            <a role="button" href="#" class="nav-item nav-link openbtn" target_id="Statpanel" width = "475px" onclick="openNav(this.getAttribute('target_id'),this.getAttribute('width'))">Statistics</a>
+            <a role="button" href="#" class="nav-item nav-link openbtn" target_id="mySidepanel" onclick="openNav(this.getAttribute('target_id'))">Help</a>
+          </div>
+          <div class="p-2 bd-highlight text-secondary align-middle">
+            Finished {{finished}}/{{total_count}}
+          </div>
+          <div class="p-2 bd-highlight text-secondary align-middle">
+            Current_id {{instance_id}}
+          </div>
+          <div class="p-2 bd-highlight text-secondary align-middle">
+            <form action="/annotate" method="post">
+              <fieldset>
+                <input type="hidden" name="firstname" id="a" value="{{firstname}}">
+                <input type="hidden" name="lastname" id="b" value="{{lastname}}">
+                 <input type="hidden" name="email" id="c" value="{{username}}">
+                <input type="hidden" name="src" id="src" value="go_to">
+                <input type="number" name="go_to" id="go_to" value="" onfocusin="user_input()" onfocusout="user_input_leave()" max={{total_count}} min=0 required>
+                <input type="submit" value="go">
+              </fieldset>
+            </form>
+          </div>
+          <div class="navbar-nav ml-auto">
+            <div class="text-secondary align-middle">Currently logged in as {{username}}</div>
+          </div>
+        </div>
+      </div>    
+    </nav>
+    <div class="container-fluid">
+
+      <!--- LAYOUT GOES BELOW HERE --->
+
+      {{ TASK_LAYOUT }}
+
+      <!--- LAYOUT GOES ABOVE  --->
+
+      <div>
+        <p>
+          <div class="text-center">
+            <a class="btn btn-secondary" href="#" role="button" onclick="click_to_prev()">Move backward</a>
+            <a class="btn btn-secondary" href="#" role="button" onclick="click_to_next()">Move forward</a>
+          </div>
+        </p>        
+      </div>
+
+      <hr>
+      <footer>
+        <div class="row">
+          <div class="col-md-6">
+            <p>Copyright &copy; 2022 <a href="https://blablablab.si.umich.edu/">Blablablab</a> </p>
+          </div>
+          <div class="col-md-12 text-md-right">
+            <a href="https://github.com/davidjurgens/potato" class="text-dark">Fork on GitHub</a>
+            <span class="text-muted mx-2">|</span> 
+            <a href="https://github.com/davidjurgens/potato#cite-us" class="text-dark">Cite Us</a>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <script>
+      /* Set the width of the sidebar to 250px (show it) */
+      function openNav(target_id, width = "350px") {
+          document.getElementById(target_id).style.width = width;
+      }
+      
+      /* Set the width of the sidebar to 0 (hide it) */
+      function closeNav(target_id) {
+          document.getElementById(target_id).style.width = "0";
+      }
+
+      function closeNav2(target_id) {
+          // document.getElementById(target_id).style.height = "20px";
+          console.error(document.getElementById(target_id).style.display);
+          if (document.getElementById(target_id).style.display == "block" 
+              || document.getElementById(target_id).style.display == "") {
+              
+              document.getElementById(target_id).style.display = "none";
+              localStorage.setItem('show_instructions', 'false'); 
+          }
+          else{
+              document.getElementById(target_id).style.display = "block";
+              localStorage.setItem('show_instructions', 'true'); 
+          }
+      }
+
+      /* Keep the instructions hidden/shown across instance transitions based on
+         what the user had selected */      
+      window.onload = function() {
+          var show = localStorage.getItem('show_instructions');
+          if (document.getElementById('instructions')) {
+              if (show === 'true') {
+                  document.getElementById('instructions').style.display = "block";
+              }
+              else {
+                  document.getElementById('instructions').style.display = "none";
+              }
+          }
+      }      
+
+    </script>
+  </body>
+</html>

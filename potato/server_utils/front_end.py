@@ -461,6 +461,7 @@ def generate_surveyflow_pages(config):
                     "horizontal": False,
                     "labels": line.get("choices"),
                     "label_requirement": line.get("label_requirement"),
+                    "has_free_response": line.get("has_free_response"),
                     "sequential_key_binding": False,
                 }
                 schema_layout, keybindings = generate_schematic(annotation_scheme)
@@ -496,7 +497,11 @@ def generate_surveyflow_pages(config):
             cur_html_template = cur_html_template.replace("{{keybindings}}", keybindings_desc)
             # Jiaxin: change the basename from the template name to the project name +
             # template name, to allow multiple annotation tasks using the same template
-            site_name = "%s.html" % page
+            site_name = (
+                    "-".join(config["annotation_task_name"].split(" "))
+                    + "-"
+                    + "%s.html" % page
+            )
 
             output_html_fname = os.path.join(config["site_dir"], site_name)
 
