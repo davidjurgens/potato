@@ -46,7 +46,7 @@ mkdocstrings-python==0.7.1
     # via mkdocstrings
 packaging==21.3
     # via mkdocs
-pymdown-extensions==9.5
+pymdown-extensions==10.0
     # via mkdocstrings
 pyparsing==3.0.9
     # via packaging
