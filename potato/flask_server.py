@@ -649,22 +649,22 @@ def load_all_data(config):
     for page in config.get("pre_annotation_pages", []):
         # TODO Currently we simply remove the language type before -,
         # but we need a more elegant way for this in the future
-        item = {"id": page, "text": page.split("-")[-1][:-5]}
-        instance_id_to_data.update({page: item})
-        instance_id_to_data.move_to_end(page, last=False)
+        item = {"id": page['id'], "text": page['text'] if 'text' in page else page['id'].split("-")[-1][:-5]}
+        instance_id_to_data.update({page['id']: item})
+        instance_id_to_data.move_to_end(page['id'], last=False)
 
     for it in ["prestudy_failed_pages", "prestudy_passed_pages"]:
         for page in config.get(it, []):
             # TODO Currently we simply remove the language type before -,
             # but we need a more elegant way for this in the future
-            item = {"id": page, "text": page.split("-")[-1][:-5]}
-            instance_id_to_data.update({page: item})
-            instance_id_to_data.move_to_end(page, last=False)
+            item = {"id": page['id'], "text": page['text'] if 'text' in page else page['id'].split("-")[-1][:-5]}
+            instance_id_to_data.update({page['id']: item})
+            instance_id_to_data.move_to_end(page['id'], last=False)
 
     for page in config.get("post_annotation_pages", []):
-        item = {"id": page, "text": page.split("-")[-1][:-5]}
-        instance_id_to_data.update({page: item})
-        instance_id_to_data.move_to_end(page, last=True)
+        item = {"id": page['id'], "text": page['text'] if 'text' in page else page['id'].split("-")[-1][:-5]}
+        instance_id_to_data.update({page['id']: item})
+        instance_id_to_data.move_to_end(page['id'], last=True)
 
     # Generate the text to display in instance_id_to_data
     for inst_id in instance_id_to_data:
@@ -722,9 +722,9 @@ def load_all_data(config):
 
             for it in ["pre_annotation", "prestudy_passed", "prestudy_failed", "post_annotation"]:
                 if it + "_pages" in config:
-                    task_assignment[it + "_pages"] = config[it + "_pages"]
+                    task_assignment[it + "_pages"] = [p['id'] if type(p) == dict else p for p in config[it + "_pages"]]
                     for p in config[it + "_pages"]:
-                        task_assignment["assigned"][p] = 0
+                        task_assignment["assigned"][p['id']] = 0
 
             for _id in instance_id_to_data:
                 if _id in task_assignment["assigned"]:
