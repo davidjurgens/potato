@@ -97,6 +97,10 @@ def generate_multirate_layout(annotation_scheme):
                     % tooltip_text
                 )
 
+        validation = ""
+        label_requirement = annotation_scheme.get("label_requirement")
+        if label_requirement and label_requirement.get("required"):
+            validation = "required"
 
         label_content = label
         radio_style = "vertical-align: middle; margin: 0px;"
@@ -109,9 +113,9 @@ def generate_multirate_layout(annotation_scheme):
             schematic += (
                 '<td style="text-align:center;">' +
                 '<input name="{name}" type="radio" id="{id}" ' +
-                'value="{value}" onclick="onlyOne(this)" style="{radio_style}"/></td>'
+                'value="{value}" onclick="onlyOne(this)" validation="{validation}" style="{radio_style}"/></td>'
             ).format(name=name, tooltip=tooltip, class_name=class_name, id=name+'.'+rating,
-                     radio_style=radio_style, value=rating)
+                     radio_style=radio_style, value=rating, validation=validation)
 
         #schematic += "</td>"
         if i % n_columns == 0:

@@ -2141,10 +2141,14 @@ def annotate_page(username=None, action=None):
                         print("No input for ", name)
                         continue
 
-                    # If it's not a text area or a slider, let's see if this is the button
+                    # If it's a slider, set the value for the slider
+                    if input_field['type'] == 'range' and name.startswith('slider:::'):
+                        input_field['value'] = value
+                        continue
+
+                    # If it's not a text area, let's see if this is the button
                     # that was checked, and if so mark it as checked
-                    if not (input_field.name != "textarea" or input_field['type'] == 'range') \
-                           and ("value" in input_field) and (input_field["value"] != value):
+                    if input_field.name != "textarea" and input_field.has_attr("value") and input_field.get("value") != value:
                         continue
                     else:
                         input_field["checked"] = True
@@ -2160,9 +2164,6 @@ def annotate_page(username=None, action=None):
                         option = input_field.findChildren("option", {"value": value})[0]
                         option["selected"] = "selected"
 
-                    # If it's a slider, set the value for the slider
-                    elif name.startswith('slider:::'):
-                        input_field['value'] = value
 
     rendered_html = str(soup)
 
