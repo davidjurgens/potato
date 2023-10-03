@@ -529,7 +529,7 @@ def generate_surveyflow_pages(config):
             elif type(it) == dict:
                 item = {'id': config["surveyflow_site_file"][it['file'].split(".")[0].split("/")[-1]]}
                 for k in it:
-                    item[k] = it
+                    item[k] = it[k]
             else:
                 print('ERROR: unsupported surveyflow %s type: '%(key, type(it)))
             page_list.append(item)
