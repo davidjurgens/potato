@@ -110,6 +110,30 @@ file:
 },
 ```
 
+On each page of the surveyflow, we display the filename of the page by default. For example,
+for the page of `surveyflow/consent.jsonl`, we will display `consent` as the theme of the page.
+If you want to display a different theme text, you could use a `dict` to define the surveyflow pages. For example:
+
+``` YAML
+"surveyflow": {
+        "on": true,
+        "order": [
+            "pre_annotation",
+            "post_annotation"
+        ],
+        "pre_annotation": [
+            {"file":"surveyflow/consent.jsonl", "text":"Please answer all the consent questions"},
+        ],
+        "post_annotation": [
+            "surveyflow/demographics.jsonl",
+        ],
+        "testing": [
+             "surveyflow/testing.jsonl",
+        ]
+},
+```
+
+
 ## Built-in demographic questions 
 Potato provides a list of basic demographic questions covering common needs:
 

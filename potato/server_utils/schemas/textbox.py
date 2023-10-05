@@ -36,6 +36,10 @@ def generate_textbox_layout(annotation_scheme):
 
     tooltip = ""
 
+    paste_setting = ''
+    if "allowing_paste" in annotation_scheme and annotation_scheme["allowing_paste"] == False:
+        paste_setting = 'onpaste="alert(\'Pasting is not allowed for the current study\');return false;"'
+
     # supporting multiple textboxes with different labels
     if "labels" not in annotation_scheme or annotation_scheme["labels"] == None:
         labels = ["text_box"]
@@ -70,7 +74,7 @@ def generate_textbox_layout(annotation_scheme):
             )
             schematic += (
                 '  <li><label for="%s" %s>%s</label> '
-                + '<textarea rows="%s" cols="%s" class="%s" style=%s type="text" id="%s" name="%s" validation="%s"></textarea></li> <br/>'
+                + '<textarea rows="%s" cols="%s" class="%s" style=%s type="text" id="%s" name="%s" validation="%s" %s></textarea></li> <br/>'
             ) % (
                 name,
                 tooltip,
@@ -82,10 +86,11 @@ def generate_textbox_layout(annotation_scheme):
                 name,
                 name,
                 validation,
+                paste_setting
             )
         else:
             schematic += (
-                '  <li><label for="%s" %s>%s</label> <input class="%s" style=%s type="text" id="%s" name="%s" validation="%s"> </li> <br/>'
+                '  <li><label for="%s" %s>%s</label> <input class="%s" style=%s type="text" id="%s" name="%s" validation="%s" %s> </li> <br/>'
             ) % (
                 name,
                 tooltip,
@@ -95,6 +100,7 @@ def generate_textbox_layout(annotation_scheme):
                 name,
                 name,
                 validation,
+                paste_setting
             )
 
         # schematic += '  </fieldset>\n</form></div>\n'

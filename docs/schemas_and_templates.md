@@ -299,6 +299,31 @@ with "labels":
 ]
 ```
 
+If you want to disallowing pasting into a textbox, you could add the `allowing_paste` field and set it as `False`:
+
+```YAML
+"annotation_schemes": [      
+        {
+            "annotation_type": "text",
+            "name": "textbox_input",
+            "description": "How does this text make you feel?",
+            # you could easily define a list of textboxes within one schema with a list of labels
+            "labels": ['happy?','sad?'],
+            # if you want to use multi-line textbox, turn on the text area and set the desired rows and cols of the textbox
+            "textarea": {
+              "on": False,
+              "rows": 2,
+              "cols": 40
+            },
+            "allowing_paste": False
+        }       
+    ],
+```
+
+This will disallow pasting into the textbox and will alert the user when they are pasting.
+
+
+
 ## Number
 
 If you want to use number as the input, simply change the annotation_type to ''number''
