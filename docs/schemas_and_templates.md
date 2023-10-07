@@ -315,7 +315,7 @@ If you want to disallowing pasting into a textbox, you could add the `allowing_p
               "rows": 2,
               "cols": 40
             },
-            "allowing_paste": False
+            "allow_paste": False
         }       
     ],
 ```

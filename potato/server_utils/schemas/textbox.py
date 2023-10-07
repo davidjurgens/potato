@@ -37,7 +37,7 @@ def generate_textbox_layout(annotation_scheme):
     tooltip = ""
 
     paste_setting = ''
-    if "allowing_paste" in annotation_scheme and annotation_scheme["allowing_paste"] == False:
+    if "allow_paste" in annotation_scheme and annotation_scheme["allow_paste"] == False:
         paste_setting = 'onpaste="alert(\'Pasting is not allowed for the current study\');return false;"'
 
     # supporting multiple textboxes with different labels
