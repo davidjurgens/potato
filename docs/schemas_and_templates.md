@@ -299,7 +299,7 @@ with "labels":
 ]
 ```
 
-If you want to disallowing pasting into a textbox, you could add the `allowing_paste` field and set it as `False`:
+If you want to disallowing pasting into a textbox, you could add the `allow_paste` field and set it as `False`:
 
 ```YAML
 "annotation_schemes": [      
