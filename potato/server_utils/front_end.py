@@ -262,7 +262,7 @@ def generate_site(config):
                 # If we have LLM-chat enabled, schema_layout is a tuple
                 assert isinstance(schema_layout, tuple)
                 schema_layout, cur_schema_query = schema_layout
-                schema_query += f"\nInstruction {i+1}: {cur_schema_query}\n\n"
+                schema_query += f"Instruction {i+1}: {cur_schema_query}\n\n"
 
             schema_layouts += schema_layout + "\n"
             all_keybindings.extend(keybindings)
