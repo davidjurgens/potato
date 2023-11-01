@@ -129,6 +129,9 @@ class ChatWidget {
     const instanceContent = this.extractInstanceContent();
     const annotationSchemaContent = this.extractAnnotationSchemaContent();
 
+    // Maintain a list of messages to be sent to the server
+    this.messages = [];
+
     if (instanceContent && annotationSchemaContent) {
       // Concatenate the two strings
       const message = instanceContent + '\n\n------\n\n' + annotationSchemaContent;
@@ -149,6 +152,14 @@ class ChatWidget {
 
     // Scroll to the bottom
     chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+
+    // Add the message 
+    this.messages.push({
+      role: 'user',
+      content: message
+    })
+
+    console.log('Messages: ', this.messages);
   }
 
   addAssistantMessage(message) {
@@ -163,18 +174,52 @@ class ChatWidget {
 
     // Scroll to the bottom
     chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+
+    // Add the message
+    this.messages.push({
+      role: 'assistant',
+      content: message
+    })
+    // console.log('Messages: ', this.messages);
   }
 
+  postData(url, data) {
+    return fetch(url, {
+        method: 'POST',
+        body: JSON.stringify(data),
+        headers: {
+            'Content-Type': 'application/json',
+            // add other headers here if needed
+        },
+    })
+    .then((response) => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .catch((error) => {
+        console.error('There was a problem:', error.message);
+        // Handle the error as needed
+    });
+  }
 
   onUserRequest(message) {
     this.addUserMessage(message);
     // Disable the Send button
     this.submitButton.disabled = true;
 
-    // TODO: replace this with API call
-    setTimeout(() => {
-      this.reply('Hello! This is a sample reply.');
-    }, 1000);
+    // post to /llm endpoint with this.messages
+    const url = '/llm';
+    const data = {
+      'messages': this.messages,
+    };
+
+    this.postData(url, data)
+    .then(data => {
+      console.log(data);
+      this.reply(data['content']);
+    });
   }
 
   reply(message) {

@@ -9,11 +9,11 @@
   
   <body>
 
-
-
     <input type="hidden" name="username" id="username" value="{{username}}">
     <input type="hidden" name="instance_id" id="instance_id" value="{{instance_id}}">
+    <input type="hidden" name="enable_llm_chat" id="enable_llm_chat" value="{{enable_llm_chat}}">
     <input type="hidden" name="alert_time_each_instance" id="alert_time_each_instance" value="{{alert_time_each_instance}}">
+    <input type="hidden" name="copy_count" id="copy_count" value="0">
     <p id="timecounter" hidden>Time spent:</p>
 
     <div id="mySidepanel" class="sidepanel">
@@ -25,7 +25,6 @@
       <a href="javascript:void(0)" class="closebtn" target_id="Statpanel" onclick="closeNav(this.getAttribute('target_id'))">&times;</a>
       {{statistics_nav}}
     </div>
-    
     <script>
       document.addEventListener('keyup', function (event) {
           var active_id = document.activeElement.id;

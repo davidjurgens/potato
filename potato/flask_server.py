@@ -20,7 +20,7 @@ import simpledorff
 from simpledorff.metrics import nominal_metric, interval_metric
 
 import flask
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, jsonify
 from bs4 import BeautifulSoup
 
 cur_working_dir = os.getcwd() #get the current working dir
@@ -1185,6 +1185,62 @@ def signup():
 @app.route("/newuser")
 def new_user():
     return render_template("newuser.html")
+
+@app.route("/llm", methods=["POST"])
+def llm_request():
+    global user_config
+
+    llm_chat_config = config.get("llm_chat", None)
+    if llm_chat_config is None:
+        return "No llm chat config found", 500
+
+    # Get post data
+    data = request.get_json()
+    if data is None:
+        return "No json data found", 400
+    # verify data["message"] is a list of dict with key "role" and "content"
+    if not isinstance(data["messages"], list):
+        return "message must be a list", 400
+    for message in data["messages"]:
+        if not isinstance(message, dict):
+            return "messages must be a list of dict", 400
+        if "role" not in message \
+            or "content" not in message \
+            or not isinstance(message["role"], str) \
+            or not isinstance(message["content"], str):
+            return "each message must be a dict with key 'role' and 'content'", 400
+
+    model_name = llm_chat_config.get("model_name", "gpt-3.5-turbo")
+    prompt_messages = llm_chat_config.get(
+        "prompt_messages",
+        [
+            {
+            "role": "system",
+            "content": "You are a helpful assistant. Your role is to assist the human annotator in generating creative and accurate responses. Provide guidance and information whenever asked, ensuring that the human annotator produces the best possible output. Always be supportive and informative."
+          }
+        ]
+    )
+    messages = prompt_messages + data["messages"]
+    
+    if llm_chat_config.get("api", "openai") != "openai":
+        raise NotImplementedError("Only openai is supported for now")
+
+    if llm_chat_config.get("debug", False):
+        print(f"Request to LLM with model {model_name} and messages:")
+        print(messages)
+        return jsonify({
+            "role": "assistant",
+            "content": "This is a debug message from the assistant"
+        }), 200
+    
+    import openai
+    openai.api_key = llm_chat_config["api_key"]
+    print(messages)
+    response = openai.ChatCompletion.create(
+        model=model_name,
+        messages=messages,
+    )["choices"][0]["message"]
+    return jsonify(response), 200
 
 
 def get_users():
