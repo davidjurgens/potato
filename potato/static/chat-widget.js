@@ -1,11 +1,52 @@
 class ChatWidget {
   constructor() {
-    this.initStyles();
     this.createChatWidget();
     this.attachEventListeners();
   }
 
-  initStyles() {
+  createChatWidget() {
+    const annotationElement = document.querySelector('.annotation_schema');
+    if (!annotationElement) return; // Ensure the element exists
+
+    // Traverse up to locate the closest parent with class col-md-12
+    const annotationBox = annotationElement.closest('.col-md-12');
+    if (!annotationBox) return;  // Ensure the element exists
+
+    // Modify the class of the found col-md-12 element to col-md-8
+    annotationBox.classList.remove('col-md-12');
+    annotationBox.classList.add('col-md-8');
+    annotationBox.classList.add('justify-content-end');
+
+    // Get the computed height of the annotation box
+    const annotationComputedHeight = window.getComputedStyle(annotationBox).height;
+    // widgetHeight is the minimum of 80vh and the computed height of the annotation box
+    const widgetHeight = Math.min(window.innerHeight * 0.8, parseInt(annotationComputedHeight));
+
+    // Create chat window as col-md-4
+    const chatColumn = document.createElement('div');
+    chatColumn.classList.add('col-md-4');
+    chatColumn.classList.add('justify-content-start');
+
+    chatColumn.innerHTML = `
+    <div id="chat-widget" class="card d-flex flex-column" style="height: ${widgetHeight}px; max-height: ${widgetHeight}px;">
+      <div class="card-header d-flex justify-content-between align-items-center">
+          <span>Chat with Large Language Models</span>
+      </div>
+      <div id="chat-messages" class="card-body overflow-auto flex-grow-1" style="height: 100%;">
+      </div>
+      <form class="form-inline p-3">
+          <div class="d-flex w-100 flex-wrap">
+              <textarea id="chat-input" class="form-control flex-grow-1 mb-1 mr-1" rows="1" placeholder="Ask anything..." style="resize: vertical; overflow-y: auto;"></textarea>
+              <button id="chat-submit" type="submit" class="btn btn-secondary mb-1">Send</button>
+          </div>
+      </form>
+    </div>
+    `;
+    // Insert the chat window next to the col-md-8 element
+    annotationBox.parentNode.appendChild(chatColumn);
+    this.container = chatColumn;
+    this.annotationBox = annotationBox;
+
     // Custom styles for chat widget
     const style = document.createElement('style');
     style.innerHTML = `
@@ -56,52 +97,18 @@ class ChatWidget {
       color: #a6d8ff; // Change color on hover for visual feedback
     }
   
+    #chat-widget {
+      height: ${widgetHeight}px;
+      max-height: ${widgetHeight}px;
+    }
+
+    @media screen and (max-width: 768px) {
+      #chat-widget {
+        max-height: 40vh;
+      }
+    }
     `;
     document.head.appendChild(style);
-  }
-
-  createChatWidget() {
-    const annotationElement = document.querySelector('.annotation_schema');
-    if (!annotationElement) return; // Ensure the element exists
-
-    // Traverse up to locate the closest parent with class col-md-12
-    const annotationBox = annotationElement.closest('.col-md-12');
-    if (!annotationBox) return;  // Ensure the element exists
-
-    // Modify the class of the found col-md-12 element to col-md-8
-    annotationBox.classList.remove('col-md-12');
-    annotationBox.classList.add('col-md-8');
-    annotationBox.classList.add('justify-content-end');
-
-    // Get the computed height of the annotation box
-    const annotationComputedHeight = window.getComputedStyle(annotationBox).height;
-    // widgetHeight is the minimum of 80vh and the computed height of the annotation box
-    const widgetHeight = Math.min(window.innerHeight, parseInt(annotationComputedHeight));
-
-    // Create chat window as col-md-4
-    const chatColumn = document.createElement('div');
-    chatColumn.classList.add('col-md-4');
-    chatColumn.classList.add('justify-content-start');
-
-    chatColumn.innerHTML = `
-    <div id="chat-widget" class="card d-flex flex-column" style="height: 100%; max-height: ${widgetHeight};">
-      <div class="card-header d-flex justify-content-between align-items-center">
-          <span>Chat with Large Language Models</span>
-      </div>
-      <div id="chat-messages" class="card-body overflow-auto flex-grow-1" style="height: 100%;">
-      </div>
-      <form class="form-inline p-3">
-          <div class="d-flex w-100 flex-wrap">
-              <textarea id="chat-input" class="form-control flex-grow-1 mb-1 mr-1" rows="1" placeholder="Ask anything..." style="resize: vertical; overflow-y: auto;"></textarea>
-              <button id="chat-submit" type="submit" class="btn btn-secondary mb-1">Send</button>
-          </div>
-      </form>
-    </div>
-    `;
-    // Insert the chat window next to the col-md-8 element
-    annotationBox.parentNode.appendChild(chatColumn);
-    this.container = chatColumn;
-    this.annotationBox = annotationBox;
   }
 
 
