@@ -11,9 +11,13 @@
 
     <input type="hidden" name="username" id="username" value="{{username}}">
     <input type="hidden" name="instance_id" id="instance_id" value="{{instance_id}}">
-    <input type="hidden" name="enable_llm_chat" id="enable_llm_chat" value="{{enable_llm_chat}}">
     <input type="hidden" name="alert_time_each_instance" id="alert_time_each_instance" value="{{alert_time_each_instance}}">
+
+    <input type="hidden" name="enable_llm_chat" id="enable_llm_chat" value="{{enable_llm_chat}}">
+    <input type="hidden" name="llm_schema_query" id="llm_schema_query" value="{{llm_schema_query}}">
+    <input type="hidden" name="llm_instance_query" id="llm_instance_query" value="{{instance | safe}}">
     <input type="hidden" name="copy_count" id="copy_count" value="0">
+
     <p id="timecounter" hidden>Time spent:</p>
 
     <div id="mySidepanel" class="sidepanel">

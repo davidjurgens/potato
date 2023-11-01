@@ -15,7 +15,7 @@ class ChatWidget {
       border-radius: 18px;
       background-color: #a6d8ff;  // Darker shade
       color: white;
-      max-width: 80%;
+      max-width: 95%;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     }
     .chat-message-assistant {
@@ -24,7 +24,7 @@ class ChatWidget {
       border-radius: 18px;
       background-color: #ecf0f1;  // Lighter shade
       color: #2c3e50;  // Dark text for light background
-      max-width: 80%;
+      max-width: 90%;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     }
 
@@ -96,7 +96,6 @@ class ChatWidget {
               <button id="chat-submit" type="submit" class="btn btn-secondary mb-1">Send</button>
           </div>
       </form>
-  
     </div>
     `;
     // Insert the chat window next to the col-md-8 element
@@ -137,16 +136,16 @@ class ChatWidget {
       this.onUserRequest(message);
     });
 
-    // Initial chat setup
-    const instanceContent = this.extractInstanceContent();
-    const annotationSchemaContent = this.extractAnnotationSchemaContent();
-
     // Maintain a list of messages to be sent to the server
     this.messages = [];
 
-    if (instanceContent && annotationSchemaContent) {
-      // Concatenate the two strings
-      const message = instanceContent + '\n\n------\n\n' + annotationSchemaContent;
+    // Try to send the first message automatically if the schema and instance are provided
+    const initialSchemaQuery = document.getElementById('llm_schema_query').value;
+    const initialInstanceQuery = document.getElementById('llm_instance_query').value;
+    
+    if (initialSchemaQuery && initialSchemaQuery) {
+      const message = 'Here is an instance to annotate:\n\n' + initialInstanceQuery + '\n\nHere are the instruction(s):\n\n' + initialSchemaQuery;
+      
       this.onUserRequest(message);
     }
   }
@@ -260,19 +259,6 @@ class ChatWidget {
     this.addAssistantMessage(message);
     // Re-enable the Send button
     this.submitButton.disabled = false;
-  }
-
-  // ==== Extracting Content from Annotation Box ====
-  // Extract content from .instance
-  extractInstanceContent() {
-    const instanceElement = this.annotationBox.querySelector('.instance[name="context_text"]');
-    return instanceElement ? instanceElement.innerText.trim() : null;
-  }
-
-  // Extract content from .annotation_schema
-  extractAnnotationSchemaContent() {
-    const schemaElement = this.annotationBox.querySelector('.annotation_schema legend');
-    return schemaElement ? schemaElement.innerText.trim() : null;
   }
 }
 
