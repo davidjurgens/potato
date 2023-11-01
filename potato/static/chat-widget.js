@@ -246,7 +246,10 @@ class ChatWidget {
 
   onUserRequest(message) {
     this.addUserMessage(message);
+
+    // Add spinner classes to the submit button
     // Disable the Send button
+    this.submitButton.innerHTML = '<i class="fa fa-spinner fa-spin"></i>&nbsp;Waiting...';
     this.submitButton.disabled = true;
 
     // post to /llm endpoint with this.messages
@@ -265,6 +268,7 @@ class ChatWidget {
   reply(message) {
     this.addAssistantMessage(message);
     // Re-enable the Send button
+    this.submitButton.innerHTML = 'Send';
     this.submitButton.disabled = false;
   }
 }
