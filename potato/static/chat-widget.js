@@ -198,5 +198,9 @@ class ChatWidget {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
-  new ChatWidget();
+  // only initialize the chat widget if the enable_llm_chat is set to True
+  const enableLLMChat = document.getElementById('enable_llm_chat').value;
+  if (enableLLMChat === 'True') {
+    new ChatWidget();
+  }
 });

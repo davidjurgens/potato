@@ -2070,10 +2070,14 @@ def annotate_page(username=None, action=None):
     # all_statistics['Agreement'] = get_agreement_score('all', 'all', return_type='overall_average')
     # print(all_statistics)
 
+    # Check whether to enable_llm_chat
+    enable_llm_chat = config.get("llm_chat", {}).get("enable", False)
+
     # Set the html file as surveyflow pages when the instance is a not an
     # annotation page (survey pages, prestudy pass or fail page)
     if instance_id in config.get("non_annotation_pages", []):
         html_file = instance_id
+        enable_llm_chat = False  # disable llm chat for non-annotation pages
     # otherwise set the page as the normal annotation page
     else:
         html_file = config["site_file"]
@@ -2091,6 +2095,7 @@ def annotate_page(username=None, action=None):
         total_count=lookup_user_state(username).get_real_assigned_instance_count(),
         alert_time_each_instance=config["alert_time_each_instance"],
         statistics_nav=all_statistics,
+        enable_llm_chat=enable_llm_chat,
         **kwargs
     )
 
