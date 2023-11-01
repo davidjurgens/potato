@@ -18,7 +18,6 @@ class ChatWidget {
       max-width: 80%;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     }
-    
     .chat-message-assistant {
       display: inline-block;
       padding: 10px 15px;
@@ -35,6 +34,8 @@ class ChatWidget {
       white-space: -pre-wrap;      /* Opera 4-6 */
       white-space: -o-pre-wrap;    /* Opera 7 */
       word-wrap: break-word;       /* Internet Explorer 5.5+ */
+      padding: 0;
+      margin: 0;
     }
 
     #chat-input {
@@ -42,7 +43,18 @@ class ChatWidget {
       max-height: 20vh;
       overflow-y: auto;
       resize: none !important;
-  }
+    }
+
+    .copy-button {
+      padding: 0;
+      border: none;
+      margin: 0;
+      margin-top: 2px;
+    }
+
+    .copy-button:hover {
+      color: #a6d8ff; // Change color on hover for visual feedback
+    }
   
     `;
     document.head.appendChild(style);
@@ -164,9 +176,12 @@ class ChatWidget {
 
   addAssistantMessage(message) {
     const messageElement = document.createElement('div');
-    messageElement.className = 'text-left mb-2';
+    messageElement.className = 'text-left mb-2 chat-message-assistant';
     messageElement.innerHTML = `
-    <pre class="chat-message-assistant">${message}</pre>
+    <pre>${message}</pre>
+    <button class="btn btn-outlint-dark btn-sm copy-button float-right">
+      <i class="far fa-copy"></i>&nbsp;Copy
+    </button>
     `;
 
     const chatMessagesContainer = this.container.querySelector('#chat-messages');
@@ -180,28 +195,47 @@ class ChatWidget {
       role: 'assistant',
       content: message
     })
-    // console.log('Messages: ', this.messages);
+    // Attach the copy event to the button
+    const copyButton = messageElement.querySelector('.copy-button');
+    copyButton.addEventListener('click', () => {
+      this.copyToClipboard(message);
+    });
+  }
+
+  copyToClipboard(message) {
+    // Create a temporary textarea element
+    const textarea = document.createElement('textarea');
+    textarea.value = message;
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    textarea.remove();
+
+    // Increment the copy count
+    const copyCountInput = document.getElementById('copy_count');
+    let count = parseInt(copyCountInput.value, 10);
+    copyCountInput.value = count + 1;
   }
 
   postData(url, data) {
     return fetch(url, {
-        method: 'POST',
-        body: JSON.stringify(data),
-        headers: {
-            'Content-Type': 'application/json',
-            // add other headers here if needed
-        },
+      method: 'POST',
+      body: JSON.stringify(data),
+      headers: {
+        'Content-Type': 'application/json',
+        // add other headers here if needed
+      },
     })
-    .then((response) => {
+      .then((response) => {
         if (!response.ok) {
-            throw new Error(`HTTP error! Status: ${response.status}`);
+          throw new Error(`HTTP error! Status: ${response.status}`);
         }
         return response.json();
-    })
-    .catch((error) => {
+      })
+      .catch((error) => {
         console.error('There was a problem:', error.message);
         // Handle the error as needed
-    });
+      });
   }
 
   onUserRequest(message) {
@@ -216,10 +250,10 @@ class ChatWidget {
     };
 
     this.postData(url, data)
-    .then(data => {
-      console.log(data);
-      this.reply(data['content']);
-    });
+      .then(data => {
+        console.log(data);
+        this.reply(data['content']);
+      });
   }
 
   reply(message) {
