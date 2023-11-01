@@ -1234,7 +1234,8 @@ def llm_request():
         }), 200
     
     import openai
-    openai.api_key = llm_chat_config["api_key"]
+    api_key = llm_chat_config.get("api_key", os.environ.get("OPENAI_API_KEY"))
+    openai.api_key = api_key
     print(messages)
     response = openai.ChatCompletion.create(
         model=model_name,
