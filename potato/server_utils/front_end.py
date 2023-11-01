@@ -227,6 +227,7 @@ def generate_site(config):
             )
             if send_initial_query:
                 # If we have LLM-chat enabled, schema_layout is a tuple
+                assert isinstance(schema_layout, tuple)
                 schema_layout, schema_query = schema_layout
 
             all_keybindings.extend(keybindings)
@@ -259,10 +260,11 @@ def generate_site(config):
             )
             if send_initial_query:
                 # If we have LLM-chat enabled, schema_layout is a tuple
-                schema_layout, schema_query = schema_layout
+                assert isinstance(schema_layout, tuple)
+                schema_layout, cur_schema_query = schema_layout
 
             schema_layouts += schema_layout + "\n"
-            schema_query += f"Question {i+1}: {schema_query}\n\n"
+            schema_query += f"\nInstruction {i+1}: {cur_schema_query}\n\n"
             all_keybindings.extend(keybindings)
 
         task_html_layout = task_html_layout.replace("{{annotation_schematic}}", schema_layouts)
@@ -273,6 +275,13 @@ def generate_site(config):
         annotation_codebook = config["annotation_codebook_url"]
         codebook_html = '<a href="{{annotation_codebook_url}}" class="nav-item nav-link">Annotation Codebook</a>'
         codebook_html = codebook_html.replace("{{annotation_codebook_url}}", annotation_codebook)
+
+    # If LLM-Chat
+    if send_initial_query:
+        print("schema_query", schema_query)
+        html_template = html_template.replace(
+            "{{llm_schema_query}}", schema_query
+        )
 
     #
     # Step 3, drop in the annotation layout and insert the rest of the task-specific variables

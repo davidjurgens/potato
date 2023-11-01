@@ -3,9 +3,10 @@ Textbox Layout
 """
 
 
-def generate_textbox_layout(annotation_scheme, generate_llm_query=False):
-    if generate_llm_query:
-        raise NotImplementedError("LLM query is not supported for textbox layout.")
+def generate_textbox_layout(
+    annotation_scheme,
+    generate_llm_query=False
+):
 
     #'<div style="border:1px solid black; border-radius: 25px;">' + \
     schematic = (
@@ -142,4 +143,12 @@ def generate_textbox_layout(annotation_scheme, generate_llm_query=False):
             ' [' + label2key[label].upper() + ']'
     """
 
+
+    if generate_llm_query:
+        schema_query = annotation_scheme["description"]
+        # make this a tuple when generating llm query
+        schematic = (
+            schematic,
+            schema_query
+        )
     return schematic, key_bindings

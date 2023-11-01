@@ -1227,6 +1227,7 @@ def llm_request():
 
     if llm_chat_config.get("debug", False):
         print(f"Request to LLM with model {model_name} and messages:")
+        print(messages)
         return jsonify({
             "role": "assistant",
             "content": "This is a debug message from the assistant"
