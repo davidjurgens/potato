@@ -3,7 +3,9 @@ Textbox Layout
 """
 
 
-def generate_textbox_layout(annotation_scheme):
+def generate_textbox_layout(annotation_scheme, generate_llm_query=False):
+    if generate_llm_query:
+        raise NotImplementedError("LLM query is not supported for textbox layout.")
 
     #'<div style="border:1px solid black; border-radius: 25px;">' + \
     schematic = (

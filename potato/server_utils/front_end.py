@@ -41,7 +41,7 @@ STATS_KEYS = {
 }
 
 
-def generate_schematic(annotation_scheme):
+def generate_schematic(annotation_scheme, generate_llm_query: bool = False):
     """
     Based on the task's yaml configuration, generate the full HTML site needed
     to annotate the tasks's data.
@@ -64,7 +64,10 @@ def generate_schematic(annotation_scheme):
     if not annotation_func:
         raise Exception("unsupported annotation type: %s" % annotation_type)
 
-    return annotation_func(annotation_scheme)
+    return annotation_func(
+        annotation_scheme,
+        generate_llm_query=generate_llm_query
+    )
 
 
 def generate_keybindings_sidebar(config, keybindings, horizontal=False):
@@ -207,11 +210,25 @@ def generate_site(config):
     # Keep track of all the keybindings we have
     all_keybindings = [("&#8592;", "Move backward"), ("&#8594;", "Move forward")]
 
+    # Check if we have LLM-chat enabled.
+    llm_chat_config = config.get("llm_chat", {})
+    send_initial_query = llm_chat_config.get(
+        "send_initial_query", False
+    )
+
     # Potato admin can specify a custom HTML layout that allows variable-named
     # placement of task elements
     if config.get("custom_layout"):
         for annotation_scheme in annotation_schemes:
-            schema_layout, keybindings = generate_schematic(annotation_scheme)
+
+            schema_layout, keybindings = generate_schematic(
+                annotation_scheme,
+                generate_llm_query=send_initial_query
+            )
+            if send_initial_query:
+                # If we have LLM-chat enabled, schema_layout is a tuple
+                schema_layout, schema_query = schema_layout
+
             all_keybindings.extend(keybindings)
             schema_name = annotation_scheme["name"]
 
@@ -234,9 +251,18 @@ def generate_site(config):
         # If we don't have a custom layout, accumulate all the tasks into a
         # single HTML element
         schema_layouts = ""
-        for annotation_scheme in annotation_schemes:
-            schema_layout, keybindings = generate_schematic(annotation_scheme)
+        schema_query = ""
+        for i, annotation_scheme in enumerate(annotation_schemes):
+            schema_layout, keybindings = generate_schematic(
+                annotation_scheme,
+                generate_llm_query=send_initial_query
+            )
+            if send_initial_query:
+                # If we have LLM-chat enabled, schema_layout is a tuple
+                schema_layout, schema_query = schema_layout
+
             schema_layouts += schema_layout + "\n"
+            schema_query += f"Question {i+1}: {schema_query}\n\n"
             all_keybindings.extend(keybindings)
 
         task_html_layout = task_html_layout.replace("{{annotation_schematic}}", schema_layouts)

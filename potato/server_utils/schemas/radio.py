@@ -7,7 +7,9 @@ from collections.abc import Mapping
 logger = logging.getLogger(__name__)
 
 
-def generate_radio_layout(annotation_scheme, horizontal=False):
+def generate_radio_layout(annotation_scheme, horizontal=False, generate_llm_query=False):
+    if generate_llm_query:
+        raise NotImplementedError("LLM query is not supported for radio layout.")
     # when horizontal is specified in the annotation_scheme, set horizontal = True
     if "horizontal" in annotation_scheme and annotation_scheme["horizontal"]:
         horizontal = True
