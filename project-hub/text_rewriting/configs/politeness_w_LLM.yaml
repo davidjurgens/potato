@@ -141,7 +141,7 @@
         # the instance text and the annotation schema,
         # and send this query to LLM at the time of page load.
         "send_initial_query": True
-    }
+    },
 
     # The html that changes the visualiztation for your task. Change this file
     # to influence the layout and description of your task. This is not a full
