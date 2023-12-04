@@ -2061,7 +2061,8 @@ def annotate_page(username=None, action=None):
     # Fill in the kwargs that the user wanted us to include when rendering the page
     kwargs = {}
     for kw in config["item_properties"].get("kwargs", []):
-        kwargs[kw] = instance[kw]
+        if kw in instance:
+            kwargs[kw] = instance[kw]
 
     all_statistics = lookup_user_state(username).generate_user_statistics()
 
