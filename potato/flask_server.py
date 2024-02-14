@@ -115,6 +115,12 @@ template_dict = {
         'plain': os.path.join(cur_program_dir, 'base_html/examples/plain_layout.html'),
         'kwargs': os.path.join(cur_program_dir, 'base_html/examples/kwargs_example.html'),
         'fixed_keybinding': os.path.join(cur_program_dir, 'base_html/examples/fixed_keybinding_layout.html')
+    },
+    "surveyflow_html_layout": {
+        'default': os.path.join(cur_program_dir, 'base_html/examples/plain_layout.html'),
+        'plain': os.path.join(cur_program_dir, 'base_html/examples/plain_layout.html'),
+        'kwargs': os.path.join(cur_program_dir, 'base_html/examples/kwargs_example.html'),
+        'fixed_keybinding': os.path.join(cur_program_dir, 'base_html/examples/fixed_keybinding_layout.html')
     }
 }
 
@@ -2612,7 +2618,7 @@ def run_server(args):
 
 
     # set up the template file path
-    for key in ["html_layout", "base_html_template", "header_file"]:
+    for key in ["html_layout", "surveyflow_html_layout", "base_html_template", "header_file"]:
         # if template not set in the configuration file, use the default version
         if key not in config:
             logger.warning("%s not configured, use default template at %s"%(key, template_dict[key]['default']))

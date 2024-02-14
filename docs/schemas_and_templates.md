@@ -461,6 +461,26 @@ And then point it to the new template file in YAML file:
 "html_layout": "templates/layout.html",
 ```
 
+### Different layout for surveyflow and annotation pages
+Surveyflow and annotation pages share the same layout file by default, however, if you want to use 
+different html layouts for them, you could use `surveyflow_html_layout` to set up the layout for surveyflow
+pages.
+
+For example, if you want to use a customized page for the annotation task but keep the default layout for the 
+surveyflow pages, you can use the follow configuration in your `.yaml` file. `surveyflow_html_layout` pages accept the same
+template strings as the normal `html_layout` (i.e. `default`, `fixed_keybinding`, `kwargs` and custom html file).
+``` yaml
+    "html_layout": "templates/layout.html",
+    "surveryflow_html_layout": "default",
+```
+
+if you want to use another customized page for the surveyflow pages:
+``` yaml
+    "html_layout": "templates/layout.html",
+    "surveryflow_html_layout": "templates/surveyflow-layout.html",
+```
+
+
 ### Example for custom layout
 Sometimes we have multiple annotation schemes and how to display them on the same page could 
 be tricky. Potato aligns the boxes horizontally by default. However, you might
