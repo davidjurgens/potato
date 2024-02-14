@@ -16,6 +16,16 @@ Please check out our [official documentation](https://potato-annotation.readthed
 
 >Jiaxin Pei, Aparna Ananthasubramaniam, Xingyao Wang, Naitian Zhou, Jackson Sargent, Apostolos Dedeloudis and David Jurgens. 🥔Potato: the POrtable Text Annotation TOol. In Proceedings of the 2022 Conference on Empirical Methods on Natural Language Processing (EMNLP'22 demo)
 
+
+
+## Recent Updates
+- 1.2.1.6 Supports different HTML templates for surveyflow and annotation pages ([link](https://potato-annotation.readthedocs.io/en/latest/schemas_and_templates/#different-layouts-for-surveyflow-and-annotation-pages))
+- 1.2.1.5 Supports disallowing copy-pasting into textboxes ([link](https://potato-annotation.readthedocs.io/en/latest/schemas_and_templates/#text-box))
+
+
+
+
+
 ## Feature hightlights 
 Potato supports a wide range of features that can make your data annotation easier:
 
