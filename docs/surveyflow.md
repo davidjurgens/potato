@@ -109,7 +109,7 @@ file:
         ]
 },
 ```
-
+### Customize the header for each surveyflow page
 On each page of the surveyflow, we display the filename of the page by default. For example,
 for the page of `surveyflow/consent.jsonl`, we will display `consent` as the theme of the page.
 If you want to display a different theme text, you could use a `dict` to define the surveyflow pages. For example:
