@@ -47,8 +47,9 @@ Potato will automatically create a consent page for all the annotators
 when you launch it.
 
 ## Pre-study qualification test 
+Details coming soon
 
-# Attention test
+## Attention test
 
 Potato also allows you to easily assign attention test questions into
 the annotation instances, just create another jsonl file, for example:
