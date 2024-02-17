@@ -58,6 +58,11 @@ the annotation instances, just create another jsonl file, for example:
 {"id":"test_question","text":"This is a test question, please select [test_question_choice].", "choices": ["1", "2", "3", "4", "5"]}
 ```
 
+`[test_question_choice]` is the placeholder where the desired option will be displayed.
+`choices` defines all the potential options and the system will automatically choose one from it. 
+In the example above, `["1", "2", "3", "4", "5"]` will be randomly used to replace `[test_question_choice]`
+and the annotators are required to choose the displayed option as an attention test.
+
 and edit the surveyflow section in the configuration file:
 
 ``` YAML
