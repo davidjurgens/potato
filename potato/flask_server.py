@@ -1907,6 +1907,18 @@ def get_displayed_text(text):
 
         # unfolding dict into different sections
         elif isinstance(text, dict):
+            #randomize the order of the displayed text
+            if config["list_as_text"].get("randomization") == "value":
+                values = list(text.values())
+                random.shuffle(values)
+                text = {key: value for key, value in zip(text.keys(), values)}
+            elif config["list_as_text"].get("randomization") == "key":
+                keys = list(text.keys())
+                random.shuffle(keys)
+                text = {key: text[key] for key in keys}
+            else:
+                print("WARNING: %s currently not supported for list_as_text, please check your .yaml file"%config["list_as_text"].get("randomization"))
+
             block = []
             if config["list_as_text"].get("horizontal"):
                 for key in text:
