@@ -66,7 +66,6 @@ If you are using a list of instances, you could also define whether adding a pre
 the content will displayed vertically by default, 
 if you want to display the list or dict horizontally, you can set `horizontal` as `True`
 ``` yaml
-#list_as_text is used when the input text is actually a list of texts, usually used for best-worst-scaling
 "list_as_text": {
   "horizontal": True
 },
@@ -77,7 +76,6 @@ In this case, the order of the displayed content will be shuffled, so that you c
 biased caused by the ordering effect. You can access the displayed content in the annotated outputs.
 
 ``` yaml
-#list_as_text is used when the input text is actually a list of texts, usually used for best-worst-scaling
 "list_as_text": {
   "randomization":"value" # whether randomizing the list or dictionary when creating displayed_text, 
                           # options: 
