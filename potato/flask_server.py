@@ -1090,12 +1090,21 @@ def home():
         return annotate_page("debug_user", action="home")
     if "login" in config:
         if config["login"]["type"] == "url_direct":
-            url_argument = (
+            url_arguments = (
                 config["login"]["url_argument"] if "url_argument" in config["login"] else "username"
             )
-            username = request.args.get(url_argument)
-            print("url direct logging in with %s=%s" % (url_argument,username))
+            if type(url_arguments) == str:
+                url_arguments = [url_arguments]
+            username = '&'.join([request.args.get(it) for it in url_arguments])
+            print("url direct logging in with %s=%s" % ('&'.join(url_arguments),username))
             return annotate_page(username, action="home")
+        #elif config["login"]["type"] == "prolific":
+            #we force the order of the url_arguments for prolific logins, so that we can easily retrieve
+            #the session and study information
+        #    url_arguments = ['PROLIFIC_PID','STUDY_ID', 'SESSION_ID']
+        #    username = '&'.join([request.args.get(it) for it in url_arguments])
+        #    print("prolific logging in with %s=%s" % ('&'.join(url_arguments),username))
+        #    return annotate_page(username, action="home")
         print("password logging in")
         return render_template("home.html", title=config["annotation_task_name"])
     print("password logging in")

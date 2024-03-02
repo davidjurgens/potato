@@ -40,8 +40,21 @@ You could setup direct login in the YAML configuration file
 },
 ```
 
-Collaboration under local network \-\-\-\-\-\-\-\-\-\-\-\-\-\-\--If you
-do not want to expose the annotation app globally, Potato serves to the
+You can also use a list of url_arguments, for example
+
+``` YAML
+#defining the ways annotators entering the annotation system
+"login": {
+   "type": 'url_direct',    #can be 'password' or 'url_direct'
+   "url_argument": ['PROLIFIC_PID','STUDY_ID','SESSION_ID'] # when the login type is set to 'url_direct', 'url_argument' must be setup for a direct url argument login
+},
+```
+
+In this setting, the annotation folder for each user will be named with
+the concatenation of all the url argument values
+
+## Collaboration under local network
+If you do not want to expose the annotation app globally, Potato serves to the
 local area network by default. You can access the Potato instance
 through the local IP address of the server.
 

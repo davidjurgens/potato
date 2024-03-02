@@ -3,7 +3,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 setup(
     name='potato-annotation',
-    version='1.2.1.7',
+    version='1.2.1.8',
     packages=find_packages(),
     entry_points={
         'console_scripts': [
