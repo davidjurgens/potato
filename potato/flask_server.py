@@ -11,6 +11,7 @@ from collections import deque, defaultdict, Counter, OrderedDict
 from itertools import zip_longest
 import string
 import threading
+import click
 
 import numpy as np
 import pandas as pd
@@ -30,8 +31,7 @@ base_html_dir = os.path.join(cur_program_dir,'base_htmls') #get the dir where th
 
 #insert the current program dir into sys path
 sys.path.insert(0, cur_program_dir)
-
-from create_task_cli import create_task_cli, yes_or_no
+from create_task_cli import create_task_cli
 from server_utils.arg_utils import arguments
 from server_utils.config_module import init_config, config
 from server_utils.front_end import generate_site, generate_surveyflow_pages
@@ -2603,8 +2603,8 @@ def run_create_task_cli():
     """
     Run create_task_cli().
     """
-    if yes_or_no("Launch task creation process?"):
-        if yes_or_no("Launch on command line?"):
+    if click.confirm("Launch task creation process?", None):
+        if click.confirm("Launch on command line?", None):
             create_task_cli()
         else:
             # Probably need to launch the Flask server to accept form inputs
