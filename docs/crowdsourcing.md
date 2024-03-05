@@ -129,11 +129,58 @@ If set as `ordered`, the instances will be assigned following the order of your 
 ```
 After this setup, all the instances in your input data will be automatically assigned to the annotators. 
 
-### 4. Add instructions, study consent and survey questions 
+### 4. Set up the configuration file for your prolific study
+Starting from 1.2.2.0, potato supports automatic task management for prolific, which saves you from
+manually releasing the places previously assigned to the returned, time-out or rejected users. 
+In order to do this, you need to create a separate `.yaml` file
+for your prolific study setting:
+``` YAML
+{
+    "token": 'your-prolific-token',
+    "study_id": 'your-study-id',
+}
+```
+then in the main `.yaml` file, add a field named `prolific` and add the path to the prolific 
+configuration file:
+``` YAML
+"prolific": {
+    "config_file_path": 'prolific_config.yaml'
+},
+```
+
+potato will then do all the work to check the returned, time-out or rejected users and automatically
+release the study place to new users. Potato will also automatically pause the study when the study
+is done. 
+
+#### Managing server workload
+When a large amount of users are working on your task concurrently, your server might overload, which 
+may lead to a server crash. Potato now allows you to easily set up the `max_concurrent_sessions` and 
+will help to automatically manage the server load for you. Potato will check if the current active users are above this threshold once a new 
+user click the study link. If so, potato will pause the prolific study for a while (`workload_checker_period` seconds) 
+and will automatically restart the prolific task once the amount of active users drops
+below a predefined threshold (20% of the `max_concurrent_sessions`).
+
+``` YAML
+{
+    "token": 'your-prolific-token',
+    "study_id": 'your-study-id',
+    "max_concurrent_sessions": 30  #maximum number of concurrent users, default 30
+    "workload_checker_period": 300  #the waiting time in seconds before next workload check, 
+                                   #default 300 seconds
+}
+```
+
+You can also check [prolific_api_example](https://github.com/davidjurgens/potato/raw/master/project-hub/prolific_api_example) in the 
+potato project-hub to see how to set up prolific api for your annotation task.
+
+> **_NOTE:_**  Prolific api may not work well when the number of users is above 200, we are currently 
+> working on to resolve this issue.
+
+### 5. Add instructions, study consent and survey questions 
 Potato allows you to easily insert instruction pages and survey questions before and after the annotation flow, please check
 [setting up surveyflow](https://potato-annotation.readthedocs.io/en/latest/surveyflow/) for more details.
 
-### 5. look and feel 
+### 6. look and feel 
 After all the steps above, you will be able to preview your study. Simply go to the bottom of your study on prolific.co and click `preview`,
 after seeing the following page, clik `open study link in a new window` and then you will see the annotation site just like your 
 future participants.

@@ -11,6 +11,7 @@ from collections import deque, defaultdict, Counter, OrderedDict
 from itertools import zip_longest
 import string
 import threading
+import yaml
 
 import numpy as np
 import pandas as pd
@@ -22,6 +23,7 @@ from simpledorff.metrics import nominal_metric, interval_metric
 import flask
 from flask import Flask, render_template, request
 from bs4 import BeautifulSoup
+import shutil
 
 cur_working_dir = os.getcwd() #get the current working dir
 cur_program_dir = os.path.dirname(os.path.abspath(__file__)) #get the current program dir (for the case of pypi, it will be the path where potato is installed)
@@ -37,6 +39,7 @@ from server_utils.config_module import init_config, config
 from server_utils.front_end import generate_site, generate_surveyflow_pages
 from server_utils.schemas.span import render_span_annotations
 from server_utils.cli_utlis import get_project_from_hub, show_project_hub
+from server_utils.prolific_apis import ProlificStudy
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -1089,24 +1092,48 @@ def home():
         print("debug user logging in")
         return annotate_page("debug_user", action="home")
     if "login" in config:
-        if config["login"]["type"] == "url_direct":
-            url_arguments = (
-                config["login"]["url_argument"] if "url_argument" in config["login"] else "username"
+
+        try:
+            if config["login"]["type"] == "url_direct":
+                url_arguments = (
+                    config["login"]["url_argument"] if "url_argument" in config["login"] else "username"
+                )
+                if type(url_arguments) == str:
+                    url_arguments = [url_arguments]
+                username = '&'.join([request.args.get(it) for it in url_arguments])
+                print("url direct logging in with %s=%s" % ('&'.join(url_arguments),username))
+                return annotate_page(username, action="home")
+            elif config["login"]["type"] == "prolific":
+                #we force the order of the url_arguments for prolific logins, so that we can easily retrieve
+                #the session and study information
+                #url_arguments = ['PROLIFIC_PID','STUDY_ID', 'SESSION_ID']
+
+                #Currently we still only use PROLIFIC_PID as the username, however, in the longer term, we might switch to
+                # a combination of PROLIFIC_PID and SESSION id
+                url_arguments = ['PROLIFIC_PID']
+                username = '&'.join([request.args.get(it) for it in url_arguments])
+                print("prolific logging in with %s=%s" % ('&'.join(url_arguments),username))
+
+                # check if the provided study id is the same as the study id defined in prolific configuration file, if not,
+                # pause the studies and terminate the program
+                if request.args.get('STUDY_ID') != prolific_study.study_id:
+                    print('ERROR: Study id (%s) does not match the study id in %s (%s), trying to pause the prolific study, \
+                          please check if study id is defined correctly on the server or if the study link if provided correctly \
+                          on prolific'%(request.args.get('STUDY_ID'),
+                         config['prolific']['config_file_path'], prolific_study.study_id))
+                    prolific_study.pause_study(study_id=request.args.get('STUDY_ID'))
+                    prolific_study.pause_study(study_id=prolific_study.study_id)
+                    quit()
+
+                return annotate_page(username, action="home")
+            print("password logging in")
+            return render_template("home.html", title=config["annotation_task_name"])
+
+        except:
+            return render_template(
+                "error.html",
+                error_message="Please login to annotate or you are using the wrong link",
             )
-            if type(url_arguments) == str:
-                url_arguments = [url_arguments]
-            username = '&'.join([request.args.get(it) for it in url_arguments])
-            print("url direct logging in with %s=%s" % ('&'.join(url_arguments),username))
-            return annotate_page(username, action="home")
-        #elif config["login"]["type"] == "prolific":
-            #we force the order of the url_arguments for prolific logins, so that we can easily retrieve
-            #the session and study information
-        #    url_arguments = ['PROLIFIC_PID','STUDY_ID', 'SESSION_ID']
-        #    username = '&'.join([request.args.get(it) for it in url_arguments])
-        #    print("prolific logging in with %s=%s" % ('&'.join(url_arguments),username))
-        #    return annotate_page(username, action="home")
-        print("password logging in")
-        return render_template("home.html", title=config["annotation_task_name"])
     print("password logging in")
     return render_template("home.html", title=config["annotation_task_name"])
 
@@ -1461,8 +1488,8 @@ def assign_instances_to_user(username):
         json.dump(user_state.get_assigned_data(), w)
 
     # save task assignment status
-    task_assignment_path = (
-        config["output_annotation_dir"] + config["automatic_assignment"]["output_filename"]
+    task_assignment_path = os.path.join(
+        config["output_annotation_dir"], config["automatic_assignment"]["output_filename"]
     )
     with open(task_assignment_path, "w") as w:
         json.dump(task_assignment, w)
@@ -1471,6 +1498,58 @@ def assign_instances_to_user(username):
 
     # return the assigned user data dict
     return assigned_user_data
+
+
+
+def remove_instances_from_users(user_set):
+    """
+    Remove users from the annotation state, move the saved annotations to another folder
+    Release the assigned instances
+    """
+    global user_to_annotation_state
+    global archived_users
+    global instance_id_to_data
+    global task_assignment
+
+    if len(user_set) == 0:
+        print('No users need to be dropped at this moment')
+        return None
+
+    #remove user from the global user_to_annotation_state
+    for u in user_set:
+        if u in user_to_annotation_state:
+            archived_users = user_to_annotation_state[u]
+            del user_to_annotation_state[u]
+
+    #remove assigned instances
+    for inst_id in task_assignment['assigned']:
+        new_li = []
+        if type(task_assignment['assigned'][inst_id]) != list:
+            continue
+        for u in task_assignment['assigned'][inst_id]:
+            if u in user_set:
+                if inst_id not in task_assignment['unassigned']:
+                    task_assignment['unassigned'][inst_id] = 0
+                task_assignment['unassigned'][inst_id] += 1
+            else:
+                new_li.append(u)
+        # if len(new_li) != len(task_assignment['assigned'][inst_id]):
+        #    print(task_assignment['assigned'][inst_id], new_li)
+        task_assignment['assigned'][inst_id] = new_li
+
+    # Figure out where this user's data would be stored on disk
+    output_annotation_dir = config["output_annotation_dir"]
+
+    # move the bad users into a separate dir under annotation output
+    bad_user_dir = os.path.join(output_annotation_dir, "archived_users")
+    if not os.path.exists(bad_user_dir):
+        os.mkdir(bad_user_dir)
+    for u in user_set:
+        if os.path.exists(os.path.join(output_annotation_dir, u)):
+            shutil.move(os.path.join(output_annotation_dir, u), os.path.join(bad_user_dir, u))
+    print('bad users moved to %s' % bad_user_dir)
+    print('removed %s users from the current annotation queue' % len(user_set))
+
 
 
 def generate_full_user_dataflow(username):
@@ -1597,6 +1676,31 @@ def get_total_user_count():
 
     return len(user_to_annotation_state)
 
+def update_prolific_study_status():
+    """
+    Update the prolific study status
+    This is the regular status update of prolific study object
+    """
+
+    global prolific_study
+    global user_to_annotation_state
+
+    print('update_prolific_study is called')
+    prolific_study.update_submission_status()
+    users_to_drop = prolific_study.get_dropped_users()
+    users_to_drop = [it for it in users_to_drop if it in user_to_annotation_state] # only drop the users who are currently in the data
+    remove_instances_from_users(users_to_drop)
+
+    #automatically check if there are too many users working on the task and if so, pause it
+    #
+    if prolific_study.get_concurrent_sessions_count() > prolific_study.max_concurrent_sessions:
+        print('Concurrent sessions (%s) exceed the predefined threshold (%s), trying to pause the prolific study'%
+              (prolific_study.get_concurrent_sessions_count(), prolific_study.max_concurrent_sessions))
+        prolific_study.pause_study()
+
+        #use a separate thread to periodically check if the amount of active users are below a threshold
+        th = threading.Thread(target=prolific_study.workload_checker)
+        th.start()
 
 def lookup_user_state(username):
     """
@@ -1866,8 +1970,15 @@ def load_user_state(username):
 
         logger.debug('Previously unknown user "%s"; creating new annotation state' % (username))
 
+        # whenever a user creation happens, update the prolific study first so that we can potentially release some spots
+        if config.get('prolific'):
+            update_prolific_study_status()
+
         # create new user state with the look up function
         if instances_all_assigned():
+            if config.get('prolific'):
+                print('All instance have been assigned, trying to pause the prolific study')
+                prolific_study.pause_study()
             return "all instances have been assigned"
 
         lookup_user_state(username)
@@ -1917,16 +2028,17 @@ def get_displayed_text(text):
         # unfolding dict into different sections
         elif isinstance(text, dict):
             #randomize the order of the displayed text
-            if config["list_as_text"].get("randomization") == "value":
-                values = list(text.values())
-                random.shuffle(values)
-                text = {key: value for key, value in zip(text.keys(), values)}
-            elif config["list_as_text"].get("randomization") == "key":
-                keys = list(text.keys())
-                random.shuffle(keys)
-                text = {key: text[key] for key in keys}
-            else:
-                print("WARNING: %s currently not supported for list_as_text, please check your .yaml file"%config["list_as_text"].get("randomization"))
+            if "randomization" in config["list_as_text"]:
+                if config["list_as_text"].get("randomization") == "value":
+                    values = list(text.values())
+                    random.shuffle(values)
+                    text = {key: value for key, value in zip(text.keys(), values)}
+                elif config["list_as_text"].get("randomization") == "key":
+                    keys = list(text.keys())
+                    random.shuffle(keys)
+                    text = {key: text[key] for key in keys}
+                else:
+                    print("WARNING: %s currently not supported for list_as_text, please check your .yaml file"%config["list_as_text"].get("randomization"))
 
             block = []
             if config["list_as_text"].get("horizontal"):
@@ -2617,6 +2729,7 @@ def run_server(args):
     """
     global user_config
     global user_to_annotation_state
+    global prolific_study
 
 
     init_config(args)
@@ -2627,6 +2740,29 @@ def run_server(args):
 
     user_config = UserConfig(USER_CONFIG_PATH)
 
+    #load prolific configurations
+    if config.get('prolific') and config['prolific']['config_file_path']:
+        # load multitask annotation config
+        with open(config['prolific']['config_file_path'], "rt") as f:
+            prolific_config = yaml.safe_load(f)
+            max_concurrent_sessions = prolific_config.get('max_concurrent_sessions') if prolific_config.get('max_concurrent_sessions') else 30
+            workload_checker_period = prolific_config.get('workload_checker_period') if prolific_config.get('workload_checker_period') else 300
+            prolific_study = ProlificStudy(prolific_config['token'], prolific_config['study_id'],
+                                           saving_dir = config.get('output_annotation_dir'),
+                                           max_concurrent_sessions=max_concurrent_sessions,
+                                           workload_checker_period=workload_checker_period)
+        study_basic_info = prolific_study.get_basic_study_info()
+        print('Prolific configurations successfully loaded for study: %s'%study_basic_info['internal_name'])
+        for k,v in study_basic_info.items():
+            print("%s: %s"%(k, v))
+
+        #overide the login setting as prolific
+        config['login']['type'] = 'prolific'
+
+        #update the submission status
+        #prolific_study.update_submission_status()
+        #users_to_drop = prolific_study.get_dropped_users()
+        #remove_instances_from_users(users_to_drop)
 
     #load user configuration settings and add authorized users
     user_config_data = config['user_config']
