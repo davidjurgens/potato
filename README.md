@@ -19,6 +19,7 @@ Please check out our [official documentation](https://potato-annotation.readthed
 
 
 ## Recent Updates
+- 1.2.2.0 Supports automatic task management with prolific apis ([Documentation](https://potato-annotation.readthedocs.io/en/latest/crowdsourcing/#4-set-up-the-configuration-file-for-your-prolific-study)|[Example project](https://github.com/davidjurgens/potato/tree/master/project-hub/prolific_api_example))
 - 1.2.1.7 Supports randomizing the order of the displayed instances when it is defined with a dictionary ([link](https://potato-annotation.readthedocs.io/en/latest/data_format/#displaying-a-list-or-a-dictionary-of-instances))
 - 1.2.1.6 Supports different HTML templates for surveyflow and annotation pages ([link](https://potato-annotation.readthedocs.io/en/latest/schemas_and_templates/#different-layouts-for-surveyflow-and-annotation-pages))
 - 1.2.1.5 Supports disallowing copy-pasting into textboxes ([link](https://potato-annotation.readthedocs.io/en/latest/schemas_and_templates/#text-box))
