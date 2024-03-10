@@ -21,6 +21,8 @@ project_hub = {
     'politeness_rating': 'https://github.com/davidjurgens/potato/raw/master/project-hub/politeness_rating.zip',
     'offensiveness': 'https://github.com/davidjurgens/potato/raw/master/project-hub/offensiveness.zip',
     'text_rewriting': 'https://github.com/davidjurgens/potato/raw/master/project-hub/text_rewriting.zip',
+    'prolific_api_example': 'https://github.com/davidjurgens/potato/raw/master/project-hub/prolific_api_example.zip',
+    'label_suggestions': 'https://github.com/davidjurgens/potato/raw/master/project-hub/label_suggestions.zip',
 }
 
 # get a speicific project from the hub

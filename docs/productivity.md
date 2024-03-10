@@ -188,3 +188,67 @@ for this function
    "users": []
 },
 ```
+
+## Label suggestions
+Starting from 1.2.2.1, Potato supports displaying suggestions to improve the productivity of annotators. Currently we 
+support two types of label suggestions: `prefill` and `highlight`. `prefill` will automatically 
+pre-select the labels or prefill the text inputs for the annotators while `highlight` will only
+highlight the text of the labels. `highlight` can only be used for `multiselect` and `radio`.
+`prefill` can also be used with textboxes.
+
+There are two steps to set up label suggestions for your annotation tasks:
+
+### Step 1: modify your configuration file
+Labels suggestions are defined for each scheme. In your configuration file, you can simply add 
+a field named `label_suggestions` to specific annotation schemes. You can use different suggestion 
+types for different schemes.
+``` yaml
+{
+    "annotation_type": "multiselect",
+    "name": "sentiment",
+    "description": "What kind of sentiment does the given text hold?",
+    "labels": [
+       "positive", "neutral", "negative",
+    ],
+
+    # If true, numbers [1-len(labels)] will be bound to each
+    # label. Aannotations with more than 10 are not supported with this
+    # simple keybinding and will need to use the full item specification
+    # to bind all labels to keys.
+    "sequential_key_binding": True,
+
+    #how to display the suggestions, currently support:
+    # "highlight": highlight the suggested labels with color
+    # "pre-select": directly prefill the suggested labels or content
+    # otherwise this feature is turned off
+    "label_suggestions":"highlight"
+},
+{
+    "annotation_type": "text",
+    "name": "explanation",
+    "description": "Why do you think so?",
+    # if you want to use multi-line textbox, turn on the text area and set the desired rows and cols of the textbox
+    "textarea": {
+      "on": True,
+      "rows": 2,
+      "cols": 40
+    },
+    #how to display the suggestions, currently support:
+    # "highlight": highlight the suggested labels with color
+    # "pre-select": directly prefill the suggested labels or content
+    # otherwise this feature is turned off
+    "label_suggestions": "prefill"
+},
+```
+
+### Step 2: prepare your data
+For each line of your input data, you can add a field named `label_suggestions`. `label_suggestions` defines
+a mapping from the scheme name to labels. For example:
+``` yaml
+{"id":"1","text":"Good Job!","label_suggestions": {"sentiment": "positive", "explanation": "Because I think "}}
+{"id":"2","text":"Great work!","label_suggestions": {"sentiment": "positive", "explanation": "Because I think "}}
+```
+
+You can check out our [example project](https://github.com/davidjurgens/potato/tree/master/project-hub/label_suggestions) in project hub regarding how to set up label suggestions
+
+![Alt text](img/label_suggestions.png)

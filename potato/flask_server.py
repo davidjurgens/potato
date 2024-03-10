@@ -2193,8 +2193,32 @@ def annotate_page(username=None, action=None):
     #
     # NOTE: this code is probably going to break the span annotation's
     # understanding of the instance. Need to check this...
-    updated_text, schema_labels_to_highlight = text, set()
-    if "keyword_highlights_file" in config:
+    updated_text, schema_labels_to_highlight, schema_content_to_prefill = text, set(), []
+
+    #prepare label suggestions
+    suggestions = instance['label_suggestions']
+    for scheme in config['annotation_schemes']:
+        if scheme['name'] not in suggestions:
+            continue
+        suggested_labels = suggestions[scheme['name']]
+        if type(suggested_labels) == str:
+            suggested_labels = [suggested_labels]
+        elif type(suggested_labels) == list:
+            suggested_labels = suggested_labels
+        else:
+            print("WARNING: Unsupported suggested label type %s, please check your input data" % type(s))
+            continue
+
+        if scheme.get('label_suggestions') == 'highlight':
+            for s in suggested_labels:
+                schema_labels_to_highlight.add((scheme['name'], s))
+        elif scheme.get('label_suggestions') == 'prefill':
+            for s in suggested_labels:
+                schema_content_to_prefill.append({'name':scheme['name'], 'label':s})
+        else:
+            print('WARNING: the style of suggested labels is not defined, please check your configuration file.')
+
+    if "keyword_highlights_file" in config and len(schema_labels_to_highlight) == 0:
         updated_text, schema_labels_to_highlight = post_process(config, text)
 
     # Fill in the kwargs that the user wanted us to include when rendering the page
@@ -2261,9 +2285,29 @@ def annotate_page(username=None, action=None):
         if label_elem:
             label_elem["style"] = "background-color: %s" % c
 
+
     # If the user has annotated this before, walk the DOM and fill out what they
     # did
     annotations = get_annotations_for_user_on(username, instance_id)
+
+    # convert the label suggestions into annotations for front-end rendering
+    if annotations == None and schema_content_to_prefill:
+        scheme_dict = {}
+        annotations = defaultdict(dict)
+        for it in config['annotation_schemes']:
+            if it['annotation_type'] in ['radio', 'multiselect']:
+                it['label2value'] = {(l if type(l) == str else l['name']):str(i+1) for i,l in enumerate(it['labels'])}
+            scheme_dict[it['name']] = it
+        for s in schema_content_to_prefill:
+            if scheme_dict[s['name']]['annotation_type'] in ['radio', 'multiselect']:
+                annotations[s['name']][s['label']] = scheme_dict[s['name']]['label2value'][s['label']]
+            elif scheme_dict[s['name']]['annotation_type'] in ['text']:
+                if "labels" not in scheme_dict[s['name']]:
+                    annotations[s['name']]['text_box'] = s['label']
+            else:
+                print('WARNING: label suggestions not supported for annotation_type %s, please submit a github issue to get support'%scheme_dict[s['name']]['annotation_type'])
+    #print(schema_content_to_prefill, annotations)
+
 
     if annotations is not None:
         # Reset the state
