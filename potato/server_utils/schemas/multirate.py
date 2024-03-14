@@ -8,7 +8,10 @@ from collections.abc import Mapping
 logger = logging.getLogger(__name__)
 
 
-def generate_multirate_layout(annotation_scheme):
+def generate_multirate_layout(annotation_scheme, generate_llm_query=False):
+    if generate_llm_query:
+        raise NotImplementedError("LLM query is not supported for multirate layout.")
+
     schematic = (
         '<form action="/action_page.php">'
         + "  <fieldset>"

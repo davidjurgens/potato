@@ -5,7 +5,9 @@ Likert Layout
 from .radio import generate_radio_layout
 
 
-def generate_likert_layout(annotation_scheme):
+def generate_likert_layout(annotation_scheme, generate_llm_query=False):
+    if generate_llm_query:
+        raise NotImplementedError("LLM query is not supported for likert layout.")
 
     # If the user specified the more complicated likert layout, default to the
     # radio layout

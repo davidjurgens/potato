@@ -6,7 +6,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def generate_number_layout(annotation_scheme):
+def generate_number_layout(annotation_scheme, generate_llm_query=False):
+    if generate_llm_query:
+        raise NotImplementedError("LLM query is not supported for number layout.")
     # '<div style="border:1px solid black; border-radius: 25px;">' + \
     schematic = (
         '<form action="/action_page.php">'

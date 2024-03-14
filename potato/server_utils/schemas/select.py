@@ -6,7 +6,9 @@ import os
 from pathlib import Path
 
 
-def generate_select_layout(annotation_scheme):
+def generate_select_layout(annotation_scheme, generate_llm_query=False):
+    if generate_llm_query:
+        raise NotImplementedError("LLM query is not supported for select layout.")
 
     # setting up label validation for each label, if "required" is True, the annotators will be asked to finish the current instance to proceed
     validation = ""
