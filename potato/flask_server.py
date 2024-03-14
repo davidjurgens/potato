@@ -2196,27 +2196,28 @@ def annotate_page(username=None, action=None):
     updated_text, schema_labels_to_highlight, schema_content_to_prefill = text, set(), []
 
     #prepare label suggestions
-    suggestions = instance['label_suggestions']
-    for scheme in config['annotation_schemes']:
-        if scheme['name'] not in suggestions:
-            continue
-        suggested_labels = suggestions[scheme['name']]
-        if type(suggested_labels) == str:
-            suggested_labels = [suggested_labels]
-        elif type(suggested_labels) == list:
-            suggested_labels = suggested_labels
-        else:
-            print("WARNING: Unsupported suggested label type %s, please check your input data" % type(s))
-            continue
+    if 'label_suggestions' in instance:
+        suggestions = instance['label_suggestions']
+        for scheme in config['annotation_schemes']:
+            if scheme['name'] not in suggestions:
+                continue
+            suggested_labels = suggestions[scheme['name']]
+            if type(suggested_labels) == str:
+                suggested_labels = [suggested_labels]
+            elif type(suggested_labels) == list:
+                suggested_labels = suggested_labels
+            else:
+                print("WARNING: Unsupported suggested label type %s, please check your input data" % type(s))
+                continue
 
-        if scheme.get('label_suggestions') == 'highlight':
-            for s in suggested_labels:
-                schema_labels_to_highlight.add((scheme['name'], s))
-        elif scheme.get('label_suggestions') == 'prefill':
-            for s in suggested_labels:
-                schema_content_to_prefill.append({'name':scheme['name'], 'label':s})
-        else:
-            print('WARNING: the style of suggested labels is not defined, please check your configuration file.')
+            if scheme.get('label_suggestions') == 'highlight':
+                for s in suggested_labels:
+                    schema_labels_to_highlight.add((scheme['name'], s))
+            elif scheme.get('label_suggestions') == 'prefill':
+                for s in suggested_labels:
+                    schema_content_to_prefill.append({'name':scheme['name'], 'label':s})
+            else:
+                print('WARNING: the style of suggested labels is not defined, please check your configuration file.')
 
     if "keyword_highlights_file" in config and len(schema_labels_to_highlight) == 0:
         updated_text, schema_labels_to_highlight = post_process(config, text)
