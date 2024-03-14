@@ -903,24 +903,6 @@ def cal_amount(user):
     return count
 
 
-def find_start_id(user):
-    """
-    path = user_dict[user]["path"]
-    # if not os.path.exists(path):
-    #    initialize_user_data(path, user_dict[user]['user_id'])
-    user_data = {}
-    user_dict[user]["start_id"] = len(all_data["annotated_data"])
-    lines = user_dict[user]["user_data"]
-    for i in range(len(lines), 0):
-        line = lines[str(i)]
-        if not line["annotated"]:
-            user_dict[user]["start_id"] = line["id"]
-            return line["id"]
-    # user_dict[user]['user_data'] = user_data
-    """
-    raise RuntimeError("This function is deprecated?")
-
-
 def move_to_prev_instance(username):
     user_state = lookup_user_state(username)
     user_state.go_back()
@@ -1039,49 +1021,6 @@ def get_span_annotations_for_user_on(username, instance_id):
     user_state = lookup_user_state(username)
     span_annotations = user_state.get_span_annotations(instance_id)
     return span_annotations
-
-
-# This was used to merge annotated instances in previous annotations.  For
-# example, you had some annotations from google sheet, and want to merge it with
-# the current annotation procedure
-def merge_annotation():
-    """
-    global user_dict
-    global all_data
-    global args
-
-    with open("merged_annotation.json", "w") as w:
-        for i in range(len(all_data["annotated_data"])):
-            line = all_data["annotated_data"][i]
-            annotations = []
-            for user in user_dict:
-                if "label" in user_dict[user]["user_data"][str(i)]:
-                    annotations.append(
-                        {
-                            "label": int(user_dict[user]["user_data"][str(i)]["label"]),
-                            "user": int(user_dict[user]["user_id"]),
-                        }
-                    )
-            line["annotations"] = annotations
-            w.writelines(json.dumps(line) + "\n")
-    """
-    raise RuntimeError("This function is deprecated?")
-
-
-def write_data(username):
-    """
-    global user_dict
-    # global closed
-    global all_data
-    global args
-
-    path = user_dict[username]["path"]
-    with open(path, "w") as w:
-        for line in user_dict[username]["user_data"]:
-            line = json.dumps(user_dict[username]["user_data"][line])
-            w.writelines(line + "\n")
-    """
-    raise RuntimeError("This function is deprecated?")
 
 
 @app.route("/")
