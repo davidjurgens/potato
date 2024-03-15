@@ -139,6 +139,25 @@ If you want to display a different theme text, you could use a `dict` to define 
 },
 ```
 
+## Different layouts for surveyflow and annotation pages
+Surveyflow and annotation pages share the same layout file by default, however, if you want to use 
+different html layouts for them, you could use `surveyflow_html_layout` to set up the layout for surveyflow
+pages.
+
+For example, if you want to use a customized page for the annotation task but keep the default layout for the 
+surveyflow pages, you can use the follow configuration in your `.yaml` file. `surveyflow_html_layout` pages accept the same
+template strings as the normal `html_layout` (i.e. `default`, `fixed_keybinding`, `kwargs` and custom html file).
+``` yaml
+    "html_layout": "templates/layout.html",
+    "surveyflow_html_layout": "default",
+```
+
+if you want to use another customized page for the surveyflow pages:
+``` yaml
+    "html_layout": "templates/layout.html",
+    "surveyflow_html_layout": "templates/surveyflow-layout.html",
+```
+
 
 ## Built-in demographic questions 
 Potato provides a list of basic demographic questions covering common needs:
