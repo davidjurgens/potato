@@ -72,16 +72,6 @@ potato project-hub to see how to set up prolific api for your annotation task.
 > **_NOTE:_**  Prolific api may not work well when the number of users is above 200, we are currently 
 > working on to resolve this issue.
 
-It is also recommended to set the `jumping_to_id_disabled` and `hide_navbar` as True
-
-``` YAML
-#the jumping-to-id function will be disabled if "jumping_to_id_disabled" is True
- "jumping_to_id_disabled": False,
-
-#the navigation bar will be hidden to the annotators if "hide_navbar" is True
- "hide_navbar": True,
-```
-
 ### 3. set up finishing code
 As prolific uses finishing code or a redirect link to indicate whether an annotator has finished all the tasks, you would also need to set up an end page 
 and display it at the end of the study. To insert an end page, you would need to use the surveyflow feature of potato and here are the following steps
@@ -162,26 +152,37 @@ After this setup, all the instances in your input data will be automatically ass
 Potato allows you to easily insert instruction pages and survey questions before and after the annotation flow, please check
 [setting up surveyflow](https://potato-annotation.readthedocs.io/en/latest/surveyflow/) for more details.
 
-### 6. Take a break
+It is also recommended to set the `jumping_to_id_disabled` and `hide_navbar` as True
+
+``` YAML
+#the jumping-to-id function will be disabled if "jumping_to_id_disabled" is True
+ "jumping_to_id_disabled": False,
+
+#the navigation bar will be hidden to the annotators if "hide_navbar" is True
+ "hide_navbar": True,
+```
+
+### 6. Take a break and do a final check
 After all the steps above, you have successfully set up a potato project that is compatible with prolific. You can take a break
 now and try to launch it locally. After testing it locally and make sure everything looks good, you can follow the next steps to 
 set up the server to host your potato project.
 
-### 6. Upload the potato project to your server
+
+### 7. Upload the potato project to your server
 To use potato with prolific, you need a server with open ports. Once your server is set up, you can upload your potato project
 to the server. We recommend you create a github repo for your potato project as it allows you to easily sync up between your server
 and laptop. You can set up your potato on your local computer, commit all the changes to the repo, and then pull all the changes easily
 on your server. 
 
 
-### 7. Update the server address on prolific
+### 8. Update the server address on prolific
 Once your upload your project to a server, you need find the ip address and make sure the server has at least
 one open port. Then you can launch potato in a screen session via `potato start your-project -p your-port`
 Then you need to update the study link on prolific with the real ip address and port number of your server:
 
 ![Alt text](img/prolific-setup-url.png)
 
-### 8. look and feel 
+### 9. look and feel 
 After all the steps above, you will be able to preview your study. Simply go to the bottom of your study on prolific.co and click `preview`,
 after seeing the following page, clik `open study link in a new window` and then you will see the annotation site just like your 
 future participants.
