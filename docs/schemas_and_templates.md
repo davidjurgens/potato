@@ -207,6 +207,48 @@ example](https://github.com/davidjurgens/potato/blob/b57d12a2bd2133604c00ebe8086
   ]
 ```
 
+## Multirate
+
+**Simple Multirate Example** ([yaml
+config](https://github.com/davidjurgens/potato/blob/master/project-hub/simple_examples/configs/simple-multirate.yaml))
+
+![image](img/screenshots/multirate_example.png)
+
+``` YAML
+"annotation_schemes": [      
+        {
+            "annotation_type": "multirate",
+
+            # This name gets used in reporting the annotation results
+            "name": "awesomeness",
+
+            # This text is shown to the user and can be a longer statement
+            "description": "How awesome is this?",
+
+            "display_config": {
+                                "num_columns":1
+            },
+
+            "arrangement":'vertical',
+
+            "options": ['Option 1', 'Option 2', 'Option 3'],
+            "labels": ['Strongly disagree', 'Disagree', 'Neutral', 'Agree' , 'Strongly Agree'],
+
+            # adding requirements for labels, when "required" is True, the annotators will be asked to finish the current instance to proceed
+            "label_requirement": { "required": True },
+
+            # If true, keys [1-size] will be bound to scale responses. Likert
+            # scales larger than 10 are not supported with this simple
+            # keybinding and will need to use the full item specification to
+            # bind all scale points to keys.
+            "sequential_key_binding": True,
+
+            # Whether randomizing the order of the options
+            "option_randomization": True
+        }       
+  ]
+```
+
 ## Text span
 
 **Simple Text Span Example** ([yaml

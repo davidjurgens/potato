@@ -19,6 +19,7 @@ Please check out our [official documentation](https://potato-annotation.readthed
 
 
 ## Recent Updates
+- 1.2.2.3 Supports randomizing the order of multirate schema options ([Documentation](https://potato-annotation.readthedocs.io/en/latest/schemas_and_templates/#multirate) | [Example project](https://github.com/davidjurgens/potato/blob/master/project-hub/simple_examples/configs/simple-multirate.yaml))
 - 1.2.2.2 small bugs fixed for label suggestions
 - 1.2.2.1 Supports displaying or prefilling label suggestions ([Documentation](https://potato-annotation.readthedocs.io/en/latest/productivity/#label-suggestions) | [Example project](https://github.com/davidjurgens/potato/tree/master/project-hub/label_suggestions))
 - 1.2.2.0 Supports automatic task management with prolific apis ([Documentation](https://potato-annotation.readthedocs.io/en/latest/crowdsourcing/#4-set-up-the-configuration-file-for-your-prolific-study) | [Example project](https://github.com/davidjurgens/potato/tree/master/project-hub/prolific_api_example))

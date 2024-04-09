@@ -2349,10 +2349,71 @@ def annotate_page(username=None, action=None):
                         option = input_field.findChildren("option", {"value": value})[0]
                         option["selected"] = "selected"
 
+    # randomize the order of options for multirate schema
+    selected_schemas_for_option_randomization = []
+    for it in config['annotation_schemes']:
+        if it['annotation_type'] == 'multirate' and it.get('option_randomization'):
+            selected_schemas_for_option_randomization.append(it['description'])
+
+    if len(selected_schemas_for_option_randomization) > 0:
+        soup = randomize_options(soup, selected_schemas_for_option_randomization, map_user_id_to_digit(username))
 
     rendered_html = str(soup)
 
     return rendered_html
+
+
+def map_user_id_to_digit(user_id_str):
+    # Convert the user_id_str to an integer using a hash function
+    user_id_hash = hash(user_id_str)
+
+    # Map the hashed value to a single-digit integer using modulus
+    digit = abs(user_id_hash) % 9 + 1  # Add 1 to avoid 0
+
+    return digit
+
+
+def randomize_options(soup, legend_names, seed):
+    random.seed(seed)
+
+    # Find all fieldsets in the soup
+    fieldsets = soup.find_all('fieldset')
+    if not fieldsets:
+        print("No fieldsets found.")
+        return soup
+
+    # Initialize a variable to track whether the legend is found
+    legend_found = False
+
+    # Iterate through each fieldset
+    for fieldset in fieldsets:
+        # Find the legend within the current fieldset
+        legend = fieldset.find('legend')
+        if legend and legend.string in legend_names:
+            # Legend found, set the flag and break the loop
+            legend_found = True
+
+            # Find the table within the fieldset
+            table = fieldset.find('table')
+            if not table:
+                print("Table not found within the fieldset.")
+                continue
+
+            # Get the list of tr elements excluding the first one (title)
+            tr_elements = table.find_all('tr')[1:]
+
+            # Shuffle the tr elements based on the given random seed
+            random.shuffle(tr_elements)
+
+            # Insert the shuffled tr elements back into the tbody
+            for tr in tr_elements:
+                table.append(tr)
+
+    # Check if any legend was found
+    if not legend_found:
+        print(f"No matching legends found within any fieldset.")
+
+    return soup
 
 
 def get_color_for_schema_label(schema, label):
