@@ -14,7 +14,9 @@ def test_and_get(key, d):
     
 
 
-def generate_slider_layout(annotation_scheme):
+def generate_slider_layout(annotation_scheme, generate_llm_query=False):
+    if generate_llm_query:
+        raise NotImplementedError("LLM query is not supported for slider layout.")
 
     # If the user specified the more complicated likert layout, default to the
     # radio layout

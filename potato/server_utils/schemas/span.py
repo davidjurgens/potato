@@ -127,11 +127,14 @@ def render_span_annotations(text, span_annotations):
     return text
 
 
-def generate_span_layout(annotation_scheme, horizontal=False):
+def generate_span_layout(annotation_scheme, horizontal=False, generate_llm_query=False):
     """
     Renders a span annotation option selection in the annotation panel and
     returns the HTML code
     """
+    if generate_llm_query:
+        raise NotImplementedError("LLM query is not supported for span annotation")
+
     # when horizontal is specified in the annotation_scheme, set horizontal = True
     if "horizontal" in annotation_scheme and annotation_scheme["horizontal"]:
         horizontal = True
