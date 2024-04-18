@@ -964,7 +964,7 @@ def update_annotation_state(username, form):
     schema_to_label_to_value = defaultdict(dict)
 
     behavioral_data_dict = {}
-    
+
     did_change = False
     for key in form:
 
@@ -972,7 +972,7 @@ def update_annotation_state(username, form):
         if key[:9] == "behavior_":
             behavioral_data_dict[key[9:]] = form[key]
             continue
-        
+
         # Look for the marker that indicates an annotation label.
         #
         # NOTE: The span annotation uses radio buttons as well to figure out
@@ -984,14 +984,14 @@ def update_annotation_state(username, form):
             annotation_schema = cols[0]
             annotation_label = cols[1]
             annotation_value = form[key]
-            
+
             # skip the input when it is an empty string (from a text-box)
             if annotation_value == "":
                 continue
 
             schema_to_label_to_value[annotation_schema][annotation_label] = annotation_value
-    
-            
+
+
     # Span annotations are a bit funkier since we're getting raw HTML that
     # we need to post-process on the server side.
     span_annotations = []
@@ -1186,7 +1186,7 @@ def signup():
     # Jiaxin: currently we are just using email as the username
     username = request.form.get("email")
     email = request.form.get("email")
-    password = request.form.get("pass")    
+    password = request.form.get("pass")
 
     if action == "signup":
         single_user = {"username": username, "email": email, "password": password}
@@ -1802,13 +1802,14 @@ def save_all_annotations():
     # We write jsonl format regardless
     if fmt in ["json", "jsonl"]:
         with open(annotated_instances_fname, "wt") as outf:
-            for user_state in user_to_annotation_state.values():
+            for user_id, user_state in user_to_annotation_state.items():
                 for inst_id, data in user_state.get_all_annotations().items():
 
                     bd_dict = user_state.instance_id_to_behavioral_data.get(inst_id, {})
 
                     output = {
-                        "id": inst_id,
+                        "user_id": user_id,  # "user_id
+                        "instance_id": inst_id,
                         "displayed_text": instance_id_to_data[inst_id]["displayed_text"],
                         "label_annotations": data["labels"],
                         "span_annotations": data["spans"],
@@ -2320,7 +2321,7 @@ def annotate_page(username=None, action=None):
                 # Find all the input, select, and textarea tags with this name
                 # (which was annotated) and figure out which one to fill in
                 input_fields = soup.find_all(["input", "select", "textarea"], {"name": name})
-                
+
                 for input_field in input_fields:
                     if input_field is None:
                         print("No input for ", name)
@@ -2433,7 +2434,7 @@ def parse_html_span_annotation(html_span_annotation):
     and extracts out the precise spans and labels annotated by users.
 
     :returns: a tuple of (1) the annotated string without annotation HTML
-              and a list of annotations    
+              and a list of annotations
     """
     s = html_span_annotation.strip()
     init_tag_regex = re.compile(r"(<span.+?>)")
