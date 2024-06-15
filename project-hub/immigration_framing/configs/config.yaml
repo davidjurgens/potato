@@ -31,6 +31,11 @@
         "text_key": "text"
     },
 
+    "user_config": {
+      "allow_all_users": True,
+      "users": [ ],
+    },
+
     "keyword_highlights_file": "frame_keywords.tsv",
 
     # How many seconds do you want the annotators spend on each instance, after
