@@ -6,7 +6,7 @@ import os
 import logging
 import json
 import re
-from collections import defaultdict
+from collections import OrderedDict
 
 #add local module
 from pathlib import Path
@@ -397,7 +397,7 @@ def generate_surveyflow_pages(config):
     #
 
     # grab survey flow files
-    surveyflow_pages = defaultdict(list)
+    surveyflow_pages = OrderedDict()
     surveyflow = config["surveyflow"]
     surveyflow_list = []
     for key in surveyflow["order"]:
@@ -411,7 +411,7 @@ def generate_surveyflow_pages(config):
                     line = json.loads(line.strip())
                     line["filename"] = _file
                     line["pagename"] = _file.split(".")[0].split("/")[-1]
-                    surveyflow_pages[line["pagename"]].append(line)
+                    surveyflow_pages.setdefault(line["pagename"], []).append(line)
 
     # Grab the annotation schemes
     annotation_schemes = config["annotation_schemes"]
