@@ -1433,6 +1433,8 @@ def delete_instances_from_user(username, ids_to_delete):
 
         # Put instances back to pool
         task_assignment["assigned"][key].remove(username)
+        if len(task_assignment["assigned"][key]) == 0:
+            task_assignment["assigned"].pop(key)
         if key not in task_assignment["unassigned"]:
             task_assignment["unassigned"][key] = 0
         task_assignment["unassigned"][key] += 1
