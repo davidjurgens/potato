@@ -20,3 +20,17 @@ If set as `ordered`, the instances will be assigned following the order of your 
 "test_question_per_annotator": 0, # the number of attention test question to be inserted into the annotation queue. you must set up the test question in surveyflow to use this function
 },
 ```
+## Setting up test questions
+In some cases, you might need to insert some test questions into the annotation queue. These test questions are usually a small set of super easy instances with
+golden labels. To define test question instances, you can simply add `_testing` into the normal instance id. For example:
+
+``` YAML
+text,id
+"This is test question 1", 0_testing
+"This is test question 2", 1_testing
+"This is test question 3", 2_testing
+"Hello world", dkjfd
+"Hello tomorrow", 998ds
+```
+
+You can easily define these test question instances in the same input data file. Potato will identify these questions and sample N of them into the annotation queue, where N = `test_question_per_annotator`

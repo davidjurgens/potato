@@ -45,7 +45,7 @@ Step 2, insert the file path into the configuration file:
 
 Potato will automatically create a consent page for all the annotators
 when you launch it.
-
+<!---
 ## Pre-study qualification test 
 Details coming soon
 
@@ -83,6 +83,7 @@ and edit the surveyflow section in the configuration file:
         ]
 },
 ```
+--->
 
 ## Post-screening questions 
 
