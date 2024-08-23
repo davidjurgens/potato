@@ -70,7 +70,7 @@ def generate_multirate_layout(annotation_scheme):
     for i, label_data in enumerate(options, 1):
 
         if (i - 1) % n_columns == 0:
-            schematic += "<tr>"
+            schematic += '<tr schema="multirate">'
         
 
         label = label_data if isinstance(label_data, str) else label_data["label"]
@@ -113,7 +113,7 @@ def generate_multirate_layout(annotation_scheme):
             schematic += (
                 '<td style="text-align:center;">' +
                 '<input name="{name}" type="radio" id="{id}" ' +
-                'value="{value}" onclick="onlyOne(this)" validation="{validation}" style="{radio_style}"/></td>'
+                'value="{value}" onclick="onlyOne(this);this.blur();" validation="{validation}" style="{radio_style}"/></td>'
             ).format(name=name, tooltip=tooltip, class_name=class_name, id=name+'.'+rating,
                      radio_style=radio_style, value=rating, validation=validation)
 

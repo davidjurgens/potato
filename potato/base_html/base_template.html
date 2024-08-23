@@ -359,6 +359,27 @@
           form.submit();
       }
 
+      /**
+       * Validate if the user has completed each row for multi-rate schema
+       */
+      function validateForm() {
+        var rows = document.querySelectorAll("tr[schema='multirate']");
+        for (var i = 0; i < rows.length; i++) {
+          var inputs = rows[i].querySelectorAll("input[type='radio'][validation='required']");
+          if (inputs.length > 0) {
+              var checked = Array.from(inputs).some(input => input.checked);
+          } else {
+              var checked = true;
+          }
+
+          if (!checked) {
+            alert("Please complete all the require fields");
+            return false;
+          }
+        }
+        return true;
+      }
+
 
        /**
        * Validate if the input answers meet certain rules
@@ -466,7 +487,7 @@
               action = "prev_instance";
           }
           else if (x == "ArrowRight") {
-              if (validate_answers() == true) {
+              if (validateForm() == true && validate_answers() == true) {
                   action = "next_instance";
               }
               else{
