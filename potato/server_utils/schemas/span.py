@@ -8,7 +8,6 @@ from potato.server_utils.config_module import config
 
 logger = logging.getLogger(__name__)
 
-
 SPAN_COLOR_PALETTE = [
     "(230, 25, 75)",
     "(60, 180, 75)",
@@ -34,6 +33,8 @@ SPAN_COLOR_PALETTE = [
     "(0, 0, 0)",
 ]
 
+span_counter = 0
+SPAN_COLOR_PALETTE_LENGTH = len(SPAN_COLOR_PALETTE)
 
 def get_span_color(span_label):
     """
@@ -165,7 +166,14 @@ def generate_span_layout(annotation_scheme, horizontal=False):
 
         span_color = get_span_color(label)
         if span_color is None:
-            span_color = SPAN_COLOR_PALETTE[(i - 1) % len(SPAN_COLOR_PALETTE)]
+            global span_counter
+            if span_counter > SPAN_COLOR_PALETTE_LENGTH:
+                logger.warning("Not enough colors to support annotation! please add more colors!")
+            elif span_counter > 65536:
+                raise RuntimeError("Span Counter Overflow")
+
+            span_color = SPAN_COLOR_PALETTE[(span_counter) % SPAN_COLOR_PALETTE_LENGTH]
+            span_counter += 1
             set_span_color(label, span_color)
 
         # For better or worse, we need to cache these label-color pairings
