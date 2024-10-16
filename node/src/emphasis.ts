@@ -39,9 +39,10 @@ import TrieSearch from "trie-search";
             return;
         }
         
-        console.log(instanceText);
-        
-        const emphasisTrie = new TrieSearch<any>();
+        const emphasisTrie = new TrieSearch<any>(undefined, {
+            splitOnRegEx: false,
+        });
+
         emphasisList.map((item) => emphasisTrie.map(item, item));
         const wordList = instanceText.split(" ");
         let lastWasValid = false;
@@ -53,9 +54,10 @@ import TrieSearch from "trie-search";
 
             if(search.length === 0 && lastWasValid) {
                 result += `
-                <mark aria-hidden="true" class="emphasis">${last}</mark> ${' '}               
-                `
-                result += word;
+                <mark aria-hidden="true" class="emphasis">${last}</mark>
+                `;
+                
+                result += word + ' ';
                 last = "";
                 lastWasValid = false;
                 continue;
@@ -68,10 +70,10 @@ import TrieSearch from "trie-search";
                 continue;
             }
 
-            if(search.length === 1) {
+            if(search.length === 1 && search[0] === current) {
                 result += `
-                <mark aria-hidden="true" class="emphasis">${current}</mark> ${' '}            
-                `
+                <mark aria-hidden="true" class="emphasis">${current}</mark>
+                `;
                 last = "";
                 lastWasValid = false;
                 continue;
@@ -94,7 +96,6 @@ import TrieSearch from "trie-search";
 
     const emphasis = getJsonElement<Array<string>>("emphasis");
     if(emphasis !== undefined) {
-        console.log(emphasis);
         emphasize(emphasis);
     }
 
