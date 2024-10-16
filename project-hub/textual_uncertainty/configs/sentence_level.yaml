@@ -30,6 +30,13 @@
         
     },
 
+    "user_config": {
+
+      "allow_all_users": True,
+      
+      "users": [  ],
+    },
+
     "keyword_highlights_file": "configs/uncertainty_keywords.tsv",
     
     

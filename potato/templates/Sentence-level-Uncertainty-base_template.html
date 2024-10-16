@@ -3,7 +3,246 @@
 
   <!--- HEADER GOES BELOW HERE--->
 
-  {{ HEADER }}
+  
+    <head>
+      <!-- <script src="jquery-3.3.1.min.js"></script> -->
+
+        <script src="https://code.jquery.com/jquery-3.4.1.slim.min.js" integrity="sha384-J6qa4849blE2+poT4WnyKhv5vZF5SrPo0iEjwBvKU7imGFAV0wwj1yYfoRSJoZ+n" crossorigin="anonymous"></script>
+        <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
+        <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js" integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css" integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js" integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>
+
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta http-equiv="content-type" content="text/html;charset=UTF-8">
+        <style>
+            * {
+                box-sizing: border-box;
+            }
+
+            var {
+                display: none;
+            }
+
+            .row {
+                display: flex;
+                flex-direction: column;
+            }
+
+
+            /*                 border:1px solid black;
+                border-radius: 5px; */
+
+            
+            /* Create two equal columns that sits next to each other */
+            .column {
+                flex: 50%;
+                padding: 15px;
+            }
+            
+            .instance {
+                border:1px solid #070707;
+                background-color: cccccc;
+                border-radius: 5px;
+                padding: 15px;
+                display: block;
+                justify-content: center;
+                width: fit-content;
+                max-width: 80%;
+                text-align: left;
+                margin: 0 auto;
+                font-size: 15pt;
+            }
+
+            .instance p {
+                font-weight: bold;
+                display: block;
+            }
+
+            
+            .annotation_schema {
+                padding: 5px;                
+                display: flex;
+                justify-content: center;
+                width: 80%;
+                text-align: left;
+                margin: 0 auto;
+            }
+           
+            
+            fieldset {
+                background-color: #ededed;
+                border:1px solid #160085;
+                background-color: cccccc;
+                padding: 10px 15px 10px 15px;
+            }
+            
+            legend {
+                background-color: #160085;
+                color: white;
+                padding: 5px 5px;
+                font-size: 13pt;
+                font-weight: bold;
+            }
+
+            input[type="text"] {
+                -webkit-box-sizing: border-box;
+                -moz-box-sizing: border-box;  
+                box-sizing: border-box;
+                width: 100%;
+            }
+              
+            input {
+                margin: 5px;
+            }
+
+
+            .likert li {
+                float: left;
+                list-style-type: none;
+            }
+
+
+            /* The sidepanel menu */
+            .sidepanel {
+                min-height: 250px; /* Specify a height */
+                width: 0; /* 0 width - change this with JavaScript */
+                position: fixed; /* Stay in place */
+                z-index: 1; /* Stay on top */
+                top: 95px;
+                left: 1px;
+                background-color: #111; /* Black*/
+                overflow-x: hidden; /* Disable horizontal scroll */
+                padding-top: 10px; /* Place content 60px from the top */
+                padding-bottom: 20px;
+                transition: 0.5s; /* 0.5 second transition effect to slide in the sidepanel */
+            }
+
+            /* The sidepanel links */
+            .sidepanel a {
+                padding: 8px 8px 8px 32px;
+                text-decoration: none;
+                font-size: 55px;
+                color: #ffffff; /* #818181; */
+                display: block;
+                transition: 0.3s;
+            }
+
+            /* When you mouse over the navigation links, change their color */
+            .sidepanel a:hover {
+                color: #f1f1f1;
+            }
+
+            /* When you mouse over the navigation links, change their color */
+            .sidepanel table {
+                color: #ffffff;
+                font-size: 20px;
+                /*padding: 8px 8px 18px 62px;*/
+                margin-left: 20px;
+                margin-top: 10px;
+                border-spacing: 10px;
+            }
+            
+            .sidepanel td, th  {
+                color: #ffffff;
+                padding: 5px;
+            }
+
+            .sidepanel tr:nth-child(even) {
+                background-color: #333333;
+            }
+                        
+            
+            /* Position and style the close button (top right corner) */
+            .sidepanel .closebtn {
+                position: absolute;
+                top: 0;
+                right: 25px;
+                font-size: 36px;
+                margin-left: 50px;
+            }
+
+            /* Style the button that is used to open the sidepanel */
+            .openbtn {
+                cursor: pointer;
+                /*
+                font-size: 20px;                
+                background-color: #111;
+                color: white;
+                padding: 10px 15px;
+                border: none;*/
+            }
+
+            .openbtn:hover {
+                background-color: #444;
+            } 
+
+            /* The instructions */
+            .instructions {
+                /* width: 0; */ /* 0 width - change this with JavaScript */
+                transition: 0.5s; /* 0.5 second transition effect to slide in the sidepanel */
+                overflow-y: hidden; /* Disable horizontal scroll */
+                border:1px solid #070707;
+                background-color: cccccc;
+                border-radius: 5px;
+                padding: 15px;
+                display: block;
+                justify-content: center;
+                width: fit-content;
+                max-width: 80%;
+                text-align: left;
+                margin: 0 auto;
+                font-size: 14pt;               
+            }
+
+            
+            /* Position and style the close button (top right corner) */
+            .instructions .closebtn {
+                position: absolute;
+                top: 0;
+                right: 25px;
+                font-size: 36px;
+                margin-left: 50px;
+            }
+
+            /* Style the button that is used to open the sidepanel */
+            .instructions .openbtn {
+                cursor: pointer;
+                /*
+                font-size: 20px;                
+                background-color: #111;
+                color: white;
+                padding: 10px 15px;
+                border: none;*/
+            }
+
+            .span_container {
+              border-width:3px;
+              border-style:solid;
+              border: 2px solid black;
+              position: relative;
+              border-radius: 5px;
+              padding: 2px 5px;
+              background-color: pink;
+            }
+            
+            .span_label {
+            position: absolute;
+            top: -12px;
+            left: 5px;
+            font-size: 7px;
+            padding: 1px 1px;
+            border-radius: 3px;
+            background-color: pink;
+            border: 2px solid red;
+            text-align: center;
+            }            
+            
+        </style>
+    </head>
+
+    
+
 
   <!--- HEADER GOES ABOVE HERE--->
   
@@ -18,12 +257,12 @@
 
     <div id="mySidepanel" class="sidepanel">
       <a href="javascript:void(0)" class="closebtn" target_id="mySidepanel" onclick="closeNav(this.getAttribute('target_id'))">&times;</a>
-      {{keybindings}}
+      <table><tr><th>Key</th><th>Description</th></tr><tr><td style="text-align: center;">&#8592;</td><td>Move backward</td></tr><tr><td style="text-align: center;">&#8594;</td><td>Move forward</td></tr><tr><td style="text-align: center;">1</td><td>Sentence-Level-Uncertainty: 1. Very uncertain </td></tr><tr><td style="text-align: center;">2</td><td>Sentence-Level-Uncertainty: 2. Uncertain</td></tr><tr><td style="text-align: center;">3</td><td>Sentence-Level-Uncertainty: 3. Somewhat uncertain</td></tr><tr><td style="text-align: center;">4</td><td>Sentence-Level-Uncertainty: 4. Somewhat certain</td></tr><tr><td style="text-align: center;">5</td><td>Sentence-Level-Uncertainty: 5. Certain</td></tr><tr><td style="text-align: center;">6</td><td>Sentence-Level-Uncertainty: 6. Very certain</td></tr><tr><td style="text-align: center;">None</td><td>Sentence-Level-Uncertainty: 7. None</td></tr></table>
     </div>
 
     <div id="Statpanel" class="sidepanel">
       <a href="javascript:void(0)" class="closebtn" target_id="Statpanel" onclick="closeNav(this.getAttribute('target_id'))">&times;</a>
-      {{statistics_nav}}
+      <table><tr><th> </th><th> </th></tr><tr><td style="text-align: center;">Annotated instances</td><td>{{statistics_nav['Annotated instances']}}</td></tr><tr><td style="text-align: center;">Total working time</td><td>{{statistics_nav['Total working time']}}</td></tr><tr><td style="text-align: center;">Average time on each instance</td><td>{{statistics_nav['Average time on each instance']}}</td></tr><tr><td style="text-align: center;">Agreement</td><td>{{statistics_nav['Agreement']}}</td></tr></table>
     </div>
     
     <script>
@@ -522,18 +761,18 @@
       });
     </script>
 
-    {{var_elems | safe}}
+
    
     <nav class="navbar navbar-expand-md navbar-dark bg-dark mb-3">
       <div class="container-fluid">
-        <a href="#" class="navbar-brand mr-3">{{annotation_task_name}}</a>
+        <a href="#" class="navbar-brand mr-3">Sentence-level-Uncertainty</a>
         <button type="button" class="navbar-toggler" data-toggle="collapse" data-target="#navbarCollapse">
           <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="navbarCollapse">
           <div class="navbar-nav">
             <a href="#" class="nav-item nav-link active">Home</a>
-            {{annotation_codebook}}
+            
             <a role="button" href="#" class="nav-item nav-link openbtn" target_id="Statpanel" width = "475px" onclick="openNav(this.getAttribute('target_id'),this.getAttribute('width'))">Statistics</a>
             <a role="button" href="#" class="nav-item nav-link openbtn" target_id="mySidepanel" onclick="openNav(this.getAttribute('target_id'))">Help</a>
           </div>
@@ -565,7 +804,72 @@
 
       <!--- LAYOUT GOES BELOW HERE --->
 
-      {{ TASK_LAYOUT }}
+      <div class="row">
+  <div class="col-md-12">
+
+    <div class="row">
+      <div class="col-md-12">
+        <div name="context_text" class="instance">
+          <div name="instance_text">
+            {{instance | safe}}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    
+    <div style="height: 15px;" />
+    
+  </div>
+  <div class="col-md-12">
+    <div class="annotation_schema">
+      <form action="/action_page.php">  <fieldset>  <legend>How certain do you feel about the given scientific finding</legend><table><tr><td>  <input class="Sentence-Level-Uncertainty" type="checkbox" id="Sentence-Level-Uncertainty:::1. Very uncertain " name="Sentence-Level-Uncertainty:::1. Very uncertain " value="1" onclick="onlyOne(this)" validation="">  <label for="Sentence-Level-Uncertainty:::1. Very uncertain " data-toggle="tooltip" data-html="true" data-placement="top" title="Choose this when the finding is very uncertain to you. The effect is generally very small or it happens in very limited situations or with very low possibilities (<10%).
+<ul>
+  <li>There might be a possible way to cure cancer, while it still depends on many factors.
+    <li> We are unsure about the effect of xxx
+    <li> For only 10%, A might have an effect on B.
+</ul>
+">1. Very uncertain </label><br/></td></tr><tr><td>  <input class="Sentence-Level-Uncertainty" type="checkbox" id="Sentence-Level-Uncertainty:::2. Uncertain" name="Sentence-Level-Uncertainty:::2. Uncertain" value="2" onclick="onlyOne(this)" validation="">  <label for="Sentence-Level-Uncertainty:::2. Uncertain" data-toggle="tooltip" data-html="true" data-placement="top" title="Choose this when the finding is generally uncertain. Usually, it’s describing some effects that may happen but with limited possibilities.
+<ul>
+  <li>Spending money may not make people happy.
+</ul>
+For some cases, the author may explicitly express the level of uncertainty
+<ul>
+    <li> The causative mutations for many of the genes remain largely unknown.
+</ul>">2. Uncertain</label><br/></td></tr><tr><td>  <input class="Sentence-Level-Uncertainty" type="checkbox" id="Sentence-Level-Uncertainty:::3. Somewhat uncertain" name="Sentence-Level-Uncertainty:::3. Somewhat uncertain" value="3" onclick="onlyOne(this)" validation="">  <label for="Sentence-Level-Uncertainty:::3. Somewhat uncertain" data-toggle="tooltip" data-html="true" data-placement="top" title=" Choose this when you feel the finding is somewhat uncertain, but it’s stronger compared with the uncertain findings.
+    Sometimes it’s a mixture of multiple sentences where some of them are uncertain but some are not.
+<ul>
+  <li>Snakes may have moved to forested environments from underwater and coastal regions earlier on than was previously thought.
+    <li> We are not very sure about the relationship between A and B
+</ul>
+">3. Somewhat uncertain</label><br/></td></tr><tr><td>  <input class="Sentence-Level-Uncertainty" type="checkbox" id="Sentence-Level-Uncertainty:::4. Somewhat certain" name="Sentence-Level-Uncertainty:::4. Somewhat certain" value="4" onclick="onlyOne(this)" validation="">  <label for="Sentence-Level-Uncertainty:::4. Somewhat certain" data-toggle="tooltip" data-html="true" data-placement="top" title="Choose this when you feel the finding is somewhat certain, but it’s less strong compared with the statement of facts.
+<ul>
+  <li>Several natural compounds could possibly stop the cancerous cells from forming.
+    <li> Playing basketball should be a good way to relax yourself.
+</ul>
+">4. Somewhat certain</label><br/></td></tr><tr><td>  <input class="Sentence-Level-Uncertainty" type="checkbox" id="Sentence-Level-Uncertainty:::5. Certain" name="Sentence-Level-Uncertainty:::5. Certain" value="5" onclick="onlyOne(this)" validation="">  <label for="Sentence-Level-Uncertainty:::5. Certain" data-toggle="tooltip" data-html="true" data-placement="top" title="Choose this when you feel the finding is generally certain, especially when there are no uncertain cues and it sounds like a statement of fact.
+<ul>
+  <li>Doing sports is a good way to stay healthy.
+  <li>Drinking too much coffee can make you sick.
+    <li> This newly developed medicine can mitigate headaches.
+</ul>
+">5. Certain</label><br/></td></tr><tr><td>  <input class="Sentence-Level-Uncertainty" type="checkbox" id="Sentence-Level-Uncertainty:::6. Very certain" name="Sentence-Level-Uncertainty:::6. Very certain" value="6" onclick="onlyOne(this)" validation="">  <label for="Sentence-Level-Uncertainty:::6. Very certain" data-toggle="tooltip" data-html="true" data-placement="top" title="Context should also be taken into consideration here. Cure is a very strong word so you might wanna label the following sentence as very certain here.
+<ul>
+  <li>Eating too much sugar can surely cause many forms of diseases
+  <li>Thinking about the contextual elements of the memories significantly reduced their emotional impact.
+    <li> Spending too much time on social media is never good for your health.
+</ul>
+Choose this when you feel the finding is extremely certain. Usually, there are strong signals that increase the statement strength
+<ul>
+    <li> Scientists have found a way to cure cancer
+</ul>">6. Very certain</label><br/></td></tr><tr><td>  <input class="Sentence-Level-Uncertainty" type="checkbox" id="Sentence-Level-Uncertainty:::7. None" name="Sentence-Level-Uncertainty:::7. None" value="None" onclick="onlyOne(this)" validation="">  <label for="Sentence-Level-Uncertainty:::7. None" data-toggle="tooltip" data-html="true" data-placement="top" title="This is not a scientific finding">7. None</label><br/></td></tr></table>  </fieldset>
+</form>
+
+
+    </div>
+  </div>
+</div>
+
 
       <!--- LAYOUT GOES ABOVE  --->
 

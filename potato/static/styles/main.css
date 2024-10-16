@@ -117,6 +117,9 @@ button:hover {
 iframe {
   border:none !important;
 }
+var {
+  display: none;
+}
 .txt1 {
   font-family:Arial;
   font-size:13px;
