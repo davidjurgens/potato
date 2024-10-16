@@ -539,7 +539,7 @@ the following content into it:
       <div class="col-md-12">
 
         <div name="context_text" class="instance">
-          <div name="instance_text" style="max-width:400px;">
+          <div id="instance-text" name="instance_text" style="max-width:400px;">
             {{instance | safe}}
           </div>
         </div>
@@ -571,7 +571,7 @@ If you want to make changes to the instance area, simply edit the corresponding 
 for example:
 
 ``` html
-<div name="instance_text" style="max-width:400px;">
+<div id="instance-text" name="instance_text" style="max-width:400px;">
             {{instance | safe}}
 </div>
 ```

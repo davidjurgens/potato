@@ -2067,14 +2067,14 @@ def get_displayed_text(text):
             if config["list_as_text"].get("horizontal"):
                 for key in text:
                     block.append(
-                        '<div name="instance_text" style="float:left;width:%s;padding:5px;" class="column"> <legend> %s </legend> %s </div>'
+                        '<div id="instance-text" name="instance_text" style="float:left;width:%s;padding:5px;" class="column"> <legend> %s </legend> %s </div>'
                         % ("%d" % int(100 / len(text)) + "%", key, text[key])
                     )
                 text = '<div class="row" style="display: table"> %s </div>' % ("".join(block))
             else:
                 for key in text:
                     block.append(
-                        '<div name="instance_text"> <legend> %s </legend> %s <br/> </div>'
+                        '<div id="instance-text" name="instance_text"> <legend> %s </legend> %s <br/> </div>'
                         % (key, text[key])
                     )
                 text = "".join(block)
