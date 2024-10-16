@@ -17,7 +17,7 @@ def generate_select_layout(annotation_scheme):
         validation = "required"
 
     schematic = (
-        '<form class="annotation-form" action="/action_page.php">'
+          ('<form id="%s" class="annotation-form select" action="/action_page.php">' % annotation_scheme["name"] )
         + "  <fieldset>"
         + ("  <legend>%s</legend>" % annotation_scheme["description"])
         + (

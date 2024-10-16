@@ -7,7 +7,7 @@ def generate_textbox_layout(annotation_scheme):
 
     #'<div style="border:1px solid black; border-radius: 25px;">' + \
     schematic = (
-        '<form class="annotation-form" action="/action_page.php">'
+         ('<form id="%s" class="annotation-form textbox" action="/action_page.php">' % annotation_scheme["name"])
         + "  <fieldset>"
         + (
             '  <legend>%s</legend> <ul class="likert" style="text-align: center;">'

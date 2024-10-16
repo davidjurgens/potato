@@ -89,17 +89,41 @@ import TrieSearch from "trie-search";
         instanceTextElem.innerHTML = result;
     }
 
-    function suggest(suggestions: Array<string>) {
-        console.log(suggestions);
+    interface Suggestion {
+        name: string
+        label: string
     }
 
+    function suggest(suggestions: Array<Suggestion>) {
+        try{
+            for(const s of suggestions) {
+                const elem = document.getElementById(s.name);
+                if(elem === null) {
+                    console.warn("no elem with id " + s.name);
+                    continue;
+                }
+
+                if(elem.classList.contains("multiselect") || elem.classList.contains("radio")) {
+                    const inputElem = document.getElementById(s.name + ":::" + s.label);
+                    if(elem === null) {
+                        console.warn(`no elem with id ${s.name + ":::" + s.label}`);
+                        continue;
+                    }
+                    
+                    inputElem?.parentElement?.classList.add("suggestion");
+                }
+            }
+        } catch(err) {
+            console.error(`could not suggest elements`);
+        }
+    }
 
     const emphasis = getJsonElement<Array<string>>("emphasis");
     if(emphasis !== undefined) {
         emphasize(emphasis);
     }
 
-    const suggestions = getJsonElement<Array<string>>("suggestions");
+    const suggestions = getJsonElement<Array<Suggestion>>("suggestions");
     if(suggestions !== undefined) {
         suggest(suggestions);
     }

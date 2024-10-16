@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 def generate_multirate_layout(annotation_scheme):
     schematic = (
-        '<form class="annotation-form" action="/action_page.php">'
+          ('<form class="annotation-form multirate" id="%s" nameaction="/action_page.php">' % annotation_scheme["name"])
         + "  <fieldset>"
         + ("  <legend>%s</legend>" % annotation_scheme["description"])
     )
