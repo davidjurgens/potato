@@ -19,6 +19,13 @@ out your own versions.
 This will create a development server using vite. Feel free to learn more about the vite
 ecosystem and it's features to understand how to deploy and test.
 
+## Running Locally
+Sadly with vite not supporting preview builds with the dev server you have to run
+ the build and the server seperately.
+
+- In 1st Window: `npm run dev`
+- In 2nd Window: `npm run preview`
+
 ## Deploying to dist
 `npm run build`
 

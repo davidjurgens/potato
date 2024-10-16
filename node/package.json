@@ -2,10 +2,18 @@
     "name": "potato-node",
     "version": "1.0.0",
     "description": "A set of modules to make interfacing javascript with potato easier.",
-    "main": "main.ts",
+    "main": "./live/potato.umd.js",
+    "module": "./live/potato.js",
     "type": "module",
+    "exports": {
+      ".": {
+        "import": "./live/potato.js",
+        "require": "./live/potato.umd.cjs"
+      }
+    },
+    "files": ["live"],
     "scripts": {
-      "dev": "vite",
+      "dev": "tsc && vite build --watch",
       "build": "tsc && vite build",
       "preview": "vite preview"
     },

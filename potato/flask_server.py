@@ -2277,8 +2277,30 @@ def annotate_page(username=None, action=None):
         html_file = config["site_file"]
 
     var_elems_html = "".join(
-        map(lambda item : f'<var id="{item[0]}"> {easy_json(item[1])} </var>', var_elems.items())
+        map(lambda item : (
+            f'<script id="{item[0]}" ' +
+            ' type="application/json"> ' +
+            f' {easy_json(item[1])} </script>'
+        ), var_elems.items())
     )
+
+    custom_js = ""
+    if config["customjs"] and config.get("customjs_hostname"):
+        custom_js = (
+            f'<script src="http://{config["customjs_hostname"]}/potato.js"' + 
+            ' defer></script>'
+        )
+    elif config["customjs"]:
+        custom_js = (
+            '<script src="http://localhost:4173/potato.js" ' +
+            ' defer></script>'
+        )
+    else:
+        custom_js = (
+            '<script src="https://cdn.jsdelivr.net/gh/' +
+            'davidjurgens/potato@HEAD/node/live/potato.js" ' +
+            ' crossorigin="anonymous"></script>'
+        )
 
     # Flask will fill in the things we need into the HTML template we've created,
     # replacing {{variable_name}} with the associated text for keyword arguments
@@ -2294,6 +2316,7 @@ def annotate_page(username=None, action=None):
         alert_time_each_instance=config["alert_time_each_instance"],
         statistics_nav=all_statistics,
         var_elems=var_elems_html,
+        custom_js=custom_js,
         **kwargs
     )
 
