@@ -7,14 +7,14 @@
  * 
  */
 
-function getJsonElement(elementId: string): Record<string, any> | undefined {
-    let elem = document.getElementById(elementId);
+function getJsonElement<T>(elementId: string): T | undefined {
+    const elem = document.getElementById(elementId);
     if(elem === null) {
         return undefined;
     }
 
     try{
-        JSON.parse(elem.textContent as string);
+        return JSON.parse(elem.textContent as string) as T;
     } catch(err) {
         console.warn(`could not parse json element '${elementId}'. Error: ${err}`);
     }
@@ -22,13 +22,52 @@ function getJsonElement(elementId: string): Record<string, any> | undefined {
     return undefined;
 }
 
+function emphasize(emphasisList: Array<string>) {
+    const instanceTextElem = document.getElementById("instance-text");
+    if(instanceTextElem === null) {
+        console.warn("cannot find instance text");
+        return;
+    }
+
+    const instanceText = instanceTextElem.textContent;
+    if(!instanceText || instanceText === "") {
+        console.log("text content in instance");
+        return;
+    }
+
+    const emphasisSet = new Set(emphasisList);
+    const wordList = instanceText.split(" ");
+    let result = "";
+    for(const word in wordList) {
+        if(emphasisSet.has(word)) {
+            result += `
+            <mark aria-hidden="true" class="emphasis">
+                ${word}
+            </mark>
+            `
+        } else {
+            // since this is html we don't have to worry about extra spaces
+            result += word + " ";
+        }
+    }
+
+    instanceTextElem.innerHTML = result;
+}
+
+function suggest(suggestions: Array<string>) {
+    console.log(suggestions);
+}
+
 // Main
 (function(){
-    let emphasis = getJsonElement("emphasis");
-    
+    const emphasis = getJsonElement<Array<string>>("emphasis");
+    if(emphasis !== undefined) {
+        emphasize(emphasis);
+    }
 
-
-    let suggestions = getJsonElement("suggestions");
-
+    const suggestions = getJsonElement<Array<string>>("suggestions");
+    if(suggestions !== undefined) {
+        suggest(suggestions);
+    }
     
 }())
