@@ -1,0 +1,10 @@
+/*
+ * filename: emphasis.css
+ * date: 10/16/2024
+ * author: Tristan Hilbert (aka TFlexSoom)
+ * desc: Emphasis stylesheet for suggestions within the potato tool
+ */
+
+mark.emphasis {
+    background: #90EE9090;
+}

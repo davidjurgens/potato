@@ -1,4 +1,4 @@
-const c = class u {
+const p = class f {
   /**
    * Accept two comparable values and creates new instance of interval
    * Predicate Interval.comparable_less(low, high) supposed to return true on these values
@@ -13,7 +13,7 @@ const c = class u {
    * @returns {Interval}
    */
   clone() {
-    return new u(this.low, this.high);
+    return new f(this.low, this.high);
   }
   /**
    * Propery max returns clone of this interval
@@ -60,7 +60,7 @@ const c = class u {
    * @returns {Interval}
    */
   merge(t) {
-    return new u(
+    return new f(
       this.low === void 0 ? t.low : this.low < t.low ? this.low : t.low,
       this.high === void 0 ? t.high : this.high > t.high ? this.high : t.high
     );
@@ -90,11 +90,11 @@ const c = class u {
     return t < e;
   }
 }, s = 0, l = 1;
-class h {
-  constructor(t = void 0, e = void 0, i = null, r = null, a = null, _ = l) {
-    if (this.left = i, this.right = r, this.parent = a, this.color = _, this.item = { key: t, value: e }, t && t instanceof Array && t.length === 2 && !Number.isNaN(t[0]) && !Number.isNaN(t[1])) {
-      let [n, o] = t;
-      n > o && ([n, o] = [o, n]), this.item.key = new c(n, o);
+class a {
+  constructor(t = void 0, e = void 0, i = null, r = null, h = null, o = l) {
+    if (this.left = i, this.right = r, this.parent = h, this.color = o, this.item = { key: t, value: e }, t && t instanceof Array && t.length === 2 && !Number.isNaN(t[0]) && !Number.isNaN(t[1])) {
+      let [u, c] = t;
+      u > c && ([u, c] = [c, u]), this.item.key = new p(u, c);
     }
     this.max = this.item.key ? this.item.key.max : void 0;
   }
@@ -142,12 +142,12 @@ class h {
     return e(t.item.key.high, i);
   }
 }
-class f {
+class m {
   /**
    * Construct new empty instance of IntervalTree
    */
   constructor() {
-    this.root = null, this.nil_node = new h();
+    this.root = null, this.nil_node = new a();
   }
   /**
    * Returns number of items stored in the interval tree
@@ -207,7 +207,7 @@ class f {
    */
   insert(t, e = t) {
     if (t === void 0) return;
-    let i = new h(t, e, this.nil_node, this.nil_node, null, s);
+    let i = new a(t, e, this.nil_node, this.nil_node, null, s);
     return this.tree_insert(i), this.recalc_max(i), i;
   }
   /**
@@ -217,7 +217,7 @@ class f {
    * @returns {boolean} true if item {key, value} exist in the tree, false otherwise
    */
   exist(t, e = t) {
-    let i = new h(t, e);
+    let i = new a(t, e);
     return !!this.tree_search(this.root, i);
   }
   /**
@@ -227,7 +227,7 @@ class f {
    * @returns {boolean} true if item {key, value} deleted, false if not found
    */
   remove(t, e = t) {
-    let i = new h(t, e), r = this.tree_search(this.root, i);
+    let i = new a(t, e), r = this.tree_search(this.root, i);
     return r && this.tree_delete(r), r;
   }
   /**
@@ -238,8 +238,8 @@ class f {
    * @returns {Array}
    */
   search(t, e = (i, r) => i === r ? r.output() : i) {
-    let i = new h(t), r = [];
-    return this.tree_search_interval(this.root, i, r), r.map((a) => e(a.item.value, a.item.key));
+    let i = new a(t), r = [];
+    return this.tree_search_interval(this.root, i, r), r.map((h) => e(h.item.value, h.item.key));
   }
   /**
    * Returns true if intersection between given and any interval stored in the tree found
@@ -247,7 +247,7 @@ class f {
    * @returns {boolean}
    */
   intersect_any(t) {
-    let e = new h(t);
+    let e = new a(t);
     return this.tree_find_any_interval(this.root, e);
   }
   /**
@@ -263,7 +263,7 @@ class f {
    * @param callback(value,key) - function to be called for each tree item
    */
   map(t) {
-    const e = new f();
+    const e = new m();
     return this.tree_walk(this.root, (i) => e.insert(i.item.key, t(i.item.value, i.item.key))), e;
   }
   /**
@@ -273,7 +273,7 @@ class f {
    */
   *iterate(t, e = (i, r) => i === r ? r.output() : i) {
     let i;
-    for (t ? i = this.tree_search_nearest_forward(this.root, new h(t)) : this.root && (i = this.local_minimum(this.root)); i; )
+    for (t ? i = this.tree_search_nearest_forward(this.root, new a(t)) : this.root && (i = this.local_minimum(this.root)); i; )
       yield e(i.item.value, i.item.key), i = this.tree_successor(i);
   }
   recalc_max(t) {
@@ -386,6 +386,45 @@ class f {
     return e += i, e;
   }
 }
+function _(n) {
+  const t = document.getElementById(n);
+  if (t !== null)
+    try {
+      return JSON.parse(t.textContent);
+    } catch (e) {
+      console.warn(`could not parse json element '${n}'. Error: ${e}`);
+    }
+}
+function g(n) {
+  const t = document.getElementById("instance-text");
+  if (t === null) {
+    console.warn("cannot find instance text");
+    return;
+  }
+  const e = t.textContent;
+  if (!e || e === "") {
+    console.log("text content in instance");
+    return;
+  }
+  const i = new Set(n), r = e.split(" ");
+  let h = "";
+  for (const o in r)
+    i.has(o) ? h += `
+            <mark aria-hidden="true" class="emphasis">
+                ${o}
+            </mark>
+            ` : h += o + " ";
+  t.innerHTML = h;
+}
+function w(n) {
+  console.log(n);
+}
+(function() {
+  const n = _("emphasis");
+  n !== void 0 && g(n);
+  const t = _("suggestions");
+  t !== void 0 && w(t);
+})();
 document.potato = {
-  IntervalTree: f
+  IntervalTree: m
 };
