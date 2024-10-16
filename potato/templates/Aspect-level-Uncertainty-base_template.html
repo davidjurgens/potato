@@ -3,7 +3,245 @@
 
   <!--- HEADER GOES BELOW HERE--->
 
-  {{ HEADER }}
+  
+    <head>
+      <!-- <script src="jquery-3.3.1.min.js"></script> -->
+
+        <script src="https://code.jquery.com/jquery-3.4.1.slim.min.js" integrity="sha384-J6qa4849blE2+poT4WnyKhv5vZF5SrPo0iEjwBvKU7imGFAV0wwj1yYfoRSJoZ+n" crossorigin="anonymous"></script>
+        <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
+        <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js" integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6" crossorigin="anonymous"></script>
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css" integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
+        <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js" integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta http-equiv="content-type" content="text/html;charset=UTF-8">
+        <style>
+            * {
+                box-sizing: border-box;
+            }
+
+            var {
+                display: none;
+            }
+
+            .row {
+                display: flex;
+                flex-direction: column;
+            }
+
+
+            /*                 border:1px solid black;
+                border-radius: 5px; */
+
+            
+            /* Create two equal columns that sits next to each other */
+            .column {
+                flex: 50%;
+                padding: 15px;
+            }
+            
+            .instance {
+                border:1px solid #070707;
+                background-color: cccccc;
+                border-radius: 5px;
+                padding: 15px;
+                display: block;
+                justify-content: center;
+                width: fit-content;
+                max-width: 80%;
+                text-align: left;
+                margin: 0 auto;
+                font-size: 15pt;
+            }
+
+            .instance p {
+                font-weight: bold;
+                display: block;
+            }
+
+            
+            .annotation_schema {
+                padding: 5px;                
+                display: flex;
+                justify-content: center;
+                width: 80%;
+                text-align: left;
+                margin: 0 auto;
+            }
+           
+            
+            fieldset {
+                background-color: #ededed;
+                border:1px solid #160085;
+                background-color: cccccc;
+                padding: 10px 15px 10px 15px;
+            }
+            
+            legend {
+                background-color: #160085;
+                color: white;
+                padding: 5px 5px;
+                font-size: 13pt;
+                font-weight: bold;
+            }
+
+            input[type="text"] {
+                -webkit-box-sizing: border-box;
+                -moz-box-sizing: border-box;  
+                box-sizing: border-box;
+                width: 100%;
+            }
+              
+            input {
+                margin: 5px;
+            }
+
+
+            .likert li {
+                float: left;
+                list-style-type: none;
+            }
+
+
+            /* The sidepanel menu */
+            .sidepanel {
+                min-height: 250px; /* Specify a height */
+                width: 0; /* 0 width - change this with JavaScript */
+                position: fixed; /* Stay in place */
+                z-index: 1; /* Stay on top */
+                top: 95px;
+                left: 1px;
+                background-color: #111; /* Black*/
+                overflow-x: hidden; /* Disable horizontal scroll */
+                padding-top: 10px; /* Place content 60px from the top */
+                padding-bottom: 20px;
+                transition: 0.5s; /* 0.5 second transition effect to slide in the sidepanel */
+            }
+
+            /* The sidepanel links */
+            .sidepanel a {
+                padding: 8px 8px 8px 32px;
+                text-decoration: none;
+                font-size: 55px;
+                color: #ffffff; /* #818181; */
+                display: block;
+                transition: 0.3s;
+            }
+
+            /* When you mouse over the navigation links, change their color */
+            .sidepanel a:hover {
+                color: #f1f1f1;
+            }
+
+            /* When you mouse over the navigation links, change their color */
+            .sidepanel table {
+                color: #ffffff;
+                font-size: 20px;
+                /*padding: 8px 8px 18px 62px;*/
+                margin-left: 20px;
+                margin-top: 10px;
+                border-spacing: 10px;
+            }
+            
+            .sidepanel td, th  {
+                color: #ffffff;
+                padding: 5px;
+            }
+
+            .sidepanel tr:nth-child(even) {
+                background-color: #333333;
+            }
+                        
+            
+            /* Position and style the close button (top right corner) */
+            .sidepanel .closebtn {
+                position: absolute;
+                top: 0;
+                right: 25px;
+                font-size: 36px;
+                margin-left: 50px;
+            }
+
+            /* Style the button that is used to open the sidepanel */
+            .openbtn {
+                cursor: pointer;
+                /*
+                font-size: 20px;                
+                background-color: #111;
+                color: white;
+                padding: 10px 15px;
+                border: none;*/
+            }
+
+            .openbtn:hover {
+                background-color: #444;
+            } 
+
+            /* The instructions */
+            .instructions {
+                /* width: 0; */ /* 0 width - change this with JavaScript */
+                transition: 0.5s; /* 0.5 second transition effect to slide in the sidepanel */
+                overflow-y: hidden; /* Disable horizontal scroll */
+                border:1px solid #070707;
+                background-color: cccccc;
+                border-radius: 5px;
+                padding: 15px;
+                display: block;
+                justify-content: center;
+                width: fit-content;
+                max-width: 80%;
+                text-align: left;
+                margin: 0 auto;
+                font-size: 14pt;               
+            }
+
+            
+            /* Position and style the close button (top right corner) */
+            .instructions .closebtn {
+                position: absolute;
+                top: 0;
+                right: 25px;
+                font-size: 36px;
+                margin-left: 50px;
+            }
+
+            /* Style the button that is used to open the sidepanel */
+            .instructions .openbtn {
+                cursor: pointer;
+                /*
+                font-size: 20px;                
+                background-color: #111;
+                color: white;
+                padding: 10px 15px;
+                border: none;*/
+            }
+
+            .span_container {
+              border-width:3px;
+              border-style:solid;
+              border: 2px solid black;
+              position: relative;
+              border-radius: 5px;
+              padding: 2px 5px;
+              background-color: pink;
+            }
+            
+            .span_label {
+            position: absolute;
+            top: -12px;
+            left: 5px;
+            font-size: 7px;
+            padding: 1px 1px;
+            border-radius: 3px;
+            background-color: pink;
+            border: 2px solid red;
+            text-align: center;
+            }            
+            
+        </style>
+    </head>
+
+    
+
 
   <!--- HEADER GOES ABOVE HERE--->
   
@@ -20,12 +258,12 @@
 
     <div id="mySidepanel" class="sidepanel">
       <a href="javascript:void(0)" class="closebtn" target_id="mySidepanel" onclick="closeNav(this.getAttribute('target_id'))">&times;</a>
-      {{keybindings}}
+      <table><tr><th>Key</th><th>Description</th></tr><tr><td style="text-align: center;">&#8592;</td><td>Move backward</td></tr><tr><td style="text-align: center;">&#8594;</td><td>Move forward</td></tr><tr><td style="text-align: center;">q</td><td>Aspects: Number</td></tr><tr><td style="text-align: center;">w</td><td>Aspects: Extent</td></tr><tr><td style="text-align: center;">e</td><td>Aspects: Probability/Effect/Connection</td></tr><tr><td style="text-align: center;">r</td><td>Aspects: Condition</td></tr><tr><td style="text-align: center;">t</td><td>Aspects: Suggestion/Action</td></tr><tr><td style="text-align: center;">y</td><td>Aspects: Framing</td></tr><tr><td style="text-align: center;">None</td><td>Aspects: None</td></tr><tr><td style="text-align: center;">BAD</td><td>Aspects: Bad-Text</td></tr><tr><td style="text-align: center;">a</td><td>Which-is-uncertain: Number</td></tr><tr><td style="text-align: center;">s</td><td>Which-is-uncertain: Extent</td></tr><tr><td style="text-align: center;">d</td><td>Which-is-uncertain: Probability/Effect/Connection</td></tr><tr><td style="text-align: center;">f</td><td>Which-is-uncertain: Condition</td></tr><tr><td style="text-align: center;">g</td><td>Which-is-uncertain: Suggestion/Action</td></tr><tr><td style="text-align: center;">h</td><td>Which-is-uncertain: Framing</td></tr><tr><td style="text-align: center;">None</td><td>Which-is-uncertain: None</td></tr><tr><td style="text-align: center;">BAD</td><td>Which-is-uncertain: Bad-Text</td></tr></table>
     </div>
 
     <div id="Statpanel" class="sidepanel">
       <a href="javascript:void(0)" class="closebtn" target_id="Statpanel" onclick="closeNav(this.getAttribute('target_id'))">&times;</a>
-      {{statistics_nav}}
+      <table><tr><th> </th><th> </th></tr><tr><td style="text-align: center;">Annotated instances</td><td>{{statistics_nav['Annotated instances']}}</td></tr><tr><td style="text-align: center;">Total working time</td><td>{{statistics_nav['Total working time']}}</td></tr><tr><td style="text-align: center;">Average time on each instance</td><td>{{statistics_nav['Average time on each instance']}}</td></tr><tr><td style="text-align: center;">Agreement</td><td>{{statistics_nav['Agreement']}}</td></tr></table>
     </div>
     
     <script>
@@ -528,14 +766,14 @@
    
     <nav class="navbar navbar-expand-md navbar-dark bg-dark mb-3">
       <div class="container-fluid">
-        <a href="#" class="navbar-brand mr-3">{{annotation_task_name}}</a>
+        <a href="#" class="navbar-brand mr-3">Aspect-level-Uncertainty</a>
         <button type="button" class="navbar-toggler" data-toggle="collapse" data-target="#navbarCollapse">
           <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="navbarCollapse">
           <div class="navbar-nav">
             <a href="#" class="nav-item nav-link active">Home</a>
-            {{annotation_codebook}}
+            
             <a role="button" href="#" class="nav-item nav-link openbtn" target_id="Statpanel" width = "475px" onclick="openNav(this.getAttribute('target_id'),this.getAttribute('width'))">Statistics</a>
             <a role="button" href="#" class="nav-item nav-link openbtn" target_id="mySidepanel" onclick="openNav(this.getAttribute('target_id'))">Help</a>
           </div>
@@ -567,7 +805,122 @@
 
       <!--- LAYOUT GOES BELOW HERE --->
 
-      {{ TASK_LAYOUT }}
+      <div class="row">
+  <div class="col-md-12">
+
+    <div class="row">
+      <div class="col-md-12">
+        <div name="context_text" class="instance">
+          <div name="instance_text">
+            {{instance | safe}}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    
+    <div style="height: 15px;" />
+    
+  </div>
+  <div class="col-md-12">
+    <div class="annotation_schema">
+      <form action="/action_page.php">  <fieldset>  <legend>Do the following aspects present in the given finding?</legend><table><tr><td><label for="Aspects:::Number" data-toggle="tooltip" data-html="true" data-placement="top" title="Uncertainty about the value of a specific number
+<ul>
+  <li>Approximately 300 people participated in this study
+  <li>The authors are unsure how many planets are out there
+    <li> Based on a survey among 1000 individuals, we found that ...
+</ul>
+"><input class="Aspects" type="checkbox" id="Aspects:::Number" name="Aspects:::Number" value="q" onclick="whetherNone(this)" validation="">  Number</label><br/></td></tr><tr><td><label for="Aspects:::Extent" data-toggle="tooltip" data-html="true" data-placement="top" title="Uncertainty about the proportion/ratio of properties that make up an object/event
+<ul>
+  <li>The bridge is mainly composed of agate.
+  <li>The mice were mostly fed junk food.
+    <li>Subjects reported largely tasting bitterness
+  <li> In barley, extensive mutant collections are available, however, the causative mutations for many of the genes remains largely unknown.
+</ul>
+"><input class="Aspects" type="checkbox" id="Aspects:::Extent" name="Aspects:::Extent" value="w" onclick="whetherNone(this)" validation="">  Extent</label><br/></td></tr><tr><td><label for="Aspects:::Probability/Effect/Connection" data-toggle="tooltip" data-html="true" data-placement="top" title="Uncertainty about probability that something will occur, has occurred, or is true/false
+<ul>
+  <li>It is possible that people who eat too much will be unhealthy
+  <li>Eating too much might make you unhealthy
+    <li>Eating too much could make you unhealthy
+  <li> Irregularities in the chromosome structure sometimes indicated the type of cancer and the corresponding therapy.
+</ul>
+
+"><input class="Aspects" type="checkbox" id="Aspects:::Probability/Effect/Connection" name="Aspects:::Probability/Effect/Connection" value="e" onclick="whetherNone(this)" validation="">  Probability/Effect/Connection</label><br/></td></tr><tr><td><label for="Aspects:::Condition" data-toggle="tooltip" data-html="true" data-placement="top" title="Uncertainty due to specific condition
+<ul>
+  <li>Time travel becomes possible if we could find the wormhole.
+  <li>We plan to leave soon but it depends on the weather.
+</ul>
+
+
+"><input class="Aspects" type="checkbox" id="Aspects:::Condition" name="Aspects:::Condition" value="r" onclick="whetherNone(this)" validation="">  Condition</label><br/></td></tr><tr><td><label for="Aspects:::Suggestion/Action" data-toggle="tooltip" data-html="true" data-placement="top" title="Uncertainty about future action
+<ul>
+  <li>Scientists need to account for religious beliefs and memory when designing questionnaires about sensitive topics such as sexual health.
+  <li>Patients probably need more medicine to cure this disease
+</ul>
+
+
+"><input class="Aspects" type="checkbox" id="Aspects:::Suggestion/Action" name="Aspects:::Suggestion/Action" value="t" onclick="whetherNone(this)" validation="">  Suggestion/Action</label><br/></td></tr><tr><td><label for="Aspects:::Framing" data-toggle="tooltip" data-html="true" data-placement="top" title="Uncertainty directly expressed by the authors or the journalists
+<ul>
+  <li>We found that ...
+   <li> We estimate that ...
+  <li>This study suggests that ...
+    <li>We are uncertain that ...
+</ul>
+
+"><input class="Aspects" type="checkbox" id="Aspects:::Framing" name="Aspects:::Framing" value="y" onclick="whetherNone(this)" validation="">  Framing</label><br/></td></tr><tr><td><label for="Aspects:::None" data-toggle="tooltip" data-html="true" data-placement="top" title="All the labels do not apply here"><input class="Aspects" type="checkbox" id="Aspects:::None" name="Aspects:::None" value="None" onclick="whetherNone(this)" validation="">  None</label><br/></td></tr><tr><td><label for="Aspects:::Bad-Text" data-toggle="tooltip" data-html="true" data-placement="top" title="This is not a scientific finding"><input class="Aspects" type="checkbox" id="Aspects:::Bad-Text" name="Aspects:::Bad-Text" value="BAD" onclick="whetherNone(this)" validation="">  Bad-Text</label><br/></td></tr></table>  </fieldset>
+</form>
+
+<form action="/action_page.php">  <fieldset>  <legend>Are the presented aspects uncertain?</legend><table><tr><td><label for="Which-is-uncertain:::Number" data-toggle="tooltip" data-html="true" data-placement="top" title="Uncertainty about the value of a specific number
+<ul>
+  <li>Approximately 300 people participated in this study
+  <li>The authors are unsure how many planets are out there
+    <li> Based on a survey among 1000 individuals, we found that ...
+</ul>
+"><input class="Which-is-uncertain" type="checkbox" id="Which-is-uncertain:::Number" name="Which-is-uncertain:::Number" value="a" onclick="whetherNone(this)" validation="">  Number</label><br/></td></tr><tr><td><label for="Which-is-uncertain:::Extent" data-toggle="tooltip" data-html="true" data-placement="top" title="Uncertainty about the proportion/ratio of properties that make up an object/event
+<ul>
+  <li>The bridge is mainly composed of agate.
+  <li>The mice were mostly fed junk food.
+    <li>Subjects reported largely tasting bitterness
+  <li> In barley, extensive mutant collections are available, however, the causative mutations for many of the genes remains largely unknown.
+</ul>
+"><input class="Which-is-uncertain" type="checkbox" id="Which-is-uncertain:::Extent" name="Which-is-uncertain:::Extent" value="s" onclick="whetherNone(this)" validation="">  Extent</label><br/></td></tr><tr><td><label for="Which-is-uncertain:::Probability/Effect/Connection" data-toggle="tooltip" data-html="true" data-placement="top" title="Uncertainty about probability that something will occur, has occurred, or is true/false
+<ul>
+  <li>It is possible that people who eat too much will be unhealthy
+  <li>Eating too much might make you unhealthy
+    <li>Eating too much could make you unhealthy
+  <li> Irregularities in the chromosome structure sometimes indicated the type of cancer and the corresponding therapy.
+</ul>
+
+"><input class="Which-is-uncertain" type="checkbox" id="Which-is-uncertain:::Probability/Effect/Connection" name="Which-is-uncertain:::Probability/Effect/Connection" value="d" onclick="whetherNone(this)" validation="">  Probability/Effect/Connection</label><br/></td></tr><tr><td><label for="Which-is-uncertain:::Condition" data-toggle="tooltip" data-html="true" data-placement="top" title="Uncertainty due to specific condition
+<ul>
+  <li>Time travel becomes possible if we could find the wormhole.
+  <li>We plan to leave soon but it depends on the weather.
+</ul>
+
+
+"><input class="Which-is-uncertain" type="checkbox" id="Which-is-uncertain:::Condition" name="Which-is-uncertain:::Condition" value="f" onclick="whetherNone(this)" validation="">  Condition</label><br/></td></tr><tr><td><label for="Which-is-uncertain:::Suggestion/Action" data-toggle="tooltip" data-html="true" data-placement="top" title="Uncertainty about future action
+<ul>
+  <li>Scientists need to account for religious beliefs and memory when designing questionnaires about sensitive topics such as sexual health.
+  <li>Patients probably need more medicine to cure this disease
+</ul>
+
+
+"><input class="Which-is-uncertain" type="checkbox" id="Which-is-uncertain:::Suggestion/Action" name="Which-is-uncertain:::Suggestion/Action" value="g" onclick="whetherNone(this)" validation="">  Suggestion/Action</label><br/></td></tr><tr><td><label for="Which-is-uncertain:::Framing" data-toggle="tooltip" data-html="true" data-placement="top" title="Uncertainty directly expressed by the authors or the journalists
+<ul>
+  <li>We found that ...
+   <li> We estimate that ...
+  <li>This study suggests that ...
+    <li>We are uncertain that ...
+</ul>
+
+"><input class="Which-is-uncertain" type="checkbox" id="Which-is-uncertain:::Framing" name="Which-is-uncertain:::Framing" value="h" onclick="whetherNone(this)" validation="">  Framing</label><br/></td></tr><tr><td><label for="Which-is-uncertain:::None" data-toggle="tooltip" data-html="true" data-placement="top" title="All the labels do not apply here"><input class="Which-is-uncertain" type="checkbox" id="Which-is-uncertain:::None" name="Which-is-uncertain:::None" value="None" onclick="whetherNone(this)" validation="">  None</label><br/></td></tr><tr><td><label for="Which-is-uncertain:::Bad-Text" data-toggle="tooltip" data-html="true" data-placement="top" title="This is not a scientific finding"><input class="Which-is-uncertain" type="checkbox" id="Which-is-uncertain:::Bad-Text" name="Which-is-uncertain:::Bad-Text" value="BAD" onclick="whetherNone(this)" validation="">  Bad-Text</label><br/></td></tr></table>  </fieldset>
+</form>
+
+
+    </div>
+  </div>
+</div>
+
 
       <!--- LAYOUT GOES ABOVE  --->
 

@@ -7,6 +7,7 @@ import { defineConfig
 export default defineConfig
 ({
  build: {
+   outDir: "live",
    lib: {
      // Could also be a dictionary or array of multiple entry points
      entry: resolve(__dirname, 'src/main.ts'),
@@ -27,5 +28,6 @@ export default defineConfig
        },
      },
    },
+   
  },
 })

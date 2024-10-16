@@ -47,4 +47,20 @@ def arguments():
         default=False,
     )
 
+    parser.add_argument(
+        "--with-custom-js",
+        action="store_true",
+        dest="customjs",
+        help="Use a custom js module served from vite."
+    )
+
+    parser.add_argument(
+        "--custom-js-hostname",
+        action="store",
+        type=str,
+        dest="customjs_hostname",
+        help="custom hostname for potato.js serving",
+        default=None,
+    )
+
     return parser.parse_args()
