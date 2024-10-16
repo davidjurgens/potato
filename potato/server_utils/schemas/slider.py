@@ -50,7 +50,7 @@ def generate_slider_layout(annotation_scheme):
     # TODO: Fix the UI alignment so the min/max labels are
     # vertically aligned with the slider bar
     schematic = (
-        '<div><form class="annotation-form" action="/action_page.php">'
+          ('<div><form id="%s" class="annotation-form slider" action="/action_page.php">' % annotation_scheme["name"])
         + '  <fieldset> <legend>{description}</legend> '
         + '  <span style="flex:1;">{min_label}</span>'
         + '<input style="position:auto;" type="range" min="{min_value}" max="{max_value}" value="{default_value}" class="slider" name="{name}" id="{name}">'

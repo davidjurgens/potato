@@ -19,9 +19,9 @@ def generate_likert_layout(annotation_scheme):
             )
 
     schematic = (
-        '<div><form class="annotation-form" action="/action_page.php">'
+        '<div><form class="annotation-form likert" id="%s" action="/action_page.php">'
         + '  <fieldset> <legend>%s</legend> <ul class="likert" style="text-align: center;"> <li> %s </li>'
-    ) % (annotation_scheme["description"], annotation_scheme["min_label"])
+    ) % (annotation_scheme["name"], annotation_scheme["description"], annotation_scheme["min_label"])
 
     key2label = {}
     label2key = {}
