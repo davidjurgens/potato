@@ -7,61 +7,94 @@
  * 
  */
 
-function getJsonElement<T>(elementId: string): T | undefined {
-    const elem = document.getElementById(elementId);
-    if(elem === null) {
-        return undefined;
-    }
-
-    try{
-        return JSON.parse(elem.textContent as string) as T;
-    } catch(err) {
-        console.warn(`could not parse json element '${elementId}'. Error: ${err}`);
-    }
-
-    return undefined;
-}
-
-function emphasize(emphasisList: Array<string>) {
-    const instanceTextElem = document.getElementById("instance-text");
-    if(instanceTextElem === null) {
-        console.warn("cannot find instance text");
-        return;
-    }
-
-    const instanceText = instanceTextElem.textContent;
-    if(!instanceText || instanceText === "") {
-        console.log("text content in instance");
-        return;
-    }
-
-    const emphasisSet = new Set(emphasisList);
-    const wordList = instanceText.split(" ");
-    let result = "";
-    for(const word in wordList) {
-        if(emphasisSet.has(word)) {
-            result += `
-            <mark aria-hidden="true" class="emphasis">
-                ${word}
-            </mark>
-            `
-        } else {
-            // since this is html we don't have to worry about extra spaces
-            result += word + " ";
-        }
-    }
-
-    instanceTextElem.innerHTML = result;
-}
-
-function suggest(suggestions: Array<string>) {
-    console.log(suggestions);
-}
+import TrieSearch from "trie-search";
 
 // Main
 (function(){
+    function getJsonElement<T>(elementId: string): T | undefined {
+        const elem = document.getElementById(elementId);
+        if(elem === null) {
+            return undefined;
+        }
+
+        try{
+            return JSON.parse(elem.textContent as string) as T;
+        } catch(err) {
+            console.warn(`could not parse json element '${elementId}'. Error: ${err}`);
+        }
+
+        return undefined;
+    }
+
+    function emphasize(emphasisList: Array<string>) {
+        const instanceTextElem = document.getElementById("instance-text");
+        if(instanceTextElem === null) {
+            console.warn("cannot find instance text");
+            return;
+        }
+
+        const instanceText = instanceTextElem.textContent;
+        if(!instanceText || instanceText === "") {
+            console.log("text content in instance");
+            return;
+        }
+        
+        console.log(instanceText);
+        
+        const emphasisTrie = new TrieSearch<any>();
+        emphasisList.map((item) => emphasisTrie.map(item, item));
+        const wordList = instanceText.split(" ");
+        let lastWasValid = false;
+        let last = "";
+        let result = "";
+        for(const word of wordList) {
+            const current = last + word;
+            const search = emphasisTrie.search(current);
+
+            if(search.length === 0 && lastWasValid) {
+                result += `
+                <mark aria-hidden="true" class="emphasis">${last}</mark> ${' '}               
+                `
+                result += word;
+                last = "";
+                lastWasValid = false;
+                continue;
+            }
+
+            if(search.length === 0) {
+                // since this is html we don't have to worry about extra spaces
+                result += word + " ";
+                last = "";
+                continue;
+            }
+
+            if(search.length === 1) {
+                result += `
+                <mark aria-hidden="true" class="emphasis">${current}</mark> ${' '}            
+                `
+                last = "";
+                lastWasValid = false;
+                continue;
+            }
+
+            if(search.includes(current)) {
+                lastWasValid = true;
+            }
+            
+            last = current + " ";
+        }
+
+        instanceTextElem.innerHTML = result;
+    }
+
+    function suggest(suggestions: Array<string>) {
+        console.log(suggestions);
+    }
+
+
     const emphasis = getJsonElement<Array<string>>("emphasis");
     if(emphasis !== undefined) {
+        console.log(emphasis);
         emphasize(emphasis);
     }
 
@@ -69,5 +102,4 @@ function suggest(suggestions: Array<string>) {
     if(suggestions !== undefined) {
         suggest(suggestions);
     }
-    
-}())
+}());

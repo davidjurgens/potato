@@ -6,44 +6,48 @@
     "module": "./live/potato.js",
     "type": "module",
     "exports": {
-      ".": {
-        "import": "./live/potato.js",
-        "require": "./live/potato.umd.cjs"
-      }
+        ".": {
+            "import": "./live/potato.js",
+            "require": "./live/potato.umd.cjs"
+        }
     },
-    "files": ["live"],
+    "files": [
+        "live"
+    ],
     "scripts": {
-      "dev": "tsc && vite build --watch",
-      "build": "tsc && vite build",
-      "preview": "vite preview"
+        "dev": "tsc && vite build --watch",
+        "build": "tsc && vite build",
+        "preview": "vite preview"
     },
     "repository": {
-      "type": "git",
-      "url": "git+https://github.com/davidjurgens/potato.git"
+        "type": "git",
+        "url": "git+https://github.com/davidjurgens/potato.git"
     },
     "keywords": [
-      "potato",
-      "text",
-      "annotation",
-      "utility",
-      "ai",
-      "learning",
-      "model",
-      "crowdsourcing",
-      "collaboration"
+        "potato",
+        "text",
+        "annotation",
+        "utility",
+        "ai",
+        "learning",
+        "model",
+        "crowdsourcing",
+        "collaboration"
     ],
     "author": "David Jurgens and Co.",
     "license": "SEE LICENSE IN LICENSE",
     "bugs": {
-      "url": "https://github.com/davidjurgens/potato/issues"
+        "url": "https://github.com/davidjurgens/potato/issues"
     },
     "homepage": "https://github.com/davidjurgens/potato#readme",
     "devDependencies": {
-      "typescript": "^5.5.3",
-      "vite": "^5.4.8"
+        "@types/jquery": "^3.5.31",
+        "typescript": "^5.5.3",
+        "vite": "^5.4.8"
     },
     "dependencies": {
-      "@flatten-js/interval-tree": "^1.1.3",
-      "@types/node": "^22.7.4"
+        "@flatten-js/interval-tree": "^1.1.3",
+        "@types/node": "^22.7.4",
+        "trie-search": "^2.0.0"
     }
-  }
+}
