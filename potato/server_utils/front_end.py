@@ -112,6 +112,24 @@ def generate_statistics_sidebar(statistics):
     return layout
 
 
+def generate_quota_adjust_interface():
+    return '''
+        <div class="p-2 bd-highlight text-secondary align-middle">
+        <form action="/annotate" method="post">
+            <fieldset>
+            <input type="hidden" name="firstname" id="a" value="{{firstname}}">
+            <input type="hidden" name="lastname" id="b" value="{{lastname}}">
+                <input type="hidden" name="email" id="c" value="{{username}}">
+            <input type="hidden" name="src" id="src" value="adjust_quota">
+            Adjust my quota
+            <input type="number" name="adjust_quota" id="adjust_quota" value="" onfocusin="user_input()" onfocusout="user_input_leave()" min={{finished}} required>
+            <input type="submit" value="Request">
+            </fieldset>
+        </form>
+        </div>
+    '''
+
+
 def generate_site(config):
     """
     Generates the full HTML file in site/ for annotating this tasks data,
@@ -264,6 +282,12 @@ def generate_site(config):
 
     statistics_layout = generate_statistics_sidebar(STATS_KEYS)
     html_template = html_template.replace("{{statistics_nav}}", statistics_layout)
+
+    if ("allow_user_adjust_quota" not in config["automatic_assignment"] 
+        or config["automatic_assignment"]["allow_user_adjust_quota"] != True):
+        html_template = html_template.replace("{{quota_adjust_interface}}", "")
+    else:
+        html_template = html_template.replace("{{quota_adjust_interface}}", generate_quota_adjust_interface())
 
     # Jiaxin: change the basename from the template name to the project name +
     # template name, to allow multiple annotation tasks using the same template
