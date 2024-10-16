@@ -1,517 +1,129 @@
-const H = class E {
-  /**
-   * Accept two comparable values and creates new instance of interval
-   * Predicate Interval.comparable_less(low, high) supposed to return true on these values
-   * @param low
-   * @param high
-   */
-  constructor(t, e) {
-    this.low = t, this.high = e;
-  }
-  /**
-   * Clone interval
-   * @returns {Interval}
-   */
-  clone() {
-    return new E(this.low, this.high);
-  }
-  /**
-   * Propery max returns clone of this interval
-   * @returns {Interval}
-   */
-  get max() {
-    return this.clone();
-  }
-  /**
-   * Predicate returns true is this interval less than other interval
-   * @param other_interval
-   * @returns {boolean}
-   */
-  less_than(t) {
-    return this.low < t.low || this.low === t.low && this.high < t.high;
-  }
-  /**
-   * Predicate returns true is this interval equals to other interval
-   * @param other_interval
-   * @returns {boolean}
-   */
-  equal_to(t) {
-    return this.low === t.low && this.high === t.high;
-  }
-  /**
-   * Predicate returns true if this interval intersects other interval
-   * @param other_interval
-   * @returns {boolean}
-   */
-  intersect(t) {
-    return !this.not_intersect(t);
-  }
-  /**
-   * Predicate returns true if this interval does not intersect other interval
-   * @param other_interval
-   * @returns {boolean}
-   */
-  not_intersect(t) {
-    return this.high < t.low || t.high < this.low;
-  }
-  /**
-   * Returns new interval merged with other interval
-   * @param {Interval} other_interval - Other interval to merge with
-   * @returns {Interval}
-   */
-  merge(t) {
-    return new E(
-      this.low === void 0 ? t.low : this.low < t.low ? this.low : t.low,
-      this.high === void 0 ? t.high : this.high > t.high ? this.high : t.high
-    );
-  }
-  /**
-   * Returns how key should return
-   */
-  output() {
-    return [this.low, this.high];
-  }
-  /**
-   * Function returns maximum between two comparable values
-   * @param interval1
-   * @param interval2
-   * @returns {Interval}
-   */
-  static comparable_max(t, e) {
-    return t.merge(e);
-  }
-  /**
-   * Predicate returns true if first value less than second value
-   * @param val1
-   * @param val2
-   * @returns {boolean}
-   */
-  static comparable_less_than(t, e) {
-    return t < e;
-  }
-}, g = 0, f = 1;
-class x {
-  constructor(t = void 0, e = void 0, r = null, n = null, l = null, a = f) {
-    if (this.left = r, this.right = n, this.parent = l, this.color = a, this.item = { key: t, value: e }, t && t instanceof Array && t.length === 2 && !Number.isNaN(t[0]) && !Number.isNaN(t[1])) {
-      let [s, o] = t;
-      s > o && ([s, o] = [o, s]), this.item.key = new H(s, o);
-    }
-    this.max = this.item.key ? this.item.key.max : void 0;
-  }
-  isNil() {
-    return this.item.key === void 0 && this.item.value === void 0 && this.left === null && this.right === null && this.color === f;
-  }
-  _value_less_than(t) {
-    return this.item.value && t.item.value && this.item.value.less_than ? this.item.value.less_than(t.item.value) : this.item.value < t.item.value;
-  }
-  less_than(t) {
-    return this.item.value === this.item.key && t.item.value === t.item.key ? this.item.key.less_than(t.item.key) : this.item.key.less_than(t.item.key) || this.item.key.equal_to(t.item.key) && this._value_less_than(t);
-  }
-  _value_equal(t) {
-    return this.item.value && t.item.value && this.item.value.equal_to ? this.item.value.equal_to(t.item.value) : this.item.value === t.item.value;
-  }
-  equal_to(t) {
-    return this.item.value === this.item.key && t.item.value === t.item.key ? this.item.key.equal_to(t.item.key) : this.item.key.equal_to(t.item.key) && this._value_equal(t);
-  }
-  intersect(t) {
-    return this.item.key.intersect(t.item.key);
-  }
-  copy_data(t) {
-    this.item.key = t.item.key, this.item.value = t.item.value;
-  }
-  update_max() {
-    if (this.max = this.item.key ? this.item.key.max : void 0, this.right && this.right.max) {
-      const t = this.item.key.constructor.comparable_max;
-      this.max = t(this.max, this.right.max);
-    }
-    if (this.left && this.left.max) {
-      const t = this.item.key.constructor.comparable_max;
-      this.max = t(this.max, this.left.max);
-    }
-  }
-  // Other_node does not intersect any node of left subtree, if this.left.max < other_node.item.key.low
-  not_intersect_left_subtree(t) {
-    const e = this.item.key.constructor.comparable_less_than;
-    let r = this.left.max.high !== void 0 ? this.left.max.high : this.left.max;
-    return e(r, t.item.key.low);
-  }
-  // Other_node does not intersect right subtree if other_node.item.key.high < this.right.key.low
-  not_intersect_right_subtree(t) {
-    const e = this.item.key.constructor.comparable_less_than;
-    let r = this.right.max.low !== void 0 ? this.right.max.low : this.right.item.key.low;
-    return e(t.item.key.high, r);
-  }
+function j(t) {
+  return t && t.__esModule && Object.prototype.hasOwnProperty.call(t, "default") ? t.default : t;
 }
-class F {
-  /**
-   * Construct new empty instance of IntervalTree
-   */
-  constructor() {
-    this.root = null, this.nil_node = new x();
-  }
-  /**
-   * Returns number of items stored in the interval tree
-   * @returns {number}
-   */
-  get size() {
-    let t = 0;
-    return this.tree_walk(this.root, () => t++), t;
-  }
-  /**
-   * Returns array of sorted keys in the ascending order
-   * @returns {Array}
-   */
-  get keys() {
-    let t = [];
-    return this.tree_walk(this.root, (e) => t.push(
-      e.item.key.output ? e.item.key.output() : e.item.key
-    )), t;
-  }
-  /**
-   * Return array of values in the ascending keys order
-   * @returns {Array}
-   */
-  get values() {
-    let t = [];
-    return this.tree_walk(this.root, (e) => t.push(e.item.value)), t;
-  }
-  /**
-   * Returns array of items (<key,value> pairs) in the ascended keys order
-   * @returns {Array}
-   */
-  get items() {
-    let t = [];
-    return this.tree_walk(this.root, (e) => t.push({
-      key: e.item.key.output ? e.item.key.output() : e.item.key,
-      value: e.item.value
-    })), t;
-  }
-  /**
-   * Returns true if tree is empty
-   * @returns {boolean}
-   */
-  isEmpty() {
-    return this.root == null || this.root === this.nil_node;
-  }
-  /**
-   * Clear tree
-   */
-  clear() {
-    this.root = null;
-  }
-  /**
-   * Insert new item into interval tree
-   * @param {Interval} key - interval object or array of two numbers [low, high]
-   * @param {any} value - value representing any object (optional)
-   * @returns {Node} returns reference to inserted node as an object {key:interval, value: value}
-   */
-  insert(t, e = t) {
-    if (t === void 0) return;
-    let r = new x(t, e, this.nil_node, this.nil_node, null, g);
-    return this.tree_insert(r), this.recalc_max(r), r;
-  }
-  /**
-   * Returns true if item {key,value} exist in the tree
-   * @param {Interval} key - interval correspondent to keys stored in the tree
-   * @param {any} value - value object to be checked
-   * @returns {boolean} true if item {key, value} exist in the tree, false otherwise
-   */
-  exist(t, e = t) {
-    let r = new x(t, e);
-    return !!this.tree_search(this.root, r);
-  }
-  /**
-   * Remove entry {key, value} from the tree
-   * @param {Interval} key - interval correspondent to keys stored in the tree
-   * @param {any} value - value object
-   * @returns {boolean} true if item {key, value} deleted, false if not found
-   */
-  remove(t, e = t) {
-    let r = new x(t, e), n = this.tree_search(this.root, r);
-    return n && this.tree_delete(n), n;
-  }
-  /**
-   * Returns array of entry values which keys intersect with given interval <br/>
-   * If no values stored in the tree, returns array of keys which intersect given interval
-   * @param {Interval} interval - search interval, or tuple [low, high]
-   * @param outputMapperFn(value,key) - optional function that maps (value, key) to custom output
-   * @returns {Array}
-   */
-  search(t, e = (r, n) => r === n ? n.output() : r) {
-    let r = new x(t), n = [];
-    return this.tree_search_interval(this.root, r, n), n.map((l) => e(l.item.value, l.item.key));
-  }
-  /**
-   * Returns true if intersection between given and any interval stored in the tree found
-   * @param {Interval} interval - search interval or tuple [low, high]
-   * @returns {boolean}
-   */
-  intersect_any(t) {
-    let e = new x(t);
-    return this.tree_find_any_interval(this.root, e);
-  }
-  /**
-   * Tree visitor. For each node implement a callback function. <br/>
-   * Method calls a callback function with two parameters (key, value)
-   * @param visitor(key,value) - function to be called for each tree item
-   */
-  forEach(t) {
-    this.tree_walk(this.root, (e) => t(e.item.key, e.item.value));
-  }
-  /**
-   * Value Mapper. Walk through every node and map node value to another value
-   * @param callback(value,key) - function to be called for each tree item
-   */
-  map(t) {
-    const e = new F();
-    return this.tree_walk(this.root, (r) => e.insert(r.item.key, t(r.item.value, r.item.key))), e;
-  }
-  /**
-   * @param {Interval} interval - optional if the iterator is intended to start from the beginning
-   * @param outputMapperFn(value,key) - optional function that maps (value, key) to custom output
-   * @returns {Iterator}
-   */
-  *iterate(t, e = (r, n) => r === n ? n.output() : r) {
-    let r;
-    for (t ? r = this.tree_search_nearest_forward(this.root, new x(t)) : this.root && (r = this.local_minimum(this.root)); r; )
-      yield e(r.item.value, r.item.key), r = this.tree_successor(r);
-  }
-  recalc_max(t) {
-    let e = t;
-    for (; e.parent != null; )
-      e.parent.update_max(), e = e.parent;
-  }
-  tree_insert(t) {
-    let e = this.root, r = null;
-    if (this.root == null || this.root === this.nil_node)
-      this.root = t;
-    else {
-      for (; e !== this.nil_node; )
-        r = e, t.less_than(e) ? e = e.left : e = e.right;
-      t.parent = r, t.less_than(r) ? r.left = t : r.right = t;
-    }
-    this.insert_fixup(t);
-  }
-  // After insertion insert_node may have red-colored parent, and this is a single possible violation
-  // Go upwords to the root and re-color until violation will be resolved
-  insert_fixup(t) {
-    let e, r;
-    for (e = t; e !== this.root && e.parent.color === g; )
-      e.parent === e.parent.parent.left ? (r = e.parent.parent.right, r.color === g ? (e.parent.color = f, r.color = f, e.parent.parent.color = g, e = e.parent.parent) : (e === e.parent.right && (e = e.parent, this.rotate_left(e)), e.parent.color = f, e.parent.parent.color = g, this.rotate_right(e.parent.parent))) : (r = e.parent.parent.left, r.color === g ? (e.parent.color = f, r.color = f, e.parent.parent.color = g, e = e.parent.parent) : (e === e.parent.left && (e = e.parent, this.rotate_right(e)), e.parent.color = f, e.parent.parent.color = g, this.rotate_left(e.parent.parent)));
-    this.root.color = f;
-  }
-  tree_delete(t) {
-    let e, r;
-    t.left === this.nil_node || t.right === this.nil_node ? e = t : e = this.tree_successor(t), e.left !== this.nil_node ? r = e.left : r = e.right, r.parent = e.parent, e === this.root ? this.root = r : (e === e.parent.left ? e.parent.left = r : e.parent.right = r, e.parent.update_max()), this.recalc_max(r), e !== t && (t.copy_data(e), t.update_max(), this.recalc_max(t)), /*fix_node != this.nil_node && */
-    e.color === f && this.delete_fixup(r);
-  }
-  delete_fixup(t) {
-    let e = t, r;
-    for (; e !== this.root && e.parent != null && e.color === f; )
-      e === e.parent.left ? (r = e.parent.right, r.color === g && (r.color = f, e.parent.color = g, this.rotate_left(e.parent), r = e.parent.right), r.left.color === f && r.right.color === f ? (r.color = g, e = e.parent) : (r.right.color === f && (r.color = g, r.left.color = f, this.rotate_right(r), r = e.parent.right), r.color = e.parent.color, e.parent.color = f, r.right.color = f, this.rotate_left(e.parent), e = this.root)) : (r = e.parent.left, r.color === g && (r.color = f, e.parent.color = g, this.rotate_right(e.parent), r = e.parent.left), r.left.color === f && r.right.color === f ? (r.color = g, e = e.parent) : (r.left.color === f && (r.color = g, r.right.color = f, this.rotate_left(r), r = e.parent.left), r.color = e.parent.color, e.parent.color = f, r.left.color = f, this.rotate_right(e.parent), e = this.root));
-    e.color = f;
-  }
-  tree_search(t, e) {
-    if (!(t == null || t === this.nil_node))
-      return e.equal_to(t) ? t : e.less_than(t) ? this.tree_search(t.left, e) : this.tree_search(t.right, e);
-  }
-  tree_search_nearest_forward(t, e) {
-    let r, n = t;
-    for (; n && n !== this.nil_node; )
-      n.less_than(e) ? n.intersect(e) ? (r = n, n = n.left) : n = n.right : ((!r || n.less_than(r)) && (r = n), n = n.left);
-    return r || null;
-  }
-  // Original search_interval method; container res support push() insertion
-  // Search all intervals intersecting given one
-  tree_search_interval(t, e, r) {
-    t != null && t !== this.nil_node && (t.left !== this.nil_node && !t.not_intersect_left_subtree(e) && this.tree_search_interval(t.left, e, r), t.intersect(e) && r.push(t), t.right !== this.nil_node && !t.not_intersect_right_subtree(e) && this.tree_search_interval(t.right, e, r));
-  }
-  tree_find_any_interval(t, e) {
-    let r = !1;
-    return t != null && t !== this.nil_node && (t.left !== this.nil_node && !t.not_intersect_left_subtree(e) && (r = this.tree_find_any_interval(t.left, e)), r || (r = t.intersect(e)), !r && t.right !== this.nil_node && !t.not_intersect_right_subtree(e) && (r = this.tree_find_any_interval(t.right, e))), r;
-  }
-  local_minimum(t) {
-    let e = t;
-    for (; e.left != null && e.left !== this.nil_node; )
-      e = e.left;
-    return e;
-  }
-  // not in use
-  local_maximum(t) {
-    let e = t;
-    for (; e.right != null && e.right !== this.nil_node; )
-      e = e.right;
-    return e;
-  }
-  tree_successor(t) {
-    let e, r, n;
-    if (t.right !== this.nil_node)
-      e = this.local_minimum(t.right);
-    else {
-      for (r = t, n = t.parent; n != null && n.right === r; )
-        r = n, n = n.parent;
-      e = n;
-    }
-    return e;
-  }
-  //           |            right-rotate(T,y)       |
-  //           y            ---------------.       x
-  //          / \                                  / \
-  //         x   c          left-rotate(T,x)      a   y
-  //        / \             <---------------         / \
-  //       a   b                                    b   c
-  rotate_left(t) {
-    let e = t.right;
-    t.right = e.left, e.left !== this.nil_node && (e.left.parent = t), e.parent = t.parent, t === this.root ? this.root = e : t === t.parent.left ? t.parent.left = e : t.parent.right = e, e.left = t, t.parent = e, t != null && t !== this.nil_node && t.update_max(), e = t.parent, e != null && e !== this.nil_node && e.update_max();
-  }
-  rotate_right(t) {
-    let e = t.left;
-    t.left = e.right, e.right !== this.nil_node && (e.right.parent = t), e.parent = t.parent, t === this.root ? this.root = e : t === t.parent.left ? t.parent.left = e : t.parent.right = e, e.right = t, t.parent = e, t !== null && t !== this.nil_node && t.update_max(), e = t.parent, e != null && e !== this.nil_node && e.update_max();
-  }
-  tree_walk(t, e) {
-    t != null && t !== this.nil_node && (this.tree_walk(t.left, e), e(t), this.tree_walk(t.right, e));
-  }
-  /* Return true if all red nodes have exactly two black child nodes */
-  testRedBlackProperty() {
-    let t = !0;
-    return this.tree_walk(this.root, function(e) {
-      e.color === g && (e.left.color === f && e.right.color === f || (t = !1));
-    }), t;
-  }
-  /* Throw error if not every path from root to bottom has same black height */
-  testBlackHeightProperty(t) {
-    let e = 0, r = 0, n = 0;
-    if (t.color === f && e++, t.left !== this.nil_node ? r = this.testBlackHeightProperty(t.left) : r = 1, t.right !== this.nil_node ? n = this.testBlackHeightProperty(t.right) : n = 1, r !== n)
-      throw new Error("Red-black height property violated");
-    return e += r, e;
-  }
-}
-function N(i) {
-  return i && i.__esModule && Object.prototype.hasOwnProperty.call(i, "default") ? i.default : i;
-}
-var k = { exports: {} }, b = { exports: {} };
-(function(i, t) {
-  (function(e) {
-    t = e(), i.exports = t;
+var E = { exports: {} }, m = { exports: {} };
+(function(t, i) {
+  (function(n) {
+    i = n(), t.exports = i;
   })(function() {
-    var e = function(s) {
-      return s instanceof Function;
-    }, r = function(s) {
-      var o = Array.prototype.slice.call(arguments, 1);
-      for (var c in o) {
-        var h = o[c];
-        if (typeof h == "object")
-          for (var u in h)
-            s[u] = h[u];
+    var n = function(a) {
+      return a instanceof Function;
+    }, e = function(a) {
+      var h = Array.prototype.slice.call(arguments, 1);
+      for (var c in h) {
+        var l = h[c];
+        if (typeof l == "object")
+          for (var f in l)
+            a[f] = l[f];
       }
-      return s;
-    }, n = {
+      return a;
+    }, r = {
       // internal object for indicating that class objects don't have a class object themselves,
       // may not be used by users
       _isClassObject: !1
-    }, l = !1, a = function() {
+    }, o = !1, s = function() {
     };
-    return a._subClasses = [], a.prototype.init = function() {
-    }, a._extend = function(s, o, c) {
-      s === void 0 && (s = {}), o === void 0 && (o = {}), c === void 0 && (c = {}), c = r({}, n, c);
-      var h = function() {
-        l || (this._class = h, this.init instanceof Function && this.init.apply(this, arguments));
-      }, u = this;
-      l = !0;
-      var d = new u();
-      l = !1;
-      var p = u.prototype;
-      h.prototype = d, h.prototype.constructor = h, h._superClass = u, h._subClasses = [], u._subClasses.push(h), h._extend = u._extend, h._extends = function(C) {
-        return this._superClass == a ? !1 : C == this._superClass || C == a ? !0 : this._superClass._extends(C);
+    return s._subClasses = [], s.prototype.init = function() {
+    }, s._extend = function(a, h, c) {
+      a === void 0 && (a = {}), h === void 0 && (h = {}), c === void 0 && (c = {}), c = e({}, r, c);
+      var l = function() {
+        o || (this._class = l, this.init instanceof Function && this.init.apply(this, arguments));
+      }, f = this;
+      o = !0;
+      var d = new f();
+      o = !1;
+      var u = f.prototype;
+      l.prototype = d, l.prototype.constructor = l, l._superClass = f, l._subClasses = [], f._subClasses.push(l), l._extend = f._extend, l._extends = function(C) {
+        return this._superClass == s ? !1 : C == this._superClass || C == s ? !0 : this._superClass._extends(C);
       };
-      for (var _ in s) {
-        var m = Object.getOwnPropertyDescriptor(s, _), v = m.value;
+      for (var p in a) {
+        var g = Object.getOwnPropertyDescriptor(a, p), v = g.value;
         if (v !== null && typeof v == "object" && v.descriptor)
-          Object.defineProperty(d, _, v);
-        else if (!("value" in m) && ("set" in m || "get" in m))
-          Object.defineProperty(d, _, m);
+          Object.defineProperty(d, p, v);
+        else if (!("value" in g) && ("set" in g || "get" in g))
+          Object.defineProperty(d, p, g);
         else {
-          d[_] = v;
-          var O = p[_];
-          e(v) && e(O) && v !== O && (v._super = O);
+          d[p] = v;
+          var O = u[p];
+          n(v) && n(O) && v !== O && (v._super = O);
         }
       }
       if (!c._isClassObject) {
-        var T = u._members === void 0 ? a : u._members._class, S = r({}, c, { _isClassObject: !0 }), R = T._extend(o, {}, S);
-        R._instanceClass = h, h._members = new R();
+        var R = f._members === void 0 ? s : f._members._class, b = e({}, c, { _isClassObject: !0 }), y = R._extend(h, {}, b);
+        y._instanceClass = l, l._members = new y();
       }
-      return h;
-    }, a._convert = function(s, o) {
-      var c = s.prototype;
+      return l;
+    }, s._convert = function(a, h) {
+      var c = a.prototype;
       return c.init = function() {
-        var h = this._origin = a._construct(s, arguments);
-        Object.keys(h).forEach(function(u) {
-          h.hasOwnProperty(u) && Object.defineProperty(this, u, {
+        var l = this._origin = s._construct(a, arguments);
+        Object.keys(l).forEach(function(f) {
+          l.hasOwnProperty(f) && Object.defineProperty(this, f, {
             get: function() {
-              return h[u];
+              return l[f];
             }
           });
         }, this);
-      }, a._extend(c, {}, o);
-    }, a._construct = function(s, o) {
-      o === void 0 && (o = []);
+      }, s._extend(c, {}, h);
+    }, s._construct = function(a, h) {
+      h === void 0 && (h = []);
       var c = function() {
-        return s.apply(this, o);
+        return a.apply(this, h);
       };
-      return c.prototype = s.prototype, new c();
-    }, a._superDescriptor = function(s, o) {
-      if ("_class" in s && s instanceof s._class && (s = s._class), "_extends" in s && s._extends instanceof Function && s._extends(this))
-        return Object.getOwnPropertyDescriptor(s._superClass.prototype, o);
-    }, a;
+      return c.prototype = a.prototype, new c();
+    }, s._superDescriptor = function(a, h) {
+      if ("_class" in a && a instanceof a._class && (a = a._class), "_extends" in a && a._extends instanceof Function && a._extends(this))
+        return Object.getOwnPropertyDescriptor(a._superClass.prototype, h);
+    }, s;
   });
-})(b, b.exports);
-var I = b.exports, D = I, w = D._extend({
+})(m, m.exports);
+var P = m.exports, S = P, _ = S._extend({
   //-----------------------------------
   // Constructor
   //-----------------------------------
-  init: function(i, t, e) {
-    i = i instanceof Array ? i : [i], this._map = {}, this._list = [], this.callback = t, this.keyFields = i, this.isHashArray = !0, this.options = e || {
+  init: function(t, i, n) {
+    t = t instanceof Array ? t : [t], this._map = {}, this._list = [], this.callback = i, this.keyFields = t, this.isHashArray = !0, this.options = n || {
       ignoreDuplicates: !1
-    }, t && t("construct");
+    }, i && i("construct");
   },
   //-----------------------------------
   // add()
   //-----------------------------------
-  addOne: function(i) {
-    var t = !1;
-    for (var e in this.keyFields) {
-      e = this.keyFields[e];
-      var r = this.objectAt(i, e);
-      if (r)
-        if (this.has(r)) {
+  addOne: function(t) {
+    var i = !1;
+    for (var n in this.keyFields) {
+      n = this.keyFields[n];
+      var e = this.objectAt(t, n);
+      if (e)
+        if (this.has(e)) {
           if (this.options.ignoreDuplicates)
             return;
-          if (this._map[r].indexOf(i) != -1) {
-            t = !0;
+          if (this._map[e].indexOf(t) != -1) {
+            i = !0;
             continue;
           }
-          this._map[r].push(i);
-        } else this._map[r] = [i];
+          this._map[e].push(t);
+        } else this._map[e] = [t];
     }
-    (!t || this._list.indexOf(i) == -1) && this._list.push(i);
+    (!i || this._list.indexOf(t) == -1) && this._list.push(t);
   },
   add: function() {
-    for (var i = 0; i < arguments.length; i++)
-      this.addOne(arguments[i]);
+    for (var t = 0; t < arguments.length; t++)
+      this.addOne(arguments[t]);
     return this.callback && this.callback("add", Array.prototype.slice.call(arguments, 0)), this;
   },
-  addAll: function(i) {
-    if (i.length < 100)
-      this.add.apply(this, i);
+  addAll: function(t) {
+    if (t.length < 100)
+      this.add.apply(this, t);
     else
-      for (var t = 0; t < i.length; t++)
-        this.add(i[t]);
+      for (var i = 0; i < t.length; i++)
+        this.add(t[i]);
     return this;
   },
-  addMap: function(i, t) {
-    return this._map[i] = t, this.callback && this.callback("addMap", {
-      key: i,
-      obj: t
+  addMap: function(t, i) {
+    return this._map[t] = i, this.callback && this.callback("addMap", {
+      key: t,
+      obj: i
     }), this;
   },
   //-----------------------------------
@@ -520,198 +132,198 @@ var I = b.exports, D = I, w = D._extend({
   /**
    * Returns a new HashArray that contains the intersection between this (A) and the hasharray passed in (B). Returns A ^ B.
    */
-  intersection: function(i) {
-    var t = this;
-    if (!i || !i.isHashArray)
-      throw Error("Cannot HashArray.intersection() on a non-hasharray object. You passed in: ", i);
-    var e = this.clone(null, !0), r = this.clone(null, !0).addAll(this.all.concat(i.all));
-    return r.all.forEach(function(n) {
-      t.collides(n) && i.collides(n) && e.add(n);
-    }), e;
+  intersection: function(t) {
+    var i = this;
+    if (!t || !t.isHashArray)
+      throw Error("Cannot HashArray.intersection() on a non-hasharray object. You passed in: ", t);
+    var n = this.clone(null, !0), e = this.clone(null, !0).addAll(this.all.concat(t.all));
+    return e.all.forEach(function(r) {
+      i.collides(r) && t.collides(r) && n.add(r);
+    }), n;
   },
   /**
    * Returns a new HashArray that contains the complement (difference) between this hash array (A) and the hasharray passed in (B). Returns A - B.
    */
-  complement: function(i) {
-    if (!i || !i.isHashArray)
-      throw Error("Cannot HashArray.complement() on a non-hasharray object. You passed in: ", i);
-    var t = this.clone(null, !0);
-    return this.all.forEach(function(e) {
-      i.collides(e) || t.add(e);
-    }), t;
+  complement: function(t) {
+    if (!t || !t.isHashArray)
+      throw Error("Cannot HashArray.complement() on a non-hasharray object. You passed in: ", t);
+    var i = this.clone(null, !0);
+    return this.all.forEach(function(n) {
+      t.collides(n) || i.add(n);
+    }), i;
   },
   //-----------------------------------
   // Retrieval
   //-----------------------------------
-  get: function(i) {
-    if (this.has(i))
-      return !(this._map[i] instanceof Array) || this._map[i].length != 1 ? this._map[i] : this._map[i][0];
+  get: function(t) {
+    if (this.has(t))
+      return !(this._map[t] instanceof Array) || this._map[t].length != 1 ? this._map[t] : this._map[t][0];
   },
-  getAll: function(i) {
-    if (i = i instanceof Array ? i : [i], i[0] == "*")
+  getAll: function(t) {
+    if (t = t instanceof Array ? t : [t], t[0] == "*")
       return this.all;
-    var t = new w(this.keyFields);
-    for (var e in i)
-      t.add.apply(t, this.getAsArray(i[e]));
-    return t.all;
+    var i = new _(this.keyFields);
+    for (var n in t)
+      i.add.apply(i, this.getAsArray(t[n]));
+    return i.all;
   },
-  getAsArray: function(i) {
-    return this._map[i] || [];
+  getAsArray: function(t) {
+    return this._map[t] || [];
   },
-  getUniqueRandomIntegers: function(i, t, e) {
-    var r = [], n = {};
-    for (i = Math.min(Math.max(e - t, 1), i); r.length < i; ) {
-      var l = Math.floor(t + Math.random() * (e + 1));
-      n[l] || (n[l] = !0, r.push(l));
+  getUniqueRandomIntegers: function(t, i, n) {
+    var e = [], r = {};
+    for (t = Math.min(Math.max(n - i, 1), t); e.length < t; ) {
+      var o = Math.floor(i + Math.random() * (n + 1));
+      r[o] || (r[o] = !0, e.push(o));
     }
-    return r;
+    return e;
   },
-  sample: function(i, t) {
-    var e = this.all, r = [];
-    t && (e = this.getAll(t));
-    for (var n = this.getUniqueRandomIntegers(i, 0, e.length - 1), l = 0; l < n.length; l++)
-      r.push(e[n[l]]);
-    return r;
+  sample: function(t, i) {
+    var n = this.all, e = [];
+    i && (n = this.getAll(i));
+    for (var r = this.getUniqueRandomIntegers(t, 0, n.length - 1), o = 0; o < r.length; o++)
+      e.push(n[r[o]]);
+    return e;
   },
   //-----------------------------------
   // Peeking
   //-----------------------------------
-  has: function(i) {
-    return this._map.hasOwnProperty(i);
+  has: function(t) {
+    return this._map.hasOwnProperty(t);
   },
-  collides: function(i) {
-    for (var t in this.keyFields)
-      if (this.has(this.objectAt(i, this.keyFields[t])))
+  collides: function(t) {
+    for (var i in this.keyFields)
+      if (this.has(this.objectAt(t, this.keyFields[i])))
         return !0;
     return !1;
   },
-  hasMultiple: function(i) {
-    return this._map[i] instanceof Array;
+  hasMultiple: function(t) {
+    return this._map[t] instanceof Array;
   },
   //-----------------------------------
   // Removal
   //-----------------------------------
   removeByKey: function() {
-    for (var i = [], t = 0; t < arguments.length; t++) {
-      var e = arguments[t], r = this._map[e].concat();
-      if (r) {
-        i = i.concat(r);
-        for (var n in r) {
-          var l = r[n];
-          for (var a in this.keyFields) {
-            var s = this.objectAt(l, this.keyFields[a]);
-            if (s && this.has(s)) {
-              var a = this._map[s].indexOf(l);
-              a != -1 && this._map[s].splice(a, 1), this._map[s].length == 0 && delete this._map[s];
+    for (var t = [], i = 0; i < arguments.length; i++) {
+      var n = arguments[i], e = this._map[n].concat();
+      if (e) {
+        t = t.concat(e);
+        for (var r in e) {
+          var o = e[r];
+          for (var s in this.keyFields) {
+            var a = this.objectAt(o, this.keyFields[s]);
+            if (a && this.has(a)) {
+              var s = this._map[a].indexOf(o);
+              s != -1 && this._map[a].splice(s, 1), this._map[a].length == 0 && delete this._map[a];
             }
           }
-          this._list.splice(this._list.indexOf(l), 1);
+          this._list.splice(this._list.indexOf(o), 1);
         }
       }
-      delete this._map[e];
+      delete this._map[n];
     }
-    return this.callback && this.callback("removeByKey", i), this;
+    return this.callback && this.callback("removeByKey", t), this;
   },
   remove: function() {
-    for (var i = 0; i < arguments.length; i++) {
-      var t = arguments[i];
-      for (var r in this.keyFields) {
-        var e = this.objectAt(t, this.keyFields[r]);
-        if (e) {
-          var r = this._map[e].indexOf(t);
-          if (r != -1)
-            this._map[e].splice(r, 1);
+    for (var t = 0; t < arguments.length; t++) {
+      var i = arguments[t];
+      for (var e in this.keyFields) {
+        var n = this.objectAt(i, this.keyFields[e]);
+        if (n) {
+          var e = this._map[n].indexOf(i);
+          if (e != -1)
+            this._map[n].splice(e, 1);
           else
-            throw new Error("HashArray: attempting to remove an object that was never added!" + e);
-          this._map[e].length == 0 && delete this._map[e];
+            throw new Error("HashArray: attempting to remove an object that was never added!" + n);
+          this._map[n].length == 0 && delete this._map[n];
         }
       }
-      var r = this._list.indexOf(t);
-      if (r != -1)
-        this._list.splice(r, 1);
+      var e = this._list.indexOf(i);
+      if (e != -1)
+        this._list.splice(e, 1);
       else
-        throw new Error("HashArray: attempting to remove an object that was never added!" + e);
+        throw new Error("HashArray: attempting to remove an object that was never added!" + n);
     }
     return this.callback && this.callback("remove", arguments), this;
   },
   removeAll: function() {
-    var i = this._list.concat();
-    return this._map = {}, this._list = [], this.callback && this.callback("remove", i), this;
+    var t = this._list.concat();
+    return this._map = {}, this._list = [], this.callback && this.callback("remove", t), this;
   },
   //-----------------------------------
   // Utility
   //-----------------------------------
-  objectAt: function(i, t) {
-    if (typeof t == "string")
-      return i[t];
-    for (var e = t.concat(); e.length && i; )
-      i = i[e.shift()];
-    return i;
+  objectAt: function(t, i) {
+    if (typeof i == "string")
+      return t[i];
+    for (var n = i.concat(); n.length && t; )
+      t = t[n.shift()];
+    return t;
   },
   //-----------------------------------
   // Iteration
   //-----------------------------------
-  forEach: function(i, t) {
-    i = i instanceof Array ? i : [i];
-    var e = this.getAll(i);
-    return e.forEach(t), this;
+  forEach: function(t, i) {
+    t = t instanceof Array ? t : [t];
+    var n = this.getAll(t);
+    return n.forEach(i), this;
   },
-  forEachDeep: function(i, t, e) {
-    i = i instanceof Array ? i : [i];
-    var r = this, n = this.getAll(i);
-    return n.forEach(function(l) {
-      e(r.objectAt(l, t), l);
+  forEachDeep: function(t, i, n) {
+    t = t instanceof Array ? t : [t];
+    var e = this, r = this.getAll(t);
+    return r.forEach(function(o) {
+      n(e.objectAt(o, i), o);
     }), this;
   },
   //-----------------------------------
   // Cloning
   //-----------------------------------
-  clone: function(i, t) {
-    var e = new w(this.keyFields.concat(), i || this.callback);
-    return t || e.add.apply(e, this.all.concat()), e;
+  clone: function(t, i) {
+    var n = new _(this.keyFields.concat(), t || this.callback);
+    return i || n.add.apply(n, this.all.concat()), n;
   },
   //-----------------------------------
   // Mathematical
   //-----------------------------------
-  sum: function(i, t, e) {
-    var r = this, n = 0;
-    return this.forEachDeep(i, t, function(l, a) {
-      e !== void 0 && (l *= r.objectAt(a, e)), n += l;
-    }), n;
+  sum: function(t, i, n) {
+    var e = this, r = 0;
+    return this.forEachDeep(t, i, function(o, s) {
+      n !== void 0 && (o *= e.objectAt(s, n)), r += o;
+    }), r;
   },
-  average: function(i, t, e) {
-    var r = 0, n = 0, l = 0, a = this;
-    return e !== void 0 && this.forEachDeep(i, e, function(s) {
-      l += s;
-    }), this.forEachDeep(i, t, function(s, o) {
-      e !== void 0 && (s *= a.objectAt(o, e) / l), r += s, n++;
-    }), e !== void 0 ? r : r / n;
+  average: function(t, i, n) {
+    var e = 0, r = 0, o = 0, s = this;
+    return n !== void 0 && this.forEachDeep(t, n, function(a) {
+      o += a;
+    }), this.forEachDeep(t, i, function(a, h) {
+      n !== void 0 && (a *= s.objectAt(h, n) / o), e += a, r++;
+    }), n !== void 0 ? e : e / r;
   },
   //-----------------------------------
   // Filtering
   //-----------------------------------
-  filter: function(i, t) {
-    var e = this, r = typeof t == "function" ? t : l, n = new w(this.keyFields);
-    return n.addAll(this.getAll(i).filter(r)), n;
-    function l(a) {
-      var s = e.objectAt(a, t);
-      return s !== void 0 && s !== !1;
+  filter: function(t, i) {
+    var n = this, e = typeof i == "function" ? i : o, r = new _(this.keyFields);
+    return r.addAll(this.getAll(t).filter(e)), r;
+    function o(s) {
+      var a = n.objectAt(s, i);
+      return a !== void 0 && a !== !1;
     }
   }
 });
-Object.defineProperty(w.prototype, "all", {
+Object.defineProperty(_.prototype, "all", {
   get: function() {
     return this._list;
   }
 });
-Object.defineProperty(w.prototype, "map", {
+Object.defineProperty(_.prototype, "map", {
   get: function() {
     return this._map;
   }
 });
-var q = w;
-typeof window < "u" && (window.HashArray = w);
-var B = q, y = B, L = 64, P = /^[\s]*$/, $ = [
+var T = _;
+typeof window < "u" && (window.HashArray = _);
+var D = T, x = D, H = 64, F = /^[\s]*$/, I = [
   {
     regex: /[åäàáâãæ]/ig,
     alternate: "a"
@@ -737,26 +349,26 @@ var B = q, y = B, L = 64, P = /^[\s]*$/, $ = [
     alternate: "ae"
   }
 ];
-String.prototype.replaceCharAt = function(i, t) {
-  return this.substr(0, i) + t + this.substr(i + t.length);
+String.prototype.replaceCharAt = function(t, i) {
+  return this.substr(0, t) + i + this.substr(t + i.length);
 };
-var A = function(i, t) {
-  this.options = t || {}, this.options.ignoreCase = this.options.ignoreCase === void 0 ? !0 : this.options.ignoreCase, this.options.maxCacheSize = this.options.maxCacheSize || L, this.options.cache = this.options.hasOwnProperty("cache") ? this.options.cache : !0, this.options.splitOnRegEx = this.options.hasOwnProperty("splitOnRegEx") ? this.options.splitOnRegEx : /\s/g, this.options.splitOnGetRegEx = this.options.hasOwnProperty("splitOnGetRegEx") ? this.options.splitOnGetRegEx : this.options.splitOnRegEx, this.options.min = this.options.min || 1, this.options.keepAll = this.options.hasOwnProperty("keepAll") ? this.options.keepAll : !1, this.options.keepAllKey = this.options.hasOwnProperty("keepAllKey") ? this.options.keepAllKey : "id", this.options.idFieldOrFunction = this.options.hasOwnProperty("idFieldOrFunction") ? this.options.idFieldOrFunction : void 0, this.options.expandRegexes = this.options.expandRegexes || $, this.options.insertFullUnsplitKey = this.options.hasOwnProperty("insertFullUnsplitKey") ? this.options.insertFullUnsplitKey : !1, this.keyFields = i ? i instanceof Array ? i : [i] : [], this.root = {}, this.size = 0, this.options.cache && (this.getCache = new y("key"));
+var A = function(t, i) {
+  this.options = i || {}, this.options.ignoreCase = this.options.ignoreCase === void 0 ? !0 : this.options.ignoreCase, this.options.maxCacheSize = this.options.maxCacheSize || H, this.options.cache = this.options.hasOwnProperty("cache") ? this.options.cache : !0, this.options.splitOnRegEx = this.options.hasOwnProperty("splitOnRegEx") ? this.options.splitOnRegEx : /\s/g, this.options.splitOnGetRegEx = this.options.hasOwnProperty("splitOnGetRegEx") ? this.options.splitOnGetRegEx : this.options.splitOnRegEx, this.options.min = this.options.min || 1, this.options.keepAll = this.options.hasOwnProperty("keepAll") ? this.options.keepAll : !1, this.options.keepAllKey = this.options.hasOwnProperty("keepAllKey") ? this.options.keepAllKey : "id", this.options.idFieldOrFunction = this.options.hasOwnProperty("idFieldOrFunction") ? this.options.idFieldOrFunction : void 0, this.options.expandRegexes = this.options.expandRegexes || I, this.options.insertFullUnsplitKey = this.options.hasOwnProperty("insertFullUnsplitKey") ? this.options.insertFullUnsplitKey : !1, this.keyFields = t ? t instanceof Array ? t : [t] : [], this.root = {}, this.size = 0, this.options.cache && (this.getCache = new x("key"));
 };
-function j(i, t) {
-  return t.length === 1 ? i[t[0]] : j(i[t[0]], t.slice(1, t.length));
+function w(t, i) {
+  return i.length === 1 ? t[i[0]] : w(t[i[0]], i.slice(1, i.length));
 }
 A.prototype = {
-  add: function(i, t) {
-    this.options.cache && this.clearCache(), typeof t == "number" && (t = void 0);
-    var e = t || this.keyFields;
-    for (var r in e) {
-      var n = e[r], l = n instanceof Array, a = l ? j(i, n) : i[n];
-      if (a) {
-        a = a.toString();
-        for (var s = this.expandString(a), o = 0; o < s.length; o++) {
-          var c = s[o];
-          this.map(c, i);
+  add: function(t, i) {
+    this.options.cache && this.clearCache(), typeof i == "number" && (i = void 0);
+    var n = i || this.keyFields;
+    for (var e in n) {
+      var r = n[e], o = r instanceof Array, s = o ? w(t, r) : t[r];
+      if (s) {
+        s = s.toString();
+        for (var a = this.expandString(s), h = 0; h < a.length; h++) {
+          var c = a[h];
+          this.map(c, t);
         }
       }
     }
@@ -775,205 +387,203 @@ A.prototype = {
    * @param value The string to find alternates for.
    * @returns {Array} Always returns an array even if no matches.
    */
-  expandString: function(i) {
-    var t = [i];
+  expandString: function(t) {
+    var i = [t];
     if (this.options.expandRegexes && this.options.expandRegexes.length)
-      for (var e = 0; e < this.options.expandRegexes.length; e++)
-        for (var r = this.options.expandRegexes[e], n; (n = r.regex.exec(i)) !== null; ) {
-          var l = i.replaceCharAt(n.index, r.alternate);
-          t.push(l);
+      for (var n = 0; n < this.options.expandRegexes.length; n++)
+        for (var e = this.options.expandRegexes[n], r; (r = e.regex.exec(t)) !== null; ) {
+          var o = t.replaceCharAt(r.index, e.alternate);
+          i.push(o);
         }
-    return t;
+    return i;
   },
-  addAll: function(i, t) {
-    for (var e = 0; e < i.length; e++)
-      this.add(i[e], t);
+  addAll: function(t, i) {
+    for (var n = 0; n < t.length; n++)
+      this.add(t[n], i);
   },
   reset: function() {
     this.root = {}, this.size = 0;
   },
   clearCache: function() {
-    this.getCache = new y("key");
+    this.getCache = new x("key");
   },
   cleanCache: function() {
     for (; this.getCache.all.length > this.options.maxCacheSize; )
       this.getCache.remove(this.getCache.all[0]);
   },
-  addFromObject: function(i, t) {
-    this.options.cache && this.clearCache(), t = t || "value", this.keyFields.indexOf("_key_") == -1 && this.keyFields.push("_key_");
-    for (var e in i) {
-      var r = { _key_: e };
-      r[t] = i[e], this.add(r);
+  addFromObject: function(t, i) {
+    this.options.cache && this.clearCache(), i = i || "value", this.keyFields.indexOf("_key_") == -1 && this.keyFields.push("_key_");
+    for (var n in t) {
+      var e = { _key_: n };
+      e[i] = t[n], this.add(e);
     }
   },
-  map: function(i, t) {
-    if (this.options.splitOnRegEx && this.options.splitOnRegEx.test(i)) {
-      var e = i.split(this.options.splitOnRegEx), r = e.filter(function(u) {
-        return P.test(u);
-      }), n = e.filter(function(u) {
-        return u === i;
-      }), l = n.length + r.length === e.length;
-      if (!l) {
-        for (var a = 0, s = e.length; a < s; a++)
-          P.test(e[a]) || this.map(e[a], t);
+  map: function(t, i) {
+    if (this.options.splitOnRegEx && this.options.splitOnRegEx.test(t)) {
+      var n = t.split(this.options.splitOnRegEx), e = n.filter(function(f) {
+        return F.test(f);
+      }), r = n.filter(function(f) {
+        return f === t;
+      }), o = r.length + e.length === n.length;
+      if (!o) {
+        for (var s = 0, a = n.length; s < a; s++)
+          F.test(n[s]) || this.map(n[s], i);
         if (!this.options.insertFullUnsplitKey)
           return;
       }
     }
-    this.options.cache && this.clearCache(), this.options.keepAll && (this.indexed = this.indexed || new y([this.options.keepAllKey]), this.indexed.add(t)), this.options.ignoreCase && (i = i.toLowerCase());
-    var o = this.keyToArr(i), c = this;
-    h(o, t, this.root);
-    function h(u, d, p) {
-      if (u.length == 0) {
-        p.value = p.value || [], p.value.push(d);
+    this.options.cache && this.clearCache(), this.options.keepAll && (this.indexed = this.indexed || new x([this.options.keepAllKey]), this.indexed.add(i)), this.options.ignoreCase && (t = t.toLowerCase());
+    var h = this.keyToArr(t), c = this;
+    l(h, i, this.root);
+    function l(f, d, u) {
+      if (f.length == 0) {
+        u.value = u.value || [], u.value.push(d);
         return;
       }
-      var _ = u.shift();
-      p[_] || c.size++, p[_] = p[_] || {}, h(u, d, p[_]);
+      var p = f.shift();
+      u[p] || c.size++, u[p] = u[p] || {}, l(f, d, u[p]);
     }
   },
-  keyToArr: function(i) {
-    var t;
+  keyToArr: function(t) {
+    var i;
     if (this.options.min && this.options.min > 1) {
-      if (i.length < this.options.min)
+      if (t.length < this.options.min)
         return [];
-      t = [i.substr(0, this.options.min)], t = t.concat(i.substr(this.options.min).split(""));
-    } else t = i.split("");
-    return t;
+      i = [t.substr(0, this.options.min)], i = i.concat(t.substr(this.options.min).split(""));
+    } else i = t.split("");
+    return i;
   },
-  findNode: function(i) {
-    return t(this.keyToArr(i), this.root);
-    function t(e, r) {
-      if (r) {
-        if (e.length == 0) return r;
-        var n = e.shift();
-        return t(e, r[n]);
+  findNode: function(t) {
+    return i(this.keyToArr(t), this.root);
+    function i(n, e) {
+      if (e) {
+        if (n.length == 0) return e;
+        var r = n.shift();
+        return i(n, e[r]);
       }
     }
   },
-  _getCacheKey: function(i, t) {
-    var e = i;
-    return t && (e = i + "_" + t), e;
+  _getCacheKey: function(t, i) {
+    var n = t;
+    return i && (n = t + "_" + i), n;
   },
-  _get: function(i, t) {
-    i = this.options.ignoreCase ? i.toLowerCase() : i;
-    var e, r;
-    if (this.options.cache && (e = this.getCache.get(this._getCacheKey(i, t))))
-      return e.value;
-    for (var n = void 0, l = this.options.indexField ? [this.options.indexField] : this.keyFields, a = this.options.splitOnGetRegEx ? i.split(this.options.splitOnGetRegEx) : [i], s = 0, o = a.length; s < o; s++)
-      if (!(this.options.min && a[s].length < this.options.min)) {
-        var c = new y(l);
-        (r = this.findNode(a[s])) && d(r, c), n = n ? n.intersection(c) : c;
+  _get: function(t, i) {
+    t = this.options.ignoreCase ? t.toLowerCase() : t;
+    var n, e;
+    if (this.options.cache && (n = this.getCache.get(this._getCacheKey(t, i))))
+      return n.value;
+    for (var r = void 0, o = this.options.indexField ? [this.options.indexField] : this.keyFields, s = this.options.splitOnGetRegEx ? t.split(this.options.splitOnGetRegEx) : [t], a = 0, h = s.length; a < h; a++)
+      if (!(this.options.min && s[a].length < this.options.min)) {
+        var c = new x(o);
+        (e = this.findNode(s[a])) && d(e, c), r = r ? r.intersection(c) : c;
       }
-    var h = n ? n.all : [];
+    var l = r ? r.all : [];
     if (this.options.cache) {
-      var u = this._getCacheKey(i, t);
-      this.getCache.add({ key: u, value: h }), this.cleanCache();
+      var f = this._getCacheKey(t, i);
+      this.getCache.add({ key: f, value: l }), this.cleanCache();
     }
-    return h;
-    function d(p, _) {
-      if (!(t && _.all.length === t)) {
-        if (p.value && p.value.length)
-          if (!t || _.all.length + p.value.length < t)
-            _.addAll(p.value);
+    return l;
+    function d(u, p) {
+      if (!(i && p.all.length === i)) {
+        if (u.value && u.value.length)
+          if (!i || p.all.length + u.value.length < i)
+            p.addAll(u.value);
           else {
-            _.addAll(p.value.slice(0, t - _.all.length));
+            p.addAll(u.value.slice(0, i - p.all.length));
             return;
           }
-        for (var m in p) {
-          if (t && _.all.length === t)
+        for (var g in u) {
+          if (i && p.all.length === i)
             return;
-          m != "value" && d(p[m], _);
+          g != "value" && d(u[g], p);
         }
       }
     }
   },
-  get: function(i, t, e) {
-    var r = this.options.indexField ? [this.options.indexField] : this.keyFields, n = void 0, l = void 0;
-    if (t && !this.options.idFieldOrFunction)
+  get: function(t, i, n) {
+    var e = this.options.indexField ? [this.options.indexField] : this.keyFields, r = void 0, o = void 0;
+    if (i && !this.options.idFieldOrFunction)
       throw new Error("To use the accumulator, you must specify and idFieldOrFunction");
-    i = i instanceof Array ? i : [i];
-    for (var a = 0, s = i.length; a < s; a++) {
-      var o = this._get(i[a], e);
-      t ? l = t(l, i[a], o, this) : n = n ? n.addAll(o) : new y(r).addAll(o);
+    t = t instanceof Array ? t : [t];
+    for (var s = 0, a = t.length; s < a; s++) {
+      var h = this._get(t[s], n);
+      i ? o = i(o, t[s], h, this) : r = r ? r.addAll(h) : new x(e).addAll(h);
     }
-    return t ? l : n.all;
+    return i ? o : r.all;
   },
-  search: function(i, t, e) {
-    return this.get(i, t, e);
+  search: function(t, i, n) {
+    return this.get(t, i, n);
   },
-  getId: function(i) {
-    return typeof this.options.idFieldOrFunction == "function" ? this.options.idFieldOrFunction(i) : i[this.options.idFieldOrFunction];
+  getId: function(t) {
+    return typeof this.options.idFieldOrFunction == "function" ? this.options.idFieldOrFunction(t) : t[this.options.idFieldOrFunction];
   }
 };
-A.UNION_REDUCER = function(i, t, e, r) {
-  if (i === void 0)
-    return e;
-  var n = {}, l, a, s = Math.max(i.length, e.length), o = [], c = 0;
-  for (l = 0; l < s; l++)
-    l < i.length && (a = r.getId(i[l]), n[a] = n[a] ? n[a] : 0, n[a]++, n[a] === 2 && (o[c++] = i[l])), l < e.length && (a = r.getId(e[l]), n[a] = n[a] ? n[a] : 0, n[a]++, n[a] === 2 && (o[c++] = e[l]));
-  return o;
+A.UNION_REDUCER = function(t, i, n, e) {
+  if (t === void 0)
+    return n;
+  var r = {}, o, s, a = Math.max(t.length, n.length), h = [], c = 0;
+  for (o = 0; o < a; o++)
+    o < t.length && (s = e.getId(t[o]), r[s] = r[s] ? r[s] : 0, r[s]++, r[s] === 2 && (h[c++] = t[o])), o < n.length && (s = e.getId(n[o]), r[s] = r[s] ? r[s] : 0, r[s]++, r[s] === 2 && (h[c++] = n[o]));
+  return h;
 };
-k.exports = A;
-k.exports.default = A;
-var z = k.exports, U = z;
-const K = /* @__PURE__ */ N(U);
+E.exports = A;
+E.exports.default = A;
+var N = E.exports, U = N;
+const z = /* @__PURE__ */ j(U);
 (function() {
-  function i(l) {
-    const a = document.getElementById(l);
-    if (a !== null)
+  function t(o) {
+    const s = document.getElementById(o);
+    if (s !== null)
       try {
-        return JSON.parse(a.textContent);
-      } catch (s) {
-        console.warn(`could not parse json element '${l}'. Error: ${s}`);
+        return JSON.parse(s.textContent);
+      } catch (a) {
+        console.warn(`could not parse json element '${o}'. Error: ${a}`);
       }
   }
-  function t(l) {
-    const a = document.getElementById("instance-text");
-    if (a === null) {
+  function i(o) {
+    const s = document.getElementById("instance-text");
+    if (s === null) {
       console.warn("cannot find instance text");
       return;
     }
-    const s = a.textContent;
-    if (!s || s === "") {
+    const a = s.textContent;
+    if (!a || a === "") {
       console.log("text content in instance");
       return;
     }
-    console.log(s);
-    const o = new K();
-    l.map((p) => o.map(p, p));
-    const c = s.split(" ");
-    let h = !1, u = "", d = "";
-    for (const p of c) {
-      const _ = u + p, m = o.search(_);
-      if (m.length === 0 && h) {
+    const h = new z(void 0, {
+      splitOnRegEx: !1
+    });
+    o.map((u) => h.map(u, u));
+    const c = a.split(" ");
+    let l = !1, f = "", d = "";
+    for (const u of c) {
+      const p = f + u, g = h.search(p);
+      if (g.length === 0 && l) {
         d += `
-                <mark aria-hidden="true" class="emphasis">${u}</mark>                 
-                `, d += p, u = "", h = !1;
+                <mark aria-hidden="true" class="emphasis">${f}</mark>
+                `, d += u + " ", f = "", l = !1;
         continue;
       }
-      if (m.length === 0) {
-        d += p + " ", u = "";
+      if (g.length === 0) {
+        d += u + " ", f = "";
         continue;
       }
-      if (m.length === 1) {
+      if (g.length === 1 && g[0] === p) {
         d += `
-                <mark aria-hidden="true" class="emphasis">${_}</mark>              
-                `, u = "", h = !1;
+                <mark aria-hidden="true" class="emphasis">${p}</mark>
+                `, f = "", l = !1;
         continue;
       }
-      m.includes(_) && (h = !0), u = _ + " ";
+      g.includes(p) && (l = !0), f = p + " ";
     }
-    a.innerHTML = d;
+    s.innerHTML = d;
   }
-  function e(l) {
-    console.log(l);
+  function n(o) {
+    console.log(o);
   }
-  const r = i("emphasis");
-  r !== void 0 && (console.log(r), t(r));
-  const n = i("suggestions");
-  n !== void 0 && e(n);
+  const e = t("emphasis");
+  e !== void 0 && i(e);
+  const r = t("suggestions");
+  r !== void 0 && n(r);
 })();
-document.potato = {
-  IntervalTree: F
-};
