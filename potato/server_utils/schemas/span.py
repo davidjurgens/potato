@@ -41,17 +41,12 @@ def get_span_color(span_label):
     Returns the color of a span with this label as a string with an RGB triple
     in parentheses, or None if the span is unmapped.
     """
-    if "ui" not in config or "spans" not in config["ui"]:
-        return None
-    span_ui = config["ui"]["spans"]
-
-    if "span_colors" not in span_ui:
-        return None
-
-    if span_label in span_ui["span_colors"]:
-        return span_ui["span_colors"][span_label]
-    else:
-        return None
+    return (
+        config.get("ui", {})
+            .get("spans", {})
+            .get("span_colors", {})
+            .get(span_label, None)
+    )
 
 
 def set_span_color(span_label, color):
@@ -60,25 +55,11 @@ def set_span_color(span_label, color):
 
     :color: a string containing an RGB triple in parentheses
     """
-    if "ui" not in config:
-        ui = {}
-        config["ui"] = ui
-    else:
-        ui = config["ui"]
-
-    if "spans" not in ui:
-        span_ui = {}
-        ui["spans"] = span_ui
-    else:
-        span_ui = ui["spans"]
-
-    if "span_colors" not in span_ui:
-        span_colors = {}
-        span_ui["span_colors"] = span_colors
-    else:
-        span_colors = span_ui["span_colors"]
-
-    span_colors[span_label] = color
+    (
+        config.setdefault("ui", {})
+            .setdefault("spans", {})
+            .setdefault("span_colors", {})
+    )[span_label] = color
 
 
 def render_span_annotations(text, span_annotations):

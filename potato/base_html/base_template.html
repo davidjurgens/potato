@@ -71,7 +71,7 @@
           return text;
       }
 
-      function surroundSelection(selectionLabel, selectionColor)  {
+      function surroundSelection(checkbox, selectionLabel, selectionColor)  {
           //var span = document.createElement("span");
           //span.style.fontWeight = "bold";
           //span.style.color = "green";
@@ -108,10 +108,10 @@
               // the user has selected some non-empty part of th text
               if (sel.rangeCount && sel.toString().trim().length > 0) {                 
 
-                  tsc = selectionColor.replace(")", ", 0.25)")
+                  tsc = selectionColor.replace(")", ", 0.25)");
                   
                   var span = document.createElement("span");
-                  span.className = "span_container";
+                  span.className = "span_container " + (checkbox.className || "");
                   span.setAttribute("selection_label", selectionLabel);
                   span.setAttribute("style", "background-color:rgb" + tsc + ";");
                   console.log(selectionColor);
@@ -135,7 +135,7 @@
           // Listen for when the user has highlighted some text (only when the label is checked)
           document.onmouseup = function() {
               if (checkbox.checked){
-                  surroundSelection(spanLabel, spanColor);
+                  surroundSelection(checkbox, spanLabel, spanColor);
               }
           }
       }
@@ -430,7 +430,7 @@
                     // bad_text label is selected
                     if (inputs[j].getAttribute("for_span") == "True"){
                         //alert($(".span_container").length);
-                        if ($(".span_container").length > 0) {
+                        if ($(".span_container." + inputs[j].className).length > 0) {
                             checked_flag = true;
                             break;
                         } else if (inputs[j].name.slice(-8) == "bad_text" && inputs[j].checked == true){
