@@ -82,7 +82,7 @@ def set_span_color(span_label, color):
 
 
 def render_span_annotations(text, span_annotations):
-    """    
+    """
     Retuns a modified version of the text with span annotation overlays inserted
     into the text.
 
@@ -159,7 +159,6 @@ def generate_span_layout(annotation_scheme, horizontal=False):
     for i, label_data in enumerate(annotation_scheme["labels"], 1):
 
         label = label_data if isinstance(label_data, str) else label_data["name"]
-
         name = annotation_scheme["name"] + ":::" + label
         class_name = annotation_scheme["name"]
         key_value = name
@@ -225,6 +224,14 @@ def generate_span_layout(annotation_scheme, horizontal=False):
         else:
             label_content = label
 
+        # Because the text of the label in the radio button could be long, users can
+        # specify an abbreviation for the label which is shown as the name above the span label.
+        # itself. If the abbreviation is not specified, we just use the full label text.
+        if 'abbreviation' in label_data and label_data['abbreviation']:
+            label_title = label_data['abbreviation']
+        else:
+            label_title = label_content
+
         # Check the first radio
         if i == 1:
             is_checked = 'xchecked="checked"'
@@ -246,7 +253,7 @@ def generate_span_layout(annotation_scheme, horizontal=False):
         schematic += (
             '      <input class="{class_name}" for_span="{for_span}" type="checkbox" id="{name}" name="{name_with_span}" '
             + ' value="{key_value}" {is_checked} '
-            + "onclick=\"onlyOne(this); changeSpanLabel(this, '{label_content}', '{span_color}');\" validation=\"{validation}\">"
+            + "onclick=\"onlyOne(this); changeSpanLabel(this, '{label_title}', '{span_color}');\" validation=\"{validation}\">"
             + '  <label for="{name}" {tooltip}>'
             + '<span style="background-color:rgb{bg_color};">{label_content}</span></label>{br_label}'
         ).format(
@@ -258,6 +265,7 @@ def generate_span_layout(annotation_scheme, horizontal=False):
             validation=validation,
             tooltip=tooltip,
             br_label=br_label,
+            label_title=label_title,
             is_checked=is_checked,
             name_with_span=name_with_span,
             bg_color=span_color.replace(")", ",0.25)"),
