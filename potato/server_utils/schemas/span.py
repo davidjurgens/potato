@@ -105,9 +105,9 @@ def render_span_annotations(text, span_annotations):
 
     ann_wrapper = (
         '<span class="span_container" selection_label="{annotation}" '
-        + 'style="background-color:rgb{bg_color};">'
+        + 'schema="{schema}" style="background-color:rgb{bg_color};">'
         + "{span}"
-        + '<div class="span_label" name="{annotation}" '
+        + '<div class="span_label" name="{annotation}" schema="{schema}" '
         + 'style="background-color:white;border:2px solid rgb{color};">'
         + "{annotation_title}</div></span>"
     )
@@ -125,7 +125,7 @@ def render_span_annotations(text, span_annotations):
 
         ann = ann_wrapper.format(
             annotation=a["annotation"], annotation_title=annotation_title, \
-              span=a["span"], color=color, bg_color=bg_color
+              span=a["span"], color=color, bg_color=bg_color, schema=a["schema"]
         )
         text = text[: a["start"]] + ann + text[a["end"] :]
 
@@ -282,7 +282,7 @@ def generate_span_layout(annotation_scheme, horizontal=False):
         name = annotation_scheme["name"] + ":::" + "bad_text"
         bad_text_schematic = (
             (
-                    ' <input class="span_label" for_span="{for_span}" type="checkbox" id="{id}" name="{name}" value="{value}" onclick="onlyOne(this)" validation="{validation}">'
+                    ' <input class="{class_name}" for_span="{for_span}" type="checkbox" id="{id}" name="{name}" value="{value}" onclick="onlyOne(this)" validation="{validation}">'
                     + ' {line_break} <label for="{label_for}" {label_args}>{label_text}</label>'
             )
         ).format(

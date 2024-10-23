@@ -1060,7 +1060,6 @@ def get_span_annotations_for_user_on(username, instance_id):
     """
     user_state = lookup_user_state(username)
     span_annotations = user_state.get_span_annotations(instance_id)
-    print('span_annotations:', span_annotations)
     return span_annotations
 
 
@@ -1903,7 +1902,8 @@ def save_all_annotations():
     # Jiaxin: we are simply saving this as a json file at this moment
     if "automatic_assignment" in config and config["automatic_assignment"]["on"]:
         # TODO: write the code here
-        print("saved")
+        #print("saved")
+        pass
 
 
 def load_user_state(username):
