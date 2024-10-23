@@ -2482,12 +2482,13 @@ def parse_html_span_annotation(html_span_annotation):
     s = html_span_annotation.strip()
     init_tag_regex = re.compile(r"(<span.+?>)")
     end_tag_regex = re.compile(r"(</span>)")
-    anno_regex = re.compile(r'<div class="span_label" name="(.+?)"(.+)?>(.+)</div>')
-    schema_regex = re.compile(r'schema="([^"]+?)"')
+    anno_regex = re.compile(r'<div class="span_label"(.*)name="(.+?)"(.+)?>(.+)</div>')
+    schema_regex = re.compile(r'data-schema="([^"]+?)"')
     no_html_s = ""
     start = 0
 
     annotations = []
+    print(html_span_annotation)
 
     while True:
         m = init_tag_regex.search(s, start)
@@ -2503,8 +2504,10 @@ def parse_html_span_annotation(html_span_annotation):
         m3 = anno_regex.search(middle)
 
         middle_text = middle[: m3.start()]
-        annotation = m3.group(1)
-        annotation_title = m3.group(3)
+        annotation = m3.group(2)
+        annotation_title = m3.group(4)
+
+        print(annotation, annotation_title)
 
         m4 = schema_regex.search(middle)
         schema = m4.group(1)

@@ -71,7 +71,7 @@
           return text;
       }
 
-      function surroundSelection(checkbox, selectionClass, selectionLabel, selectionTitle, selectionColor)  {
+      function surroundSelection(selectionClass, selectionLabel, selectionTitle, selectionColor)  {
           //var span = document.createElement("span");
           //span.style.fontWeight = "bold";
           //span.style.color = "green";
@@ -111,7 +111,7 @@
                   tsc = selectionColor.replace(")", ", 0.25)");
                   
                   var span = document.createElement("span");
-                  span.className = "span_container " + (checkbox.className || "");
+                  span.className = "span_container";
                   span.setAttribute("selection_label", selectionLabel);
                   span.setAttribute("style", "background-color:rgb" + tsc + ";");
                   console.log(selectionColor);
@@ -120,7 +120,7 @@
                   label.className = "span_label";
                   label.textContent = selectionTitle;
                   label.setAttribute('name', selectionLabel);
-                  label.setAttribute('schema', selectionClass);
+                  label.setAttribute('data-schema', selectionClass);
                   label.setAttribute("style", "background-color:white;"
                                     + "border:2px solid rgb" + selectionColor + ";");
 
@@ -137,7 +137,7 @@
           // Listen for when the user has highlighted some text (only when the label is checked)
           document.onmouseup = function() {
               if (checkbox.checked){
-                  surroundSelection(checkbox, selectionClass, spanLabel, spanTitle, spanColor);
+                  surroundSelection(selectionClass, spanLabel, spanTitle, spanColor);
               }
           }
       }
@@ -432,7 +432,7 @@
                     // bad_text label is selected
                     if (inputs[j].getAttribute("for_span") == "True"){
                         //alert($(".span_container").length);
-                        if ($(".span_container." + inputs[j].className).length > 0) {
+                        if ($(".span_container [data-schema=\"" + inputs[j].className + "\"]").length > 0) {
                             checked_flag = true;
                             break;
                         } else if (inputs[j].name.slice(-8) == "bad_text" && inputs[j].checked == true){

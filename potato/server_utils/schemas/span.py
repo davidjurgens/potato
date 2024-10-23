@@ -86,13 +86,14 @@ def render_span_annotations(text, span_annotations):
 
     ann_wrapper = (
         '<span class="span_container" selection_label="{annotation}" '
-        + 'schema="{schema}" style="background-color:rgb{bg_color};">'
+        + 'data-schema="{schema}" style="background-color:rgb{bg_color};">'
         + "{span}"
-        + '<div class="span_label" name="{annotation}" schema="{schema}" '
+        + '<div class="span_label" name="{annotation}" data-schema="{schema}" '
         + 'style="background-color:white;border:2px solid rgb{color};">'
         + "{annotation_title}</div></span>"
     )
     for a in rev_order_sa:
+        print(a)
 
         # Spans are colored according to their order in the list and we need to
         # retrofit the color
