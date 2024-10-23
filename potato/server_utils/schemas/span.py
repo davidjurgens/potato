@@ -93,8 +93,6 @@ def render_span_annotations(text, span_annotations):
         + "{annotation_title}</div></span>"
     )
     for a in rev_order_sa:
-        print(a)
-
         # Spans are colored according to their order in the list and we need to
         # retrofit the color
         color = get_span_color(a["annotation"])

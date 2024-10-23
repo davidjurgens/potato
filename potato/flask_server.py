@@ -2488,7 +2488,6 @@ def parse_html_span_annotation(html_span_annotation):
     start = 0
 
     annotations = []
-    print(html_span_annotation)
 
     while True:
         m = init_tag_regex.search(s, start)
@@ -2506,8 +2505,6 @@ def parse_html_span_annotation(html_span_annotation):
         middle_text = middle[: m3.start()]
         annotation = m3.group(2)
         annotation_title = m3.group(4)
-
-        print(annotation, annotation_title)
 
         m4 = schema_regex.search(middle)
         schema = m4.group(1)
