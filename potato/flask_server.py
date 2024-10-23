@@ -1060,6 +1060,7 @@ def get_span_annotations_for_user_on(username, instance_id):
     """
     user_state = lookup_user_state(username)
     span_annotations = user_state.get_span_annotations(instance_id)
+    print('span_annotations:', span_annotations)
     return span_annotations
 
 
@@ -2287,7 +2288,7 @@ def annotate_page(username=None, action=None):
     custom_js = ""
     if config["customjs"] and config.get("customjs_hostname"):
         custom_js = (
-            f'<script src="http://{config["customjs_hostname"]}/potato.js"' + 
+            f'<script src="http://{config["customjs_hostname"]}/potato.js"' +
             ' defer></script>'
         )
     elif config["customjs"]:
@@ -2481,7 +2482,8 @@ def parse_html_span_annotation(html_span_annotation):
     s = html_span_annotation.strip()
     init_tag_regex = re.compile(r"(<span.+?>)")
     end_tag_regex = re.compile(r"(</span>)")
-    anno_regex = re.compile(r'<div class="span_label".+?>(.+)</div>')
+    anno_regex = re.compile(r'<div class="span_label" name="(.+?)"(.+)?>(.+)</div>')
+    schema_regex = re.compile(r'schema="([^"]+?)"')
     no_html_s = ""
     start = 0
 
@@ -2502,6 +2504,10 @@ def parse_html_span_annotation(html_span_annotation):
 
         middle_text = middle[: m3.start()]
         annotation = m3.group(1)
+        annotation_title = m3.group(3)
+
+        m4 = schema_regex.search(middle)
+        schema = m4.group(1)
 
         no_html_s += s[start : m.start()]
 
@@ -2510,7 +2516,10 @@ def parse_html_span_annotation(html_span_annotation):
             "end": len(no_html_s) + len(middle_text),
             "span": middle_text,
             "annotation": annotation,
+            "schema": schema,
+            "annotation_title": annotation_title
         }
+
         annotations.append(ann)
 
         no_html_s += middle_text

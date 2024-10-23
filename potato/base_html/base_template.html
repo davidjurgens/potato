@@ -6,7 +6,7 @@
   {{ HEADER }}
 
   <!--- HEADER GOES ABOVE HERE--->
-  
+
   {{ custom_js | safe }}
 
   <body>
@@ -27,7 +27,7 @@
       <a href="javascript:void(0)" class="closebtn" target_id="Statpanel" onclick="closeNav(this.getAttribute('target_id'))">&times;</a>
       {{statistics_nav}}
     </div>
-    
+
     <script>
       document.addEventListener('keyup', function (event) {
           var active_id = document.activeElement.id;
@@ -58,7 +58,7 @@
 
           // Each time we process a user's key presses, track who is doing
           // it by grabbing the hidden firstname and lastname fields
-          get_new_instance(event);          
+          get_new_instance(event);
       });
 
       function getSelectedText() {
@@ -71,11 +71,11 @@
           return text;
       }
 
-      function surroundSelection(selectionLabel, selectionColor)  {
+      function surroundSelection(selectionClass, selectionLabel, selectionTitle, selectionColor)  {
           //var span = document.createElement("span");
           //span.style.fontWeight = "bold";
           //span.style.color = "green";
-   
+
           if (window.getSelection) {
               var sel = window.getSelection();
 
@@ -84,7 +84,7 @@
               if (sel.anchorNode.parentElement) {
 
                   if (sel.anchorNode.parentElement.getAttribute("name") != "instance_text") {
-                      
+
                       // See if this text was already wrapped with the currently
                       // selected class label and if so, remove it
                       var parentOfSelection = sel.anchorNode.parentElement
@@ -103,25 +103,27 @@
                   // alert("no parent element");
                   return;
               }
-              
+
               // Otherwise, we're going to be adding a new span annotation, if
               // the user has selected some non-empty part of th text
-              if (sel.rangeCount && sel.toString().trim().length > 0) {                 
+              if (sel.rangeCount && sel.toString().trim().length > 0) {
 
                   tsc = selectionColor.replace(")", ", 0.25)")
-                  
+
                   var span = document.createElement("span");
                   span.className = "span_container";
                   span.setAttribute("selection_label", selectionLabel);
                   span.setAttribute("style", "background-color:rgb" + tsc + ";");
                   console.log(selectionColor);
-                  
+
                   var label = document.createElement("div");
                   label.className = "span_label";
-                  label.textContent = selectionLabel;
+                  label.textContent = selectionTitle;
+                  label.setAttribute('name', selectionLabel);
+                  label.setAttribute('schema', selectionClass);
                   label.setAttribute("style", "background-color:white;"
                                     + "border:2px solid rgb" + selectionColor + ";");
-                  
+
                   var range = sel.getRangeAt(0).cloneRange();
                   range.surroundContents(span);
                   sel.removeAllRanges();
@@ -131,17 +133,17 @@
           }
       }
 
-      function changeSpanLabel(checkbox, spanLabel, spanColor) {
+      function changeSpanLabel(checkbox, selectionClass, spanLabel, spanTitle, spanColor) {
           // Listen for when the user has highlighted some text (only when the label is checked)
           document.onmouseup = function() {
               if (checkbox.checked){
-                  surroundSelection(spanLabel, spanColor);
+                  surroundSelection(selectionClass, spanLabel, spanTitle, spanColor);
               }
           }
       }
 
       // Listen for when the user has highlighted some text
-      // document.onmouseup = function() { surroundSelection("Undefined"); } 
+      // document.onmouseup = function() { surroundSelection("Undefined"); }
 
     </script>
     <script>
@@ -191,7 +193,7 @@
           // events
           var e = $.Event('keyup');
           e.key = "ArrowRight";
-          
+
           get_new_instance(e);
       }
 
@@ -201,14 +203,14 @@
           // events
           var e = $.Event('keyup');
           e.key = "ArrowLeft";
-          
+
           get_new_instance(e);
-      } 
-      
+      }
+
     </script>
-    
+
     {{annotation}}
-    
+
     <script>
       window.onunload = check_close;
       function check_close() {
@@ -257,39 +259,39 @@
 
       }, 1000);
     </script>
-    
+
     <script>
       // We submit a new post to the same (user/annotate) endpoint
       function post(params) {
-          
+
           // The rest of this code assumes you are not using a library.
           // It can be made less wordy if you use one.
           var form = document.createElement("form");
           form.setAttribute("method", "post");
           form.setAttribute("action", "annotate");
-          
+
           var hiddenField = document.createElement("input");
           hiddenField.setAttribute("type", "hidden");
           hiddenField.setAttribute("name", "email");
           hiddenField.setAttribute("value", document.getElementById('username').value);
           form.appendChild(hiddenField);
-          
+
           for (var key in params) {
               if (params.hasOwnProperty(key)) {
                   var hiddenField = document.createElement("input");
                   hiddenField.setAttribute("type", "hidden");
                   hiddenField.setAttribute("name", key);
                   hiddenField.setAttribute("value", params[key]);
-                  
+
                   form.appendChild(hiddenField);
               }
           }
 
           // Stuff all the current annotations into attributes for processing on the server side
           $('form input, form select, form textarea').each(
-              function(index){  
+              function(index){
                   var input = $(this);
-                  
+
                   if (input.attr('type') == 'checkbox' || input.attr('type') == 'radio') {
                       if (input.is(":checked")) {
                           // Stuff all the input fields into something for the post
@@ -305,14 +307,14 @@
                       hiddenField.setAttribute("type", "hidden");
                       hiddenField.setAttribute("name", input.attr('name'));
                       hiddenField.setAttribute("value", input[0].value);
-                      form.appendChild(hiddenField);                                        
+                      form.appendChild(hiddenField);
                   }
                   else if (input.attr('type') == 'range') {
                       var hiddenField = document.createElement("input");
                       hiddenField.setAttribute("type", "hidden");
                       hiddenField.setAttribute("name", input.attr('name'));
                       hiddenField.setAttribute("value", input[0].value);
-                      form.appendChild(hiddenField);                                        
+                      form.appendChild(hiddenField);
                   }
                   else if (input.attr('type') == 'select-one') {
                       //alert(input[0].value)
@@ -352,11 +354,11 @@
                   hiddenField.setAttribute("name", "span-annotation");
                   hiddenField.setAttribute("value", annotated_spans);
                   form.appendChild(hiddenField);
-                  //console.log(annotated_spans)
+                  // console.log(annotated_spans)
               }
           );
 
-          
+
           document.body.appendChild(form);
           form.submit();
       }
@@ -500,7 +502,7 @@
               // console.log("Unknown key press", event)
               return
           }
-          
+
           var instance_id = document.getElementById('instance_id').value
           var time_string = document.getElementById("timecounter").innerHTML //get time spent on this instance
           //time_string = '-1'
@@ -525,7 +527,7 @@
     </script>
 
     {{var_elems | safe}}
-   
+
     <nav class="navbar navbar-expand-md navbar-dark bg-dark mb-3">
       <div class="container-fluid">
         <a href="#" class="navbar-brand mr-3">{{annotation_task_name}}</a>
@@ -561,7 +563,7 @@
             <div class="text-secondary align-middle">Currently logged in as {{username}}</div>
           </div>
         </div>
-      </div>    
+      </div>
     </nav>
     <div class="container-fluid">
 
@@ -577,7 +579,7 @@
             <a class="btn btn-secondary" href="#" role="button" onclick="click_to_prev()">Move backward</a>
             <a class="btn btn-secondary" href="#" role="button" onclick="click_to_next()">Move forward</a>
           </div>
-        </p>        
+        </p>
       </div>
 
       <hr>
@@ -588,7 +590,7 @@
           </div>
           <div class="col-md-12 text-md-right">
             <a href="https://github.com/davidjurgens/potato" class="text-dark">Fork on GitHub</a>
-            <span class="text-muted mx-2">|</span> 
+            <span class="text-muted mx-2">|</span>
             <a href="https://github.com/davidjurgens/potato#cite-us" class="text-dark">Cite Us</a>
           </div>
         </div>
@@ -600,7 +602,7 @@
       function openNav(target_id, width = "350px") {
           document.getElementById(target_id).style.width = width;
       }
-      
+
       /* Set the width of the sidebar to 0 (hide it) */
       function closeNav(target_id) {
           document.getElementById(target_id).style.width = "0";
@@ -609,20 +611,20 @@
       function closeNav2(target_id) {
           // document.getElementById(target_id).style.height = "20px";
           console.error(document.getElementById(target_id).style.display);
-          if (document.getElementById(target_id).style.display == "block" 
+          if (document.getElementById(target_id).style.display == "block"
               || document.getElementById(target_id).style.display == "") {
-              
+
               document.getElementById(target_id).style.display = "none";
-              localStorage.setItem('show_instructions', 'false'); 
+              localStorage.setItem('show_instructions', 'false');
           }
           else{
               document.getElementById(target_id).style.display = "block";
-              localStorage.setItem('show_instructions', 'true'); 
+              localStorage.setItem('show_instructions', 'true');
           }
       }
 
       /* Keep the instructions hidden/shown across instance transitions based on
-         what the user had selected */      
+         what the user had selected */
       window.onload = function() {
           var show = localStorage.getItem('show_instructions');
           if (document.getElementById('instructions')) {
@@ -633,7 +635,7 @@
                   document.getElementById('instructions').style.display = "none";
               }
           }
-      }      
+      }
 
     </script>
   </body>

@@ -107,9 +107,9 @@ def render_span_annotations(text, span_annotations):
         '<span class="span_container" selection_label="{annotation}" '
         + 'style="background-color:rgb{bg_color};">'
         + "{span}"
-        + '<div class="span_label" '
+        + '<div class="span_label" name="{annotation}" '
         + 'style="background-color:white;border:2px solid rgb{color};">'
-        + "{annotation}</div></span>"
+        + "{annotation_title}</div></span>"
     )
     for a in rev_order_sa:
 
@@ -120,8 +120,12 @@ def render_span_annotations(text, span_annotations):
         # the text to be somewhat transparent so we switch to RGBA for bg
         bg_color = color.replace(")", ",0.25)")
 
+        # The text above the span is its title and we display whatever its set to
+        annotation_title= a["annotation_title"]
+
         ann = ann_wrapper.format(
-            annotation=a["annotation"], span=a["span"], color=color, bg_color=bg_color
+            annotation=a["annotation"], annotation_title=annotation_title, \
+              span=a["span"], color=color, bg_color=bg_color
         )
         text = text[: a["start"]] + ann + text[a["end"] :]
 
@@ -253,9 +257,9 @@ def generate_span_layout(annotation_scheme, horizontal=False):
         schematic += (
             '      <input class="{class_name}" for_span="{for_span}" type="checkbox" id="{name}" name="{name_with_span}" '
             + ' value="{key_value}" {is_checked} '
-            + "onclick=\"onlyOne(this); changeSpanLabel(this, '{label_title}', '{span_color}');\" validation=\"{validation}\">"
+            + "onclick=\"onlyOne(this); changeSpanLabel(this, '{class_name}','{label_content}', '{label_title}', '{span_color}');\" validation=\"{validation}\">"
             + '  <label for="{name}" {tooltip}>'
-            + '<span style="background-color:rgb{bg_color};">{label_content}</span></label>{br_label}'
+            + '<span style="background-color:rgb{bg_color};" name="{label_content}">{label_content}</span></label>{br_label}'
         ).format(
             class_name=class_name,
             for_span = True,
@@ -278,7 +282,7 @@ def generate_span_layout(annotation_scheme, horizontal=False):
         name = annotation_scheme["name"] + ":::" + "bad_text"
         bad_text_schematic = (
             (
-                    ' <input class="{class_name}" for_span="{for_span}" type="checkbox" id="{id}" name="{name}" value="{value}" onclick="onlyOne(this)" validation="{validation}">'
+                    ' <input class="span_label" for_span="{for_span}" type="checkbox" id="{id}" name="{name}" value="{value}" onclick="onlyOne(this)" validation="{validation}">'
                     + ' {line_break} <label for="{label_for}" {label_args}>{label_text}</label>'
             )
         ).format(
