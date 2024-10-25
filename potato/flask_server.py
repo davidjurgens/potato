@@ -1358,7 +1358,7 @@ def generate_initial_user_dataflow(username):
     return assigned_user_data
 
 
-def sample_instances(username):
+def sample_instances(username, num_instances=None):
     global user_to_annotation_state
     global instance_id_to_data
 
@@ -1391,17 +1391,28 @@ def sample_instances(username):
         sorted_keys = [
             it[0] for it in sorted(unassigned_dict.items(), key=lambda item: item[1], reverse=True)
         ]
-        sampled_keys = sorted_keys[
-            : min(config["automatic_assignment"]["instance_per_annotator"], len(sorted_keys))
-        ]
+        if num_instances is None:
+            sampled_keys = sorted_keys[
+                : min(config["automatic_assignment"]["instance_per_annotator"], len(sorted_keys))
+            ]
+        else:
+            sampled_keys = sorted_keys[
+                : min(num_instances, len(sorted_keys))
+            ]
 
     elif config["automatic_assignment"]["sampling_strategy"] == "ordered":
         # sampling instances based on the natural order of the data
 
         sorted_keys = list(task_assignment["unassigned"].keys())
-        sampled_keys = sorted_keys[
-                       : min(config["automatic_assignment"]["instance_per_annotator"], len(sorted_keys))
-        ]
+        
+        if num_instances is None:
+            sampled_keys = sorted_keys[
+                : min(config["automatic_assignment"]["instance_per_annotator"], len(sorted_keys))
+            ]  
+        else:
+            sampled_keys = sorted_keys[
+                : min(num_instances, len(sorted_keys))
+            ]
         #print(sampled_keys)
 
     # update task_assignment to keep track of task assignment status globally
@@ -1414,7 +1425,7 @@ def sample_instances(username):
             del task_assignment["unassigned"][key]
 
     # sample and insert test questions
-    if task_assignment["testing"]["test_question_per_annotator"] > 0:
+    if task_assignment["testing"]["test_question_per_annotator"] > 0 and num_instances is None:
         sampled_testing_ids = random.sample(
             task_assignment["testing"]["ids"],
             k=task_assignment["testing"]["test_question_per_annotator"],
@@ -1427,6 +1438,124 @@ def sample_instances(username):
             sampled_keys.insert(random.randint(0, len(sampled_keys) - 1), key)
 
     return sampled_keys
+
+
+def delete_instances_from_user(username, ids_to_delete):
+    """
+    Delete specific ids from specific user
+    """
+    global task_assignment
+    user_state = lookup_user_state(username)
+    # If there are repeated assigned ids we can't easily delete them (maybe TODO in future)
+    assert len(set(user_state.instance_id_ordering)) == len(user_state.instance_id_ordering) 
+    for key in ids_to_delete:
+        # Delete user assigned data
+        user_state.instance_id_to_data.pop(key)
+        user_state.instance_id_ordering.remove(key)
+
+        # Put instances back to pool
+        task_assignment["assigned"][key].remove(username)
+        if len(task_assignment["assigned"][key]) == 0:
+            task_assignment["assigned"].pop(key)
+        if key not in task_assignment["unassigned"]:
+            task_assignment["unassigned"][key] = 0
+        task_assignment["unassigned"][key] += 1
+        
+    user_state.instance_id_to_order = user_state.generate_id_order_mapping(user_state.instance_id_ordering)
+
+
+
+def adjust_quota(username, _target_num, admin=False):
+    """
+    Adjust the quota of user
+    """
+    global user_to_annotation_state
+    global instance_id_to_data
+    global task_assignment
+
+    # Check if adjust quota is allow by policy
+    if ("allow_user_adjust_quota" not in config["automatic_assignment"] 
+        or config["automatic_assignment"]["allow_user_adjust_quota"] != True) and (not admin):
+        return False
+
+    user_state = lookup_user_state(username)
+    prestudy_status, consent_status = user_state.get_prestudy_status(), user_state.get_consent_status()
+
+    target_num = int(_target_num)
+    curr_instance_num = user_state.get_real_assigned_instance_count()
+
+    # Reject if prestudy or consent is present
+    # TODO: Support cases when the dataset have prestudy and consent items
+    if prestudy_status is not None or consent_status is not None:
+        return False
+    
+    # If user is requesting more tasks
+    if target_num > curr_instance_num:
+        # Make sure the requested instance no more than unassigned instances
+        if target_num - curr_instance_num > get_unassigned_count():
+            target_num = curr_instance_num + get_unassigned_count()
+        
+        sampled_keys = sample_instances(username, target_num-curr_instance_num)
+        user_state.real_instance_assigned_count += len(sampled_keys)
+        if "post_annotation_pages" in task_assignment:
+            sampled_keys = sampled_keys + task_assignment["post_annotation_pages"]
+        
+        assigned_user_data = {key: instance_id_to_data[key] for key in sampled_keys}
+        user_state.add_new_assigned_data(assigned_user_data)
+        #user_state.instance_id_ordering += list(assigned_user_data)
+
+        print("%s requested %d additional instances and now have %d instances. Remaining unassigned labels: %s"
+            % (
+                username,
+                target_num-curr_instance_num,
+                user_state.get_assigned_instance_count(),
+                get_unassigned_count(),
+            )
+        )
+    # If user is requesting fewer tasks
+    elif target_num < curr_instance_num:
+        all_assigned_ids = user_state.instance_id_ordering
+        labeled_ids = [iid for iid, _ in user_state.instance_id_to_labeling.items()]
+        unlabeled_ids = [iid for iid in all_assigned_ids if iid not in labeled_ids]
+        # Reject if user's request is less than his already finished instances
+        if target_num < len(labeled_ids) or target_num <= 0:
+            return False
+        ids_to_delete = unlabeled_ids[target_num-curr_instance_num:]
+        delete_instances_from_user(username, ids_to_delete)
+
+        print("%s requested %d fewer instances and now have %d instances. Remaining unassigned labels: %s"
+            % (
+                username,
+                curr_instance_num-target_num,
+                user_state.get_assigned_instance_count(),
+                get_unassigned_count(),
+            )
+        )
+    # If the totalnumber doesn't change
+    else:
+        return True
+    
+    # save the assigned user data dict
+    user_dir = os.path.join(config["output_annotation_dir"], username)
+    assigned_user_data_path = os.path.join(user_dir, "assigned_user_data.json")
+
+    with open(assigned_user_data_path, "w") as w:
+        json.dump(user_state.get_assigned_data(), w)
+
+    # save task assignment status
+    task_assignment_path = os.path.join(
+        config["output_annotation_dir"], config["automatic_assignment"]["output_filename"]
+    )
+    with open(task_assignment_path, "w") as w:
+        json.dump(task_assignment, w)
+
+    # Save annotation order
+    save_user_state(username, save_order=True)
+
+    # Redirect to the last available instance
+    user_state.instance_cursor = min(user_state.instance_cursor, len(user_state.instance_id_to_data)-1)
+
+    return True
 
 
 def assign_instances_to_user(username):
@@ -2175,6 +2304,9 @@ def annotate_page(username=None, action=None):
 
     elif action == "go_to":
         go_to_id(username, request.form.get("go_to"))
+    
+    elif action == "adjust_quota":
+        adjust_quota(username, request.form.get("adjust_quota"))
 
     else:
         print('unrecognized action request: "%s"' % action)
