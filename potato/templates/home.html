@@ -240,7 +240,7 @@
               </span>
             </div>
             <div class="wrap-input100 validate-input" data-validate="Password is required">
-              <input class="input100" type="password" name="pass" id="login_pass" placeholder="Password" value = "{{ login_password }}">
+              <input class="input100" type="password" name="pass" id="login_pass" placeholder="Password" value = "{{ login_password }}" onkeydown="if (event.key === 'Enter') {login();}">
               <span class="focus-input100"></span>
               <span class="symbol-input100">
                 <i class="fa fa-lock" aria-hidden="true"></i>
@@ -302,7 +302,7 @@
               </span>
             </div>
              <div class="wrap-input100 validate-input" data-validate="Password is required">
-              <input class="input100" type="password" name="pass" id="pass_again" placeholder="Re-enter password" action = "signup" onblur="confirmPassword(this.getAttribute('action'))">
+              <input class="input100" type="password" name="pass" id="pass_again" placeholder="Re-enter password" action = "signup" onblur="confirmPassword(this.getAttribute('action'))" onkeydown="if (event.key === 'Enter') {signup();}">
               <span class="focus-input100"></span>
               <span class="symbol-input100">
                 <i class="fa fa-lock" aria-hidden="true"></i>
