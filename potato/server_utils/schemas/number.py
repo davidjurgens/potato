@@ -1,90 +1,153 @@
 """
 Number Layout
+
+Generates a form interface for numeric input. Features include:
+- Custom CSS styling options
+- Tooltip support
+- Required/optional validation
+- Min/max value constraints
 """
+
 import logging
 
 logger = logging.getLogger(__name__)
 
-
 def generate_number_layout(annotation_scheme):
-    # '<div style="border:1px solid black; border-radius: 25px;">' + \
-    schematic = (
-          ('<form id="%s" class="annotation-form number" action="/action_page.php">' % annotation_scheme["name"] )
-        + "  <fieldset>"
-        + ("  <legend>%s</legend>" % annotation_scheme["description"])
-    )
+    """
+    Generate HTML for a numeric input interface.
 
-    # TODO: display keyboard shortcuts on the annotation page
-    key2label = {}
-    label2key = {}
+    Args:
+        annotation_scheme (dict): Configuration including:
+            - name: Schema identifier
+            - description: Display description
+            - custom_css (dict): Optional CSS styling
+                - width: Input width (default: "60px")
+                - height: Input height
+                - font_size: Text size
+            - tooltip: Optional hover text description
+            - tooltip_file: Optional path to tooltip text file
+            - label_requirement (dict): Optional validation settings
+                - required (bool): Whether input is mandatory
+            - min_value (int): Optional minimum allowed value
+            - max_value (int): Optional maximum allowed value
 
-    # TODO: decide whether text boxes need labels
-    label = "text_box"
+    Returns:
+        tuple: (html_string, key_bindings)
+            html_string: Complete HTML for the number input interface
+            key_bindings: Empty list (no keyboard shortcuts)
+    """
+    logger.debug(f"Generating number layout for schema: {annotation_scheme['name']}")
 
-    name = annotation_scheme["name"] + ":::" + label
-    class_name = annotation_scheme["name"]
-    key_value = name
+    # Initialize form wrapper
+    schematic = f"""
+        <form id="{annotation_scheme['name']}" class="annotation-form number" action="/action_page.php">
+            <fieldset schema="{annotation_scheme['name']}">
+                <legend>{annotation_scheme['description']}</legend>
+    """
 
-    # Technically, text boxes don't have these but we define it anyway
-    key_bindings = []
+    # Handle CSS styling
+    custom_css = _generate_css_style(annotation_scheme)
+    logger.debug(f"Applied custom CSS: {custom_css}")
 
-    display_info = (
-        annotation_scheme["display_config"] if "display_config" in annotation_scheme else {}
-    )
-
-    # TODO: pull this out into a separate method that does some sanity checks
-    custom_css = '""'
-    if "custom_css" in display_info:
-        custom_css = '"'
-        for k, v in display_info["custom_css"].items():
-            custom_css += k + ":" + v + ";"
-        custom_css += '"'
-
-    tooltip = ""
-    if False:
-        if "tooltip" in annotation_scheme:
-            tooltip_text = annotation_scheme["tooltip"]
-            # print('direct: ', tooltip_text)
-        elif "tooltip_file" in annotation_scheme:
-            with open(annotation_scheme["tooltip_file"], "rt") as f:
-                lines = f.readlines()
-            tooltip_text = "".join(lines)
-            # print('file: ', tooltip_text)
-        if len(tooltip_text) > 0:
-            tooltip = (
-                'data-toggle="tooltip" data-html="true" data-placement="top" title="%s"'
-                % tooltip_text
-            )
-        if "key_value" in label_data:
-            key_value = label_data["key_value"]
-            if key_value in key2label:
-                logger.warning("Keyboard input conflict: %s" % key_value)
-                quit()
-            key2label[key_value] = label
-            label2key[label] = key_value
-
-    label_content = label
-
-    # add shortkey to the label so that the annotators will know how to use it
-    # when the shortkey is "None", this will not displayed as we do not allow short key for None category
-    # if label in label2key and label2key[label] != 'None':
-    if label in label2key:
-        label_content = label_content + " [" + label2key[label].upper() + "]"
-
-    # setting up label validation for each label, if "required" is True, the annotators will be asked to finish the current instance to proceed
+    # Setup validation
     validation = ""
-    label_requirement = (
-        annotation_scheme["label_requirement"] if "label_requirement" in annotation_scheme else None
-    )
-    if label_requirement and "required" in label_requirement and label_requirement["required"]:
+    if annotation_scheme.get("label_requirement", {}).get("required"):
         validation = "required"
+        logger.debug("Setting required validation")
 
-    schematic += (
-        '  <input class="%s" style=%s type="number" id="%s" name="%s" validation="%s">'
-        + '  <label for="%s" %s></label><br/>'
-    ) % (class_name, custom_css, name, name, validation, name, tooltip)
+    # Generate tooltip
+    tooltip = _generate_tooltip(annotation_scheme)
 
-    # schematic += '  </fieldset>\n</form></div>\n'
-    schematic += "  </fieldset>\n</form>\n"
+    # Generate number input
+    name = f"{annotation_scheme['name']}:::number"
+    input_attrs = _generate_input_attributes(annotation_scheme)
 
-    return schematic, key_bindings
+    schematic += f"""
+        <input class="{annotation_scheme['name']}"
+               type="number"
+               id="{name}"
+               name="{name}"
+               style="{custom_css}"
+               validation="{validation}"
+               {input_attrs}>
+        <label for="{name}" {tooltip}></label>
+    """
+
+    schematic += "</fieldset></form>"
+
+    logger.info(f"Successfully generated number layout for {annotation_scheme['name']}")
+    return schematic, []
+
+def _generate_css_style(annotation_scheme):
+    """
+    Generate CSS style string from configuration.
+
+    Args:
+        annotation_scheme (dict): Configuration containing custom_css settings
+
+    Returns:
+        str: Formatted CSS style string
+    """
+    css = annotation_scheme.get("custom_css", {})
+    styles = []
+
+    # Default width if not specified
+    width = css.get("width", "60px")
+    styles.append(f"width: {width}")
+
+    # Optional height
+    if "height" in css:
+        styles.append(f"height: {css['height']}")
+
+    # Optional font size
+    if "font_size" in css:
+        styles.append(f"font-size: {css['font_size']}")
+
+    return "; ".join(styles)
+
+def _generate_tooltip(annotation_scheme):
+    """
+    Generate tooltip HTML attribute from configuration.
+
+    Args:
+        annotation_scheme (dict): Configuration containing tooltip information
+
+    Returns:
+        str: Tooltip HTML attribute or empty string if no tooltip
+    """
+    tooltip_text = ""
+    if "tooltip" in annotation_scheme:
+        tooltip_text = annotation_scheme["tooltip"]
+    elif "tooltip_file" in annotation_scheme:
+        try:
+            with open(annotation_scheme["tooltip_file"], "rt") as f:
+                tooltip_text = "".join(f.readlines())
+        except Exception as e:
+            logger.error(f"Failed to read tooltip file: {e}")
+            return ""
+
+    if tooltip_text:
+        return f'data-toggle="tooltip" data-html="true" data-placement="top" title="{tooltip_text}"'
+    return ""
+
+def _generate_input_attributes(annotation_scheme):
+    """
+    Generate additional input attributes for number constraints.
+
+    Args:
+        annotation_scheme (dict): Configuration containing min/max values
+
+    Returns:
+        str: Space-separated attribute string
+    """
+    attrs = []
+
+    if "min_value" in annotation_scheme:
+        attrs.append(f'min="{annotation_scheme["min_value"]}"')
+        logger.debug(f"Setting minimum value: {annotation_scheme['min_value']}")
+
+    if "max_value" in annotation_scheme:
+        attrs.append(f'max="{annotation_scheme["max_value"]}"')
+        logger.debug(f"Setting maximum value: {annotation_scheme['max_value']}")
+
+    return " ".join(attrs)

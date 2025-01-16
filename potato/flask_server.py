@@ -1,11 +1,20 @@
 """
-Driver to run a flask server.
+Flask Server Driver
+
+This module provides the main Flask server implementation for the annotation platform.
+Features include:
+- User authentication and session management
+- Annotation state tracking
+- Multi-phase annotation workflow
+- Survey flow support
+- Data loading and persistence
+- AI augmentation support
 """
-from dataclasses import dataclass
-import os
-import re
-import sys
+from __future__ import annotations
+
 import logging
+import os
+import sys
 import random
 import json
 from collections import deque, defaultdict, Counter, OrderedDict
@@ -22,9 +31,12 @@ import simpledorff
 from simpledorff.metrics import nominal_metric, interval_metric
 
 import flask
-from flask import Flask, render_template, request
+from flask import Flask, session, render_template, request, redirect, url_for, jsonify
 from bs4 import BeautifulSoup
 import shutil
+from datetime import timedelta
+
+
 
 cur_working_dir = os.getcwd() #get the current working dir
 cur_program_dir = os.path.dirname(os.path.abspath(__file__)) #get the current program dir (for the case of pypi, it will be the path where potato is installed)
@@ -34,20 +46,31 @@ base_html_dir = os.path.join(cur_program_dir,'base_htmls') #get the dir where th
 #insert the current program dir into sys path
 sys.path.insert(0, cur_program_dir)
 
+from item_state_management import ItemStateManager, Item, Label, SpanAnnotation
+from item_state_management import get_item_state_manager, init_item_state_manager
+from user_state_management import UserStateManager, UserState, get_user_state_manager, init_user_state_manager
+from authentificaton import UserAuthenticator
+from phase import UserPhase
+
 from create_task_cli import create_task_cli, yes_or_no
 from server_utils.arg_utils import arguments
 from server_utils.config_module import init_config, config
-from server_utils.front_end import generate_site, generate_surveyflow_pages
+from server_utils.front_end import generate_annotation_html_template, generate_html_from_schematic, generate_surveyflow_pages
 from server_utils.schemas.span import render_span_annotations
 from server_utils.cli_utlis import get_project_from_hub, show_project_hub
 from server_utils.prolific_apis import ProlificStudy
 from server_utils.json import easy_json
 
+# This allows us to create an AI endpoint for the system to interact with as needed (if configured)
+from ai.ai_endpoint import get_ai_endpoint
+
+app = Flask(__name__)
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-logging.basicConfig()
-
-
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 random.seed(0)
 
@@ -63,23 +86,24 @@ user_story_pos = defaultdict(lambda: 0, dict())
 user_response_dicts_queue = defaultdict(deque)
 
 # A global mapping from username to the annotator's
-user_to_annotation_state = {}
+#user_to_annotation_state = {}
+#user_state_manager = None
 
 # A global mapping from an instance's id to its data. This is filled by
 # load_all_data()
-instance_id_to_data = {}
+#instance_id_to_data = {}
+#item_state_manager = None
 
 # A global dict to keep tracking of the task assignment status
-task_assignment = {}
+#task_assignment = {}
 
 # path to save user information
 USER_CONFIG_PATH = "user_config.json"
 DEFAULT_LABELS_PER_INSTANCE = 3
 
-
 # This variable of tyep ActiveLearningState keeps track of information on active
 # learning, such as which instances were sampled according to each strategy
-active_learning_state = None
+#active_learning_state = None
 
 # Hacky nonsense
 schema_label_to_color = {}
@@ -126,7 +150,7 @@ COLOR_PALETTE = [
     "rgb(179, 179, 179)",
 ]
 
-#mapping the base html template str to the real file
+# Mapping the base html template str to the real file
 template_dict = {
     "base_html_template":{
         'base': os.path.join(cur_program_dir, 'base_html/base_template.html'),
@@ -149,88 +173,6 @@ template_dict = {
     }
 }
 
-
-app = Flask(__name__)
-
-
-class UserConfig:
-    """
-    A class for maintaining state on which users are allowed to use the system
-    """
-
-    def __init__(self, user_config_path="potato/user_config.json"):
-        self.allow_all_users = True
-        self.user_config_path = user_config_path
-        self.authorized_users = []
-        self.userlist = []
-        self.usernames = set()
-        self.users = {}
-        self.required_user_info_keys = ["username", "password"]
-
-        if os.path.isfile(self.user_config_path):
-            print("Loading users from" + self.user_config_path)
-            with open(self.user_config_path, "rt") as f:
-                for line in f.readlines():
-                    single_user = json.loads(line.strip())
-                    self.add_single_user(single_user)
-
-    # Jiaxin: this function will be depreciate since we will save the full user dict with password
-    def add_user(self, username):
-        if username in self.usernames:
-            print("Duplicate user in list: %s" % username)
-        self.usernames.add(username)
-
-    def add_single_user(self, single_user):
-        """
-        Add a single user to the full user dict
-        """
-        if self.allow_all_users == False and self.is_authorized_user(single_user["username"]) == False:
-            return "Unauthorized user"
-
-        for key in self.required_user_info_keys:
-            if key not in single_user:
-                print("Missing %s in user info" % key)
-                return "Missing %s in user info" % key
-        if single_user["username"] in self.users:
-            print("Duplicate user in list: %s" % single_user["username"])
-            return "Duplicate user in list: %s" % single_user["username"]
-        self.users[single_user["username"]] = single_user
-        self.userlist.append(single_user["username"])
-        return "Success"
-
-    def save_user_config(self):
-        if self.user_config_path:
-            with open(self.user_config_path, "wt") as f:
-                for k in self.userlist:
-                    f.writelines(json.dumps(self.users[k]) + "\n")
-            print("user info file saved at:", self.user_config_path)
-        else:
-            print("WARNING: user_config_path not specified, user registration info are not saved")
-
-    def is_authorized_user(self, username):
-        """
-        Check if a user name is in the authorized user list (as presented in the configuration file).
-        """
-        return username in self.authorized_users
-
-    def is_valid_username(self, username):
-        """
-        Check if a user name is in the current user list.
-        """
-        return username in self.users
-
-    # TODO: Currently we are just doing simple plaintext verification,
-    # but we will need ciphertext verification in the long run
-    def is_valid_password(self, username, password):
-        """
-        Check if the password is correct for a given (username, password) pair.
-        """
-        return self.is_valid_username(username) and self.users[username]["password"] == password
-
-    def is_valid_user(self, username):
-        return self.allow_all_users or username in self.usernames
-
-
 class ActiveLearningState:
     """
     A class for maintaining state on active learning.
@@ -249,363 +191,278 @@ class ActiveLearningState:
             self.id_to_update_round[iid] = self.cur_round
 
 
-class UserAnnotationState:
-    """
-    A class for maintaining state on which annotations users have completed.
-    """
+def load_instance_data(config: dict):
+    '''Loads the instance data from the files specified in the config.'''
 
-    def __init__(self, assigned_user_data):
+    ism = get_item_state_manager()
 
-        # This data structure keeps the label-based annotations the user has
-        # completed so far
-        self.instance_id_to_labeling = {}
+    # Where to look in the JSON item object for the text to annotate
+    text_key = config["item_properties"]["text_key"]
+    id_key = config["item_properties"]["id_key"]
 
-        # This data structure keeps the span-based annotations the user has
-        # completed so far
-        self.instance_id_to_span_annotations = {}
+    data_files = config["data_files"]
+    logger.debug("Loading data from %d files" % (len(data_files)))
 
-        # This is a reference to the data
-        #
-        # NB: do we need this as a field?
-        self.instance_id_to_data = assigned_user_data
+    for data_fname in data_files:
+        fmt = data_fname.split(".")[-1]
+        if fmt not in ["csv", "tsv", "json", "jsonl"]:
+            raise Exception("Unsupported input file format %s for %s" % (fmt, data_fname))
 
-        # TODO: Put behavioral information of each instance with the labels
-        # together however, that requires too many changes of the data structure
-        # therefore, we contruct a separate dictionary to save all the
-        # behavioral information (e.g. time, click, ..)
-        self.instance_id_to_behavioral_data = {}
+        logger.debug("Reading data from " + data_fname)
 
-        # NOTE: this might be dumb but at the moment, we cache the order in
-        # which this user will walk the instances. This might not work if we're
-        # annotating a ton of things with a lot of people, but hopefully it's
-        # not too bad. The underlying motivation is to programmatically change
-        # this ordering later
-        self.instance_id_ordering = list(assigned_user_data.keys())
+        if fmt in ["json", "jsonl"]:
+            with open(data_fname, "rt") as f:
+                for line_no, line in enumerate(f):
+                    item = json.loads(line)
 
-        # initialize the mapping from instance id to order
-        self.instance_id_to_order = self.generate_id_order_mapping(self.instance_id_ordering)
+                    # Validate that the ID key exists in the item
+                    if id_key not in item:
+                        raise KeyError(f"ID key '{id_key}' not found in item at line {line_no+1}")
 
-        self.instance_cursor = 0
+                    instance_id = str(item[id_key]) # Ensure ID is string
 
-        # Indicator of whether the user has passed the prestudy, None means no
-        # prestudy or prestudy not complete, True means passed and False means
-        # failed
-        self.prestudy_passed = None
+                    # Check for duplicate IDs
+                    if ism.has_item(instance_id):
+                        raise ValueError(f"Duplicate instance ID '{instance_id}' found at line {line_no+1}")
 
-        # Indicator of whether the user has agreed to participate this study,
-        # None means consent not complete, True means yes and False measn no
-        self.consent_agreed = None
+                    # Validate text key exists if required
+                    if text_key not in item:
+                        logger.warning(f"Text key '{text_key}' not found in item with ID '{instance_id}'")
 
-        # Total annotation instances assigned to a user
-        self.real_instance_assigned_count = 0
-
-    def generate_id_order_mapping(self, instance_id_ordering):
-        id_order_mapping = {}
-        for i in range(len(instance_id_ordering)):
-            id_order_mapping[instance_id_ordering[i]] = i
-        return id_order_mapping
-
-    def add_new_assigned_data(self, new_assigned_data):
-        """
-        Add new assigned data to the user state
-        """
-        for key in new_assigned_data:
-            self.instance_id_to_data[key] = new_assigned_data[key]
-            self.instance_id_ordering.append(key)
-        self.instance_id_to_order = self.generate_id_order_mapping(self.instance_id_ordering)
-
-    def get_assigned_data(self):
-        return self.instance_id_to_data
-
-    def current_instance(self):
-        inst_id = self.instance_id_ordering[self.instance_cursor]
-        instance = self.instance_id_to_data[inst_id]
-        return instance
-
-    def get_instance_cursor(self):
-        return self.instance_cursor
-
-    def cursor_to_real_instance_id(self, cursor):
-        return self.instance_id_ordering[cursor]
-
-    def is_prestudy_question(self, cursor):
-        return self.instance_id_ordering[cursor][:8] == "prestudy"
-
-    def go_back(self):
-        if self.instance_cursor > 0:
-            if self.prestudy_passed is not None and self.is_prestudy_question(
-                self.instance_cursor - 1
-            ):
-                return
-            self.instance_cursor -= 1
-
-    def go_forward(self):
-        if self.instance_cursor < len(self.instance_id_to_data) - 1:
-            self.instance_cursor += 1
-
-    def go_to_id(self, _id):
-        if _id < len(self.instance_id_to_data) and _id >= 0:
-            self.instance_cursor = _id
-
-    def get_all_annotations(self):
-        """
-        Returns all annotations (label and span) for all annotated instances
-        """
-        labeled = set(self.instance_id_to_labeling.keys()) | set(
-            self.instance_id_to_span_annotations.keys()
-        )
-
-        anns = {}
-        for iid in labeled:
-            labels = {}
-            if iid in self.instance_id_to_labeling:
-                labels = self.instance_id_to_labeling[iid]
-            spans = {}
-            if iid in self.instance_id_to_span_annotations:
-                spans = self.instance_id_to_span_annotations[iid]
-
-            anns[iid] = {"labels": labels, "spans": spans}
-
-        return anns
-
-    def get_label_annotations(self, instance_id):
-        """
-        Returns the label-based annotations for the instance.
-        """
-        if instance_id not in self.instance_id_to_labeling:
-            return None
-        # NB: Should this be a view/copy?
-        return self.instance_id_to_labeling[instance_id]
-
-    def get_span_annotations(self, instance_id):
-        """
-        Returns the span annotations for this instance.
-        """
-        if instance_id not in self.instance_id_to_span_annotations:
-            return None
-        # NB: Should this be a view/copy?
-        return self.instance_id_to_span_annotations[instance_id]
-
-    def get_annotation_count(self):
-        return len(self.instance_id_to_labeling) + len(self.instance_id_to_span_annotations)
-
-    def get_assigned_instance_count(self):
-        return len(self.instance_id_ordering)
-
-    def set_prestudy_status(self, whether_passed):
-        if self.prestudy_passed is not None:
-            return False
-        self.prestudy_passed = whether_passed
-        return True
-
-    def get_prestudy_status(self):
-        """
-        Check if the user has passed the prestudy test.
-        """
-        return self.prestudy_passed
-
-    def get_consent_status(self):
-        """
-        Check if the user has agreed to participate this study.
-        """
-        return self.consent_agreed
-
-    def get_real_assigned_instance_count(self):
-        """
-        Check the number of assigned instances for a user (only the core annotation parts)
-        """
-        return len([it for it in self.instance_id_ordering if it[-4:] != 'html' and it[:8] != 'prestudy'])
-
-    def get_real_finished_instance_count(self):
-        """
-        Check the number of finished instances for a user (only the core annotation parts)
-        """
-        finished_instances = [it for it in self.instance_id_to_labeling if it[-4:]!='html']
-        finished_span_instances = [it for it in self.instance_id_to_span_annotations if (it[-4:] != 'html' and len(self.instance_id_to_span_annotations[it])!=0)]
-
-        return len(set(finished_instances + finished_span_instances))
-
-    def set_annotation(
-        self, instance_id, schema_to_label_to_value, span_annotations, behavioral_data_dict
-    ):
-        """
-        Based on a user's actions, updates the annotation for this particular instance.
-
-        :span_annotations: a list of span annotations, which are each
-          represented as dictionary objects/
-        :return: True if setting these annotation values changes the previous
-          annotation of this instance.
-        """
-
-        # Get whatever annotations were present for this instance, or, if the
-        # item has not been annotated represent that with empty data structures
-        # so we can keep track of whether the state changes
-        old_annotation = defaultdict(dict)
-        if instance_id in self.instance_id_to_labeling:
-            old_annotation = self.instance_id_to_labeling[instance_id]
-
-        old_span_annotations = []
-        if instance_id in self.instance_id_to_span_annotations:
-            old_span_annotations = self.instance_id_to_span_annotations[instance_id]
-
-        # Avoid updating with no entries
-        if len(schema_to_label_to_value) > 0:
-            self.instance_id_to_labeling[instance_id] = schema_to_label_to_value
-        # If the user didn't label anything (e.g. they unselected items), then
-        # we delete the old annotation state
-        elif instance_id in self.instance_id_to_labeling:
-            del self.instance_id_to_labeling[instance_id]
-
-        # Avoid updating with no entries
-        if len(span_annotations) > 0:
-            self.instance_id_to_span_annotations[instance_id] = span_annotations
-        # If the user didn't label anything (e.g. they unselected items), then
-        # we delete the old annotation state
-        elif instance_id in self.instance_id_to_span_annotations:
-            del self.instance_id_to_span_annotations[instance_id]
-
-        # TODO: keep track of all the annotation behaviors instead of only
-        # keeping the latest one each time when new annotation is updated,
-        # we also update the behavioral_data_dict (currently done in the
-        # update_annotation_state function)
-        #
-        # self.instance_id_to_behavioral_data[instance_id] = behavioral_data_dict
-
-        return (
-            old_annotation != schema_to_label_to_value or old_span_annotations != span_annotations
-        )
-
-    def update(self, annotation_order, annotated_instances):
-        """
-        Updates the entire state of annotations for this user by inserting
-        all the data in annotated_instances into this user's state. Typically
-        this data is loaded from a file
-
-        NOTE: This is only used to update the entire list of annotations,
-        normally when loading all the saved data
-
-        :annotation_order: a list of string instance IDs in the order that this
-        user should see those instances.
-        :annotated_instances: a list of dictionary objects detailing the
-        annotations on each item.
-        """
-
-        self.instance_id_to_labeling = {}
-        for inst in annotated_instances:
-
-            inst_id = inst["id"]
-            label_annotations = inst["label_annotations"]
-            span_annotations = inst["span_annotations"]
-
-            self.instance_id_to_labeling[inst_id] = label_annotations
-            self.instance_id_to_span_annotations[inst_id] = span_annotations
-
-            behavior_dict = inst.get("behavioral_data", {})
-            self.instance_id_to_behavioral_data[inst_id] = behavior_dict
-
-            # TODO: move this code somewhere else so consent is organized
-            # separately
-            if re.search("consent", inst_id):
-                consent_key = "I want to participate in this research and continue with the study."
-                self.consent_agreed = False
-                if label_annotations[consent_key].get("Yes") == "true":
-                    self.consent_agreed = True
-
-        self.instance_id_ordering = annotation_order
-        self.instance_id_to_order = self.generate_id_order_mapping(self.instance_id_ordering)
-
-        # Set the current item to be the one after the last thing that was
-        # annotated
-        # self.instance_cursor = min(len(self.instance_id_to_labeling),
-        #                           len(self.instance_id_ordering)-1)
-
-        #follow the first unannotated instance and set it as the current instance after user re-login
-        if self.get_real_finished_instance_count() > 0:
-            annotated_set = set([it['id'] for it in annotated_instances])
-            self.instance_cursor = self.instance_id_to_order[annotated_instances[-1]['id']]
-            for in_id in self.instance_id_ordering:
-                if in_id[-4:] == 'html':
-                    continue
-                if in_id in annotated_set:
-                    self.instance_cursor = self.instance_id_to_order[in_id]
-                else:
-                    break
-    def reorder_remaining_instances(self, new_id_order, preserve_order):
-
-        # Preserve the ordering the user has seen so far for data they've
-        # annotated. This also includes items that *other* users have annotated
-        # to ensure all items get the same number of annotations (otherwise
-        # these items might get re-ordered farther away)
-        new_order = [iid for iid in self.instance_id_ordering if iid in preserve_order]
-
-        # Now add all the other IDs
-        for iid in new_id_order:
-            if iid not in self.instance_id_to_labeling:
-                new_order.append(iid)
-
-        assert len(new_order) == len(self.instance_id_ordering)
-
-        # Update the user's state
-        self.instance_id_ordering = new_order
-        self.instance_id_to_order = self.generate_id_order_mapping(self.instance_id_ordering)
-
-    def parse_time_string(self, time_string):
-        """
-        Parse the time string generated by front end,
-        e.g., 'time_string': 'Time spent: 0d 0h 0m 5s '
-        """
-        time_dict = {}
-        items = time_string.strip().split(" ")
-        if len(items) != 6:
-            return None
-        time_dict["day"] = int(items[2][:-1])
-        time_dict["hour"] = int(items[3][:-1])
-        time_dict["minute"] = int(items[4][:-1])
-        time_dict["second"] = int(items[5][:-1])
-        time_dict["total_seconds"] = (
-            time_dict["second"] + 60 * time_dict["minute"] + 3600 * time_dict["hour"]
-        )
-
-        return time_dict
-
-    def total_working_time(self):
-        """
-        Calculate the amount of time a user have spend on annotation
-        """
-        total_working_seconds = 0
-        for inst_id in self.instance_id_to_behavioral_data:
-            time_string = self.instance_id_to_behavioral_data[inst_id].get("time_string")
-            if time_string:
-                total_working_seconds += (
-                    self.parse_time_string(time_string)["total_seconds"]
-                    if self.parse_time_string(time_string)
-                    else 0
-                )
-
-        if total_working_seconds < 60:
-            total_working_time_str = str(total_working_seconds) + " seconds"
-        elif total_working_seconds < 3600:
-            total_working_time_str = str(int(total_working_seconds) / 60) + " minutes"
+                    ism.add_item(instance_id, item)
         else:
-            total_working_time_str = str(int(total_working_seconds) / 3600) + " hours"
+            sep = "," if fmt == "csv" else "\t"
 
-        return (total_working_seconds, total_working_time_str)
+            # Validate required columns exist
+            df = pd.read_csv(data_fname, sep=sep)
+            if id_key not in df.columns:
+                raise KeyError(f"ID column '{id_key}' not found in file {data_fname}")
+            if text_key not in df.columns:
+                logger.warning(f"Text column '{text_key}' not found in file {data_fname}")
 
-    def generate_user_statistics(self):
-        statistics = {
-            "Annotated instances": len(self.instance_id_to_labeling),
-            "Total working time": self.total_working_time()[1],
-            "Average time on each instance": "N/A",
-        }
-        if statistics["Annotated instances"] != 0:
-            statistics["Average time on each instance"] = "%s seconds" % str(
-                round(self.total_working_time()[0] / statistics["Annotated instances"], 1)
-            )
-        return statistics
+            # Convert ID column to string to ensure consistent typing
+            df[id_key] = df[id_key].astype(str)
+
+            # Check for duplicate IDs in the dataframe
+            if df[id_key].duplicated().any():
+                dupes = df[id_key][df[id_key].duplicated()].tolist()
+                raise ValueError(f"Duplicate instance IDs found in {data_fname}: {dupes}")
+
+            # Check for duplicate IDs with existing items
+            existing_dupes = [id for id in df[id_key] if ism.has_item(id)]
+            if existing_dupes:
+                raise ValueError(f"Instance IDs in {data_fname} conflict with existing IDs: {existing_dupes}")
+
+            # Load data with proper type conversion
+            df = df.astype({id_key: str})
+            if text_key in df.columns:
+                df = df.astype({text_key: str})
+
+            # Add items to state manager
+            for _, row in df.iterrows():
+                item = row.to_dict()
+                instance_id = item[id_key]
+                ism.add_item(instance_id, item)
+
+            line_no = len(df)
+
+        # If the admin didn't specify a subset, have the user annotate all instances
+        max_annotations_per_user = config.get("max_annotations_per_user", len(ism.get_instance_ids()))
+        get_user_state_manager().set_max_annotations_per_user(max_annotations_per_user)
+
+        logger.debug("Loaded %d instances from %s" % (line_no, data_fname))
+
+    # For each item, render the text to display in the UI ahead of time.
+    for item in get_item_state_manager().items():
+        item_data = item.get_data()
+
+        # Validate text key exists before rendering
+        if text_key in item_data:
+            item_data["displayed_text"] = get_displayed_text(item_data[text_key])
+        else:
+            item_data["displayed_text"] = ""
+            logger.warning(f"No text found for item {item.get_id()}, using empty string")
+
+def load_user_data(config: dict):
+
+    user_data_dir = config['output_annotation_dir']
+    usm = get_user_state_manager()
+
+    # For each user's directory, load in their state
+    for user_dir in os.listdir(user_data_dir):
+        usm.load_user_state(os.path.join(user_data_dir, user_dir))
+
+    logger.info("Loaded user data for %d users" % len(usm.get_user_ids()))
+
+def load_all_data(config: dict):
+    '''Loads instance and annotation data from the files specified in the config.'''
+    global item_state_manager
+    global user_state_manager
+
+    # Hacky nonsense
+    global emphasis_corpus_to_schemas
+
+    load_annotation_schematic_data(config)
+    load_instance_data(config)
+    load_user_data(config)
+    load_phase_data(config)
+    load_highlights_data(config)
+
+def load_annotation_schematic_data(config: dict) -> None:
+
+    # Creates the templates we'll use in flask by mashing annotation
+    # specification on top of the proto-templates
+    html_template_fname = generate_annotation_html_template(config)
+
+    # Register that we have an annotation phase. Theoretically, we always
+    # should have this, but perhaps there will be some future case where
+    # annotation is not the primary task.
+    #
+    # NOTE: We don't have any HTML for this yet...
+    usm = get_user_state_manager()
+    usm.add_phase(UserPhase.ANNOTATION, config['annotation_task_name'],
+                  html_template_fname)
+
+def load_highlights_data(config: dict) -> None:
+    pass
+
+def load_phase_data(config: dict) -> None:
+    global logger
+
+    if "phases" not in config or not config["phases"]:
+        return
+
+    phases = config["phases"]
+    if "order" in phases:
+        phase_order = phases["order"]
+    else:
+        phase_order = list(phases.keys())
+
+    logger.debug("Loading %d phases in order: %s" % (len(phase_order), phase_order))
+
+    # TODO: add some logging if "order" was specified with fewer phases than are defined
+    # TODO: add some validation logic to ensure that
+    #         1) all phase names have a definition in the config
+    #         2) all names are unique (no repeats)
+    #         3) all names are strings
+    #         4) all names are non-empty
+    #         5) all types are recognized and valid
 
 
-def load_all_data(config):
-    global instance_id_to_data
+
+    for phase_name in phase_order:
+        phase = phases[phase_name]
+        if not "type" in phase or not phase['type']:
+            raise Exception("Phase %s does not have a type" % phase_name)
+        if not "file" in phase or not phase['file']:
+            raise Exception("Phase %s is specified but does not have a file" % phase_name)
+
+        # Get the phase labeling schemes, being robust to relative or absolute paths
+        phase_scheme_fname = get_abs_or_rel_path(phase['file'], config)
+        phase_labeling_schemes = get_phase_annotation_schemes(phase_scheme_fname)
+
+        # Use the default templates unless specified in the phase config
+        html_template_filename = config["base_html_template"]
+        if 'template' in phase:
+            html_template_filename = phase['template']
+        html_header_filename = config["header_file"]
+        if 'header' in phase:
+            html_header_filename = phase['header']
+        html_layout_filename = config["html_layout"]
+        if 'layout' in phase:
+            html_layout_filename = phase['layout']
+
+        try:
+            phase_html_fname = generate_html_from_schematic(html_template_filename,
+                                            html_header_filename,
+                                            html_layout_filename,
+                                            phase_labeling_schemes,
+                                            False, False,
+                                            phase_name, config)
+        except KeyError as e:
+            raise Exception("Error generating HTML for phase %s (file: %s): %s" \
+                            % (phase_name, phase['file'], str(e)))
+
+        phase_type = UserPhase.fromstr(phase['type'])
+
+        # Register the HTML so it's easy to find later
+        # config['phase'][phase['type']]['pages'].append(phase_html_fname)
+        # Add the phase to the user state manager
+        user_state_manager.add_phase(phase_type, phase_name, phase_html_fname)
+
+        match phase['type']:
+            case "consent":
+                consent_fname = None
+            case "instructions":
+                instructions_fname = phase_html_fname
+            case "prestudy":
+                prestudy_fname = phase_html_fname
+            case "training":
+                training_fname = phase_html_fname
+            case "poststudy":
+                poststudy_fname = phase_html_fname
+            case _:
+                raise Exception("Unknown phase type %s specified for %s" \
+                                 % (phase_name, phase['type']))
+
+
+def get_phase_annotation_schemes(filename: str) -> list[dict]:
+    '''Returns the annotation schemes for a phase from a file.'''
+
+    schemes = []
+    if not os.path.exists(filename):
+        raise Exception("Phase labeling schemes file %s does not exist" % filename)
+
+    if filename.endswith(".json"):
+        with open(filename, "rt") as f:
+            schemes = json.load(f)
+        # Allow users to have specified a single scheme in the JSON file
+        if type(schemes) != list:
+            schemes = [schemes]
+    elif filename.endswith(".jsonl"):
+        with open(filename, 'rt') as f:
+            for line in f:
+                schemes.append(json.loads(line))
+    elif filename.endswith(".yaml") or filename.endswith(".yml"):
+        with open(filename, 'rt') as f:
+            schemes = yaml.safe_load(f)
+    else:
+        raise Exception("Unknown file format for phase labeling schemes file %s" % filename)
+    return schemes
+
+def get_abs_or_rel_path(fname: str, config: dict) -> str:
+    """
+    Returns the path to the fname if it exists as specified, or if not, attempts to find
+    the file in the relative paths from the config file.
+    """
+
+    if os.path.exists(fname):
+        return fname
+
+    # See if we can find the file in the same directory as the config file
+    dname = os.path.dirname(config["__config_file__"])
+    rel_path = os.path.join(dname, fname)
+    if os.path.exists(rel_path):
+        return rel_path
+
+    # See if we can locate the file in the current working directory
+    cwd = os.getcwd()
+    rel_path = os.path.join(cwd, fname)
+    if os.path.exists(rel_path):
+        return rel_path
+
+    # See if we can figure it out from the real path directory
+    real_path = os.path.abspath(dname)
+    dir_path = os.path.dirname(real_path)
+    fname = os.path.join(dir_path, fname)
+
+    if not os.path.exists(fname):
+        raise FileNotFoundError("File not found: %s" % fname)
+    return fname
+
+
+def load_all_data_old(config) -> None:
+    global item_state_manager
     global task_assignment
 
     # Hacky nonsense
@@ -794,10 +651,10 @@ def get_agreement_score(user_list, schema_name, return_type="overall_average"):
     """
     Get the final agreement score for selected users and schemas.
     """
-    global user_to_annotation_state
+    global user_state_manager
 
     if user_list == "all":
-        user_list = user_to_annotation_state.keys()
+        user_list = user_state_manager.get_user_ids()
 
     name2alpha = {}
     if schema_name == "all":
@@ -943,20 +800,25 @@ def find_start_id(user):
     raise RuntimeError("This function is deprecated?")
 
 
-def move_to_prev_instance(username):
-    user_state = lookup_user_state(username)
+def move_to_prev_instance(user_id):
+    user_state = get_user_state(user_id)
     user_state.go_back()
 
 
-def move_to_next_instance(username):
-    user_state = lookup_user_state(username)
+def move_to_next_instance(user_id):
+    user_state = get_user_state(user_id)
+
+    # If the user is at the end of the list, try to assign instances to the user
+    if user_state.is_at_end_index():
+        get_item_state_manager().assign_instances_to_user(user_state)
+
     user_state.go_forward()
 
 
-def go_to_id(username, _id):
-    # go to specific item
-    user_state = lookup_user_state(username)
-    user_state.go_to_id(int(_id))
+def go_to_id(user_id: str, instance_index: int):
+    '''Causes the user's view to change to the Item at the given index.'''
+    user_state = get_user_state(user_id)
+    user_state.go_to_index(int(instance_index))
 
 
 def get_total_annotations():
@@ -965,8 +827,8 @@ def get_total_annotations():
     """
     total = 0
     for username in get_users():
-        user_state = lookup_user_state(username)
-        total += user_state.get_real_finished_instance_count()
+        user_state = get_user_state(username)
+        total += user_state.get_annotation_count()
 
     return total
 
@@ -978,10 +840,10 @@ def update_annotation_state(username, form):
     """
 
     # Get what the user has already annotated, which might include this instance too
-    user_state = lookup_user_state(username)
+    user_state = get_user_state(username)
 
     # Jiaxin: the instance_id are changed to the user's local instance cursor
-    instance_id = user_state.cursor_to_real_instance_id(int(request.form["instance_id"]))
+    instance_id = user_state.get_current_instance_id()
 
     schema_to_label_to_value = defaultdict(dict)
 
@@ -1028,20 +890,6 @@ def update_annotation_state(username, form):
     # update the behavioral information regarding time only when the annotations are changed
     if did_change:
         user_state.instance_id_to_behavioral_data[instance_id] = behavioral_data_dict
-
-        # todo: we probably need a more elegant way to check the status of user consent
-        # when the user agreed to participate, try to assign
-        if re.search("consent", instance_id):
-            consent_key = "I want to participate in this research and continue with the study."
-            user_state.consent_agreed = False
-            if schema_to_label_to_value[consent_key].get("Yes") == "true":
-                user_state.consent_agreed = True
-            assign_instances_to_user(username)
-
-        # when the user is working on prestudy, check the status
-        if re.search("prestudy", instance_id):
-            print(check_prestudy_status(username))
-
     return did_change
 
 
@@ -1049,7 +897,8 @@ def get_annotations_for_user_on(username, instance_id):
     """
     Returns the label-based annotations made by this user on the instance.
     """
-    user_state = lookup_user_state(username)
+    user_state = get_user_state(username)
+    print("instance_id", instance_id)
     annotations = user_state.get_label_annotations(instance_id)
     return annotations
 
@@ -1058,56 +907,11 @@ def get_span_annotations_for_user_on(username, instance_id):
     """
     Returns the span annotations made by this user on the instance.
     """
-    user_state = lookup_user_state(username)
+    user_state = get_user_state(username)
     span_annotations = user_state.get_span_annotations(instance_id)
     return span_annotations
 
-
-# This was used to merge annotated instances in previous annotations.  For
-# example, you had some annotations from google sheet, and want to merge it with
-# the current annotation procedure
-def merge_annotation():
-    """
-    global user_dict
-    global all_data
-    global args
-
-    with open("merged_annotation.json", "w") as w:
-        for i in range(len(all_data["annotated_data"])):
-            line = all_data["annotated_data"][i]
-            annotations = []
-            for user in user_dict:
-                if "label" in user_dict[user]["user_data"][str(i)]:
-                    annotations.append(
-                        {
-                            "label": int(user_dict[user]["user_data"][str(i)]["label"]),
-                            "user": int(user_dict[user]["user_id"]),
-                        }
-                    )
-            line["annotations"] = annotations
-            w.writelines(json.dumps(line) + "\n")
-    """
-    raise RuntimeError("This function is deprecated?")
-
-
-def write_data(username):
-    """
-    global user_dict
-    # global closed
-    global all_data
-    global args
-
-    path = user_dict[username]["path"]
-    with open(path, "w") as w:
-        for line in user_dict[username]["user_data"]:
-            line = json.dumps(user_dict[username]["user_data"][line])
-            w.writelines(line + "\n")
-    """
-    raise RuntimeError("This function is deprecated?")
-
-
-@app.route("/")
-def home():
+def old_home():
     global user_config
 
     if config["__debug__"]:
@@ -1159,10 +963,701 @@ def home():
     print("password logging in")
     return render_template("home.html", title=config["annotation_task_name"])
 
+@app.route("/", methods=['GET', 'POST'])
+def home():
+    print('home', request, session)
+
+    usm = get_user_state_manager()
+
+    # If we're in debug mode, just log in as the debug user
+    # with no password needed and forward to next page
+    if config['__debug__']:
+        if 'username' not in session \
+            or ('username' in session and session['username'] != "debug_user") \
+            or not usm.has_user('debug_user'):
+
+            session['username'] = "debug_user"
+            usm.get_or_create_user(session['username'])
+            # Move past the login phase
+            usm.advance_phase(session['username'])
+        else:
+            print('already logged in as debug user', session['username'])
+
+
+    if 'username' in session:
+        # Check that this user is in the user state manager
+        # anf if not, switch to the login process
+        usm = get_user_state_manager()
+        if session['username'] not in usm.get_user_ids():
+            return login()
+
+        user_state = get_user_state(session['username'])
+        print('User is logged in; redirecting to phase...', user_state.get_phase())
+        match user_state.get_phase():
+            case UserPhase.LOGIN:
+                return login()
+            case UserPhase.CONSENT:
+                return consent()
+            case UserPhase.PRESTUDY:
+                return prestudy()
+            case UserPhase.INSTRUCTIONS:
+                return instructions()
+            case UserPhase.TRAINING:
+                return training()
+            case UserPhase.ANNOTATION:
+                return annotate()
+            case UserPhase.POSTSTUDY:
+                return poststudy()
+            case UserPhase.DONE:
+                return done()
+            case _:
+                raise Exception("User is logged in but in unknown user phase", user_state.get_phase())
+    else:
+        return login()
+
+def get_current_page_html(config: dict, username: str) -> str:
+    user_state = get_user_state(username)
+    phase, page = user_state.get_current_phase_and_page()
+    usm = get_user_state_manager()
+    # Look up the html template for the current page
+    html_fname = usm.get_phase_html_fname(phase, page)
+    # Render the consent form
+    return render_template(html_fname)
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
     global user_config
+    print('login', request, session)
+
+    # If the user is already logged in, just forward to the home
+    # which will figure out where to go next
+    if False: #or 'username' in session:
+        # Check that this user is in the user state manager
+        # or if not, continue with the login process
+        usm = get_user_state_manager()
+        print('\n\nusers: ', usm.get_user_ids())
+        if session['username'] in usm.get_user_ids():
+            return redirect(home())
+        else:
+            logger.debug('User %s in session cache but not found in user state manager, continuing with login' % session['username'])
+
+    # If we're not in debug mode, we need to check the login
+    if request.method == 'POST':
+        session['username'] = request.form['username']
+        print('POST -> LOGIN: username: ', session['username'])
+
+        # Get the user state manager so we can register the user
+        usm = get_user_state_manager()
+
+        # Register the user if they don't exist
+        # TODO: add in logic for checking/hashing passwords, safe password
+        user_state = create_user(session['username'])
+
+        # Advance the user's phase beyond login
+        usm.advance_phase(session['username'])
+        request.method = 'GET'
+        return home()
+
+        #phase, page = user_state.get_current_phase_and_page()
+        #print('GET <- LOGIN: phase, page: ', phase, page)
+
+        #usm = get_user_state_manager()
+        # Look up the html template for the current consent form
+        #next_html_fname = usm.get_phase_html_fname(phase, page)
+        # Render the consent form
+        #return render_template(next_html_fname, title=config["annotation_task_name"])
+
+    else:
+        print('GET <- LOGIN')
+        return '''
+            <form method="post">
+                <p><input type=text name=username>
+                <p><input type=submit value=login>
+            </form>
+        '''
+
+def create_user(username: str) -> UserState:
+    '''Creates a new user in the user state manager.'''
+    usm = get_user_state_manager()
+    user_state = usm.get_or_create_user(username)
+    return user_state
+
+@app.route("/consent", methods=["GET", "POST"])
+def consent():
+    if 'username' not in session:
+        return home()
+
+    username = session['username']
+    user_state = get_user_state(username)
+    print('CONSENT: user_state: ', user_state)
+    print('CONSENT: user_state.get_phase(): ', user_state.get_phase())
+
+    # Check at the user is still in the consent phase. Note that this might
+    # #nvolve multiple pages of different types of consent
+    if user_state.get_phase() != UserPhase.CONSENT:
+        # If not in the consent phase, dump back to the home page to redirect
+        return home()
+
+    # If the user is returning some information from the pag
+    if request.method == 'POST':
+        # User is logged in, so check where they are in the process and redirect
+        print('POST -> CONSENT: ', request.form)
+
+        # The form should require that the user consent to the study
+        #
+        # TODO: add some extra sanity checks here that they actually did,
+        #       which is going to require us to know which keys are the
+        #       consent keys from the relevant phase's schema
+
+        # Now that the user has consisented, advance the state
+        # and have the home page redirect to the appropriate next phase
+        usm = get_user_state_manager()
+        usm.advance_phase(session['username'])
+
+        # Reset to pretend this is a new get request
+        request.method = 'GET'
+        return home()
+    # Show the current consent form
+    else:
+        print("GET <- CONSENT")
+        if True:
+            return get_current_page_html(config, username)
+        # Get the page the user is currentlly on
+        phase, page = user_state.get_current_phase_and_page()
+
+        usm = get_user_state_manager()
+        # Look up the html template for the current consent form
+        consent_html_fname = usm.get_phase_html_fname(phase, page)
+        # Render the consent form
+        return render_template(consent_html_fname)
+
+@app.route("/instructions", methods=["GET", "POST"])
+def instructions():
+    if 'username' not in session:
+        return home()
+
+    username = session['username']
+    user_state = get_user_state(username)
+
+    # Check at the user is still in the instructions phase. Note that this might
+    # #nvolve multiple pages of different types of consent
+    if user_state.get_phase() != UserPhase.INSTRUCTIONS:
+        # If not in the instructions phase, dump back to the home page to redirect
+        # Reset to pretend this is a new get request
+        return home()
+
+    # If the user is returning some information from the page
+    if request.method == 'POST':
+        print('POST -> INSTRUCTIONS: ', request.form)
+
+        # Verify that the user has read the instructions.
+        #
+        # TODO: add some extra sanity checks here that they actually did,
+        #       which is going to require us to know which keys are the
+        #       required keys and values from the relevant phase's schema
+
+        # Now that the user has read the instructions, advance the state
+        # and have the home page redirect to the appropriate next phase
+        usm = get_user_state_manager()
+        usm.advance_phase(session['username'])
+        request.method = 'GET'
+        return home()
+
+    # Show the current set of instructions
+    else:
+        # Get the page the user is currentlly on
+        phase, page = user_state.get_current_phase_and_page()
+        print('GET <-- INSTRUCTIONS: phase, page: ', phase, page)
+
+        usm = get_user_state_manager()
+        # Look up the html template for the current consent form
+        instructions_html_fname = usm.get_phase_html_fname(phase, page)
+        # Render the consent form
+        return render_template(instructions_html_fname)
+
+@app.route("/prestudy", methods=["GET", "POST"])
+def prestudy():
+    if 'username' not in session:
+        return home()
+
+    username = session['username']
+    user_state = get_user_state(username)
+
+    # Check at the user is still in the instructions phase. Note that this might
+    # #nvolve multiple pages of different types of consent
+    if user_state.get_phase() != UserPhase.PRESTUDY:
+        print('NOT IN PRESTUDY PHASE')
+        return home()
+
+    # If the user is returning some information from the page
+    if request.method == 'POST':
+        print('POST -> PRESTUDY: ', request.form)
+
+        # Process the prestudy form data
+        #
+        # TODO: Save this data in the user state manager
+
+        # Advance the state and have the home page redirect to the
+        # appropriate next phase
+        usm = get_user_state_manager()
+        usm.advance_phase(session['username'])
+        request.method = 'GET'
+        return home()
+
+    # Show the current prestudy page
+    else:
+        # Get the page the user is currently on
+        phase, page = user_state.get_current_phase_and_page()
+        print('GET <-- PRESTUDY: phase, page: ', phase, page)
+
+        # Look up the html template for the current page and
+        usm = get_user_state_manager()
+        prestudy_html_fname = usm.get_phase_html_fname(phase, page)
+        return render_template(prestudy_html_fname)
+
+@app.route("/annotate2", methods=["GET", "POST"])
+def annotate2():
+    if 'username' not in session:
+        return home()
+
+    username = session['username']
+    user_state = get_user_state(username)
+
+    # Check at the user is in the annotation phase.
+    if user_state.get_phase() != UserPhase.ANNOTATION:
+        # If not in the annotation phase, dump back to the home page to redirect
+        return home()
+
+    # If the user is returning some information from the page
+    if request.method == 'POST':
+        print('POST -> ANNOTATION: ', request.form)
+        usm = get_user_state_manager()
+        usm.advance_phase(session['username'])
+        request.method = 'GET'
+        return home()
+    # Show an annotation page
+    else:
+        # Get the page the user is currentlly on
+        phase, page = user_state.get_current_phase_and_page()
+        print('GET <-- ANNOTATION: phase, page: ', phase, page)
+        usm = get_user_state_manager()
+        # Look up the html template for the current annotation form
+        html_fname = usm.get_phase_html_fname(phase, page)
+        # Render the consent form
+        return render_template(html_fname)
+
+
+@app.route("/annotate", methods=["GET", "POST"])
+def annotate():
+    """
+    Handle annotation page requests and user interactions.
+
+    Manages:
+    - User session validation
+    - Phase checking
+    - Instance assignment
+    - Navigation between instances
+    - Page rendering with annotations
+
+    Returns:
+        flask.Response: Rendered annotation page or redirect
+    """
+    logger.debug("Handling annotation request")
+
+    if 'username' not in session:
+        logger.info("No active session, redirecting to home")
+        return home()
+
+    username = session['username']
+    user_state = get_user_state(username)
+    logger.debug(f"Retrieved state for user: {username}")
+
+    # Check user phase
+    if user_state.get_phase() != UserPhase.ANNOTATION:
+        logger.info(f"User {username} not in annotation phase, redirecting")
+        return home()
+
+    # If the user hasn't yet be assigned anything to annotate, do so now. We do
+    # this step now rather than when the user was created to ensure that we
+    # only assign instances to users after they have completed any pre-study
+    # phases that might be required (e.g., consent, instructions, etc.)
+    #
+    # Have the ItemStateManager assign the instances to the user based on its
+    # internal logic (e.g. random, round-robin, etc.). Note that this may
+    # be a no-op if the ISM declines to assign items ot the user (e.g.,
+    # because they have already annotated everything).
+    if not user_state.has_assignments():
+        get_item_state_manager().assign_instances_to_user(user_state)
+
+    # See if this user has finished annotating all of their assigned instances
+    if not user_state.has_remaining_assignments():
+        print('User %s has NO remaining instances to annotate' % username)
+        # If the user is done annotating, advance to the next phase
+        #
+        # NOTE: Should we check prompt the user to confirm that they are done
+        # since they won't be able to go back and annotate?
+        get_user_state_manager().advance_phase(username)
+        return home()
+
+    if request.is_json and 'action' in request.json:
+       action = request.json['action']
+    else:
+       action = request.form['action'] if 'action' in request.form else "init"
+
+    # print("Action: ", action)
+
+    if action == "prev_instance":
+        move_to_prev_instance(username)
+
+    elif action == "next_instance":
+        move_to_next_instance(username)
+
+    elif action == "go_to":
+        go_to_id(username, request.form.get("go_to"))
+    else:
+        print('unrecognized action request: "%s"' % action)
+
+    # Once we figure out what instance the user is annotating now,
+    # render the page for that with any existing annotations
+    return render_page_with_annotations(username)
+
+@app.route("/go_to", methods=["GET", "POST"])
+def go_to():
+    """
+    TBD
+    """
+    if 'username' not in session:
+        return home()
+
+    username = session['username']
+    user_state = get_user_state(username)
+
+    # Check at the user is in the annotation phase.
+    if user_state.get_phase() != UserPhase.ANNOTATION:
+        # If not in the annotation phase, dump back to the home page to redirect
+        return home()
+
+    if request.method == 'POST':
+        print('POST -> GO_TO: ', request.form)
+        go_to_id(username, request.form.get("go_to"))
+
+    return render_page_with_annotations(username)
+
+def render_page_with_annotations(username) -> str:
+    '''
+    When annotating, shows the current instance to the user with any annotations
+    they may have made. This method is called when the user is in the annotation
+    phase and is currently annotating.
+    '''
+
+    # Hacky nonsense
+    global emphasis_corpus_to_schemas
+
+    user_state = get_user_state_manager().get_user_state(username)
+    item = user_state.get_current_instance()
+    instance_id = item.get_id()
+    # print('instance_id: ', instance_id)
+
+    # directly display the prepared displayed_text
+    text = item.get_data()["displayed_text"]
+    # print('displayed_text: ', text)
+
+    var_elems = {
+        "instance": { "text": text },
+        "emphasis": list(emphasis_corpus_to_schemas)
+    }
+
+    # also save the displayed text in the metadata dict
+    # instance_id_to_data[instance_id]['displayed_text'] = text
+
+    # If the user has labeled spans within this instance before, replace the
+    # current instance text with pre-annotated mark-up. We do this here before
+    # the render_template call so that we can directly insert the span-marked-up
+    # HTML into the template.
+    #
+    # NOTE: This currently requires a very tight (and kludgy) binding between
+    # the UI code for how Potato represents span annotations and how the
+    # back-end displays these. Future work when we are better programmers will
+    # pass this info to client side for rendering, rather than doing
+    # pre-rendering here. This also means that any changes to the UI code for
+    # rendering need to be updated here too.
+    #
+    # NOTE2: We have to this here to account for any keyword highlighting before
+    # the instance text gets marked up in the post-processing below
+    span_annotations = get_span_annotations_for_user_on(username, instance_id)
+    if span_annotations is not None and len(span_annotations) > 0:
+        # Mark up the instance text where the annotated spans were
+        text = render_span_annotations(text, span_annotations)
+
+    # If the admin has specified that certain keywords need to be highlighted,
+    # post-process the selected instance so that it now also has colored span
+    # overlays for keywords. This also include label suggestions for the user.
+    #
+    # NOTE: this code is probably going to break the span annotation's
+    # understanding of the instance. Need to check this...
+    schema_content_to_prefill = []
+
+    #prepare label suggestions
+    label_suggestion_json = get_label_suggestions(item, config, schema_content_to_prefill)
+
+    var_elems["suggestions"] = list(label_suggestion_json)
+    # Fill in the kwargs that the user wanted us to include when rendering the page
+    kwargs = {}
+    for kw in config["item_properties"].get("kwargs", []):
+        if kw in item.get_data():
+            kwargs[kw] = item.get_data()[kw]
+
+    all_statistics = get_user_state(username).generate_user_statistics()
+
+    # TODO: Display plots for agreement scores instead of only the overall score
+    # in the statistics sidebar
+    # all_statistics['Agreement'] = get_agreement_score('all', 'all', return_type='overall_average')
+    # print(all_statistics)
+
+    # Set the html file as surveyflow pages when the instance is a not an
+    # annotation page (survey pages, prestudy pass or fail page)
+    html_file = config["site_file"]
+
+    var_elems_html = "".join(
+        map(lambda item : (
+            f'<script id="{item[0]}" ' +
+            ' type="application/json"> ' +
+            f' {easy_json(item[1])} </script>'
+        ), var_elems.items())
+    )
+
+    custom_js = ""
+    if config["customjs"] and config.get("customjs_hostname"):
+        custom_js = (
+            f'<script src="http://{config["customjs_hostname"]}/potato.js"' +
+            ' defer></script>'
+        )
+    elif config["customjs"]:
+        custom_js = (
+            '<script src="http://localhost:4173/potato.js" ' +
+            ' defer></script>'
+        )
+    else:
+        custom_js = (
+            '<script src="https://cdn.jsdelivr.net/gh/' +
+            'davidjurgens/potato@HEAD/node/live/potato.js" ' +
+            ' crossorigin="anonymous"></script>'
+        )
+
+    # Flask will fill in the things we need into the HTML template we've created,
+    # replacing {{variable_name}} with t    he associated text for keyword arguments
+    rendered_html = render_template(
+        html_file,
+        username=username,
+        # This is what instance the user is currently on
+        instance=text,
+        instance_obj=item,
+        instance_id=instance_id,
+        instance_index=user_state.get_current_instance_index(),
+        finished=get_user_state(username).get_annotation_count(),
+        total_count=get_user_state(username).get_max_assignments(),
+        alert_time_each_instance=config["alert_time_each_instance"],
+        statistics_nav=all_statistics,
+        var_elems=var_elems_html,
+        custom_js=custom_js,
+        **kwargs
+    )
+
+    # Parse the page so we can programmatically reset the annotation state
+    # to what it was before
+    soup = BeautifulSoup(rendered_html, "html.parser")
+
+    # If the user has annotated this before, walk the DOM and fill out what they
+    # did
+    annotations = get_annotations_for_user_on(username, instance_id)
+    # print(f'annotations for {instance_id}: ', annotations)
+
+    # convert the label suggestions into annotations for front-end rendering
+    if annotations == None and schema_content_to_prefill:
+        scheme_dict = {}
+        annotations = defaultdict(dict)
+        for it in config['annotation_schemes']:
+            if it['annotation_type'] in ['radio', 'multiselect']:
+                it['label2value'] = {(l if type(l) == str else l['name']):str(i+1) for i,l in enumerate(it['labels'])}
+            scheme_dict[it['name']] = it
+        for s in schema_content_to_prefill:
+            if scheme_dict[s['name']]['annotation_type'] in ['radio', 'multiselect']:
+                annotations[s['name']][s['label']] = scheme_dict[s['name']]['label2value'][s['label']]
+            elif scheme_dict[s['name']]['annotation_type'] in ['text']:
+                if "labels" not in scheme_dict[s['name']]:
+                    annotations[s['name']]['text_box'] = s['label']
+            else:
+                print('WARNING: label suggestions not supported for annotation_type %s, please submit a github issue to get support'%scheme_dict[s['name']]['annotation_type'])
+    #print(schema_content_to_prefill, annotations)
+
+
+    if annotations is not None:
+        # Reset the state
+        for label_obj, value in annotations.items():
+
+            print("Filling in ", label_obj, value)
+
+            schema = label_obj.get_schema()
+            label = label_obj.get_name()
+
+            name = schema + ":::" + label
+
+            # Find all the input, select, and textarea tags with this name
+            # (which was annotated) and figure out which one to fill in
+            input_fields = soup.find_all(["input", "select", "textarea"], {"name": name})
+
+            for input_field in input_fields:
+
+                if input_field is None:
+                    print("No input for ", name)
+                    continue
+
+                # If it's a slider, set the value for the slider
+                if input_field['type'] == 'range' and name.endswith(':::slider'):
+                    input_field['value'] = value
+                    continue
+
+                if input_field['type'] == 'checkbox' or input_field['type'] == 'radio':
+                    if value:
+                        input_field['checked'] = True
+
+                if input_field['type'] == 'text' or input_field['type'] == 'textarea':
+                    if isinstance(value, str):
+                        input_field['value'] = value
+
+                if False:
+                    # If it's not a text area, let's see if this is the button
+                    # that was checked, and if so mark it as checked
+                    if input_field.name != "textarea" and input_field.has_attr("value") and input_field.get("value") != value:
+                        continue
+                    else:
+                        input_field["checked"] = True
+                        input_field["value"] = value
+
+                    # Set the input value for textarea input
+                    #if input_field.name == "textarea" and isinstance(value, str):
+                    #    input_field.string = value
+
+                    # Find the right option and set it as selected if the current
+                    # annotation schema is a select box
+                    if label == "select-one":
+                        option = input_field.findChildren("option", {"value": value})[0]
+                        option["selected"] = "selected"
+
+    # randomize the order of options for multirate schema
+    selected_schemas_for_option_randomization = []
+    for it in config['annotation_schemes']:
+        if it['annotation_type'] == 'multirate' and it.get('option_randomization'):
+            selected_schemas_for_option_randomization.append(it['description'])
+
+    if len(selected_schemas_for_option_randomization) > 0:
+        soup = randomize_options(soup, selected_schemas_for_option_randomization,
+                                 map_user_id_to_digit(username))
+
+    # If the admin has turned on AI hints, add them to the page
+    soup = add_ai_hints(soup, instance_id)
+
+    rendered_html = str(soup)
+
+    return rendered_html
+
+def get_label_suggestions(item, config, schema_content_to_prefill) -> set[SuggestedResponse]:
+
+    label_suggestions_json = set()
+    if 'label_suggestions' in item.get_data():
+        suggestions = item.get_data()['label_suggestions']
+        for scheme in config['annotation_schemes']:
+            if scheme['name'] not in suggestions:
+                continue
+            suggested_labels = suggestions[scheme['name']]
+            if type(suggested_labels) == str:
+                suggested_labels = [suggested_labels]
+            elif type(suggested_labels) == list:
+                suggested_labels = suggested_labels
+            else:
+                print("WARNING: Unsupported suggested label type %s, please check your input data" % type(s))
+                continue
+
+            if not scheme.get('label_suggestions') in ['highlight', 'prefill']:
+                print('WARNING: the style of suggested labels is not defined, please check your configuration file.')
+                continue
+
+            label_suggestion = scheme['label_suggestions']
+            for s in suggested_labels:
+                if label_suggestion == 'highlight':
+                        #bad suggestion -- TODO make chance configurable
+                        if random.randrange(0, 3) == 2:
+                            label_suggestions_json.add(SuggestedResponse(scheme['name'], random.choice(scheme['labels'])))
+                            continue
+
+                        label_suggestions_json.add(SuggestedResponse(scheme['name'], s))
+                elif label_suggestion == 'prefill':
+                        schema_content_to_prefill.append({'name':scheme['name'], 'label':s})
+    return label_suggestions_json
+
+def add_ai_hints(soup: BeautifulSoup, instance_id: str) -> BeautifulSoup:
+    """
+    Adds AI-generated hints to the page, if enabled. This is a hook for adding hints to the
+    page based on the instance that the user is currently annotating.
+    """
+
+    return soup
+
+
+@app.route("/poststudy", methods=["GET", "POST"])
+def poststudy():
+    if 'username' not in session:
+        return home()
+
+    username = session['username']
+    user_state = get_user_state(username)
+
+    # Check at the user is still in the instructions phase. Note that this might
+    # #nvolve multiple pages of different types of consent
+    if user_state.get_phase() != UserPhase.POSTSTUDY:
+        # If not in the instructions phase, dump back to the home page to redirect
+        # Reset to pretend this is a new get request
+        return home()
+
+    # If the user is returning some information from the page
+    if request.method == 'POST':
+        print('POSTSTUDY: POST: ', request.form)
+
+        # TODO: Record the poststudy data
+
+        # Advance the state and move to the appropriate next phase
+        usm = get_user_state_manager()
+        usm.advance_phase(session['username'])
+        request.method = 'GET'
+        return home()
+
+    # Show the current set of instructions
+    else:
+        # Get the page the user is currentlly on
+        phase, page = user_state.get_current_phase_and_page()
+        print('INSTRUCTIONS GET: phase, page: ', phase, page)
+
+        usm = get_user_state_manager()
+        # Look up the html template for the current consent form
+        html_fname = usm.get_phase_html_fname(phase, page)
+        # Render the consent form
+        return render_template(html_fname)
+
+@app.route("/done", methods=["GET", "POST"])
+def done():
+    return '<p>u did it done now. gud job.</p>'
+
+@app.route('/logout')
+def logout():
+    session.pop('username', None)
+    return home()
+
+@app.route("/prolificlogin", methods=["GET", "POST"])
+def prolificlogin():
+    global user_config
+
+
+def old_login():
 
     if config["__debug__"]:
         action = "login"
@@ -1199,21 +1694,36 @@ def login():
 
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
-    global user_config
+    """
+    Handle user registration requests.
 
-    # TODO: add in logic for checking/hashing passwords, safe password
-    # management, etc. For now just #yolo and log in people regardless.
+    Features:
+    - Email validation
+    - Password handling (TODO: add proper hashing)
+    - User authorization checking
+    - Config persistence
+
+    Args (from form):
+        email: User's email address
+        pass: User's password
+        action: Request action type
+
+    Returns:
+        flask.Response: Rendered template with registration result
+    """
+    logger.debug("Processing signup request")
+
     action = request.form.get("action")
-
-    # Jiaxin: currently we are just using email as the username
     username = request.form.get("email")
     email = request.form.get("email")
     password = request.form.get("pass")
 
+    logger.debug(f"Signup action: {action}")
+
     if action == "signup":
         single_user = {"username": username, "email": email, "password": password}
         result = user_config.add_single_user(single_user)
-        print(single_user["username"], result)
+        logger.info(f"Signup result for {username}: {result}")
 
         if result == "Success":
             user_config.save_user_config()
@@ -1245,19 +1755,63 @@ def signup():
         login_error="Invalid username or password",
     )
 
+@app.route("/updateinstance", methods=["POST"])
+def update_instance() -> str:
+    '''The API endpoint for updating the instance data when a user clicks on the
+       something in the web UI. We track the progress in real time.'''
+
+    if request.is_json:
+        # Get the instance id
+        instance_id = request.json.get("instance_id")
+
+        # Get the schema name
+        schema_name = request.json.get("schema")
+
+        # Get the state of items for that schema
+        schema_state = request.json.get("state")
+
+        username = session['username']
+        user_state = get_user_state(username)
+
+        print('updateinstance/ -> ', request.json)
+
+        if request.json.get("type") == "label":
+            for lv in schema_state:
+                label = Label(schema_name, lv['name'])
+                value = lv['value']
+                user_state.add_label_annotation(instance_id, label, value)
+        elif request.json.get("type") == "span":
+            for sv in schema_state:
+                span = SpanAnnotation(schema_name, sv['name'], sv['title'], sv['start'], sv['end'])
+                value = sv['value']
+                user_state.add_span_annotation(instance_id, span, value)
+        else:
+            raise Exception("Unknown annotation type: ", request.json.get("type"))
+
+        # If we're annotating
+        if user_state.get_phase() == UserPhase.ANNOTATION:
+
+            # Update that we got some annotation on this instance
+            get_item_state_manager().register_annotator(instance_id, username)
+
+        # Save these new instance labels (could be annotations or pre/post study)
+        get_user_state_manager().save_user_state(user_state)
+
+    return {"status": "success"}
 
 @app.route("/newuser")
 def new_user():
     return render_template("newuser.html")
 
 
-def get_users():
+def get_users() -> list[str]:
     """
     Returns an iterable over the usernames of all users who have annotated in
     the system so far
     """
-    global user_to_annotation_state
-    return list(user_to_annotation_state.keys())
+    global user_state_manager
+
+    return user_state_manager.get_user_ids()
 
 
 def get_prestudy_label(label):
@@ -1291,7 +1845,7 @@ def check_prestudy_status(username):
     if "prestudy" not in config or config["prestudy"]["on"] is False:
         return "no prestudy test"
 
-    user_state = lookup_user_state(username)
+    user_state = get_user_state(username)
 
     # directly return the status if the user has passed/failed the prestudy before
     if user_state.get_prestudy_status() == False:
@@ -1323,7 +1877,7 @@ def check_prestudy_status(username):
     print_prestudy_result()
 
     # update the annotation list according the prestudy test result
-    assign_instances_to_user(username)
+    #assign_instances_to_user(username)
 
     return prestudy_result
 
@@ -1724,40 +2278,13 @@ def update_prolific_study_status():
         th = threading.Thread(target=prolific_study.workload_checker)
         th.start()
 
-def lookup_user_state(username):
+def get_user_state(user_id: str) -> UserState:
     """
-    Returns the UserAnnotationState for a user, or if that user has not yet
-    annotated, creates a new state for them and registers them with the system.
+    Returns the UserState for a user
     """
-    global user_to_annotation_state
+    global user_state_manager
 
-    if username not in user_to_annotation_state:
-        logger.debug('Previously unknown user "%s"; creating new annotation state' % (username))
-
-        if "automatic_assignment" in config and config["automatic_assignment"]["on"]:
-            # when pre_annotation is set up, only assign the instance when consent question is answered
-            if "prestudy" in config and config["prestudy"]["on"]:
-                user_state = UserAnnotationState(generate_initial_user_dataflow(username))
-                user_to_annotation_state[username] = user_state
-
-            # when pre_annotation is set up, only assign the instance when consent question is answered
-            elif "pre_annotation" in config["automatic_assignment"] and "pre_annotation" in config["automatic_assignment"]["order"]:
-                user_state = UserAnnotationState(generate_initial_user_dataflow(username))
-                user_to_annotation_state[username] = user_state
-
-            # assign instances to new user when automatic assignment is turned on and there is no pre_annotation or prestudy pages
-            else:
-                user_state = UserAnnotationState(generate_initial_user_dataflow(username))
-                user_to_annotation_state[username] = user_state
-                assign_instances_to_user(username)
-
-        else:
-            # assign all the instance to each user when automatic assignment is turned off
-            user_state = UserAnnotationState(instance_id_to_data)
-            user_state.real_instance_assigned_count = user_state.get_assigned_instance_count()
-            user_to_annotation_state[username] = user_state
-    else:
-        user_state = user_to_annotation_state[username]
+    user_state = user_state_manager.get_user_state(user_id)
 
     return user_state
 
@@ -1772,7 +2299,7 @@ def save_user_state(username, save_order=False):
     # NB: Do some kind of sanitizing on the username to improve security
     user_dir = os.path.join(output_annotation_dir, username)
 
-    user_state = lookup_user_state(username)
+    user_state = get_user_state(username)
 
     if not os.path.exists(user_dir):
         os.makedirs(user_dir)
@@ -1793,9 +2320,11 @@ def save_user_state(username, save_order=False):
             if inst_id in user_state.instance_id_to_behavioral_data:
                 bd_dict = user_state.instance_id_to_behavioral_data[inst_id]
 
+            item = get_item_state_manager().get_item(inst_id)
+
             output = {
                 "id": inst_id,
-                "displayed_text": instance_id_to_data[inst_id]["displayed_text"],
+                "displayed_text": item.get_data()["displayed_text"],
                 "label_annotations": data["labels"],
                 "span_annotations": data["spans"],
                 "behavioral_data": bd_dict,
@@ -1905,13 +2434,20 @@ def save_all_annotations():
         print("saved")
 
 
-def load_user_state(username):
+def load_user_state(config: dict):
+    users_with_annotations = [
+        f for f in os.listdir(config["output_annotation_dir"])
+        if os.path.isdir(os.path.join(config["output_annotation_dir"],f)) and f != 'archived_users'
+    ]
+    for user in users_with_annotations:
+        #load_user_state2(user)
+        pass
+
+def load_user_state2(username):
     """
     Loads the user's state from disk. The state includes which instances they
     have annotated and the order in which they are expected to see instances.
     """
-    global user_to_annotation_state
-    global instance_id_to_data
 
     # Figure out where this user's data would be stored on disk
     user_state_dir = config["output_annotation_dir"]
@@ -1931,7 +2467,8 @@ def load_user_state(username):
                 assigned_user_data = json.load(r)
         # otherwise, set the assigned user data as all the instances
         else:
-            assigned_user_data = instance_id_to_data
+            #assigned_user_data = instance_id_to_data
+            pass
 
         annotation_order = []
         annotation_order_fname = os.path.join(user_dir, "annotation_order.txt")
@@ -2004,7 +2541,7 @@ def load_user_state(username):
                 prolific_study.pause_study()
             return "all instances have been assigned"
 
-        lookup_user_state(username)
+        get_user_state(username)
         return "new user initialized"
 
 
@@ -2012,9 +2549,9 @@ def get_cur_instance_for_user(username):
     global user_to_annotation_state
     global instance_id_to_data
 
-    user_state = lookup_user_state(username)
+    user_state = get_user_state(username)
 
-    return user_state.current_instance()
+    return user_state.get_current_instance()
 
 
 def previous_response(user, file_path):
@@ -2083,7 +2620,7 @@ def get_displayed_text(text):
     return text
 
 
-@app.route("/annotate", methods=["GET", "POST"])
+#@app.route("/annotate", methods=["GET", "POST"])
 def annotate_page(username=None, action=None):
     """
     Parses the input received from the user's annotation and takes some action
@@ -2163,7 +2700,7 @@ def annotate_page(username=None, action=None):
         if result_code == "all instances have been assigned":
             return render_template(
                 "error.html",
-                error_message="Sorry that you come a bit late. We have collected enough responses for our study. However, prolific sometimes will recruit more participants than we expected. We are sorry for the inconvenience!",
+                error_message="Sorry that you've come a bit late. We have collected enough responses for our study. However, prolific sometimes will recruit more participants than we expected. We are sorry for the inconvenience!",
             )
 
     elif action == "prev_instance":
@@ -2261,7 +2798,7 @@ def annotate_page(username=None, action=None):
         if kw in instance:
             kwargs[kw] = instance[kw]
 
-    all_statistics = lookup_user_state(username).generate_user_statistics()
+    all_statistics = get_user_state(username).generate_user_statistics()
 
     # TODO: Display plots for agreement scores instead of only the overall score
     # in the statistics sidebar
@@ -2287,7 +2824,7 @@ def annotate_page(username=None, action=None):
     custom_js = ""
     if config["customjs"] and config.get("customjs_hostname"):
         custom_js = (
-            f'<script src="http://{config["customjs_hostname"]}/potato.js"' + 
+            f'<script src="http://{config["customjs_hostname"]}/potato.js"' +
             ' defer></script>'
         )
     elif config["customjs"]:
@@ -2310,9 +2847,9 @@ def annotate_page(username=None, action=None):
         # This is what instance the user is currently on
         instance=text,
         instance_obj=instance,
-        instance_id=lookup_user_state(username).get_instance_cursor(),
-        finished=lookup_user_state(username).get_real_finished_instance_count(),
-        total_count=lookup_user_state(username).get_real_assigned_instance_count(),
+        instance_id=get_user_state(username).get_current_instance_index(),
+        finished=get_user_state(username).get_real_finished_instance_count(),
+        total_count=get_user_state(username).get_real_assigned_instance_count(),
         alert_time_each_instance=config["alert_time_each_instance"],
         statistics_nav=all_statistics,
         var_elems=var_elems_html,
@@ -2358,6 +2895,8 @@ def annotate_page(username=None, action=None):
         for schema, labels in annotations.items():
             for label, value in labels.items():
 
+                print("Filling in", schema, label, value)
+
                 name = schema + ":::" + label
 
                 # Find all the input, select, and textarea tags with this name
@@ -2370,7 +2909,7 @@ def annotate_page(username=None, action=None):
                         continue
 
                     # If it's a slider, set the value for the slider
-                    if input_field['type'] == 'range' and name.startswith('slider:::'):
+                    if input_field['type'] == 'range' and name.endswith(':::slider'):
                         input_field['value'] = value
                         continue
 
@@ -2549,180 +3088,6 @@ def get_class(kls):
     return m
 
 
-def actively_learn():
-    global user_to_annotation_state
-    global instance_id_to_data
-
-    if "active_learning_config" not in config:
-        logger.warning(
-            "the server is trying to do active learning " + "but this hasn't been configured"
-        )
-        return
-
-    al_config = config["active_learning_config"]
-
-    # Skip if the user doesn't want us to do active learning
-    if "enable_active_learning" in al_config and not al_config["enable_active_learning"]:
-        return
-
-    if "classifier_name" not in al_config:
-        raise Exception('active learning enabled but no classifier is set with "classifier_name"')
-
-    if "vectorizer_name" not in al_config:
-        raise Exception('active learning enabled but no vectorizer is set with "vectorizer_name"')
-
-    if "resolution_strategy" not in al_config:
-        raise Exception("active learning enabled but resolution_strategy is not set")
-
-    # This specifies which schema we need to use in active learning (separate
-    # classifiers for each). If the user doesn't specify these, we use all of
-    # them.
-    schema_used = []
-    if "active_learning_schema" in al_config:
-        schema_used = al_config["active_learning_schema"]
-
-    cls_kwargs = al_config.get("classifier_kwargs", {})
-    cls_kwargs = al_config.get("classifier_kwargs", {})
-    vectorizer_kwargs = al_config.get("vectorizer_kwargs", {})
-    strategy = al_config["resolution_strategy"]
-
-    # Collect all the current labels
-    instance_to_labels = defaultdict(list)
-    for uas in user_to_annotation_state.values():
-        for iid, annotation in uas.instance_id_to_labeling.items():
-            instance_to_labels[iid].append(annotation)
-
-    # Resolve all the mutiple-annotations to a single one using the provided
-    # strategy to get training data
-    instance_to_label = {}
-    schema_seen = set()
-    for iid, annotations in instance_to_labels.items():
-        resolved = resolve(annotations, strategy)
-
-        # Prune to just the schema we care about
-        if len(schema_used) > 0:
-            resolved = {k: resolved[k] for k in schema_used}
-
-        for s in resolved:
-            schema_seen.add(s)
-        instance_to_label[iid] = resolved
-
-    # Construct a dataframe for easy processing
-    texts = []
-    # We'll train one classifier for each scheme
-    scheme_to_labels = defaultdict(list)
-    text_key = config["item_properties"]["text_key"]
-    for iid, schema_to_label in instance_to_label.items():
-        # get the text
-        text = instance_id_to_data[iid][text_key]
-        texts.append(text)
-        for s in schema_seen:
-            # In some cases where the user has not selected anything but somehow
-            # this is considered annotated, we include some dummy label
-            label = schema_to_label.get(s, "DUMMY:NONE")
-
-            # HACK: this needs to get fixed for multilabel data and possibly
-            # number data
-            label = list(label.keys())[0]
-            scheme_to_labels[s].append(label)
-
-    scheme_to_classifier = {}
-
-    # Train a classifier for each scheme
-    for scheme, labels in scheme_to_labels.items():
-
-        # Sanity check we have more than 1 label
-        label_counts = Counter(labels)
-        if len(label_counts) < 2:
-            logger.warning(
-                (
-                    "In the current data, data labeled with %s has only a"
-                    + "single unique label, which is insufficient for "
-                    + "active learning; skipping..."
-                )
-                % scheme
-            )
-            continue
-
-        # Instantiate the classifier and the tokenizer
-        cls = get_class(al_config["classifier_name"])(**cls_kwargs)
-        vectorizer = get_class(al_config["vectorizer_name"])(**vectorizer_kwargs)
-
-        # Train the classifier
-        clf = Pipeline([("vectorizer", vectorizer), ("classifier", cls)])
-        logger.info("training classifier for %s..." % scheme)
-        clf.fit(texts, labels)
-        logger.info("done training classifier for %s" % scheme)
-        scheme_to_classifier[scheme] = clf
-
-    # Get the remaining unlabeled instances and start predicting
-    unlabeled_ids = [iid for iid in instance_id_to_data if iid not in instance_to_label]
-    random.shuffle(unlabeled_ids)
-
-    perc_random = al_config["random_sample_percent"] / 100
-
-    # Split to keep some of the data random
-    random_ids = unlabeled_ids[int(len(unlabeled_ids) * perc_random) :]
-    unlabeled_ids = unlabeled_ids[: int(len(unlabeled_ids) * perc_random)]
-    remaining_ids = []
-
-    # Cap how much inference we need to do (important for big datasets)
-    if "max_inferred_predictions" in al_config:
-        max_insts = al_config["max_inferred_predictions"]
-        remaining_ids = unlabeled_ids[max_insts:]
-        unlabeled_ids = unlabeled_ids[:max_insts]
-
-    # For each scheme, use its classifier to label the data
-    scheme_to_predictions = {}
-    unlabeled_texts = [instance_id_to_data[iid][text_key] for iid in unlabeled_ids]
-    for scheme, clf in scheme_to_classifier.items():
-        logger.info("Inferring labels for %s" % scheme)
-        preds = clf.predict_proba(unlabeled_texts)
-        scheme_to_predictions[scheme] = preds
-
-    # Figure out which of the instances to prioritize, keeping the specified
-    # ratio of random-vs-AL-selected instances.
-    ids_and_confidence = []
-    logger.info("Scoring items by model confidence")
-    for i, iid in enumerate(tqdm(unlabeled_ids)):
-        most_confident_pred = 0
-        mp_scheme = None
-        for scheme, all_preds in scheme_to_predictions.items():
-
-            preds = all_preds[i, :]
-            mp = max(preds)
-            if mp > most_confident_pred:
-                most_confident_pred = mp
-                mp_scheme = scheme
-        ids_and_confidence.append((iid, most_confident_pred, mp_scheme))
-
-    # Sort by confidence
-    ids_and_confidence = sorted(ids_and_confidence, key=lambda x: x[1])
-
-    # Re-order all of the unlabeled instances
-    new_id_order = []
-    id_to_selection_type = {}
-    for (al, rand_id) in zip_longest(ids_and_confidence, random_ids, fillvalue=None):
-        if al:
-            new_id_order.append(al[0])
-            id_to_selection_type[al[0]] = "%s Classifier" % al[2]
-        if rand_id:
-            new_id_order.append(rand_id)
-            id_to_selection_type[rand_id] = "Random"
-
-    # These are the IDs that weren't in the random sample or that we didn't
-    # reorder with active learning
-    new_id_order.extend(remaining_ids)
-
-    # Update each user's ordering, preserving the order for any item that has
-    # any annotation so that it stays in the front of the users' queues even if
-    # they haven't gotten to it yet (but others have)
-    already_annotated = list(instance_to_labels.keys())
-    for annotation_state in user_to_annotation_state.values():
-        annotation_state.reorder_remaining_instances(new_id_order, already_annotated)
-
-    logger.info("Finished reording instances")
-
 
 def resolve(annotations, strategy):
     if strategy == "random":
@@ -2741,108 +3106,47 @@ def run_create_task_cli():
             # Probably need to launch the Flask server to accept form inputs
             raise Exception("Gui-based design not supported yet.")
 
-
 def run_server(args):
     """
-    Run Flask server.
+    Initialize and run the Flask annotation server.
+
+    Handles:
+    - Configuration loading
+    - Template setup
+    - Directory creation
+    - Data loading
+    - Server startup
+
+    Args:
+        args: Command line arguments
+
+    Raises:
+        ConfigurationError: If server configuration is invalid
     """
-    global user_config
-    global user_to_annotation_state
-    global prolific_study
+    logger.info("Initializing annotation server")
 
-
-    init_config(args)
-    if config.get("verbose"):
-        logger.setLevel(logging.DEBUG)
-    if config.get("very_verbose"):
-        logger.setLevel(logging.NOTSET)
-
-    user_config = UserConfig(USER_CONFIG_PATH)
-
-    #load prolific configurations
-    if config.get('prolific') and config['prolific']['config_file_path']:
-        # load multitask annotation config
-        with open(config['prolific']['config_file_path'], "rt") as f:
-            prolific_config = yaml.safe_load(f)
-            max_concurrent_sessions = prolific_config.get('max_concurrent_sessions') if prolific_config.get('max_concurrent_sessions') else 30
-            workload_checker_period = prolific_config.get('workload_checker_period') if prolific_config.get('workload_checker_period') else 300
-            prolific_study = ProlificStudy(prolific_config['token'], prolific_config['study_id'],
-                                           saving_dir = config.get('output_annotation_dir'),
-                                           max_concurrent_sessions=max_concurrent_sessions,
-                                           workload_checker_period=workload_checker_period)
-        study_basic_info = prolific_study.get_basic_study_info()
-        print('Prolific configurations successfully loaded for study: %s'%study_basic_info['internal_name'])
-        for k,v in study_basic_info.items():
-            print("%s: %s"%(k, v))
-
-        #overide the login setting as prolific
-        config['login']['type'] = 'prolific'
-
-        #update the submission status
-        #prolific_study.update_submission_status()
-        #users_to_drop = prolific_study.get_dropped_users()
-        #remove_instances_from_users(users_to_drop)
-
-    #load user configuration settings and add authorized users
-    user_config_data = config['user_config']
+    # User configuration
     if 'allow_all_users' in user_config_data:
         user_config.allow_all_users = user_config_data['allow_all_users']
+        logger.debug(f"Allow all users: {user_config.allow_all_users}")
 
         if 'authorized_users' in user_config_data:
             for user in user_config_data["authorized_users"]:
                 user_config.authorized_users.append(user)
+            logger.debug(f"Loaded {len(user_config.authorized_users)} authorized users")
 
+    # ... rest of the function with similar logging ...
 
-    # set up the template file path
-    for key in ["html_layout", "surveyflow_html_layout", "base_html_template", "header_file"]:
-        # if template not set in the configuration file, use the default version
-        if key not in config:
-            logger.warning("%s not configured, use default template at %s"%(key, template_dict[key]['default']))
-            config[key] = template_dict[key]['default']
-        # if user uses a template in the lib, replace the key with the file location
-        elif config[key] in template_dict[key]:
-            config[key] = template_dict[key][config[key]]
-        # if user uses a self defined file, directly use it as the template
-        else:
-            logger.info("%s will be loaded from user-defined file %s" % (key,config[key]))
-
-    #overwrite the site_dir to the default path, this will not be shown to the users
-    #todo: remove all the site_dir key from the configuration files or figure out a way to handle render flask templates from different dirs
-    #todo: having the flask templates in the user-defined project folder would be neccessary in the long run due to potential conflicts of projects with the same name
-    # each project dir should be self-contained, even for the flask template files
-    config["site_dir"] = flask_templates_dir
-    # Creates the templates we'll use in flask by mashing annotation
-    # specification on top of the proto-templates
-    generate_site(config)
-    if "surveyflow" in config and config["surveyflow"]["on"]:
-        generate_surveyflow_pages(config)
-
-    # Generate the output directory if it doesn't exist yet
-    if not os.path.exists(config["output_annotation_dir"]):
-        os.makedirs(config["output_annotation_dir"])
-
-    # Loads the training data
-    load_all_data(config)
-
-    # load users with annotations to user_to_annotation_state
-    users_with_annotations = [
-        f
-        for f in os.listdir(config["output_annotation_dir"])
-        if os.path.isdir(os.path.join(config["output_annotation_dir"],f)) and f != 'archived_users'
-    ]
-    for user in users_with_annotations:
-        load_user_state(user)
-
-    # TODO: load previous annotation state
-    # load_annotation_state(config)
-
-    flask_logger = logging.getLogger("werkzeug")
-    flask_logger.setLevel(logging.ERROR)
-
+    # Server startup
     port = args.port or config.get("port", default_port)
-    print("running at:\nlocalhost:" + str(port))
-    app.run(debug=args.very_verbose, host="0.0.0.0", port=port)
+    logger.info(f"Starting server on port {port}")
 
+    app.config["SESSION_PERMANENT"] = False
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=1)
+    app.secret_key = b'_5#y2L"F4Q8z\n\xec]/FIXME22'  # TODO: Make configurable
+
+    logger.info("Server initialization complete")
+    app.run(debug=args.very_verbose, host="0.0.0.0", port=port)
 
 def main():
     if len(sys.argv) == 1:

@@ -4,7 +4,10 @@ Span Layout
 
 import logging
 from collections.abc import Mapping
+from collections import defaultdict
 from potato.server_utils.config_module import config
+
+from item_state_management import SpanAnnotation
 
 logger = logging.getLogger(__name__)
 
@@ -36,25 +39,29 @@ SPAN_COLOR_PALETTE = [
 span_counter = 0
 SPAN_COLOR_PALETTE_LENGTH = len(SPAN_COLOR_PALETTE)
 
-def get_span_color(span_label):
+def get_span_color(schema, span_label):
     """
     Returns the color of a span with this label as a string with an RGB triple
     in parentheses, or None if the span is unmapped.
     """
+
     if "ui" not in config or "spans" not in config["ui"]:
         return None
+
     span_ui = config["ui"]["spans"]
 
     if "span_colors" not in span_ui:
         return None
 
-    if span_label in span_ui["span_colors"]:
-        return span_ui["span_colors"][span_label]
-    else:
-        return None
+    if schema in span_ui["span_colors"]:
+        schema_colors = span_ui["span_colors"][schema]
+        if span_label in schema_colors:
+            return schema_colors[span_label]
+
+    return None
 
 
-def set_span_color(span_label, color):
+def set_span_color(schema, span_label, color):
     """
     Sets the color of a span with this label as a string with an RGB triple in parentheses.
 
@@ -73,16 +80,56 @@ def set_span_color(span_label, color):
         span_ui = ui["spans"]
 
     if "span_colors" not in span_ui:
-        span_colors = {}
+        span_colors = defaultdict(dict)
         span_ui["span_colors"] = span_colors
     else:
         span_colors = span_ui["span_colors"]
 
-    span_colors[span_label] = color
+    span_colors[schema][span_label] = color
 
+def render_span_annotations(text, span_annotations: list[SpanAnnotation]):
 
-def render_span_annotations(text, span_annotations):
-    """    
+    rev_order_sa = sorted(span_annotations, key=lambda d: d.get_start(), reverse=True)
+
+    print('rev_order_sa: ', rev_order_sa)
+
+    ann_wrapper = (
+        '<span class="span_container" selection_label="{annotation}" '
+        + 'schema="{schema}" style="background-color:rgb{bg_color};">'
+        + "{span}"
+        + '<div class="span_label" schema="{schema}" name="{annotation}" '
+        + 'style="background-color:white;border:2px solid rgb{color};">'
+        + "{annotation_title}</div>"
+        + "<div class=\"span_close\" style=\"background-color:white;\""
+         " onclick=\"deleteSpanAnnotation(this, {schema}, {annotation}, {annotation_title}, {start}, {end});\">×</div>"
+        + "</span>"
+    )
+    for a in rev_order_sa:
+
+        # Spans are colored according to their order in the list and we need to
+        # retrofit the color
+        color = get_span_color(a.get_schema(), a.get_name())
+        # The color is an RGB triple like (1,2,3) and we want the background for
+        # the text to be somewhat transparent so we switch to RGBA for bg
+        bg_color = color.replace(")", ",0.25)")
+
+        # The text above the span is its title and we display whatever its set to
+        annotation_title= a.get_title()
+
+        print(text, a)
+        span = text[a.get_start():a.get_end()]
+
+        ann = ann_wrapper.format(
+            annotation=a.get_name(), annotation_title=annotation_title,
+            span=span, color=color, bg_color=bg_color, schema=a.get_schema(),
+            end=a.get_end(), start=a.get_start()
+        )
+        text = text[:a.get_start()] + ann + text[a.get_end():]
+
+    return text
+
+def render_span_annotations_old(text, span_annotations):
+    """
     Retuns a modified version of the text with span annotation overlays inserted
     into the text.
 
@@ -105,11 +152,11 @@ def render_span_annotations(text, span_annotations):
 
     ann_wrapper = (
         '<span class="span_container" selection_label="{annotation}" '
-        + 'style="background-color:rgb{bg_color};">'
+        + 'schema="{schema}" style="background-color:rgb{bg_color};">'
         + "{span}"
-        + '<div class="span_label" '
+        + '<div class="span_label" schema="{schema}" name="{annotation}" '
         + 'style="background-color:white;border:2px solid rgb{color};">'
-        + "{annotation}</div></span>"
+        + "{annotation_title}</div></span>"
     )
     for a in rev_order_sa:
 
@@ -120,9 +167,14 @@ def render_span_annotations(text, span_annotations):
         # the text to be somewhat transparent so we switch to RGBA for bg
         bg_color = color.replace(")", ",0.25)")
 
+        # The text above the span is its title and we display whatever its set to
+        annotation_title= a["annotation_title"]
+
         ann = ann_wrapper.format(
-            annotation=a["annotation"], span=a["span"], color=color, bg_color=bg_color
+            annotation=a["annotation"], annotation_title=annotation_title,
+            span=a["span"], color=color, bg_color=bg_color, schema=a["schema"]
         )
+        print(text, a)
         text = text[: a["start"]] + ann + text[a["end"] :]
 
     return text
@@ -136,6 +188,8 @@ def generate_span_layout(annotation_scheme, horizontal=False):
     # when horizontal is specified in the annotation_scheme, set horizontal = True
     if "horizontal" in annotation_scheme and annotation_scheme["horizontal"]:
         horizontal = True
+
+    scheme_name = annotation_scheme["name"]
 
     schematic = (
           ('<form id="%s" class="annotation-form span" action="/action_page.php">' % annotation_scheme["name"])
@@ -159,12 +213,15 @@ def generate_span_layout(annotation_scheme, horizontal=False):
     for i, label_data in enumerate(annotation_scheme["labels"], 1):
 
         label = label_data if isinstance(label_data, str) else label_data["name"]
+        span_title = label
+        if isinstance(label_data, dict) and "abbreviation" in label_data:
+            span_title = label_data["abbreviation"]
 
         name = annotation_scheme["name"] + ":::" + label
         class_name = annotation_scheme["name"]
         key_value = name
 
-        span_color = get_span_color(label)
+        span_color = get_span_color(scheme_name, label)
         if span_color is None:
             global span_counter
             if span_counter > SPAN_COLOR_PALETTE_LENGTH:
@@ -174,7 +231,7 @@ def generate_span_layout(annotation_scheme, horizontal=False):
 
             span_color = SPAN_COLOR_PALETTE[(span_counter) % SPAN_COLOR_PALETTE_LENGTH]
             span_counter += 1
-            set_span_color(label, span_color)
+            set_span_color(scheme_name, label, span_color)
 
         # For better or worse, we need to cache these label-color pairings
         # somewhere so that we can render them in the colored instances later in
@@ -246,13 +303,16 @@ def generate_span_layout(annotation_scheme, horizontal=False):
         schematic += (
             '      <input class="{class_name}" for_span="{for_span}" type="checkbox" id="{name}" name="{name_with_span}" '
             + ' value="{key_value}" {is_checked} '
-            + "onclick=\"onlyOne(this); changeSpanLabel(this, '{label_content}', '{span_color}');\" validation=\"{validation}\">"
+            + "onclick=\"onlyOne(this); changeSpanLabel(this, '{schema}', '{label}', '{span_title}', '{span_color}');\" validation=\"{validation}\">"
             + '  <label for="{name}" {tooltip}>'
             + '<span style="background-color:rgb{bg_color};">{label_content}</span></label>{br_label}'
         ).format(
             class_name=class_name,
             for_span = True,
             name=name,
+            schema=scheme_name,
+            label=label,
+            span_title=span_title,
             key_value=key_value,
             label_content=label_content,
             validation=validation,

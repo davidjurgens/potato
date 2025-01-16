@@ -1,112 +1,140 @@
 """
-Likert Layout
+Likert Scale Layout
+
+Generates a likert scale rating interface with radio buttons arranged horizontally.
+Each button represents a point on the scale between min_label and max_label.
+
+This module provides functionality for creating HTML-based Likert scale interfaces
+that can be used for collecting ordinal data responses. The scale supports:
+- Customizable number of points
+- Optional numeric display
+- Keyboard shortcuts
+- Required/optional validation
+- Bad text option for invalid inputs
 """
 
-from .radio import generate_radio_layout
+import logging
 
+logger = logging.getLogger(__name__)
 
 def generate_likert_layout(annotation_scheme):
+    """
+    Generate HTML for a likert scale annotation interface.
 
-    # If the user specified the more complicated likert layout, default to the
-    # radio layout
+    Args:
+        annotation_scheme (dict): Configuration including:
+            - name: Schema identifier
+            - description: Display description
+            - size: Number of scale points
+            - min_label: Label for minimum value
+            - max_label: Label for maximum value
+            - sequential_key_binding: Enable number key bindings (1-9)
+            - displaying_score: Show numeric values on buttons
+            - label_requirement: Validation settings
+                - required (bool): Whether response is mandatory
+            - bad_text_label (dict): Optional configuration for invalid text option
+                - label_content (str): Label text for bad text option
+
+    Returns:
+        tuple: (html_string, key_bindings)
+            html_string: Complete HTML for the likert scale interface
+            key_bindings: List of (key, description) tuples for keyboard shortcuts
+
+    Raises:
+        Exception: If required fields are missing from annotation_scheme
+    """
+    logger.debug(f"Generating likert layout for schema: {annotation_scheme['name']}")
+
+    # Use radio layout if complex labels specified
     if "labels" in annotation_scheme:
+        logger.info(f"Complex labels detected for {annotation_scheme['name']}, using radio layout")
         return generate_radio_layout(annotation_scheme, horizontal=False)
 
-    for required in ["size", "min_label", "max_label"]:
+    # Validate required fields
+    required_fields = ["size", "min_label", "max_label"]
+    for required in required_fields:
         if required not in annotation_scheme:
-            raise Exception(
-                'Likert scale for "%s" did not include %s' % (annotation_scheme["name"], required)
-            )
+            error_msg = f'Likert scale for "{annotation_scheme["name"]}" missing required field: {required}'
+            logger.error(error_msg)
+            raise Exception(error_msg)
 
-    schematic = (
-        '<div><form class="annotation-form likert" id="%s" action="/action_page.php">'
-        + '  <fieldset> <legend>%s</legend> <ul class="likert" style="text-align: center;"> <li> %s </li>'
-    ) % (annotation_scheme["name"], annotation_scheme["description"], annotation_scheme["min_label"])
+    logger.debug(f"Creating {annotation_scheme['size']}-point likert scale")
 
-    key2label = {}
-    label2key = {}
+    # Initialize form wrapper
+    schematic = f"""
+        <form id="{annotation_scheme['name']}" class="annotation-form likert" action="/action_page.php">
+            <fieldset schema="{annotation_scheme['name']}">
+                <legend>{annotation_scheme['description']}</legend>
+                <ul class="likert" style="text-align: center;">
+                    <li>{annotation_scheme['min_label']}</li>
+    """
+
+    # Setup validation and key bindings
     key_bindings = []
-
-    # Setting up label validation for each label, if "required" is True,
-    # the annotators will be asked to finish the current instance to proceed
     validation = ""
-    label_requirement = annotation_scheme.get("label_requirement")
-    if label_requirement and label_requirement.get("required"):
+    if annotation_scheme.get("label_requirement", {}).get("required"):
         validation = "required"
+        logger.debug(f"Setting required validation for {annotation_scheme['name']}")
 
+    # Generate scale points
     for i in range(1, annotation_scheme["size"] + 1):
-
-        label = "scale_" + str(i)
-        name = annotation_scheme["name"] + ":::" + label
-        class_name = annotation_scheme["name"]
-
+        label = f"scale_{i}"
+        name = f"{annotation_scheme['name']}:::{label}"
         key_value = str(i % 10)
 
-        # if the user wants us to add in easy key bindings
-        if "sequential_key_binding" in annotation_scheme and annotation_scheme["sequential_key_binding"] == True and annotation_scheme["size"] < 10:
-            key2label[key_value] = label
-            label2key[label] = key_value
-            key_bindings.append((key_value, class_name + ": " + key_value))
+        # Handle key bindings for scales with less than 10 points
+        if (annotation_scheme.get("sequential_key_binding")
+            and annotation_scheme["size"] < 10):
+            key_bindings.append((key_value, f"{annotation_scheme['name']}: {key_value}"))
+            logger.debug(f"Added key binding '{key_value}' for point {i}")
 
-        # In the collapsed version of the likert scale, no label is shown.
+        # Format label content - show numbers if displaying_score is enabled
         label_content = str(i) if annotation_scheme.get("displaying_score") else ""
-        tooltip = ""
+        line_break = "<br>" if label_content else ""
 
-        # displaying the label content in a different line if it is not empty
-        if label_content != "":
-            line_break = "<br>"
-        else:
-            line_break = ""
-        # schematic += \
-        #        ((' <li><input class="%s" type="radio" id="%s" name="%s" value="%s" onclick="onlyOne(this)">' +
-        #         '  <label for="%s" %s>%s</label></li>')
-        #         % (class_name, label, name, key_value, name, tooltip, label_content))
+        # Generate radio input for each scale point
+        schematic += f"""
+            <li>
+                <input class="{annotation_scheme['name']}"
+                       type="radio"
+                       id="{name}"
+                       name="{name}"
+                       value="{key_value}"
+                       schema="{annotation_scheme['name']}"
+                       label_name="{key_value}"
+                       selection_constraint="single"
+                       validation="{validation}"
+                       onclick="onlyOne(this);registerAnnotation(this);">
+                {line_break}
+                <label for="{name}">{label_content}</label>
+            </li>
+        """
 
-        schematic += (
-            (
-                ' <li><input class="{class_name}" type="radio" id="{id}" name="{name}" value="{value}" onclick="onlyOne(this)" validation="{validation}">'
-                + ' {line_break} <label for="{label_for}" {label_args}>{label_text}</label></li>'
-            )
-        ).format(
-            class_name=class_name,
-            id=name,
-            name=name,
-            value=key_value,
-            validation=validation,
-            line_break=line_break,
-            label_for=name,
-            label_args=tooltip,
-            label_text=" " + label_content,
-        )
+    # Add max label to complete the scale
+    schematic += f"<li>{annotation_scheme['max_label']}</li>"
 
-    # allow annotators to choose bad_text label
-    bad_text_schematic = ""
+    # Add optional bad text input for invalid/problematic cases
     if "label_content" in annotation_scheme.get("bad_text_label", {}):
-        name = annotation_scheme["name"] + ":::" + "bad_text"
-        bad_text_schematic = (
-            (
-                ' <li><input class="{class_name}" type="radio" id="{id}" name="{name}" value="{value}" onclick="onlyOne(this)" validation="{validation}">'
-                + ' {line_break} <label for="{label_for}" {label_args}>{label_text}</label></li>'
-            )
-        ).format(
-            class_name=annotation_scheme["name"],
-            id=name,
-            name=name,
-            value=0,
-            validation=validation,
-            line_break="<br>",
-            label_for=name,
-            label_args="",
-            label_text=annotation_scheme["bad_text_label"]["label_content"],
-        )
-        if "sequential_key_binding" in annotation_scheme and annotation_scheme["sequential_key_binding"] == True and annotation_scheme["size"] < 10:
-            key_bindings.append(
-                (0, class_name + ": " + annotation_scheme["bad_text_label"]["label_content"])
-            )
+        logger.debug(f"Adding bad text option for {annotation_scheme['name']}")
+        name = f"{annotation_scheme['name']}:::bad_text"
+        schematic += f"""
+            <li>
+                <input class="{annotation_scheme['name']}"
+                       type="radio"
+                       id="{name}"
+                       name="{name}"
+                       value="0"
+                       validation="{validation}"
+                       onclick="onlyOne(this);registerAnnotation(this);">
+                <br>
+                <label for="{name}">
+                    {annotation_scheme['bad_text_label']['label_content']}
+                </label>
+            </li>
+        """
 
-    schematic += "  <li>%s</li> %s </ul></fieldset>\n</form></div>\n" % (
-        annotation_scheme["max_label"],
-        bad_text_schematic,
-    )
+    schematic += "</ul></fieldset></form>"
 
+    logger.info(f"Successfully generated likert layout for {annotation_scheme['name']} "
+                f"with {annotation_scheme['size']} points")
     return schematic, key_bindings

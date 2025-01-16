@@ -5,10 +5,12 @@ Textbox Layout
 
 def generate_textbox_layout(annotation_scheme):
 
+    schema_name = annotation_scheme["name"]
+
     #'<div style="border:1px solid black; border-radius: 25px;">' + \
     schematic = (
          ('<form id="%s" class="annotation-form textbox" action="/action_page.php">' % annotation_scheme["name"])
-        + "  <fieldset>"
+        + f"  <fieldset schema_name=\"{schema_name}\">"
         + (
             '  <legend>%s</legend> <ul class="likert" style="text-align: center;">'
             % annotation_scheme["description"]
@@ -73,10 +75,11 @@ def generate_textbox_layout(annotation_scheme):
                 else "40"
             )
             schematic += (
-                '  <li><label for="%s" %s>%s</label> '
-                + '<textarea rows="%s" cols="%s" class="%s" style=%s type="text" id="%s" name="%s" validation="%s" %s></textarea></li> <br/>'
+                '  <li><label for="%s" schema="%s" %s>%s</label> '
+                + '<textarea rows="%s" cols="%s" class="%s" style=%s type="text" id="%s" name="%s" validation="%s" schema="%s" label_name="%s" %s></textarea></li> <br/>'
             ) % (
                 name,
+                schema_name,
                 tooltip,
                 label if label != "text_box" else "",
                 rows,
@@ -86,13 +89,16 @@ def generate_textbox_layout(annotation_scheme):
                 name,
                 name,
                 validation,
+                schema_name,
+                label,
                 paste_setting
             )
         else:
             schematic += (
-                '  <li><label for="%s" %s>%s</label> <input class="%s" style=%s type="text" id="%s" name="%s" validation="%s" %s> </li> <br/>'
+                '  <li><label for="%s" schema="%s" %s>%s</label> <input class="%s" style=%s type="text" id="%s" name="%s" validation="%s" schema="%s" label_name="%s" %s> </li> <br/>'
             ) % (
                 name,
+                schema_name,
                 tooltip,
                 label if label != "text_box" else "",
                 class_name,
@@ -100,6 +106,8 @@ def generate_textbox_layout(annotation_scheme):
                 name,
                 name,
                 validation,
+                schema_name,
+                label,
                 paste_setting
             )
 
@@ -129,7 +137,7 @@ def generate_textbox_layout(annotation_scheme):
             key2label[key_value] = label
             label2key[label] = key_value
 
-    
+
     label_content = label
 
     #add shortkey to the label so that the annotators will know how to use it

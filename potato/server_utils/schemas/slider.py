@@ -2,6 +2,8 @@
 slider Layout
 """
 
+# Needed for the fall-back radio layout
+from .radio import generate_radio_layout
 
 def test_and_get(key, d):
     val = d[key]
@@ -11,7 +13,7 @@ def test_and_get(key, d):
         raise Exception(
             'Slider scale %s\'s value for "%s" is not an int' % (annotation_scheme["name"], key)
         )
-    
+
 
 
 def generate_slider_layout(annotation_scheme):
@@ -45,26 +47,30 @@ def generate_slider_layout(annotation_scheme):
     min_label = str(min_value) if show_labels else ''
     max_label = str(max_value) if show_labels else ''
 
-    name = 'slider:::' + annotation_scheme["name"]
-    
+    schema_name = annotation_scheme["name"]
+    name = schema_name + ':::' + 'slider'
+
     # TODO: Fix the UI alignment so the min/max labels are
     # vertically aligned with the slider bar
     schematic = (
           ('<div><form id="%s" class="annotation-form slider" action="/action_page.php">' % annotation_scheme["name"])
-        + '  <fieldset> <legend>{description}</legend> '
         + '  <span style="flex:1;">{min_label}</span>'
-        + '<input style="position:auto;" type="range" min="{min_value}" max="{max_value}" value="{default_value}" class="slider" name="{name}" id="{name}">'
+        + '  <fieldset schema="{schema_name}"> <legend>{description}</legend> '
+        + '<input style="position:auto;" type="range" min="{min_value}" max="{max_value}" '
+        + ' onclick="registerAnnotation(this);" label_name="slider"'
+        + 'value="{default_value}" class="slider" name="{name}" id="{name}" schema="{schema_name}">'
         + '  <span style="flex:1;">{max_label}</span>'
-        + '</fieldset>\n</form></div>\n' 
+        + '</fieldset>\n</form></div>\n'
     ).format(description=annotation_scheme["description"],
              min_value=annotation_scheme["min_value"],
              max_value=annotation_scheme["max_value"],
              min_label=min_label,
              max_label=max_label,
+             schema_name=schema_name,
              default_value=annotation_scheme["starting_value"],
              name=name)
-             
+
 
     key_bindings = []
-    
+
     return schematic, key_bindings

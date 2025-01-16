@@ -1,5 +1,15 @@
 """
 Multiselect Layout
+
+Generates a form interface that allows users to select multiple options from a list
+of choices. Features include:
+- Multiple column layout support
+- Keyboard shortcuts
+- Required/optional validation
+- Individual label requirements
+- Tooltip support
+- Video label support
+- Free response option
 """
 
 import logging
@@ -7,152 +17,227 @@ from collections.abc import Mapping
 
 logger = logging.getLogger(__name__)
 
-
 def generate_multiselect_layout(annotation_scheme):
-    schematic = (
-          ('<form id="%s" class="annotation-form multiselect" action="/action_page.php">' % annotation_scheme["name"] )
-        + "  <fieldset>"
-        + ("  <legend>%s</legend>" % annotation_scheme["description"])
-    )
+    """
+    Generate HTML for a multiple-choice selection interface.
 
-    # TODO: display keyboard shortcuts on the annotation page
+    Args:
+        annotation_scheme (dict): Configuration including:
+            - name: Schema identifier
+            - description: Display description
+            - labels: List of label configurations, each either:
+                - str: Simple label text
+                - dict: Complex label with:
+                    - name: Label identifier
+                    - tooltip: Hover text description
+                    - tooltip_file: Path to file containing tooltip text
+                    - key_value: Keyboard shortcut key
+                    - videopath: Path to video file (if video_as_label=True)
+            - display_config (dict): Optional display settings
+                - num_columns: Number of columns to arrange options (default: 1)
+            - label_requirement (dict): Optional validation settings
+                - required (bool): Whether any selection is mandatory
+                - required_label (str|list): Specific labels that must be selected
+            - sequential_key_binding (bool): Enable numeric key shortcuts
+            - video_as_label (bool): Use videos instead of text for labels
+            - has_free_response (dict): Optional free text input configuration
+                - instruction: Label for free response field
+
+    Returns:
+        tuple: (html_string, key_bindings)
+            html_string: Complete HTML for the multiselect interface
+            key_bindings: List of (key, description) tuples for keyboard shortcuts
+    """
+    logger.debug(f"Generating multiselect layout for schema: {annotation_scheme['name']}")
+
+    # Initialize form wrapper
+    schematic = f"""
+        <form id="{annotation_scheme['name']}" class="annotation-form multiselect" action="/action_page.php">
+            <fieldset schema="{annotation_scheme['name']}">
+                <legend>{annotation_scheme['description']}</legend>
+    """
+
+    # Initialize keyboard shortcut mappings
     key2label = {}
     label2key = {}
-
     key_bindings = []
 
-    display_info = (
-        annotation_scheme["display_config"] if "display_config" in annotation_scheme else {}
-    )
-
-    n_columns = display_info["num_columns"] if "num_columns" in display_info else 1
+    # Get display configuration
+    display_info = annotation_scheme.get("display_config", {})
+    n_columns = display_info.get("num_columns", 1)
+    logger.debug(f"Using {n_columns} column layout")
 
     schematic += "<table>"
 
-    # setting up label validation for each label, if "required" is True, the annotators will be asked to finish the current instance to proceed
+    # Setup validation requirements
     validation = ""
-    label_requirement = (
-        annotation_scheme["label_requirement"] if "label_requirement" in annotation_scheme else None
-    )
-    if label_requirement and label_requirement["required"]:
+    label_requirement = annotation_scheme.get("label_requirement", {})
+    if label_requirement and label_requirement.get("required"):
         validation = "required"
+        logger.debug("Setting required validation")
 
-    # if right_label is provided, the associated label has to be clicked to proceed. This is normally used for consent questions at the beginning of a survey.
-    right_label = set()
-    if label_requirement and "right_label" in label_requirement:
-        if type(label_requirement["right_label"]) == str:
-            right_label.add(label_requirement["right_label"])
-        elif type(label_requirement["right_label"]) == list:
-            right_label = set(label_requirement["right_label"])
+    # Handle required label validation
+    required_label = set()
+    if label_requirement and "required_label" in label_requirement:
+        req_label = label_requirement["required_label"]
+        if isinstance(req_label, str):
+            required_label.add(req_label)
+        elif isinstance(req_label, list):
+            required_label = set(req_label)
         else:
-            logger.warning("Incorrect format of right_label %s" % label_requirement["right_label"])
-            # quit()
+            logger.warning(f"Invalid required_label format: {req_label}")
+        logger.debug(f"Required labels: {required_label}")
 
+    # Generate checkbox inputs for each label
     for i, label_data in enumerate(annotation_scheme["labels"], 1):
-
+        # Start new row if needed
         if (i - 1) % n_columns == 0:
             schematic += "<tr>"
         schematic += "<td>"
 
+        # Extract label information
         label = label_data if isinstance(label_data, str) else label_data["name"]
-
-        name = annotation_scheme["name"] + ":::" + label
-        class_name = annotation_scheme["name"]
+        schema = annotation_scheme["name"]
+        name = f"{schema}:::{label}"
+        class_name = schema
         key_value = name
 
+        # Handle tooltips
         tooltip = ""
         if isinstance(label_data, Mapping):
-            tooltip_text = ""
-            if "tooltip" in label_data:
-                tooltip_text = label_data["tooltip"]
-                # print('direct: ', tooltip_text)
-            elif "tooltip_file" in label_data:
-                with open(label_data["tooltip_file"], "rt") as f:
-                    lines = f.readlines()
-                tooltip_text = "".join(lines)
-                # print('file: ', tooltip_text)
-            if len(tooltip_text) > 0:
-                tooltip = (
-                    'data-toggle="tooltip" data-html="true" data-placement="top" title="%s"'
-                    % tooltip_text
-                )
+            tooltip = _generate_tooltip(label_data)
 
+            # Handle keyboard shortcuts
             if "key_value" in label_data:
                 key_value = label_data["key_value"]
                 if key_value in key2label:
-                    logger.warning("Keyboard input conflict: %s" % key_value)
-                    quit()
+                    logger.warning(f"Keyboard input conflict: {key_value}")
+                    continue
                 key2label[key_value] = label
                 label2key[label] = key_value
-                key_bindings.append((key_value, class_name + ": " + label))
+                key_bindings.append((key_value, f"{class_name}: {label}"))
+                logger.debug(f"Added key binding '{key_value}' for label '{label}'")
 
-        if (
-            "sequential_key_binding" in annotation_scheme
-            and annotation_scheme["sequential_key_binding"]
-            and len(annotation_scheme["labels"]) <= 10
-        ):
+        # Handle sequential key bindings
+        if (annotation_scheme.get("sequential_key_binding")
+            and len(annotation_scheme["labels"]) <= 10):
             key_value = str(i % 10)
             key2label[key_value] = label
             label2key[label] = key_value
 
-        label_content = label
-        if annotation_scheme.get("video_as_label", None) == "True":
-            assert (
-                "videopath" in label_data
-            ), "Video path should in each label_data when video_as_label is True."
-            video_path = label_data["videopath"]
-            label_content = f"""
-            <video width="320" height="240" autoplay loop muted>
-                <source src="{video_path}" type="video/mp4" />
-            </video>"""
+        # Format label content
+        label_content = _format_label_content(label_data, annotation_scheme)
 
-        # add shortkey to the label so that the annotators will know how to use it
-        # when the shortkey is "None", this will not displayed as we do not allow short key for None category
-        # if label in label2key and label2key[label] != 'None':
-        # if label in label2key:
-        #    label_content = label_content + \
-        #        ' [' + label2key[label].upper() + ']'
+        # Set validation requirements
+        final_validation = "required_label" if label in required_label else validation
 
-        final_validation = "right_label" if label in right_label else validation
-
-        if ("single_select" in annotation_scheme) and (
-            annotation_scheme["single_select"] == "True"
-        ):
-            logger.warning(
-                'single_select is Depricated and will be removed soon. Use "radio" instead.'
-            )
-            schematic += (
-                '  <input class="%s" type="checkbox" id="%s" name="%s" value="%s" onclick="onlyOne(this)" validation="%s">'
-                + '  <label for="%s" %s>%s</label><br/>'
-            ) % (class_name, name, name, key_value, final_validation, name, tooltip, label_content)
-        else:
-            schematic += (
-                '<label for="%s" %s><input class="%s" type="checkbox" id="%s" name="%s" value="%s" onclick="whetherNone(this)" validation="%s">'
-                + "  %s</label><br/>"
-            ) % (name, tooltip, class_name, name, name, key_value, final_validation, label_content)
+        # Generate checkbox input
+        schematic += f"""
+            <label for="{name}" {tooltip} schema="{schema}">
+                <input class="{class_name}"
+                       type="checkbox"
+                       id="{name}"
+                       name="{name}"
+                       value="{key_value}"
+                       label_name="{label}"
+                       schema="{schema}"
+                       onclick="whetherNone(this);registerAnnotation(this)"
+                       validation="{final_validation}">
+                {label_content}
+            </label><br/>
+        """
 
         schematic += "</td>"
         if i % n_columns == 0:
             schematic += "</tr>"
 
-    if "has_free_response" in annotation_scheme and annotation_scheme["has_free_response"]:
+    # Add optional free response field
+    if annotation_scheme.get("has_free_response"):
+        schematic += _generate_free_response(annotation_scheme, n_columns)
 
-        label = "free_response"
-        name = annotation_scheme["name"] + ":::free_response"
-        class_name = annotation_scheme["name"]
-        tooltip = "Entire a label not listed here"
-        instruction = (
-            "Other"
-            if "instruction" not in annotation_scheme["has_free_response"]
-            else annotation_scheme["has_free_response"]["instruction"]
-        )
+    schematic += "</table></fieldset></form>"
 
-        schematic += (
-            '<tr><td colspan="%s"><div style="float:left; display:flex; flex-direction:row;">%s <input class="%s" type="text" id="%s" name="%s">'
-            + '  <label for="%s" %s></label></div></td</tr>'
-        ) % (str(n_columns), instruction, class_name, name, name, name, tooltip)
-
-    schematic += "</table>"
-    schematic += "  </fieldset>\n</form>\n"
-
+    logger.info(f"Successfully generated multiselect layout for {annotation_scheme['name']} "
+                f"with {len(annotation_scheme['labels'])} options")
     return schematic, key_bindings
+
+def _generate_tooltip(label_data):
+    """
+    Generate tooltip HTML attribute from label data.
+
+    Args:
+        label_data (dict): Label configuration containing tooltip information
+
+    Returns:
+        str: Tooltip HTML attribute or empty string if no tooltip
+    """
+    tooltip_text = ""
+    if "tooltip" in label_data:
+        tooltip_text = label_data["tooltip"]
+    elif "tooltip_file" in label_data:
+        try:
+            with open(label_data["tooltip_file"], "rt") as f:
+                tooltip_text = "".join(f.readlines())
+        except Exception as e:
+            logger.error(f"Failed to read tooltip file: {e}")
+            return ""
+
+    if tooltip_text:
+        return f'data-toggle="tooltip" data-html="true" data-placement="top" title="{tooltip_text}"'
+    return ""
+
+def _format_label_content(label_data, annotation_scheme):
+    """
+    Format the label content, handling both text and video labels.
+
+    Args:
+        label_data: Label configuration
+        annotation_scheme: Full annotation scheme configuration
+
+    Returns:
+        str: Formatted label content (text or video HTML)
+    """
+    if not annotation_scheme.get("video_as_label"):
+        return label_data if isinstance(label_data, str) else label_data["name"]
+
+    if not isinstance(label_data, Mapping) or "videopath" not in label_data:
+        logger.error("Video path missing for video label")
+        return ""
+
+    return f"""
+        <video width="320" height="240" autoplay loop muted>
+            <source src="{label_data['videopath']}" type="video/mp4" />
+        </video>
+    """
+
+def _generate_free_response(annotation_scheme, n_columns):
+    """
+    Generate HTML for free response input field.
+
+    Args:
+        annotation_scheme: Annotation scheme configuration
+        n_columns: Number of columns in layout
+
+    Returns:
+        str: HTML for free response input
+    """
+    if not annotation_scheme.get("has_free_response"):
+        return ""
+
+    name = f"{annotation_scheme['name']}:::free_response"
+    instruction = (annotation_scheme["has_free_response"].get("instruction", "Other"))
+
+    return f"""
+        <tr>
+            <td colspan="{n_columns}">
+                <div style="float:left; display:flex; flex-direction:row;">
+                    {instruction}
+                    <input class="{annotation_scheme['name']}"
+                           type="text"
+                           id="{name}"
+                           name="{name}">
+                    <label for="{name}"></label>
+                </div>
+            </td>
+        </tr>
+    """

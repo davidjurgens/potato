@@ -112,11 +112,12 @@ def generate_statistics_sidebar(statistics):
     return layout
 
 
-def generate_site(config):
+def generate_annotation_html_template(config: dict) -> str:
     """
     Generates the full HTML file in site/ for annotating this tasks data,
     combining the various templates with the annotation specification in
-    the yaml file.
+    the yaml file and returns the path to the HTML template for this
+    annotation task.
     """
     logger.info("Generating anntotation site at %s" % config["site_dir"])
 
@@ -283,6 +284,8 @@ def generate_site(config):
         outf.write(html_template)
 
     logger.debug("writing annotation html to %s" % output_html_fname)
+
+    return site_name
 
 
 def generate_surveyflow_pages(config):
@@ -536,3 +539,153 @@ def generate_surveyflow_pages(config):
 
         config["%s_pages" % key] = page_list
         config["non_annotation_pages"] += [it['id'] for it in config["%s_pages" % key]]
+
+
+def get_html(fname: str, config: dict):
+    """
+    Returns the content of an HTML file, looking for alternative locations relative
+    to the config file if the path is relative.
+    """
+    if not os.path.exists(fname):
+
+        real_path = os.path.realpath(config["__config_file__"])
+        dir_path = os.path.dirname(real_path)
+        abs_html_template_file = dir_path + "/" + fname
+
+        if not os.path.exists(abs_html_template_file):
+            raise FileNotFoundError("html file not found: %s" % fname)
+        else:
+            fname = abs_html_template_file
+
+    with open(fname, "rt") as f:
+        html = "".join(f.readlines())
+    return html
+
+def generate_html_from_schematic(html_template_filename: str,
+                                 html_header_filename: str,
+                                 html_layout_filename: str,
+                                 annotation_schemas: list[dict],
+                                 allow_jumping_to_id: bool,
+                                 hide_navbar: bool,
+                                 phase_name: str,
+                                 config: dict):
+    """
+    Generates the full HTML file in site/ for annotating this tasks data,
+    combining the various templates with the annotation specification in
+    the yaml file.
+    """
+    #
+    # Stage 1: Construct the core HTML file devoid the annotation-specific content
+    #
+
+    # Load the core template that has all the UI controls and non-task layout.
+    logger.debug("Reading html annotation template %s" % html_template_filename)
+    html_template = get_html(html_template_filename, config)
+
+    # Load the header content we'll stuff in the template, which has scripts and assets we'll need
+    logger.debug("Reading html header %s" % html_header_filename)
+    header = get_html(html_header_filename, config)
+
+    # Once we have the base template constructed, load the user's custom layout for their task
+    html_template = html_template.replace("{{ HEADER }}", header)
+
+    if allow_jumping_to_id:
+        html_template = html_template.replace(
+            '<input type="submit" value="go">', '<input type="submit" value="go" hidden>'
+        )
+        html_template = html_template.replace(
+            '<input type="number" name="go_to" id="go_to" value="" onfocusin="user_input()" onfocusout="user_input_leave()" max={{total_count}} min=0 required>',
+            '<input type="number" name="go_to" id="go_to" value="" onfocusin="user_input()" onfocusout="user_input_leave()" max={{total_count}} min=0 required hidden>',
+        )
+
+    if hide_navbar:
+        html_template = html_template.replace(
+            '<div class="navbar-nav">', '<div class="navbar-nav" hidden>'
+        )
+
+    # Once we have the base template constructed, load the user's custom layout for their task
+    # Use the surveyflow layout if it is specified, otherwise stick with the html_layout
+    logger.debug("Reading task layout html %s" % html_layout_filename)
+    task_html_layout = get_html(html_layout_filename, config)
+
+    # Put forms in rows for survey questions
+    task_html_layout = task_html_layout.replace(
+        '<div class="annotation_schema">',
+    '<div class="annotation_schema" style="flex-direction:column;">')
+
+    #
+    # Stage 2: drop in the annotation layout and insertthe task-specific variables
+    #
+
+    # Add in a codebook link if the admin specified one
+    codebook_html = ""
+    if len(config.get("annotation_codebook_url", "")) > 0:
+        annotation_codebook = config["annotation_codebook_url"]
+        codebook_html = '<a href="{{annotation_codebook_url}}" class="nav-item nav-link">Annotation Codebook</a>'
+        codebook_html = codebook_html.replace("{{annotation_codebook_url}}", annotation_codebook)
+
+    html_template = html_template.replace("{{annotation_codebook}}", codebook_html)
+
+    html_template = html_template.replace(
+        "{{annotation_task_name}}", config["annotation_task_name"]
+    )
+
+    _ = generate_statistics_sidebar(STATS_KEYS)
+    html_template = html_template.replace("{{statistics_nav}}", " ")
+
+    #
+    # Step 3, Fill in the annotation-specific pieces in the layout and save the page
+    #
+
+    logger.debug("Saw %d annotation scheme(s)" % len(annotation_schemas))
+
+    # Keep track of all the keybindings we have
+    all_keybindings = [("&#8592;", "Move backward"), ("&#8594;", "Move forward")]
+
+    schema_layouts = ""
+    for annotation_scheme in annotation_schemas:
+
+        schema_layout, keybindings = generate_schematic(annotation_scheme)
+        schema_layouts += schema_layout + "<br>" + "\n"
+
+        cur_task_html_layout = task_html_layout.replace(
+            "{{annotation_schematic}}", schema_layouts
+        )
+
+    # Swap in the task's layout
+    cur_html_template = html_template.replace("{{ TASK_LAYOUT }}", cur_task_html_layout)
+
+    # Do not display keybindings for the first and last page
+    if False:
+        if i == 0:
+            keybindings_desc = generate_keybindings_sidebar(config, all_keybindings[1:])
+            cur_html_template = cur_html_template.replace(
+                '<a class="btn btn-secondary" href="#" role="button" onclick="click_to_prev()">Move backward</a>',
+                '<a class="btn btn-secondary" href="#" role="button" onclick="click_to_prev()" hidden>Move backward</a>',
+            )
+        elif i == len(annotation_schemas) - 1 or re.search("prestudy_fail", page):
+            keybindings_desc = generate_keybindings_sidebar(config, all_keybindings[:-1])
+            cur_html_template = cur_html_template.replace(
+                '<a class="btn btn-secondary" href="#" role="button" onclick="click_to_next()">Move forward</a>',
+                '<a class="btn btn-secondary" href="#" role="button" onclick="click_to_next()" hidden>Move forward</a>',
+            )
+        else:
+            keybindings_desc = generate_keybindings_sidebar(config, all_keybindings)
+
+        cur_html_template = cur_html_template.replace("{{keybindings}}", keybindings_desc)
+
+    # Cache the html as a template for use in flask server
+    site_name = (
+            "_".join(config["annotation_task_name"].split(" "))
+            + "-"
+            + "%s.html" % phase_name
+        )
+
+    output_html_fname = os.path.join(config["site_dir"], site_name)
+
+    # Write the file
+    logger.debug("writing %s html to %s.html" % (phase_name, output_html_fname))
+    with open(output_html_fname, "wt") as outf:
+        outf.write(cur_html_template)
+
+    return site_name #output_html_fname

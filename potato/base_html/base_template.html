@@ -6,7 +6,7 @@
   {{ HEADER }}
 
   <!--- HEADER GOES ABOVE HERE--->
-  
+
   {{ custom_js | safe }}
 
   <body>
@@ -25,9 +25,9 @@
 
     <div id="Statpanel" class="sidepanel">
       <a href="javascript:void(0)" class="closebtn" target_id="Statpanel" onclick="closeNav(this.getAttribute('target_id'))">&times;</a>
-      {{statistics_nav}}
+      [[statistics_nav]]
     </div>
-    
+
     <script>
       document.addEventListener('keyup', function (event) {
           var active_id = document.activeElement.id;
@@ -58,8 +58,111 @@
 
           // Each time we process a user's key presses, track who is doing
           // it by grabbing the hidden firstname and lastname fields
-          get_new_instance(event);          
+          get_new_instance(event);
       });
+
+      function getFieldSetState(element) {
+        // console.dir('saw annotation' + element.value);
+        // console.dir(element.parentElement);
+        //var fieldSet = element.parentElement;
+
+        // Find the closeset ancestor fieldset element from this input
+        var fieldSet = element.closest('fieldset');
+
+        // Get all the inputs in this field set (what are the annotation options)
+        var inputs = fieldSet.querySelectorAll('input');
+
+        // Get state of all the in this group
+        var state = Array.from(inputs).map(input => {
+          return {
+            name: input.getAttribute('label_name'),
+            value: input.checked,
+            // checked: input.value // unused??
+          }
+        });
+        return state
+      }
+
+      function registerAnnotation(element) {
+
+        // If the element is a radio button, we need to uncheck all the other which
+        // requires sending the state of all the other buttons in the group
+        sc = element.getAttribute("selection_constraint")
+        if (sc && sc == "single") {
+            state = getFieldSetState(element);
+        }
+        else if (element.getAttribute('type') == 'range') {
+            state = [{
+              name: element.getAttribute('label_name'),
+              value: element.value,
+            }]
+        }
+        // This is a checkbox so we can just send the state of this checkbox
+        else {
+            state = [{
+              name: element.getAttribute('label_name'),
+              value: element.checked,
+              // checked: element.value // unused??
+            }]
+        }
+
+        // Get which annotation group this change belongs to
+        var schema = element.getAttribute('schema');
+
+        // Get the instance id
+        var instance_id = document.getElementById('instance_id').value;
+
+        // Package this all up in a post request to the server's updateinstance endpoint
+        var post_req = {
+          type: "label",
+          schema: schema,
+          state: state,
+          instance_id: instance_id
+        }
+
+        // Send the post request
+        fetch("/updateinstance", {
+            method: "POST",
+            body: JSON.stringify(post_req),
+            credentials: "same-origin",
+            headers: {
+                "Content-type": "application/json; charset=UTF-8"
+            }
+            });
+      }
+
+      function registerTextAnnotation(element) {
+
+        // Get which annotation group this change belongs to
+        var schema = element.getAttribute('schema');
+
+        // Get the instance id
+        var instance_id = document.getElementById('instance_id').value;
+
+        state = [{
+              name: element.getAttribute('label_name'),
+              value: element.value,
+            }]
+
+        // Package this all up in a post request to the server's updateinstance endpoint
+        var post_req = {
+            type: "label",
+            schema: schema,
+            state: state,
+            instance_id: instance_id
+        }
+
+        // Send the post request
+        fetch("/updateinstance", {
+            method: "POST",
+            body: JSON.stringify(post_req),
+            credentials: "same-origin",
+            headers: {
+                "Content-type": "application/json; charset=UTF-8"
+            }
+            });
+
+      }
 
       function getSelectedText() {
           var text = "";
@@ -71,77 +174,314 @@
           return text;
       }
 
-      function surroundSelection(selectionLabel, selectionColor)  {
+      function deleteSpanAnnotation(spanElem, schema, labelName, title, start, end) {
+            // Get the instance id
+            var instance_id = document.getElementById('instance_id').value;
+
+            // Get the text of the span
+            var spanText = spanElem.innerText;
+
+            // Package this all up in a post request to the server's updateinstance endpoint
+            var post_req = {
+                type: "span",
+                schema: schema,
+                state: [{
+                    name: labelName,
+                    start: start,
+                    end: end,
+                    title: title,
+                    value: null
+                }],
+                instance_id: instance_id
+            }
+
+            // Send the post request
+            fetch("/updateinstance", {
+                method: "POST",
+                body: JSON.stringify(post_req),
+                credentials: "same-origin",
+                headers: {
+                    "Content-type": "application/json; charset=UTF-8"
+                }
+            });
+
+            // Remove the outer most div tag that has the span's annotation title (the small text above)
+            $( spanElem ).find("div").first().remove()
+            // Remove the close tag
+            $( spanElem ).find("div").last().remove()
+            // Remove the span highlight by unwrapping the inner text
+            $( spanElem.firstChild ).unwrap();
+      }
+
+
+      function getEarlierChildren(n, skipMe){
+            var r = [];
+            for ( ; n; n = n.nextSibling )
+                if ( n.nodeType == 1 && n != skipMe)
+                    r.push( n );
+                else if ( n == skipMe )
+                    break;
+            return r;
+        };
+
+        function getEarlierSiblings(n) {
+            return getEarlierChildren(n.parentNode.firstChild, n);
+        }
+
+        function getTextOfSpans(elems) {
+            text = ""
+            for (i = 0; i < elems.length; i++) {
+                //console.log(elems[i].textContent)
+
+                e = elems[i].cloneNode(true);
+                console.log('e', e)
+                // Delete all the nested <div> elements with jquery to get the plain text
+                $(e).find('div').remove();
+                console.log('sib text', e.textContent)
+                text += " " + e.textContent
+
+            }
+
+            return text.trim();
+        }
+    re
+
+      function getSelectionIndices() {
+            // Get the user selection
+            var selection = window.getSelection();
+
+            if (selection.rangeCount === 0) {
+                return { start: -1, end: -1 }; // No selection
+            }
+
+            // Get the range object representing the selected portion
+            var range = selection.getRangeAt(0);
+
+            // Get the left most element in the selection
+            var leftMost = range.startContainer;
+            var leftSibs = getEarlierSiblings(leftMost);
+            console.log('leftSibs', leftSibs);
+            // Get the text of the left elements
+            var leftText = getTextOfSpans(leftSibs);
+
+            // Find the parent div element with name "instance_text" using jquery
+            var parentDiv = $(range.commonAncestorContainer).closest('div[name="instance_text"]')[0];
+            //console.log('parentDiv', parentDiv)
+
+            if (!parentDiv) {
+                return { start: -2, end: -2 }; // Not within a <div class="context_text">
+            }
+
+            //console.log('parentDiv')
+            //console.dir(parentDiv.innerHTML)
+
+            // Make a copy of the parent div to manipulate
+            parentDiv = parentDiv.cloneNode(true);
+
+            // Create a temporary Range to find the offset relative to the parent div
+            console.log('before delete', range.startContainer, range.startOffset, range.endOffset)
+            var tempRange = document.createRange();
+            tempRange.setStart(parentDiv, 0);
+            tempRange.setEnd(range.startContainer, range.startOffset);
+
+            // Delete all the nested <div> elements with jquery to get the plain text
+            $(parentDiv).find('div').remove();
+
+            console.log('after delete')
+            console.dir(parentDiv.innerHTML)
+            console.log('text')
+            console.dir(parentDiv.textContent)
+
+            console.log('after delete', range.startContainer, range.startOffset, range.endOffset)
+
+
+            // Get the starting offset of the selection within the parent div
+            var div = document.createElement("div");
+            div.appendChild(tempRange.cloneContents());
+
+            var s = range.startContainer.textContent.toString();
+            //console.log(`text: "${text}"`);
+            var whitespaceOffset = s.length - s.trimStart().length;
+
+
+            var startOffset = range.startOffset - whitespaceOffset;
+
+            if (leftText.length > 0) {
+                // Add 1 for space between the left text and the selected text
+                startOffset += leftText.length + 1;
+            }
+
+            // Get the length of the selected text
+            var selectedTextLength = range.toString().length;
+
+            // Calculate the ending offset of the selection within the parent div
+            var endOffset = startOffset + selectedTextLength;
+
+            return { start: startOffset, end: endOffset };
+        }
+
+
+
+      function surroundSelection(schema, labelName, title, selectionColor)  {
           //var span = document.createElement("span");
           //span.style.fontWeight = "bold";
           //span.style.color = "green";
-   
+
+        // Check that this wasn't a spurious click or the click for the delete button which
+        // also seems to trigger this selection event
+        if (window.getSelection().rangeCount == 0) {
+            return;
+        }
+        var range = window.getSelection().getRangeAt(0)
+
+        // console.dir(window.getSelection())
+
+        // console.log(range.startOffset, range.endOffset)
+        if (range.startOffset == range.endOffset) {
+            return;
+        }
+
+
+        // Get the instance id
+        var instance_id = document.getElementById('instance_id').value;
+
           if (window.getSelection) {
               var sel = window.getSelection();
 
+              // console.dir(sel);
+
               // Check that we're labeling something in the instance text that
               // we want to annotate
-              if (sel.anchorNode.parentElement) {
-
-                  if (sel.anchorNode.parentElement.getAttribute("name") != "instance_text") {
-                      
-                      // See if this text was already wrapped with the currently
-                      // selected class label and if so, remove it
-                      var parentOfSelection = sel.anchorNode.parentElement
-
-                      if (parentOfSelection.getAttribute("selection_label") == selectionLabel) {
-                          // Remove the div tag that has the span's annotation label
-                          $( parentOfSelection ).find("div").remove();
-                          // Remove the span tag that has the highlight box
-                          $( parentOfSelection.firstChild ).unwrap();
-                      }
-
-                      return;
-                  }
+              if (!sel.anchorNode.parentElement) {
+                return;
               }
-              else {
-                  // alert("no parent element");
-                  return;
-              }
-              
+
+              // TODO: check that we're not nesting a span of the same time here
+
               // Otherwise, we're going to be adding a new span annotation, if
-              // the user has selected some non-empty part of th text
-              if (sel.rangeCount && sel.toString().trim().length > 0) {                 
+              // the user has selected some non-empty part of the text
+              if (sel.rangeCount && sel.toString().trim().length > 0) {
+
+
+
+                  // Get the selection text as a string
+                  var selText = window.getSelection().toString().trim();
+                  console.log('selText1', selText);
+
+                  // Get the start and end offsets of the selection
+                  var range = sel.getRangeAt(0);
+                  var start = range.startOffset;
+                  var end = range.endOffset;
+                  // Get the generic text between the start and end offsets
+                  var text = range.startContainer.textContent.substring(start, end);
+                  var s = range.startContainer.textContent.toString();
+                  //console.log(`text: "${text}"`);
+                  var whitespaceOffset = s.length - s.trimStart().length;
+                  //console.log('whitespaceOffset', whitespaceOffset);
+
+                  /*
+                  console.log(`full range text "${range.startContainer.textContent}`);
+                  console.log('start', start);
+                  console.log('end', end);
+                  console.log('start', start - whitespaceOffset);
+                  console.log('end', end - whitespaceOffset);
+                  console.log(`ranged substring "${text}"`);
+                    */
+                  // Get the raw text of the selection without any HTML
+                  var sel = window.getSelection();
+                  var range = sel.getRangeAt(0);
+                  var div = document.createElement("div");
+                  div.appendChild(range.cloneContents());
+                  var selText = div.innerHTML;
+                  //console.log(`selText2: "${selText}"`);
+
+
 
                   tsc = selectionColor.replace(")", ", 0.25)")
-                  
+
                   var span = document.createElement("span");
                   span.className = "span_container";
-                  span.setAttribute("selection_label", selectionLabel);
+                  span.setAttribute("selection_label", labelName);
                   span.setAttribute("style", "background-color:rgb" + tsc + ";");
-                  console.log(selectionColor);
-                  
+
                   var label = document.createElement("div");
                   label.className = "span_label";
-                  label.textContent = selectionLabel;
+                  label.textContent = title;
                   label.setAttribute("style", "background-color:white;"
                                     + "border:2px solid rgb" + selectionColor + ";");
-                  
-                  var range = sel.getRangeAt(0).cloneRange();
-                  range.surroundContents(span);
-                  sel.removeAllRanges();
-                  sel.addRange(range);
-                  span.appendChild(label);
+
+
+                  var delLabel = document.createElement("div");
+                  delLabel.className = "span_close";
+                  delLabel.textContent = "×";
+                  delLabel.setAttribute("style", "background-color:white;");
+                  //                  + "border:2px solid rgb" + selectionColor + ";");
+                  delLabel.onclick= function() {
+                    deleteSpanAnnotation(span, schema, labelName, title, range.startOffset, range.endOffset);
+                  };
+
+                  // Get the offsets
+                  startEnd = getSelectionIndices();
+                  console.log('startEnd', startEnd);
+                  state = [{
+                      name: labelName,
+                      start: startEnd['start'],
+                      end: startEnd['end'],
+                      title: title,
+                      value: sel.toString()
+                  }]
+
+                  // console.log('adding new annotation', range.startOffset, range.endOffset, sel.toString())
+
+                  // Package this all up in a post request to the server's updateinstance endpoint
+                 var post_req = {
+                    type: "span",
+                    schema: schema,
+                    state: state,
+                    instance_id: instance_id
+                 }
+
+                 // Send the post request
+                 fetch("/updateinstance", {
+                    method: "POST",
+                    body: JSON.stringify(post_req),
+                    credentials: "same-origin",
+                    headers: {
+                        "Content-type": "application/json; charset=UTF-8"
+                    }
+                 });
+
+                 var range = sel.getRangeAt(0).cloneRange();
+                 range.surroundContents(span);
+                 sel.removeAllRanges();
+                 sel.addRange(range);
+                 span.appendChild(label);
+                 span.appendChild(delLabel);
+
+                 // Clear the current selection
+                 sel.empty();
               }
           }
       }
 
-      function changeSpanLabel(checkbox, spanLabel, spanColor) {
+      function changeSpanLabel(checkbox, schema, spanLabel, spanTitle, spanColor) {
           // Listen for when the user has highlighted some text (only when the label is checked)
-          document.onmouseup = function() {
+          document.onmouseup = function(e) {
+
+            var senderElement = e.target;
+            // Avoid the case where the user clicks the delete button
+              if (senderElement.getAttribute("class") == "span_close") {
+                  e.stopPropagation()
+                  return true;
+              }
               if (checkbox.checked){
-                  surroundSelection(spanLabel, spanColor);
+                  surroundSelection(schema, spanLabel, spanTitle, spanColor);
               }
           }
       }
 
       // Listen for when the user has highlighted some text
-      // document.onmouseup = function() { surroundSelection("Undefined"); } 
+      // document.onmouseup = function() { surroundSelection("Undefined"); }
 
     </script>
     <script>
@@ -183,7 +523,6 @@
       }
     </script>
 
-
     <script>
       function click_to_next() {
           // Gacky code to simulate the submit button as a keyboard event
@@ -191,7 +530,7 @@
           // events
           var e = $.Event('keyup');
           e.key = "ArrowRight";
-          
+
           get_new_instance(e);
       }
 
@@ -201,15 +540,16 @@
           // events
           var e = $.Event('keyup');
           e.key = "ArrowLeft";
-          
+
           get_new_instance(e);
-      } 
-      
+      }
+
     </script>
-    
+
     {{annotation}}
-    
+
     <script>
+        /*
       window.onunload = check_close;
       function check_close() {
           // console.error("session closed");
@@ -218,6 +558,7 @@
           }
           post(post_req);
       }
+          */
     </script>
 
     <script>
@@ -242,8 +583,8 @@
 
           // Output the result in an element with id="timecounter"
 
-          document.getElementById("timecounter").innerHTML = "Time spent: " + days + "d " + hours + "h "
-              + minutes + "m " + seconds + "s ";
+          //document.getElementById("timecounter").innerHTML = "Time spent: " + days + "d " + hours + "h "
+          //    + minutes + "m " + seconds + "s ";
 
           // TODO: add configurations for alert message and maximum time spent on each instance
           // If the count down is over, write some text
@@ -257,39 +598,81 @@
 
       }, 1000);
     </script>
-    
+
     <script>
       // We submit a new post to the same (user/annotate) endpoint
       function post(params) {
-          
+
+        // Package this all up in a post request to the server's updateinstance endpoint
+        var post_req = {
+            instance_id: instance_id
+        }
+        for (var key in params) {
+              if (params.hasOwnProperty(key)) {
+                post_req[key] = params[key];
+              }
+          }
+
+        // Send the post request and re-render the page with the new instance
+        //
+        // TODO: fix this the server-client protocol so we're just sending over
+        // the new instance data and not the entire page
+        fetch("/", {
+            method: "POST",
+            body: JSON.stringify(post_req),
+            credentials: "same-origin",
+            headers: {
+                "Content-type": "application/json; charset=UTF-8"
+            }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.text(); // Assuming the response is text/html
+            })
+            .then(html => {
+                // 2. Update the page content
+                document.body.innerHTML = html;
+                // Add all the listeners back to the new page
+                watch_text_boxes();
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                // Handle errors appropriately, e.g., display an error message
+            });
+
+          /*
+
+
           // The rest of this code assumes you are not using a library.
           // It can be made less wordy if you use one.
           var form = document.createElement("form");
           form.setAttribute("method", "post");
-          form.setAttribute("action", "annotate");
-          
+          form.setAttribute("action", "/");
+
           var hiddenField = document.createElement("input");
           hiddenField.setAttribute("type", "hidden");
           hiddenField.setAttribute("name", "email");
           hiddenField.setAttribute("value", document.getElementById('username').value);
           form.appendChild(hiddenField);
-          
+
           for (var key in params) {
               if (params.hasOwnProperty(key)) {
                   var hiddenField = document.createElement("input");
                   hiddenField.setAttribute("type", "hidden");
                   hiddenField.setAttribute("name", key);
                   hiddenField.setAttribute("value", params[key]);
-                  
+
                   form.appendChild(hiddenField);
               }
           }
 
           // Stuff all the current annotations into attributes for processing on the server side
           $('form input, form select, form textarea').each(
-              function(index){  
+              function(index){
                   var input = $(this);
-                  
+
                   if (input.attr('type') == 'checkbox' || input.attr('type') == 'radio') {
                       if (input.is(":checked")) {
                           // Stuff all the input fields into something for the post
@@ -305,14 +688,14 @@
                       hiddenField.setAttribute("type", "hidden");
                       hiddenField.setAttribute("name", input.attr('name'));
                       hiddenField.setAttribute("value", input[0].value);
-                      form.appendChild(hiddenField);                                        
+                      form.appendChild(hiddenField);
                   }
                   else if (input.attr('type') == 'range') {
                       var hiddenField = document.createElement("input");
                       hiddenField.setAttribute("type", "hidden");
                       hiddenField.setAttribute("name", input.attr('name'));
                       hiddenField.setAttribute("value", input[0].value);
-                      form.appendChild(hiddenField);                                        
+                      form.appendChild(hiddenField);
                   }
                   else if (input.attr('type') == 'select-one') {
                       //alert(input[0].value)
@@ -327,7 +710,9 @@
                   }
               }
           );
+          */
 
+          /*
           // Get all the highlighted text for this instance and marshall that
           // into some kind of representation for the server side
           $(".span_container").first().each(
@@ -355,10 +740,10 @@
                   //console.log(annotated_spans)
               }
           );
+          */
 
-          
-          document.body.appendChild(form);
-          form.submit();
+          //document.body.appendChild(form);
+          //form.submit();
       }
 
       /**
@@ -390,13 +775,21 @@
        */
       function validate_answers() {
 
-          // check if all the right labels are checked
-          //alert({{instance_obj|tojson}}['id'])
-          var inputs =  document.querySelectorAll('input[validation=right_label]');
+          // Test whether all the required labels are checked
+          var inputs =  document.querySelectorAll('input[validation=required_label]');
           for (var i = 0; i < inputs.length; ++i) {
-            if (inputs[i].getAttribute('validation') == 'right_label' && inputs[i].checked == false){
-                alert(inputs[i].name + " must be selected to proceed");
-                //alert(instance_obj.id)
+            if (inputs[i].getAttribute('validation') == 'required_label' && inputs[i].checked == false){
+                // Get the text of the legend element that contains the question
+                var legend = inputs[i].closest('fieldset').querySelector('legend');
+                var question = legend.textContent;
+
+                // Get the text of the answer
+                var neededAnswer = inputs[i].getAttribute('label_name');
+
+                // Generate an alert that shows the question text and the required label
+                // so the user knows what they missed
+                alert("The question \"" + question + "\" requires the label \"" + neededAnswer
+                            + "\" to be selected to proceed");
                 return false;
             }
           }
@@ -460,10 +853,15 @@
                     }
                 }
 
+                // Get the text of the legend element that contains the question
+                //
+                // TODO: check that this works with questions for the text input fields
+                var legend = inputs[i].closest('fieldset').querySelector('legend');
+                var question = legend.textContent;
 
                 // if this form requires inputs, but nothing is checked, display an error msg and return false
                 if (checked_flag == false){
-                    alert("You must answer the following item to proceed: " + inputs[0].className);
+                    alert("You must answer the following item to proceed: " + question  );
                     return false;
                 }
                 //alert(instance_obj.id)
@@ -489,6 +887,8 @@
               action = "prev_instance";
           }
           else if (x == "ArrowRight") {
+            //console.log("validateForm", validateForm())
+            //console.log("validate_answers", validate_answers())
               if (validateForm() == true && validate_answers() == true) {
                   action = "next_instance";
               }
@@ -500,13 +900,13 @@
               // console.log("Unknown key press", event)
               return
           }
-          
+
           var instance_id = document.getElementById('instance_id').value
           var time_string = document.getElementById("timecounter").innerHTML //get time spent on this instance
           //time_string = '-1'
           var post_req = {
               label: ism,
-              src: action,
+              "action": action,
               instance_id: instance_id,
               behavior_time_string: time_string
           }
@@ -525,7 +925,7 @@
     </script>
 
     {{var_elems | safe}}
-   
+
     <nav class="navbar navbar-expand-md navbar-dark bg-dark mb-3">
       <div class="container-fluid">
         <a href="#" class="navbar-brand mr-3">{{annotation_task_name}}</a>
@@ -543,10 +943,10 @@
             Finished {{finished}}/{{total_count}}
           </div>
           <div class="p-2 bd-highlight text-secondary align-middle">
-            Current_id {{instance_id}}
+            Current_id {{instance_index}}
           </div>
           <div class="p-2 bd-highlight text-secondary align-middle">
-            <form action="/annotate" method="post">
+            <form action="/go_to" method="post">
               <fieldset>
                 <input type="hidden" name="firstname" id="a" value="{{firstname}}">
                 <input type="hidden" name="lastname" id="b" value="{{lastname}}">
@@ -561,15 +961,19 @@
             <div class="text-secondary align-middle">Currently logged in as {{username}}</div>
           </div>
         </div>
-      </div>    
+      </div>
     </nav>
     <div class="container-fluid">
 
-      <!--- LAYOUT GOES BELOW HERE --->
+      <div id="task_layout">
 
-      {{ TASK_LAYOUT }}
+         <!--- LAYOUT GOES BELOW HERE --->
 
-      <!--- LAYOUT GOES ABOVE  --->
+         {{ TASK_LAYOUT }}
+
+        <!--- LAYOUT GOES ABOVE  --->
+
+      </div>
 
       <div>
         <p>
@@ -577,7 +981,7 @@
             <a class="btn btn-secondary" href="#" role="button" onclick="click_to_prev()">Move backward</a>
             <a class="btn btn-secondary" href="#" role="button" onclick="click_to_next()">Move forward</a>
           </div>
-        </p>        
+        </p>
       </div>
 
       <hr>
@@ -588,7 +992,7 @@
           </div>
           <div class="col-md-12 text-md-right">
             <a href="https://github.com/davidjurgens/potato" class="text-dark">Fork on GitHub</a>
-            <span class="text-muted mx-2">|</span> 
+            <span class="text-muted mx-2">|</span>
             <a href="https://github.com/davidjurgens/potato#cite-us" class="text-dark">Cite Us</a>
           </div>
         </div>
@@ -600,7 +1004,7 @@
       function openNav(target_id, width = "350px") {
           document.getElementById(target_id).style.width = width;
       }
-      
+
       /* Set the width of the sidebar to 0 (hide it) */
       function closeNav(target_id) {
           document.getElementById(target_id).style.width = "0";
@@ -609,21 +1013,21 @@
       function closeNav2(target_id) {
           // document.getElementById(target_id).style.height = "20px";
           console.error(document.getElementById(target_id).style.display);
-          if (document.getElementById(target_id).style.display == "block" 
+          if (document.getElementById(target_id).style.display == "block"
               || document.getElementById(target_id).style.display == "") {
-              
+
               document.getElementById(target_id).style.display = "none";
-              localStorage.setItem('show_instructions', 'false'); 
+              localStorage.setItem('show_instructions', 'false');
           }
           else{
               document.getElementById(target_id).style.display = "block";
-              localStorage.setItem('show_instructions', 'true'); 
+              localStorage.setItem('show_instructions', 'true');
           }
       }
 
       /* Keep the instructions hidden/shown across instance transitions based on
-         what the user had selected */      
-      window.onload = function() {
+         what the user had selected */
+      window.addEventListener("load", function() {
           var show = localStorage.getItem('show_instructions');
           if (document.getElementById('instructions')) {
               if (show === 'true') {
@@ -633,8 +1037,40 @@
                   document.getElementById('instructions').style.display = "none";
               }
           }
-      }      
+      });
 
+    function watch_text_boxes() {
+        let timer;
+        const waitTime = 1000;
+
+        var text_boxes = document.querySelectorAll('input[type=text]');
+        for (var i = 0; i < text_boxes.length; i++) {
+            //console.log('adding event listener to text box');
+            //console.log(text_boxes[i]);
+            text_boxes[i].addEventListener('input', function (event) {
+                console.log('text box input event')
+                clearTimeout(timer);
+                timer = setTimeout(() => {
+                    registerTextAnnotation(event.target);
+                }, waitTime);
+            });
+        }
+
+        var text_areas = document.querySelectorAll('textarea');
+        //console.log('num text_areas: ' + text_areas.length);
+        for (var i = 0; i < text_areas.length; i++) {
+            //console.log('adding event listener to text area');
+            //console.dir(text_areas[i]);
+            text_areas[i].addEventListener('input', function (event) {
+                //console.log('text area input event')
+                clearTimeout(timer);
+                timer = setTimeout(() => {
+                    registerTextAnnotation(event.target);
+                }, waitTime);
+            });
+        }
+    }
+    watch_text_boxes();
     </script>
   </body>
 </html>

@@ -4,8 +4,13 @@ Config module.
 
 import yaml
 import os
-
+import logging
 config = {}
+
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logging.basicConfig()
 
 
 def init_config(args):
@@ -24,7 +29,7 @@ def init_config(args):
                 project_dir = path_sep.join(split_path[:-2])
             else:
                 project_dir = path_sep.join(split_path[:-1])
-            print("project folder set as %s"%project_dir)
+            #print("project folder set as %s"%project_dir)
         else:
             print("%s not found, please make sure the .yaml config file is setup correctly" % args.config_file)
             quit()
@@ -61,10 +66,10 @@ def init_config(args):
                     print("wrong input, please reselect")
 
     if not config_file:
-        print("configuration file not found under %s, please make sure .yaml file exists in the given directory, or please directly give the path of the .yaml file" % config_folder)
+        logger.error("configuration file not found under %s, please make sure .yaml file exists in the given directory, or please directly give the path of the .yaml file" % config_folder)
         quit()
 
-    print("starting server from %s" % config_file)
+    # print("starting server from %s" % config_file)
     with open(config_file, "r") as file_p:
         config.update(yaml.safe_load(file_p))
 
@@ -81,4 +86,4 @@ def init_config(args):
 
     # update the current working dir for the server
     os.chdir(project_dir)
-    print("the current working directory is: %s"%project_dir)
+    # print("the current working directory is: %s"%project_dir)
