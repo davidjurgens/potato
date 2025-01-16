@@ -963,57 +963,198 @@ def old_home():
     print("password logging in")
     return render_template("home.html", title=config["annotation_task_name"])
 
-@app.route("/", methods=['GET', 'POST'])
+@app.route("/", methods=["GET", "POST"])
 def home():
-    print('home', request, session)
+    """
+    Handle requests to the home page.
 
-    usm = get_user_state_manager()
+    Features:
+    - Session management
+    - User authentication
+    - Phase routing
+    - Survey flow management
+    - Progress tracking
 
-    # If we're in debug mode, just log in as the debug user
-    # with no password needed and forward to next page
-    if config['__debug__']:
-        if 'username' not in session \
-            or ('username' in session and session['username'] != "debug_user") \
-            or not usm.has_user('debug_user'):
+    Returns:
+        flask.Response: Rendered template or redirect based on user state
+    """
+    logger.debug("Processing home page request")
 
-            session['username'] = "debug_user"
-            usm.get_or_create_user(session['username'])
-            # Move past the login phase
-            usm.advance_phase(session['username'])
-        else:
-            print('already logged in as debug user', session['username'])
+    if 'username' not in session:
+        logger.debug("No active session, rendering login page")
+        return render_template("login.html")
 
+    username = session['username']
+    logger.info(f"Active session for user: {username}")
+
+    user_state = get_user_state(username)
+    phase = user_state.get_phase()
+    logger.debug(f"User phase: {phase}")
+
+    if phase == UserPhase.CONSENT:
+        return render_template("consent.html")
+    elif phase == UserPhase.SURVEY:
+        return redirect(url_for("survey"))
+    elif phase == UserPhase.TUTORIAL:
+        return redirect(url_for("tutorial"))
+    elif phase == UserPhase.ANNOTATION:
+        return redirect(url_for("annotate"))
+    elif phase == UserPhase.COMPLETED:
+        return render_template("completed.html")
+
+    logger.error(f"Invalid phase for user {username}: {phase}")
+    return render_template("error.html", message="Invalid application state")
+
+@app.route("/login", methods=["POST"])
+def login():
+    """
+    Handle user login requests.
+
+    Features:
+    - Credential validation
+    - Session creation
+    - User state initialization
+    - Prolific integration
+
+    Args (from form):
+        username: User's email or username
+        password: User's password
+        prolific_pid: Optional Prolific participant ID
+
+    Returns:
+        flask.Response: Redirect to appropriate page based on login result
+    """
+    logger.debug("Processing login request")
+
+    username = request.form.get("username")
+    password = request.form.get("password")
+    prolific_pid = request.form.get("prolific_pid")
+
+    logger.debug(f"Login attempt for user: {username}")
+
+    if not user_authenticator.authenticate(username, password):
+        logger.warning(f"Failed login attempt for user: {username}")
+        return render_template("login.html", error="Invalid credentials")
+
+    session['username'] = username
+    logger.info(f"Successful login for user: {username}")
+
+    # Initialize user state if needed
+    if not get_user_state_manager().has_user(username):
+        logger.debug(f"Initializing state for new user: {username}")
+        init_user_state(username, prolific_pid)
+
+    return redirect(url_for("home"))
+
+@app.route("/logout")
+def logout():
+    """
+    Handle user logout requests.
+
+    Features:
+    - Session cleanup
+    - State persistence
+    - Progress saving
+
+    Returns:
+        flask.Response: Redirect to login page
+    """
+    logger.debug("Processing logout request")
 
     if 'username' in session:
-        # Check that this user is in the user state manager
-        # anf if not, switch to the login process
-        usm = get_user_state_manager()
-        if session['username'] not in usm.get_user_ids():
-            return login()
+        username = session['username']
+        logger.info(f"Logging out user: {username}")
 
-        user_state = get_user_state(session['username'])
-        print('User is logged in; redirecting to phase...', user_state.get_phase())
-        match user_state.get_phase():
-            case UserPhase.LOGIN:
-                return login()
-            case UserPhase.CONSENT:
-                return consent()
-            case UserPhase.PRESTUDY:
-                return prestudy()
-            case UserPhase.INSTRUCTIONS:
-                return instructions()
-            case UserPhase.TRAINING:
-                return training()
-            case UserPhase.ANNOTATION:
-                return annotate()
-            case UserPhase.POSTSTUDY:
-                return poststudy()
-            case UserPhase.DONE:
-                return done()
-            case _:
-                raise Exception("User is logged in but in unknown user phase", user_state.get_phase())
-    else:
-        return login()
+        # Save user progress
+        user_state = get_user_state(username)
+        if user_state:
+            user_state.save_progress()
+            logger.debug(f"Saved progress for user: {username}")
+
+        session.pop('username', None)
+
+    return redirect(url_for("home"))
+
+@app.route("/submit_annotation", methods=["POST"])
+def submit_annotation():
+    """
+    Handle annotation submission requests.
+
+    Features:
+    - Validation checking
+    - Progress tracking
+    - State updates
+    - AI integration
+    - Data persistence
+
+    Args (from form):
+        annotation_data: JSON-encoded annotation data
+        instance_id: ID of annotated instance
+
+    Returns:
+        flask.Response: JSON response with submission result
+    """
+    logger.debug("Processing annotation submission")
+
+    if 'username' not in session:
+        logger.warning("Annotation submission without active session")
+        return jsonify({"status": "error", "message": "No active session"})
+
+    username = session['username']
+    instance_id = request.form.get("instance_id")
+    annotation_data = request.form.get("annotation_data")
+
+    logger.debug(f"Annotation from {username} for instance {instance_id}")
+
+    try:
+        # Validate annotation data
+        annotation = json.loads(annotation_data)
+        if not validate_annotation(annotation):
+            raise ValueError("Invalid annotation format")
+
+        # Update state
+        user_state = get_user_state(username)
+        user_state.add_annotation(instance_id, annotation)
+
+        # Process with AI if configured
+        if config.get("ai_enabled"):
+            ai_endpoint = get_ai_endpoint()
+            ai_feedback = ai_endpoint.process_annotation(annotation)
+            logger.debug(f"AI feedback received: {ai_feedback}")
+
+        logger.info(f"Successfully saved annotation for {instance_id} from {username}")
+        return jsonify({"status": "success"})
+
+    except Exception as e:
+        logger.error(f"Failed to save annotation: {e}")
+        return jsonify({"status": "error", "message": str(e)})
+
+def get_user_state(username):
+    """
+    Retrieve or create user state object.
+
+    Args:
+        username (str): User identifier
+
+    Returns:
+        UserState: User's current state object
+
+    Raises:
+        ValueError: If username is invalid
+    """
+    logger.debug(f"Retrieving state for user: {username}")
+
+    if not username:
+        error_msg = "Invalid username"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+
+    user_state_manager = get_user_state_manager()
+    if not user_state_manager.has_user(username):
+        logger.debug(f"Creating new state for user: {username}")
+        user_state_manager.create_user(username)
+
+    return user_state_manager.get_user_state(username)
 
 def get_current_page_html(config: dict, username: str) -> str:
     user_state = get_user_state(username)
@@ -1023,64 +1164,6 @@ def get_current_page_html(config: dict, username: str) -> str:
     html_fname = usm.get_phase_html_fname(phase, page)
     # Render the consent form
     return render_template(html_fname)
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    global user_config
-    print('login', request, session)
-
-    # If the user is already logged in, just forward to the home
-    # which will figure out where to go next
-    if False: #or 'username' in session:
-        # Check that this user is in the user state manager
-        # or if not, continue with the login process
-        usm = get_user_state_manager()
-        print('\n\nusers: ', usm.get_user_ids())
-        if session['username'] in usm.get_user_ids():
-            return redirect(home())
-        else:
-            logger.debug('User %s in session cache but not found in user state manager, continuing with login' % session['username'])
-
-    # If we're not in debug mode, we need to check the login
-    if request.method == 'POST':
-        session['username'] = request.form['username']
-        print('POST -> LOGIN: username: ', session['username'])
-
-        # Get the user state manager so we can register the user
-        usm = get_user_state_manager()
-
-        # Register the user if they don't exist
-        # TODO: add in logic for checking/hashing passwords, safe password
-        user_state = create_user(session['username'])
-
-        # Advance the user's phase beyond login
-        usm.advance_phase(session['username'])
-        request.method = 'GET'
-        return home()
-
-        #phase, page = user_state.get_current_phase_and_page()
-        #print('GET <- LOGIN: phase, page: ', phase, page)
-
-        #usm = get_user_state_manager()
-        # Look up the html template for the current consent form
-        #next_html_fname = usm.get_phase_html_fname(phase, page)
-        # Render the consent form
-        #return render_template(next_html_fname, title=config["annotation_task_name"])
-
-    else:
-        print('GET <- LOGIN')
-        return '''
-            <form method="post">
-                <p><input type=text name=username>
-                <p><input type=submit value=login>
-            </form>
-        '''
-
-def create_user(username: str) -> UserState:
-    '''Creates a new user in the user state manager.'''
-    usm = get_user_state_manager()
-    user_state = usm.get_or_create_user(username)
-    return user_state
 
 @app.route("/consent", methods=["GET", "POST"])
 def consent():
@@ -3069,42 +3152,105 @@ def parse_story_pair_from_file(filepath):
 
 @app.route("/<path:filename>")
 def get_file(filename):
-    """Make files available for annotation access from a folder"""
+    """
+    Serve static files needed for annotation interface.
+
+    Args:
+        filename (str): Path to requested file relative to working directory
+
+    Returns:
+        flask.Response: File contents or 404 error
+
+    Raises:
+        FileNotFoundError: If requested file doesn't exist
+    """
+    logger.debug(f"File request for: {filename}")
     try:
         return flask.send_from_directory(os.getcwd(), filename)
     except FileNotFoundError:
+        logger.warning(f"File not found: {filename}")
         flask.abort(404)
 
 
 def get_class(kls):
     """
-    Returns an instantiated class object from a fully specified name.
+    Dynamically load and instantiate a class from its fully qualified name.
+
+    Args:
+        kls (str): Fully qualified class name (e.g. "package.module.ClassName")
+
+    Returns:
+        type: Instantiated class object
+
+    Raises:
+        ImportError: If module cannot be imported
+        AttributeError: If class doesn't exist in module
     """
+    logger.debug(f"Loading class: {kls}")
     parts = kls.split(".")
     module = ".".join(parts[:-1])
-    m = __import__(module)
-    for comp in parts[1:]:
-        m = getattr(m, comp)
-    return m
+
+    try:
+        m = __import__(module)
+        for comp in parts[1:]:
+            m = getattr(m, comp)
+        logger.debug(f"Successfully loaded class {kls}")
+        return m
+    except (ImportError, AttributeError) as e:
+        logger.error(f"Failed to load class {kls}: {e}")
+        raise
 
 
 
 def resolve(annotations, strategy):
-    if strategy == "random":
-        return random.choice(annotations)
-    raise Exception('Unknonwn annotation resolution strategy: "%s"' % (strategy))
+    """
+    Resolve multiple annotations into a single annotation using specified strategy.
 
+    Args:
+        annotations (list): List of annotation values to resolve
+        strategy (str): Resolution strategy ('random' or others)
+
+    Returns:
+        Any: Single resolved annotation value
+
+    Raises:
+        ValueError: If strategy is unknown
+    """
+    logger.debug(f"Resolving {len(annotations)} annotations using strategy: {strategy}")
+
+    if strategy == "random":
+        result = random.choice(annotations)
+        logger.debug(f"Random resolution selected: {result}")
+        return result
+
+    error_msg = f'Unknown annotation resolution strategy: "{strategy}"'
+    logger.error(error_msg)
+    raise ValueError(error_msg)
 
 def run_create_task_cli():
     """
-    Run create_task_cli().
+    Launch the interactive task creation CLI.
+
+    Prompts user to:
+    - Choose between CLI and GUI interfaces (GUI not implemented)
+    - Start task creation process
+    - Configure task parameters
+
+    Raises:
+        NotImplementedError: If GUI option is selected
     """
+    logger.info("Starting task creation process")
+
     if yes_or_no("Launch task creation process?"):
         if yes_or_no("Launch on command line?"):
+            logger.info("Starting CLI task creation")
             create_task_cli()
         else:
-            # Probably need to launch the Flask server to accept form inputs
-            raise Exception("Gui-based design not supported yet.")
+            error_msg = "GUI-based design not supported yet"
+            logger.error(error_msg)
+            raise NotImplementedError(error_msg)
+    else:
+        logger.info("Task creation cancelled by user")
 
 def run_server(args):
     """
@@ -3149,19 +3295,38 @@ def run_server(args):
     app.run(debug=args.very_verbose, host="0.0.0.0", port=port)
 
 def main():
+    """
+    Main entry point for the annotation server.
+
+    Handles:
+    - Command line argument parsing
+    - Server mode selection:
+        - Task creation
+        - Server startup
+        - Project retrieval
+        - Project listing
+    - Configuration loading
+    """
+    logger.info("Starting annotation platform")
+
     if len(sys.argv) == 1:
-        # Run task configuration script if no arguments are given.
+        logger.debug("No arguments provided, launching task creation")
         return run_create_task_cli()
 
     args = arguments()
+    logger.debug(f"Parsed arguments: {args}")
+
     if args.mode == 'start':
+        logger.info("Starting server mode")
         run_server(args)
     elif args.mode == 'get':
+        logger.info("Starting project retrieval")
         get_project_from_hub(args.config_file)
-
-    # currently config_file is still an required arg, so when potato list is used, users must add all after it: potato list all
     elif args.mode == 'list':
+        logger.info("Listing available projects")
         show_project_hub(args.config_file)
+
+    logger.info("Annotation platform shutdown complete")
 
 
 if __name__ == "__main__":
