@@ -60,7 +60,7 @@
       #whether do automatic task assignment for annotators, default False.
       "on": False,
       "output_filename": 'task_assignment.json',
-      "sampling_strategy:": 'random',
+      "sampling_strategy": 'random',
       "labels_per_instance": 2,
       "instance_per_annotator": 1,
 
