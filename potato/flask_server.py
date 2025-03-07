@@ -2849,8 +2849,10 @@ def run_server(args):
     flask_logger.setLevel(logging.ERROR)
 
     port = args.port or config.get("port", default_port)
+    ssl_context = (args.ssl_cert, args.ssl_key) if args.ssl_cert and args.ssl_key else None
+
     print("running at:\nlocalhost:" + str(port))
-    app.run(debug=args.very_verbose, host="0.0.0.0", port=port)
+    app.run(debug=args.very_verbose, host="0.0.0.0", port=port, ssl_context=ssl_context)
 
 
 def main():
