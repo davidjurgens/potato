@@ -5,7 +5,7 @@ Span Layout
 import logging
 from collections.abc import Mapping
 from collections import defaultdict
-from potato.server_utils.config_module import config
+from server_utils.config_module import config
 
 from item_state_management import SpanAnnotation
 

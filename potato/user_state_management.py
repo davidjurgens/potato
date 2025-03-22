@@ -212,7 +212,6 @@ class UserStateManager:
 
         # Figure out where this user's data would be stored on disk
         output_annotation_dir = self.config["output_annotation_dir"]
-
         username = user_state.get_user_id()
 
         # NB: Do some kind of sanitizing on the username to improve security

@@ -78,7 +78,7 @@ def generate_likert_layout(annotation_scheme):
 
     # Generate scale points
     for i in range(1, annotation_scheme["size"] + 1):
-        label = f"scale_{i}"
+        label = f"{i}"
         name = f"{annotation_scheme['name']}:::{label}"
         key_value = str(i % 10)
 
