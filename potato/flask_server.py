@@ -31,12 +31,12 @@ import simpledorff
 from simpledorff.metrics import nominal_metric, interval_metric
 
 import flask
-from flask import Flask, session, render_template, request, redirect, url_for, jsonify
+from flask import Flask, session, render_template, request, redirect, url_for, jsonify, make_response
 from bs4 import BeautifulSoup
 import shutil
 from datetime import timedelta
 
-
+from dataclasses import dataclass
 
 cur_working_dir = os.getcwd() #get the current working dir
 cur_program_dir = os.path.dirname(os.path.abspath(__file__)) #get the current program dir (for the case of pypi, it will be the path where potato is installed)
@@ -55,7 +55,7 @@ from phase import UserPhase
 from create_task_cli import create_task_cli, yes_or_no
 from server_utils.arg_utils import arguments
 from server_utils.config_module import init_config, config
-from server_utils.front_end import generate_annotation_html_template, generate_html_from_schematic, generate_surveyflow_pages
+from server_utils.front_end import generate_annotation_html_template, generate_html_from_schematic
 from server_utils.schemas.span import render_span_annotations
 from server_utils.cli_utlis import get_project_from_hub, show_project_hub
 from server_utils.prolific_apis import ProlificStudy
@@ -190,7 +190,6 @@ class ActiveLearningState:
             self.id_to_selection_type[iid] = st
             self.id_to_update_round[iid] = self.cur_round
 
-
 def load_instance_data(config: dict):
     '''Loads the instance data from the files specified in the config.'''
 
@@ -308,7 +307,27 @@ def load_all_data(config: dict):
     load_phase_data(config)
     load_highlights_data(config)
 
+    print("STATES: ", get_user_state_manager().phase_type_to_name_to_page)
+
 def load_annotation_schematic_data(config: dict) -> None:
+
+    # Swap in the right file paths if the user specified the default templates
+    if config["base_html_template"] == "default":
+        config["base_html_template"] = template_dict["base_html_template"]["default"]
+    if config["header_file"] == "default":
+        config["header_file"] = template_dict["header_file"]["default"]
+    if config["html_layout"] == "default":
+        config["html_layout"] = template_dict["html_layout"]["default"]
+
+    task_dir = config["task_dir"]
+    # Swap in the right file paths if the user specified the default templates
+    if config["site_dir"] == "default" or True:
+        templates_dir = os.path.join(cur_program_dir, 'templates')
+        if not os.path.exists(templates_dir):
+            # make the directory
+            os.makedirs(templates_dir)
+        config["site_dir"] = templates_dir
+
 
     # Creates the templates we'll use in flask by mashing annotation
     # specification on top of the proto-templates
@@ -786,7 +805,6 @@ def find_start_id(user):
     """
     path = user_dict[user]["path"]
     # if not os.path.exists(path):
-    #    initialize_user_data(path, user_dict[user]['user_id'])
     user_data = {}
     user_dict[user]["start_id"] = len(all_data["annotated_data"])
     lines = user_dict[user]["user_data"]
@@ -800,19 +818,23 @@ def find_start_id(user):
     raise RuntimeError("This function is deprecated?")
 
 
-def move_to_prev_instance(user_id):
+def move_to_prev_instance(user_id) -> bool:
+    '''Moves the user back to the previous instance and returns True if successful'''
     user_state = get_user_state(user_id)
-    user_state.go_back()
+    return user_state.go_back()
 
 
-def move_to_next_instance(user_id):
+def move_to_next_instance(user_id) -> bool:
+    '''Moves the user forward to the next instance and returns True if successful'''
     user_state = get_user_state(user_id)
 
     # If the user is at the end of the list, try to assign instances to the user
     if user_state.is_at_end_index():
-        get_item_state_manager().assign_instances_to_user(user_state)
+        logger.debug(f"User {user_id} is at the end of the list, assigning new instances")
+        num_assigned = get_item_state_manager().assign_instances_to_user(user_state)
+        logger.debug(f"Assigned {num_assigned} new instances to user {user_id}")
 
-    user_state.go_forward()
+    return user_state.go_forward()
 
 
 def go_to_id(user_id: str, instance_index: int):
@@ -963,6 +985,8 @@ def old_home():
     print("password logging in")
     return render_template("home.html", title=config["annotation_task_name"])
 
+
+
 @app.route("/", methods=["GET", "POST"])
 def home():
     """
@@ -982,68 +1006,225 @@ def home():
 
     if 'username' not in session:
         logger.debug("No active session, rendering login page")
-        return render_template("login.html")
+        return redirect(url_for("auth"))
 
     username = session['username']
     logger.info(f"Active session for user: {username}")
+
+    print("home request.form: ", request.form)
+    print("home request.json: ", request.json)
+    print('home: request.method: ', request.method)
 
     user_state = get_user_state(username)
     phase = user_state.get_phase()
     logger.debug(f"User phase: {phase}")
 
-    if phase == UserPhase.CONSENT:
-        return render_template("consent.html")
-    elif phase == UserPhase.SURVEY:
-        return redirect(url_for("survey"))
-    elif phase == UserPhase.TUTORIAL:
-        return redirect(url_for("tutorial"))
+    if phase == UserPhase.LOGIN:
+        return redirect(url_for("auth"), code=307)
+    elif phase == UserPhase.CONSENT:
+        return render_template("consent")
+    elif phase == UserPhase.PRESTUDY:
+        return redirect(url_for("prestudy"), code=307)
+    elif phase == UserPhase.INSTRUCTIONS:
+        return redirect(url_for("instructions"), code=307)
+    elif phase == UserPhase.TRAINING:
+        return redirect(url_for("training"), code=307)
     elif phase == UserPhase.ANNOTATION:
-        return redirect(url_for("annotate"))
-    elif phase == UserPhase.COMPLETED:
-        return render_template("completed.html")
+        return redirect(url_for("annotate"), code=307)
+    elif phase == UserPhase.POSTSTUDY:
+        return redirect(url_for("poststudy"), code=307)
+    elif phase == UserPhase.DONE:
+        return redirect(url_for("done"))
 
     logger.error(f"Invalid phase for user {username}: {phase}")
     return render_template("error.html", message="Invalid application state")
 
-@app.route("/login", methods=["POST"])
-def login():
+
+@app.route("/auth", methods=["GET", "POST"])
+def auth():
     """
-    Handle user login requests.
-
-    Features:
-    - Credential validation
-    - Session creation
-    - User state initialization
-    - Prolific integration
-
-    Args (from form):
-        username: User's email or username
-        password: User's password
-        prolific_pid: Optional Prolific participant ID
+    Handle requests to the home page, redirecting to appropriate auth method.
 
     Returns:
-        flask.Response: Redirect to appropriate page based on login result
+        flask.Response: Rendered template or redirect
     """
-    logger.debug("Processing login request")
+    logger.debug("Processing home page request")
 
-    username = request.form.get("username")
-    password = request.form.get("password")
-    prolific_pid = request.form.get("prolific_pid")
+    # Check if user is already logged in
+    if 'username' in session:
+        logger.debug(f"User {session['username']} already logged in, redirecting to annotate")
+        return redirect(url_for("annotate"))
 
-    logger.debug(f"Login attempt for user: {username}")
+    # Get authentication method from config
+    auth_method = config.get("authentication", {}).get("method", "in_memory")
 
-    if not user_authenticator.authenticate(username, password):
-        logger.warning(f"Failed login attempt for user: {username}")
-        return render_template("login.html", error="Invalid credentials")
+    # For Clerk SSO, redirect to clerk login page
+    if auth_method == "clerk":
+        logger.debug("Using Clerk SSO, redirecting to clerk login")
+        return redirect(url_for("clerk_login"))
 
-    session['username'] = username
-    logger.info(f"Successful login for user: {username}")
+    # For passwordless login (check if require_password is False)
+    if not config.get("require_password", True):
+        logger.debug("Passwordless login enabled, redirecting")
+        return redirect(url_for("passwordless_login"))
 
-    # Initialize user state if needed
-    if not get_user_state_manager().has_user(username):
-        logger.debug(f"Initializing state for new user: {username}")
-        init_user_state(username, prolific_pid)
+    # For standard username/password login
+    if request.method == "POST":
+        username = request.form.get("email")
+        password = request.form.get("pass")
 
+        logger.debug(f"Login attempt for user: {username}")
+
+        if not username:
+            logger.warning("Login attempt with empty username")
+            return render_template("home.html",
+                                  login_error="Username is required",
+                                  title=config.get("annotation_task_name", "Annotation Platform"))
+
+        # Authenticate the user
+        if UserAuthenticator.authenticate(username, password):
+            session.clear()  # Clear any existing session data
+            session['username'] = username
+            session.permanent = True  # Make session persist longer
+            logger.info(f"Login successful for user: {username}")
+
+
+            # Initialize user state if needed
+            if not get_user_state_manager().has_user(username):
+                logger.debug(f"Initializing state for new user: {username}")
+                #init_user_state(username)
+                usm = get_user_state_manager()
+                usm.add_user(username)
+                usm.advance_phase(username)
+                request.method = 'GET'
+                return home()
+        else:
+            logger.warning(f"Login failed for user: {username}")
+            return render_template("home.html",
+                                  login_error="Invalid username or password",
+                                  login_email=username,
+                                  title=config.get("annotation_task_name", "Annotation Platform"))
+
+    # GET request - show the login form
+    return render_template("home.html",
+                         title=config.get("annotation_task_name", "Annotation Platform"))
+
+
+@app.route("/passwordless-login", methods=["GET", "POST"])
+def passwordless_login():
+    """
+    Handle passwordless login page requests.
+
+    Returns:
+        flask.Response: Rendered template or redirect
+    """
+    logger.debug("Processing passwordless login page request")
+
+    # Redirect to regular login if passwords are required
+    if config.get("require_password", True):
+        logger.debug("Passwords required, redirecting to regular login")
+        return redirect(url_for("home"))
+
+    # Check if username was submitted via POST
+    if request.method == "POST":
+        username = request.form.get("email")
+
+        if not username:
+            logger.warning("Passwordless login attempt with empty username")
+            return render_template("passwordless_login.html",
+                                  login_error="Username is required",
+                                  title=config.get("annotation_task_name", "Annotation Platform"))
+
+        # Authenticate without password
+        if UserAuthenticator.authenticate(username, None):
+            session['username'] = username
+            logger.info(f"Passwordless login successful for user: {username}")
+
+            # Initialize user state if needed
+            if not get_user_state_manager().has_user(username):
+                logger.debug(f"Initializing state for new user: {username}")
+                init_user_state(username)
+
+            return redirect(url_for("annotate"))
+        else:
+            logger.warning(f"Passwordless login failed for user: {username}")
+            return render_template("passwordless_login.html",
+                                  login_error="Invalid username",
+                                  login_email=username,
+                                  title=config.get("annotation_task_name", "Annotation Platform"))
+
+    # GET request - show the passwordless login form
+    return render_template("passwordless_login.html",
+                         title=config.get("annotation_task_name", "Annotation Platform"))
+
+@app.route("/clerk-login", methods=["GET", "POST"])
+def clerk_login():
+    """
+    Handle Clerk SSO login process.
+
+    Returns:
+        flask.Response: Rendered template or redirect
+    """
+    logger.debug("Processing Clerk SSO login request")
+
+    # Only proceed if Clerk is configured
+    auth_method = config.get("authentication", {}).get("method", "in_memory")
+    if auth_method != "clerk":
+        logger.warning("Clerk login attempted but not configured")
+        return redirect(url_for("home"))
+
+    # Get the Clerk frontend API key
+    authenticator = UserAuthenticator.get_instance()
+    clerk_frontend_api = authenticator.get_clerk_frontend_api()
+
+    if not clerk_frontend_api:
+        logger.error("Clerk frontend API key not configured")
+        return render_template("home.html",
+                             login_error="SSO configuration error",
+                             title=config.get("annotation_task_name", "Annotation Platform"))
+
+    # Handle the Clerk token verification
+    if request.method == "POST":
+        token = request.form.get("clerk_token")
+        username = request.form.get("username")
+
+        if not token or not username:
+            logger.warning("Clerk login attempt with missing token or username")
+            return render_template("clerk_login.html",
+                                 login_error="Missing authentication data",
+                                 title=config.get("annotation_task_name", "Annotation Platform"))
+
+        # Authenticate with Clerk
+        if UserAuthenticator.authenticate(username, token):
+            session['username'] = username
+            logger.info(f"Clerk SSO login successful for user: {username}")
+
+            # Initialize user state if needed
+            if not get_user_state_manager().has_user(username):
+                logger.debug(f"Initializing state for new user: {username}")
+                init_user_state(username)
+
+            return redirect(url_for("annotate"))
+        else:
+            logger.warning(f"Clerk SSO login failed for user: {username}")
+            return render_template("clerk_login.html",
+                                 login_error="Authentication failed",
+                                 title=config.get("annotation_task_name", "Annotation Platform"))
+
+    # GET request - show the Clerk login form
+    return render_template("clerk_login.html",
+                         clerk_frontend_api=clerk_frontend_api,
+                         title=config.get("annotation_task_name", "Annotation Platform"))
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    """
+    Handle login requests - now just redirects to home which handles login
+
+    Returns:
+        flask.Response: Redirect to home
+    """
+    logger.debug("Redirecting /login to home")
     return redirect(url_for("home"))
 
 @app.route("/logout")
@@ -1155,6 +1336,35 @@ def get_user_state(username):
         user_state_manager.create_user(username)
 
     return user_state_manager.get_user_state(username)
+
+@app.route("/register", methods=["POST"])
+def register():
+    """
+    Register a new user and initialize their user state.
+
+    Args:
+        username: The username to initialize state for
+    """
+    logger.debug("Registering new user")
+
+    if 'username' in session:
+        logger.warning("User already logged in, redirecting to annotate")
+        return home()
+
+    username = request.form.get("email")
+    password = request.form.get("pass")
+
+    if not username or not password:
+        logger.warning("Missing username or password")
+        return render_template("home.html",
+                                login_error="Username and password are required")
+
+    # Register the user with the autheticator
+    user_authenticator = UserAuthenticator.get_instance()
+    user_authenticator.add_user(username, password)
+
+    # Redirect to the annotate page
+    return redirect(url_for("annotate"))
 
 def get_current_page_html(config: dict, username: str) -> str:
     user_state = get_user_state(username)
@@ -1333,25 +1543,25 @@ def annotate2():
 @app.route("/annotate", methods=["GET", "POST"])
 def annotate():
     """
-    Handle annotation page requests and user interactions.
-
-    Manages:
-    - User session validation
-    - Phase checking
-    - Instance assignment
-    - Navigation between instances
-    - Page rendering with annotations
-
-    Returns:
-        flask.Response: Rendered annotation page or redirect
+    Handle annotation page requests.
     """
-    logger.debug("Handling annotation request")
-
+    # Check if user is logged in
     if 'username' not in session:
-        logger.info("No active session, redirecting to home")
-        return home()
+        logger.warning("Unauthorized access attempt to annotate page")
+        return redirect(url_for("home"))
 
     username = session['username']
+
+    print('annotate_page: username: ', username)
+    print('annotate: request.method: ', request.method)
+
+    # Ensure user state exists
+    if not get_user_state_manager().has_user(username):
+        logger.info(f"Creating missing user state for {username}")
+        init_user_state(username)
+
+    logger.debug("Handling annotation request")
+
     user_state = get_user_state(username)
     logger.debug(f"Retrieved state for user: {username}")
 
@@ -1384,9 +1594,11 @@ def annotate():
 
     if request.is_json and 'action' in request.json:
        action = request.json['action']
+       print('request.json: ', request.json)
     else:
        action = request.form['action'] if 'action' in request.form else "init"
 
+    print('form: ', request.form)
     # print("Action: ", action)
 
     if action == "prev_instance":
@@ -1649,10 +1861,10 @@ def get_label_suggestions(item, config, schema_content_to_prefill) -> set[Sugges
     label_suggestions_json = set()
     if 'label_suggestions' in item.get_data():
         suggestions = item.get_data()['label_suggestions']
-        for scheme in config['annotation_schemes']:
-            if scheme['name'] not in suggestions:
+        for schema in config['annotation_schemes']:
+            if schema['name'] not in suggestions:
                 continue
-            suggested_labels = suggestions[scheme['name']]
+            suggested_labels = suggestions[schema['name']]
             if type(suggested_labels) == str:
                 suggested_labels = [suggested_labels]
             elif type(suggested_labels) == list:
@@ -1661,21 +1873,21 @@ def get_label_suggestions(item, config, schema_content_to_prefill) -> set[Sugges
                 print("WARNING: Unsupported suggested label type %s, please check your input data" % type(s))
                 continue
 
-            if not scheme.get('label_suggestions') in ['highlight', 'prefill']:
+            if not schema.get('label_suggestions') in ['highlight', 'prefill']:
                 print('WARNING: the style of suggested labels is not defined, please check your configuration file.')
                 continue
 
-            label_suggestion = scheme['label_suggestions']
+            label_suggestion = schema['label_suggestions']
             for s in suggested_labels:
                 if label_suggestion == 'highlight':
                         #bad suggestion -- TODO make chance configurable
                         if random.randrange(0, 3) == 2:
-                            label_suggestions_json.add(SuggestedResponse(scheme['name'], random.choice(scheme['labels'])))
+                            label_suggestions_json.add(SuggestedResponse(schema['name'], random.choice(schema['labels'])))
                             continue
 
-                        label_suggestions_json.add(SuggestedResponse(scheme['name'], s))
+                        label_suggestions_json.add(SuggestedResponse(schema['name'], s))
                 elif label_suggestion == 'prefill':
-                        schema_content_to_prefill.append({'name':scheme['name'], 'label':s})
+                        schema_content_to_prefill.append({'name':schema['name'], 'label':s})
     return label_suggestions_json
 
 def add_ai_hints(soup: BeautifulSoup, instance_id: str) -> BeautifulSoup:
@@ -1728,12 +1940,8 @@ def poststudy():
 
 @app.route("/done", methods=["GET", "POST"])
 def done():
+    print(get_user_state_manager().phase_type_to_name_to_page)
     return '<p>u did it done now. gud job.</p>'
-
-@app.route('/logout')
-def logout():
-    session.pop('username', None)
-    return home()
 
 @app.route("/prolificlogin", methods=["GET", "POST"])
 def prolificlogin():
@@ -1794,6 +2002,8 @@ def signup():
     Returns:
         flask.Response: Rendered template with registration result
     """
+    global config
+    user_auth = UserAuthenticator.get_instance()
     logger.debug("Processing signup request")
 
     action = request.form.get("action")
@@ -1805,11 +2015,11 @@ def signup():
 
     if action == "signup":
         single_user = {"username": username, "email": email, "password": password}
-        result = user_config.add_single_user(single_user)
+        result = user_auth.add_single_user(single_user)
         logger.info(f"Signup result for {username}: {result}")
 
         if result == "Success":
-            user_config.save_user_config()
+            user_auth.save_user_config()
             return render_template(
                 "home.html",
                 title=config["annotation_task_name"],
@@ -1827,6 +2037,7 @@ def signup():
         return render_template(
             "home.html",
             title=config["annotation_task_name"],
+            login_email=username,
             login_error=result + ", please try again or log in",
         )
 
@@ -2365,12 +2576,10 @@ def get_user_state(user_id: str) -> UserState:
     """
     Returns the UserState for a user
     """
-    global user_state_manager
 
-    user_state = user_state_manager.get_user_state(user_id)
+    user_state = get_user_state_manager().get_user_state(user_id)
 
     return user_state
-
 
 def save_user_state(username, save_order=False):
     global user_to_annotation_state
@@ -2710,8 +2919,6 @@ def annotate_page(username=None, action=None):
     based on what was clicked/typed. This method is the main switch for changing
     the state of the server for this user.
     """
-    global user_config
-
     # use the provided username when the username is given
     if not username:
         if config["__debug__"]:
@@ -2728,6 +2935,8 @@ def annotate_page(username=None, action=None):
     # Check if the user is authorized. If not, go to the login page
     # if not user_config.is_valid_username(username):
     #    return render_template("home.html")
+
+    print('annotate_page')
 
     # Based on what the user did to the instance, update the annotate state for
     # this instance. All of the instances clicks/checks/text are stored in the
@@ -2846,10 +3055,10 @@ def annotate_page(username=None, action=None):
     label_suggestion_json = set()
     if 'label_suggestions' in instance:
         suggestions = instance['label_suggestions']
-        for scheme in config['annotation_schemes']:
-            if scheme['name'] not in suggestions:
+        for schema in config['annotation_schemes']:
+            if schema['name'] not in suggestions:
                 continue
-            suggested_labels = suggestions[scheme['name']]
+            suggested_labels = suggestions[schema['name']]
             if type(suggested_labels) == str:
                 suggested_labels = [suggested_labels]
             elif type(suggested_labels) == list:
@@ -2858,21 +3067,21 @@ def annotate_page(username=None, action=None):
                 print("WARNING: Unsupported suggested label type %s, please check your input data" % type(s))
                 continue
 
-            if not scheme.get('label_suggestions') in ['highlight', 'prefill']:
+            if not schema.get('label_suggestions') in ['highlight', 'prefill']:
                 print('WARNING: the style of suggested labels is not defined, please check your configuration file.')
                 continue
 
-            label_suggestion = scheme['label_suggestions']
+            label_suggestion = schema['label_suggestions']
             for s in suggested_labels:
                 if label_suggestion == 'highlight':
                         #bad suggestion -- TODO make chance configurable
                         if random.randrange(0, 3) == 2:
-                            label_suggestion_json.add(SuggestedResponse(scheme['name'], random.choice(scheme['labels'])))
+                            label_suggestion_json.add(SuggestedResponse(schema['name'], random.choice(schema['labels'])))
                             continue
 
-                        label_suggestion_json.add(SuggestedResponse(scheme['name'], s))
+                        label_suggestion_json.add(SuggestedResponse(schema['name'], s))
                 elif label_suggestion == 'prefill':
-                        schema_content_to_prefill.append({'name':scheme['name'], 'label':s})
+                        schema_content_to_prefill.append({'name':schema['name'], 'label':s})
 
     var_elems["suggestions"] = list(label_suggestion_json)
     # Fill in the kwargs that the user wanted us to include when rendering the page
@@ -3271,17 +3480,41 @@ def run_server(args):
     """
     logger.info("Initializing annotation server")
 
-    # User configuration
-    if 'allow_all_users' in user_config_data:
-        user_config.allow_all_users = user_config_data['allow_all_users']
-        logger.debug(f"Allow all users: {user_config.allow_all_users}")
+    # Initialize config
+    init_config(args)
 
-        if 'authorized_users' in user_config_data:
-            for user in user_config_data["authorized_users"]:
-                user_config.authorized_users.append(user)
-            logger.debug(f"Loaded {len(user_config.authorized_users)} authorized users")
+    # Apply command line flags that override config settings
+    if args.require_password is not None:
+        # Command line flag takes precedence over config file
+        config["require_password"] = args.require_password
+        logger.debug(f"Password requirement set from command line: {args.require_password}")
 
-    # ... rest of the function with similar logging ...
+    # Set logging level based on verbosity flags
+    if config.get("verbose"):
+        logger.setLevel(logging.DEBUG)
+    if config.get("very_verbose"):
+        logger.setLevel(logging.NOTSET)
+
+    # Ensure that the task directory exists
+    task_dir = config["task_dir"]
+    if not os.path.exists(task_dir):
+        os.makedirs(task_dir)
+
+    # Ensure that the output annotation directory exists
+    output_annotation_dir = config["output_annotation_dir"]
+    if not os.path.exists(output_annotation_dir):
+        os.makedirs(output_annotation_dir)
+
+    # Initialize authenticator
+    UserAuthenticator.init_from_config(config)
+
+    init_user_state_manager(config)
+    init_item_state_manager(config)
+    load_all_data(config)
+
+
+    # Log password requirement status
+    logger.info(f"Password authentication required: {config.get('require_password', True)}")
 
     # Server startup
     port = args.port or config.get("port", default_port)
@@ -3331,3 +3564,34 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+def init_user_state(username):
+    """
+    Initialize the user state for a new user.
+
+    Args:
+        username: The username to initialize state for
+    """
+    user_state_manager = get_user_state_manager()
+
+    # Only initialize if user doesn't already have state
+    if not user_state_manager.has_user(username):
+        logger.debug(f"Initializing state for new user: {username}")
+
+        # Create user state
+        user_state = user_state_manager.add_user(username)
+
+
+@app.route("/routes", methods=["GET"])
+def show_routes():
+    """Debug endpoint to show all registered routes"""
+    routes = []
+    for rule in app.url_map.iter_rules():
+        methods = ','.join(sorted([method for method in rule.methods if method not in ('OPTIONS', 'HEAD')]))
+        routes.append(f"{rule} ({methods})")
+
+    routes.sort()
+    return jsonify({
+        "routes": routes,
+        "total": len(routes)
+    })

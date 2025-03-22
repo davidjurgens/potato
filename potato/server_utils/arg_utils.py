@@ -63,4 +63,13 @@ def arguments():
         default=None,
     )
 
+    parser.add_argument(
+        "--require-password",
+        action="store",
+        type=lambda x: str(x).lower() == 'true',
+        dest="require_password",
+        help="Whether to require password authentication (true/false)",
+        default=True,
+    )
+
     return parser.parse_args()

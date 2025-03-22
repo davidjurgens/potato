@@ -1,5 +1,5 @@
 {
-    "port": 9001,
+    "port": 8000,
 
     "server_name": "potato annotator",
 
@@ -9,6 +9,8 @@
     # directory, as well as per-annotator output files and state information
     # necessary to restart annotation.
     "output_annotation_dir": "annotation_output/",
+
+    "task_dir": "immigration_framing",
 
     # The output format for the all-annotator data. Allowed formats are:
     # * jsonl
@@ -165,7 +167,7 @@
     # The html that changes the visualiztation for your task. Change this file
     # to influence the layout and description of your task. This is not a full
     # HTML page, just the piece that does lays out your task's pieces
-    "html_layout": "fixed_keybinding",
+    "html_layout": "default",
 
 
     # The core UI files for Potato. You should not need to change these normally.

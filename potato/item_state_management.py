@@ -193,7 +193,9 @@ class ItemStateManager:
         else:
             self.assignment_strategy = AssignmentStrategy.FIXED_ORDER
 
-
+    def has_item(self, instance_id: str) -> bool:
+        '''Returns True if the item is in the state manager'''
+        return instance_id in self.instance_id_to_item
 
     def add_item(self, instance_id: str, item_data: dict):
         '''Adds a new item to be annotated to the state manager'''
@@ -210,12 +212,13 @@ class ItemStateManager:
         for iid, item_data in items.items():
             self.add_item(iid, item_data)
 
-    def assign_instances_to_user(self, user_state: UserState) -> None:
-        '''Assigns a set of instances to a user based on the current state of the system'''
+    def assign_instances_to_user(self, user_state: UserState) -> int:
+        '''Assigns a set of instances to a user based on the current state of the system
+        and returns the number of instances assigned'''
 
         # Decline to assign new items to users that have completed the maximum
         if not user_state.has_remaining_assignments():
-            return
+            return 0
 
         # TODO: add strategy for assigning instances to users:
         #
@@ -236,12 +239,14 @@ class ItemStateManager:
             to_assign = random.sample(unlabeled_items, 1)
             print("assigning item %s to user %s" % (to_assign.get_id(), user_state.get_user_id()))
             user_state.assign_instance(self.instance_id_to_item[to_assign])
+            return 1
         elif self.assignment_strategy == AssignmentStrategy.FIXED_ORDER:
             for iid in self.remaining_instance_ids:
                 if not user_state.has_annotated(iid):
                     print("assigning item %s to user %s" % (iid, user_state.get_user_id()))
                     user_state.assign_instance(self.instance_id_to_item[iid])
-                    break
+                    return 1
+            return 0
         else:
             raise ValueError("Unsupported assignment strategy, %s" % self.assignment_strategy)
 

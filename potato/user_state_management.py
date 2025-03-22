@@ -21,6 +21,7 @@ logging.basicConfig()
 # Singleton instance of the user state manager
 USER_STATE_MANAGER = None
 
+@staticmethod
 def init_user_state_manager(config: dict) -> UserStateManager:
     '''
     Returns the manager for tracking all the users' states in where they are in the annotation process.
@@ -158,6 +159,7 @@ class UserStateManager:
 
         # Get the current of their phase
         cur_phase, cur_page = user_state.get_current_phase_and_page()
+        print('GET NEXT USER PHASE PAGE: cur_phase, cur_page: ', cur_phase, cur_page)
         if cur_phase == UserPhase.DONE:
             return UserPhase.DONE, None
 
@@ -466,9 +468,12 @@ class InMemoryUserState(UserState):
         #print('GET current_instance_index ->', self.current_instance_index)
         return self.current_instance_index
 
-    def go_back(self) -> None:
+    def go_back(self) -> bool:
+        '''Moves the user back to the previous instance and returns True if successful'''
         if self.current_instance_index > 0:
             self.current_instance_index -= 1
+            return True
+        return False
         #print('GO BACK current_instance_index ->', self.current_instance_index)
 
     def is_at_end_index(self) -> bool:
@@ -476,12 +481,14 @@ class InMemoryUserState(UserState):
         # TODO: Rename this function to be something more descriptive
         return self.current_instance_index == len(self.instance_id_ordering) - 1
 
-    def go_forward(self) -> None:
+    def go_forward(self) -> bool:
+        '''Moves the user forward to the next instance and returns True if successful'''
         #print('GO FORWARD current_instance_index ->', self.current_instance_index)
         #print('GO FORWARD instance_id_ordering ->', self.instance_id_ordering)
         if self.current_instance_index < len(self.instance_id_ordering) - 1:
             self.current_instance_index += 1
-        #print('GO FORWARD after current_instance_index ->', self.current_instance_index)
+            return True
+        return False
 
 
 

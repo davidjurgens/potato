@@ -244,7 +244,6 @@
 
             return text.trim();
         }
-    re
 
       function getSelectionIndices() {
             // Get the user selection
@@ -815,8 +814,7 @@
                 for (var j = 0; j < inputs.length; ++j) {
                     // if a right_label is not selected, display an error msg and return false
                     //if (inputs[j].getAttribute('validation') == 'right_label' && inputs[j].checked == false) {
-                    //    alert(inputs[j].name + " must be selected to proceed");
-                        //alert(instance_obj.id)
+                        //alert(inputs[j].name + " must be selected to proceed");
                     //    return false;
                     //}
                     // if the input is for a span annotation schema, check if the at least some span is annotated or if the
@@ -911,6 +909,7 @@
               behavior_time_string: time_string
           }
 
+          console.log('post_req: ', post_req)
           // Sends the post message to the server which will let us update the
           // currently displayed content
           post(post_req)
@@ -926,39 +925,41 @@
 
     {{var_elems | safe}}
 
-    <nav class="navbar navbar-expand-md navbar-dark bg-dark mb-3">
+    <nav class="navbar navbar-expand-md shadow-sm mb-4" style="background-color: var(--background);">
       <div class="container-fluid">
-        <a href="#" class="navbar-brand mr-3">{{annotation_task_name}}</a>
-        <button type="button" class="navbar-toggler" data-toggle="collapse" data-target="#navbarCollapse">
+        <a href="#" class="navbar-brand fw-bold" style="color: var(--primary);">{{annotation_task_name}}</a>
+        <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbarCollapse">
           <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="navbarCollapse">
           <div class="navbar-nav">
-            <a href="#" class="nav-item nav-link active">Home</a>
+            <a href="#" class="nav-item nav-link" style="color: var(--primary);">Home</a>
             {{annotation_codebook}}
-            <a role="button" href="#" class="nav-item nav-link openbtn" target_id="Statpanel" width = "475px" onclick="openNav(this.getAttribute('target_id'),this.getAttribute('width'))">Statistics</a>
+            <a role="button" href="#" class="nav-item nav-link openbtn" target_id="Statpanel" width="475px" onclick="openNav(this.getAttribute('target_id'),this.getAttribute('width'))">Statistics</a>
             <a role="button" href="#" class="nav-item nav-link openbtn" target_id="mySidepanel" onclick="openNav(this.getAttribute('target_id'))">Help</a>
           </div>
-          <div class="p-2 bd-highlight text-secondary align-middle">
-            Finished {{finished}}/{{total_count}}
-          </div>
-          <div class="p-2 bd-highlight text-secondary align-middle">
-            Current_id {{instance_index}}
-          </div>
-          <div class="p-2 bd-highlight text-secondary align-middle">
-            <form action="/go_to" method="post">
-              <fieldset>
+          <div class="ms-auto d-flex align-items-center">
+            <div class="me-3" style="color: var(--muted-foreground);">
+              Finished <span class="fw-medium">{{finished}}/{{total_count}}</span>
+            </div>
+            <div class="me-3" style="color: var(--muted-foreground);">
+              Current ID <span class="fw-medium">{{instance_index}}</span>
+            </div>
+            <div class="me-3">
+              <form action="/go_to" method="post" class="d-flex">
                 <input type="hidden" name="firstname" id="a" value="{{firstname}}">
                 <input type="hidden" name="lastname" id="b" value="{{lastname}}">
-                 <input type="hidden" name="email" id="c" value="{{username}}">
+                <input type="hidden" name="email" id="c" value="{{username}}">
                 <input type="hidden" name="src" id="src" value="go_to">
-                <input type="number" name="go_to" id="go_to" value="" onfocusin="user_input()" onfocusout="user_input_leave()" max={{total_count}} min=0 required>
-                <input type="submit" value="go">
-              </fieldset>
-            </form>
-          </div>
-          <div class="navbar-nav ml-auto">
-            <div class="text-secondary align-middle">Currently logged in as {{username}}</div>
+                <input type="number" name="go_to" id="go_to" class="form-control form-control-sm me-2"
+                  style="width: 70px; border-color: var(--border); border-radius: var(--radius);"
+                  value="" onfocusin="user_input()" onfocusout="user_input_leave()" max={{total_count}} min=0 required>
+                <button type="submit" class="shadcn-button shadcn-button-primary" style="height: 31px;">Go</button>
+              </form>
+            </div>
+            <div style="color: var(--muted-foreground);">
+              Logged in as <span class="fw-medium">{{username}}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -975,25 +976,33 @@
 
       </div>
 
-      <div>
-        <p>
-          <div class="text-center">
-            <a class="btn btn-secondary" href="#" role="button" onclick="click_to_prev()">Move backward</a>
-            <a class="btn btn-secondary" href="#" role="button" onclick="click_to_next()">Move forward</a>
-          </div>
-        </p>
+      <div class="my-4">
+        <div class="text-center">
+          <a class="shadcn-button shadcn-button-outline me-2" href="#" role="button" onclick="click_to_prev()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-left me-1" viewBox="0 0 16 16">
+              <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
+            </svg>
+            Previous
+          </a>
+          <a class="shadcn-button shadcn-button-primary" href="#" role="button" onclick="click_to_next()">
+            Next
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-right ms-1" viewBox="0 0 16 16">
+              <path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h11.793l-3.147-3.146a.5.5 0 0 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L13.293 8.5H1.5A.5.5 0 0 1 1 8z"/>
+            </svg>
+          </a>
+        </div>
       </div>
 
-      <hr>
-      <footer>
+      <hr style="color: var(--border);">
+      <footer class="py-3">
         <div class="row">
           <div class="col-md-6">
-            <p>Copyright &copy; 2022 <a href="https://blablablab.si.umich.edu/">Blablablab</a> </p>
+            <p style="color: var(--muted-foreground);">Copyright &copy; 2025 <a href="https://blablablab.si.umich.edu/" style="color: var(--primary); text-decoration: none;">Blablablab</a></p>
           </div>
-          <div class="col-md-12 text-md-right">
-            <a href="https://github.com/davidjurgens/potato" class="text-dark">Fork on GitHub</a>
-            <span class="text-muted mx-2">|</span>
-            <a href="https://github.com/davidjurgens/potato#cite-us" class="text-dark">Cite Us</a>
+          <div class="col-md-12 text-md-end">
+            <a href="https://github.com/davidjurgens/potato" style="color: var(--primary); text-decoration: none;">Fork on GitHub</a>
+            <span class="mx-2" style="color: var(--muted-foreground);">|</span>
+            <a href="https://github.com/davidjurgens/potato#cite-us" style="color: var(--primary); text-decoration: none;">Cite Us</a>
           </div>
         </div>
       </footer>
