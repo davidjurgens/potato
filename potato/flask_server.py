@@ -23,6 +23,7 @@ from itertools import zip_longest
 import string
 import threading
 import yaml
+from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -35,7 +36,6 @@ import flask
 from flask import Flask, session, render_template, request, redirect, url_for, jsonify, make_response
 from bs4 import BeautifulSoup
 import shutil
-from datetime import timedelta
 
 from dataclasses import dataclass
 
@@ -174,6 +174,9 @@ class ActiveLearningState:
         for iid, st in id_to_selection_type.items():
             self.id_to_selection_type[iid] = st
             self.id_to_update_round[iid] = self.cur_round
+
+# Set session timeout duration (e.g., 30 minutes)
+SESSION_TIMEOUT = timedelta(minutes=1)
 
 def load_instance_data(config: dict):
     '''Loads the instance data from the files specified in the config.'''
@@ -477,7 +480,28 @@ def init_user_state(username):
     """
     usm = get_user_state_manager()
     usm.add_user(username)
+
+    # Store the session creation time
+    session['created_at'] = datetime.now()
+
     return usm.get_user_state(username)
+
+def is_session_valid() -> bool:
+    """
+    Check if the current session is valid based on the creation time.
+    """
+    if 'created_at' not in session:
+        return False
+    return datetime.now() - session['created_at'] < SESSION_TIMEOUT
+
+@app.before_request
+def before_request():
+    """
+    Check session validity before processing any request.
+    """
+    if not is_session_valid():
+        session.clear()  # Clear the session
+        return redirect(url_for('login'))  # Redirect to login page
 
 def get_users():
     """
@@ -651,7 +675,6 @@ def render_page_with_annotations(username) -> str:
     # If the user has annotated this before, walk the DOM and fill out what they
     # did
     annotations = get_annotations_for_user_on(username, instance_id)
-    print(f'annotations for {instance_id}: ', annotations)
 
     # convert the label suggestions into annotations for front-end rendering
     if annotations == None and schema_content_to_prefill:

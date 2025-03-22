@@ -270,7 +270,23 @@ def login():
     logger.debug("Redirecting /login to home")
     return redirect(url_for("home"))
 
-@app.route("/logout")
+@app.route("/logout", methods=["GET"])
+def logout_page():
+    """
+    Handle user logout requests and redirect to login page.
+
+    Returns:
+        flask.Response: Redirect to login page
+    """
+    logger.debug("Processing logout request")
+
+    # Clear the session
+    session.clear()
+    logger.info("User logged out successfully")
+
+    return redirect(url_for("home"))  # Redirect to the login page
+
+@app.route("/logout", methods=["POST"])
 def logout():
     """
     Handle user logout requests.
@@ -283,21 +299,8 @@ def logout():
     Returns:
         flask.Response: Redirect to login page
     """
-    logger.debug("Processing logout request")
-
-    if 'username' in session:
-        username = session['username']
-        logger.info(f"Logging out user: {username}")
-
-        # Save user progress
-        user_state = get_user_state(username)
-        if user_state:
-            user_state.save_progress()
-            logger.debug(f"Saved progress for user: {username}")
-
-        session.pop('username', None)
-
-    return redirect(url_for("home"))
+    logger.debug("Redirecting /logout to logout_page")
+    return logout_page()
 
 @app.route("/submit_annotation", methods=["POST"])
 def submit_annotation():
