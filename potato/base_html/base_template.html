@@ -7,11 +7,195 @@
 
   <!--- HEADER GOES ABOVE HERE--->
 
+  <style>
+    :root {
+      --background: #FFFFFF;
+      --foreground: #09090B;
+      --card: #FFFFFF;
+      --card-foreground: #09090B;
+      --popover: #FFFFFF;
+      --popover-foreground: #09090B;
+      --primary: #6E56CF;
+      --primary-foreground: #FFFFFF;
+      --secondary: #F4F4F5;
+      --secondary-foreground: #18181B;
+      --muted: #F4F4F5;
+      --muted-foreground: #71717A;
+      --accent: #F4F4F5;
+      --accent-foreground: #18181B;
+      --destructive: #EF4444;
+      --destructive-foreground: #FAFAFA;
+      --border: #E4E4E7;
+      --input: #E4E4E7;
+      --ring: #6E56CF;
+      --radius: 0.5rem;
+      --primary-color: #6E56CF; /* Shadcn purple */
+      --secondary-color: #7C66CE;
+      --accent-color: #A18FFF;
+      --dark-color: #09090B;
+      --light-color: #FAFAFA;
+      --gray-color: #71717A;
+      --light-gray: #F4F4F5;
+      --light-bg: #F5F7FB; /* Light background for sections */
+      --heading-color: #09090B; /* For headings */
+      --text-color: #555555; /* For regular text */
+      --success-color: #10B981;
+      --border-radius: 0.5rem;
+      --box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+      --transition: all 0.2s ease;
+      --section-padding-top: 100px;
+    }
+
+    /* Shadcn-style button */
+    .shadcn-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--radius);
+      font-weight: 500;
+      font-size: 0.875rem;
+      height: 2.5rem;
+      padding-left: 1rem;
+      padding-right: 1rem;
+      transition: var(--transition);
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    .shadcn-button-primary {
+      background-color: var(--primary);
+      color: var(--primary-foreground);
+      border: 1px solid var(--primary);
+    }
+
+    .shadcn-button-primary:hover {
+      background-color: var(--secondary-color);
+      color: var(--primary-foreground);
+    }
+
+    .shadcn-button-outline {
+      background-color: transparent;
+      color: var(--primary);
+      border: 1px solid var(--border);
+    }
+
+    .shadcn-button-outline:hover {
+      background-color: var(--secondary);
+      color: var(--primary);
+    }
+
+    /* Sidepanel styling */
+    .sidepanel {
+      height: 100%;
+      width: 0;
+      position: fixed;
+      z-index: 1000;
+      top: 0;
+      right: 0;
+      background-color: var(--card);
+      overflow-x: hidden;
+      transition: 0.3s;
+      padding-top: 60px;
+      box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+    }
+
+    .sidepanel a {
+      padding: 8px 8px 8px 32px;
+      text-decoration: none;
+      font-size: 16px;
+      color: var(--foreground);
+      display: block;
+      transition: 0.3s;
+    }
+
+    .sidepanel .closebtn {
+      position: absolute;
+      top: 0;
+      right: 25px;
+      font-size: 36px;
+      margin-left: 50px;
+      color: var(--muted-foreground);
+    }
+
+    /* Span annotation styling */
+    .span_container {
+      position: relative;
+      display: inline-block;
+      border-radius: var(--radius);
+    }
+
+    .span_label {
+      position: absolute;
+      top: -18px;
+      left: 0;
+      font-size: 10px;
+      border-radius: 3px;
+      padding: 0 3px;
+      color: var(--primary);
+    }
+
+    .span_close {
+      position: absolute;
+      top: -18px;
+      right: 0;
+      font-size: 12px;
+      border-radius: 3px;
+      padding: 0 3px;
+      cursor: pointer;
+      color: var(--destructive);
+    }
+
+    /* Card styling */
+    .shadcn-card {
+      background-color: var(--card);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--box-shadow);
+      overflow: hidden;
+    }
+
+    .shadcn-card-header {
+      padding: 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .shadcn-card-content {
+      padding: 1.5rem;
+    }
+
+    fieldset {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    legend {
+      font-weight: 500;
+      color: var(--heading-color);
+      padding: 0 0.5rem;
+    }
+
+    /* Form elements */
+    input[type="text"], input[type="number"], textarea, select {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.5rem;
+      background-color: var(--background);
+      color: var(--foreground);
+      transition: var(--transition);
+    }
+
+    input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: var(--ring);
+      box-shadow: 0 0 0 2px var(--ring-opacity);
+    }
+  </style>
+
   {{ custom_js | safe }}
 
-  <body>
-
-
+  <body style="background-color: var(--background); color: var(--foreground);">
 
     <input type="hidden" name="username" id="username" value="{{username}}">
     <input type="hidden" name="instance_id" id="instance_id" value="{{instance_id}}">
@@ -925,87 +1109,117 @@
 
     {{var_elems | safe}}
 
-    <nav class="navbar navbar-expand-md shadow-sm mb-4" style="background-color: var(--background);">
-      <div class="container-fluid">
-        <a href="#" class="navbar-brand fw-bold" style="color: var(--primary);">{{annotation_task_name}}</a>
-        <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbarCollapse">
-          <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="navbarCollapse">
-          <div class="navbar-nav">
-            <a href="#" class="nav-item nav-link" style="color: var(--primary);">Home</a>
+    <!-- Header navigation bar -->
+    <nav class="navbar sticky-top shadow-sm" style="background-color: var(--primary-color); padding: 0.75rem 1rem; margin-bottom: 1.5rem;">
+      <div class="container-fluid d-flex align-items-center">
+        <!-- Task name (left aligned) -->
+        <div class="navbar-brand">
+          <span class="fw-bold" style="color: var(--light-color); font-size: 1.25rem;">{{annotation_task_name}}</span>
+        </div>
+
+        <!-- Middle section with three elements -->
+        <div class="d-flex align-items-center justify-content-center flex-grow-1 gap-4">
+          <!-- 1. Annotation codebook link -->
+          <div>
             {{annotation_codebook}}
-            <a role="button" href="#" class="nav-item nav-link openbtn" target_id="Statpanel" width="475px" onclick="openNav(this.getAttribute('target_id'),this.getAttribute('width'))">Statistics</a>
-            <a role="button" href="#" class="nav-item nav-link openbtn" target_id="mySidepanel" onclick="openNav(this.getAttribute('target_id'))">Help</a>
           </div>
-          <div class="ms-auto d-flex align-items-center">
-            <div class="me-3" style="color: var(--muted-foreground);">
-              Finished <span class="fw-medium">{{finished}}/{{total_count}}</span>
-            </div>
-            <div class="me-3" style="color: var(--muted-foreground);">
-              Current ID <span class="fw-medium">{{instance_index}}</span>
-            </div>
-            <div class="me-3">
-              <form action="/go_to" method="post" class="d-flex">
-                <input type="hidden" name="firstname" id="a" value="{{firstname}}">
-                <input type="hidden" name="lastname" id="b" value="{{lastname}}">
-                <input type="hidden" name="email" id="c" value="{{username}}">
-                <input type="hidden" name="src" id="src" value="go_to">
-                <input type="number" name="go_to" id="go_to" class="form-control form-control-sm me-2"
-                  style="width: 70px; border-color: var(--border); border-radius: var(--radius);"
-                  value="" onfocusin="user_input()" onfocusout="user_input_leave()" max={{total_count}} min=0 required>
-                <button type="submit" class="shadcn-button shadcn-button-primary" style="height: 31px;">Go</button>
-              </form>
-            </div>
-            <div class="me-3" style="color: var(--muted-foreground);">
-              Logged in as <span class="fw-medium">{{username}}</span>
-            </div>
+
+          <!-- 2. Progress counter -->
+          <div class="d-flex align-items-center" style="color: var(--light-color); margin-right: 40px;">
+            <span>Progress: <span class="fw-medium">{{finished}}/{{total_count}}</span></span>
           </div>
-          <a href="/logout" class="nav-item nav-link ms-auto" style="color: var(--primary);">Logout</a>
+
+          <!-- 3. Jump to item form -->
+          <div style="margin-left: 40px;">
+            <form action="/go_to" method="post" class="d-flex align-items-center">
+              <input type="hidden" name="firstname" id="a" value="{{firstname}}">
+              <input type="hidden" name="lastname" id="b" value="{{lastname}}">
+              <input type="hidden" name="email" id="c" value="{{username}}">
+              <input type="hidden" name="src" id="src" value="go_to">
+              <label for="go_to" class="me-2" style="color: var(--light-color); margin-bottom: 0;">Go to:</label>
+              <input type="number" name="go_to" id="go_to" class="form-control form-control-sm me-2"
+                style="width: 70px; height: 31px; border: none; border-radius: var(--radius);"
+                value="" onfocusin="user_input()" onfocusout="user_input_leave()" max={{total_count}} min=0 required>
+              <button type="submit" class="shadcn-button"
+                style="height: 31px; line-height: 1; padding: 0 0.75rem; background-color: var(--light-color); color: var(--primary-color); border: none;">Go</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- User info and logout (right aligned) -->
+        <div class="d-flex align-items-center" style="background-color: rgba(255, 255, 255, 0.15); padding: 0.5rem 1rem; border-radius: var(--radius);">
+          <div class="me-3" style="color: var(--light-color);">
+            <span>Logged in as <span class="fw-medium">{{username}}</span></span>
+          </div>
+          <div class="border-start" style="padding-left: 20px; height: 24px; display: flex; align-items: center;">
+            <a href="/logout" class="shadcn-button"
+              style="background-color: var(--light-color); color: var(--primary-color); height: auto; padding: 0.25rem 0.75rem !important; font-size: 0.875rem; min-width: 60px; text-align: center; border: none; text-decoration: none;">Logout</a>
+          </div>
         </div>
       </div>
     </nav>
+
     <div class="container-fluid">
 
-      <div id="task_layout">
-
+      <div id="task_layout" class="shadcn-card mb-4">
+        <div class="shadcn-card-content">
          <!--- LAYOUT GOES BELOW HERE --->
 
          {{ TASK_LAYOUT }}
 
         <!--- LAYOUT GOES ABOVE  --->
-
+        </div>
       </div>
 
       <div class="my-4">
-        <div class="text-center">
-          <a class="shadcn-button shadcn-button-outline me-2" href="#" role="button" onclick="click_to_prev()">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-left me-1" viewBox="0 0 16 16">
-              <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
-            </svg>
-            Previous
-          </a>
-          <a class="shadcn-button shadcn-button-primary" href="#" role="button" onclick="click_to_next()">
-            Next
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-right ms-1" viewBox="0 0 16 16">
-              <path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h11.793l-3.147-3.146a.5.5 0 0 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L13.293 8.5H1.5A.5.5 0 0 1 1 8z"/>
-            </svg>
-          </a>
+        <!-- Reorganized button layout with 3 columns -->
+        <div class="d-flex justify-content-between align-items-center">
+          <!-- Statistics button (left) -->
+          <div>
+            <a role="button" href="#" class="shadcn-button shadcn-button-outline openbtn" target_id="Statpanel" width="475px" onclick="openNav(this.getAttribute('target_id'),this.getAttribute('width'))">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-bar-chart-line me-1" viewBox="0 0 16 16">
+                <path d="M11 2a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v12h.5a.5.5 0 0 1 0 1H.5a.5.5 0 0 1 0-1H1v-3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v3h1V7a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v7h1V2zm1 12h2V2h-2v12zm-3 0V7H7v7h2zm-5 0v-3H2v3h2z"/>
+              </svg>
+              Statistics
+            </a>
+          </div>
+
+          <!-- Previous/Next buttons (center) -->
+          <div>
+            <a class="shadcn-button shadcn-button-outline me-2" href="#" role="button" onclick="click_to_prev()" style="vertical-align: middle;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-left" viewBox="0 0 16 16" style="display: inline-block; vertical-align: middle; margin-right: 0.25rem;">
+                <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
+              </svg>
+              <span style="display: inline-block; vertical-align: middle;">Previous</span>
+            </a>
+            <a class="shadcn-button shadcn-button-primary" href="#" role="button" onclick="click_to_next()" style="vertical-align: middle;">
+              <span style="display: inline-block; vertical-align: middle;">Next</span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-right" viewBox="0 0 16 16" style="display: inline-block; vertical-align: middle; margin-left: 0.25rem;">
+                <path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h11.793l-3.147-3.146a.5.5 0 0 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L13.293 8.5H1.5A.5.5 0 0 1 1 8z"/>
+              </svg>
+            </a>
+          </div>
+
+          <!-- Help button (right) -->
+          <div>
+            <a role="button" href="#" class="shadcn-button shadcn-button-outline openbtn" target_id="mySidepanel" onclick="openNav(this.getAttribute('target_id'))">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-question-circle me-1" viewBox="0 0 16 16">
+                <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                <path d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z"/>
+              </svg>
+              Help
+            </a>
+          </div>
         </div>
       </div>
 
       <hr style="color: var(--border);">
-      <footer class="py-3">
-        <div class="row">
-          <div class="col-md-6">
-            <p style="color: var(--muted-foreground);">Copyright &copy; 2025 <a href="https://blablablab.si.umich.edu/" style="color: var(--primary); text-decoration: none;">Blablablab</a></p>
-          </div>
-          <div class="col-md-12 text-md-end">
-            <a href="https://github.com/davidjurgens/potato" style="color: var(--primary); text-decoration: none;">Fork on GitHub</a>
-            <span class="mx-2" style="color: var(--muted-foreground);">|</span>
-            <a href="https://github.com/davidjurgens/potato#cite-us" style="color: var(--primary); text-decoration: none;">Cite Us</a>
-          </div>
-        </div>
+      <footer class="py-2 text-center" style="font-size: 0.75rem; color: var(--muted-foreground);">
+        Copyright &copy; 2025 <a href="https://blablablab.si.umich.edu/" style="color: var(--primary); text-decoration: none;">Blablablab</a>
+        <span class="mx-2">|</span>
+        <a href="https://github.com/davidjurgens/potato" style="color: var(--primary); text-decoration: none;">Chat with us on GitHub</a>
+        <span class="mx-2">|</span>
+        <a href="https://github.com/davidjurgens/potato#cite-us" style="color: var(--primary); text-decoration: none;">Cite Us</a>
       </footer>
     </div>
 

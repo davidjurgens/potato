@@ -50,13 +50,8 @@ def home():
         return redirect(url_for("auth"))
 
     username = session['username']
-    logger.info(f"Active session for user: {username}")
+    logger.debug(f"Active session for user: {username}")
 
-    if request.is_json:
-        print("home request.json: ", request.json)
-    else:
-        print("home request.form: ", request.form)
-    print('home: request.method: ', request.method)
 
     user_state = get_user_state(username)
     phase = user_state.get_phase()
@@ -517,10 +512,6 @@ def annotate():
         return redirect(url_for("home"))
 
     username = session['username']
-
-    print('annotate_page: username: ', username)
-    print('annotate: request.method: ', request.method)
-
     # Ensure user state exists
     if not get_user_state_manager().has_user(username):
         logger.info(f"Creating missing user state for {username}")
@@ -542,18 +533,14 @@ def annotate():
 
     # See if this user has finished annotating all of their assigned instances
     if not user_state.has_remaining_assignments():
-        print('User %s has NO remaining instances to annotate' % username)
         # If the user is done annotating, advance to the next phase
         get_user_state_manager().advance_phase(username)
         return home()
 
     if request.is_json and 'action' in request.json:
        action = request.json['action']
-       print('request.json: ', request.json)
     else:
        action = request.form['action'] if 'action' in request.form else "init"
-
-    print('form: ', request.form)
 
     if action == "prev_instance":
         move_to_prev_instance(username)
@@ -562,7 +549,7 @@ def annotate():
     elif action == "go_to":
         go_to_id(username, request.form.get("go_to"))
     else:
-        print('unrecognized action request: "%s"' % action)
+        logger.warning('unrecognized action request: "%s"' % action)
 
     # Process any annotation updates if they were submitted
     if request.method == 'POST' and request.form and not action and 'instance_id' in request.form:
