@@ -8,7 +8,8 @@
     # Potato will write the annotation file for all annotations to this
     # directory, as well as per-annotator output files and state information
     # necessary to restart annotation.
-    "output_annotation_dir": "annotation_output/simple-radio-selection/",
+    "task_dir": "annotation_output/simple-radio-selection/",
+    "output_annotation_dir": "annotation_output/simple-radio-selection/annotations",
 
     # The output format for the all-annotator data. Allowed formats are:
     # * jsonl
@@ -16,7 +17,7 @@
     # * csv
     # * tsv
     #
-    "output_annotation_format": "tsv", 
+    "output_annotation_format": "tsv",
 
     # If annotators are using a codebook, this will be linked at the top to the
     # instance for easy access
@@ -36,7 +37,7 @@
     "user_config": {
 
       "allow_all_users": True,
-      
+
       "users": [  ],
     },
 
@@ -44,10 +45,10 @@
     # that, an alert will be sent per alert_time_each_instance seconds.
     "alert_time_each_instance": 10000000,
 
-    "annotation_schemes": [      
+    "annotation_schemes": [
         {
             "annotation_type": "radio",
-            "name": "favorite_color", 
+            "name": "favorite_color",
             "description": "What food does this text make you want to eat?",
             "labels": [
                "pizza", "bagels", "burgers", "curry", "tacos",
@@ -57,8 +58,8 @@
             # label. Aannotations with more than 10 are not supported with this
             # simple keybinding and will need to use the full item specification
             # to bind all labels to keys.
-            "sequential_key_binding": True,                        
-        },       
+            "sequential_key_binding": True,
+        },
     ],
 
     # The html that changes the visualiztation for your task. Change this file

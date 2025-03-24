@@ -1,22 +1,24 @@
 {
     "port": 9001,
 
-    "server_name": "potato annotator",    
-    
+    "server_name": "potato annotator",
+
     "annotation_task_name": "Example for using kwargs",
 
     # Potato will write the annotation file for all annotations to this
     # directory, as well as per-annotator output files and state information
     # necessary to restart annotation.
-    "output_annotation_dir": "annotation_output/kwarg-example/",
-    
+    "output_annotation_dir": "annotation_output/kwarg-example/annotations",
+
+    "task_dir": "annotation_output/kwarg-example/",
+
     # The output format for the all-annotator data. Allowed formats are:
     # * jsonl
     # * json (same output as jsonl)
     # * csv
     # * tsv
     #
-    "output_annotation_format": "tsv", 
+    "output_annotation_format": "tsv",
 
     "annotation_codebook_url": "",
 
@@ -33,13 +35,13 @@
 
     "user_config": {
       "allow_all_users": True,
-      "users": [ ] 
+      "users": [ ]
     },
 
 
     "alert_time_each_instance": 1000000,
-        
-    
+
+
     "annotation_schemes": [
 
         {
@@ -49,7 +51,7 @@
           "min_label": "Not very cool",
           "max_label": "Totally cool",
           "size": 7,
-        },          
+        },
     ],
 
 

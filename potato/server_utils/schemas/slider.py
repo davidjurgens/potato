@@ -50,27 +50,118 @@ def generate_slider_layout(annotation_scheme):
     schema_name = annotation_scheme["name"]
     name = schema_name + ':::' + 'slider'
 
-    # TODO: Fix the UI alignment so the min/max labels are
-    # vertically aligned with the slider bar
-    schematic = (
-          ('<div><form id="%s" class="annotation-form slider" action="/action_page.php">' % annotation_scheme["name"])
-        + '  <span style="flex:1;">{min_label}</span>'
-        + '  <fieldset schema="{schema_name}"> <legend>{description}</legend> '
-        + '<input style="position:auto;" type="range" min="{min_value}" max="{max_value}" '
-        + ' onclick="registerAnnotation(this);" label_name="slider"'
-        + 'value="{default_value}" class="slider" name="{name}" id="{name}" schema="{schema_name}">'
-        + '  <span style="flex:1;">{max_label}</span>'
-        + '</fieldset>\n</form></div>\n'
-    ).format(description=annotation_scheme["description"],
-             min_value=annotation_scheme["min_value"],
-             max_value=annotation_scheme["max_value"],
-             min_label=min_label,
-             max_label=max_label,
-             schema_name=schema_name,
-             default_value=annotation_scheme["starting_value"],
-             name=name)
+    schematic = f"""
+    <style>
+        .shadcn-slider-container {{
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            max-width: 100%;
+            margin: 1.5rem auto;
+            font-family: ui-sans-serif, system-ui, sans-serif;
+        }}
 
+        .shadcn-slider-title {{
+            font-size: 1rem;
+            font-weight: 500;
+            color: var(--heading-color);
+            margin-bottom: 1rem;
+            text-align: left;
+            width: 100%;
+        }}
+
+        .shadcn-slider-wrapper {{
+            display: flex;
+            align-items: center;
+            width: 100%;
+            gap: 1rem;
+            padding: 0.5rem 0;
+        }}
+
+        .shadcn-slider-label {{
+            flex: 0 0 auto;
+            width: 2.5rem;
+            text-align: center;
+            font-size: 0.875rem;
+            color: var(--muted-foreground);
+        }}
+
+        .shadcn-slider-track {{
+            flex: 1;
+            position: relative;
+            height: 1.5rem;
+        }}
+
+        .shadcn-slider-input {{
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 0.25rem;
+            background: var(--border);
+            border-radius: 1rem;
+            outline: none;
+            cursor: pointer;
+        }}
+
+        .shadcn-slider-input::-webkit-slider-thumb {{
+            -webkit-appearance: none;
+            appearance: none;
+            width: 1.25rem;
+            height: 1.25rem;
+            background-color: var(--primary);
+            border-radius: 50%;
+            border: 2px solid var(--background);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            transition: var(--transition);
+        }}
+
+        .shadcn-slider-input::-moz-range-thumb {{
+            width: 1.25rem;
+            height: 1.25rem;
+            background-color: var(--primary);
+            border-radius: 50%;
+            border: 2px solid var(--background);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            transition: var(--transition);
+        }}
+
+        .shadcn-slider-input:focus {{
+            outline: none;
+        }}
+
+        .shadcn-slider-input:focus::-webkit-slider-thumb {{
+            box-shadow: 0 0 0 4px rgba(110, 86, 207, 0.25);
+        }}
+
+        .shadcn-slider-input:focus::-moz-range-thumb {{
+            box-shadow: 0 0 0 4px rgba(110, 86, 207, 0.25);
+        }}
+    </style>
+
+    <form id="{schema_name}" class="annotation-form slider shadcn-slider-container" action="/action_page.php">
+        <fieldset schema="{schema_name}">
+            <legend class="shadcn-slider-title">{annotation_scheme["description"]}</legend>
+            <div class="shadcn-slider-wrapper">
+                <div class="shadcn-slider-label">{min_label}</div>
+                <div class="shadcn-slider-track">
+                    <input type="range"
+                           min="{min_value}"
+                           max="{max_value}"
+                           value="{starting_value}"
+                           class="shadcn-slider-input"
+                           onclick="registerAnnotation(this);"
+                           label_name="slider"
+                           name="{name}"
+                           id="{name}"
+                           schema="{schema_name}">
+                </div>
+                <div class="shadcn-slider-label">{max_label}</div>
+            </div>
+        </fieldset>
+    </form>
+    """
 
     key_bindings = []
-
     return schematic, key_bindings

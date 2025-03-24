@@ -52,8 +52,13 @@ def home():
     username = session['username']
     logger.debug(f"Active session for user: {username}")
 
-
     user_state = get_user_state(username)
+    if user_state is None:
+        logger.warning(f"User {username} not found in user state")
+        session.clear()
+        return redirect(url_for("auth"))
+
+    # Get the phase of the user
     phase = user_state.get_phase()
     logger.debug(f"User phase: {phase}")
 
@@ -89,7 +94,7 @@ def auth():
     logger.debug("Processing home page request")
 
     # Check if user is already logged in
-    if 'username' in session:
+    if 'username' in session and get_user_state_manager().has_user(session['username']):
         logger.debug(f"User {session['username']} already logged in, redirecting to annotate")
         return redirect(url_for("annotate"))
 

@@ -127,7 +127,9 @@ class UserStateManager:
             user_state = self.user_to_annotation_state[user_id]
 
     def get_user_state(self, user_id: str) -> UserState:
-        '''Gets a user from the user state manager'''
+        '''Gets a user from the user state manager or None if the user does not exist'''
+        if user_id not in self.user_to_annotation_state:
+            return None
         return self.user_to_annotation_state[user_id]
 
     def get_all_users(self) -> list[UserState]:

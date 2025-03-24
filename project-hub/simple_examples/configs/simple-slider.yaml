@@ -4,7 +4,9 @@
     # Potato will write the annotation file for all annotations to this
     # directory, as well as per-annotator output files and state information
     # necessary to restart annotation.
-    "output_annotation_dir": "annotation_output/simple-slider/",
+    "output_annotation_dir": "annotation_output/simple-slider/annotations",
+
+    "task_dir": "annotation_output/simple-slider/",
 
     # The output format for the all-annotator data. Allowed formats are:
     # * jsonl
@@ -12,7 +14,7 @@
     # * csv
     # * tsv
     #
-    "output_annotation_format": "csv", 
+    "output_annotation_format": "csv",
 
     # If annotators are using a codebook, this will be linked at the top to the
     # instance for easy access
@@ -29,12 +31,12 @@
 
 
     "user_config": {
-      "allow_all_users": True,     
+      "allow_all_users": True,
       "users": [  ],
     },
 
 
-    "annotation_schemes": [      
+    "annotation_schemes": [
         {
             "annotation_type": "slider",
 
@@ -48,14 +50,14 @@
             "min_value": 0,
             "max_value": 100,
             "starting_value": 50,
-        }       
+        }
     ],
 
     # The html that changes the visualiztation for your task. Change this file
     # to influence the layout and description of your task. This is not a full
     # HTML page, just the piece that does lays out your task's pieces
     "html_layout": "default",
- 
+
     # The core UI files for Potato. You should not need to change these normally.
     #
     # Exceptions to this might include:
@@ -71,7 +73,7 @@
     # that, an alert will be sent per alert_time_each_instance seconds.
     "alert_time_each_instance": 10000000,
 
-    
+
     # This is where the actual HTML files will be generated
     "site_dir": "potato/templates/",
 

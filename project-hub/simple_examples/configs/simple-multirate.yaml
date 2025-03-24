@@ -4,7 +4,8 @@
     # Potato will write the annotation file for all annotations to this
     # directory, as well as per-annotator output files and state information
     # necessary to restart annotation.
-    "output_annotation_dir": "annotation_output/simple-multirate/",
+    "task_dir": "annotation_output/simple-multirate/",
+    "output_annotation_dir": "annotation_output/simple-multirate/annotations",
 
     # The output format for the all-annotator data. Allowed formats are:
     # * jsonl
@@ -51,7 +52,7 @@
                                 "num_columns":1
             },
 
-            "arrangement":'vertical',
+            #"arrangement":'vertical',
 
             "options": ['Option 1', 'Option 2', 'Option 3'],
             "labels": ['Strongly disagree', 'Disagree', 'Neutral', 'Agree' , 'Strongly Agree'],
