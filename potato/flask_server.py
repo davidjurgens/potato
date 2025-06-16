@@ -649,6 +649,9 @@ def render_page_with_annotations(username) -> str:
             ' crossorigin="anonymous"></script>'
         )
 
+    # Shea: Test for AI suggestion
+    ai_hints = get_ai_hints(text)
+
     # Flask will fill in the things we need into the HTML template we've created,
     # replacing {{variable_name}} with t    he associated text for keyword arguments
     rendered_html = render_template(
@@ -665,6 +668,7 @@ def render_page_with_annotations(username) -> str:
         statistics_nav=all_statistics,
         var_elems=var_elems_html,
         custom_js=custom_js,
+        ai=ai_hints,
         **kwargs
     )
 
@@ -759,7 +763,7 @@ def render_page_with_annotations(username) -> str:
     soup = add_ai_hints(soup, instance_id)
 
     rendered_html = str(soup)
-
+    
     return rendered_html
 
 def get_label_suggestions(item, config, schema_content_to_prefill) -> set[SuggestedResponse]:
@@ -803,6 +807,38 @@ def add_ai_hints(soup: BeautifulSoup, instance_id: str) -> BeautifulSoup:
     """
     
     return soup
+
+# Shea: a function to get some suggestions from AI
+def get_ai_hints(text: str) -> str:
+    """
+    Returns the AI hints for the given instance.
+    """
+    import requests
+    print(text)
+    description = config["annotation_schemes"][0]["description"]
+    annotation_type = config["annotation_schemes"][0]["annotation_type"]
+    print(description)
+    prompt = f'''You are assisting a user with an annotation task. Here is the annotation instruction: {description} 
+    Here is the annotation task type: {annotation_type}
+    Here is the sentence (or item) to annotate: {text}
+    Based on the instruction, task type, and the given sentence, generate a short, helpful hint that guides the user on how to approach this annotation. 
+    Also, give a short reason of your answer and the relevant part(keyword or text).
+    The hint should not provide the label or answer directly, but should highlight what the user might consider or look for.'''
+
+
+    response = requests.post(
+        'http://localhost:11434/api/generate',
+        json={
+            # 'model': 'llama3.2',
+            'model': 'qwen3:0.6b',
+            'prompt': prompt,
+            'stream': False
+        }
+    )
+    print(response.json()['response'])
+    return response.json()['response']
+
+
 
 def render_page_with_annotations_WEIRD(username):
     """

@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
   <!--- HEADER GOES BELOW HERE--->
 
   {{ HEADER }}
@@ -9,39 +8,40 @@
 
   <style>
     :root {
-      --background: #FFFFFF;
-      --foreground: #09090B;
-      --card: #FFFFFF;
-      --card-foreground: #09090B;
-      --popover: #FFFFFF;
-      --popover-foreground: #09090B;
-      --primary: #6E56CF;
-      --primary-foreground: #FFFFFF;
-      --secondary: #F4F4F5;
-      --secondary-foreground: #18181B;
-      --muted: #F4F4F5;
-      --muted-foreground: #71717A;
-      --accent: #F4F4F5;
-      --accent-foreground: #18181B;
-      --destructive: #EF4444;
-      --destructive-foreground: #FAFAFA;
-      --border: #E4E4E7;
-      --input: #E4E4E7;
-      --ring: #6E56CF;
+      --background: #ffffff;
+      --foreground: #09090b;
+      --card: #ffffff;
+      --card-foreground: #09090b;
+      --popover: #ffffff;
+      --popover-foreground: #09090b;
+      --primary: #6e56cf;
+      --primary-foreground: #ffffff;
+      --secondary: #f4f4f5;
+      --secondary-foreground: #18181b;
+      --muted: #f4f4f5;
+      --muted-foreground: #71717a;
+      --accent: #f4f4f5;
+      --accent-foreground: #18181b;
+      --destructive: #ef4444;
+      --destructive-foreground: #fafafa;
+      --border: #e4e4e7;
+      --input: #e4e4e7;
+      --ring: #6e56cf;
       --radius: 0.5rem;
-      --primary-color: #6E56CF; /* Shadcn purple */
-      --secondary-color: #7C66CE;
-      --accent-color: #A18FFF;
-      --dark-color: #09090B;
-      --light-color: #FAFAFA;
-      --gray-color: #71717A;
-      --light-gray: #F4F4F5;
-      --light-bg: #F5F7FB; /* Light background for sections */
-      --heading-color: #09090B; /* For headings */
+      --primary-color: #6e56cf; /* Shadcn purple */
+      --secondary-color: #7c66ce;
+      --accent-color: #a18fff;
+      --dark-color: #09090b;
+      --light-color: #fafafa;
+      --gray-color: #71717a;
+      --light-gray: #f4f4f5;
+      --light-bg: #f5f7fb; /* Light background for sections */
+      --heading-color: white; /* For headings */
       --text-color: #555555; /* For regular text */
-      --success-color: #10B981;
+      --success-color: #10b981;
       --border-radius: 0.5rem;
-      --box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+      --box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1),
+        0 1px 2px -1px rgb(0 0 0 / 0.1);
       --transition: all 0.2s ease;
       --section-padding-top: 100px;
     }
@@ -96,7 +96,7 @@
       overflow-x: hidden;
       transition: 0.3s;
       padding-top: 60px;
-      box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+      box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
     }
 
     .sidepanel a {
@@ -177,7 +177,10 @@
     }
 
     /* Form elements */
-    input[type="text"], input[type="number"], textarea, select {
+    input[type="text"],
+    input[type="number"],
+    textarea,
+    select {
       border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 0.5rem;
@@ -186,7 +189,10 @@
       transition: var(--transition);
     }
 
-    input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:focus {
+    input[type="text"]:focus,
+    input[type="number"]:focus,
+    textarea:focus,
+    select:focus {
       outline: none;
       border-color: var(--ring);
       box-shadow: 0 0 0 2px var(--ring-opacity);
@@ -195,54 +201,76 @@
 
   {{ custom_js | safe }}
 
-  <body style="background-color: var(--background); color: var(--foreground);">
-
-    <input type="hidden" name="username" id="username" value="{{username}}">
-    <input type="hidden" name="instance_id" id="instance_id" value="{{instance_id}}">
-    <input type="hidden" name="alert_time_each_instance" id="alert_time_each_instance" value="{{alert_time_each_instance}}">
+  <body style="background-color: var(--background); color: var(--foreground)">
+    <input type="hidden" name="username" id="username" value="{{username}}" />
+    <input
+      type="hidden"
+      name="instance_id"
+      id="instance_id"
+      value="{{instance_id}}"
+    />
+    <input
+      type="hidden"
+      name="alert_time_each_instance"
+      id="alert_time_each_instance"
+      value="{{alert_time_each_instance}}"
+    />
     <p id="timecounter" hidden>Time spent:</p>
 
     <div id="mySidepanel" class="sidepanel">
-      <a href="javascript:void(0)" class="closebtn" target_id="mySidepanel" onclick="closeNav(this.getAttribute('target_id'))">&times;</a>
+      <a
+        href="javascript:void(0)"
+        class="closebtn"
+        target_id="mySidepanel"
+        onclick="closeNav(this.getAttribute('target_id'))"
+        >&times;</a
+      >
       {{keybindings}}
     </div>
 
     <div id="Statpanel" class="sidepanel">
-      <a href="javascript:void(0)" class="closebtn" target_id="Statpanel" onclick="closeNav(this.getAttribute('target_id'))">&times;</a>
+      <a
+        href="javascript:void(0)"
+        class="closebtn"
+        target_id="Statpanel"
+        onclick="closeNav(this.getAttribute('target_id'))"
+        >&times;</a
+      >
       [[statistics_nav]]
     </div>
 
     <script>
-      document.addEventListener('keyup', function (event) {
-          var active_id = document.activeElement.id;
-          var active_type = document.activeElement.getAttribute('type');
-          if (active_id == 'go_to' | active_type == 'text') return;
+      document.addEventListener("keyup", function (event) {
+        var active_id = document.activeElement.id;
+        var active_type = document.activeElement.getAttribute("type");
+        if ((active_id == "go_to") | (active_type == "text")) return;
 
-          //first check whether this keyboard input is a shortcut for checkboxes
-          var checkboxes = document.querySelectorAll('input[type=checkbox]');
-          var radios = document.querySelectorAll('input[type=radio]');
-          var x = event.key.toLowerCase();
+        //first check whether this keyboard input is a shortcut for checkboxes
+        var checkboxes = document.querySelectorAll("input[type=checkbox]");
+        var radios = document.querySelectorAll("input[type=radio]");
+        var x = event.key.toLowerCase();
 
-          for (var i = 0; i < checkboxes.length; i++) {
-              //alert(checkboxes[i].value)
-              if(x === checkboxes[i].value){
-                  checkboxes[i].checked = !checkboxes[i].checked;
-                  if (checkboxes[i].onclick != null) checkboxes[i].onclick.apply(checkboxes[i]);
-                  return;
-              };
+        for (var i = 0; i < checkboxes.length; i++) {
+          //alert(checkboxes[i].value)
+          if (x === checkboxes[i].value) {
+            checkboxes[i].checked = !checkboxes[i].checked;
+            if (checkboxes[i].onclick != null)
+              checkboxes[i].onclick.apply(checkboxes[i]);
+            return;
           }
-          for (var i = 0; i < radios.length; i++) {
-              //alert(checkboxes[i].value)
-              if(x === radios[i].value){
-                  radios[i].checked = !radios[i].checked;
-                  if (radios[i].onclick != null) radios[i].onclick.apply(radios[i]);
-                  return;
-              };
+        }
+        for (var i = 0; i < radios.length; i++) {
+          //alert(checkboxes[i].value)
+          if (x === radios[i].value) {
+            radios[i].checked = !radios[i].checked;
+            if (radios[i].onclick != null) radios[i].onclick.apply(radios[i]);
+            return;
           }
+        }
 
-          // Each time we process a user's key presses, track who is doing
-          // it by grabbing the hidden firstname and lastname fields
-          get_new_instance(event);
+        // Each time we process a user's key presses, track who is doing
+        // it by grabbing the hidden firstname and lastname fields
+        get_new_instance(event);
       });
 
       function getFieldSetState(element) {
@@ -251,318 +279,332 @@
         //var fieldSet = element.parentElement;
 
         // Find the closeset ancestor fieldset element from this input
-        var fieldSet = element.closest('fieldset');
+        var fieldSet = element.closest("fieldset");
 
         // Get all the inputs in this field set (what are the annotation options)
-        var inputs = fieldSet.querySelectorAll('input');
+        var inputs = fieldSet.querySelectorAll("input");
 
         // Get state of all the in this group
-        var state = Array.from(inputs).map(input => {
+        var state = Array.from(inputs).map((input) => {
           return {
-            name: input.getAttribute('label_name'),
+            name: input.getAttribute("label_name"),
             value: input.checked,
             // checked: input.value // unused??
-          }
+          };
         });
-        return state
+        return state;
       }
 
       function registerAnnotation(element) {
-
         // If the element is a radio button, we need to uncheck all the other which
         // requires sending the state of all the other buttons in the group
-        sc = element.getAttribute("selection_constraint")
+        sc = element.getAttribute("selection_constraint");
         if (sc && sc == "single") {
-            state = getFieldSetState(element);
-        }
-        else if (element.getAttribute('type') == 'range') {
-            state = [{
-              name: element.getAttribute('label_name'),
+          state = getFieldSetState(element);
+        } else if (element.getAttribute("type") == "range") {
+          state = [
+            {
+              name: element.getAttribute("label_name"),
               value: element.value,
-            }]
+            },
+          ];
         }
         // This is a checkbox so we can just send the state of this checkbox
         else {
-            state = [{
-              name: element.getAttribute('label_name'),
+          state = [
+            {
+              name: element.getAttribute("label_name"),
               value: element.checked,
               // checked: element.value // unused??
-            }]
+            },
+          ];
         }
 
         // Get which annotation group this change belongs to
-        var schema = element.getAttribute('schema');
+        var schema = element.getAttribute("schema");
 
         // Get the instance id
-        var instance_id = document.getElementById('instance_id').value;
+        var instance_id = document.getElementById("instance_id").value;
 
         // Package this all up in a post request to the server's updateinstance endpoint
         var post_req = {
           type: "label",
           schema: schema,
           state: state,
-          instance_id: instance_id
-        }
+          instance_id: instance_id,
+        };
 
         // Send the post request
         fetch("/updateinstance", {
-            method: "POST",
-            body: JSON.stringify(post_req),
-            credentials: "same-origin",
-            headers: {
-                "Content-type": "application/json; charset=UTF-8"
-            }
-            });
+          method: "POST",
+          body: JSON.stringify(post_req),
+          credentials: "same-origin",
+          headers: {
+            "Content-type": "application/json; charset=UTF-8",
+          },
+        });
       }
 
       function registerTextAnnotation(element) {
-
         // Get which annotation group this change belongs to
-        var schema = element.getAttribute('schema');
+        var schema = element.getAttribute("schema");
 
         // Get the instance id
-        var instance_id = document.getElementById('instance_id').value;
+        var instance_id = document.getElementById("instance_id").value;
 
-        state = [{
-              name: element.getAttribute('label_name'),
-              value: element.value,
-            }]
+        state = [
+          {
+            name: element.getAttribute("label_name"),
+            value: element.value,
+          },
+        ];
 
         // Package this all up in a post request to the server's updateinstance endpoint
         var post_req = {
-            type: "label",
-            schema: schema,
-            state: state,
-            instance_id: instance_id
-        }
+          type: "label",
+          schema: schema,
+          state: state,
+          instance_id: instance_id,
+        };
 
         // Send the post request
         fetch("/updateinstance", {
-            method: "POST",
-            body: JSON.stringify(post_req),
-            credentials: "same-origin",
-            headers: {
-                "Content-type": "application/json; charset=UTF-8"
-            }
-            });
-
+          method: "POST",
+          body: JSON.stringify(post_req),
+          credentials: "same-origin",
+          headers: {
+            "Content-type": "application/json; charset=UTF-8",
+          },
+        });
       }
 
       function getSelectedText() {
-          var text = "";
-          if (typeof window.getSelection != "undefined") {
-              text = window.getSelection().toString();
-          } else if (typeof document.selection != "undefined" && document.selection.type == "Text") {
-              text = document.selection.createRange().text;
-          }
-          return text;
+        var text = "";
+        if (typeof window.getSelection != "undefined") {
+          text = window.getSelection().toString();
+        } else if (
+          typeof document.selection != "undefined" &&
+          document.selection.type == "Text"
+        ) {
+          text = document.selection.createRange().text;
+        }
+        return text;
       }
 
-      function deleteSpanAnnotation(spanElem, schema, labelName, title, start, end) {
-            // Get the instance id
-            var instance_id = document.getElementById('instance_id').value;
+      function deleteSpanAnnotation(
+        spanElem,
+        schema,
+        labelName,
+        title,
+        start,
+        end
+      ) {
+        // Get the instance id
+        var instance_id = document.getElementById("instance_id").value;
 
-            // Get the text of the span
-            var spanText = spanElem.innerText;
+        // Get the text of the span
+        var spanText = spanElem.innerText;
 
-            // Package this all up in a post request to the server's updateinstance endpoint
-            var post_req = {
-                type: "span",
-                schema: schema,
-                state: [{
-                    name: labelName,
-                    start: start,
-                    end: end,
-                    title: title,
-                    value: null
-                }],
-                instance_id: instance_id
-            }
-
-            // Send the post request
-            fetch("/updateinstance", {
-                method: "POST",
-                body: JSON.stringify(post_req),
-                credentials: "same-origin",
-                headers: {
-                    "Content-type": "application/json; charset=UTF-8"
-                }
-            });
-
-            // Remove the outer most div tag that has the span's annotation title (the small text above)
-            $( spanElem ).find("div").first().remove()
-            // Remove the close tag
-            $( spanElem ).find("div").last().remove()
-            // Remove the span highlight by unwrapping the inner text
-            $( spanElem.firstChild ).unwrap();
-      }
-
-
-      function getEarlierChildren(n, skipMe){
-            var r = [];
-            for ( ; n; n = n.nextSibling )
-                if ( n.nodeType == 1 && n != skipMe)
-                    r.push( n );
-                else if ( n == skipMe )
-                    break;
-            return r;
+        // Package this all up in a post request to the server's updateinstance endpoint
+        var post_req = {
+          type: "span",
+          schema: schema,
+          state: [
+            {
+              name: labelName,
+              start: start,
+              end: end,
+              title: title,
+              value: null,
+            },
+          ],
+          instance_id: instance_id,
         };
 
-        function getEarlierSiblings(n) {
-            return getEarlierChildren(n.parentNode.firstChild, n);
+        // Send the post request
+        fetch("/updateinstance", {
+          method: "POST",
+          body: JSON.stringify(post_req),
+          credentials: "same-origin",
+          headers: {
+            "Content-type": "application/json; charset=UTF-8",
+          },
+        });
+
+        // Remove the outer most div tag that has the span's annotation title (the small text above)
+        $(spanElem).find("div").first().remove();
+        // Remove the close tag
+        $(spanElem).find("div").last().remove();
+        // Remove the span highlight by unwrapping the inner text
+        $(spanElem.firstChild).unwrap();
+      }
+
+      function getEarlierChildren(n, skipMe) {
+        var r = [];
+        for (; n; n = n.nextSibling)
+          if (n.nodeType == 1 && n != skipMe) r.push(n);
+          else if (n == skipMe) break;
+        return r;
+      }
+
+      function getEarlierSiblings(n) {
+        return getEarlierChildren(n.parentNode.firstChild, n);
+      }
+
+      function getTextOfSpans(elems) {
+        text = "";
+        for (i = 0; i < elems.length; i++) {
+          //console.log(elems[i].textContent)
+
+          e = elems[i].cloneNode(true);
+          console.log("e", e);
+          // Delete all the nested <div> elements with jquery to get the plain text
+          $(e).find("div").remove();
+          console.log("sib text", e.textContent);
+          text += " " + e.textContent;
         }
 
-        function getTextOfSpans(elems) {
-            text = ""
-            for (i = 0; i < elems.length; i++) {
-                //console.log(elems[i].textContent)
-
-                e = elems[i].cloneNode(true);
-                console.log('e', e)
-                // Delete all the nested <div> elements with jquery to get the plain text
-                $(e).find('div').remove();
-                console.log('sib text', e.textContent)
-                text += " " + e.textContent
-
-            }
-
-            return text.trim();
-        }
+        return text.trim();
+      }
 
       function getSelectionIndices() {
-            // Get the user selection
-            var selection = window.getSelection();
+        // Get the user selection
+        var selection = window.getSelection();
 
-            if (selection.rangeCount === 0) {
-                return { start: -1, end: -1 }; // No selection
-            }
-
-            // Get the range object representing the selected portion
-            var range = selection.getRangeAt(0);
-
-            // Get the left most element in the selection
-            var leftMost = range.startContainer;
-            var leftSibs = getEarlierSiblings(leftMost);
-            console.log('leftSibs', leftSibs);
-            // Get the text of the left elements
-            var leftText = getTextOfSpans(leftSibs);
-
-            // Find the parent div element with name "instance_text" using jquery
-            var parentDiv = $(range.commonAncestorContainer).closest('div[name="instance_text"]')[0];
-            //console.log('parentDiv', parentDiv)
-
-            if (!parentDiv) {
-                return { start: -2, end: -2 }; // Not within a <div class="context_text">
-            }
-
-            //console.log('parentDiv')
-            //console.dir(parentDiv.innerHTML)
-
-            // Make a copy of the parent div to manipulate
-            parentDiv = parentDiv.cloneNode(true);
-
-            // Create a temporary Range to find the offset relative to the parent div
-            console.log('before delete', range.startContainer, range.startOffset, range.endOffset)
-            var tempRange = document.createRange();
-            tempRange.setStart(parentDiv, 0);
-            tempRange.setEnd(range.startContainer, range.startOffset);
-
-            // Delete all the nested <div> elements with jquery to get the plain text
-            $(parentDiv).find('div').remove();
-
-            console.log('after delete')
-            console.dir(parentDiv.innerHTML)
-            console.log('text')
-            console.dir(parentDiv.textContent)
-
-            console.log('after delete', range.startContainer, range.startOffset, range.endOffset)
-
-
-            // Get the starting offset of the selection within the parent div
-            var div = document.createElement("div");
-            div.appendChild(tempRange.cloneContents());
-
-            var s = range.startContainer.textContent.toString();
-            //console.log(`text: "${text}"`);
-            var whitespaceOffset = s.length - s.trimStart().length;
-
-
-            var startOffset = range.startOffset - whitespaceOffset;
-
-            if (leftText.length > 0) {
-                // Add 1 for space between the left text and the selected text
-                startOffset += leftText.length + 1;
-            }
-
-            // Get the length of the selected text
-            var selectedTextLength = range.toString().length;
-
-            // Calculate the ending offset of the selection within the parent div
-            var endOffset = startOffset + selectedTextLength;
-
-            return { start: startOffset, end: endOffset };
+        if (selection.rangeCount === 0) {
+          return { start: -1, end: -1 }; // No selection
         }
 
+        // Get the range object representing the selected portion
+        var range = selection.getRangeAt(0);
 
+        // Get the left most element in the selection
+        var leftMost = range.startContainer;
+        var leftSibs = getEarlierSiblings(leftMost);
+        console.log("leftSibs", leftSibs);
+        // Get the text of the left elements
+        var leftText = getTextOfSpans(leftSibs);
 
-      function surroundSelection(schema, labelName, title, selectionColor)  {
-          //var span = document.createElement("span");
-          //span.style.fontWeight = "bold";
-          //span.style.color = "green";
+        // Find the parent div element with name "instance_text" using jquery
+        var parentDiv = $(range.commonAncestorContainer).closest(
+          'div[name="instance_text"]'
+        )[0];
+        //console.log('parentDiv', parentDiv)
+
+        if (!parentDiv) {
+          return { start: -2, end: -2 }; // Not within a <div class="context_text">
+        }
+
+        //console.log('parentDiv')
+        //console.dir(parentDiv.innerHTML)
+
+        // Make a copy of the parent div to manipulate
+        parentDiv = parentDiv.cloneNode(true);
+
+        // Create a temporary Range to find the offset relative to the parent div
+        console.log(
+          "before delete",
+          range.startContainer,
+          range.startOffset,
+          range.endOffset
+        );
+        var tempRange = document.createRange();
+        tempRange.setStart(parentDiv, 0);
+        tempRange.setEnd(range.startContainer, range.startOffset);
+
+        // Delete all the nested <div> elements with jquery to get the plain text
+        $(parentDiv).find("div").remove();
+
+        console.log("after delete");
+        console.dir(parentDiv.innerHTML);
+        console.log("text");
+        console.dir(parentDiv.textContent);
+
+        console.log(
+          "after delete",
+          range.startContainer,
+          range.startOffset,
+          range.endOffset
+        );
+
+        // Get the starting offset of the selection within the parent div
+        var div = document.createElement("div");
+        div.appendChild(tempRange.cloneContents());
+
+        var s = range.startContainer.textContent.toString();
+        //console.log(`text: "${text}"`);
+        var whitespaceOffset = s.length - s.trimStart().length;
+
+        var startOffset = range.startOffset - whitespaceOffset;
+
+        if (leftText.length > 0) {
+          // Add 1 for space between the left text and the selected text
+          startOffset += leftText.length + 1;
+        }
+
+        // Get the length of the selected text
+        var selectedTextLength = range.toString().length;
+
+        // Calculate the ending offset of the selection within the parent div
+        var endOffset = startOffset + selectedTextLength;
+
+        return { start: startOffset, end: endOffset };
+      }
+
+      function surroundSelection(schema, labelName, title, selectionColor) {
+        //var span = document.createElement("span");
+        //span.style.fontWeight = "bold";
+        //span.style.color = "green";
 
         // Check that this wasn't a spurious click or the click for the delete button which
         // also seems to trigger this selection event
         if (window.getSelection().rangeCount == 0) {
-            return;
+          return;
         }
-        var range = window.getSelection().getRangeAt(0)
+        var range = window.getSelection().getRangeAt(0);
 
         // console.dir(window.getSelection())
 
         // console.log(range.startOffset, range.endOffset)
         if (range.startOffset == range.endOffset) {
-            return;
+          return;
         }
 
-
         // Get the instance id
-        var instance_id = document.getElementById('instance_id').value;
+        var instance_id = document.getElementById("instance_id").value;
 
-          if (window.getSelection) {
-              var sel = window.getSelection();
+        if (window.getSelection) {
+          var sel = window.getSelection();
 
-              // console.dir(sel);
+          // console.dir(sel);
 
-              // Check that we're labeling something in the instance text that
-              // we want to annotate
-              if (!sel.anchorNode.parentElement) {
-                return;
-              }
+          // Check that we're labeling something in the instance text that
+          // we want to annotate
+          if (!sel.anchorNode.parentElement) {
+            return;
+          }
 
-              // TODO: check that we're not nesting a span of the same time here
+          // TODO: check that we're not nesting a span of the same time here
 
-              // Otherwise, we're going to be adding a new span annotation, if
-              // the user has selected some non-empty part of the text
-              if (sel.rangeCount && sel.toString().trim().length > 0) {
+          // Otherwise, we're going to be adding a new span annotation, if
+          // the user has selected some non-empty part of the text
+          if (sel.rangeCount && sel.toString().trim().length > 0) {
+            // Get the selection text as a string
+            var selText = window.getSelection().toString().trim();
+            console.log("selText1", selText);
 
+            // Get the start and end offsets of the selection
+            var range = sel.getRangeAt(0);
+            var start = range.startOffset;
+            var end = range.endOffset;
+            // Get the generic text between the start and end offsets
+            var text = range.startContainer.textContent.substring(start, end);
+            var s = range.startContainer.textContent.toString();
+            //console.log(`text: "${text}"`);
+            var whitespaceOffset = s.length - s.trimStart().length;
+            //console.log('whitespaceOffset', whitespaceOffset);
 
-
-                  // Get the selection text as a string
-                  var selText = window.getSelection().toString().trim();
-                  console.log('selText1', selText);
-
-                  // Get the start and end offsets of the selection
-                  var range = sel.getRangeAt(0);
-                  var start = range.startOffset;
-                  var end = range.endOffset;
-                  // Get the generic text between the start and end offsets
-                  var text = range.startContainer.textContent.substring(start, end);
-                  var s = range.startContainer.textContent.toString();
-                  //console.log(`text: "${text}"`);
-                  var whitespaceOffset = s.length - s.trimStart().length;
-                  //console.log('whitespaceOffset', whitespaceOffset);
-
-                  /*
+            /*
                   console.log(`full range text "${range.startContainer.textContent}`);
                   console.log('start', start);
                   console.log('end', end);
@@ -570,169 +612,183 @@
                   console.log('end', end - whitespaceOffset);
                   console.log(`ranged substring "${text}"`);
                     */
-                  // Get the raw text of the selection without any HTML
-                  var sel = window.getSelection();
-                  var range = sel.getRangeAt(0);
-                  var div = document.createElement("div");
-                  div.appendChild(range.cloneContents());
-                  var selText = div.innerHTML;
-                  //console.log(`selText2: "${selText}"`);
+            // Get the raw text of the selection without any HTML
+            var sel = window.getSelection();
+            var range = sel.getRangeAt(0);
+            var div = document.createElement("div");
+            div.appendChild(range.cloneContents());
+            var selText = div.innerHTML;
+            //console.log(`selText2: "${selText}"`);
 
+            tsc = selectionColor.replace(")", ", 0.25)");
 
+            var span = document.createElement("span");
+            span.className = "span_container";
+            span.setAttribute("selection_label", labelName);
+            span.setAttribute("style", "background-color:rgb" + tsc + ";");
 
-                  tsc = selectionColor.replace(")", ", 0.25)")
+            var label = document.createElement("div");
+            label.className = "span_label";
+            label.textContent = title;
+            label.setAttribute(
+              "style",
+              "background-color:white;" +
+                "border:2px solid rgb" +
+                selectionColor +
+                ";"
+            );
 
-                  var span = document.createElement("span");
-                  span.className = "span_container";
-                  span.setAttribute("selection_label", labelName);
-                  span.setAttribute("style", "background-color:rgb" + tsc + ";");
+            var delLabel = document.createElement("div");
+            delLabel.className = "span_close";
+            delLabel.textContent = "×";
+            delLabel.setAttribute("style", "background-color:white;");
+            //                  + "border:2px solid rgb" + selectionColor + ";");
+            delLabel.onclick = function () {
+              deleteSpanAnnotation(
+                span,
+                schema,
+                labelName,
+                title,
+                range.startOffset,
+                range.endOffset
+              );
+            };
 
-                  var label = document.createElement("div");
-                  label.className = "span_label";
-                  label.textContent = title;
-                  label.setAttribute("style", "background-color:white;"
-                                    + "border:2px solid rgb" + selectionColor + ";");
+            // Get the offsets
+            startEnd = getSelectionIndices();
+            console.log("startEnd", startEnd);
+            state = [
+              {
+                name: labelName,
+                start: startEnd["start"],
+                end: startEnd["end"],
+                title: title,
+                value: sel.toString(),
+              },
+            ];
 
+            // console.log('adding new annotation', range.startOffset, range.endOffset, sel.toString())
 
-                  var delLabel = document.createElement("div");
-                  delLabel.className = "span_close";
-                  delLabel.textContent = "×";
-                  delLabel.setAttribute("style", "background-color:white;");
-                  //                  + "border:2px solid rgb" + selectionColor + ";");
-                  delLabel.onclick= function() {
-                    deleteSpanAnnotation(span, schema, labelName, title, range.startOffset, range.endOffset);
-                  };
+            // Package this all up in a post request to the server's updateinstance endpoint
+            var post_req = {
+              type: "span",
+              schema: schema,
+              state: state,
+              instance_id: instance_id,
+            };
 
-                  // Get the offsets
-                  startEnd = getSelectionIndices();
-                  console.log('startEnd', startEnd);
-                  state = [{
-                      name: labelName,
-                      start: startEnd['start'],
-                      end: startEnd['end'],
-                      title: title,
-                      value: sel.toString()
-                  }]
+            // Send the post request
+            fetch("/updateinstance", {
+              method: "POST",
+              body: JSON.stringify(post_req),
+              credentials: "same-origin",
+              headers: {
+                "Content-type": "application/json; charset=UTF-8",
+              },
+            });
 
-                  // console.log('adding new annotation', range.startOffset, range.endOffset, sel.toString())
+            var range = sel.getRangeAt(0).cloneRange();
+            range.surroundContents(span);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            span.appendChild(label);
+            span.appendChild(delLabel);
 
-                  // Package this all up in a post request to the server's updateinstance endpoint
-                 var post_req = {
-                    type: "span",
-                    schema: schema,
-                    state: state,
-                    instance_id: instance_id
-                 }
-
-                 // Send the post request
-                 fetch("/updateinstance", {
-                    method: "POST",
-                    body: JSON.stringify(post_req),
-                    credentials: "same-origin",
-                    headers: {
-                        "Content-type": "application/json; charset=UTF-8"
-                    }
-                 });
-
-                 var range = sel.getRangeAt(0).cloneRange();
-                 range.surroundContents(span);
-                 sel.removeAllRanges();
-                 sel.addRange(range);
-                 span.appendChild(label);
-                 span.appendChild(delLabel);
-
-                 // Clear the current selection
-                 sel.empty();
-              }
+            // Clear the current selection
+            sel.empty();
           }
+        }
       }
 
-      function changeSpanLabel(checkbox, schema, spanLabel, spanTitle, spanColor) {
-          // Listen for when the user has highlighted some text (only when the label is checked)
-          document.onmouseup = function(e) {
-
-            var senderElement = e.target;
-            // Avoid the case where the user clicks the delete button
-              if (senderElement.getAttribute("class") == "span_close") {
-                  e.stopPropagation()
-                  return true;
-              }
-              if (checkbox.checked){
-                  surroundSelection(schema, spanLabel, spanTitle, spanColor);
-              }
+      function changeSpanLabel(
+        checkbox,
+        schema,
+        spanLabel,
+        spanTitle,
+        spanColor
+      ) {
+        // Listen for when the user has highlighted some text (only when the label is checked)
+        document.onmouseup = function (e) {
+          var senderElement = e.target;
+          // Avoid the case where the user clicks the delete button
+          if (senderElement.getAttribute("class") == "span_close") {
+            e.stopPropagation();
+            return true;
           }
+          if (checkbox.checked) {
+            surroundSelection(schema, spanLabel, spanTitle, spanColor);
+          }
+        };
       }
 
       // Listen for when the user has highlighted some text
       // document.onmouseup = function() { surroundSelection("Undefined"); }
-
     </script>
     <script>
-      function barValue(range,sibling) {
-          // function used to obtain value for range input
-          sibling.value = range.value;
-          //var x = document.getElementsByClassName(range.className);
-          //var i;
-          //for (i=0: i < x.length; i++) {
-          //    if(x[i].value != range.value) x[i]
-          //}
+      function barValue(range, sibling) {
+        // function used to obtain value for range input
+        sibling.value = range.value;
+        //var x = document.getElementsByClassName(range.className);
+        //var i;
+        //for (i=0: i < x.length; i++) {
+        //    if(x[i].value != range.value) x[i]
+        //}
       }
     </script>
 
     <script>
       function onlyOne(checkbox) {
-	  // this function is used for the single-choice setting
-	  //alert(checkbox.className)
-	  var x = document.getElementsByClassName(checkbox.className);
-	  var i;
-	  for (i = 0; i < x.length; i++) {
-	      if(x[i].value != checkbox.value) x[i].checked = false;
-	  }
+        // this function is used for the single-choice setting
+        //alert(checkbox.className)
+        var x = document.getElementsByClassName(checkbox.className);
+        var i;
+        for (i = 0; i < x.length; i++) {
+          if (x[i].value != checkbox.value) x[i].checked = false;
+        }
       }
     </script>
 
-
     <script>
       function whetherNone(checkbox) {
-	  // this function is used to uncheck all the other labels when "None" is checked
-	  //alert(checkbox.className)
-	  var x = document.getElementsByClassName(checkbox.className);
-	  var i;
-	  for (i = 0; i < x.length; i++) {
-              if(checkbox.value == "None" && x[i].value != "None") x[i].checked = false;
-              if(checkbox.value != "None" && x[i].value == "None") x[i].checked = false;
-          }
-
+        // this function is used to uncheck all the other labels when "None" is checked
+        //alert(checkbox.className)
+        var x = document.getElementsByClassName(checkbox.className);
+        var i;
+        for (i = 0; i < x.length; i++) {
+          if (checkbox.value == "None" && x[i].value != "None")
+            x[i].checked = false;
+          if (checkbox.value != "None" && x[i].value == "None")
+            x[i].checked = false;
+        }
       }
     </script>
 
     <script>
       function click_to_next() {
-          // Gacky code to simulate the submit button as a keyboard event
-          // and not have two separate paths to handle keyboard and mouse
-          // events
-          var e = $.Event('keyup');
-          e.key = "ArrowRight";
+        // Gacky code to simulate the submit button as a keyboard event
+        // and not have two separate paths to handle keyboard and mouse
+        // events
+        var e = $.Event("keyup");
+        e.key = "ArrowRight";
 
-          get_new_instance(e);
+        get_new_instance(e);
       }
 
       function click_to_prev() {
-          // Gacky code to simulate the submit button as a keyboard event
-          // and not have two separate paths to handle keyboard and mouse
-          // events
-          var e = $.Event('keyup');
-          e.key = "ArrowLeft";
+        // Gacky code to simulate the submit button as a keyboard event
+        // and not have two separate paths to handle keyboard and mouse
+        // events
+        var e = $.Event("keyup");
+        e.key = "ArrowLeft";
 
-          get_new_instance(e);
+        get_new_instance(e);
       }
-
     </script>
 
     {{annotation}}
 
     <script>
-        /*
+      /*
       window.onunload = check_close;
       function check_close() {
           // console.error("session closed");
@@ -749,83 +805,86 @@
       var countDownDate = new Date().getTime();
 
       // Update the count down every 1 second
-      var x = setInterval(function() {
+      var x = setInterval(function () {
+        // Get today's date and time
+        var now = new Date().getTime();
 
-          // Get today's date and time
-          var now = new Date().getTime();
+        // Find the distance between now and the count down date
+        var distance = now - countDownDate;
 
-          // Find the distance between now and the count down date
-          var distance = now - countDownDate;
+        // Time calculations for days, hours, minutes and seconds
+        var days = Math.floor(distance / (1000 * 60 * 60 * 24));
+        var hours = Math.floor(
+          (distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+        );
+        var minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+        var seconds = Math.floor((distance % (1000 * 60)) / 1000);
+        var total_seconds = Math.floor(distance / 1000);
 
-          // Time calculations for days, hours, minutes and seconds
-          var days = Math.floor(distance / (1000 * 60 * 60 * 24));
-          var hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-          var minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-          var seconds = Math.floor((distance % (1000 * 60)) / 1000);
-          var total_seconds = Math.floor(distance / 1000);
+        // Output the result in an element with id="timecounter"
 
-          // Output the result in an element with id="timecounter"
+        //document.getElementById("timecounter").innerHTML = "Time spent: " + days + "d " + hours + "h "
+        //    + minutes + "m " + seconds + "s ";
 
-          //document.getElementById("timecounter").innerHTML = "Time spent: " + days + "d " + hours + "h "
-          //    + minutes + "m " + seconds + "s ";
+        // TODO: add configurations for alert message and maximum time spent on each instance
+        // If the count down is over, write some text
 
-          // TODO: add configurations for alert message and maximum time spent on each instance
-          // If the count down is over, write some text
-
-          var alert_time_each_instance = document.getElementById("alert_time_each_instance").value;
-          if (total_seconds % alert_time_each_instance == 0) {
-              //clearInterval(x);
-              //document.getElementById("timecounter").innerHTML = "EXPIRED";
-              alert("You have spent " + total_seconds + " seconds on this instance")
-          }
-
+        var alert_time_each_instance = document.getElementById(
+          "alert_time_each_instance"
+        ).value;
+        if (total_seconds % alert_time_each_instance == 0) {
+          //clearInterval(x);
+          //document.getElementById("timecounter").innerHTML = "EXPIRED";
+          alert(
+            "You have spent " + total_seconds + " seconds on this instance"
+          );
+        }
       }, 1000);
     </script>
 
     <script>
       // We submit a new post to the same (user/annotate) endpoint
       function post(params) {
-
         // Package this all up in a post request to the server's updateinstance endpoint
         var post_req = {
-            instance_id: instance_id
-        }
+          instance_id: instance_id,
+        };
         for (var key in params) {
-              if (params.hasOwnProperty(key)) {
-                post_req[key] = params[key];
-              }
+          if (params.hasOwnProperty(key)) {
+            post_req[key] = params[key];
           }
+        }
 
         // Send the post request and re-render the page with the new instance
         //
         // TODO: fix this the server-client protocol so we're just sending over
         // the new instance data and not the entire page
         fetch("/", {
-            method: "POST",
-            body: JSON.stringify(post_req),
-            credentials: "same-origin",
-            headers: {
-                "Content-type": "application/json; charset=UTF-8"
+          method: "POST",
+          body: JSON.stringify(post_req),
+          credentials: "same-origin",
+          headers: {
+            "Content-type": "application/json; charset=UTF-8",
+          },
+        })
+          .then((response) => {
+            if (!response.ok) {
+              throw new Error("Network response was not ok");
             }
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
-                }
-                return response.text(); // Assuming the response is text/html
-            })
-            .then(html => {
-                // 2. Update the page content
-                document.body.innerHTML = html;
-                // Add all the listeners back to the new page
-                watch_text_boxes();
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                // Handle errors appropriately, e.g., display an error message
-            });
+            return response.text(); // Assuming the response is text/html
+          })
+          .then((html) => {
+            // 2. Update the page content
+            document.body.innerHTML = html;
+            // Add all the listeners back to the new page
+            watch_text_boxes();
+          })
+          .catch((error) => {
+            console.error("Error:", error);
+            // Handle errors appropriately, e.g., display an error message
+          });
 
-          /*
+        /*
 
 
           // The rest of this code assumes you are not using a library.
@@ -895,7 +954,7 @@
           );
           */
 
-          /*
+        /*
           // Get all the highlighted text for this instance and marshall that
           // into some kind of representation for the server side
           $(".span_container").first().each(
@@ -925,8 +984,8 @@
           );
           */
 
-          //document.body.appendChild(form);
-          //form.submit();
+        //document.body.appendChild(form);
+        //form.submit();
       }
 
       /**
@@ -935,11 +994,13 @@
       function validateForm() {
         var rows = document.querySelectorAll("tr[schema='multirate']");
         for (var i = 0; i < rows.length; i++) {
-          var inputs = rows[i].querySelectorAll("input[type='radio'][validation='required']");
+          var inputs = rows[i].querySelectorAll(
+            "input[type='radio'][validation='required']"
+          );
           if (inputs.length > 0) {
-              var checked = Array.from(inputs).some(input => input.checked);
+            var checked = Array.from(inputs).some((input) => input.checked);
           } else {
-              var checked = true;
+            var checked = true;
           }
 
           if (!checked) {
@@ -950,107 +1011,122 @@
         return true;
       }
 
-
-       /**
+      /**
        * Validate if the input answers meet certain rules
        * along with any relevant key presses to request a new instance to
        * annotate.
        */
       function validate_answers() {
+        // Test whether all the required labels are checked
+        var inputs = document.querySelectorAll(
+          "input[validation=required_label]"
+        );
+        for (var i = 0; i < inputs.length; ++i) {
+          if (
+            inputs[i].getAttribute("validation") == "required_label" &&
+            inputs[i].checked == false
+          ) {
+            // Get the text of the legend element that contains the question
+            var legend = inputs[i].closest("fieldset").querySelector("legend");
+            var question = legend.textContent;
 
-          // Test whether all the required labels are checked
-          var inputs =  document.querySelectorAll('input[validation=required_label]');
-          for (var i = 0; i < inputs.length; ++i) {
-            if (inputs[i].getAttribute('validation') == 'required_label' && inputs[i].checked == false){
-                // Get the text of the legend element that contains the question
-                var legend = inputs[i].closest('fieldset').querySelector('legend');
-                var question = legend.textContent;
+            // Get the text of the answer
+            var neededAnswer = inputs[i].getAttribute("label_name");
 
-                // Get the text of the answer
-                var neededAnswer = inputs[i].getAttribute('label_name');
+            // Generate an alert that shows the question text and the required label
+            // so the user knows what they missed
+            alert(
+              'The question "' +
+                question +
+                '" requires the label "' +
+                neededAnswer +
+                '" to be selected to proceed'
+            );
+            return false;
+          }
+        }
 
-                // Generate an alert that shows the question text and the required label
-                // so the user knows what they missed
-                alert("The question \"" + question + "\" requires the label \"" + neededAnswer
-                            + "\" to be selected to proceed");
+        // identify all the fieldsets and check if all the required forms are filled
+        var fields = document.getElementsByTagName("fieldset");
+        for (var i = 0; i < fields.length; ++i) {
+          var inputs = fields[i].querySelectorAll(
+            "input[validation=required], select[validation=required], textarea[validation=required]"
+          );
+
+          // continue if all there's no required inputs in the current field set
+          if (inputs.length == 0) {
+            continue;
+          }
+          //var required = true;
+          // check if the current form requires inputs
+          //if (inputs[0].getAttribute('validation') == 'required'){
+          //    required= true;
+          //}
+
+          checked_flag = false;
+          for (var j = 0; j < inputs.length; ++j) {
+            // if a right_label is not selected, display an error msg and return false
+            //if (inputs[j].getAttribute('validation') == 'right_label' && inputs[j].checked == false) {
+            //alert(inputs[j].name + " must be selected to proceed");
+            //    return false;
+            //}
+            // if the input is for a span annotation schema, check if the at least some span is annotated or if the
+            // bad_text label is selected
+            if (inputs[j].getAttribute("for_span") == "True") {
+              //alert($(".span_container").length);
+              if ($(".span_container").length > 0) {
+                checked_flag = true;
+                break;
+              } else if (
+                inputs[j].name.slice(-8) == "bad_text" &&
+                inputs[j].checked == true
+              ) {
+                checked_flag = true;
+                break;
+              }
+            }
+
+            // if any of the labels is checked, set checked_flag as true;
+            if (
+              inputs[j].getAttribute("for_span") != "True" &&
+              inputs[j].checked == true
+            ) {
+              checked_flag = true;
+              break;
+            }
+
+            // if the input_type is number, text, select or textarea, check if it's empty
+            // todo: the current way might not work well if there are mixed textinput and radio buttons under a sample fieldset
+            if (
+              inputs[j].type == "text" ||
+              inputs[j].tagName == "TEXTAREA" ||
+              inputs[j].type == "number" ||
+              inputs[j].type == "select-one"
+            ) {
+              if (inputs[j].value.length == 0) {
+                alert(inputs[j].name + " must be completed to proceed");
                 return false;
+              } else {
+                checked_flag = true;
+              }
             }
           }
 
+          // Get the text of the legend element that contains the question
+          //
+          // TODO: check that this works with questions for the text input fields
+          var legend = inputs[i].closest("fieldset").querySelector("legend");
+          var question = legend.textContent;
 
-          // identify all the fieldsets and check if all the required forms are filled
-          var fields = document.getElementsByTagName('fieldset');
-          for (var i = 0; i < fields.length; ++i) {
-                var inputs = fields[i].querySelectorAll('input[validation=required], select[validation=required], textarea[validation=required]');
-
-                // continue if all there's no required inputs in the current field set
-                if (inputs.length == 0){
-                    continue;
-                }
-                //var required = true;
-                // check if the current form requires inputs
-                //if (inputs[0].getAttribute('validation') == 'required'){
-                //    required= true;
-                //}
-
-
-                checked_flag = false;
-                for (var j = 0; j < inputs.length; ++j) {
-                    // if a right_label is not selected, display an error msg and return false
-                    //if (inputs[j].getAttribute('validation') == 'right_label' && inputs[j].checked == false) {
-                        //alert(inputs[j].name + " must be selected to proceed");
-                    //    return false;
-                    //}
-                    // if the input is for a span annotation schema, check if the at least some span is annotated or if the
-                    // bad_text label is selected
-                    if (inputs[j].getAttribute("for_span") == "True"){
-                        //alert($(".span_container").length);
-                        if ($(".span_container").length > 0) {
-                            checked_flag = true;
-                            break;
-                        } else if (inputs[j].name.slice(-8) == "bad_text" && inputs[j].checked == true){
-                            checked_flag = true;
-                            break;
-                        }
-                    }
-
-
-                    // if any of the labels is checked, set checked_flag as true;
-                    if (inputs[j].getAttribute("for_span") != "True" && inputs[j].checked == true) {
-
-                        checked_flag = true;
-                        break;
-                    }
-
-                    // if the input_type is number, text, select or textarea, check if it's empty
-                    // todo: the current way might not work well if there are mixed textinput and radio buttons under a sample fieldset
-                    if (inputs[j].type == "text" || inputs[j].tagName == "TEXTAREA" || inputs[j].type == "number" || inputs[j].type == "select-one") {
-                        if (inputs[j].value.length == 0){
-                            alert(inputs[j].name + " must be completed to proceed");
-                            return false;
-                        }
-                        else{
-                            checked_flag = true;
-                        }
-                    }
-                }
-
-                // Get the text of the legend element that contains the question
-                //
-                // TODO: check that this works with questions for the text input fields
-                var legend = inputs[i].closest('fieldset').querySelector('legend');
-                var question = legend.textContent;
-
-                // if this form requires inputs, but nothing is checked, display an error msg and return false
-                if (checked_flag == false){
-                    alert("You must answer the following item to proceed: " + question  );
-                    return false;
-                }
-                //alert(instance_obj.id)
+          // if this form requires inputs, but nothing is checked, display an error msg and return false
+          if (checked_flag == false) {
+            alert("You must answer the following item to proceed: " + question);
+            return false;
           }
-          return true;
+          //alert(instance_obj.id)
+        }
+        return true;
       }
-
 
       /**
        * Sends the current state of the instance's annotation to the server,
@@ -1058,127 +1134,241 @@
        * annotate.
        */
       function get_new_instance(event) {
-          var x = event.key;
-          var action = ""
-          var ism = ""
+        var x = event.key;
+        var action = "";
+        var ism = "";
 
-          //console.log(x)
-          //console.log(firstname)
-          //console.log(lastname)
-          if (x == "ArrowLeft") { // Spacebar
-              action = "prev_instance";
+        //console.log(x)
+        //console.log(firstname)
+        //console.log(lastname)
+        if (x == "ArrowLeft") {
+          // Spacebar
+          action = "prev_instance";
+        } else if (x == "ArrowRight") {
+          //console.log("validateForm", validateForm())
+          //console.log("validate_answers", validate_answers())
+          if (validateForm() == true && validate_answers() == true) {
+            action = "next_instance";
+          } else {
+            return;
           }
-          else if (x == "ArrowRight") {
-            //console.log("validateForm", validateForm())
-            //console.log("validate_answers", validate_answers())
-              if (validateForm() == true && validate_answers() == true) {
-                  action = "next_instance";
-              }
-              else{
-                  return;
-              }
-          }
-          else {
-              // console.log("Unknown key press", event)
-              return
-          }
+        } else {
+          // console.log("Unknown key press", event)
+          return;
+        }
 
-          var instance_id = document.getElementById('instance_id').value
-          var time_string = document.getElementById("timecounter").innerHTML //get time spent on this instance
-          //time_string = '-1'
-          var post_req = {
-              label: ism,
-              "action": action,
-              instance_id: instance_id,
-              behavior_time_string: time_string
-          }
+        var instance_id = document.getElementById("instance_id").value;
+        var time_string = document.getElementById("timecounter").innerHTML; //get time spent on this instance
+        //time_string = '-1'
+        var post_req = {
+          label: ism,
+          action: action,
+          instance_id: instance_id,
+          behavior_time_string: time_string,
+        };
 
-          console.log('post_req: ', post_req)
-          // Sends the post message to the server which will let us update the
-          // currently displayed content
-          post(post_req)
+        console.log("post_req: ", post_req);
+        // Sends the post message to the server which will let us update the
+        // currently displayed content
+        post(post_req);
       }
-
     </script>
 
     <script>
-      $(document).ready(function(){
-          $('[data-toggle="tooltip"]').tooltip();
+      $(document).ready(function () {
+        $('[data-toggle="tooltip"]').tooltip();
       });
     </script>
 
     {{var_elems | safe}}
 
     <!-- Header navigation bar -->
-    <nav class="navbar sticky-top shadow-sm" style="background-color: var(--primary-color); padding: 0.75rem 1rem; margin-bottom: 1.5rem;">
+    <nav
+      class="navbar sticky-top shadow-sm"
+      style="
+        background-color: var(--primary-color);
+        padding: 0.75rem 1rem;
+        margin-bottom: 1.5rem;
+      "
+    >
       <div class="container-fluid d-flex align-items-center">
         <!-- Task name (left aligned) -->
         <div class="navbar-brand">
-          <span class="fw-bold" style="color: var(--light-color); font-size: 1.25rem;">{{annotation_task_name}}</span>
+          <span
+            class="fw-bold"
+            style="color: var(--light-color); font-size: 1.25rem"
+            >{{annotation_task_name}}</span
+          >
         </div>
 
         <!-- Middle section with three elements -->
-        <div class="d-flex align-items-center justify-content-center flex-grow-1 gap-4">
+        <div
+          class="d-flex align-items-center justify-content-center flex-grow-1 gap-4"
+        >
           <!-- 1. Annotation codebook link -->
-          <div>
-            {{annotation_codebook}}
-          </div>
+          <div>{{annotation_codebook}}</div>
 
           <!-- 2. Progress counter -->
-          <div class="d-flex align-items-center" style="color: var(--light-color); margin-right: 40px;">
-            <span>Progress: <span class="fw-medium">{{finished}}/{{total_count}}</span></span>
+          <div
+            class="d-flex align-items-center"
+            style="color: var(--light-color); margin-right: 40px"
+          >
+            <span
+              >Progress:
+              <span class="fw-medium">{{finished}}/{{total_count}}</span></span
+            >
           </div>
 
           <!-- 3. Jump to item form -->
-          <div style="margin-left: 40px;">
-            <form action="/go_to" method="post" class="d-flex align-items-center">
-              <input type="hidden" name="firstname" id="a" value="{{firstname}}">
-              <input type="hidden" name="lastname" id="b" value="{{lastname}}">
-              <input type="hidden" name="email" id="c" value="{{username}}">
-              <input type="hidden" name="src" id="src" value="go_to">
-              <label for="go_to" class="me-2" style="color: var(--light-color); margin-bottom: 0;">Go to:</label>
-              <input type="number" name="go_to" id="go_to" class="form-control form-control-sm me-2"
-                style="width: 70px; height: 31px; border: none; border-radius: var(--radius);"
-                value="" onfocusin="user_input()" onfocusout="user_input_leave()" max={{total_count}} min=0 required>
-              <button type="submit" class="shadcn-button"
-                style="height: 31px; line-height: 1; padding: 0 0.75rem; background-color: var(--light-color); color: var(--primary-color); border: none;">Go</button>
+          <div style="margin-left: 40px">
+            <form
+              action="/go_to"
+              method="post"
+              class="d-flex align-items-center"
+            >
+              <input
+                type="hidden"
+                name="firstname"
+                id="a"
+                value="{{firstname}}"
+              />
+              <input
+                type="hidden"
+                name="lastname"
+                id="b"
+                value="{{lastname}}"
+              />
+              <input type="hidden" name="email" id="c" value="{{username}}" />
+              <input type="hidden" name="src" id="src" value="go_to" />
+              <label
+                for="go_to"
+                class="me-2"
+                style="color: var(--light-color); margin-bottom: 0"
+                >Go to:</label
+              >
+              <input
+                type="number"
+                name="go_to"
+                id="go_to"
+                class="form-control form-control-sm me-2"
+                style="
+                  width: 70px;
+                  height: 31px;
+                  border: none;
+                  border-radius: var(--radius);
+                "
+                value=""
+                onfocusin="user_input()"
+                onfocusout="user_input_leave()"
+                max="{{total_count}}"
+                min="0"
+                required
+              />
+              <button
+                type="submit"
+                class="shadcn-button"
+                style="
+                  height: 31px;
+                  line-height: 1;
+                  padding: 0 0.75rem;
+                  background-color: var(--light-color);
+                  color: var(--primary-color);
+                  border: none;
+                "
+              >
+                Go
+              </button>
             </form>
           </div>
         </div>
 
         <!-- User info and logout (right aligned) -->
-        <div class="d-flex align-items-center" style="background-color: rgba(255, 255, 255, 0.15); padding: 0.5rem 1rem; border-radius: var(--radius);">
-          <div class="me-3" style="color: var(--light-color);">
-            <span>Logged in as <span class="fw-medium">{{username}}</span></span>
+        <div
+          class="d-flex align-items-center"
+          style="
+            background-color: rgba(255, 255, 255, 0.15);
+            padding: 0.5rem 1rem;
+            border-radius: var(--radius);
+          "
+        >
+          <div class="me-3" style="color: var(--light-color)">
+            <span
+              >Logged in as <span class="fw-medium">{{username}}</span></span
+            >
           </div>
-          <div class="border-start" style="padding-left: 20px; height: 24px; display: flex; align-items: center;">
-            <a href="/logout" class="shadcn-button"
-              style="background-color: var(--light-color); color: var(--primary-color); height: auto; padding: 0.25rem 0.75rem !important; font-size: 0.875rem; min-width: 60px; text-align: center; border: none; text-decoration: none;">Logout</a>
+          <div
+            class="border-start"
+            style="
+              padding-left: 20px;
+              height: 24px;
+              display: flex;
+              align-items: center;
+            "
+          >
+            <a
+              href="/logout"
+              class="shadcn-button"
+              style="
+                background-color: var(--light-color);
+                color: var(--primary-color);
+                height: auto;
+                padding: 0.25rem 0.75rem !important;
+                font-size: 0.875rem;
+                min-width: 60px;
+                text-align: center;
+                border: none;
+                text-decoration: none;
+              "
+              >Logout</a
+            >
           </div>
         </div>
       </div>
     </nav>
 
     <div class="container-fluid">
-
       <div id="task_layout" class="shadcn-card mb-4">
         <div class="shadcn-card-content">
-         <!--- LAYOUT GOES BELOW HERE --->
+          <!--- LAYOUT GOES BELOW HERE --->
 
-         {{ TASK_LAYOUT }}
+          {{ TASK_LAYOUT }}
 
-        <!--- LAYOUT GOES ABOVE  --->
+          <!--- LAYOUT GOES ABOVE  --->
         </div>
       </div>
+      <!-- Test -->
+      <div id="task_layout" class="shadcn-card mb-4">
+        <div class="shadcn-card-content">
+          <strong>AI Label Suggestion</strong>
+          <div>{{ ai }}</div>
+        </div>
+      </div>
+      <!-- Test -->
 
       <div class="my-4">
         <!-- Reorganized button layout with 3 columns -->
         <div class="d-flex justify-content-between align-items-center">
           <!-- Statistics button (left) -->
           <div>
-            <a role="button" href="#" class="shadcn-button shadcn-button-outline openbtn" target_id="Statpanel" width="475px" onclick="openNav(this.getAttribute('target_id'),this.getAttribute('width'))">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-bar-chart-line me-1" viewBox="0 0 16 16">
-                <path d="M11 2a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v12h.5a.5.5 0 0 1 0 1H.5a.5.5 0 0 1 0-1H1v-3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v3h1V7a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v7h1V2zm1 12h2V2h-2v12zm-3 0V7H7v7h2zm-5 0v-3H2v3h2z"/>
+            <a
+              role="button"
+              href="#"
+              class="shadcn-button shadcn-button-outline openbtn"
+              target_id="Statpanel"
+              width="475px"
+              onclick="openNav(this.getAttribute('target_id'),this.getAttribute('width'))"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                fill="currentColor"
+                class="bi bi-bar-chart-line me-1"
+                viewBox="0 0 16 16"
+              >
+                <path
+                  d="M11 2a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v12h.5a.5.5 0 0 1 0 1H.5a.5.5 0 0 1 0-1H1v-3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v3h1V7a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v7h1V2zm1 12h2V2h-2v12zm-3 0V7H7v7h2zm-5 0v-3H2v3h2z"
+                />
               </svg>
               Statistics
             </a>
@@ -1186,26 +1376,89 @@
 
           <!-- Previous/Next buttons (center) -->
           <div>
-            <a class="shadcn-button shadcn-button-outline me-2" href="#" role="button" onclick="click_to_prev()" style="vertical-align: middle;">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-left" viewBox="0 0 16 16" style="display: inline-block; vertical-align: middle; margin-right: 0.25rem;">
-                <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
+            <a
+              class="shadcn-button shadcn-button-outline me-2"
+              href="#"
+              role="button"
+              onclick="click_to_prev()"
+              style="vertical-align: middle"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                fill="currentColor"
+                class="bi bi-arrow-left"
+                viewBox="0 0 16 16"
+                style="
+                  display: inline-block;
+                  vertical-align: middle;
+                  margin-right: 0.25rem;
+                "
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"
+                />
               </svg>
-              <span style="display: inline-block; vertical-align: middle;">Previous</span>
+              <span style="display: inline-block; vertical-align: middle"
+                >Previous</span
+              >
             </a>
-            <a class="shadcn-button shadcn-button-primary" href="#" role="button" onclick="click_to_next()" style="vertical-align: middle;">
-              <span style="display: inline-block; vertical-align: middle;">Next</span>
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-right" viewBox="0 0 16 16" style="display: inline-block; vertical-align: middle; margin-left: 0.25rem;">
-                <path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h11.793l-3.147-3.146a.5.5 0 0 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L13.293 8.5H1.5A.5.5 0 0 1 1 8z"/>
+            <a
+              class="shadcn-button shadcn-button-primary"
+              href="#"
+              role="button"
+              onclick="click_to_next()"
+              style="vertical-align: middle"
+            >
+              <span style="display: inline-block; vertical-align: middle"
+                >Next</span
+              >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                fill="currentColor"
+                class="bi bi-arrow-right"
+                viewBox="0 0 16 16"
+                style="
+                  display: inline-block;
+                  vertical-align: middle;
+                  margin-left: 0.25rem;
+                "
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M1 8a.5.5 0 0 1 .5-.5h11.793l-3.147-3.146a.5.5 0 0 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L13.293 8.5H1.5A.5.5 0 0 1 1 8z"
+                />
               </svg>
             </a>
           </div>
 
           <!-- Help button (right) -->
           <div>
-            <a role="button" href="#" class="shadcn-button shadcn-button-outline openbtn" target_id="mySidepanel" onclick="openNav(this.getAttribute('target_id'))">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-question-circle me-1" viewBox="0 0 16 16">
-                <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
-                <path d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z"/>
+            <a
+              role="button"
+              href="#"
+              class="shadcn-button shadcn-button-outline openbtn"
+              target_id="mySidepanel"
+              onclick="openNav(this.getAttribute('target_id'))"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                fill="currentColor"
+                class="bi bi-question-circle me-1"
+                viewBox="0 0 16 16"
+              >
+                <path
+                  d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"
+                />
+                <path
+                  d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z"
+                />
               </svg>
               Help
             </a>
@@ -1213,88 +1466,103 @@
         </div>
       </div>
 
-      <hr style="color: var(--border);">
-      <footer class="py-2 text-center" style="font-size: 0.75rem; color: var(--muted-foreground);">
-        Copyright &copy; 2025 <a href="https://blablablab.si.umich.edu/" style="color: var(--primary); text-decoration: none;">Blablablab</a>
+      <hr style="color: var(--border)" />
+      <footer
+        class="py-2 text-center"
+        style="font-size: 0.75rem; color: var(--muted-foreground)"
+      >
+        Copyright &copy; 2025
+        <a
+          href="https://blablablab.si.umich.edu/"
+          style="color: var(--primary); text-decoration: none"
+          >Blablablab</a
+        >
         <span class="mx-2">|</span>
-        <a href="https://github.com/davidjurgens/potato" style="color: var(--primary); text-decoration: none;">Chat with us on GitHub</a>
+        <a
+          href="https://github.com/davidjurgens/potato"
+          style="color: var(--primary); text-decoration: none"
+          >Chat with us on GitHub</a
+        >
         <span class="mx-2">|</span>
-        <a href="https://github.com/davidjurgens/potato#cite-us" style="color: var(--primary); text-decoration: none;">Cite Us</a>
+        <a
+          href="https://github.com/davidjurgens/potato#cite-us"
+          style="color: var(--primary); text-decoration: none"
+          >Cite Us</a
+        >
       </footer>
     </div>
 
     <script>
       /* Set the width of the sidebar to 250px (show it) */
       function openNav(target_id, width = "350px") {
-          document.getElementById(target_id).style.width = width;
+        document.getElementById(target_id).style.width = width;
       }
 
       /* Set the width of the sidebar to 0 (hide it) */
       function closeNav(target_id) {
-          document.getElementById(target_id).style.width = "0";
+        document.getElementById(target_id).style.width = "0";
       }
 
       function closeNav2(target_id) {
-          // document.getElementById(target_id).style.height = "20px";
-          console.error(document.getElementById(target_id).style.display);
-          if (document.getElementById(target_id).style.display == "block"
-              || document.getElementById(target_id).style.display == "") {
-
-              document.getElementById(target_id).style.display = "none";
-              localStorage.setItem('show_instructions', 'false');
-          }
-          else{
-              document.getElementById(target_id).style.display = "block";
-              localStorage.setItem('show_instructions', 'true');
-          }
+        // document.getElementById(target_id).style.height = "20px";
+        console.error(document.getElementById(target_id).style.display);
+        if (
+          document.getElementById(target_id).style.display == "block" ||
+          document.getElementById(target_id).style.display == ""
+        ) {
+          document.getElementById(target_id).style.display = "none";
+          localStorage.setItem("show_instructions", "false");
+        } else {
+          document.getElementById(target_id).style.display = "block";
+          localStorage.setItem("show_instructions", "true");
+        }
       }
 
       /* Keep the instructions hidden/shown across instance transitions based on
          what the user had selected */
-      window.addEventListener("load", function() {
-          var show = localStorage.getItem('show_instructions');
-          if (document.getElementById('instructions')) {
-              if (show === 'true') {
-                  document.getElementById('instructions').style.display = "block";
-              }
-              else {
-                  document.getElementById('instructions').style.display = "none";
-              }
+      window.addEventListener("load", function () {
+        var show = localStorage.getItem("show_instructions");
+        if (document.getElementById("instructions")) {
+          if (show === "true") {
+            document.getElementById("instructions").style.display = "block";
+          } else {
+            document.getElementById("instructions").style.display = "none";
           }
+        }
       });
 
-    function watch_text_boxes() {
+      function watch_text_boxes() {
         let timer;
         const waitTime = 1000;
 
-        var text_boxes = document.querySelectorAll('input[type=text]');
+        var text_boxes = document.querySelectorAll("input[type=text]");
         for (var i = 0; i < text_boxes.length; i++) {
-            //console.log('adding event listener to text box');
-            //console.log(text_boxes[i]);
-            text_boxes[i].addEventListener('input', function (event) {
-                console.log('text box input event')
-                clearTimeout(timer);
-                timer = setTimeout(() => {
-                    registerTextAnnotation(event.target);
-                }, waitTime);
-            });
+          //console.log('adding event listener to text box');
+          //console.log(text_boxes[i]);
+          text_boxes[i].addEventListener("input", function (event) {
+            console.log("text box input event");
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+              registerTextAnnotation(event.target);
+            }, waitTime);
+          });
         }
 
-        var text_areas = document.querySelectorAll('textarea');
+        var text_areas = document.querySelectorAll("textarea");
         //console.log('num text_areas: ' + text_areas.length);
         for (var i = 0; i < text_areas.length; i++) {
-            //console.log('adding event listener to text area');
-            //console.dir(text_areas[i]);
-            text_areas[i].addEventListener('input', function (event) {
-                //console.log('text area input event')
-                clearTimeout(timer);
-                timer = setTimeout(() => {
-                    registerTextAnnotation(event.target);
-                }, waitTime);
-            });
+          //console.log('adding event listener to text area');
+          //console.dir(text_areas[i]);
+          text_areas[i].addEventListener("input", function (event) {
+            //console.log('text area input event')
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+              registerTextAnnotation(event.target);
+            }, waitTime);
+          });
         }
-    }
-    watch_text_boxes();
+      }
+      watch_text_boxes();
     </script>
   </body>
 </html>
