@@ -525,6 +525,7 @@ def annotate():
     logger.debug("Handling annotation request")
 
     user_state = get_user_state(username)
+    # logger.info(vars(user_state))
     logger.debug(f"Retrieved state for user: {username}")
 
     # Check user phase
@@ -557,8 +558,9 @@ def annotate():
         logger.warning('unrecognized action request: "%s"' % action)
 
     # Process any annotation updates if they were submitted
-    if request.method == 'POST' and request.form and not action and 'instance_id' in request.form:
-        update_annotation_state(username, request.form)
+    if request.method == 'POST' and request.form and 'instance_id' in request.form:
+        if action == "prev_instance" or action == "next_instance" or action == "go_to":
+            update_annotation_state(username, request.form)
 
     # Render the page with any existing annotations
     return render_page_with_annotations(username)

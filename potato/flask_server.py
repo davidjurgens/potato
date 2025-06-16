@@ -523,7 +523,7 @@ def move_to_prev_instance(user_id) -> bool:
 def move_to_next_instance(user_id) -> bool:
     '''Moves the user forward to the next instance and returns True if successful'''
     user_state = get_user_state(user_id)
-
+ 
     # If the user is at the end of the list, try to assign instances to the user
     if user_state.is_at_end_index():
         logger.debug(f"User {user_id} is at the end of the list, assigning new instances")
@@ -693,57 +693,57 @@ def render_page_with_annotations(username) -> str:
             else:
                 print('WARNING: label suggestions not supported for annotation_type %s, please submit a github issue to get support'%scheme_dict[s['name']]['annotation_type'])
     #print(schema_content_to_prefill, annotations)
-
-
+    print("annotations")
+    print(annotations)
     if annotations is not None:
         # Reset the state
-        for label_obj, value in annotations.items():
+        for schema_name, label_dict in annotations.items():
+            for label_name, value in label_dict.items():
+                schema = schema_name
+                label = label_name
+                name = schema + ":::" + label
 
-            schema = label_obj.get_schema()
-            label = label_obj.get_name()
-            name = schema + ":::" + label
+                # Find all the input, select, and textarea tags with this name
+                # (which was annotated) and figure out which one to fill in
+                input_fields = soup.find_all(["input", "select", "textarea"], {"name": name})
 
-            # Find all the input, select, and textarea tags with this name
-            # (which was annotated) and figure out which one to fill in
-            input_fields = soup.find_all(["input", "select", "textarea"], {"name": name})
+                for input_field in input_fields:
 
-            for input_field in input_fields:
-
-                if input_field is None:
-                    print("No input for ", name)
-                    continue
-
-                # If it's a slider, set the value for the slider
-                if input_field['type'] == 'range' and name.endswith(':::slider'):
-                    input_field['value'] = value
-                    continue
-
-                if input_field['type'] == 'checkbox' or input_field['type'] == 'radio':
-                    if value:
-                        input_field['checked'] = True
-
-                if input_field['type'] == 'text' or input_field['type'] == 'textarea':
-                    if isinstance(value, str):
-                        input_field['value'] = value
-
-                if False:
-                    # If it's not a text area, let's see if this is the button
-                    # that was checked, and if so mark it as checked
-                    if input_field.name != "textarea" and input_field.has_attr("value") and input_field.get("value") != value:
+                    if input_field is None:
+                        print("No input for ", name)
                         continue
-                    else:
-                        input_field["checked"] = True
-                        input_field["value"] = value
 
-                    # Set the input value for textarea input
-                    #if input_field.name == "textarea" and isinstance(value, str):
-                    #    input_field.string = value
+                    # If it's a slider, set the value for the slider
+                    if input_field['type'] == 'range' and name.endswith(':::slider'):
+                        input_field['value'] = value
+                        continue
 
-                    # Find the right option and set it as selected if the current
-                    # annotation schema is a select box
-                    if label == "select-one":
-                        option = input_field.findChildren("option", {"value": value})[0]
-                        option["selected"] = "selected"
+                    if input_field['type'] == 'checkbox' or input_field['type'] == 'radio':
+                        if value:
+                            input_field['checked'] = True
+
+                    if input_field['type'] == 'text' or input_field['type'] == 'textarea':
+                        if isinstance(value, str):
+                            input_field['value'] = value
+
+                    if False:
+                        # If it's not a text area, let's see if this is the button
+                        # that was checked, and if so mark it as checked
+                        if input_field.name != "textarea" and input_field.has_attr("value") and input_field.get("value") != value:
+                            continue
+                        else:
+                            input_field["checked"] = True
+                            input_field["value"] = value
+
+                        # Set the input value for textarea input
+                        #if input_field.name == "textarea" and isinstance(value, str):
+                        #    input_field.string = value
+
+                        # Find the right option and set it as selected if the current
+                        # annotation schema is a select box
+                        if label == "select-one":
+                            option = input_field.findChildren("option", {"value": value})[0]
+                            option["selected"] = "selected"
 
     # randomize the order of options for multirate schema
     selected_schemas_for_option_randomization = []
@@ -801,7 +801,7 @@ def add_ai_hints(soup: BeautifulSoup, instance_id: str) -> BeautifulSoup:
     Adds AI-generated hints to the page, if enabled. This is a hook for adding hints to the
     page based on the instance that the user is currently annotating.
     """
-
+    
     return soup
 
 def render_page_with_annotations_WEIRD(username):
@@ -951,7 +951,7 @@ def update_annotation_state(username, form):
     did_change = user_state.set_annotation(
         instance_id, schema_to_label_to_value, span_annotations, behavioral_data_dict
     )
-
+    logger.info(f"did_change: {did_change}")
     # update the behavioral information regarding time only when the annotations are changed
     if did_change:
         user_state.instance_id_to_behavioral_data[instance_id] = behavioral_data_dict
