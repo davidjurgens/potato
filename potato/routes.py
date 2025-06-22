@@ -701,6 +701,14 @@ def done():
                           title=config.get("annotation_task_name", "Annotation Platform"),
                           completion_code=config.get("completion_code", ""))
 
+@app.route("/admin", methods=["GET"])
+def admin():
+    num_annotations = get_total_annotations()
+    context = {
+        "total_annotations": num_annotations,
+    }
+    return render_template("admin.html", **context)
+
 def configure_routes(flask_app, app_config):
     """
     Initialize the Flask routes with the given Flask app instance
@@ -737,3 +745,4 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/updateinstance", "update_instance", update_instance, methods=["POST"])
     app.add_url_rule("/poststudy", "poststudy", poststudy, methods=["GET", "POST"])
     app.add_url_rule("/done", "done", done, methods=["GET", "POST"])
+    app.add_url_rule("/admin", "admin", admin, methods=["GET"])

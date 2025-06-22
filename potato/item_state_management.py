@@ -242,6 +242,7 @@ class ItemStateManager:
             user_state.assign_instance(self.instance_id_to_item[to_assign])
             return 1
         elif self.assignment_strategy == AssignmentStrategy.FIXED_ORDER:
+            assigned = 0
             for iid in self.remaining_instance_ids:
                 if not user_state.has_annotated(iid):
                     #print("assigning item %s to user %s" % (iid, user_state.get_user_id()))
@@ -250,6 +251,7 @@ class ItemStateManager:
                     return 1
             return 0
         else:
+            print("Unsupported assignment strategy: %s" % self.assignment_strategy)
             raise ValueError("Unsupported assignment strategy, %s" % self.assignment_strategy)
 
 
