@@ -542,11 +542,18 @@ def annotate():
         # If the user is done annotating, advance to the next phase
         get_user_state_manager().advance_phase(username)
         return home()
+    
+
 
     if request.is_json and 'action' in request.json:
        action = request.json['action']
     else:
        action = request.form['action'] if 'action' in request.form else "init"
+    
+     # Process any annotation updates if they were submitted
+    if request.method == 'POST' and request.form and 'instance_id' in request.form:
+        if action == "prev_instance" or action == "next_instance" or action == "go_to":
+            update_annotation_state(username, request.form)
 
     if action == "prev_instance":
         move_to_prev_instance(username)
@@ -557,10 +564,6 @@ def annotate():
     else:
         logger.warning('unrecognized action request: "%s"' % action)
 
-    # Process any annotation updates if they were submitted
-    if request.method == 'POST' and request.form and 'instance_id' in request.form:
-        if action == "prev_instance" or action == "next_instance" or action == "go_to":
-            update_annotation_state(username, request.form)
 
     # Render the page with any existing annotations
     return render_page_with_annotations(username)

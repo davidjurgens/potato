@@ -529,7 +529,7 @@ def move_to_next_instance(user_id) -> bool:
         logger.debug(f"User {user_id} is at the end of the list, assigning new instances")
         num_assigned = get_item_state_manager().assign_instances_to_user(user_state)
         logger.debug(f"Assigned {num_assigned} new instances to user {user_id}")
-
+        
     return user_state.go_forward()
 
 def go_to_id(user_id: str, instance_index: int):
@@ -987,7 +987,6 @@ def update_annotation_state(username, form):
     did_change = user_state.set_annotation(
         instance_id, schema_to_label_to_value, span_annotations, behavioral_data_dict
     )
-    logger.info(f"did_change: {did_change}")
     # update the behavioral information regarding time only when the annotations are changed
     if did_change:
         user_state.instance_id_to_behavioral_data[instance_id] = behavioral_data_dict

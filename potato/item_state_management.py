@@ -235,6 +235,7 @@ class ItemStateManager:
         # FOR NOW, just assign all instances to the user
         if self.assignment_strategy == AssignmentStrategy.RANDOM:
             # TODO: make this a lot more efficient
+        
             unlabeled_items = [iid for iid in self.remaining_instance_ids if not user_state.has_annotated(iid)]
             to_assign = random.sample(unlabeled_items, 1)
             #print("assigning item %s to user %s" % (to_assign.get_id(), user_state.get_user_id()))
@@ -245,6 +246,7 @@ class ItemStateManager:
                 if not user_state.has_annotated(iid):
                     #print("assigning item %s to user %s" % (iid, user_state.get_user_id()))
                     user_state.assign_instance(self.instance_id_to_item[iid])
+
                     return 1
             return 0
         else:

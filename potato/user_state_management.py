@@ -58,7 +58,8 @@ class UserStateManager:
         self.max_annotations_per_user = -1
 
         self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.INFO)
+        # setting to debug
+        self.logger.setLevel(logging.DEBUG)
         logging.basicConfig()
 
 
@@ -408,11 +409,9 @@ class InMemoryUserState(UserState):
         # check that the item has not already been assigned to the user
         if item.get_id() in self.assigned_instance_ids:
             return
-
         #print('Assigned %s to %s' % (item.get_id(), self.instance_id_ordering   ))
         self.instance_id_ordering.append(item.get_id())
         self.assigned_instance_ids.add(item.get_id())
-
         # If this is the first assigned instance, set the current instance to be the first one
         if self.current_instance_index == -1:
             self.current_instance_index = 0
@@ -430,7 +429,6 @@ class InMemoryUserState(UserState):
 
         if self.current_instance_index >= len(self.instance_id_ordering):
             return None
-
         inst_id = self.instance_id_ordering[self.current_instance_index]
         return get_item_state_manager().get_item(inst_id)
 
@@ -486,6 +484,7 @@ class InMemoryUserState(UserState):
         '''Moves the user forward to the next instance and returns True if successful'''
         #print('GO FORWARD current_instance_index ->', self.current_instance_index)
         #print('GO FORWARD instance_id_ordering ->', self.instance_id_ordering)
+        print(f"self.instance_id_ordering: {len(self.instance_id_ordering)}")
         if self.current_instance_index < len(self.instance_id_ordering) - 1:
             self.current_instance_index += 1
             return True
