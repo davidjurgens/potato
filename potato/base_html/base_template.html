@@ -855,11 +855,30 @@
           }
         }
 
+        // Extract inputs from the DOM and add to post_req
+        $("form input, form select").each(function () {
+          var input = $(this);
+          var type = input.attr("type");
+          var name = input.attr("name");
+
+          if (!name) return; // skip unnamed inputs
+
+          if (type === "checkbox" || type === "radio") {
+            if (input.is(":checked")) {
+              post_req[name] = true;
+            }
+          } else if (type === "text" || input.is("select")) {
+            post_req[name] = input.val();
+          } else {
+            console.log("unknown input type:", type);
+          }
+        });
+
         // Send the post request and re-render the page with the new instance
         //
         // TODO: fix this the server-client protocol so we're just sending over
         // the new instance data and not the entire page
-        fetch("/", {
+        fetch("/annotate", {
           method: "POST",
           body: JSON.stringify(post_req),
           credentials: "same-origin",
@@ -885,7 +904,6 @@
           });
 
         /*
-
 
           // The rest of this code assumes you are not using a library.
           // It can be made less wordy if you use one.

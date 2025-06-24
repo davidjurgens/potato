@@ -511,6 +511,7 @@ def annotate():
     """
     Handle annotation page requests.
     """
+
     # Check if user is logged in
     if 'username' not in session:
         logger.warning("Unauthorized access attempt to annotate page")
@@ -543,17 +544,17 @@ def annotate():
         get_user_state_manager().advance_phase(username)
         return home()
     
-
-
     if request.is_json and 'action' in request.json:
+       print(f"request.json: {request.json}")
        action = request.json['action']
     else:
+       print(f"request.form: {request.form}")
        action = request.form['action'] if 'action' in request.form else "init"
     
      # Process any annotation updates if they were submitted
-    if request.method == 'POST' and request.form and 'instance_id' in request.form:
+    if request.method == 'POST' and request.json and 'instance_id' in request.json:
         if action == "prev_instance" or action == "next_instance" or action == "go_to":
-            update_annotation_state(username, request.form)
+            update_annotation_state(username, request.json)
 
     if action == "prev_instance":
         move_to_prev_instance(username)
