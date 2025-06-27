@@ -650,7 +650,7 @@ def render_page_with_annotations(username) -> str:
         )
 
     # Shea: Test for AI suggestion
-    ai_hints = get_ai_hints(text)
+    # ai_hints = get_ai_hints(text)
 
     # Flask will fill in the things we need into the HTML template we've created,
     # replacing {{variable_name}} with t    he associated text for keyword arguments
@@ -668,7 +668,7 @@ def render_page_with_annotations(username) -> str:
         statistics_nav=all_statistics,
         var_elems=var_elems_html,
         custom_js=custom_js,
-        ai=ai_hints,
+        # ai=ai_hints,
         **kwargs
     )
 
@@ -702,6 +702,11 @@ def render_page_with_annotations(username) -> str:
     if annotations is not None:
         # Reset the state
         for schema_name, label_dict in annotations.items():
+            # this needs to be fixed, there is a chance that we get incorrect type 
+            if not isinstance(label_dict, dict):
+                print(f"Skipping {schema_name}: Expected dict but got {type(label_dict)} -> {label_dict}")
+                continue
+
             for label_name, value in label_dict.items():
                 schema = schema_name
                 label = label_name
