@@ -21,8 +21,29 @@ def get_ai_endpoint(config: dict):
         if endpoint_type == "ollama":
 
             # Only do the import if we need it prevent unnecessary imports on small systems
-            from ollama_endpoint import OllamaEndpoint
+            from .ollama_endpoint import OllamaEndpoint
 
-            return OllamaEndpoint(config["ai_endpoint"])
+            # return OllamaEndpoint(config["ai_endpoint"])
+            # pass the config 
+            return OllamaEndpoint(config)
+        # Open AI API
+        elif endpoint_type == "openai":
+            from .openai_endpoint import OpenAIEndpoint
+
+            return OpenAIEndpoint(config)
+        
+        # Huggingface API
+        elif endpoint_type == "huggingface":
+            from .huggingface_endpoint import HuggingfaceEndpoint
+
+            return HuggingfaceEndpoint(config)
+        
+        # Gemini API
+        elif endpoint_type == "gemini":
+            from .gemini_api import GeminiEndpoint
+
+            return GeminiEndpoint(config)
+
 
     raise ValueError(f"Unknown endpoint type: {endpoint_type}")
+
