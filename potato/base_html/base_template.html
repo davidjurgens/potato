@@ -147,6 +147,7 @@
 
     /* Card styling */
     .shadcn-card {
+      height: 65vh;
       background-color: var(--card);
       border-radius: var(--radius);
       border: 1px solid var(--border);
@@ -238,6 +239,39 @@
       >
       [[statistics_nav]]
     </div>
+
+    <script>
+      // this is for ai hints
+      document.addEventListener("click", function (event) {
+        const hintEl = event.target.closest(".hint");
+        if (!hintEl) return; // Not a .hint click
+
+        const aiHelp = hintEl.closest(".ai-help");
+        const tooltip = aiHelp.querySelector(".tooltip");
+        const tooltipText = tooltip.querySelector(".tooltip-text");
+        const instanceTextEl = document.getElementById("instance-text");
+        const instanceText = instanceTextEl?.innerText || "";
+
+        fetch(`/get_ai_hint?instance_text=${encodeURIComponent(instanceText)}`)
+          .then((response) => response.json())
+          .then((data) => {
+            tooltipText.innerHTML = `<span class="reasoning">Reasoning:</span> ${data.reasoning}`;
+            tooltip.classList.toggle("active");
+          })
+          .catch((error) => {
+            tooltipText.innerHTML = `<span class="reasoning">Error:</span> Could not load hint`;
+            tooltip.classList.toggle("active");
+            console.error("Error fetching AI hint:", error);
+          });
+      });
+      document.addEventListener("click", function (event) {
+        if (!event.target.closest(".ai-help")) {
+          document.querySelectorAll(".tooltip.active").forEach((tooltip) => {
+            tooltip.classList.remove("active");
+          });
+        }
+      });
+    </script>
 
     <script>
       document.addEventListener("keyup", function (event) {
@@ -1355,12 +1389,12 @@
         </div>
       </div>
       <!-- Test -->
-      <div id="task_layout" class="shadcn-card mb-4">
+      <!-- <div id="task_layout" class="shadcn-card mb-4">
         <div class="shadcn-card-content">
           <strong>AI Label Suggestion</strong>
           <div>{{ ai }}</div>
         </div>
-      </div>
+      </div> -->
       <!-- Test -->
 
       <div class="my-4">

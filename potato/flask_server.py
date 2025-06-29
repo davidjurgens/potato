@@ -814,7 +814,7 @@ def add_ai_hints(soup: BeautifulSoup, instance_id: str) -> BeautifulSoup:
     return soup
 
 # Shea: a function to get some suggestions from AI
-def get_ai_hints(text: str) -> str:
+def ai_hints(text: str) -> str:
     """
     Returns the AI hints for the given instance.
     """
@@ -829,7 +829,6 @@ def get_ai_hints(text: str) -> str:
     Based on the instruction, task type, and the given sentence, generate a short, helpful hint that guides the user on how to approach this annotation. 
     Also, give a short reason of your answer and the relevant part(keyword or text).
     The hint should not provide the label or answer directly, but should highlight what the user might consider or look for.'''
-
 
     response = requests.post(
         'http://localhost:11434/api/generate',

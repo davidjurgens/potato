@@ -52,7 +52,7 @@ class UserStateManager:
         self.task_assignment = {}
         self.prolific_study = None
         self.phase_type_to_name_to_page = defaultdict(OrderedDict)
-
+      
 
         # TODO: load this from the config
         self.max_annotations_per_user = -1
@@ -61,8 +61,6 @@ class UserStateManager:
         # setting to debug
         self.logger.setLevel(logging.DEBUG)
         logging.basicConfig()
-
-
 
     def add_phase(self, phase_type: UserPhase, phase_name: str, page_fname: str):
         self.phase_type_to_name_to_page[phase_type][phase_name] = page_fname
@@ -389,6 +387,19 @@ class InMemoryUserState(UserState):
 
         # How many items a user can be assigned
         self.max_assignments = max_assignments
+
+        # Caches the ai hints
+        self.ai_hints = defaultdict(dict) 
+    
+    def hint_exists(self, instance_id: str) -> bool:
+        return instance_id in self.ai_hints
+
+    def get_hint(self, instance_id: str) -> str:
+        return self.ai_hints.get(instance_id)
+
+    def cache_hint(self, instance_id: str, hint: str) -> None:
+        self.ai_hints[instance_id] = hint
+
 
     def add_new_assigned_data(self, new_assigned_data):
         """

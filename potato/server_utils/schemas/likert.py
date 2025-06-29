@@ -18,6 +18,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 def generate_likert_layout(annotation_scheme):
+    print("using likert")
     """
     Generate HTML for a likert scale annotation interface.
 
@@ -70,7 +71,11 @@ def generate_likert_layout(annotation_scheme):
     # Initialize styles and container
     schematic = f"""
     <style>
+
         .shadcn-likert-container {{
+            border: 1px solid #E5E5EA;
+            border-radius: 18px 0 18px 18px;
+            padding: 1rem;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -78,13 +83,13 @@ def generate_likert_layout(annotation_scheme):
             max-width: 100%;
             margin: 1.5rem auto;
             font-family: ui-sans-serif, system-ui, sans-serif;
+            position: relative;
         }}
 
         .shadcn-likert-title {{
             font-size: 1rem;
             font-weight: 500;
-            color: var(--primary-foreground);
-            margin-bottom: 1rem;
+            color: black;
             text-align: left;
             width: 100%;
         }}
@@ -94,8 +99,6 @@ def generate_likert_layout(annotation_scheme):
             align-items: center;
             justify-content: space-between;
             width: 100%;
-            margin: 0.5rem auto;
-            padding: 0 0.5rem;
         }}
 
         .shadcn-likert-endpoint {{
@@ -207,9 +210,83 @@ def generate_likert_layout(annotation_scheme):
             max-width: 100%;
             overflow: visible;
         }}
+
+        .ai-help {{
+            width: 9.375rem;
+            height: 2.063rem;
+            border: 1px solid #E5E5EA;
+            border-radius: 18px;
+            position: absolute;
+            top: -0.75rem;
+            right: -0.05rem;
+            background-color: white;
+            display: flex; 
+            justify-content: center;
+            align-items: center;
+        }}
+        
+        .ai-help-word {{
+            font-size: 1rem;
+            margin: 0;
+        }}
+
+        .hint {{
+            cursor: pointer;
+        }}
+
+        .hint:hover {{
+            color: #6E56CF;
+        }}
+
+        .tooltip {{
+            position: absolute;
+            top: 120%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: white;
+            padding: 1rem;
+            border-radius: .5rem;
+            white-space: nowrap;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            z-index: 1000;
+            opacity: 0;       
+            visibility: hidden; 
+            transition: opacity 0.3s, visibility 0.3s;
+            min-width: 20rem;
+            max-width: 24rem; 
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+            white-space: normal; 
+            max-height: 15rem;
+            overflow: auto;
+        }}
+
+        .tooltip.active {{
+            opacity: 1;
+            visibility: visible;
+        }}
+
+        .reasoning {{
+            font-weight: bold;
+        }}
+
+        .tooltip-text{{
+            margin: 0;
+        }}
+
     </style>
 
     <form id="{annotation_scheme['name']}" class="annotation-form likert shadcn-likert-container" action="/action_page.php">
+        <div class="ai-help">
+    <h3 class="ai-help-word"><span class="hint">Hint</span> | <span>Keyword</span></h3>
+    <div class="tooltip"> 
+            <p class="tooltip-text">
+                <span class="reasoning">Reasoning:</span> {{ai}} 
+            </p>
+        </div>
+    </div>
+
+
         <fieldset schema="{annotation_scheme['name']}" style="border: none; padding: 0; margin: 0; width: auto; min-width: fit-content;">
             <legend class="shadcn-likert-title">{annotation_scheme['description']}</legend>
             <div class="shadcn-likert-scale" style="max-width: min(100%, calc(300px + {annotation_scheme['size']} * 40px + 250px));">
@@ -277,9 +354,10 @@ def generate_likert_layout(annotation_scheme):
                 </span>
             </div>
         """
-
-    schematic += "</fieldset></form>"
-
+    schematic += """
+        </fieldset></form>
+    """
+    
     logger.info(f"Successfully generated likert layout for {annotation_scheme['name']} "
                 f"with {annotation_scheme['size']} points")
     return schematic, key_bindings
