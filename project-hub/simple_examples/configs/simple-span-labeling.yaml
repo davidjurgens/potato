@@ -4,6 +4,7 @@
     "server_name": "potato annotator",
 
     "annotation_task_name": "Simple Highlighting Example",
+    "task_dir": "annotation_output/simple-span-annotation/",
 
     # Potato will write the annotation file for all annotations to this
     # directory, as well as per-annotator output files and state information
@@ -16,7 +17,7 @@
     # * csv
     # * tsv
     #
-    "output_annotation_format": "json", 
+    "output_annotation_format": "json",
 
     # If annotators are using a codebook, this will be linked at the top to the
     # instance for easy access
@@ -36,18 +37,16 @@
     "user_config": {
 
       "allow_all_users": True,
-      
+
       "users": [  ],
     },
 
-    # How many seconds do you want the annotators spend on each instance, after
-    # that, an alert will be sent per alert_time_each_instance seconds.
     "alert_time_each_instance": 10000000,
 
-    "annotation_schemes": [      
+    "annotation_schemes": [
         {
             "annotation_type": "highlight",
-            "name": "certainty", 
+            "name": "certainty",
             "description": "Highlight which phrases make the sentence more or less certain",
             "labels": [
                "certain", "uncertain"
@@ -57,8 +56,8 @@
             # label. Highlight selection annotations with more than 10 are not supported
             # with this simple keybinding and will need to use the full item
             # specification to bind all labels to keys.
-            "sequential_key_binding": True,            
-        },       
+            "sequential_key_binding": True,
+        },
     ],
 
     # The html that changes the visualiztation for your task. Change this file

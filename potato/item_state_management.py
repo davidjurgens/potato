@@ -8,6 +8,7 @@ if TYPE_CHECKING:
 from enum import Enum
 from collections import OrderedDict, deque, Counter, defaultdict
 import random
+import uuid
 
 # Singleton instance of the ItemStateManager
 ITEM_STATE_MANAGER = None
@@ -95,12 +96,18 @@ class Label:
 class SpanAnnotation:
     '''A utility class for representing a single span annotation in any annotation scheme. Spans
        are represented by a start and end index, as well as a label.'''
-    def __init__(self, schema: str, name: str, title: str, start: int, end: int):
+    def __init__(self, schema: str, name: str, title: str, start: int, end: int, id: str = None, annotation_id: str = None):
         self.schema = schema
         self.start = start
         self.title = title
         self.end = end
         self.name = name
+        # Accept both id and annotation_id
+        _id = id if id is not None else annotation_id
+        if _id is not None:
+            self._id = _id
+        else:
+            self._id = f"span_{uuid.uuid4().hex}"
 
     def get_schema(self):
         return self.schema
@@ -117,8 +124,11 @@ class SpanAnnotation:
     def get_title(self):
         return self.title
 
+    def get_id(self):
+        return self._id
+
     def __str__(self):
-        return f"SpanAnnotation(schema:{self.schema}, name:{self.name}, start:{self.start}, end:{self.end})"
+        return f"SpanAnnotation(schema:{self.schema}, name:{self.name}, start:{self.start}, end:{self.end}, id:{self._id})"
 
     def __eq__(self, other):
         return self.schema == other.schema and self.start == other.start and self.end == other.end \
@@ -133,6 +143,7 @@ class AssignmentStrategy(Enum):
     ACTIVE_LEARNING = 'active_learning'
     LLM_CONFIDENCE = 'llm_confidence'
     MAX_DIVERSITY = 'max_diversity'
+    LEAST_ANNOTATED = 'least_annotated'
 
     def fromstr(phase: str) -> AssignmentStrategy:
         '''Converts a string to a UserPhase enum'''
@@ -147,6 +158,8 @@ class AssignmentStrategy(Enum):
             return AssignmentStrategy.LLM_CONFIDENCE
         elif phase == "max_diversity":
             return AssignmentStrategy.MAX_DIVERSITY
+        elif phase == "least_annotated":
+            return AssignmentStrategy.LEAST_ANNOTATED
         else:
             raise ValueError(f"Unknown phase: {phase}")
 
@@ -170,8 +183,8 @@ class ItemStateManager:
 
         self.instance_id_ordering = []
 
-        # TODO: load this from the config
-        self.max_annotations_per_item = -1
+        # Load max annotations per item from config
+        self.max_annotations_per_item = config.get('max_annotations_per_item', -1)
 
         self.item_annotators = defaultdict(set)
 
@@ -235,8 +248,10 @@ class ItemStateManager:
         # FOR NOW, just assign all instances to the user
         if self.assignment_strategy == AssignmentStrategy.RANDOM:
             # TODO: make this a lot more efficient
-        
+
             unlabeled_items = [iid for iid in self.remaining_instance_ids if not user_state.has_annotated(iid)]
+            if not unlabeled_items:
+                return 0
             to_assign = random.sample(unlabeled_items, 1)
             #print("assigning item %s to user %s" % (to_assign.get_id(), user_state.get_user_id()))
             user_state.assign_instance(self.instance_id_to_item[to_assign])
@@ -250,9 +265,102 @@ class ItemStateManager:
 
                     return 1
             return 0
+        elif self.assignment_strategy == AssignmentStrategy.MAX_DIVERSITY:
+            # Assign items with highest disagreement (most diverse annotations)
+            # This strategy prioritizes items that have conflicting annotations
+            unlabeled_items = [iid for iid in self.remaining_instance_ids if not user_state.has_annotated(iid)]
+            if not unlabeled_items:
+                return 0
+
+            # Calculate disagreement scores for each item
+            item_disagreement_scores = {}
+            for iid in unlabeled_items:
+                disagreement_score = self._calculate_disagreement_score(iid)
+                item_disagreement_scores[iid] = disagreement_score
+
+            # Select item with highest disagreement (max diversity)
+            if item_disagreement_scores:
+                max_disagreement_item = max(item_disagreement_scores.keys(),
+                                          key=lambda x: item_disagreement_scores[x])
+                user_state.assign_instance(self.instance_id_to_item[max_disagreement_item])
+                return 1
+
+            return 0
+        elif self.assignment_strategy == AssignmentStrategy.ACTIVE_LEARNING:
+            # For now, fall back to random assignment
+            # TODO: Implement active learning strategy
+            unlabeled_items = [iid for iid in self.remaining_instance_ids if not user_state.has_annotated(iid)]
+            if not unlabeled_items:
+                return 0
+            to_assign = random.sample(unlabeled_items, 1)
+            user_state.assign_instance(self.instance_id_to_item[to_assign])
+            return 1
+        elif self.assignment_strategy == AssignmentStrategy.LLM_CONFIDENCE:
+            # For now, fall back to random assignment
+            # TODO: Implement LLM confidence strategy
+            unlabeled_items = [iid for iid in self.remaining_instance_ids if not user_state.has_annotated(iid)]
+            if not unlabeled_items:
+                return 0
+            to_assign = random.sample(unlabeled_items, 1)
+            user_state.assign_instance(self.instance_id_to_item[to_assign])
+            return 1
+        elif self.assignment_strategy == AssignmentStrategy.LEAST_ANNOTATED:
+            # Assign items with the fewest annotations
+            unlabeled_items = [iid for iid in self.remaining_instance_ids if not user_state.has_annotated(iid)]
+            if not unlabeled_items:
+                return 0
+
+            # Calculate annotation counts for each item
+            item_annotation_counts = {}
+            for iid in unlabeled_items:
+                item_annotation_counts[iid] = len(self.item_annotators[iid])
+
+            # Select item with the fewest annotations (least annotated)
+            if item_annotation_counts:
+                min_annotated_item = min(item_annotation_counts.keys(),
+                                         key=lambda x: item_annotation_counts[x])
+                user_state.assign_instance(self.instance_id_to_item[min_annotated_item])
+                return 1
+
+            return 0
         else:
             print("Unsupported assignment strategy: %s" % self.assignment_strategy)
             raise ValueError("Unsupported assignment strategy, %s" % self.assignment_strategy)
+
+    def _calculate_disagreement_score(self, instance_id: str) -> float:
+        """
+        Calculate disagreement score for an item based on existing annotations.
+        Higher score means more disagreement/diversity in annotations.
+        """
+        if instance_id not in self.item_annotators:
+            return 0.0
+
+        # Get all annotations for this item
+        all_annotations = []
+        for user_id in self.item_annotators[instance_id]:
+            # Use lazy import to avoid circular import
+            from user_state_management import get_user_state_manager
+            user_state = get_user_state_manager().get_user_state(user_id)
+            if user_state and user_state.has_annotated(instance_id):
+                annotations = user_state.get_label_annotations(instance_id)
+                all_annotations.extend(annotations.values())
+
+        if not all_annotations:
+            return 0.0
+
+        # Calculate disagreement based on annotation diversity
+        # For now, use a simple approach: count unique annotations
+        unique_annotations = set(str(ann) for ann in all_annotations)
+        total_annotations = len(all_annotations)
+
+        if total_annotations == 0:
+            return 0.0
+
+        # Disagreement score: ratio of unique annotations to total annotations
+        # Higher ratio = more disagreement
+        disagreement_score = len(unique_annotations) / total_annotations
+
+        return disagreement_score
 
 
     def generate_id_order_mapping(self):

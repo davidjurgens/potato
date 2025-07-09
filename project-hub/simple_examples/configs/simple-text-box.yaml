@@ -5,6 +5,8 @@
 
     "annotation_task_name": "Simple Text Box Example",
 
+    "task_dir": "annotation_output/simple-text-box/",
+
     #
     # Potato will write the annotation file for all annotations to this
     # directory, as well as per-annotator output files and state information
@@ -19,7 +21,7 @@
     # * csv
     # * tsv
     #
-    "output_annotation_format": "csv", 
+    "output_annotation_format": "csv",
 
     #
     # If annotators are using a codebook, this will be linked at the top to the
@@ -41,7 +43,7 @@
     "user_config": {
 
       "allow_all_users": True,
-      
+
       "users": [  ],
     },
 
@@ -49,7 +51,7 @@
     # that, an alert will be sent per alert_time_each_instance seconds.
     "alert_time_each_instance": 10000000,
 
-    "annotation_schemes": [      
+    "annotation_schemes": [
         {
             "annotation_type": "text",
             "name": "textbox_input",
@@ -62,7 +64,7 @@
               "rows": 2,
               "cols": 40
             }
-        }       
+        }
     ],
 
     # The html that changes the visualiztation for your task. Change this file

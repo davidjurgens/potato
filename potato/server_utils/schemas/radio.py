@@ -208,6 +208,15 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
                 key_bindings.append((key_value, f"{class_name}: {label}"))
                 logger.debug(f"Added key binding '{key_value}' for label '{label}'")
 
+        # Handle sequential key bindings
+        if (annotation_scheme.get("sequential_key_binding")
+            and len(annotation_scheme["labels"]) <= 10):
+            key_value = str(i % 10)
+            key2label[key_value] = label
+            label2key[label] = key_value
+            key_bindings.append((key_value, f"{class_name}: {label}"))
+            logger.debug(f"Added sequential key binding '{key_value}' for label '{label}'")
+
         # Format label content with optional keyboard shortcut display
         label_content = label
         if label in label2key:

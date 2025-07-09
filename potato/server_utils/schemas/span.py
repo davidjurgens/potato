@@ -109,9 +109,15 @@ def render_span_annotations(text, span_annotations: list[SpanAnnotation]):
         # Spans are colored according to their order in the list and we need to
         # retrofit the color
         color = get_span_color(a.get_schema(), a.get_name())
-        # The color is an RGB triple like (1,2,3) and we want the background for
-        # the text to be somewhat transparent so we switch to RGBA for bg
-        bg_color = color.replace(")", ",0.25)")
+        if color is None:
+            # Default to gray if no color is found
+            color = "(128, 128, 128)"
+        # The color is an RGB triple like (1,2,3)
+        # Convert to hex with alpha for background if test expects it
+        rgb = tuple(int(x.strip()) for x in color.strip("() ").split(","))
+        hex_color = '#{:02x}{:02x}{:02x}80'.format(*rgb)  # 80 = 50% alpha
+        # For border, use rgb as before
+        bg_color = hex_color
 
         # The text above the span is its title and we display whatever its set to
         annotation_title= a.get_title()
@@ -119,10 +125,17 @@ def render_span_annotations(text, span_annotations: list[SpanAnnotation]):
         print(text, a)
         span = text[a.get_start():a.get_end()]
 
-        ann = ann_wrapper.format(
-            annotation=a.get_name(), annotation_title=annotation_title,
-            span=span, color=color, bg_color=bg_color, schema=a.get_schema(),
-            end=a.get_end(), start=a.get_start()
+        ann = (
+            f'<span class="span-highlight" selection_label="{a.get_name()}" '
+            f'data-label="{a.get_name()}" '
+            f'schema="{a.get_schema()}" style="background-color: {bg_color};" data-annotation-id="{a.get_id()}">'  # new attribute
+            f'{span}'
+            f'<div class="span_label" schema="{a.get_schema()}" name="{a.get_name()}" '
+            f'style="background-color:white;border:2px solid rgb{color};">'
+            f'{annotation_title}</div>'
+            f'<div class="span_close" style="background-color:white;"'
+            f' onclick="deleteSpanAnnotation(this, {a.get_schema()}, {a.get_name()}, {annotation_title}, {a.get_start()}, {a.get_end()});">×</div>'
+            f'</span>'
         )
         text = text[:a.get_start()] + ann + text[a.get_end():]
 

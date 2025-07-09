@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import datetime
 from datetime import timedelta
 from flask import Flask, session, render_template, request, redirect, url_for, jsonify, make_response
 
@@ -44,6 +45,50 @@ def home():
         flask.Response: Rendered template or redirect based on user state
     """
     logger.debug("Processing home page request")
+
+    # Check if debug mode is enabled and bypass authentication
+    if config.get("debug", False):
+        logger.debug("Debug mode enabled, bypassing authentication")
+
+        # Create debug user if not exists
+        debug_username = "debug_user"
+        if not get_user_state_manager().has_user(debug_username):
+            logger.debug(f"Creating debug user: {debug_username}")
+            usm = get_user_state_manager()
+            usm.add_user(debug_username)
+
+            # Set debug user directly to annotation phase
+            user_state = usm.get_user_state(debug_username)
+            # Set phase directly to annotation instead of advancing through all phases
+            user_state.advance_to_phase(UserPhase.ANNOTATION, None)
+            logger.debug(f"Debug user phase set directly to: {user_state.get_phase()}")
+
+            # Assign instances if needed
+            if not user_state.has_assignments():
+                # Create some test data for the debug user
+                ism = get_item_state_manager()
+                # Check if there are any items available
+                try:
+                    items = ism.items()
+                    if not items:
+                        # Create a test item if no items exist
+                        from item_state_management import Item
+                        test_item = Item("test_1", {"id": "test_1", "text": "This is a test item for debugging."})
+                        ism.add_item("test_1", {
+                            "id": "test_1",
+                            "text": "This is a test item for debugging.",
+                            "displayed_text": "This is a test item for debugging."
+                        })
+                except Exception as e:
+                    logger.warning(f"Could not check/create test items: {e}")
+
+                # Assign instances to the debug user
+                ism.assign_instances_to_user(user_state)
+
+        # Set session for debug user
+        session['username'] = debug_username
+        session.permanent = True
+        logger.info(f"Debug mode: auto-logged in as {debug_username}")
 
     if 'username' not in session:
         logger.debug("No active session, rendering login page")
@@ -92,6 +137,11 @@ def auth():
         flask.Response: Rendered template or redirect
     """
     logger.debug("Processing home page request")
+
+    # Check if debug mode is enabled and bypass authentication
+    if config.get("debug", False):
+        logger.debug("Debug mode enabled, bypassing authentication in auth route")
+        return redirect(url_for("home"))
 
     # Check if user is already logged in
     if 'username' in session and get_user_state_manager().has_user(session['username']):
@@ -323,9 +373,13 @@ def submit_annotation():
     """
     logger.debug("Processing annotation submission")
 
-    if 'username' not in session:
+    if 'username' not in session and not config.get("debug", False):
         logger.warning("Annotation submission without active session")
         return jsonify({"status": "error", "message": "No active session"})
+
+    # In debug mode, ensure we have a username
+    if config.get("debug", False) and 'username' not in session:
+        session['username'] = "debug_user"
 
     username = session['username']
     instance_id = request.form.get("instance_id")
@@ -393,7 +447,7 @@ def consent():
     Returns:
         flask.Response: Rendered template or redirect
     """
-    if 'username' not in session:
+    if 'username' not in session and not config.get("debug", False):
         return home()
 
     username = session['username']
@@ -432,7 +486,7 @@ def instructions():
     Returns:
         flask.Response: Rendered template or redirect
     """
-    if 'username' not in session:
+    if 'username' not in session and not config.get("debug", False):
         return home()
 
     username = session['username']
@@ -474,7 +528,7 @@ def prestudy():
     Returns:
         flask.Response: Rendered template or redirect
     """
-    if 'username' not in session:
+    if 'username' not in session and not config.get("debug", False):
         return home()
 
     username = session['username']
@@ -512,10 +566,31 @@ def annotate():
     Handle annotation page requests.
     """
 
-    # Check if user is logged in
-    if 'username' not in session:
+    # Check if user is logged in (skip in debug mode)
+    if 'username' not in session and not config.get("debug", False):
         logger.warning("Unauthorized access attempt to annotate page")
         return redirect(url_for("home"))
+
+    # In debug mode, ensure debug user exists
+    if config.get("debug", False):
+        debug_username = "debug_user"
+        if not get_user_state_manager().has_user(debug_username):
+            logger.debug(f"Creating debug user: {debug_username}")
+            usm = get_user_state_manager()
+            usm.add_user(debug_username)
+
+            # Set debug user directly to annotation phase
+            user_state = usm.get_user_state(debug_username)
+            while user_state.get_phase() != UserPhase.ANNOTATION:
+                usm.advance_phase(debug_username)
+                user_state = usm.get_user_state(debug_username)
+
+            # Assign instances if needed
+            if not user_state.has_assignments():
+                get_item_state_manager().assign_instances_to_user(user_state)
+
+        session['username'] = debug_username
+        session.permanent = True
 
     username = session['username']
     # Ensure user state exists
@@ -543,14 +618,14 @@ def annotate():
         # If the user is done annotating, advance to the next phase
         get_user_state_manager().advance_phase(username)
         return home()
-    
+
     if request.is_json and 'action' in request.json:
        print(f"request.json: {request.json}")
        action = request.json['action']
     else:
        print(f"request.form: {request.form}")
        action = request.form['action'] if 'action' in request.form else "init"
-    
+
      # Process any annotation updates if they were submitted
     if request.method == 'POST' and request.json and 'instance_id' in request.json:
         if action == "prev_instance" or action == "next_instance" or action == "go_to":
@@ -571,12 +646,16 @@ def annotate():
 
 @app.route('/get_ai_hint', methods=['GET'])
 def get_ai_hint():
-    if 'username' not in session:
+    if 'username' not in session and not config.get("debug", False):
         return home()
+
+    # In debug mode, ensure we have a username
+    if config.get("debug", False) and 'username' not in session:
+        session['username'] = "debug_user"
 
     username = session['username']
     user_state = get_user_state(username)
-    instance_text = request.args.get('instance_text')  
+    instance_text = request.args.get('instance_text')
     print(f"instance_text: {instance_text}")
     instance = user_state.get_current_instance()
     if instance is None:
@@ -595,13 +674,608 @@ def get_ai_hint():
     return jsonify({'reasoning': reasoning})
 
 
+# Test routes for exposing system state
+@app.route("/test/health", methods=["GET"])
+def test_health():
+    """
+    Health check endpoint for testing server status.
+
+    Returns:
+        flask.Response: JSON response with server status
+    """
+    try:
+        # Check if core managers are accessible
+        usm = get_user_state_manager()
+        ism = get_item_state_manager()
+
+        return jsonify({
+            "status": "healthy",
+            "timestamp": str(datetime.datetime.now()),
+            "managers": {
+                "user_state_manager": "available",
+                "item_state_manager": "available"
+            },
+            "config": {
+                "debug_mode": config.get("debug", False),
+                "annotation_task_name": config.get("annotation_task_name", "Unknown")
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": str(datetime.datetime.now())
+        }), 500
+
+
+@app.route("/test/system_state", methods=["GET"])
+def test_system_state():
+    """
+    Get overall system state including user and item statistics.
+
+    Returns:
+        flask.Response: JSON response with system state
+    """
+    try:
+        usm = get_user_state_manager()
+        ism = get_item_state_manager()
+
+        # Get all users
+        users = get_users()
+        user_stats = {}
+        total_annotations = 0
+
+        for username in users:
+            user_state = usm.get_user_state(username)
+            if user_state:
+                user_annotations = len(user_state.get_all_annotations())
+                total_annotations += user_annotations
+                user_stats[username] = {
+                    "phase": str(user_state.get_phase()),
+                    "annotations_count": user_annotations,
+                    "has_assignments": user_state.has_assignments(),
+                    "remaining_assignments": user_state.has_remaining_assignments()
+                }
+
+        # Get item statistics
+        items = ism.items()
+        item_stats = {
+            "total_items": len(items),
+            "items_with_annotations": 0,
+            "items_by_annotator_count": {}
+        }
+
+        for item in items:
+            item_id = item.get_id()
+            annotators = ism.get_annotators_for_item(item_id)
+            if annotators:
+                item_stats["items_with_annotations"] += 1
+                annotator_count = len(annotators)
+                item_stats["items_by_annotator_count"][annotator_count] = item_stats["items_by_annotator_count"].get(annotator_count, 0) + 1
+
+        return jsonify({
+            "system_state": {
+                "total_users": len(users),
+                "total_items": item_stats["total_items"],
+                "total_annotations": total_annotations,
+                "items_with_annotations": item_stats["items_with_annotations"],
+                "items_by_annotator_count": item_stats["items_by_annotator_count"]
+            },
+            "users": user_stats,
+            "config": {
+                "debug_mode": config.get("debug", False),
+                "annotation_task_name": config.get("annotation_task_name", "Unknown"),
+                "max_annotations_per_user": config.get("max_annotations_per_user", "Unlimited")
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            "error": f"Failed to get system state: {str(e)}"
+        }), 500
+
+
+@app.route("/test/user_state/<username>", methods=["GET"])
+def test_user_state(username):
+    """
+    Get detailed state for a specific user.
+
+    Args:
+        username: The username to get state for
+
+    Returns:
+        flask.Response: JSON response with user state
+    """
+    try:
+        usm = get_user_state_manager()
+        user_state = usm.get_user_state(username)
+
+        if not user_state:
+            return jsonify({
+                "error": f"User '{username}' not found"
+            }), 404
+
+        # Get current instance
+        current_instance = user_state.get_current_instance()
+        current_instance_data = None
+        if current_instance:
+            current_instance_data = {
+                "id": current_instance.get_id(),
+                "text": current_instance.get_text(),
+                "displayed_text": current_instance.get_displayed_text()
+            }
+
+        # Get all annotations
+        all_annotations = user_state.get_all_annotations()
+
+        # Get assignments
+        assignments = []
+        if user_state.has_assignments():
+            for instance_id in user_state.get_assigned_instance_ids():
+                instance = ism.get_item(instance_id)
+                if instance:
+                    assignments.append({
+                        "id": instance.get_id(),
+                        "text": instance.get_text(),
+                        "displayed_text": instance.get_displayed_text(),
+                        "has_annotation": instance_id in all_annotations
+                    })
+
+        return jsonify({
+            "username": username,
+            "phase": str(user_state.get_phase()),
+            "current_instance": current_instance_data,
+            "assignments": {
+                "total": len(assignments),
+                "annotated": len([a for a in assignments if a["has_annotation"]]),
+                "remaining": len([a for a in assignments if not a["has_annotation"]])
+            },
+            "annotations": {
+                "total_count": len(all_annotations),
+                "by_instance": all_annotations
+            },
+            "hints": {
+                "cached_hints": list(user_state.get_cached_hints().keys()) if hasattr(user_state, 'get_cached_hints') else []
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            "error": f"Failed to get user state for '{username}': {str(e)}"
+        }), 500
+
+
+@app.route("/test/item_state", methods=["GET"])
+def test_item_state():
+    """
+    Get state for all items in the system.
+
+    Returns:
+        flask.Response: JSON response with item state
+    """
+    try:
+        ism = get_item_state_manager()
+        items = ism.items()
+
+        item_states = []
+        for item in items:
+            item_id = item.get_id()
+            annotators = ism.get_annotators_for_item(item_id)
+
+            item_states.append({
+                "id": item_id,
+                "text": item.get_text(),
+                "displayed_text": item.get_displayed_text(),
+                "annotators": list(annotators) if annotators else [],
+                "annotation_count": len(annotators) if annotators else 0
+            })
+
+        # Sort by annotation count for easier analysis
+        item_states.sort(key=lambda x: x["annotation_count"], reverse=True)
+
+        return jsonify({
+            "total_items": len(item_states),
+            "items": item_states,
+            "summary": {
+                "items_with_annotations": len([i for i in item_states if i["annotation_count"] > 0]),
+                "items_without_annotations": len([i for i in item_states if i["annotation_count"] == 0]),
+                "average_annotations_per_item": sum(i["annotation_count"] for i in item_states) / len(item_states) if item_states else 0
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            "error": f"Failed to get item state: {str(e)}"
+        }), 500
+
+
+@app.route("/test/item_state/<item_id>", methods=["GET"])
+def test_item_state_detail(item_id):
+    """
+    Get detailed state for a specific item.
+
+    Args:
+        item_id: The item ID to get state for
+
+    Returns:
+        flask.Response: JSON response with item state
+    """
+    try:
+        ism = get_item_state_manager()
+        item = ism.get_item(item_id)
+
+        if not item:
+            return jsonify({
+                "error": f"Item '{item_id}' not found"
+            }), 404
+
+        annotators = ism.get_annotators_for_item(item_id)
+
+        # Get annotations from all users for this item
+        usm = get_user_state_manager()
+        item_annotations = {}
+
+        for username in get_users():
+            user_state = usm.get_user_state(username)
+            if user_state:
+                user_annotations = user_state.get_all_annotations()
+                if item_id in user_annotations:
+                    item_annotations[username] = user_annotations[item_id]
+
+        return jsonify({
+            "item_id": item_id,
+            "text": item.get_text(),
+            "displayed_text": item.get_displayed_text(),
+            "annotators": list(annotators) if annotators else [],
+            "annotation_count": len(annotators) if annotators else 0,
+            "annotations": item_annotations
+        })
+    except Exception as e:
+        return jsonify({
+            "error": f"Failed to get item state for '{item_id}': {str(e)}"
+        }), 500
+
+
+@app.route("/test/reset", methods=["POST"])
+def test_reset():
+    """
+    Reset the system state (for testing purposes only).
+
+    Returns:
+        flask.Response: JSON response with reset status
+    """
+    if not config.get("debug", False):
+        return jsonify({
+            "error": "Reset only available in debug mode"
+        }), 403
+
+    try:
+        usm = get_user_state_manager()
+        ism = get_item_state_manager()
+
+        # Clear all state
+        usm.clear()
+        ism.clear()
+
+        return jsonify({
+            "status": "reset_complete",
+            "message": "All user and item state has been cleared"
+        })
+    except Exception as e:
+        return jsonify({
+            "error": f"Failed to reset system: {str(e)}"
+        }), 500
+
+
+@app.route("/test/create_user", methods=["POST"])
+def test_create_user():
+    """
+    Create a test user (for testing purposes only).
+
+    This route is only available when debug mode is enabled.
+    It allows programmatic creation of users for testing scenarios.
+
+    Request Body:
+        {
+            "username": "test_user_name",
+            "initial_phase": "ANNOTATION" (optional),
+            "assign_items": true (optional)
+        }
+
+    Returns:
+        flask.Response: JSON response with user creation status
+    """
+    # Security check: Only available in debug mode
+    if not config.get("debug", False):
+        return jsonify({
+            "error": "User creation only available in debug mode",
+            "debug_mode_required": True
+        }), 403
+
+    try:
+        data = request.get_json()
+        if not data or 'username' not in data:
+            return jsonify({
+                "error": "Missing username in request",
+                "required_fields": ["username"],
+                "optional_fields": ["initial_phase", "assign_items"]
+            }), 400
+
+        username = data['username']
+        initial_phase = data.get('initial_phase', None)
+        assign_items = data.get('assign_items', False)
+
+        # Validate username format
+        if not isinstance(username, str) or len(username.strip()) == 0:
+            return jsonify({
+                "error": "Username must be a non-empty string"
+            }), 400
+
+        username = username.strip()
+
+        # Validate initial phase if provided
+        if initial_phase and initial_phase not in ['LOGIN', 'CONSENT', 'PRESTUDY', 'INSTRUCTIONS', 'TRAINING', 'ANNOTATION', 'POSTSTUDY', 'DONE']:
+            return jsonify({
+                "error": f"Invalid initial phase: {initial_phase}",
+                "valid_phases": ['LOGIN', 'CONSENT', 'PRESTUDY', 'INSTRUCTIONS', 'TRAINING', 'ANNOTATION', 'POSTSTUDY', 'DONE']
+            }), 400
+
+        usm = get_user_state_manager()
+
+        # Check if user already exists
+        if usm.has_user(username):
+            return jsonify({
+                "error": f"User '{username}' already exists",
+                "username": username,
+                "status": "exists"
+            }), 409
+
+        # Create the user
+        usm.add_user(username)
+        user_state = usm.get_user_state(username)
+
+        # Set initial phase if specified
+        if initial_phase:
+            from flask_server import UserPhase
+            phase_mapping = {
+                'LOGIN': UserPhase.LOGIN,
+                'CONSENT': UserPhase.CONSENT,
+                'PRESTUDY': UserPhase.PRESTUDY,
+                'INSTRUCTIONS': UserPhase.INSTRUCTIONS,
+                'TRAINING': UserPhase.TRAINING,
+                'ANNOTATION': UserPhase.ANNOTATION,
+                'POSTSTUDY': UserPhase.POSTSTUDY,
+                'DONE': UserPhase.DONE
+            }
+            user_state.advance_to_phase(phase_mapping[initial_phase], None)
+
+        # Assign items if requested
+        if assign_items:
+            ism = get_item_state_manager()
+            ism.assign_instances_to_user(user_state)
+
+        return jsonify({
+            "status": "created",
+            "username": username,
+            "initial_phase": initial_phase or "LOGIN",
+            "assign_items": assign_items,
+            "message": f"User '{username}' created successfully",
+            "user_state": {
+                "phase": str(user_state.get_phase()),
+                "has_assignments": user_state.has_assignments(),
+                "assignments_count": len(user_state.get_assigned_instance_ids()) if user_state.has_assignments() else 0
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            "error": f"Failed to create user: {str(e)}",
+            "username": data.get('username') if 'data' in locals() else None
+        }), 500
+
+
+@app.route("/test/create_users", methods=["POST"])
+def test_create_users():
+    """
+    Create multiple test users (for testing purposes only).
+
+    This route is only available when debug mode is enabled.
+    It allows programmatic creation of multiple users for testing scenarios.
+
+    Request Body:
+        {
+            "users": [
+                {
+                    "username": "user1",
+                    "initial_phase": "ANNOTATION" (optional),
+                    "assign_items": true (optional)
+                },
+                {
+                    "username": "user2",
+                    "initial_phase": "INSTRUCTIONS" (optional),
+                    "assign_items": false (optional)
+                }
+            ]
+        }
+
+    Returns:
+        flask.Response: JSON response with user creation results
+    """
+    # Security check: Only available in debug mode
+    if not config.get("debug", False):
+        return jsonify({
+            "error": "User creation only available in debug mode",
+            "debug_mode_required": True
+        }), 403
+
+    try:
+        data = request.get_json()
+        if not data or 'users' not in data or not isinstance(data['users'], list):
+            return jsonify({
+                "error": "Missing or invalid 'users' array in request",
+                "required_fields": ["users"],
+                "users_format": "array of user objects"
+            }), 400
+
+        users_data = data['users']
+        if len(users_data) == 0:
+            return jsonify({
+                "error": "Users array cannot be empty"
+            }), 400
+
+        if len(users_data) > 100:  # Limit to prevent abuse
+            return jsonify({
+                "error": "Cannot create more than 100 users at once"
+            }), 400
+
+        usm = get_user_state_manager()
+        results = {
+            "created": [],
+            "failed": [],
+            "already_exists": []
+        }
+
+        for user_data in users_data:
+            try:
+                if not isinstance(user_data, dict) or 'username' not in user_data:
+                    results["failed"].append({
+                        "data": user_data,
+                        "error": "Invalid user data format - missing username"
+                    })
+                    continue
+
+                username = user_data['username']
+                initial_phase = user_data.get('initial_phase', None)
+                assign_items = user_data.get('assign_items', False)
+
+                # Validate username
+                if not isinstance(username, str) or len(username.strip()) == 0:
+                    results["failed"].append({
+                        "username": username,
+                        "error": "Username must be a non-empty string"
+                    })
+                    continue
+
+                username = username.strip()
+
+                # Validate initial phase if provided
+                valid_phases = ['LOGIN', 'CONSENT', 'PRESTUDY', 'INSTRUCTIONS', 'TRAINING', 'ANNOTATION', 'POSTSTUDY', 'DONE']
+                if initial_phase and initial_phase not in valid_phases:
+                    results["failed"].append({
+                        "username": username,
+                        "error": f"Invalid initial phase: {initial_phase}",
+                        "valid_phases": valid_phases
+                    })
+                    continue
+
+                # Check if user already exists
+                if usm.has_user(username):
+                    results["already_exists"].append({
+                        "username": username,
+                        "status": "exists"
+                    })
+                    continue
+
+                # Create the user
+                usm.add_user(username)
+                user_state = usm.get_user_state(username)
+
+                # Set initial phase if specified
+                if initial_phase:
+                    from flask_server import UserPhase
+                    phase_mapping = {
+                        'LOGIN': UserPhase.LOGIN,
+                        'CONSENT': UserPhase.CONSENT,
+                        'PRESTUDY': UserPhase.PRESTUDY,
+                        'INSTRUCTIONS': UserPhase.INSTRUCTIONS,
+                        'TRAINING': UserPhase.TRAINING,
+                        'ANNOTATION': UserPhase.ANNOTATION,
+                        'POSTSTUDY': UserPhase.POSTSTUDY,
+                        'DONE': UserPhase.DONE
+                    }
+                    user_state.advance_to_phase(phase_mapping[initial_phase], None)
+
+                # Assign items if requested
+                if assign_items:
+                    ism = get_item_state_manager()
+                    ism.assign_instances_to_user(user_state)
+
+                results["created"].append({
+                    "username": username,
+                    "initial_phase": initial_phase or "LOGIN",
+                    "assign_items": assign_items,
+                    "user_state": {
+                        "phase": str(user_state.get_phase()),
+                        "has_assignments": user_state.has_assignments(),
+                        "assignments_count": len(user_state.get_assigned_instance_ids()) if user_state.has_assignments() else 0
+                    }
+                })
+
+            except Exception as e:
+                results["failed"].append({
+                    "username": user_data.get('username') if isinstance(user_data, dict) else "unknown",
+                    "error": f"Failed to create user: {str(e)}"
+                })
+
+        return jsonify({
+            "status": "completed",
+            "summary": {
+                "total_requested": len(users_data),
+                "created": len(results["created"]),
+                "failed": len(results["failed"]),
+                "already_exists": len(results["already_exists"])
+            },
+            "results": results
+        })
+
+    except Exception as e:
+        return jsonify({
+            "error": f"Failed to process user creation request: {str(e)}"
+        }), 500
+
+
+@app.route("/test/advance_user_phase/<username>", methods=["POST"])
+def test_advance_user_phase(username):
+    """
+    Advance a user's phase (for testing purposes only).
+
+    Args:
+        username: The username to advance
+
+    Returns:
+        flask.Response: JSON response with phase advancement status
+    """
+    if not config.get("debug", False):
+        return jsonify({
+            "error": "Phase advancement only available in debug mode"
+        }), 403
+
+    try:
+        usm = get_user_state_manager()
+
+        if not usm.has_user(username):
+            return jsonify({
+                "error": f"User '{username}' not found"
+            }), 404
+
+        old_phase = usm.get_user_state(username).get_phase()
+        usm.advance_phase(username)
+        new_phase = usm.get_user_state(username).get_phase()
+
+        return jsonify({
+            "status": "advanced",
+            "username": username,
+            "old_phase": str(old_phase),
+            "new_phase": str(new_phase)
+        })
+    except Exception as e:
+        return jsonify({
+            "error": f"Failed to advance user phase: {str(e)}"
+        }), 500
+
 
 @app.route("/go_to", methods=["GET", "POST"])
 def go_to():
     """
     Handle requests to go to a specific instance.
     """
-    if 'username' not in session:
+    if 'username' not in session and not config.get("debug", False):
         return home()
 
     username = session['username']
@@ -623,7 +1297,7 @@ def update_instance():
     '''
     API endpoint for updating instance data when a user interacts with the web UI.
     '''
-    if 'username' not in session:
+    if 'username' not in session and not config.get("debug", False):
         return jsonify({"status": "error", "message": "No active session"})
 
     if request.is_json:
@@ -637,6 +1311,10 @@ def update_instance():
 
         # Get the state of items for that schema
         schema_state = request.json.get("state")
+
+        # In debug mode, ensure we have a username
+        if config.get("debug", False) and 'username' not in session:
+            session['username'] = "debug_user"
 
         username = session['username']
         user_state = get_user_state(username)
@@ -672,7 +1350,7 @@ def poststudy():
     Returns:
         flask.Response: Rendered template or redirect
     """
-    if 'username' not in session:
+    if 'username' not in session and not config.get("debug", False):
         return home()
 
     username = session['username']
@@ -713,7 +1391,7 @@ def done():
     Returns:
         flask.Response: Rendered template or redirect
     """
-    if 'username' not in session:
+    if 'username' not in session and not config.get("debug", False):
         return home()
 
     username = session['username']
@@ -736,6 +1414,138 @@ def admin():
         "total_annotations": num_annotations,
     }
     return render_template("admin.html", **context)
+
+@app.route("/test/create_dataset", methods=["POST"])
+def test_create_dataset():
+    """
+    Create a test dataset with specified items and configuration.
+
+    Args:
+        JSON payload with:
+        - items: dict of item_id -> item_data
+        - max_annotations_per_item: int (optional)
+        - assignment_strategy: str (optional)
+
+    Returns:
+        flask.Response: JSON response with dataset creation status
+    """
+    if not config.get("debug", False):
+        return jsonify({
+            "error": "Dataset creation only available in debug mode"
+        }), 403
+
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                "error": "No JSON data provided"
+            }), 400
+
+        items = data.get("items", {})
+        max_annotations_per_item = data.get("max_annotations_per_item", -1)
+        assignment_strategy = data.get("assignment_strategy", "fixed_order")
+
+        # Create new config with the specified parameters
+        test_config = config.copy()
+        test_config["max_annotations_per_item"] = max_annotations_per_item
+        test_config["assignment_strategy"] = assignment_strategy
+
+        # Initialize item state manager with new config
+        from item_state_management import init_item_state_manager, ITEM_STATE_MANAGER
+        import item_state_management
+        item_state_management.ITEM_STATE_MANAGER = None  # Reset singleton
+        ism = init_item_state_manager(test_config)
+
+        # Add items to the dataset
+        ism.add_items(items)
+
+        return jsonify({
+            "status": "created",
+            "summary": {
+                "created": len(items),
+                "max_annotations_per_item": max_annotations_per_item,
+                "assignment_strategy": assignment_strategy
+            },
+            "items": list(items.keys())
+        })
+    except Exception as e:
+        return jsonify({
+            "error": f"Failed to create dataset: {str(e)}"
+        }), 500
+
+
+@app.route("/test/submit_annotation", methods=["POST"])
+def test_submit_annotation():
+    """
+    Submit an annotation for testing purposes.
+
+    Args:
+        JSON payload with:
+        - instance_id: str
+        - annotations: dict of schema -> label_data
+        - username: str (optional, defaults to debug_user)
+
+    Returns:
+        flask.Response: JSON response with annotation submission status
+    """
+    if not config.get("debug", False):
+        return jsonify({
+            "error": "Annotation submission only available in debug mode"
+        }), 403
+
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                "error": "No JSON data provided"
+            }), 400
+
+        instance_id = data.get("instance_id")
+        annotations = data.get("annotations", {})
+        username = data.get("username", "debug_user")
+
+        if not instance_id:
+            return jsonify({
+                "error": "instance_id is required"
+            }), 400
+
+        usm = get_user_state_manager()
+
+        # Ensure user exists and is in annotation phase
+        if not usm.has_user(username):
+            usm.add_user(username)
+            user_state = usm.get_user_state(username)
+            user_state.advance_to_phase(UserPhase.ANNOTATION, None)
+        else:
+            user_state = usm.get_user_state(username)
+            # Ensure user is in annotation phase
+            if user_state.get_phase() != UserPhase.ANNOTATION:
+                user_state.advance_to_phase(UserPhase.ANNOTATION, None)
+
+        # Submit annotations
+        for schema_name, label_data in annotations.items():
+            for label_name, value in label_data.items():
+                label = Label(schema_name, label_name)
+                user_state.add_label_annotation(instance_id, label, value)
+
+        # Register the annotation
+        ism = get_item_state_manager()
+        ism.register_annotator(instance_id, username)
+
+        # Save user state
+        usm.save_user_state(user_state)
+
+        return jsonify({
+            "status": "submitted",
+            "instance_id": instance_id,
+            "annotations": annotations,
+            "username": username
+        })
+    except Exception as e:
+        return jsonify({
+            "error": f"Failed to submit annotation: {str(e)}"
+        }), 500
+
 
 def configure_routes(flask_app, app_config):
     """
@@ -775,3 +1585,16 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/done", "done", done, methods=["GET", "POST"])
     app.add_url_rule("/admin", "admin", admin, methods=["GET"])
     app.add_url_rule("/get_ai_hint", "get_ai_hint", get_ai_hint, methods=["GET"])
+
+    # Test routes for debugging and testing
+    app.add_url_rule("/test/health", "test_health", test_health, methods=["GET"])
+    app.add_url_rule("/test/system_state", "test_system_state", test_system_state, methods=["GET"])
+    app.add_url_rule("/test/user_state/<username>", "test_user_state", test_user_state, methods=["GET"])
+    app.add_url_rule("/test/item_state", "test_item_state", test_item_state, methods=["GET"])
+    app.add_url_rule("/test/item_state/<item_id>", "test_item_state_detail", test_item_state_detail, methods=["GET"])
+    app.add_url_rule("/test/reset", "test_reset", test_reset, methods=["POST"])
+    app.add_url_rule("/test/create_user", "test_create_user", test_create_user, methods=["POST"])
+    app.add_url_rule("/test/create_users", "test_create_users", test_create_users, methods=["POST"])
+    app.add_url_rule("/test/advance_user_phase/<username>", "test_advance_user_phase", test_advance_user_phase, methods=["POST"])
+    app.add_url_rule("/test/create_dataset", "test_create_dataset", test_create_dataset, methods=["POST"])
+    app.add_url_rule("/test/submit_annotation", "test_submit_annotation", test_submit_annotation, methods=["POST"])

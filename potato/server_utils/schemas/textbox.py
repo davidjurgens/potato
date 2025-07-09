@@ -2,6 +2,10 @@
 Textbox Layout
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def generate_textbox_layout(annotation_scheme):
     """

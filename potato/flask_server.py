@@ -67,6 +67,9 @@ from ai.ai_endpoint import get_ai_endpoint
 # Initialize Flask app
 app = Flask(__name__)
 
+# Set a default secret key for sessions to work (required for testing)
+app.secret_key = "potato-annotation-platform-test-key"
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logging.basicConfig(
@@ -499,6 +502,10 @@ def before_request():
     """
     Check session validity before processing any request.
     """
+    # Skip session validation in debug mode
+    if config.get("debug", False):
+        return None
+
     if not is_session_valid():
         session.clear()  # Clear the session
         return redirect(url_for('login'))  # Redirect to login page
@@ -523,13 +530,13 @@ def move_to_prev_instance(user_id) -> bool:
 def move_to_next_instance(user_id) -> bool:
     '''Moves the user forward to the next instance and returns True if successful'''
     user_state = get_user_state(user_id)
- 
+
     # If the user is at the end of the list, try to assign instances to the user
     if user_state.is_at_end_index():
         logger.debug(f"User {user_id} is at the end of the list, assigning new instances")
         num_assigned = get_item_state_manager().assign_instances_to_user(user_state)
         logger.debug(f"Assigned {num_assigned} new instances to user {user_id}")
-        
+
     return user_state.go_forward()
 
 def go_to_id(user_id: str, instance_index: int):
@@ -702,7 +709,7 @@ def render_page_with_annotations(username) -> str:
     if annotations is not None:
         # Reset the state
         for schema_name, label_dict in annotations.items():
-            # this needs to be fixed, there is a chance that we get incorrect type 
+            # this needs to be fixed, there is a chance that we get incorrect type
             if not isinstance(label_dict, dict):
                 print(f"Skipping {schema_name}: Expected dict but got {type(label_dict)} -> {label_dict}")
                 continue
@@ -768,7 +775,7 @@ def render_page_with_annotations(username) -> str:
     soup = add_ai_hints(soup, instance_id)
 
     rendered_html = str(soup)
-    
+
     return rendered_html
 
 def get_label_suggestions(item, config, schema_content_to_prefill) -> set[SuggestedResponse]:
@@ -810,7 +817,7 @@ def add_ai_hints(soup: BeautifulSoup, instance_id: str) -> BeautifulSoup:
     Adds AI-generated hints to the page, if enabled. This is a hook for adding hints to the
     page based on the instance that the user is currently annotating.
     """
-    
+
     return soup
 
 # Shea: a function to get some suggestions from AI
@@ -823,10 +830,10 @@ def ai_hints(text: str) -> str:
     description = config["annotation_schemes"][0]["description"]
     annotation_type = config["annotation_schemes"][0]["annotation_type"]
     print(description)
-    prompt = f'''You are assisting a user with an annotation task. Here is the annotation instruction: {description} 
+    prompt = f'''You are assisting a user with an annotation task. Here is the annotation instruction: {description}
     Here is the annotation task type: {annotation_type}
     Here is the sentence (or item) to annotate: {text}
-    Based on the instruction, task type, and the given sentence, generate a short, helpful hint that guides the user on how to approach this annotation. 
+    Based on the instruction, task type, and the given sentence, generate a short, helpful hint that guides the user on how to approach this annotation.
     Also, give a short reason of your answer and the relevant part(keyword or text).
     The hint should not provide the label or answer directly, but should highlight what the user might consider or look for.'''
 
@@ -1053,7 +1060,7 @@ def configure_app(flask_app):
 
     # Set application configuration
     app.secret_key = config.get("secret_key", "potato-annotation-platform")
-    app.permanent_session_lifetime = timedelta(days=config.get("session_lifetime_minutes", 2))
+    app.permanent_session_lifetime = timedelta(days=config.get("session_lifetime_days", 2))
 
     # Configure routes from the routes module
     from routes import configure_routes
@@ -1093,6 +1100,11 @@ def run_server(args):
         # Command line flag takes precedence over config file
         config["require_password"] = args.require_password
         logger.debug(f"Password requirement set from command line: {args.require_password}")
+
+    # Override port from command line if specified
+    if args.port is not None:
+        config["port"] = args.port
+        logger.debug(f"Port set from command line: {args.port}")
 
     # Set logging level based on verbosity flags
     if config.get("verbose"):

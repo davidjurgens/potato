@@ -234,6 +234,8 @@ def generate_multiselect_layout(annotation_scheme):
             key_value = str(i % 10)
             key2label[key_value] = label
             label2key[label] = key_value
+            key_bindings.append((key_value, f"{class_name}: {label}"))
+            logger.debug(f"Added sequential key binding '{key_value}' for label '{label}'")
 
         # Format label content
         label_content = _format_label_content(label_data, annotation_scheme)

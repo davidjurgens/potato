@@ -1,0 +1,7 @@
+pytest>=7.0.0
+selenium>=4.0.0
+flask>=2.0.0
+requests>=2.25.0
+pytest-html>=3.0.0
+pytest-cov>=4.0.0
+webdriver-manager>=3.8.0

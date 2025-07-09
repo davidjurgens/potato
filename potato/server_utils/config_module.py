@@ -77,7 +77,7 @@ def init_config(args):
         {
             "verbose": args.verbose,
             "very_verbose": args.very_verbose,
-            "__debug__": args.debug,
+            "debug": args.debug,
             "__config_file__": args.config_file,
             "customjs": args.customjs,
             "customjs_hostname": args.customjs_hostname,
