@@ -818,29 +818,9 @@ def ai_hints(text: str) -> str:
     """
     Returns the AI hints for the given instance.
     """
-    import requests
-    print(text)
-    description = config["annotation_schemes"][0]["description"]
-    annotation_type = config["annotation_schemes"][0]["annotation_type"]
-    print(description)
-    prompt = f'''You are assisting a user with an annotation task. Here is the annotation instruction: {description} 
-    Here is the annotation task type: {annotation_type}
-    Here is the sentence (or item) to annotate: {text}
-    Based on the instruction, task type, and the given sentence, generate a short, helpful hint that guides the user on how to approach this annotation. 
-    Also, give a short reason of your answer and the relevant part(keyword or text).
-    The hint should not provide the label or answer directly, but should highlight what the user might consider or look for.'''
-
-    response = requests.post(
-        'http://localhost:11434/api/generate',
-        json={
-            # 'model': 'llama3.2',
-            'model': 'qwen3:0.6b',
-            'prompt': prompt,
-            'stream': False
-        }
-    )
-    print(response.json()['response'])
-    return response.json()['response']
+    
+    ai_endpoint = get_ai_endpoint(config)
+    return ai_endpoint.get_hint(text)
 
 
 
