@@ -44,60 +44,6 @@ def generate_number_layout(annotation_scheme):
 
     # Initialize form wrapper
     schematic = f"""
-    <style>
-        .shadcn-number-container {{
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-            width: 100%;
-            max-width: 100%;
-            margin: 1rem auto;
-            font-family: ui-sans-serif, system-ui, sans-serif;
-        }}
-
-        .shadcn-number-title {{
-            font-size: 1rem;
-            font-weight: 500;
-            color: var(--heading-color);
-            margin-bottom: 1rem;
-            text-align: left;
-            width: 100%;
-        }}
-
-        .shadcn-number-input {{
-            display: flex;
-            align-items: center;
-            width: 100%;
-        }}
-
-        .shadcn-number-field {{
-            height: 2.5rem;
-            width: {width};
-            border-radius: var(--radius);
-            border: 1px solid var(--input);
-            background-color: var(--background);
-            padding: 0 0.75rem;
-            font-size: 0.875rem;
-            color: var(--foreground);
-            transition: var(--transition);
-        }}
-
-        .shadcn-number-field:focus {{
-            outline: none;
-            border-color: var(--ring);
-            box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
-        }}
-
-        .shadcn-number-field:hover {{
-            border-color: var(--primary);
-        }}
-
-        [data-toggle="tooltip"] {{
-            position: relative;
-            cursor: help;
-        }}
-    </style>
-
     <form id="{annotation_scheme['name']}" class="annotation-form number shadcn-number-container" action="/action_page.php">
         <fieldset schema="{annotation_scheme['name']}">
             <legend class="shadcn-number-title">{annotation_scheme['description']}</legend>

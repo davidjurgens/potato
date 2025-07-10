@@ -141,8 +141,8 @@ COLOR_PALETTE = [
 # Mapping the base html template str to the real file
 template_dict = {
     "base_html_template":{
-        'base': os.path.join(cur_program_dir, 'base_html/base_template.html'),
-        'default': os.path.join(cur_program_dir, 'base_html/base_template.html'),
+        'base': os.path.join(cur_program_dir, 'base_html/base_template_v2.html'),
+        'default': os.path.join(cur_program_dir, 'base_html/base_template_v2.html'),
     },
     "header_file":{
         'default': os.path.join(cur_program_dir, 'base_html/header.html'),

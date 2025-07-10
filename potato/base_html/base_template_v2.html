@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{annotation_task_name}}</title>
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+
+<body>
+    <!-- Header navigation bar -->
+    <nav class="navbar sticky-top shadow-sm" style="background-color: var(--primary-color); padding: 0.75rem 1rem; margin-bottom: 1.5rem;">
+        <div class="container-fluid d-flex align-items-center">
+            <!-- Task name (left aligned) -->
+            <div class="navbar-brand">
+                <span class="fw-bold" style="color: var(--light-color); font-size: 1.25rem">{{annotation_task_name}}</span>
+            </div>
+
+            <!-- Middle section with progress and navigation -->
+            <div class="d-flex align-items-center justify-content-center flex-grow-1 gap-4">
+                <!-- Progress counter -->
+                <div class="d-flex align-items-center" style="color: var(--light-color); margin-right: 40px">
+                    <span>Progress: <span class="fw-medium" id="progress-counter">0/0</span></span>
+                </div>
+
+                <!-- Jump to item form -->
+                <div style="margin-left: 40px">
+                    <div class="d-flex align-items-center">
+                        <label for="go_to" class="me-2" style="color: var(--light-color); margin-bottom: 0">Go to:</label>
+                        <input type="number" id="go_to" class="form-control form-control-sm me-2"
+                               style="width: 70px; height: 31px; border: none; border-radius: var(--radius);"
+                               value="" min="0" required>
+                        <button type="button" class="shadcn-button" id="go-to-btn"
+                                style="height: 31px; line-height: 1; padding: 0 0.75rem; background-color: var(--light-color); color: var(--primary-color); border: none;">
+                            Go
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- User info and logout (right aligned) -->
+            <div class="d-flex align-items-center"
+                 style="background-color: rgba(255, 255, 255, 0.15); padding: 0.5rem 1rem; border-radius: var(--radius);">
+                <div class="me-3" style="color: var(--light-color)">
+                    <span>Logged in as <span class="fw-medium" id="username-display">{{username}}</span></span>
+                </div>
+                <div class="border-start" style="padding-left: 20px; height: 24px; display: flex; align-items: center;">
+                    <a href="/logout" class="shadcn-button"
+                       style="background-color: var(--light-color); color: var(--primary-color); height: auto; padding: 0.25rem 0.75rem !important; font-size: 0.875rem; min-width: 60px; text-align: center; border: none; text-decoration: none;">
+                        Logout
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <!-- Main annotation area -->
+        <div id="task_layout" class="shadcn-card mb-4">
+            <div class="shadcn-card-content">
+                <!-- Loading state -->
+                <div id="loading-state" class="text-center py-5">
+                    <div class="loading-spinner mb-3"></div>
+                    <p>Loading annotation interface...</p>
+                </div>
+
+                <!-- Error state -->
+                <div id="error-state" class="error-message" style="display: none;">
+                    <h5><i class="fas fa-exclamation-triangle me-2"></i>Error</h5>
+                    <p id="error-message-text"></p>
+                    <button class="shadcn-button shadcn-button-primary" onclick="loadCurrentInstance()">
+                        <i class="fas fa-redo me-2"></i>Retry
+                    </button>
+                </div>
+
+                <!-- Main content area -->
+                <div id="main-content" style="display: none;">
+                    <!-- Instance text -->
+                    <div class="mb-4">
+                        <h5 class="mb-3">Text to Annotate:</h5>
+                        <div id="instance-text" class="p-3 border rounded" style="background-color: var(--light-bg); min-height: 100px;">
+                            <!-- Instance text will be loaded here -->
+                        </div>
+                    </div>
+
+                    <!-- Annotation forms -->
+                    <div id="annotation-forms">
+                        {{ TASK_LAYOUT }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Navigation buttons -->
+        <div class="my-4">
+            <div class="d-flex justify-content-between align-items-center">
+                <!-- Previous button -->
+                <div>
+                    <button class="shadcn-button shadcn-button-outline me-2" id="prev-btn" onclick="navigateToPrevious()">
+                        <i class="fas fa-arrow-left me-2"></i>Previous
+                    </button>
+                </div>
+
+                <!-- Next button -->
+                <div>
+                    <button class="shadcn-button shadcn-button-primary" id="next-btn" onclick="navigateToNext()">
+                        Next<i class="fas fa-arrow-right ms-2"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <hr style="color: var(--border)">
+        <footer class="py-2 text-center" style="font-size: 0.75rem; color: var(--muted-foreground)">
+            Copyright &copy; 2025
+            <a href="https://blablablab.si.umich.edu/" style="color: var(--primary); text-decoration: none">Blablablab</a>
+            <span class="mx-2">|</span>
+            <a href="https://github.com/davidjurgens/potato" style="color: var(--primary); text-decoration: none">Chat with us on GitHub</a>
+            <span class="mx-2">|</span>
+            <a href="https://github.com/davidjurgens/potato#cite-us" style="color: var(--primary); text-decoration: none">Cite Us</a>
+        </footer>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Configuration from server -->
+    <script>
+        window.config = {
+            annotation_task_name: "{{ annotation_task_name }}",
+            debug: {{ debug | tojson | safe }}
+        };
+    </script>
+
+    <script>
+        // Global state
+        let currentInstance = null;
+        let currentAnnotations = {};
+        let userState = null;
+        let isLoading = false;
+        let textSaveTimer = null;
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            loadCurrentInstance();
+            setupEventListeners();
+        });
+
+        function setupEventListeners() {
+            // Go to button
+            document.getElementById('go-to-btn').addEventListener('click', function() {
+                const goToValue = document.getElementById('go_to').value;
+                if (goToValue && goToValue > 0) {
+                    navigateToInstance(parseInt(goToValue));
+                }
+            });
+
+            // Enter key on go to input
+            document.getElementById('go_to').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    document.getElementById('go-to-btn').click();
+                }
+            });
+
+            // Keyboard navigation
+            document.addEventListener('keydown', function(e) {
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+                    return; // Don't handle navigation when typing
+                }
+
+                switch(e.key) {
+                    case 'ArrowLeft':
+                        e.preventDefault();
+                        navigateToPrevious();
+                        break;
+                    case 'ArrowRight':
+                        e.preventDefault();
+                        navigateToNext();
+                        break;
+                }
+            });
+        }
+
+        async function loadCurrentInstance() {
+            try {
+                setLoading(true);
+                showError(false);
+
+                // Get current user state
+                const response = await fetch('/test/user_state/{{username}}');
+                if (!response.ok) {
+                    throw new Error('Failed to load user state');
+                }
+
+                userState = await response.json();
+
+                if (!userState.current_instance) {
+                    showError(true, 'No instances available for annotation');
+                    return;
+                }
+
+                currentInstance = userState.current_instance;
+                updateProgressDisplay();
+                updateInstanceDisplay();
+                loadAnnotations();
+                generateAnnotationForms();
+
+                // Populate input values with existing annotations AFTER forms are generated
+                setTimeout(() => {
+                    populateInputValues();
+                }, 0);
+
+            } catch (error) {
+                console.error('Error loading current instance:', error);
+                showError(true, error.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function updateProgressDisplay() {
+            const progress = userState.assignments;
+            const progressText = `${progress.annotated}/${progress.total}`;
+            document.getElementById('progress-counter').textContent = progressText;
+        }
+
+        function updateInstanceDisplay() {
+            const instanceText = document.getElementById('instance-text');
+            if (currentInstance && currentInstance.displayed_text) {
+                instanceText.innerHTML = currentInstance.displayed_text;
+            } else {
+                instanceText.textContent = 'No text available';
+            }
+        }
+
+        async function loadAnnotations() {
+            try {
+                const rawAnnotations = userState.annotations.by_instance[currentInstance.id] || {};
+
+                // Transform the server format to frontend format
+                // Server format: {"Label(schema:sentiment, name:neutral)": "true"}
+                // Frontend format: {"sentiment": {"neutral": "true"}}
+                currentAnnotations = {};
+
+                for (const [labelKey, value] of Object.entries(rawAnnotations)) {
+                    // Parse the label key format: "Label(schema:sentiment, name:neutral)"
+                    const match = labelKey.match(/Label\(schema:([^,]+), name:([^)]+)\)/);
+                    if (match) {
+                        const schemaName = match[1];
+                        const labelName = match[2];
+
+                        if (!currentAnnotations[schemaName]) {
+                            currentAnnotations[schemaName] = {};
+                        }
+                        currentAnnotations[schemaName][labelName] = value;
+                    } else {
+                        // Handle direct key-value pairs (fallback)
+                        console.warn('Could not parse annotation key:', labelKey);
+                    }
+                }
+
+                console.log('Loaded annotations for instance', currentInstance.id, ':', currentAnnotations);
+            } catch (error) {
+                console.error('Error loading annotations:', error);
+                currentAnnotations = {};
+            }
+        }
+
+        function generateAnnotationForms() {
+            const formsContainer = document.getElementById('annotation-forms');
+
+            // The server generates the forms, so we just need to set up event listeners
+            // The forms are already in the HTML from server-side generation
+            setupInputEventListeners();
+        }
+
+
+
+
+
+
+
+
+
+
+
+        async function saveAnnotations() {
+            if (!currentInstance) return;
+
+            try {
+                const response = await fetch('/test/submit_annotation', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        instance_id: currentInstance.id,
+                        annotations: currentAnnotations,
+                        username: '{{username}}'
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to save annotations');
+                }
+
+                const result = await response.json();
+                console.log('Annotations saved:', result);
+                return true;
+
+            } catch (error) {
+                console.error('Error saving annotations:', error);
+                showError(true, 'Failed to save annotations: ' + error.message);
+                return false;
+            }
+        }
+
+        async function navigateToPrevious() {
+            if (isLoading) return;
+
+            try {
+                setLoading(true);
+                const response = await fetch('/annotate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        action: 'prev_instance',
+                        instance_id: currentInstance?.id
+                    })
+                });
+
+                if (response.ok) {
+                    await loadCurrentInstance();
+                } else {
+                    throw new Error('Failed to navigate to previous instance');
+                }
+            } catch (error) {
+                console.error('Error navigating to previous:', error);
+                showError(true, error.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function navigateToNext() {
+            if (isLoading) return;
+
+            // Save current annotations before navigating
+            const saved = await saveAnnotations();
+            if (!saved) return;
+
+            try {
+                setLoading(true);
+                const response = await fetch('/annotate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        action: 'next_instance',
+                        instance_id: currentInstance?.id
+                    })
+                });
+
+                if (response.ok) {
+                    await loadCurrentInstance();
+                } else {
+                    throw new Error('Failed to navigate to next instance');
+                }
+            } catch (error) {
+                console.error('Error navigating to next:', error);
+                showError(true, error.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function navigateToInstance(instanceIndex) {
+            if (isLoading) return;
+
+            try {
+                setLoading(true);
+                const response = await fetch('/annotate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        action: 'go_to',
+                        go_to: instanceIndex
+                    })
+                });
+
+                if (response.ok) {
+                    await loadCurrentInstance();
+                } else {
+                    throw new Error('Failed to navigate to instance');
+                }
+            } catch (error) {
+                console.error('Error navigating to instance:', error);
+                showError(true, error.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function setLoading(loading) {
+            isLoading = loading;
+            const loadingState = document.getElementById('loading-state');
+            const mainContent = document.getElementById('main-content');
+            const prevBtn = document.getElementById('prev-btn');
+            const nextBtn = document.getElementById('next-btn');
+
+            if (loading) {
+                loadingState.style.display = 'block';
+                mainContent.style.display = 'none';
+                prevBtn.disabled = true;
+                nextBtn.disabled = true;
+            } else {
+                loadingState.style.display = 'none';
+                mainContent.style.display = 'block';
+                prevBtn.disabled = false;
+                nextBtn.disabled = false;
+            }
+        }
+
+        function showError(show, message = '') {
+            const errorState = document.getElementById('error-state');
+            const errorMessage = document.getElementById('error-message-text');
+            const mainContent = document.getElementById('main-content');
+
+            if (show) {
+                errorState.style.display = 'block';
+                mainContent.style.display = 'none';
+                errorMessage.textContent = message;
+            } else {
+                errorState.style.display = 'none';
+                mainContent.style.display = 'block';
+            }
+        }
+
+        // Utility functions for annotation handling
+        function updateAnnotation(schema, label, value) {
+            if (!currentAnnotations[schema]) {
+                currentAnnotations[schema] = {};
+            }
+            currentAnnotations[schema][label] = value;
+        }
+
+        // Function to handle "None" option in multiselect annotations
+        function whetherNone(checkbox) {
+            // This function is used to uncheck all the other labels when "None" is checked
+            // and vice versa
+            var x = document.getElementsByClassName(checkbox.className);
+            var i;
+            for (i = 0; i < x.length; i++) {
+                if(checkbox.value == "None" && x[i].value != "None") x[i].checked = false;
+                if(checkbox.value != "None" && x[i].value == "None") x[i].checked = false;
+            }
+            // Also trigger the input change handler for the current checkbox
+            handleInputChange(checkbox);
+        }
+
+        // Input event handling functions
+        function setupInputEventListeners() {
+            // Set up event listeners for all annotation inputs
+            const inputs = document.querySelectorAll('.annotation-input');
+
+            inputs.forEach(input => {
+                const inputType = input.type;
+                const tagName = input.tagName.toLowerCase();
+
+                if (inputType === 'text' || tagName === 'textarea') {
+                    // Text inputs and textareas - debounced saving
+                    let timer;
+                    input.addEventListener('input', function(event) {
+                        clearTimeout(timer);
+                        timer = setTimeout(() => {
+                            handleInputChange(event.target);
+                        }, 1000);
+                    });
+                    console.log(`Set up event listener for ${tagName} element:`, input.id);
+                } else if (inputType === 'radio' || inputType === 'checkbox') {
+                    // Radio/checkbox inputs - immediate saving
+                    input.addEventListener('change', function(event) {
+                        handleInputChange(event.target);
+                    });
+                } else if (inputType === 'range') {
+                    // Slider inputs - immediate saving with value display
+                    input.addEventListener('input', function(event) {
+                        const valueDisplay = document.getElementById(`${input.name}-value`);
+                        if (valueDisplay) {
+                            valueDisplay.textContent = event.target.value;
+                        }
+                        handleInputChange(event.target);
+                    });
+                } else if (tagName === 'select') {
+                    // Select inputs - immediate saving
+                    input.addEventListener('change', function(event) {
+                        handleInputChange(event.target);
+                    });
+                } else if (inputType === 'number') {
+                    // Number inputs - debounced saving
+                    let timer;
+                    input.addEventListener('input', function(event) {
+                        clearTimeout(timer);
+                        timer = setTimeout(() => {
+                            handleInputChange(event.target);
+                        }, 1000);
+                    });
+                }
+            });
+        }
+
+        function handleInputChange(element) {
+            const schema = element.getAttribute('schema');
+            const labelName = element.getAttribute('label_name');
+            const inputType = element.type;
+            const tagName = element.tagName.toLowerCase();
+
+            console.log(`handleInputChange called for ${tagName} element:`, element.id, 'schema:', schema, 'label:', labelName);
+
+            if (!schema || !labelName) {
+                console.warn('Missing schema or label_name for input:', element);
+                return;
+            }
+
+            let value;
+
+            if (inputType === 'radio') {
+                // For radio buttons, only save if checked
+                if (element.checked) {
+                    value = element.value;
+                } else {
+                    return; // Don't save unchecked radio buttons
+                }
+            } else if (inputType === 'checkbox') {
+                // For checkboxes, save the checked state
+                if (element.checked) {
+                    value = element.value;
+                } else {
+                    // For unchecked checkboxes, remove the annotation or set to false
+                    if (currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
+                        delete currentAnnotations[schema][labelName];
+                        // If the schema is empty, remove it too
+                        if (Object.keys(currentAnnotations[schema]).length === 0) {
+                            delete currentAnnotations[schema];
+                        }
+                    }
+                    console.log(`Removed annotation: ${schema}.${labelName}`);
+
+                    // Auto-save the removal
+                    clearTimeout(textSaveTimer);
+                    textSaveTimer = setTimeout(() => {
+                        saveAnnotations();
+                    }, 500);
+                    return;
+                }
+            } else {
+                // For text inputs, save the value
+                value = element.value;
+            }
+
+            // Update the current annotations
+            updateAnnotation(schema, labelName, value);
+            console.log(`Updated annotation: ${schema}.${labelName} = ${value}`);
+
+            // Auto-save
+            clearTimeout(textSaveTimer);
+            textSaveTimer = setTimeout(() => {
+                saveAnnotations();
+            }, 500);
+        }
+
+        function populateInputValues() {
+            if (!currentAnnotations || !userState) return;
+
+            console.log('Populating input values with annotations:', currentAnnotations);
+
+            // Populate text inputs and textareas
+            const textInputs = document.querySelectorAll('input[type="text"], textarea.annotation-input');
+            textInputs.forEach(input => {
+                const schema = input.getAttribute('schema');
+                const labelName = input.getAttribute('label_name');
+
+                if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
+                    input.value = currentAnnotations[schema][labelName];
+                    console.log(`Populated ${input.tagName} ${input.id} with value:`, currentAnnotations[schema][labelName]);
+                }
+            });
+
+            // Populate radio buttons
+            const radioInputs = document.querySelectorAll('input[type="radio"]');
+            radioInputs.forEach(input => {
+                const schema = input.getAttribute('schema');
+                const labelName = input.getAttribute('label_name');
+
+                if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
+                    input.checked = (currentAnnotations[schema][labelName] === input.value);
+                    console.log(`Populated radio ${input.id}: ${input.checked ? 'checked' : 'unchecked'}`);
+                }
+            });
+
+            // Populate checkboxes
+            const checkboxInputs = document.querySelectorAll('input[type="checkbox"]');
+            checkboxInputs.forEach(input => {
+                const schema = input.getAttribute('schema');
+                const labelName = input.getAttribute('label_name');
+
+                if (schema && labelName && currentAnnotations[schema]) {
+                    // For checkboxes, check if the value exists in the annotations
+                    const hasAnnotation = currentAnnotations[schema][labelName] === input.value;
+                    input.checked = hasAnnotation;
+                    console.log(`Populated checkbox ${input.id}: ${hasAnnotation ? 'checked' : 'unchecked'}`);
+                }
+            });
+
+            // Populate sliders
+            const sliderInputs = document.querySelectorAll('input[type="range"]');
+            sliderInputs.forEach(input => {
+                const schema = input.getAttribute('schema');
+                const labelName = input.getAttribute('label_name');
+
+                if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
+                    input.value = currentAnnotations[schema][labelName];
+                    const valueDisplay = document.getElementById(`${input.name}-value`);
+                    if (valueDisplay) {
+                        valueDisplay.textContent = currentAnnotations[schema][labelName];
+                    }
+                    console.log(`Populated slider ${input.id} with value:`, currentAnnotations[schema][labelName]);
+                }
+            });
+
+            // Populate select dropdowns
+            const selectInputs = document.querySelectorAll('select.annotation-input');
+            selectInputs.forEach(input => {
+                const schema = input.getAttribute('schema');
+                const labelName = input.getAttribute('label_name');
+
+                if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
+                    input.value = currentAnnotations[schema][labelName];
+                    console.log(`Populated select ${input.id} with value:`, currentAnnotations[schema][labelName]);
+                }
+            });
+
+            // Populate number inputs
+            const numberInputs = document.querySelectorAll('input[type="number"].annotation-input');
+            numberInputs.forEach(input => {
+                const schema = input.getAttribute('schema');
+                const labelName = input.getAttribute('label_name');
+
+                if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
+                    input.value = currentAnnotations[schema][labelName];
+                    console.log(`Populated number ${input.id} with value:`, currentAnnotations[schema][labelName]);
+                }
+            });
+        }
+    </script>
+</body>
+</html>

@@ -36,67 +36,6 @@ def generate_textbox_layout(annotation_scheme):
 
     # Initialize form wrapper
     schematic = f"""
-    <style>
-        .shadcn-textbox-container {{
-            display: flex;
-            flex-direction: column;
-            width: 100%;
-            max-width: 100%;
-            margin: 1rem auto;
-            font-family: ui-sans-serif, system-ui, sans-serif;
-        }}
-
-        .shadcn-textbox-title {{
-            font-size: 1rem;
-            font-weight: 500;
-            color: var(--heading-color);
-            margin-bottom: 1rem;
-            text-align: left;
-            width: 100%;
-        }}
-
-        .shadcn-textbox-item {{
-            display: flex;
-            flex-direction: column;
-            margin-bottom: 1rem;
-            width: 100%;
-        }}
-
-        .shadcn-textbox-label {{
-            font-size: 0.875rem;
-            color: var(--foreground);
-            margin-bottom: 0.5rem;
-            display: inline-block;
-        }}
-
-        .shadcn-textbox-input {{
-            width: 100%;
-            border-radius: var(--radius);
-            border: 1px solid var(--input);
-            background-color: var(--background);
-            padding: 0.75rem;
-            font-size: 0.875rem;
-            color: var(--foreground);
-            transition: var(--transition);
-            height: 2.5rem;
-        }}
-
-        .shadcn-textbox-textarea {{
-            min-height: 6rem;
-            resize: vertical;
-        }}
-
-        .shadcn-textbox-input:focus {{
-            outline: none;
-            border-color: var(--ring);
-            box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
-        }}
-
-        .shadcn-textbox-input:hover {{
-            border-color: var(--primary);
-        }}
-    </style>
-
     <form id="{schema_name}" class="annotation-form textbox shadcn-textbox-container" action="/action_page.php">
         <fieldset schema_name="{schema_name}">
             <legend class="shadcn-textbox-title">{annotation_scheme["description"]}</legend>
