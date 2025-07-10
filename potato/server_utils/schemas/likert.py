@@ -220,11 +220,11 @@ def generate_likert_layout(annotation_scheme):
             top: -0.75rem;
             right: -0.05rem;
             background-color: white;
-            display: flex; 
+            display: flex;
             justify-content: center;
             align-items: center;
         }}
-        
+
         .ai-help-word {{
             font-size: 1rem;
             margin: 0;
@@ -249,14 +249,14 @@ def generate_likert_layout(annotation_scheme):
             white-space: nowrap;
             box-shadow: 0 2px 8px rgba(0,0,0,0.2);
             z-index: 1000;
-            opacity: 0;       
-            visibility: hidden; 
+            opacity: 0;
+            visibility: hidden;
             transition: opacity 0.3s, visibility 0.3s;
             min-width: 20rem;
-            max-width: 24rem; 
+            max-width: 24rem;
             overflow-wrap: break-word;
             word-wrap: break-word;
-            white-space: normal; 
+            white-space: normal;
             max-height: 15rem;
             overflow: auto;
         }}
@@ -279,9 +279,9 @@ def generate_likert_layout(annotation_scheme):
     <form id="{annotation_scheme['name']}" class="annotation-form likert shadcn-likert-container" action="/action_page.php">
         <div class="ai-help">
     <h3 class="ai-help-word"><span class="hint">Hint</span> | <span>Keyword</span></h3>
-    <div class="tooltip"> 
+    <div class="tooltip">
             <p class="tooltip-text">
-                <span class="reasoning">Reasoning:</span> {{ai}} 
+                <span class="reasoning">Reasoning:</span> {{ai}}
             </p>
         </div>
     </div>
@@ -313,7 +313,7 @@ def generate_likert_layout(annotation_scheme):
         # Generate radio input for each scale point
         schematic += f"""
                     <div class="shadcn-likert-option">
-                        <input class="{annotation_scheme['name']} shadcn-likert-input"
+                        <input class="{annotation_scheme['name']} shadcn-likert-input annotation-input"
                                type="radio"
                                id="{name}"
                                name="{name}"
@@ -341,11 +341,13 @@ def generate_likert_layout(annotation_scheme):
         name = f"{annotation_scheme['name']}:::bad_text"
         schematic += f"""
             <div class="shadcn-likert-bad-text" style="width: 100%;">
-                <input class="{annotation_scheme['name']} shadcn-likert-input"
+                <input class="{annotation_scheme['name']} shadcn-likert-input annotation-input"
                        type="radio"
                        id="{name}"
                        name="{name}"
                        value="0"
+                       schema="{annotation_scheme['name']}"
+                       label_name="bad_text"
                        validation="{validation}"
                        onclick="onlyOne(this);registerAnnotation(this);">
                 <label class="shadcn-likert-button" for="{name}"></label>
@@ -357,7 +359,7 @@ def generate_likert_layout(annotation_scheme):
     schematic += """
         </fieldset></form>
     """
-    
+
     logger.info(f"Successfully generated likert layout for {annotation_scheme['name']} "
                 f"with {annotation_scheme['size']} points")
     return schematic, key_bindings

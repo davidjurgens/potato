@@ -192,7 +192,9 @@ MULTIRATE_TEMPLATE = """
                                                value="{{ rating }}"
                                                onclick="this.blur();"
                                                validation="{{ validation }}"
-                                               class="shadcn-multirate-radio"
+                                               class="shadcn-multirate-radio annotation-input"
+                                               schema="{{ schema_name }}"
+                                               label_name="{{ item.name.split(':::')[1] }}"
                                                aria-label="{{ item.label }}: {{ rating }}" />
                                     </td>
                                 {% endfor %}

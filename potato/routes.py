@@ -765,12 +765,49 @@ def test_system_state():
             "config": {
                 "debug_mode": config.get("debug", False),
                 "annotation_task_name": config.get("annotation_task_name", "Unknown"),
-                "max_annotations_per_user": config.get("max_annotations_per_user", "Unlimited")
+                "max_annotations_per_user": config.get("max_annotations_per_user", "Unlimited"),
+                "annotation_schemes": config.get("annotation_schemes", []),
+                "ui": config.get("ui", {})
             }
         })
     except Exception as e:
         return jsonify({
             "error": f"Failed to get system state: {str(e)}"
+        }), 500
+
+
+@app.route("/test/all_instances", methods=["GET"])
+def test_all_instances():
+    """
+    Get all available instances for navigation purposes.
+
+    Returns:
+        flask.Response: JSON response with all instances
+    """
+    if not config.get("debug", False):
+        return jsonify({
+            "error": "All instances endpoint only available in debug mode"
+        }), 403
+
+    try:
+        ism = get_item_state_manager()
+        items = ism.items()
+
+        all_instances = []
+        for item in items:
+            all_instances.append({
+                "id": item.get_id(),
+                "text": item.get_text(),
+                "displayed_text": item.get_displayed_text()
+            })
+
+        return jsonify({
+            "total_items": len(all_instances),
+            "items": all_instances
+        })
+    except Exception as e:
+        return jsonify({
+            "error": f"Failed to get all instances: {str(e)}"
         }), 500
 
 
@@ -804,14 +841,48 @@ def test_user_state(username):
                 "displayed_text": current_instance.get_displayed_text()
             }
 
+        # Helper to recursively convert all dict keys to strings
+        def stringify_keys(obj):
+            if isinstance(obj, dict):
+                return {str(k): stringify_keys(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [stringify_keys(i) for i in obj]
+            else:
+                return obj
+
         # Get all annotations
         all_annotations = user_state.get_all_annotations()
+        print(f"🔍 test_user_state - all_annotations raw: {all_annotations}")
+
+        # Convert all keys to strings for JSON serialization
+        serializable_annotations = {}
+        for instance_id, annotations in all_annotations.items():
+            instance_id_str = str(instance_id)
+            serializable_annotations[instance_id_str] = {}
+
+            # Process labels
+            if "labels" in annotations:
+                for label, value in annotations["labels"].items():
+                    if hasattr(label, 'schema_name') and hasattr(label, 'label_name'):
+                        label_str = f"{label.schema_name}:{label.label_name}"
+                    else:
+                        label_str = str(label)
+                    serializable_annotations[instance_id_str][label_str] = value
+
+            # Process spans
+            if "spans" in annotations:
+                for span, value in annotations["spans"].items():
+                    span_str = str(span)
+                    serializable_annotations[instance_id_str][span_str] = value
+
+        serializable_annotations = stringify_keys(serializable_annotations)
+        print(f"🔍 test_user_state - serializable_annotations: {serializable_annotations}")
 
         # Get assignments
         assignments = []
         if user_state.has_assignments():
             for instance_id in user_state.get_assigned_instance_ids():
-                instance = ism.get_item(instance_id)
+                instance = get_item_state_manager().get_item(instance_id)
                 if instance:
                     assignments.append({
                         "id": instance.get_id(),
@@ -824,14 +895,16 @@ def test_user_state(username):
             "username": username,
             "phase": str(user_state.get_phase()),
             "current_instance": current_instance_data,
+            "max_assignments": user_state.get_max_assignments(),
             "assignments": {
                 "total": len(assignments),
                 "annotated": len([a for a in assignments if a["has_annotation"]]),
-                "remaining": len([a for a in assignments if not a["has_annotation"]])
+                "remaining": len([a for a in assignments if not a["has_annotation"]]),
+                "items": assignments
             },
             "annotations": {
                 "total_count": len(all_annotations),
-                "by_instance": all_annotations
+                "by_instance": serializable_annotations
             },
             "hints": {
                 "cached_hints": list(user_state.get_cached_hints().keys()) if hasattr(user_state, 'get_cached_hints') else []
@@ -1495,6 +1568,8 @@ def test_submit_annotation():
 
     try:
         data = request.get_json()
+        print(f"🔍 test_submit_annotation received data: {data}")
+
         if not data:
             return jsonify({
                 "error": "No JSON data provided"
@@ -1503,6 +1578,9 @@ def test_submit_annotation():
         instance_id = data.get("instance_id")
         annotations = data.get("annotations", {})
         username = data.get("username", "debug_user")
+
+        print(f"🔍 Processing annotation for instance {instance_id}, user {username}")
+        print(f"🔍 Annotations structure: {annotations}")
 
         if not instance_id:
             return jsonify({
@@ -1516,17 +1594,87 @@ def test_submit_annotation():
             usm.add_user(username)
             user_state = usm.get_user_state(username)
             user_state.advance_to_phase(UserPhase.ANNOTATION, None)
+            print(f"🔍 Created new user {username} in annotation phase")
         else:
             user_state = usm.get_user_state(username)
             # Ensure user is in annotation phase
             if user_state.get_phase() != UserPhase.ANNOTATION:
                 user_state.advance_to_phase(UserPhase.ANNOTATION, None)
+                print(f"🔍 Advanced user {username} to annotation phase")
 
         # Submit annotations
+        annotation_count = 0
+
+        # Handle different annotation structures
+        if "labels" in annotations:
+            # Handle annotations with explicit labels structure
+            label_data = annotations["labels"]
+            if isinstance(label_data, dict):
+                for schema_name, schema_data in label_data.items():
+                    if isinstance(schema_data, dict):
+                        for label_name, value in schema_data.items():
+                            if value is not None and value != "":
+                                label = Label(schema_name, label_name)
+                                user_state.add_label_annotation(instance_id, label, value)
+                                annotation_count += 1
+                                print(f"🔍 Added label annotation: {label} = {value}")
+
+        # Handle direct schema-based annotations (for text inputs, etc.)
         for schema_name, label_data in annotations.items():
-            for label_name, value in label_data.items():
-                label = Label(schema_name, label_name)
-                user_state.add_label_annotation(instance_id, label, value)
+            if schema_name == "labels" or schema_name == "spans":
+                continue  # Skip already processed
+
+            print(f"🔍 Processing schema: {schema_name}, data: {label_data}")
+
+            if isinstance(label_data, dict):
+                # Handle regular label annotations
+                for label_name, value in label_data.items():
+                    print(f"🔍 Processing label: {label_name}, value: {value}")
+
+                    if value is None or value == "":
+                        continue  # Skip empty values
+
+                    if isinstance(value, list):
+                        # Handle span annotations - spans are stored as a list
+                        print(f"🔍 Detected span annotations list with {len(value)} items")
+                        for span_data in value:
+                            if isinstance(span_data, dict) and all(k in span_data for k in ["start", "end", "label"]):
+                                span = SpanAnnotation(
+                                    schema_name,
+                                    span_data["label"],
+                                    span_data.get("text", ""),
+                                    span_data["start"],
+                                    span_data["end"]
+                                )
+                                user_state.add_span_annotation(instance_id, span, "true")
+                                annotation_count += 1
+                                print(f"🔍 Added span annotation: {span}")
+                            else:
+                                print(f"🔍 Invalid span data: {span_data}")
+                    else:
+                        # Handle regular label annotations (text inputs, radio buttons, etc.)
+                        label = Label(schema_name, label_name)
+                        user_state.add_label_annotation(instance_id, label, value)
+                        annotation_count += 1
+                        print(f"🔍 Added label annotation: {label} = {value}")
+            elif isinstance(label_data, dict) and "spans" in label_data:
+                # Handle span annotations in old format
+                spans = label_data["spans"]
+                print(f"🔍 Processing old format spans: {spans}")
+                for span_data in spans:
+                    if isinstance(span_data, dict) and all(k in span_data for k in ["start", "end", "label"]):
+                        span = SpanAnnotation(
+                            schema_name,
+                            span_data["label"],
+                            span_data.get("text", ""),
+                            span_data["start"],
+                            span_data["end"]
+                        )
+                        user_state.add_span_annotation(instance_id, span, "true")
+                        annotation_count += 1
+                        print(f"🔍 Added span annotation (old format): {span}")
+
+        print(f"🔍 Total annotations processed: {annotation_count}")
 
         # Register the annotation
         ism = get_item_state_manager()
@@ -1535,6 +1683,7 @@ def test_submit_annotation():
         # Save user state
         usm.save_user_state(user_state)
 
+        print(f"🔍 Annotation submission successful for {instance_id}")
         return jsonify({
             "status": "submitted",
             "instance_id": instance_id,
@@ -1542,8 +1691,388 @@ def test_submit_annotation():
             "username": username
         })
     except Exception as e:
+        print(f"🔍 Error in test_submit_annotation: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({
             "error": f"Failed to submit annotation: {str(e)}"
+        }), 500
+
+
+@app.route("/api-frontend", methods=["GET"])
+def api_frontend():
+    """
+    Serve the API-based frontend interface.
+
+    This route serves a modern single-page application that uses API calls
+    to interact with the backend instead of server-side rendering.
+
+    Returns:
+        flask.Response: Rendered API frontend template
+    """
+    if 'username' not in session and not config.get("debug", False):
+        return redirect(url_for("home"))
+
+    # In debug mode, ensure debug user exists
+    if config.get("debug", False):
+        debug_username = "debug_user"
+        if not get_user_state_manager().has_user(debug_username):
+            logger.debug(f"Creating debug user: {debug_username}")
+            usm = get_user_state_manager()
+            usm.add_user(debug_username)
+
+            # Set debug user directly to annotation phase
+            user_state = usm.get_user_state(debug_username)
+            while user_state.get_phase() != UserPhase.ANNOTATION:
+                usm.advance_phase(debug_username)
+                user_state = usm.get_user_state(debug_username)
+
+            # Assign instances if needed
+            if not user_state.has_assignments():
+                get_item_state_manager().assign_instances_to_user(user_state)
+
+        session['username'] = debug_username
+        session.permanent = True
+
+    username = session['username']
+
+    # Ensure user state exists
+    if not get_user_state_manager().has_user(username):
+        logger.info(f"Creating missing user state for {username}")
+        init_user_state(username)
+
+    user_state = get_user_state(username)
+
+    # Check user phase
+    if user_state.get_phase() != UserPhase.ANNOTATION:
+        logger.info(f"User {username} not in annotation phase, redirecting")
+        return home()
+
+    # If the user hasn't yet been assigned anything to annotate, do so now
+    if not user_state.has_assignments():
+        get_item_state_manager().assign_instances_to_user(user_state)
+
+    # See if this user has finished annotating all of their assigned instances
+    if not user_state.has_remaining_assignments():
+        # If the user is done annotating, advance to the next phase
+        get_user_state_manager().advance_phase(username)
+        return home()
+
+    # Render the API frontend template
+    return render_template("api_frontend.html",
+                         username=username,
+                         annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
+                         annotation_codebook_url=config.get("annotation_codebook_url", ""),
+                         alert_time_each_instance=config.get("alert_time_each_instance", 10000000))
+
+
+@app.route("/span-api-frontend", methods=["GET"])
+def span_api_frontend():
+    """
+    Serve the span annotation API-based frontend interface.
+
+    This route serves a modern single-page application specifically designed
+    for span annotation tasks that uses API calls to interact with the backend.
+
+    Returns:
+        flask.Response: Rendered span API frontend template
+    """
+    if 'username' not in session and not config.get("debug", False):
+        return redirect(url_for("home"))
+
+    # In debug mode, ensure debug user exists
+    if config.get("debug", False):
+        debug_username = "debug_user"
+        if not get_user_state_manager().has_user(debug_username):
+            logger.debug(f"Creating debug user: {debug_username}")
+            usm = get_user_state_manager()
+            usm.add_user(debug_username)
+
+            # Set debug user directly to annotation phase
+            user_state = usm.get_user_state(debug_username)
+            while user_state.get_phase() != UserPhase.ANNOTATION:
+                usm.advance_phase(debug_username)
+                user_state = usm.get_user_state(debug_username)
+
+            # Assign instances if needed
+            if not user_state.has_assignments():
+                get_item_state_manager().assign_instances_to_user(user_state)
+
+        session['username'] = debug_username
+        session.permanent = True
+
+    username = session['username']
+
+    # Ensure user state exists
+    if not get_user_state_manager().has_user(username):
+        logger.info(f"Creating missing user state for {username}")
+        init_user_state(username)
+
+    user_state = get_user_state(username)
+
+    # Check user phase
+    if user_state.get_phase() != UserPhase.ANNOTATION:
+        logger.info(f"User {username} not in annotation phase, redirecting")
+        return home()
+
+    # If the user hasn't yet been assigned anything to annotate, do so now
+    if not user_state.has_assignments():
+        get_item_state_manager().assign_instances_to_user(user_state)
+
+    # See if this user has finished annotating all of their assigned instances
+    if not user_state.has_remaining_assignments():
+        # If the user is done annotating, advance to the next phase
+        get_user_state_manager().advance_phase(username)
+        return home()
+
+    # Render the span API frontend template
+    return render_template("span_api_frontend.html",
+                         username=username,
+                         annotation_task_name=config.get("annotation_task_name", "Span Annotation Platform"),
+                         annotation_codebook_url=config.get("annotation_codebook_url", ""),
+                         alert_time_each_instance=config.get("alert_time_each_instance", 10000000))
+
+
+@app.route("/test/assign_multiple_items/<username>", methods=["POST"])
+def test_assign_multiple_items(username):
+    """
+    Test endpoint to assign multiple items to a user for testing navigation.
+    Only available in debug mode.
+    """
+    if not config.get("debug", False):
+        return jsonify({
+            "error": "Multiple item assignment only available in debug mode"
+        }), 403
+
+    try:
+        data = request.get_json() or {}
+        item_ids = data.get("item_ids", ["1", "2", "3", "4", "5"])
+
+        user_state = get_user_state(username)
+        if not user_state:
+            return jsonify({
+                "error": f"User '{username}' not found"
+            }), 404
+
+        ism = get_item_state_manager()
+        assigned_count = 0
+
+        for item_id in item_ids:
+            if ism.has_item(item_id) and not user_state.has_annotated(item_id):
+                item = ism.get_item(item_id)
+                user_state.assign_instance(item)
+                assigned_count += 1
+
+        return jsonify({
+            "status": "success",
+            "assigned_count": assigned_count,
+            "item_ids": item_ids
+        })
+
+    except Exception as e:
+        return jsonify({
+            "error": f"Failed to assign items to '{username}': {str(e)}"
+        }), 500
+
+
+@app.route("/test/clear_annotations/<username>", methods=["POST"])
+def test_clear_annotations(username):
+    """
+    Test endpoint to clear all annotations for a user.
+    Only available in debug mode.
+    """
+    if not config.get("debug", False):
+        return jsonify({
+            "error": "Clear annotations only available in debug mode"
+        }), 403
+
+    try:
+        user_state = get_user_state(username)
+        if not user_state:
+            return jsonify({
+                "error": f"User '{username}' not found"
+            }), 404
+
+        print(f"🔍 CLEARING annotations for user '{username}'")
+        print(f"🔍 Before clearing - Label annotations: {dict(user_state.instance_id_to_label_to_value)}")
+        print(f"🔍 Before clearing - Span annotations: {dict(user_state.instance_id_to_span_to_value)}")
+
+        # Clear all annotations
+        user_state.clear_all_annotations()
+
+        print(f"🔍 After clearing - Label annotations: {dict(user_state.instance_id_to_label_to_value)}")
+        print(f"🔍 After clearing - Span annotations: {dict(user_state.instance_id_to_span_to_value)}")
+
+        # Save the updated user state
+        usm = get_user_state_manager()
+        usm.save_user_state(user_state)
+
+        print(f"🔍 Successfully cleared and saved annotations for user '{username}'")
+
+        return jsonify({
+            "status": "success",
+            "message": f"Cleared all annotations for user '{username}'"
+        })
+
+    except Exception as e:
+        print(f"🔍 Error clearing annotations for '{username}': {str(e)}")
+        return jsonify({
+            "error": f"Failed to clear annotations for '{username}': {str(e)}"
+        }), 500
+
+
+@app.route("/test/clear_debug_annotations", methods=["POST"])
+def test_clear_debug_annotations():
+    """
+    Test endpoint to clear all annotations for the debug user.
+    Only available in debug mode.
+    """
+    if not config.get("debug", False):
+        return jsonify({
+            "error": "Clear debug annotations only available in debug mode"
+        }), 403
+
+    try:
+        username = "debug_user"
+        user_state = get_user_state(username)
+
+        if not user_state:
+            return jsonify({
+                "error": f"Debug user '{username}' not found"
+            }), 404
+
+        print(f"🔍 CLEARING DEBUG annotations for user '{username}'")
+        print(f"🔍 Before clearing - Label annotations: {dict(user_state.instance_id_to_label_to_value)}")
+        print(f"🔍 Before clearing - Span annotations: {dict(user_state.instance_id_to_span_to_value)}")
+
+        # Clear all annotations
+        user_state.clear_all_annotations()
+
+        print(f"🔍 After clearing - Label annotations: {dict(user_state.instance_id_to_label_to_value)}")
+        print(f"🔍 After clearing - Span annotations: {dict(user_state.instance_id_to_span_to_value)}")
+
+        # Save the updated user state
+        usm = get_user_state_manager()
+        usm.save_user_state(user_state)
+
+        print(f"🔍 Successfully cleared and saved debug annotations")
+
+        return jsonify({
+            "status": "success",
+            "message": f"Cleared all annotations for debug user",
+            "cleared_user": username
+        })
+
+    except Exception as e:
+        print(f"🔍 Error clearing debug annotations: {str(e)}")
+        return jsonify({
+            "error": f"Failed to clear debug annotations: {str(e)}"
+        }), 500
+
+
+@app.route("/test/delete_span", methods=["POST"])
+def test_delete_span():
+    """
+    Test endpoint to delete a specific span annotation.
+    Only available in debug mode.
+
+    Expected POST data:
+        instance_id: ID of the instance
+        span_key: The span annotation key to delete
+        username: Username (optional, defaults to debug_user)
+
+    Returns:
+        flask.Response: JSON response with deletion status
+    """
+    if not config.get("debug", False):
+        return jsonify({
+            "error": "Delete span only available in debug mode"
+        }), 403
+
+    try:
+        # Get request data
+        data = request.get_json()
+        if not data:
+            data = request.form.to_dict()
+
+        instance_id = data.get('instance_id')
+        span_key = data.get('span_key')
+        username = data.get('username', 'debug_user')
+
+        print(f"🔍 Delete span request - instance: {instance_id}, span_key: {span_key}, user: {username}")
+
+        if not instance_id or not span_key:
+            return jsonify({
+                "status": "error",
+                "message": "Missing instance_id or span_key"
+            }), 400
+
+        # Get user state
+        user_state = get_user_state(username)
+        if not user_state:
+            return jsonify({
+                "error": f"User '{username}' not found"
+            }), 404
+
+        # Get span annotations for the user
+        span_annotations = user_state.instance_id_to_span_to_value
+
+        # Check if the instance has any span annotations
+        if instance_id not in span_annotations:
+            print(f"🔍 No span annotations found for instance {instance_id}")
+            return jsonify({
+                "status": "success",
+                "message": "Instance has no span annotations",
+                "instance_id": instance_id
+            })
+
+        instance_spans = span_annotations[instance_id]
+        print(f"🔍 Current spans for instance {instance_id}: {list(str(span) for span in instance_spans.keys())}")
+
+        # Find the matching span annotation object
+        span_to_delete = None
+        for span_obj, span_value in instance_spans.items():
+            if str(span_obj) == span_key and span_value == 'true':
+                span_to_delete = span_obj
+                break
+
+        if span_to_delete:
+            # Delete the span
+            del instance_spans[span_to_delete]
+            print(f"🔍 Deleted span: {span_to_delete}")
+
+            # If no spans left for this instance, remove the instance entry
+            if not instance_spans:
+                del span_annotations[instance_id]
+                print(f"🔍 Removed empty instance {instance_id} from span annotations")
+
+            # Save the changes
+            usm = get_user_state_manager()
+            usm.save_user_state(user_state)
+
+            print("🔍 Successfully deleted span and saved changes")
+
+            return jsonify({
+                "status": "success",
+                "message": f"Deleted span annotation",
+                "instance_id": instance_id,
+                "span_key": span_key,
+                "username": username
+            })
+        else:
+            print(f"🔍 Span not found: {span_key}")
+            return jsonify({
+                "status": "error",
+                "message": "Span not found",
+                "instance_id": instance_id,
+                "span_key": span_key
+            }), 404
+
+    except Exception as e:
+        print(f"🔍 Error deleting span: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": f"Error deleting span: {str(e)}"
         }), 500
 
 
@@ -1585,10 +2114,17 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/done", "done", done, methods=["GET", "POST"])
     app.add_url_rule("/admin", "admin", admin, methods=["GET"])
     app.add_url_rule("/get_ai_hint", "get_ai_hint", get_ai_hint, methods=["GET"])
+    app.add_url_rule("/api-frontend", "api_frontend", api_frontend, methods=["GET"])
+    app.add_url_rule("/span-api-frontend", "span_api_frontend", span_api_frontend, methods=["GET"])
+    app.add_url_rule("/test/assign_multiple_items/<username>", "test_assign_multiple_items", test_assign_multiple_items, methods=["POST"])
+    app.add_url_rule("/test/clear_annotations/<username>", "test_clear_annotations", test_clear_annotations, methods=["POST"])
+    app.add_url_rule("/test/clear_debug_annotations", "test_clear_debug_annotations", test_clear_debug_annotations, methods=["POST"])
+    app.add_url_rule("/test/delete_span", "test_delete_span", test_delete_span, methods=["POST"])
 
     # Test routes for debugging and testing
     app.add_url_rule("/test/health", "test_health", test_health, methods=["GET"])
     app.add_url_rule("/test/system_state", "test_system_state", test_system_state, methods=["GET"])
+    app.add_url_rule("/test/all_instances", "test_all_instances", test_all_instances, methods=["GET"])
     app.add_url_rule("/test/user_state/<username>", "test_user_state", test_user_state, methods=["GET"])
     app.add_url_rule("/test/item_state", "test_item_state", test_item_state, methods=["GET"])
     app.add_url_rule("/test/item_state/<item_id>", "test_item_state_detail", test_item_state_detail, methods=["GET"])

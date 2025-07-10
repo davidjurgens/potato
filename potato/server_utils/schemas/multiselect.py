@@ -249,7 +249,7 @@ def generate_multiselect_layout(annotation_scheme):
         # Generate checkbox input
         schematic += f"""
             <div class="shadcn-multiselect-item">
-                <input class="{class_name} shadcn-multiselect-checkbox"
+                <input class="{class_name} shadcn-multiselect-checkbox annotation-input"
                        type="checkbox"
                        id="{name}"
                        name="{name}"
@@ -345,7 +345,7 @@ def _generate_free_response(annotation_scheme, n_columns):
     return f"""
         <div class="shadcn-multiselect-free-response">
             <span>{instruction}</span>
-            <input class="{annotation_scheme['name']} shadcn-multiselect-free-input"
+            <input class="{annotation_scheme['name']} shadcn-multiselect-free-input annotation-input"
                    type="text"
                    id="{name}"
                    name="{name}">

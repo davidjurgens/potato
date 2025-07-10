@@ -64,6 +64,25 @@ class Item:
     def get_data(self):
         return self.item_data
 
+    def get_text(self):
+        """Get the text content from the item data"""
+        if isinstance(self.item_data, dict):
+            # Try to get text from common keys
+            for key in ['text', 'content', 'message', 'title']:
+                if key in self.item_data:
+                    return self.item_data[key]
+            # If no text key found, return the first string value
+            for value in self.item_data.values():
+                if isinstance(value, str):
+                    return value
+        elif isinstance(self.item_data, str):
+            return self.item_data
+        return str(self.item_data)
+
+    def get_displayed_text(self):
+        """Get the displayed text (same as get_text for now)"""
+        return self.get_text()
+
     def get_metadata(self, metadata_name: str):
         return self.metadata.get(metadata_name, None)
 
@@ -392,6 +411,10 @@ class ItemStateManager:
     def get_item(self, instance_id: str) -> Item:
         '''Returns the Item object for a given instance ID'''
         return self.instance_id_to_item[instance_id]
+
+    def get_annotators_for_item(self, instance_id: str) -> set[str]:
+        '''Returns the set of annotators who have annotated a given item'''
+        return self.item_annotators.get(instance_id, set())
 
     def items(self) -> list[Item]:
         '''Returns a list of all Item objects'''

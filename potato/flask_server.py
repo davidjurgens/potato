@@ -278,9 +278,22 @@ def load_user_data(config: dict):
     user_data_dir = config['output_annotation_dir']
     usm = get_user_state_manager()
 
+    # Check if the output directory exists
+    if not os.path.exists(user_data_dir):
+        os.makedirs(user_data_dir)
+        logger.info("Created output directory: %s" % user_data_dir)
+        return
+
     # For each user's directory, load in their state
-    for user_dir in os.listdir(user_data_dir):
-        usm.load_user_state(os.path.join(user_data_dir, user_dir))
+    user_dirs = [d for d in os.listdir(user_data_dir) if os.path.isdir(os.path.join(user_data_dir, d))]
+
+    for user_dir in user_dirs:
+        try:
+            usm.load_user_state(os.path.join(user_data_dir, user_dir))
+        except ValueError as e:
+            # Skip directories that don't have valid user state files
+            logger.warning("Skipping invalid user directory %s: %s" % (user_dir, str(e)))
+            continue
 
     logger.info("Loaded user data for %d users" % len(usm.get_user_ids()))
 
@@ -675,6 +688,10 @@ def render_page_with_annotations(username) -> str:
         statistics_nav=all_statistics,
         var_elems=var_elems_html,
         custom_js=custom_js,
+        # Pass annotation schemes to the template
+        annotation_schemes=config["annotation_schemes"],
+        annotation_task_name=config["annotation_task_name"],
+        debug=config.get("debug", False),
         # ai=ai_hints,
         **kwargs
     )
@@ -837,17 +854,28 @@ def ai_hints(text: str) -> str:
     Also, give a short reason of your answer and the relevant part(keyword or text).
     The hint should not provide the label or answer directly, but should highlight what the user might consider or look for.'''
 
-    response = requests.post(
-        'http://localhost:11434/api/generate',
-        json={
-            # 'model': 'llama3.2',
-            'model': 'qwen3:0.6b',
-            'prompt': prompt,
-            'stream': False
-        }
-    )
-    print(response.json()['response'])
-    return response.json()['response']
+    try:
+        response = requests.post(
+            'http://localhost:11434/api/generate',
+            json={
+                # 'model': 'llama3.2',
+                'model': 'qwen3:0.6b',
+                'prompt': prompt,
+                'stream': False
+            },
+            timeout=5  # Add timeout to prevent hanging
+        )
+        print(response.json()['response'])
+        return response.json()['response']
+    except requests.exceptions.ConnectionError:
+        print("AI hints service not available (Ollama not running)")
+        return "AI hints are currently unavailable. Please proceed with manual annotation."
+    except requests.exceptions.Timeout:
+        print("AI hints service timeout")
+        return "AI hints service is slow to respond. Please proceed with manual annotation."
+    except Exception as e:
+        print(f"Error getting AI hints: {e}")
+        return "AI hints are currently unavailable. Please proceed with manual annotation."
 
 
 
@@ -1010,8 +1038,23 @@ def get_annotations_for_user_on(username, instance_id):
     """
     user_state = get_user_state(username)
     print("instance_id", instance_id)
-    annotations = user_state.get_label_annotations(instance_id)
-    return annotations
+    raw_annotations = user_state.get_label_annotations(instance_id)
+
+    # Process the raw annotations into the expected format
+    processed_annotations = {}
+    for label, value in raw_annotations.items():
+        if hasattr(label, 'schema_name') and hasattr(label, 'label_name'):
+            schema_name = label.schema_name
+            label_name = label.label_name
+        else:
+            # Fallback for string labels
+            continue
+
+        if schema_name not in processed_annotations:
+            processed_annotations[schema_name] = {}
+        processed_annotations[schema_name][label_name] = value
+
+    return processed_annotations
 
 
 def get_span_annotations_for_user_on(username, instance_id):
@@ -1020,6 +1063,7 @@ def get_span_annotations_for_user_on(username, instance_id):
     """
     user_state = get_user_state(username)
     span_annotations = user_state.get_span_annotations(instance_id)
+    print(f"🔍 get_span_annotations_for_user_on({username}, {instance_id}): {span_annotations}")
     return span_annotations
 
 def parse_html_span_annotation(html):
@@ -1138,7 +1182,7 @@ def run_server(args):
     # Run the Flask app
     host = config.get("host", "0.0.0.0")
     port = config.get("port", 8000)
-    app.run(host=host, port=port, debug=config.get("debug", False))
+    app.run(host=host, port=port, debug=config.get("debug", False), use_reloader=False)
 
 
 # Define the main entry point for the Flask server

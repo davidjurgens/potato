@@ -52,7 +52,7 @@ class UserStateManager:
         self.task_assignment = {}
         self.prolific_study = None
         self.phase_type_to_name_to_page = defaultdict(OrderedDict)
-      
+
 
         # TODO: load this from the config
         self.max_annotations_per_user = -1
@@ -389,8 +389,8 @@ class InMemoryUserState(UserState):
         self.max_assignments = max_assignments
 
         # Caches the ai hints
-        self.ai_hints = defaultdict(dict) 
-    
+        self.ai_hints = defaultdict(dict)
+
     def hint_exists(self, instance_id: str) -> bool:
         return instance_id in self.ai_hints
 
@@ -466,10 +466,16 @@ class InMemoryUserState(UserState):
     def add_span_annotation(self, instance_id: str, label: SpanAnnotation, value: any) -> None:
         '''Adds a set of span annotations to the instance or if the user is not
            in the annotation phase, to the page associated with the current phase'''
+        print(f"🔍 add_span_annotation called: instance_id={instance_id}, label={label}, value={value}")
+        print(f"🔍 Current phase: {self.current_phase_and_page[0]}")
+
         if self.current_phase_and_page[0] == UserPhase.ANNOTATION:
             self.instance_id_to_span_to_value[instance_id][label] = value
+            print(f"🔍 Added span annotation to instance {instance_id}: {label} = {value}")
+            print(f"🔍 Current span annotations for instance {instance_id}: {dict(self.instance_id_to_span_to_value[instance_id])}")
         else:
             self.phase_to_page_to_span_to_value[self.current_phase_and_page[0]][self.current_phase_and_page[1]][label] = value
+            print(f"🔍 Added span annotation to phase {self.current_phase_and_page[0]}, page {self.current_phase_and_page[1]}: {label} = {value}")
 
     def get_current_instance_index(self):
         '''Returns the index of the item the user is annotating within the list of items
@@ -516,6 +522,10 @@ class InMemoryUserState(UserState):
         """
         Returns all annotations (label and span) for all annotated instances
         """
+        print(f"🔍 get_all_annotations called")
+        print(f"🔍 Label annotation instances: {list(self.instance_id_to_label_to_value.keys())}")
+        print(f"🔍 Span annotation instances: {list(self.instance_id_to_span_to_value.keys())}")
+
         labeled = set(self.instance_id_to_label_to_value.keys()) | set(
             self.instance_id_to_span_to_value.keys()
         )
@@ -530,7 +540,9 @@ class InMemoryUserState(UserState):
                 spans = self.instance_id_to_span_to_value[iid]
 
             anns[iid] = {"labels": labels, "spans": spans}
+            print(f"🔍 Instance {iid} annotations: labels={labels}, spans={spans}")
 
+        print(f"🔍 Final annotations dict: {anns}")
         return anns
 
     def get_label_annotations(self, instance_id) -> dict[str,list[Label]]:
@@ -547,10 +559,16 @@ class InMemoryUserState(UserState):
         """
         Returns a mapping from each schema to the span annotations for that schema.
         """
+        print(f"🔍 get_span_annotations called for instance {instance_id}")
+        print(f"🔍 Available span annotations: {list(self.instance_id_to_span_to_value.keys())}")
+
         if instance_id not in self.instance_id_to_span_to_value:
+            print(f"🔍 No span annotations found for instance {instance_id}")
             return {}
-        # NB: Should this be a view/copy?
-        return self.instance_id_to_span_to_value[instance_id]
+
+        result = self.instance_id_to_span_to_value[instance_id]
+        print(f"🔍 Found span annotations for instance {instance_id}: {result}")
+        return result
 
     def get_user_id(self) -> str:
         '''Returns the user ID for this user'''
@@ -567,6 +585,10 @@ class InMemoryUserState(UserState):
     def get_assigned_instance_count(self):
         #print('instance_id_ordering ->', self.instance_id_ordering)
         return len(self.instance_id_ordering)
+
+    def get_assigned_instance_ids(self) -> set[str]:
+        """Returns the set of assigned instance IDs"""
+        return self.assigned_instance_ids.copy()
 
     def set_prestudy_status(self, whether_passed):
         if self.prestudy_passed is not None:
@@ -594,6 +616,13 @@ class InMemoryUserState(UserState):
         '''Returns True if the user has annotated the instance with the given ID'''
         return instance_id in self.instance_id_to_label_to_value \
             or instance_id in self.instance_id_to_span_to_value
+
+    def clear_all_annotations(self) -> None:
+        '''Clears all annotations for this user'''
+        self.instance_id_to_label_to_value.clear()
+        self.instance_id_to_span_to_value.clear()
+        self.instance_id_to_behavioral_data.clear()
+        self.ai_hints.clear()
 
     def has_remaining_assignments(self) -> bool:
         """Returns True if the user has any remaining instances to annotate. If the user

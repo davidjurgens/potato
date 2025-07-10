@@ -209,39 +209,56 @@ def generate_annotation_html_template(config: dict) -> str:
     # Keep track of all the keybindings we have
     all_keybindings = [("&#8592;", "Move backward"), ("&#8594;", "Move forward")]
 
-    # Potato admin can specify a custom HTML layout that allows variable-named
-    # placement of task elements
-    if config.get("custom_layout"):
-        for annotation_scheme in annotation_schemes:
-            schema_layout, keybindings = generate_schematic(annotation_scheme)
-            all_keybindings.extend(keybindings)
-            schema_name = annotation_scheme["name"]
+    # Check if we're using the new API-based template that generates forms dynamically
+    is_api_template = "base_template_v2.html" in html_template_file
 
-            updated_layout = task_html_layout.replace("{{" + schema_name + "}}", schema_layout)
+    if is_api_template:
+        # For the new API-based template, generate server-side forms but use API endpoints
+        # The frontend JavaScript will handle form interactions via API calls
+        logger.info("Using API-based template - generating server-side forms with API integration")
 
-            # Check that we actually updated the template
-            if task_html_layout == updated_layout:
-                raise Exception(
-                    (
-                        "%s indicated a custom layout but a corresponding layout "
-                        + "was not found for {{%s}} in %s. Check to ensure the "
-                        + "config.yaml and layout.html files have matching names"
-                    )
-                    % (config["__config_file__"], schema_name, config["html_layout"])
-                )
-
-            task_html_layout = updated_layout
-    # If the admin doesn't specify a custom layout, use the default layout
-    else:
-        # If we don't have a custom layout, accumulate all the tasks into a
-        # single HTML element
+        # Generate the forms using the existing schematic generation
         schema_layouts = ""
         for annotation_scheme in annotation_schemes:
             schema_layout, keybindings = generate_schematic(annotation_scheme)
             schema_layouts += schema_layout + "\n"
             all_keybindings.extend(keybindings)
 
-        task_html_layout = task_html_layout.replace("{{annotation_schematic}}", schema_layouts)
+        task_html_layout = schema_layouts
+    else:
+        # Potato admin can specify a custom HTML layout that allows variable-named
+        # placement of task elements
+        if config.get("custom_layout"):
+            for annotation_scheme in annotation_schemes:
+                schema_layout, keybindings = generate_schematic(annotation_scheme)
+                all_keybindings.extend(keybindings)
+                schema_name = annotation_scheme["name"]
+
+                updated_layout = task_html_layout.replace("{{" + schema_name + "}}", schema_layout)
+
+                # Check that we actually updated the template
+                if task_html_layout == updated_layout:
+                    raise Exception(
+                        (
+                            "%s indicated a custom layout but a corresponding layout "
+                            + "was not found for {{%s}} in %s. Check to ensure the "
+                            + "config.yaml and layout.html files have matching names"
+                        )
+                        % (config["__config_file__"], schema_name, config["html_layout"])
+                    )
+
+                task_html_layout = updated_layout
+        # If the admin doesn't specify a custom layout, use the default layout
+        else:
+            # If we don't have a custom layout, accumulate all the tasks into a
+            # single HTML element
+            schema_layouts = ""
+            for annotation_scheme in annotation_schemes:
+                schema_layout, keybindings = generate_schematic(annotation_scheme)
+                schema_layouts += schema_layout + "\n"
+                all_keybindings.extend(keybindings)
+
+            task_html_layout = task_html_layout.replace("{{annotation_schematic}}", schema_layouts)
 
     # Add in a codebook link if the admin specified one
     codebook_html = ""
@@ -260,6 +277,10 @@ def generate_annotation_html_template(config: dict) -> str:
     html_template = html_template.replace(
         "{{annotation_task_name}}", config["annotation_task_name"]
     )
+
+    # For API-based templates, replace debug placeholder
+    if is_api_template:
+        html_template = html_template.replace("{{ debug | tojson | safe }}", str(config.get("debug", False)).lower())
 
     keybindings_desc = generate_keybindings_sidebar(config, all_keybindings)
     html_template = html_template.replace("{{keybindings}}", keybindings_desc)

@@ -150,7 +150,7 @@ def generate_slider_layout(annotation_scheme):
                            min="{min_value}"
                            max="{max_value}"
                            value="{starting_value}"
-                           class="shadcn-slider-input"
+                           class="shadcn-slider-input annotation-input"
                            onclick="registerAnnotation(this);"
                            label_name="slider"
                            name="{name}"

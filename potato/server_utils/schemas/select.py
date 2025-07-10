@@ -21,12 +21,13 @@ def generate_select_layout(annotation_scheme):
         + "  <fieldset>"
         + ("  <legend>%s</legend>" % annotation_scheme["description"])
         + (
-            '  <select type="select-one" class="%s" id="%s" name="%s" validation="%s">'
+            '  <select type="select-one" class="%s annotation-input" id="%s" name="%s" validation="%s" schema="%s" label_name="value">'
             % (
                 annotation_scheme["description"],
                 annotation_scheme["id"],
                 annotation_scheme["name"] + ":::select-one",
                 validation,
+                annotation_scheme["name"],
             )
         )
     )

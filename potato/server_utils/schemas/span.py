@@ -88,10 +88,11 @@ def set_span_color(schema, span_label, color):
     span_colors[schema][span_label] = color
 
 def render_span_annotations(text, span_annotations: list[SpanAnnotation]):
+    print(f"🔍 render_span_annotations called with text: '{text[:50]}...' and {len(span_annotations)} spans")
 
     rev_order_sa = sorted(span_annotations, key=lambda d: d.get_start(), reverse=True)
 
-    print('rev_order_sa: ', rev_order_sa)
+    print('🔍 rev_order_sa: ', rev_order_sa)
 
     ann_wrapper = (
         '<span class="span_container" selection_label="{annotation}" '

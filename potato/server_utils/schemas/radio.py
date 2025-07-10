@@ -225,7 +225,7 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
         # Generate radio input
         schematic += f"""
             <div class="shadcn-radio-option">
-                <input class="{class_name} shadcn-radio-input"
+                <input class="{class_name} shadcn-radio-input annotation-input"
                        type="radio"
                        id="{name}"
                        name="{name}"
@@ -250,10 +250,11 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
         schematic += f"""
             <div class="shadcn-radio-free-response">
                 <span class="shadcn-radio-label">{instruction}</span>
-                <input class="{schema_name} shadcn-radio-free-input"
+                <input class="{schema_name} shadcn-radio-free-input annotation-input"
                        type="text"
                        id="{name}"
                        name="{name}"
+                       schema="{schema_name}"
                        label_name="free_response">
                 <label for="{name}"></label>
             </div>

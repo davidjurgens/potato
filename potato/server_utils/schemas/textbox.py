@@ -137,10 +137,17 @@ def generate_textbox_layout(annotation_scheme):
         # Determine if using textarea
         is_textarea = False
         textarea_attrs = ""
-        if annotation_scheme.get("textarea", {}).get("on"):
+
+        # Check for multiline flag (new format) or textarea.on (old format)
+        if annotation_scheme.get("multiline") or annotation_scheme.get("textarea", {}).get("on"):
             is_textarea = True
-            rows = annotation_scheme["textarea"].get("rows", "3")
-            cols = annotation_scheme["textarea"].get("cols", "40")
+            # Use multiline config or fall back to textarea config
+            if annotation_scheme.get("multiline"):
+                rows = annotation_scheme.get("rows", "3")
+                cols = annotation_scheme.get("cols", "40")
+            else:
+                rows = annotation_scheme["textarea"].get("rows", "3")
+                cols = annotation_scheme["textarea"].get("cols", "40")
             textarea_attrs = f"rows='{rows}' cols='{cols}'"
 
         # Show label if not the default text_box label
@@ -154,7 +161,7 @@ def generate_textbox_layout(annotation_scheme):
         if is_textarea:
             # Render textarea for multiline input
             schematic += f"""
-                <textarea class="{class_name} shadcn-textbox-input shadcn-textbox-textarea"
+                <textarea class="{class_name} shadcn-textbox-input shadcn-textbox-textarea annotation-input"
                           id="{name}"
                           name="{name}"
                           validation="{validation}"
@@ -167,7 +174,7 @@ def generate_textbox_layout(annotation_scheme):
         else:
             # Render input for single-line text
             schematic += f"""
-                <input class="{class_name} shadcn-textbox-input"
+                <input class="{class_name} shadcn-textbox-input annotation-input"
                        type="text"
                        id="{name}"
                        name="{name}"

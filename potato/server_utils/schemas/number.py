@@ -118,11 +118,13 @@ def generate_number_layout(annotation_scheme):
     input_attrs = _generate_input_attributes(annotation_scheme)
 
     schematic += f"""
-                <input class="{annotation_scheme['name']} shadcn-number-field"
+                <input class="{annotation_scheme['name']} shadcn-number-field annotation-input"
                        type="number"
                        id="{name}"
                        name="{name}"
                        validation="{validation}"
+                       schema="{annotation_scheme['name']}"
+                       label_name="value"
                        {input_attrs}>
                 <label for="{name}" {tooltip}></label>
             </div>
