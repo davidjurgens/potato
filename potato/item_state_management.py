@@ -3,7 +3,7 @@ from __future__ import annotations
 # Need to import UserState as a type hint for the ItemStateManager
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from user_state_management import UserState
+    from potato.user_state_management import UserState
 
 from enum import Enum
 from collections import OrderedDict, deque, Counter, defaultdict
@@ -252,6 +252,25 @@ class ItemStateManager:
         if not user_state.has_remaining_assignments():
             return 0
 
+        # Determine how many instances to assign
+        # If user has very few assignments left (less than 3), assign more to reduce server calls
+        current_assignments = user_state.get_assigned_instance_count()
+        max_assignments = user_state.get_max_assignments()
+
+        if max_assignments > 0:
+            remaining_capacity = max_assignments - current_assignments
+            if remaining_capacity <= 0:
+                return 0
+            # If user has less than 3 assignments, assign up to 3 more (or remaining capacity)
+            if current_assignments < 3:
+                instances_to_assign = min(3, remaining_capacity)
+            else:
+                # Otherwise, assign one at a time
+                instances_to_assign = 1
+        else:
+            # No maximum, assign one at a time
+            instances_to_assign = 1
+
         # TODO: add strategy for assigning instances to users:
         #
         # 1) Random assignment (up to max per item/user)
@@ -271,19 +290,25 @@ class ItemStateManager:
             unlabeled_items = [iid for iid in self.remaining_instance_ids if not user_state.has_annotated(iid)]
             if not unlabeled_items:
                 return 0
-            to_assign = random.sample(unlabeled_items, 1)
-            #print("assigning item %s to user %s" % (to_assign.get_id(), user_state.get_user_id()))
-            user_state.assign_instance(self.instance_id_to_item[to_assign])
-            return 1
+
+            # Assign the determined number of instances
+            to_assign = random.sample(unlabeled_items, min(instances_to_assign, len(unlabeled_items)))
+            for item_id in to_assign:
+                #print("assigning item %s to user %s" % (item_id, user_state.get_user_id()))
+                user_state.assign_instance(self.instance_id_to_item[item_id])
+            return len(to_assign)
         elif self.assignment_strategy == AssignmentStrategy.FIXED_ORDER:
             assigned = 0
             for iid in self.remaining_instance_ids:
                 if not user_state.has_annotated(iid):
                     #print("assigning item %s to user %s" % (iid, user_state.get_user_id()))
                     user_state.assign_instance(self.instance_id_to_item[iid])
+                    assigned += 1
 
-                    return 1
-            return 0
+                    # Stop if we've reached the target number of assignments
+                    if assigned >= instances_to_assign:
+                        break
+            return assigned
         elif self.assignment_strategy == AssignmentStrategy.MAX_DIVERSITY:
             # Assign items with highest disagreement (most diverse annotations)
             # This strategy prioritizes items that have conflicting annotations
@@ -297,32 +322,43 @@ class ItemStateManager:
                 disagreement_score = self._calculate_disagreement_score(iid)
                 item_disagreement_scores[iid] = disagreement_score
 
-            # Select item with highest disagreement (max diversity)
-            if item_disagreement_scores:
-                max_disagreement_item = max(item_disagreement_scores.keys(),
-                                          key=lambda x: item_disagreement_scores[x])
-                user_state.assign_instance(self.instance_id_to_item[max_disagreement_item])
-                return 1
+            # Sort items by disagreement score (highest first)
+            sorted_items = sorted(item_disagreement_scores.keys(),
+                                key=lambda x: item_disagreement_scores[x], reverse=True)
 
-            return 0
+            # Assign the determined number of instances
+            assigned = 0
+            for item_id in sorted_items[:instances_to_assign]:
+                user_state.assign_instance(self.instance_id_to_item[item_id])
+                assigned += 1
+
+            return assigned
         elif self.assignment_strategy == AssignmentStrategy.ACTIVE_LEARNING:
             # For now, fall back to random assignment
             # TODO: Implement active learning strategy
             unlabeled_items = [iid for iid in self.remaining_instance_ids if not user_state.has_annotated(iid)]
             if not unlabeled_items:
                 return 0
-            to_assign = random.sample(unlabeled_items, 1)
-            user_state.assign_instance(self.instance_id_to_item[to_assign])
-            return 1
+
+            # Assign the determined number of instances
+            to_assign = random.sample(unlabeled_items, min(instances_to_assign, len(unlabeled_items)))
+            for item_id in to_assign:
+                user_state.assign_instance(self.instance_id_to_item[item_id])
+
+            return len(to_assign)
         elif self.assignment_strategy == AssignmentStrategy.LLM_CONFIDENCE:
             # For now, fall back to random assignment
             # TODO: Implement LLM confidence strategy
             unlabeled_items = [iid for iid in self.remaining_instance_ids if not user_state.has_annotated(iid)]
             if not unlabeled_items:
                 return 0
-            to_assign = random.sample(unlabeled_items, 1)
-            user_state.assign_instance(self.instance_id_to_item[to_assign])
-            return 1
+
+            # Assign the determined number of instances
+            to_assign = random.sample(unlabeled_items, min(instances_to_assign, len(unlabeled_items)))
+            for item_id in to_assign:
+                user_state.assign_instance(self.instance_id_to_item[item_id])
+
+            return len(to_assign)
         elif self.assignment_strategy == AssignmentStrategy.LEAST_ANNOTATED:
             # Assign items with the fewest annotations
             unlabeled_items = [iid for iid in self.remaining_instance_ids if not user_state.has_annotated(iid)]
@@ -334,14 +370,17 @@ class ItemStateManager:
             for iid in unlabeled_items:
                 item_annotation_counts[iid] = len(self.item_annotators[iid])
 
-            # Select item with the fewest annotations (least annotated)
-            if item_annotation_counts:
-                min_annotated_item = min(item_annotation_counts.keys(),
-                                         key=lambda x: item_annotation_counts[x])
-                user_state.assign_instance(self.instance_id_to_item[min_annotated_item])
-                return 1
+            # Sort items by annotation count (fewest first)
+            sorted_items = sorted(item_annotation_counts.keys(),
+                                 key=lambda x: item_annotation_counts[x])
 
-            return 0
+            # Assign the determined number of instances
+            assigned = 0
+            for item_id in sorted_items[:instances_to_assign]:
+                user_state.assign_instance(self.instance_id_to_item[item_id])
+                assigned += 1
+
+            return assigned
         else:
             print("Unsupported assignment strategy: %s" % self.assignment_strategy)
             raise ValueError("Unsupported assignment strategy, %s" % self.assignment_strategy)
@@ -358,7 +397,7 @@ class ItemStateManager:
         all_annotations = []
         for user_id in self.item_annotators[instance_id]:
             # Use lazy import to avoid circular import
-            from user_state_management import get_user_state_manager
+            from potato.user_state_management import get_user_state_manager
             user_state = get_user_state_manager().get_user_state(user_id)
             if user_state and user_state.has_annotated(instance_id):
                 annotations = user_state.get_label_annotations(instance_id)
@@ -453,3 +492,18 @@ class ItemStateManager:
             if instance_id not in self.completed_instance_ids:
                 self.completed_instance_ids.add(instance_id)
                 self.remaining_instance_ids.remove(instance_id)
+
+    def clear(self):
+        """Clear all item state (for testing/debugging)."""
+        print(f"[DEBUG] ItemStateManager attributes before clear: {list(self.__dict__.keys())}")
+        # Only clear attributes that exist
+        for attr in [
+            'instance_id_to_item',
+            'instance_id_ordering',
+            'item_annotators',
+            'item_annotation_counts',
+            'remaining_instance_ids',
+            'completed_instance_ids',
+        ]:
+            if hasattr(self, attr):
+                getattr(self, attr).clear()

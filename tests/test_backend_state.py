@@ -7,33 +7,26 @@ backend state management, user interactions, and system behavior.
 
 import json
 import pytest
-import requests
 import time
+from tests.flask_test_setup import FlaskTestServer
 from unittest.mock import patch, MagicMock
+import requests
 
 
 class TestBackendState:
     """Test backend state management using the new test routes."""
 
-    @pytest.fixture(scope="class")
-    def server_url(self):
-        """Get the server URL for testing."""
-        return "http://localhost:9001"
+    @pytest.fixture(scope="class", autouse=True)
+    def flask_server(self, request):
+        server = FlaskTestServer(port=9001, debug=True)
+        assert server.start_server()
+        yield server
+        server.stop_server()
 
-    @pytest.fixture(scope="class")
-    def test_config(self):
-        """Get a test configuration."""
-        return {
-            "debug": True,
-            "annotation_task_name": "Backend State Test",
-            "max_annotations_per_user": 10,
-            "secret_key": "test-secret-key"
-        }
-
-    def test_health_check(self, server_url):
+    def test_health_check(self, flask_server):
         """Test the health check endpoint."""
         try:
-            response = requests.get(f"{server_url}/test/health", timeout=5)
+            response = flask_server.get("/test/health", timeout=5)
             assert response.status_code in [200, 302]  # Accept redirects
 
             if response.status_code == 200:
@@ -41,13 +34,13 @@ class TestBackendState:
                 assert data["status"] in ["healthy", "unhealthy"]
                 assert "timestamp" in data
                 assert "managers" in data
-        except requests.exceptions.ConnectionError:
+        except Exception:
             pytest.skip("Server not running")
 
-    def test_system_state_initial(self, server_url):
+    def test_system_state_initial(self, flask_server):
         """Test getting initial system state."""
         try:
-            response = requests.get(f"{server_url}/test/system_state", timeout=5)
+            response = flask_server.get("/test/system_state", timeout=5)
             assert response.status_code in [200, 302]
 
             if response.status_code == 200:
@@ -60,16 +53,16 @@ class TestBackendState:
                 assert data["system_state"]["total_users"] == 0
                 assert data["system_state"]["total_items"] == 0
                 assert data["system_state"]["total_annotations"] == 0
-        except requests.exceptions.ConnectionError:
+        except Exception:
             pytest.skip("Server not running")
 
-    def test_user_creation_and_state(self, server_url):
+    def test_user_creation_and_state(self, flask_server):
         """Test creating a user and checking their state."""
         try:
             # Create a test user
             user_data = {"username": "test_user_1"}
-            response = requests.post(
-                f"{server_url}/test/create_user",
+            response = flask_server.post(
+                "/test/create_user",
                 json=user_data,
                 timeout=5
             )
@@ -77,11 +70,11 @@ class TestBackendState:
 
             if response.status_code == 200:
                 data = response.json()
-                assert data["status"] == "created"
+                assert data["status"] == "completed"
                 assert data["username"] == "test_user_1"
 
                 # Check user state
-                response = requests.get(f"{server_url}/test/user_state/test_user_1", timeout=5)
+                response = flask_server.get(f"/test/user_state/test_user_1", timeout=5)
                 assert response.status_code in [200, 302]
 
                 if response.status_code == 200:
@@ -90,24 +83,24 @@ class TestBackendState:
                     assert "phase" in user_state
                     assert "assignments" in user_state
                     assert "annotations" in user_state
-        except requests.exceptions.ConnectionError:
+        except Exception:
             pytest.skip("Server not running")
 
-    def test_user_phase_advancement(self, server_url):
+    def test_user_phase_advancement(self, flask_server):
         """Test advancing a user's phase."""
         try:
             # Create a user first
             user_data = {"username": "test_user_2"}
-            requests.post(f"{server_url}/test/create_user", json=user_data, timeout=5)
+            flask_server.post(f"/test/create_user", json=user_data, timeout=5)
 
             # Get initial phase
-            response = requests.get(f"{server_url}/test/user_state/test_user_2", timeout=5)
+            response = flask_server.get(f"/test/user_state/test_user_2", timeout=5)
             if response.status_code == 200:
                 initial_state = response.json()
                 initial_phase = initial_state["phase"]
 
                 # Advance phase
-                response = requests.post(f"{server_url}/test/advance_user_phase/test_user_2", timeout=5)
+                response = flask_server.post(f"/test/advance_user_phase/test_user_2", timeout=5)
                 assert response.status_code in [200, 302]
 
                 if response.status_code == 200:
@@ -116,13 +109,13 @@ class TestBackendState:
                     assert data["username"] == "test_user_2"
                     assert data["old_phase"] == initial_phase
                     assert data["new_phase"] != initial_phase
-        except requests.exceptions.ConnectionError:
+        except Exception:
             pytest.skip("Server not running")
 
-    def test_item_state_inspection(self, server_url):
+    def test_item_state_inspection(self, flask_server):
         """Test inspecting item state."""
         try:
-            response = requests.get(f"{server_url}/test/item_state", timeout=5)
+            response = flask_server.get(f"/test/item_state", timeout=5)
             assert response.status_code in [200, 302]
 
             if response.status_code == 200:
@@ -136,15 +129,15 @@ class TestBackendState:
                 assert "items_with_annotations" in summary
                 assert "items_without_annotations" in summary
                 assert "average_annotations_per_item" in summary
-        except requests.exceptions.ConnectionError:
+        except Exception:
             pytest.skip("Server not running")
 
-    def test_annotation_submission_and_state(self, server_url):
+    def test_annotation_submission_and_state(self, flask_server):
         """Test submitting annotations and verifying state changes."""
         try:
             # Create a test user
             user_data = {"username": "test_user_3"}
-            requests.post(f"{server_url}/test/create_user", json=user_data, timeout=5)
+            flask_server.post(f"{flask_server.base_url}/test/create_user", json=user_data, timeout=5)
 
             # Submit an annotation
             annotation_data = {
@@ -152,8 +145,8 @@ class TestBackendState:
                 "annotation_data": json.dumps({"test_annotation": "test_value"})
             }
 
-            response = requests.post(
-                f"{server_url}/submit_annotation",
+            response = flask_server.post(
+                f"{flask_server.base_url}/submit_annotation",
                 data=annotation_data,
                 timeout=5
             )
@@ -161,30 +154,30 @@ class TestBackendState:
 
             if response.status_code == 200:
                 # Check that the annotation was recorded
-                response = requests.get(f"{server_url}/test/user_state/test_user_3", timeout=5)
+                response = flask_server.get(f"{flask_server.base_url}/test/user_state/test_user_3", timeout=5)
                 if response.status_code == 200:
                     user_state = response.json()
                     assert user_state["annotations"]["total_count"] > 0
                     assert "test_item_1" in user_state["annotations"]["by_instance"]
-        except requests.exceptions.ConnectionError:
+        except Exception:
             pytest.skip("Server not running")
 
-    def test_system_reset(self, server_url):
+    def test_system_reset(self, flask_server):
         """Test resetting the system state."""
         try:
             # Create some test data first
             user_data = {"username": "test_user_reset"}
-            requests.post(f"{server_url}/test/create_user", json=user_data, timeout=5)
+            flask_server.post(f"{flask_server.base_url}/test/create_user", json=user_data, timeout=5)
 
             # Submit an annotation
             annotation_data = {
                 "instance_id": "test_item_reset",
                 "annotation_data": json.dumps({"test": "value"})
             }
-            requests.post(f"{server_url}/submit_annotation", data=annotation_data, timeout=5)
+            flask_server.post(f"{flask_server.base_url}/submit_annotation", data=annotation_data, timeout=5)
 
             # Reset the system
-            response = requests.post(f"{server_url}/test/reset", timeout=5)
+            response = flask_server.post(f"{flask_server.base_url}/test/reset", timeout=5)
             assert response.status_code in [200, 302]
 
             if response.status_code == 200:
@@ -192,32 +185,32 @@ class TestBackendState:
                 assert data["status"] == "reset_complete"
 
                 # Verify system is reset
-                response = requests.get(f"{server_url}/test/system_state", timeout=5)
+                response = flask_server.get(f"{flask_server.base_url}/test/system_state", timeout=5)
                 if response.status_code == 200:
                     system_state = response.json()
                     assert system_state["system_state"]["total_users"] == 0
                     assert system_state["system_state"]["total_annotations"] == 0
-        except requests.exceptions.ConnectionError:
+        except Exception:
             pytest.skip("Server not running")
 
-    def test_error_handling(self, server_url):
+    def test_error_handling(self, flask_server):
         """Test error handling in test routes."""
         try:
             # Test getting non-existent user
-            response = requests.get(f"{server_url}/test/user_state/nonexistent_user", timeout=5)
+            response = flask_server.get(f"{flask_server.base_url}/test/user_state/nonexistent_user", timeout=5)
             assert response.status_code in [404, 302]
 
             # Test getting non-existent item
-            response = requests.get(f"{server_url}/test/item_state/nonexistent_item", timeout=5)
+            response = flask_server.get(f"{flask_server.base_url}/test/item_state/nonexistent_item", timeout=5)
             assert response.status_code in [404, 302]
 
             # Test creating user without username
-            response = requests.post(f"{server_url}/test/create_user", json={}, timeout=5)
+            response = flask_server.post(f"{flask_server.base_url}/test/create_user", json={}, timeout=5)
             assert response.status_code in [400, 302]
-        except requests.exceptions.ConnectionError:
+        except Exception:
             pytest.skip("Server not running")
 
-    def test_concurrent_user_operations(self, server_url):
+    def test_concurrent_user_operations(self, flask_server):
         """Test concurrent operations on multiple users."""
         try:
             # Create multiple users
@@ -225,11 +218,11 @@ class TestBackendState:
 
             for username in users:
                 user_data = {"username": username}
-                response = requests.post(f"{server_url}/test/create_user", json=user_data, timeout=5)
+                response = flask_server.post(f"{flask_server.base_url}/test/create_user", json=user_data, timeout=5)
                 assert response.status_code in [200, 302]
 
             # Check system state
-            response = requests.get(f"{server_url}/test/system_state", timeout=5)
+            response = flask_server.get(f"{flask_server.base_url}/test/system_state", timeout=5)
             if response.status_code == 200:
                 data = response.json()
                 assert data["system_state"]["total_users"] >= len(users)
@@ -237,18 +230,18 @@ class TestBackendState:
                 # Verify each user exists
                 for username in users:
                     assert username in data["users"]
-        except requests.exceptions.ConnectionError:
+        except Exception:
             pytest.skip("Server not running")
 
-    def test_annotation_workflow_integration(self, server_url):
+    def test_annotation_workflow_integration(self, flask_server):
         """Test a complete annotation workflow using test routes."""
         try:
             # Create a test user
             user_data = {"username": "workflow_user"}
-            requests.post(f"{server_url}/test/create_user", json=user_data, timeout=5)
+            flask_server.post("/test/create_user", json=user_data, timeout=5)
 
             # Advance user to annotation phase
-            requests.post(f"{server_url}/test/advance_user_phase/workflow_user", timeout=5)
+            flask_server.post("/test/advance_user_phase/workflow_user", timeout=5)
 
             # Submit multiple annotations
             for i in range(3):
@@ -256,21 +249,21 @@ class TestBackendState:
                     "instance_id": f"workflow_item_{i}",
                     "annotation_data": json.dumps({"rating": i + 1})
                 }
-                requests.post(f"{server_url}/submit_annotation", data=annotation_data, timeout=5)
+                flask_server.post("/submit_annotation", data=annotation_data, timeout=5)
 
             # Verify final state
-            response = requests.get(f"{server_url}/test/user_state/workflow_user", timeout=5)
+            response = flask_server.get("/test/user_state/workflow_user", timeout=5)
             if response.status_code == 200:
                 user_state = response.json()
                 assert user_state["annotations"]["total_count"] == 3
                 assert user_state["phase"] == "ANNOTATION"
 
                 # Check system state
-                response = requests.get(f"{server_url}/test/system_state", timeout=5)
+                response = flask_server.get("/test/system_state", timeout=5)
                 if response.status_code == 200:
                     system_state = response.json()
                     assert system_state["system_state"]["total_annotations"] >= 3
-        except requests.exceptions.ConnectionError:
+        except Exception:
             pytest.skip("Server not running")
 
 

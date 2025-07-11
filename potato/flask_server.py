@@ -47,19 +47,19 @@ base_html_dir = os.path.join(cur_program_dir,'base_htmls') #get the dir where th
 #insert the current program dir into sys path
 sys.path.insert(0, cur_program_dir)
 
-from item_state_management import ItemStateManager, Item, Label, SpanAnnotation
-from item_state_management import get_item_state_manager, init_item_state_manager
-from user_state_management import UserStateManager, UserState, get_user_state_manager, init_user_state_manager
-from authentificaton import UserAuthenticator
-from phase import UserPhase
+from potato.item_state_management import ItemStateManager, Item, Label, SpanAnnotation
+from potato.item_state_management import get_item_state_manager, init_item_state_manager
+from potato.user_state_management import UserStateManager, UserState, get_user_state_manager, init_user_state_manager
+from potato.authentificaton import UserAuthenticator
+from potato.phase import UserPhase
 
-from create_task_cli import create_task_cli, yes_or_no
-from server_utils.arg_utils import arguments
-from server_utils.config_module import init_config, config
-from server_utils.schemas.span import render_span_annotations
-from server_utils.cli_utlis import get_project_from_hub, show_project_hub
-from server_utils.prolific_apis import ProlificStudy
-from server_utils.json import easy_json
+from potato.create_task_cli import create_task_cli, yes_or_no
+from potato.server_utils.arg_utils import arguments
+from potato.server_utils.config_module import init_config, config
+from potato.server_utils.schemas.span import render_span_annotations
+from potato.server_utils.cli_utlis import get_project_from_hub, show_project_hub
+from potato.server_utils.prolific_apis import ProlificStudy
+from potato.server_utils.json import easy_json
 
 # This allows us to create an AI endpoint for the system to interact with as needed (if configured)
 from ai.ai_endpoint import get_ai_endpoint
@@ -67,8 +67,7 @@ from ai.ai_endpoint import get_ai_endpoint
 # Initialize Flask app
 app = Flask(__name__)
 
-# Set a default secret key for sessions to work (required for testing)
-app.secret_key = "potato-annotation-platform-test-key"
+# Secret key will be set in configure_app() from config
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -199,6 +198,17 @@ def load_instance_data(config: dict):
             raise Exception("Unsupported input file format %s for %s" % (fmt, data_fname))
 
         logger.debug("Reading data from " + data_fname)
+        print(f"[DEBUG] Loading data from file: {data_fname}")
+        print(f"[DEBUG] Current working directory: {os.getcwd()}")
+        print(f"[DEBUG] File exists: {os.path.exists(data_fname)}")
+
+        # Read and print first few lines of the file
+        try:
+            with open(data_fname, "rt") as f:
+                first_lines = [f.readline().strip() for _ in range(3)]
+                print(f"[DEBUG] First 3 lines of file: {first_lines}")
+        except Exception as e:
+            print(f"[DEBUG] Error reading file: {e}")
 
         if fmt in ["json", "jsonl"]:
             with open(data_fname, "rt") as f:
@@ -358,73 +368,64 @@ def load_phase_data(config: dict) -> None:
     if "order" in phases:
         phase_order = phases["order"]
     else:
-        phase_order = list(phases.keys())
+        phase_order = [k for k in phases.keys() if k != "order"]
+
+    logger.debug(f"[PHASE LOAD] phases dict: {phases}")
+    logger.debug(f"[PHASE LOAD] phase_order: {phase_order}")
 
     logger.debug("Loading %d phases in order: %s" % (len(phase_order), phase_order))
 
-    # TODO: add some logging if "order" was specified with fewer phases than are defined
-    # TODO: add some validation logic to ensure that
-    #         1) all phase names have a definition in the config
-    #         2) all names are unique (no repeats)
-    #         3) all names are strings
-    #         4) all names are non-empty
-    #         5) all types are recognized and valid
-
     for phase_name in phase_order:
-        phase = phases[phase_name]
-        if not "type" in phase or not phase['type']:
-            raise Exception("Phase %s does not have a type" % phase_name)
-        if not "file" in phase or not phase['file']:
-            raise Exception("Phase %s is specified but does not have a file" % phase_name)
-
-        # Get the phase labeling schemes, being robust to relative or absolute paths
-        phase_scheme_fname = get_abs_or_rel_path(phase['file'], config)
-        phase_labeling_schemes = get_phase_annotation_schemes(phase_scheme_fname)
-
-        # Use the default templates unless specified in the phase config
-        html_template_filename = config["base_html_template"]
-        if 'template' in phase:
-            html_template_filename = phase['template']
-        html_header_filename = config["header_file"]
-        if 'header' in phase:
-            html_header_filename = phase['header']
-        html_layout_filename = config["html_layout"]
-        if 'layout' in phase:
-            html_layout_filename = phase['layout']
-
         try:
-            phase_html_fname = generate_html_from_schematic(html_template_filename,
-                                            html_header_filename,
-                                            html_layout_filename,
-                                            phase_labeling_schemes,
-                                            False, False,
-                                            phase_name, config)
-        except KeyError as e:
-            raise Exception("Error generating HTML for phase %s (file: %s): %s" \
-                            % (phase_name, phase['file'], str(e)))
+            phase = phases[phase_name]
+            if not "type" in phase or not phase['type']:
+                logger.error(f"Phase {phase_name} does not have a type")
+                raise Exception("Phase %s does not have a type" % phase_name)
+            if not "file" in phase or not phase['file']:
+                logger.error(f"Phase {phase_name} is specified but does not have a file")
+                raise Exception("Phase %s is specified but does not have a file" % phase_name)
 
-        phase_type = UserPhase.fromstr(phase['type'])
+            # Get the phase labeling schemes, being robust to relative or absolute paths
+            phase_scheme_fname = get_abs_or_rel_path(phase['file'], config)
+            logger.debug(f"Resolved phase file for {phase_name}: {phase_scheme_fname}")
+            phase_labeling_schemes = get_phase_annotation_schemes(phase_scheme_fname)
 
-        # Register the HTML so it's easy to find later
-        # config['phase'][phase['type']]['pages'].append(phase_html_fname)
-        # Add the phase to the user state manager
-        user_state_manager = get_user_state_manager()
-        user_state_manager.add_phase(phase_type, phase_name, phase_html_fname)
+            # Use the default templates unless specified in the phase config
+            html_template_filename = config["base_html_template"]
+            if 'template' in phase:
+                html_template_filename = phase['template']
+            html_header_filename = config["header_file"]
+            if 'header' in phase:
+                html_header_filename = phase['header']
+            html_layout_filename = config["html_layout"]
+            if 'layout' in phase:
+                html_layout_filename = phase['layout']
 
-        match phase['type']:
-            case "consent":
-                consent_fname = None
-            case "instructions":
-                instructions_fname = phase_html_fname
-            case "prestudy":
-                prestudy_fname = phase_html_fname
-            case "training":
-                training_fname = phase_html_fname
-            case "poststudy":
-                poststudy_fname = phase_html_fname
-            case _:
-                raise Exception("Unknown phase type %s specified for %s" \
-                                 % (phase_name, phase['type']))
+            try:
+                phase_html_fname = generate_html_from_schematic(html_template_filename,
+                                                html_header_filename,
+                                                html_layout_filename,
+                                                phase_labeling_schemes,
+                                                False, False,
+                                                phase_name, config)
+            except KeyError as e:
+                logger.error(f"Error generating HTML for phase {phase_name} (file: {phase['file']}): {e}")
+                raise Exception("Error generating HTML for phase %s (file: %s): %s" \
+                                % (phase_name, phase['file'], str(e)))
+
+            phase_type = UserPhase.fromstr(phase['type'])
+
+            # Register the HTML so it's easy to find later
+            user_state_manager = get_user_state_manager()
+            user_state_manager.add_phase(phase_type, phase_name, phase_html_fname)
+            logger.debug(f"Registered phase {phase_name} as {phase_type} with HTML {phase_html_fname}")
+
+        except Exception as e:
+            logger.error(f"Failed to load phase '{phase_name}': {e}")
+            continue
+
+    user_state_manager = get_user_state_manager()
+    logger.debug(f"[PHASE LOAD] phase_type_to_name_to_page: {user_state_manager.phase_type_to_name_to_page}")
 
 
 def get_phase_annotation_schemes(filename: str) -> list[dict]:
@@ -456,30 +457,46 @@ def get_abs_or_rel_path(fname: str, config: dict) -> str:
     Returns the path to the fname if it exists as specified, or if not, attempts to find
     the file in the relative paths from the config file.
     """
-
+    import os
+    logger = globals().get('logger', None)
+    if logger:
+        logger.debug(f"get_abs_or_rel_path: input fname={fname}")
     if os.path.exists(fname):
+        if logger:
+            logger.debug(f"get_abs_or_rel_path: found file at {fname}")
         return fname
 
     # See if we can find the file in the same directory as the config file
-    dname = os.path.dirname(config["__config_file__"])
+    dname = os.path.dirname(config["__config_file__"]) if "__config_file__" in config else os.getcwd()
     rel_path = os.path.join(dname, fname)
+    if logger:
+        logger.debug(f"get_abs_or_rel_path: trying {rel_path}")
     if os.path.exists(rel_path):
+        if logger:
+            logger.debug(f"get_abs_or_rel_path: found file at {rel_path}")
         return rel_path
 
     # See if we can locate the file in the current working directory
     cwd = os.getcwd()
     rel_path = os.path.join(cwd, fname)
+    if logger:
+        logger.debug(f"get_abs_or_rel_path: trying {rel_path}")
     if os.path.exists(rel_path):
+        if logger:
+            logger.debug(f"get_abs_or_rel_path: found file at {rel_path}")
         return rel_path
 
     # See if we can figure it out from the real path directory
     real_path = os.path.abspath(dname)
     dir_path = os.path.dirname(real_path)
-    fname = os.path.join(dir_path, fname)
-
-    if not os.path.exists(fname):
-        raise FileNotFoundError("File not found: %s" % fname)
-    return fname
+    fname2 = os.path.join(dir_path, fname)
+    if logger:
+        logger.debug(f"get_abs_or_rel_path: trying {fname2}")
+    if not os.path.exists(fname2):
+        if logger:
+            logger.error(f"File not found: {fname2}")
+        raise FileNotFoundError("File not found: %s" % fname2)
+    return fname2
 
 def get_displayed_text(text):
     """Render the text to display to the user in the annotation interface."""

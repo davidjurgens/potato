@@ -7,10 +7,9 @@ import os
 
 import logging
 
-from authentificaton import UserAuthenticator
-from phase import UserPhase
-
-from item_state_management import get_item_state_manager, Item, SpanAnnotation, Label
+from potato.authentificaton import UserAuthenticator
+from potato.phase import UserPhase
+from potato.item_state_management import get_item_state_manager, Item, SpanAnnotation, Label
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -37,7 +36,6 @@ def get_user_state_manager() -> UserStateManager:
     Returns the manager for tracking all the users' states in where they are in the annotation process.
     '''
     global USER_STATE_MANAGER
-
     if USER_STATE_MANAGER is None:
         raise ValueError('User state manager has not been initialized')
     return USER_STATE_MANAGER
@@ -160,7 +158,6 @@ class UserStateManager:
 
         # Get the current of their phase
         cur_phase, cur_page = user_state.get_current_phase_and_page()
-        print('GET NEXT USER PHASE PAGE: cur_phase, cur_page: ', cur_phase, cur_page)
         if cur_phase == UserPhase.DONE:
             return UserPhase.DONE, None
 
@@ -174,16 +171,50 @@ class UserStateManager:
                 return cur_phase, next_page
 
         # If there are no more pages in this phase, return the next phase.
-        # Filter the set of all_phases to those that were added to this task
-        all_phases = [p for p in list(UserPhase) if p in self.phase_type_to_name_to_page]
-        cur_phase_index = all_phases.index(cur_phase)
-        if cur_phase_index < len(all_phases) - 1:
-            next_phase = all_phases[cur_phase_index + 1]
-            # Use the first page in the next phase
-            next_page = list(self.phase_type_to_name_to_page[next_phase].keys())[0]
-            return next_phase, next_page
+        # Use the config's phase order instead of the enum order
+        if "phases" in self.config and "order" in self.config["phases"]:
+            # Use config phase order
+            config_phase_order = self.config["phases"]["order"]
+            # Convert config phase names to UserPhase enums
+            config_phases = []
+            for phase_name in config_phase_order:
+                if phase_name in self.config["phases"]:
+                    phase_type_str = self.config["phases"][phase_name]["type"]
+                    phase_type = UserPhase.fromstr(phase_type_str)
+                    if phase_type in self.phase_type_to_name_to_page:
+                        config_phases.append(phase_type)
+                    else:
+                        pass # Phase not found in phase_type_to_name_to_page
+                else:
+                    pass # Phase not found in config phases
+
+            # Add ANNOTATION phase if it's not in config but exists in phase_type_to_name_to_page
+            if UserPhase.ANNOTATION in self.phase_type_to_name_to_page and UserPhase.ANNOTATION not in config_phases:
+                config_phases.append(UserPhase.ANNOTATION)
+
+            # Find current phase in config order
+            if cur_phase in config_phases:
+                cur_phase_index = config_phases.index(cur_phase)
+                if cur_phase_index < len(config_phases) - 1:
+                    next_phase = config_phases[cur_phase_index + 1]
+                    # Use the first page in the next phase
+                    next_page = list(self.phase_type_to_name_to_page[next_phase].keys())[0]
+                    return next_phase, next_page
+                else:
+                    pass # Current phase is last in config order
+            else:
+                pass # Current phase not found in config_phases
         else:
-            return UserPhase.DONE, None
+            # Fallback to enum order if no config order is specified
+            all_phases = [p for p in list(UserPhase) if p in self.phase_type_to_name_to_page]
+            cur_phase_index = all_phases.index(cur_phase)
+            if cur_phase_index < len(all_phases) - 1:
+                next_phase = all_phases[cur_phase_index + 1]
+                # Use the first page in the next phase
+                next_page = list(self.phase_type_to_name_to_page[next_phase].keys())[0]
+                return next_phase, next_page
+
+        return UserPhase.DONE, None
 
     def get_user_ids(self) -> list[str]:
         '''Gets all user IDs from the user state manager'''
@@ -243,6 +274,17 @@ class UserStateManager:
 
         return user_state
 
+    def clear(self):
+        """Clear all user state (for testing/debugging)."""
+        self.user_to_annotation_state.clear()
+        self.task_assignment.clear()
+        self.prolific_study = None
+        self.phase_type_to_name_to_page.clear()
+        self.max_annotations_per_user = -1
+
+        # Reload phases after clearing to ensure phase_type_to_name_to_page is repopulated
+        from potato.flask_server import load_phase_data
+        load_phase_data(self.config)
 
 
 class UserState:
@@ -455,8 +497,6 @@ class InMemoryUserState(UserState):
         return self.span_annotations
 
     def add_label_annotation(self, instance_id: str, label: Label, value: any) -> None:
-        '''Assigns the provided label to the instance or if the user is not in the annotation phase,
-              to the page associated with the current phase'''
         if self.current_phase_and_page[0] == UserPhase.ANNOTATION:
             self.instance_id_to_label_to_value[instance_id][label] = value
         else:
@@ -466,16 +506,10 @@ class InMemoryUserState(UserState):
     def add_span_annotation(self, instance_id: str, label: SpanAnnotation, value: any) -> None:
         '''Adds a set of span annotations to the instance or if the user is not
            in the annotation phase, to the page associated with the current phase'''
-        print(f"🔍 add_span_annotation called: instance_id={instance_id}, label={label}, value={value}")
-        print(f"🔍 Current phase: {self.current_phase_and_page[0]}")
-
         if self.current_phase_and_page[0] == UserPhase.ANNOTATION:
             self.instance_id_to_span_to_value[instance_id][label] = value
-            print(f"🔍 Added span annotation to instance {instance_id}: {label} = {value}")
-            print(f"🔍 Current span annotations for instance {instance_id}: {dict(self.instance_id_to_span_to_value[instance_id])}")
         else:
             self.phase_to_page_to_span_to_value[self.current_phase_and_page[0]][self.current_phase_and_page[1]][label] = value
-            print(f"🔍 Added span annotation to phase {self.current_phase_and_page[0]}, page {self.current_phase_and_page[1]}: {label} = {value}")
 
     def get_current_instance_index(self):
         '''Returns the index of the item the user is annotating within the list of items
@@ -501,7 +535,6 @@ class InMemoryUserState(UserState):
         '''Moves the user forward to the next instance and returns True if successful'''
         #print('GO FORWARD current_instance_index ->', self.current_instance_index)
         #print('GO FORWARD instance_id_ordering ->', self.instance_id_ordering)
-        print(f"self.instance_id_ordering: {len(self.instance_id_ordering)}")
         if self.current_instance_index < len(self.instance_id_ordering) - 1:
             self.current_instance_index += 1
             return True
@@ -522,10 +555,6 @@ class InMemoryUserState(UserState):
         """
         Returns all annotations (label and span) for all annotated instances
         """
-        print(f"🔍 get_all_annotations called")
-        print(f"🔍 Label annotation instances: {list(self.instance_id_to_label_to_value.keys())}")
-        print(f"🔍 Span annotation instances: {list(self.instance_id_to_span_to_value.keys())}")
-
         labeled = set(self.instance_id_to_label_to_value.keys()) | set(
             self.instance_id_to_span_to_value.keys()
         )
@@ -540,9 +569,7 @@ class InMemoryUserState(UserState):
                 spans = self.instance_id_to_span_to_value[iid]
 
             anns[iid] = {"labels": labels, "spans": spans}
-            print(f"🔍 Instance {iid} annotations: labels={labels}, spans={spans}")
 
-        print(f"🔍 Final annotations dict: {anns}")
         return anns
 
     def get_label_annotations(self, instance_id) -> dict[str,list[Label]]:
@@ -559,15 +586,10 @@ class InMemoryUserState(UserState):
         """
         Returns a mapping from each schema to the span annotations for that schema.
         """
-        print(f"🔍 get_span_annotations called for instance {instance_id}")
-        print(f"🔍 Available span annotations: {list(self.instance_id_to_span_to_value.keys())}")
-
         if instance_id not in self.instance_id_to_span_to_value:
-            print(f"🔍 No span annotations found for instance {instance_id}")
             return {}
 
         result = self.instance_id_to_span_to_value[instance_id]
-        print(f"🔍 Found span annotations for instance {instance_id}: {result}")
         return result
 
     def get_user_id(self) -> str:
@@ -929,4 +951,9 @@ class InMemoryUserState(UserState):
         ]
 
         return user_state
+
+    def add_annotation(self, instance_id, annotation):
+        """Add a label annotation for the given instance."""
+        # Store the annotation as a dict under the instance_id
+        self.instance_id_to_label_to_value[instance_id].update(annotation)
 

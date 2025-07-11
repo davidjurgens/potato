@@ -5,7 +5,7 @@ Span Layout
 import logging
 from collections.abc import Mapping
 from collections import defaultdict
-from server_utils.config_module import config
+from potato.server_utils.config_module import config
 from .identifier_utils import (
     safe_generate_layout,
     generate_element_identifier,
@@ -14,7 +14,7 @@ from .identifier_utils import (
     escape_html_content
 )
 
-from item_state_management import SpanAnnotation
+from potato.item_state_management import SpanAnnotation
 
 logger = logging.getLogger(__name__)
 
