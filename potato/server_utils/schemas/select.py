@@ -4,31 +4,49 @@ Select Layout
 
 import os
 from pathlib import Path
-
+from .identifier_utils import (
+    safe_generate_layout,
+    generate_element_identifier,
+    generate_validation_attribute,
+    escape_html_content
+)
 
 def generate_select_layout(annotation_scheme):
+    """
+    Generate HTML for a select dropdown interface.
 
-    # setting up label validation for each label, if "required" is True, the annotators will be asked to finish the current instance to proceed
-    validation = ""
-    label_requirement = (
-        annotation_scheme["label_requirement"] if "label_requirement" in annotation_scheme else None
-    )
-    if label_requirement and ("required" in label_requirement) and label_requirement["required"]:
-        validation = "required"
+    Args:
+        annotation_scheme (dict): Configuration including:
+            - name: Schema identifier
+            - description: Display description
+            - labels: List of options or path to file containing options
+            - use_predefined_labels: Use predefined label sets (country, ethnicity, religion)
+            - label_requirement (dict): Optional validation settings
+                - required (bool): Whether selection is mandatory
+
+    Returns:
+        tuple: (html_string, key_bindings)
+            html_string: Complete HTML for the select interface
+            key_bindings: Empty list (no keyboard shortcuts)
+    """
+    return safe_generate_layout(annotation_scheme, _generate_select_layout_internal)
+
+def _generate_select_layout_internal(annotation_scheme):
+    """
+    Internal function to generate select layout after validation.
+    """
+    # Generate consistent identifiers
+    identifiers = generate_element_identifier(annotation_scheme["name"], "select-one", "select")
+    validation = generate_validation_attribute(annotation_scheme)
 
     schematic = (
-          ('<form id="%s" class="annotation-form select" action="/action_page.php">' % annotation_scheme["name"] )
+          f'<form id="{escape_html_content(annotation_scheme["name"])}" class="annotation-form select" action="/action_page.php">'
         + "  <fieldset>"
-        + ("  <legend>%s</legend>" % annotation_scheme["description"])
+        + f"  <legend>{escape_html_content(annotation_scheme['description'])}</legend>"
         + (
-            '  <select type="select-one" class="%s annotation-input" id="%s" name="%s" validation="%s" schema="%s" label_name="value">'
-            % (
-                annotation_scheme["description"],
-                annotation_scheme["id"],
-                annotation_scheme["name"] + ":::select-one",
-                validation,
-                annotation_scheme["name"],
-            )
+            f'  <select type="select-one" class="{escape_html_content(annotation_scheme["description"])} annotation-input" '
+            f'id="{identifiers["id"]}" name="{identifiers["name"]}" validation="{validation}" '
+            f'schema="{identifiers["schema"]}" label_name="{identifiers["label_name"]}">'
         )
     )
 
@@ -56,21 +74,13 @@ def generate_select_layout(annotation_scheme):
             labels = annotation_scheme["labels"]
 
         for i, label_data in enumerate(labels, 1):
-
             label = label_data if isinstance(label_data, str) else label_data["name"]
-
-            name = annotation_scheme["name"] + ":::" + label
-            class_name = annotation_scheme["name"]
-            key_value = name
+            option_identifiers = generate_element_identifier(annotation_scheme["name"], label, "option")
             label_content = label
 
-            schematic += ('<option class="%s" id="%s" name="%s" value="%s">%s</option>') % (
-                class_name,
-                name,
-                name,
-                label_content,
-                label_content,
-            )
+            schematic += f'<option class="{option_identifiers["schema"]}" id="{option_identifiers["id"]}" '
+            schematic += f'name="{option_identifiers["name"]}" value="{escape_html_content(label_content)}">'
+            schematic += f'{escape_html_content(label_content)}</option>'
 
     schematic += "  </select>\n</fieldset>\n</form>\n"
     return schematic, []

@@ -14,6 +14,12 @@ import logging
 import os
 from collections.abc import Mapping
 from jinja2 import Template
+from .identifier_utils import (
+    safe_generate_layout,
+    generate_element_identifier,
+    generate_validation_attribute,
+    escape_html_content
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,13 +49,13 @@ MULTIRATE_TEMPLATE = """
                                     <td class="shadcn-radio-cell">
                                         <input name="{{ item.name }}"
                                                type="radio"
-                                               id="{{ item.name }}.{{ rating }}"
+                                               id="{{ item.id }}.{{ rating }}"
                                                value="{{ rating }}"
                                                onclick="this.blur();"
                                                validation="{{ validation }}"
                                                class="shadcn-multirate-radio annotation-input"
                                                schema="{{ schema_name }}"
-                                               label_name="{{ item.name.split(':::')[1] }}"
+                                               label_name="{{ item.label_name }}"
                                                aria-label="{{ item.label }}: {{ rating }}" />
                                     </td>
                                 {% endfor %}
@@ -87,6 +93,12 @@ def generate_multirate_layout(annotation_scheme):
             html_string: Complete HTML for the multirate interface
             key_bindings: List of (key, description) tuples for keyboard shortcuts
     """
+    return safe_generate_layout(annotation_scheme, _generate_multirate_layout_internal)
+
+def _generate_multirate_layout_internal(annotation_scheme):
+    """
+    Internal function to generate multirate layout after validation.
+    """
     logger.debug(f"Generating multirate layout for schema: {annotation_scheme['name']}")
 
     # Extract configuration
@@ -100,23 +112,27 @@ def generate_multirate_layout(annotation_scheme):
     num_columns = display_config.get('num_columns', 1)
 
     # Set validation
-    validation = ""
-    if annotation_scheme.get('label_requirement', {}).get('required'):
-        validation = "required"
+    validation = generate_validation_attribute(annotation_scheme)
 
     # Preprocess items for template
     processed_items = []
     for option in options:
         if isinstance(option, str):
+            identifiers = generate_element_identifier(schema_name, option, "radio")
             processed_items.append({
-                'label': option,
-                'name': f"{schema_name}:::{option}",
+                'label': escape_html_content(option),
+                'name': identifiers['name'],
+                'id': identifiers['id'],
+                'label_name': identifiers['label_name'],
                 'tooltip': ""
             })
         else:
+            identifiers = generate_element_identifier(schema_name, option['name'], "radio")
             processed_items.append({
-                'label': option['label'],
-                'name': f"{schema_name}:::{option['name']}",
+                'label': escape_html_content(option['label']),
+                'name': identifiers['name'],
+                'id': identifiers['id'],
+                'label_name': identifiers['label_name'],
                 'tooltip': _generate_tooltip(option)
             })
 
@@ -128,9 +144,9 @@ def generate_multirate_layout(annotation_scheme):
 
     # Format template data
     template_data = {
-        'schema_name': schema_name,
-        'description': description,
-        'ratings': ratings,
+        'schema_name': escape_html_content(schema_name),
+        'description': escape_html_content(description),
+        'ratings': [escape_html_content(rating) for rating in ratings],
         'num_headers': min(len(options), num_columns),
         'rows': arranged_items,
         'validation': validation
@@ -212,7 +228,6 @@ def _generate_tooltip(label_data):
         str: Tooltip HTML attribute or empty string if no tooltip
     """
     tooltip_text = ""
-
     if "tooltip" in label_data:
         tooltip_text = label_data["tooltip"]
     elif "tooltip_file" in label_data:
@@ -224,5 +239,6 @@ def _generate_tooltip(label_data):
             return ""
 
     if tooltip_text:
-        return f'data-toggle="tooltip" data-html="true" data-placement="top" title="{tooltip_text}"'
+        escaped_tooltip = escape_html_content(tooltip_text)
+        return f'data-toggle="tooltip" data-html="true" data-placement="top" title="{escaped_tooltip}"'
     return ""

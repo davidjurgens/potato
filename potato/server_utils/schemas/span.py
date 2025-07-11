@@ -6,6 +6,13 @@ import logging
 from collections.abc import Mapping
 from collections import defaultdict
 from server_utils.config_module import config
+from .identifier_utils import (
+    safe_generate_layout,
+    generate_element_identifier,
+    generate_element_value,
+    generate_validation_attribute,
+    escape_html_content
+)
 
 from item_state_management import SpanAnnotation
 
@@ -213,14 +220,18 @@ def generate_span_layout(annotation_scheme, horizontal=False):
             html_string: Complete HTML for the span interface
             key_bindings: List of (key, description) tuples for keyboard shortcuts
     """
+    return safe_generate_layout(annotation_scheme, _generate_span_layout_internal, horizontal)
+
+def _generate_span_layout_internal(annotation_scheme, horizontal=False):
+    """
+    Internal function to generate span layout after validation.
+    """
     # Initialize form wrapper
     scheme_name = annotation_scheme["name"]
-    name = scheme_name
-    class_name = scheme_name
     schematic = f"""
-    <form id="{name}" class="annotation-form span shadcn-span-container" action="/action_page.php">
-        <fieldset schema="{scheme_name}">
-            <legend class="shadcn-span-title">{annotation_scheme["description"]}</legend>
+    <form id="{escape_html_content(scheme_name)}" class="annotation-form span shadcn-span-container" action="/action_page.php">
+        <fieldset schema="{escape_html_content(scheme_name)}">
+            <legend class="shadcn-span-title">{escape_html_content(annotation_scheme["description"])}</legend>
             <div class="shadcn-span-options">
     """
 
@@ -236,7 +247,7 @@ def generate_span_layout(annotation_scheme, horizontal=False):
     span_title = annotation_scheme.get("title", "")
 
     # Setup validation
-    validation = ""
+    validation = generate_validation_attribute(annotation_scheme)
     span_color = "var(--primary-color)"
 
     # Generate checkbox inputs for each label
@@ -272,7 +283,7 @@ def generate_span_layout(annotation_scheme, horizontal=False):
             key_value = str(i % 10)
             key2label[key_value] = label
             label2key[label] = key_value
-            key_bindings.append((key_value, f"{class_name}: {label}"))
+            key_bindings.append((key_value, f"{scheme_name}: {label}"))
 
         # Format label content
         if "displaying_score" in annotation_scheme and annotation_scheme["displaying_score"]:
@@ -281,20 +292,20 @@ def generate_span_layout(annotation_scheme, horizontal=False):
             label_content = label
 
         # Generate name with span prefix so ingestion code can skip this
-        name_with_span = f"span_label:::{name}"
+        name_with_span = f"span_label:::{scheme_name}"
 
         schematic += f"""
             <div class="shadcn-span-option">
-                <input class="{class_name} shadcn-span-checkbox"
+                <input class="{escape_html_content(scheme_name)} shadcn-span-checkbox"
                        for_span="true"
                        type="checkbox"
-                       id="{name}"
-                       name="{name_with_span}"
-                       value="{key_value}"
-                       onclick="onlyOne(this); changeSpanLabel(this, '{scheme_name}', '{label}', '{span_title}', '{span_color}');"
+                       id="{escape_html_content(scheme_name)}"
+                       name="{escape_html_content(name_with_span)}"
+                       value="{escape_html_content(key_value)}"
+                       onclick="onlyOne(this); changeSpanLabel(this, '{escape_html_content(scheme_name)}', '{escape_html_content(label)}', '{escape_html_content(span_title)}', '{escape_html_content(span_color)}');"
                        validation="{validation}">
-                <label for="{name}" class="shadcn-span-label" {tooltip}>
-                    <span style="background-color:rgb{span_color.replace(')', ',0.25)')};">{label_content}</span>
+                <label for="{escape_html_content(scheme_name)}" class="shadcn-span-label" {tooltip}>
+                    <span style="background-color:rgb{span_color.replace(')', ',0.25)')};">{escape_html_content(label_content)}</span>
                 </label>
             </div>
         """
@@ -303,20 +314,20 @@ def generate_span_layout(annotation_scheme, horizontal=False):
 
     # Add optional bad text option
     if "label_content" in annotation_scheme.get("bad_text_label", {}):
-        name = f"{annotation_scheme['name']}:::bad_text"
+        bad_text_identifiers = generate_element_identifier(annotation_scheme['name'], "bad_text", "checkbox")
 
         schematic += f"""
             <div class="shadcn-span-bad-text">
-                <input class="{class_name} shadcn-span-checkbox"
+                <input class="{bad_text_identifiers['schema']} shadcn-span-checkbox"
                        for_span="true"
                        type="checkbox"
-                       id="{name}"
-                       name="{name}"
+                       id="{bad_text_identifiers['id']}"
+                       name="{bad_text_identifiers['name']}"
                        value="0"
                        onclick="onlyOne(this)"
                        validation="{validation}">
-                <label for="{name}" class="shadcn-span-label">
-                    {annotation_scheme["bad_text_label"]["label_content"]}
+                <label for="{bad_text_identifiers['id']}" class="shadcn-span-label">
+                    {escape_html_content(annotation_scheme["bad_text_label"]["label_content"])}
                 </label>
             </div>
         """
@@ -327,8 +338,34 @@ def generate_span_layout(annotation_scheme, horizontal=False):
             and len(annotation_scheme["labels"]) <= 10
         ):
             key_bindings.append(
-                (0, f"{class_name}: {annotation_scheme['bad_text_label']['label_content']}")
+                (0, f"{scheme_name}: {annotation_scheme['bad_text_label']['label_content']}")
             )
 
     schematic += "</fieldset></form>"
     return schematic, key_bindings
+
+def _generate_tooltip(label_data):
+    """
+    Generate tooltip HTML attribute from label data.
+
+    Args:
+        label_data (dict): Label configuration containing tooltip information
+
+    Returns:
+        str: Tooltip HTML attribute or empty string if no tooltip
+    """
+    tooltip_text = ""
+    if "tooltip" in label_data:
+        tooltip_text = label_data["tooltip"]
+    elif "tooltip_file" in label_data:
+        try:
+            with open(label_data["tooltip_file"], "rt") as f:
+                tooltip_text = "".join(f.readlines())
+        except Exception as e:
+            logger.error(f"Failed to read tooltip file: {e}")
+            return ""
+
+    if tooltip_text:
+        escaped_tooltip = escape_html_content(tooltip_text)
+        return f'data-toggle="tooltip" data-html="true" data-placement="top" title="{escaped_tooltip}"'
+    return ""

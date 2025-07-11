@@ -12,6 +12,13 @@ Features include:
 
 import logging
 from collections.abc import Mapping
+from .identifier_utils import (
+    safe_generate_layout,
+    generate_element_identifier,
+    generate_element_value,
+    generate_validation_attribute,
+    escape_html_content
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +50,12 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
             html_string: Complete HTML for the radio interface
             key_bindings: List of (key, description) tuples for keyboard shortcuts
     """
+    return safe_generate_layout(annotation_scheme, _generate_radio_layout_internal, horizontal)
+
+def _generate_radio_layout_internal(annotation_scheme, horizontal=False):
+    """
+    Internal function to generate radio layout after validation.
+    """
     logger.debug(f"Generating radio layout for schema: {annotation_scheme['name']}")
 
     # Check for horizontal layout override
@@ -53,9 +66,9 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
     # Initialize form wrapper
     schema_name = annotation_scheme["name"]
     schematic = f"""
-    <form id="{schema_name}" class="annotation-form radio shadcn-radio-container" action="/action_page.php">
-        <fieldset schema="{schema_name}">
-            <legend class="shadcn-radio-title">{annotation_scheme['description']}</legend>
+    <form id="{escape_html_content(schema_name)}" class="annotation-form radio shadcn-radio-container" action="/action_page.php">
+        <fieldset schema="{escape_html_content(schema_name)}">
+            <legend class="shadcn-radio-title">{escape_html_content(annotation_scheme['description'])}</legend>
             <div class="shadcn-radio-options{' horizontal' if horizontal else ''}">
     """
 
@@ -64,20 +77,15 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
     label2key = {}
     key_bindings = []
 
-    # Setup validation requirements
-    validation = ""
-    label_requirement = annotation_scheme.get("label_requirement", {})
-    if label_requirement and label_requirement.get("required"):
-        validation = "required"
-        logger.debug("Setting required validation")
-
     # Generate radio inputs for each label
     for i, label_data in enumerate(annotation_scheme["labels"], 1):
         # Extract label information
         label = label_data if isinstance(label_data, str) else label_data["name"]
-        name = f"{schema_name}:::{label}"
-        class_name = schema_name
-        key_value = name
+
+        # Generate consistent identifiers
+        identifiers = generate_element_identifier(schema_name, label, "radio")
+        key_value = generate_element_value(label_data, i, annotation_scheme)
+        validation = generate_validation_attribute(annotation_scheme)
 
         # Handle tooltips and keyboard shortcuts
         tooltip = ""
@@ -92,7 +100,7 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
                     continue
                 key2label[key_value] = label
                 label2key[label] = key_value
-                key_bindings.append((key_value, f"{class_name}: {label}"))
+                key_bindings.append((key_value, f"{identifiers['schema']}: {label}"))
                 logger.debug(f"Added key binding '{key_value}' for label '{label}'")
 
         # Handle sequential key bindings
@@ -101,7 +109,7 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
             key_value = str(i % 10)
             key2label[key_value] = label
             label2key[label] = key_value
-            key_bindings.append((key_value, f"{class_name}: {label}"))
+            key_bindings.append((key_value, f"{identifiers['schema']}: {label}"))
             logger.debug(f"Added sequential key binding '{key_value}' for label '{label}'")
 
         # Format label content with optional keyboard shortcut display
@@ -112,17 +120,17 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
         # Generate radio input
         schematic += f"""
             <div class="shadcn-radio-option">
-                <input class="{class_name} shadcn-radio-input annotation-input"
+                <input class="{identifiers['schema']} shadcn-radio-input annotation-input"
                        type="radio"
-                       id="{name}"
-                       name="{name}"
-                       value="{key_value}"
+                       id="{identifiers['id']}"
+                       name="{identifiers['name']}"
+                       value="{escape_html_content(key_value)}"
                        selection_constraint="single"
-                       schema="{schema_name}"
-                       label_name="{label}"
+                       schema="{identifiers['schema']}"
+                       label_name="{identifiers['label_name']}"
                        onclick="onlyOne(this);registerAnnotation(this);"
                        validation="{validation}">
-                <label for="{name}" class="shadcn-radio-label" {tooltip}>{label_content}</label>
+                <label for="{identifiers['id']}" class="shadcn-radio-label" {tooltip}>{escape_html_content(label_content)}</label>
             </div>
         """
 
@@ -131,19 +139,19 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
     # Add optional free response field
     if annotation_scheme.get("has_free_response"):
         logger.debug("Adding free response field")
-        name = f"{schema_name}:::free_response"
+        free_response_identifiers = generate_element_identifier(schema_name, "free_response", "text")
         instruction = annotation_scheme["has_free_response"].get("instruction", "Other")
 
         schematic += f"""
             <div class="shadcn-radio-free-response">
-                <span class="shadcn-radio-label">{instruction}</span>
-                <input class="{schema_name} shadcn-radio-free-input annotation-input"
+                <span class="shadcn-radio-label">{escape_html_content(instruction)}</span>
+                <input class="{free_response_identifiers['schema']} shadcn-radio-free-input annotation-input"
                        type="text"
-                       id="{name}"
-                       name="{name}"
-                       schema="{schema_name}"
-                       label_name="free_response">
-                <label for="{name}"></label>
+                       id="{free_response_identifiers['id']}"
+                       name="{free_response_identifiers['name']}"
+                       schema="{free_response_identifiers['schema']}"
+                       label_name="{free_response_identifiers['label_name']}">
+                <label for="{free_response_identifiers['id']}"></label>
             </div>
         """
 
@@ -175,5 +183,6 @@ def _generate_tooltip(label_data):
             return ""
 
     if tooltip_text:
-        return f'data-toggle="tooltip" data-html="true" data-placement="top" title="{tooltip_text}"'
+        escaped_tooltip = escape_html_content(tooltip_text)
+        return f'data-toggle="tooltip" data-html="true" data-placement="top" title="{escaped_tooltip}"'
     return ""

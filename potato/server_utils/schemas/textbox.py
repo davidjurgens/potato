@@ -3,9 +3,14 @@ Textbox Layout
 """
 
 import logging
+from .identifier_utils import (
+    safe_generate_layout,
+    generate_element_identifier,
+    generate_validation_attribute,
+    escape_html_content
+)
 
 logger = logging.getLogger(__name__)
-
 
 def generate_textbox_layout(annotation_scheme):
     """
@@ -30,15 +35,19 @@ def generate_textbox_layout(annotation_scheme):
             html_string: Complete HTML for the textbox interface
             key_bindings: Empty list (no keyboard shortcuts)
     """
-    logger.debug(f"Generating textbox layout for schema: {annotation_scheme['name']}")
+    return safe_generate_layout(annotation_scheme, _generate_textbox_layout_internal)
 
-    schema_name = annotation_scheme["name"]
+def _generate_textbox_layout_internal(annotation_scheme):
+    """
+    Internal function to generate textbox layout after validation.
+    """
+    logger.debug(f"Generating textbox layout for schema: {annotation_scheme['name']}")
 
     # Initialize form wrapper
     schematic = f"""
-    <form id="{schema_name}" class="annotation-form textbox shadcn-textbox-container" action="/action_page.php">
-        <fieldset schema_name="{schema_name}">
-            <legend class="shadcn-textbox-title">{annotation_scheme["description"]}</legend>
+    <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form textbox shadcn-textbox-container" action="/action_page.php">
+        <fieldset schema_name="{escape_html_content(annotation_scheme['name'])}">
+            <legend class="shadcn-textbox-title">{escape_html_content(annotation_scheme["description"])}</legend>
     """
 
     # Handle custom CSS if provided
@@ -63,15 +72,9 @@ def generate_textbox_layout(annotation_scheme):
 
     # Generate input field(s) for each label
     for label in labels:
-        name = f"{schema_name}:::{label}"
-        class_name = schema_name
-        validation = ""
-
-        # Set validation if required
-        label_requirement = annotation_scheme.get("label_requirement", {})
-        if label_requirement and label_requirement.get("required"):
-            validation = "required"
-            logger.debug(f"Setting required validation for {name}")
+        # Generate consistent identifiers
+        identifiers = generate_element_identifier(annotation_scheme["name"], label, "text")
+        validation = generate_validation_attribute(annotation_scheme)
 
         # Determine if using textarea
         is_textarea = False
@@ -94,18 +97,18 @@ def generate_textbox_layout(annotation_scheme):
 
         schematic += f"""
             <div class="shadcn-textbox-item">
-                {f'<label for="{name}" schema="{schema_name}" class="shadcn-textbox-label">{label_text}</label>' if label_text else ''}
+                {f'<label for="{identifiers["id"]}" schema="{identifiers["schema"]}" class="shadcn-textbox-label">{escape_html_content(label_text)}</label>' if label_text else ''}
         """
 
         if is_textarea:
             # Render textarea for multiline input
             schematic += f"""
-                <textarea class="{class_name} shadcn-textbox-input shadcn-textbox-textarea annotation-input"
-                          id="{name}"
-                          name="{name}"
+                <textarea class="{identifiers['schema']} shadcn-textbox-input shadcn-textbox-textarea annotation-input"
+                          id="{identifiers['id']}"
+                          name="{identifiers['name']}"
                           validation="{validation}"
-                          schema="{schema_name}"
-                          label_name="{label}"
+                          schema="{identifiers['schema']}"
+                          label_name="{identifiers['label_name']}"
                           {textarea_attrs}
                           style="{custom_css}"
                           {paste_setting}></textarea>
@@ -113,13 +116,13 @@ def generate_textbox_layout(annotation_scheme):
         else:
             # Render input for single-line text
             schematic += f"""
-                <input class="{class_name} shadcn-textbox-input annotation-input"
+                <input class="{identifiers['schema']} shadcn-textbox-input annotation-input"
                        type="text"
-                       id="{name}"
-                       name="{name}"
+                       id="{identifiers['id']}"
+                       name="{identifiers['name']}"
                        validation="{validation}"
-                       schema="{schema_name}"
-                       label_name="{label}"
+                       schema="{identifiers['schema']}"
+                       label_name="{identifiers['label_name']}"
                        style="{custom_css}"
                        {paste_setting}>
             """
@@ -128,5 +131,5 @@ def generate_textbox_layout(annotation_scheme):
 
     schematic += "</fieldset></form>"
 
-    logger.info(f"Successfully generated textbox layout for {schema_name} with {len(labels)} fields")
+    logger.info(f"Successfully generated textbox layout for {annotation_scheme['name']} with {len(labels)} fields")
     return schematic, []

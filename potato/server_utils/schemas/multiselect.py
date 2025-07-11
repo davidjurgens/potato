@@ -14,6 +14,13 @@ of choices. Features include:
 
 import logging
 from collections.abc import Mapping
+from .identifier_utils import (
+    safe_generate_layout,
+    generate_element_identifier,
+    generate_element_value,
+    generate_validation_attribute,
+    escape_html_content
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,13 +55,19 @@ def generate_multiselect_layout(annotation_scheme):
             html_string: Complete HTML for the multiselect interface
             key_bindings: List of (key, description) tuples for keyboard shortcuts
     """
+    return safe_generate_layout(annotation_scheme, _generate_multiselect_layout_internal)
+
+def _generate_multiselect_layout_internal(annotation_scheme):
+    """
+    Internal function to generate multiselect layout after validation.
+    """
     logger.debug(f"Generating multiselect layout for schema: {annotation_scheme['name']}")
 
     # Initialize form wrapper
     schematic = f"""
-    <form id="{annotation_scheme['name']}" class="annotation-form multiselect shadcn-multiselect-container" action="/action_page.php">
-        <fieldset schema="{annotation_scheme['name']}">
-            <legend class="shadcn-multiselect-title">{annotation_scheme['description']}</legend>
+    <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form multiselect shadcn-multiselect-container" action="/action_page.php">
+        <fieldset schema="{escape_html_content(annotation_scheme['name'])}">
+            <legend class="shadcn-multiselect-title">{escape_html_content(annotation_scheme['description'])}</legend>
     """
 
     # Initialize keyboard shortcut mappings
@@ -70,33 +83,15 @@ def generate_multiselect_layout(annotation_scheme):
     # Add grid with appropriate columns
     schematic += f'<div class="shadcn-multiselect-grid" style="grid-template-columns: repeat({n_columns}, 1fr);">'
 
-    # Setup validation requirements
-    validation = ""
-    label_requirement = annotation_scheme.get("label_requirement", {})
-    if label_requirement and label_requirement.get("required"):
-        validation = "required"
-        logger.debug("Setting required validation")
-
-    # Handle required label validation
-    required_label = set()
-    if label_requirement and "required_label" in label_requirement:
-        req_label = label_requirement["required_label"]
-        if isinstance(req_label, str):
-            required_label.add(req_label)
-        elif isinstance(req_label, list):
-            required_label = set(req_label)
-        else:
-            logger.warning(f"Invalid required_label format: {req_label}")
-        logger.debug(f"Required labels: {required_label}")
-
     # Generate checkbox inputs for each label
     for i, label_data in enumerate(annotation_scheme["labels"], 1):
         # Extract label information
         label = label_data if isinstance(label_data, str) else label_data["name"]
-        schema = annotation_scheme["name"]
-        name = f"{schema}:::{label}"
-        class_name = schema
-        key_value = name
+
+        # Generate consistent identifiers
+        identifiers = generate_element_identifier(annotation_scheme["name"], label, "checkbox")
+        key_value = generate_element_value(label_data, i, annotation_scheme)
+        validation = generate_validation_attribute(annotation_scheme, label)
 
         # Handle tooltips
         tooltip = ""
@@ -111,7 +106,7 @@ def generate_multiselect_layout(annotation_scheme):
                     continue
                 key2label[key_value] = label
                 label2key[label] = key_value
-                key_bindings.append((key_value, f"{class_name}: {label}"))
+                key_bindings.append((key_value, f"{identifiers['schema']}: {label}"))
                 logger.debug(f"Added key binding '{key_value}' for label '{label}'")
 
         # Handle sequential key bindings
@@ -120,14 +115,11 @@ def generate_multiselect_layout(annotation_scheme):
             key_value = str(i % 10)
             key2label[key_value] = label
             label2key[label] = key_value
-            key_bindings.append((key_value, f"{class_name}: {label}"))
+            key_bindings.append((key_value, f"{identifiers['schema']}: {label}"))
             logger.debug(f"Added sequential key binding '{key_value}' for label '{label}'")
 
         # Format label content
         label_content = _format_label_content(label_data, annotation_scheme)
-
-        # Set validation requirements
-        final_validation = "required_label" if label in required_label else validation
 
         # Display keyboard shortcut if available
         key_display = f'<span class="shadcn-multiselect-key">{label2key[label].upper()}</span>' if label in label2key else ''
@@ -135,16 +127,16 @@ def generate_multiselect_layout(annotation_scheme):
         # Generate checkbox input
         schematic += f"""
             <div class="shadcn-multiselect-item">
-                <input class="{class_name} shadcn-multiselect-checkbox annotation-input"
+                <input class="{identifiers['schema']} shadcn-multiselect-checkbox annotation-input"
                        type="checkbox"
-                       id="{name}"
-                       name="{name}"
-                       value="{key_value}"
-                       label_name="{label}"
-                       schema="{schema}"
+                       id="{identifiers['id']}"
+                       name="{identifiers['name']}"
+                       value="{escape_html_content(key_value)}"
+                       label_name="{identifiers['label_name']}"
+                       schema="{identifiers['schema']}"
                        onclick="whetherNone(this);registerAnnotation(this)"
-                       validation="{final_validation}">
-                <label for="{name}" {tooltip} schema="{schema}" class="shadcn-multiselect-label">
+                       validation="{validation}">
+                <label for="{identifiers['id']}" {tooltip} schema="{identifiers['schema']}" class="shadcn-multiselect-label">
                     {label_content} {key_display}
                 </label>
             </div>
@@ -184,7 +176,8 @@ def _generate_tooltip(label_data):
             return ""
 
     if tooltip_text:
-        return f'data-toggle="tooltip" data-html="true" data-placement="top" title="{tooltip_text}"'
+        escaped_tooltip = escape_html_content(tooltip_text)
+        return f'data-toggle="tooltip" data-html="true" data-placement="top" title="{escaped_tooltip}"'
     return ""
 
 def _format_label_content(label_data, annotation_scheme):
@@ -198,43 +191,37 @@ def _format_label_content(label_data, annotation_scheme):
     Returns:
         str: Formatted label content (text or video HTML)
     """
-    if not annotation_scheme.get("video_as_label"):
-        return label_data if isinstance(label_data, str) else label_data["name"]
-
-    if not isinstance(label_data, Mapping) or "videopath" not in label_data:
-        logger.error("Video path missing for video label")
-        return ""
-
-    return f"""
-        <video width="320" height="240" autoplay loop muted>
-            <source src="{label_data['videopath']}" type="video/mp4" />
-        </video>
-    """
+    if annotation_scheme.get("video_as_label") and isinstance(label_data, dict) and "videopath" in label_data:
+        # Video label
+        video_path = label_data["videopath"]
+        return f'<video src="{escape_html_content(video_path)}" controls style="max-width: 200px; max-height: 150px;"></video>'
+    else:
+        # Text label
+        label = label_data if isinstance(label_data, str) else label_data["name"]
+        return escape_html_content(label)
 
 def _generate_free_response(annotation_scheme, n_columns):
     """
-    Generate HTML for free response input field.
+    Generate free response field for multiselect.
 
     Args:
-        annotation_scheme: Annotation scheme configuration
-        n_columns: Number of columns in layout
+        annotation_scheme: Schema configuration
+        n_columns: Number of columns in the grid
 
     Returns:
-        str: HTML for free response input
+        str: HTML for free response field
     """
-    if not annotation_scheme.get("has_free_response"):
-        return ""
-
-    name = f"{annotation_scheme['name']}:::free_response"
-    instruction = (annotation_scheme["has_free_response"].get("instruction", "Other"))
+    free_response_identifiers = generate_element_identifier(annotation_scheme["name"], "free_response", "text")
+    instruction = annotation_scheme["has_free_response"].get("instruction", "Other")
 
     return f"""
-        <div class="shadcn-multiselect-free-response">
-            <span>{instruction}</span>
-            <input class="{annotation_scheme['name']} shadcn-multiselect-free-input annotation-input"
+        <div class="shadcn-multiselect-free-response" style="grid-column: 1 / -1;">
+            <span class="shadcn-multiselect-label">{escape_html_content(instruction)}</span>
+            <input class="{free_response_identifiers['schema']} shadcn-multiselect-free-input annotation-input"
                    type="text"
-                   id="{name}"
-                   name="{name}">
-            <label for="{name}"></label>
+                   id="{free_response_identifiers['id']}"
+                   name="{free_response_identifiers['name']}"
+                   schema="{free_response_identifiers['schema']}"
+                   label_name="{free_response_identifiers['label_name']}">
         </div>
     """

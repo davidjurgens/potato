@@ -40,6 +40,74 @@ STATS_KEYS = {
     "Agreement": "Agreement",
 }
 
+# Default name for the generated annotation layout file
+DEFAULT_ANNOTATION_LAYOUT_SUBDIR = "layouts"
+DEFAULT_ANNOTATION_LAYOUT_FILENAME = "task_layout.html"
+
+
+def generate_annotation_layout_file(config: dict, annotation_schemes: list[dict]) -> str:
+    """
+    Generate a dedicated annotation layout file in the task directory under layouts/task_layout.html.
+    """
+    task_dir = config.get("task_dir")
+    if not task_dir:
+        raise ValueError("task_dir is required in config to generate annotation layout file")
+
+    # Ensure task directory and layouts subdirectory exist
+    layout_dir = os.path.join(task_dir, DEFAULT_ANNOTATION_LAYOUT_SUBDIR)
+    if not os.path.exists(layout_dir):
+        os.makedirs(layout_dir)
+
+    # Generate the layout file path
+    layout_file_path = os.path.join(layout_dir, DEFAULT_ANNOTATION_LAYOUT_FILENAME)
+
+    # Generate the HTML layout content
+    schema_layouts = ""
+    all_keybindings = []
+
+    for annotation_scheme in annotation_schemes:
+        schema_layout, keybindings = generate_schematic(annotation_scheme)
+        schema_layouts += schema_layout + "\n"
+        all_keybindings.extend(keybindings)
+
+    # Create the layout HTML content
+    layout_content = f"""<!-- Generated annotation layout file -->
+<!-- This file was automatically generated based on the annotation schemes in your config -->
+<!-- You can customize this file to modify the layout of your annotation interface -->
+<!-- Changes to this file will be preserved across server restarts -->
+
+<div class=\"annotation_schema\">
+{schema_layouts}
+</div>
+"""
+
+    # Write the layout file
+    with open(layout_file_path, "wt") as outf:
+        outf.write(layout_content)
+
+    logger.info(f"Generated annotation layout file: {layout_file_path}")
+    return layout_file_path
+
+
+def get_or_generate_annotation_layout(config: dict, annotation_schemes: list[dict]) -> str:
+    """
+    Get the annotation layout file path, generating it if it doesn't exist.
+    """
+    task_dir = config.get("task_dir")
+    if not task_dir:
+        raise ValueError("task_dir is required in config")
+    layout_dir = os.path.join(task_dir, DEFAULT_ANNOTATION_LAYOUT_SUBDIR)
+    layout_file_path = os.path.join(layout_dir, DEFAULT_ANNOTATION_LAYOUT_FILENAME)
+
+    # Check if the layout file already exists
+    if os.path.exists(layout_file_path):
+        logger.info(f"Using existing annotation layout file: {layout_file_path}")
+        return layout_file_path
+
+    # Generate the layout file if it doesn't exist
+    logger.info(f"Annotation layout file not found, generating: {layout_file_path}")
+    return generate_annotation_layout_file(config, annotation_schemes)
+
 
 def generate_schematic(annotation_scheme):
     """
@@ -179,29 +247,6 @@ def generate_annotation_html_template(config: dict) -> str:
             '<div class="navbar-nav">', '<div class="navbar-nav" hidden>'
         )
 
-    # Once we have the base template constructed, load the user's custom layout for their task
-    html_layout_file = config["html_layout"]
-    logger.debug("Reading task layout html %s" % html_layout_file)
-
-    if not os.path.exists(html_layout_file):
-
-        # See if we can get it from the relative path
-        real_path = os.path.realpath(config["__config_file__"])
-        dir_path = os.path.dirname(real_path)
-        abs_html_layout_file = dir_path + "/" + html_layout_file
-
-        if not os.path.exists(abs_html_layout_file):
-            raise FileNotFoundError("html_layout not found: %s" % html_layout_file)
-        else:
-            html_layout_file = abs_html_layout_file
-
-    with open(html_layout_file, "rt") as f:
-        task_html_layout = "".join(f.readlines())
-
-    #
-    # Stage 2: Fill in the annotation-specific pieces in the layout
-    #
-
     # Grab the annotation schemes
     annotation_schemes = config["annotation_schemes"]
     logger.debug("Saw %d annotation scheme(s)" % len(annotation_schemes))
@@ -212,53 +257,95 @@ def generate_annotation_html_template(config: dict) -> str:
     # Check if we're using the new API-based template that generates forms dynamically
     is_api_template = "base_template_v2.html" in html_template_file
 
-    if is_api_template:
-        # For the new API-based template, generate server-side forms but use API endpoints
-        # The frontend JavaScript will handle form interactions via API calls
-        logger.info("Using API-based template - generating server-side forms with API integration")
+    # Handle annotation layout generation
+    # Check if we should use the dedicated annotation layout file system
+    use_dedicated_layout = config.get("use_dedicated_layout", True)  # Default to True for new behavior
 
-        # Generate the forms using the existing schematic generation
-        schema_layouts = ""
-        for annotation_scheme in annotation_schemes:
-            schema_layout, keybindings = generate_schematic(annotation_scheme)
-            schema_layouts += schema_layout + "\n"
-            all_keybindings.extend(keybindings)
+    if use_dedicated_layout:
+        # Use the dedicated annotation layout file system
+        try:
+            layout_file_path = get_or_generate_annotation_layout(config, annotation_schemes)
 
-        task_html_layout = schema_layouts
-    else:
-        # Potato admin can specify a custom HTML layout that allows variable-named
-        # placement of task elements
-        if config.get("custom_layout"):
+            # Read the generated layout file
+            with open(layout_file_path, "rt") as f:
+                task_html_layout = "".join(f.readlines())
+
+            # Extract keybindings from the annotation schemes for the sidebar
             for annotation_scheme in annotation_schemes:
-                schema_layout, keybindings = generate_schematic(annotation_scheme)
+                _, keybindings = generate_schematic(annotation_scheme)
                 all_keybindings.extend(keybindings)
-                schema_name = annotation_scheme["name"]
 
-                updated_layout = task_html_layout.replace("{{" + schema_name + "}}", schema_layout)
+        except Exception as e:
+            logger.warning(f"Failed to use dedicated layout file: {e}. Falling back to inline generation.")
+            use_dedicated_layout = False
 
-                # Check that we actually updated the template
-                if task_html_layout == updated_layout:
-                    raise Exception(
-                        (
-                            "%s indicated a custom layout but a corresponding layout "
-                            + "was not found for {{%s}} in %s. Check to ensure the "
-                            + "config.yaml and layout.html files have matching names"
-                        )
-                        % (config["__config_file__"], schema_name, config["html_layout"])
-                    )
+    if not use_dedicated_layout:
+        # Fallback to the original behavior
+        if is_api_template:
+            # For the new API-based template, generate server-side forms but use API endpoints
+            # The frontend JavaScript will handle form interactions via API calls
+            logger.info("Using API-based template - generating server-side forms with API integration")
 
-                task_html_layout = updated_layout
-        # If the admin doesn't specify a custom layout, use the default layout
-        else:
-            # If we don't have a custom layout, accumulate all the tasks into a
-            # single HTML element
+            # Generate the forms using the existing schematic generation
             schema_layouts = ""
             for annotation_scheme in annotation_schemes:
                 schema_layout, keybindings = generate_schematic(annotation_scheme)
                 schema_layouts += schema_layout + "\n"
                 all_keybindings.extend(keybindings)
 
-            task_html_layout = task_html_layout.replace("{{annotation_schematic}}", schema_layouts)
+            task_html_layout = schema_layouts
+        else:
+            # Once we have the base template constructed, load the user's custom layout for their task
+            html_layout_file = config["html_layout"]
+            logger.debug("Reading task layout html %s" % html_layout_file)
+
+            if not os.path.exists(html_layout_file):
+                # See if we can get it from the relative path
+                real_path = os.path.realpath(config["__config_file__"])
+                dir_path = os.path.dirname(real_path)
+                abs_html_layout_file = dir_path + "/" + html_layout_file
+
+                if not os.path.exists(abs_html_layout_file):
+                    raise FileNotFoundError("html_layout not found: %s" % html_layout_file)
+                else:
+                    html_layout_file = abs_html_layout_file
+
+            with open(html_layout_file, "rt") as f:
+                task_html_layout = "".join(f.readlines())
+
+            # Potato admin can specify a custom HTML layout that allows variable-named
+            # placement of task elements
+            if config.get("custom_layout"):
+                for annotation_scheme in annotation_schemes:
+                    schema_layout, keybindings = generate_schematic(annotation_scheme)
+                    all_keybindings.extend(keybindings)
+                    schema_name = annotation_scheme["name"]
+
+                    updated_layout = task_html_layout.replace("{{" + schema_name + "}}", schema_layout)
+
+                    # Check that we actually updated the template
+                    if task_html_layout == updated_layout:
+                        raise Exception(
+                            (
+                                "%s indicated a custom layout but a corresponding layout "
+                                + "was not found for {{%s}} in %s. Check to ensure the "
+                                + "config.yaml and layout.html files have matching names"
+                            )
+                            % (config["__config_file__"], schema_name, config["html_layout"])
+                        )
+
+                    task_html_layout = updated_layout
+            # If the admin doesn't specify a custom layout, use the default layout
+            else:
+                # If we don't have a custom layout, accumulate all the tasks into a
+                # single HTML element
+                schema_layouts = ""
+                for annotation_scheme in annotation_schemes:
+                    schema_layout, keybindings = generate_schematic(annotation_scheme)
+                    schema_layouts += schema_layout + "\n"
+                    all_keybindings.extend(keybindings)
+
+                task_html_layout = task_html_layout.replace("{{annotation_schematic}}", schema_layouts)
 
     # Add in a codebook link if the admin specified one
     codebook_html = ""
@@ -398,20 +485,42 @@ def generate_html_from_schematic(html_template_filename: str,
             '<div class="navbar-nav">', '<div class="navbar-nav" hidden>'
         )
 
-    # Once we have the base template constructed, load the user's custom layout for their task
-    # Use the surveyflow layout if it is specified, otherwise stick with the html_layout
-    logger.debug("Reading task layout html %s" % html_layout_filename)
-    task_html_layout = get_html(html_layout_filename, config)
+    # Handle annotation layout generation for surveyflow phases
+    use_dedicated_layout = config.get("use_dedicated_layout", True)  # Default to True for new behavior
 
-    # Put forms in rows for survey questions
-    task_html_layout = task_html_layout.replace(
-        '<div class="annotation_schema">',
-    '<div class="annotation_schema" style="flex-direction:column;">')
+    if use_dedicated_layout:
+        # Use the dedicated annotation layout file system
+        try:
+            layout_file_path = get_or_generate_annotation_layout(config, annotation_schemas)
 
-    #
-    # Stage 2: drop in the annotation layout and insertthe task-specific variables
-    #
-    cur_task_html_layout = generate_core_task_html(config, annotation_schemas)
+            # Read the generated layout file
+            with open(layout_file_path, "rt") as f:
+                task_html_layout = "".join(f.readlines())
+
+        except Exception as e:
+            logger.warning(f"Failed to use dedicated layout file: {e}. Falling back to inline generation.")
+            use_dedicated_layout = False
+
+    if not use_dedicated_layout:
+        # Fallback to the original behavior
+        # Once we have the base template constructed, load the user's custom layout for their task
+        # Use the surveyflow layout if it is specified, otherwise stick with the html_layout
+        logger.debug("Reading task layout html %s" % html_layout_filename)
+        task_html_layout = get_html(html_layout_filename, config)
+
+        # Put forms in rows for survey questions
+        task_html_layout = task_html_layout.replace(
+            '<div class="annotation_schema">',
+        '<div class="annotation_schema" style="flex-direction:column;">')
+
+        #
+        # Stage 2: drop in the annotation layout and insertthe task-specific variables
+        #
+        cur_task_html_layout = generate_core_task_html(config, annotation_schemas)
+    else:
+        # Use the dedicated layout file directly
+        cur_task_html_layout = task_html_layout
+
     cur_html_template = html_template.replace("{{ TASK_LAYOUT }}", cur_task_html_layout)
 
 

@@ -4,6 +4,11 @@ slider Layout
 
 # Needed for the fall-back radio layout
 from .radio import generate_radio_layout
+from .identifier_utils import (
+    safe_generate_layout,
+    generate_element_identifier,
+    escape_html_content
+)
 
 def test_and_get(key, d):
     val = d[key]
@@ -11,13 +16,34 @@ def test_and_get(key, d):
         return int(val)
     except:
         raise Exception(
-            'Slider scale %s\'s value for "%s" is not an int' % (annotation_scheme["name"], key)
+            'Slider scale %s\'s value for "%s" is not an int' % (d["name"], key)
         )
 
-
-
 def generate_slider_layout(annotation_scheme):
+    """
+    Generate HTML for a slider input interface.
 
+    Args:
+        annotation_scheme (dict): Configuration including:
+            - name: Schema identifier
+            - description: Display description
+            - starting_value: Initial slider value
+            - min_value: Minimum allowed value
+            - max_value: Maximum allowed value
+            - show_labels: Whether to show min/max labels
+            - labels: If present, fall back to radio layout
+
+    Returns:
+        tuple: (html_string, key_bindings)
+            html_string: Complete HTML for the slider interface
+            key_bindings: Empty list (no keyboard shortcuts)
+    """
+    return safe_generate_layout(annotation_scheme, _generate_slider_layout_internal)
+
+def _generate_slider_layout_internal(annotation_scheme):
+    """
+    Internal function to generate slider layout after validation.
+    """
     # If the user specified the more complicated likert layout, default to the
     # radio layout
     if "labels" in annotation_scheme:
@@ -47,15 +73,15 @@ def generate_slider_layout(annotation_scheme):
     min_label = str(min_value) if show_labels else ''
     max_label = str(max_value) if show_labels else ''
 
-    schema_name = annotation_scheme["name"]
-    name = schema_name + ':::' + 'slider'
+    # Generate consistent identifiers
+    identifiers = generate_element_identifier(annotation_scheme["name"], "slider", "range")
 
     schematic = f"""
-    <form id="{schema_name}" class="annotation-form slider shadcn-slider-container" action="/action_page.php">
-        <fieldset schema="{schema_name}">
-            <legend class="shadcn-slider-title">{annotation_scheme["description"]}</legend>
+    <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form slider shadcn-slider-container" action="/action_page.php">
+        <fieldset schema="{escape_html_content(annotation_scheme['name'])}">
+            <legend class="shadcn-slider-title">{escape_html_content(annotation_scheme["description"])}</legend>
             <div class="shadcn-slider-wrapper">
-                <div class="shadcn-slider-label">{min_label}</div>
+                <div class="shadcn-slider-label">{escape_html_content(min_label)}</div>
                 <div class="shadcn-slider-track">
                     <input type="range"
                            min="{min_value}"
@@ -63,12 +89,12 @@ def generate_slider_layout(annotation_scheme):
                            value="{starting_value}"
                            class="shadcn-slider-input annotation-input"
                            onclick="registerAnnotation(this);"
-                           label_name="slider"
-                           name="{name}"
-                           id="{name}"
-                           schema="{schema_name}">
+                           label_name="{identifiers['label_name']}"
+                           name="{identifiers['name']}"
+                           id="{identifiers['id']}"
+                           schema="{identifiers['schema']}">
                 </div>
-                <div class="shadcn-slider-label">{max_label}</div>
+                <div class="shadcn-slider-label">{escape_html_content(max_label)}</div>
             </div>
         </fieldset>
     </form>

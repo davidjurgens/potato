@@ -13,6 +13,10 @@ Generates a form interface for displaying video content. Features include:
 
 import logging
 import os.path
+from .identifier_utils import (
+    safe_generate_layout,
+    escape_html_content
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +47,12 @@ def generate_video_layout(annotation_scheme):
     Raises:
         ValueError: If video_path is missing or invalid
     """
+    return safe_generate_layout(annotation_scheme, _generate_video_layout_internal)
+
+def _generate_video_layout_internal(annotation_scheme):
+    """
+    Internal function to generate video layout after validation.
+    """
     logger.debug(f"Generating video layout for schema: {annotation_scheme['name']}")
 
     # Validate video path
@@ -58,9 +68,9 @@ def generate_video_layout(annotation_scheme):
 
     # Initialize form wrapper
     schematic = f"""
-        <form id="{annotation_scheme['name']}" class="annotation-form video" action="/action_page.php">
-            <fieldset schema="{annotation_scheme['name']}">
-                <legend>{annotation_scheme['description']}</legend>
+        <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form video" action="/action_page.php">
+            <fieldset schema="{escape_html_content(annotation_scheme['name'])}">
+                <legend>{escape_html_content(annotation_scheme['description'])}</legend>
     """
 
     # Generate video element with attributes
@@ -147,14 +157,14 @@ def _generate_video_sources(annotation_scheme):
     # Add main video source
     mime_type = _get_mime_type(annotation_scheme["video_path"])
     sources.append(
-        f'<source src="{annotation_scheme["video_path"]}" type="{mime_type}">'
+        f'<source src="{escape_html_content(annotation_scheme["video_path"])}" type="{mime_type}">'
     )
     logger.debug(f"Added primary video source: {annotation_scheme['video_path']}")
 
     # Add additional sources if specified
     for source in annotation_scheme.get("additional_sources", []):
         mime_type = _get_mime_type(source)
-        sources.append(f'<source src="{source}" type="{mime_type}">')
+        sources.append(f'<source src="{escape_html_content(source)}" type="{mime_type}">')
         logger.debug(f"Added additional video source: {source}")
 
     return "\n".join(sources)
@@ -171,7 +181,7 @@ def _generate_fallback_content(annotation_scheme):
     """
     fallback = annotation_scheme.get("fallback_text", "Your browser does not support the video tag.")
     logger.debug("Added fallback content for video element")
-    return fallback
+    return escape_html_content(fallback)
 
 def _get_mime_type(file_path):
     """
