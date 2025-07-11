@@ -13,6 +13,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.options import Options
 import time
 import threading
 import subprocess
@@ -121,7 +122,7 @@ class TestAnnotationTypes:
     @pytest.mark.selenium
     def test_likert_annotation_frontend(self, server_process):
         """Test likert annotation frontend with Selenium"""
-        driver = webdriver.Chrome()
+        driver = webdriver.Chrome(options=Options().add_argument("--headless"))
         try:
             driver.get("http://localhost:9001/")
 
@@ -154,7 +155,7 @@ class TestAnnotationTypes:
         # Start server with checkbox config
         config_path = 'simple_examples/configs/simple-check-box.yaml'
 
-        driver = webdriver.Chrome()
+        driver = webdriver.Chrome(options=Options().add_argument("--headless"))
         try:
             driver.get("http://localhost:9001/")
 
@@ -186,7 +187,7 @@ class TestAnnotationTypes:
     @pytest.mark.selenium
     def test_slider_annotation_frontend(self, server_process):
         """Test slider annotation frontend with Selenium"""
-        driver = webdriver.Chrome()
+        driver = webdriver.Chrome(options=Options().add_argument("--headless"))
         try:
             driver.get("http://localhost:9001/")
 
@@ -215,7 +216,7 @@ class TestAnnotationTypes:
     @pytest.mark.selenium
     def test_span_annotation_frontend(self, server_process):
         """Test span annotation frontend with Selenium"""
-        driver = webdriver.Chrome()
+        driver = webdriver.Chrome(options=Options().add_argument("--headless"))
         try:
             driver.get("http://localhost:9001/")
 

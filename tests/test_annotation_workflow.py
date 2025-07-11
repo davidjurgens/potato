@@ -15,6 +15,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.chrome.options import Options
 import subprocess
 import requests
 
@@ -116,7 +117,7 @@ class TestAnnotationWorkflow:
     @pytest.mark.selenium
     def test_complete_annotation_workflow(self, server_process):
         """Test complete annotation workflow with Selenium"""
-        driver = webdriver.Chrome()
+        driver = webdriver.Chrome(options=Options().add_argument("--headless"))
         try:
             # Navigate to annotation page
             driver.get("http://localhost:9002/")
@@ -281,7 +282,7 @@ class TestAnnotationWorkflow:
     @pytest.mark.selenium
     def test_error_handling_workflow(self, server_process):
         """Test error handling in the annotation workflow"""
-        driver = webdriver.Chrome()
+        driver = webdriver.Chrome(options=Options().add_argument("--headless"))
         try:
             # Navigate to annotation page
             driver.get("http://localhost:9002/")

@@ -23,7 +23,7 @@ from itertools import zip_longest
 import string
 import threading
 import yaml
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import pandas as pd
@@ -56,7 +56,7 @@ from potato.phase import UserPhase
 from potato.create_task_cli import create_task_cli, yes_or_no
 from potato.server_utils.arg_utils import arguments
 from potato.server_utils.config_module import init_config, config
-from potato.server_utils.schemas.span import render_span_annotations
+from potato.server_utils.schemas.span import render_span_annotations, get_span_annotations_script, generate_span_layout
 from potato.server_utils.cli_utlis import get_project_from_hub, show_project_hub
 from potato.server_utils.prolific_apis import ProlificStudy
 from potato.server_utils.json import easy_json
@@ -178,7 +178,7 @@ class ActiveLearningState:
             self.id_to_update_round[iid] = self.cur_round
 
 # Set session timeout duration (e.g., 30 minutes)
-SESSION_TIMEOUT = timedelta(minutes=1)
+SESSION_TIMEOUT = timedelta(minutes=30)
 
 def load_instance_data(config: dict):
     '''Loads the instance data from the files specified in the config.'''
@@ -515,30 +515,56 @@ def init_user_state(username):
     usm.add_user(username)
 
     # Store the session creation time
-    session['created_at'] = datetime.now()
+    session['created_at'] = datetime.now(timezone.utc).isoformat()
 
     return usm.get_user_state(username)
 
 def is_session_valid() -> bool:
     """
-    Check if the current session is valid based on the creation time.
+    Checks if the session is still valid based on the session timeout.
+    Returns:
+        bool: True if session is valid, False otherwise
     """
     if 'created_at' not in session:
         return False
-    return datetime.now() - session['created_at'] < SESSION_TIMEOUT
+    # Always use UTC-aware datetimes
+    created_at = session['created_at']
+    if isinstance(created_at, str):
+        created_at = datetime.fromisoformat(created_at)
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    session_age = now - created_at
+    return session_age < timedelta(minutes=30)
 
 @app.before_request
 def before_request():
-    """
-    Check session validity before processing any request.
-    """
     # Skip session validation in debug mode
     if config.get("debug", False):
         return None
 
+    # Skip session validation for public/auth routes
+    public_paths = [
+        "/auth", "/register", "/passwordless-login", "/clerk-login"
+    ]
+    if request.path.startswith("/static") or request.path in public_paths:
+        return None
+
+    # Skip session validation for test endpoints with valid API key
+    if request.path.startswith("/test/"):
+        api_key = request.headers.get("X-API-KEY")
+        valid_api_key = config.get("test_api_key") or os.environ.get("TEST_API_KEY")
+        if api_key and valid_api_key and api_key == valid_api_key:
+            return None
+
+    logger.debug(f"=== BEFORE_REQUEST ===")
+    logger.debug(f"Session contents: {dict(session)}")
+    logger.debug(f"Session valid: {is_session_valid()}")
+
     if not is_session_valid():
+        logger.warning("Session expired, clearing session and redirecting to auth")
         session.clear()  # Clear the session
-        return redirect(url_for('login'))  # Redirect to login page
+        return redirect(url_for('auth'))  # Redirect to auth page
 
 def get_users():
     """
@@ -612,6 +638,22 @@ def render_page_with_annotations(username) -> str:
     # also save the displayed text in the metadata dict
     # instance_id_to_data[instance_id]['displayed_text'] = text
 
+    # Always get the latest span annotations for the current instance
+    span_annotations = get_span_annotations_for_user_on(username, instance_id)
+    print(f"🔍 DEBUG: Found {len(span_annotations) if span_annotations else 0} span annotations for instance {instance_id}")
+
+    if span_annotations is not None and len(span_annotations) > 0:
+        print(f"🔍 DEBUG: Calling render_span_annotations with {len(span_annotations)} spans")
+        text = render_span_annotations(text, span_annotations)
+        span_script = get_span_annotations_script(span_annotations)
+        print(f"🔍 DEBUG: render_span_annotations returned text: '{text[:100]}...'")
+        print(f"🔍 DEBUG: get_span_annotations_script returned script: '{span_script[:200]}...'")
+    else:
+        span_script = ""
+        print(f"🔍 DEBUG: No span annotations found, span_script is empty")
+
+    print(f"🔍 DEBUG: span_script for instance_id {instance_id} (len={len(span_script)}):\n{span_script[:300]}")
+
     # If the user has labeled spans within this instance before, replace the
     # current instance text with pre-annotated mark-up. We do this here before
     # the render_template call so that we can directly insert the span-marked-up
@@ -626,18 +668,7 @@ def render_page_with_annotations(username) -> str:
     #
     # NOTE2: We have to this here to account for any keyword highlighting before
     # the instance text gets marked up in the post-processing below
-    span_annotations = get_span_annotations_for_user_on(username, instance_id)
-    if span_annotations is not None and len(span_annotations) > 0:
-        # Mark up the instance text where the annotated spans were
-        text = render_span_annotations(text, span_annotations)
-
-    # If the admin has specified that certain keywords need to be highlighted,
-    # post-process the selected instance so that it now also has colored span
-    # overlays for keywords. This also include label suggestions for the user.
-    #
-    # NOTE: this code is probably going to break the span annotation's
-    # understanding of the instance. Need to check this...
-    schema_content_to_prefill = []
+    schema_content_to_prefill = []  # Initialize the variable
 
     #prepare label suggestions
     label_suggestion_json = get_label_suggestions(item, config, schema_content_to_prefill)
@@ -656,9 +687,19 @@ def render_page_with_annotations(username) -> str:
     # all_statistics['Agreement'] = get_agreement_score('all', 'all', return_type='overall_average')
     # print(all_statistics)
 
-    # Set the html file as surveyflow pages when the instance is a not an
-    # annotation page (survey pages, prestudy pass or fail page)
-    html_file = config["site_file"]
+    # For the v2 template, render the template directly instead of the static HTML file
+    # The static HTML file is generated by front_end.py but doesn't have the dynamic placeholders
+    print(f"🔍 DEBUG: config['base_html_template'] = {config.get('base_html_template', 'NOT_SET')}")
+    print(f"🔍 DEBUG: config['site_file'] = {config.get('site_file', 'NOT_SET')}")
+
+    if "base_template_v2.html" in config["base_html_template"]:
+        html_file = "base_template_v2.html"
+        print(f"🔍 DEBUG: Using v2 template: {html_file}")
+    else:
+        # Set the html file as surveyflow pages when the instance is a not an
+        # annotation page (survey pages, prestudy pass or fail page)
+        html_file = config["site_file"]
+        print(f"🔍 DEBUG: Using static file: {html_file}")
 
     var_elems_html = "".join(
         map(lambda item : (
@@ -691,6 +732,23 @@ def render_page_with_annotations(username) -> str:
 
     # Flask will fill in the things we need into the HTML template we've created,
     # replacing {{variable_name}} with t    he associated text for keyword arguments
+    print(f"🔍 DEBUG: FINAL annotation text passed to template (first 200 chars): {text[:200]}")
+
+    # Generate the annotation forms (TASK_LAYOUT) for each annotation scheme
+    task_layout_parts = []
+    for annotation_scheme in config["annotation_schemes"]:
+        try:
+            layout_html, key_bindings = generate_span_layout(annotation_scheme)
+            task_layout_parts.append(layout_html)
+            print(f"🔍 DEBUG: Generated layout for scheme '{annotation_scheme.get('name', 'unknown')}' (first 100 chars): {layout_html[:100]}")
+        except Exception as e:
+            print(f"🔍 ERROR: Failed to generate layout for scheme {annotation_scheme}: {e}")
+            # Fallback to a simple form
+            task_layout_parts.append(f"<div>Error generating form for {annotation_scheme.get('name', 'unknown')}</div>")
+
+    task_layout = "\n".join(task_layout_parts)
+    print(f"🔍 DEBUG: Generated TASK_LAYOUT (first 200 chars): {task_layout[:200]}")
+
     rendered_html = render_template(
         html_file,
         username=username,
@@ -709,6 +767,8 @@ def render_page_with_annotations(username) -> str:
         annotation_schemes=config["annotation_schemes"],
         annotation_task_name=config["annotation_task_name"],
         debug=config.get("debug", False),
+        span_script=span_script,
+        TASK_LAYOUT=task_layout,
         # ai=ai_hints,
         **kwargs
     )

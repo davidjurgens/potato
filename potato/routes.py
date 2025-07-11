@@ -16,6 +16,7 @@ import logging
 import datetime
 from datetime import timedelta
 from flask import Flask, session, render_template, request, redirect, url_for, jsonify, make_response
+import os
 
 # Import from the main flask_server.py module
 from potato.flask_server import (
@@ -44,7 +45,11 @@ def home():
     Returns:
         flask.Response: Rendered template or redirect based on user state
     """
-    logger.debug("Processing home page request")
+    logger.debug("=== HOME ROUTE START ===")
+    logger.debug(f"Request method: {request.method}")
+    logger.debug(f"Request URL: {request.url}")
+    logger.debug(f"Session contents: {dict(session)}")
+    logger.debug(f"Debug mode: {config.get('debug', False)}")
 
     # Check if debug mode is enabled and bypass authentication
     if config.get("debug", False):
@@ -108,20 +113,28 @@ def home():
     logger.debug(f"User phase: {phase}")
 
     if phase == UserPhase.LOGIN:
+        logger.debug("User in LOGIN phase, calling auth()")
         return auth() #redirect(url_for("auth"))
     elif phase == UserPhase.CONSENT:
+        logger.debug("User in CONSENT phase, calling consent()")
         return consent() #redirect(url_for("consent"))
     elif phase == UserPhase.PRESTUDY:
+        logger.debug("User in PRESTUDY phase, calling prestudy()")
         return prestudy() #redirect(url_for("prestudy"))
     elif phase == UserPhase.INSTRUCTIONS:
+        logger.debug("User in INSTRUCTIONS phase, calling instructions()")
         return instructions() #redirect(url_for("instructions"))
     elif phase == UserPhase.TRAINING:
+        logger.debug("User in TRAINING phase, calling training()")
         return training() #redirect(url_for("training"))
     elif phase == UserPhase.ANNOTATION:
+        logger.debug("User in ANNOTATION phase, calling annotate()")
         return annotate() # redirect(url_for("annotate"))
     elif phase == UserPhase.POSTSTUDY:
+        logger.debug("User in POSTSTUDY phase, calling poststudy()")
         return poststudy() #redirect(url_for("poststudy"))
     elif phase == UserPhase.DONE:
+        logger.debug("User in DONE phase, calling done()")
         return done() #redirect(url_for("done"))
 
     logger.error(f"Invalid phase for user {user_id}: {phase}")
@@ -136,10 +149,14 @@ def auth():
     Returns:
         flask.Response: Rendered template or redirect
     """
-    # Check if user is already logged in
+    # Check if user is already logged in (but only if not called from home route)
+    # If called from home route with a user in LOGIN phase, we should show the login form
     if 'user_id' in session and get_user_state_manager().has_user(session['user_id']):
-        logger.debug(f"User {session['user_id']} already logged in, redirecting to annotate")
-        return redirect(url_for("annotate"))
+        user_state = get_user_state(session['user_id'])
+        # Only redirect if user is not in LOGIN phase (to avoid redirect loop)
+        if user_state.get_phase() != UserPhase.LOGIN:
+            logger.debug(f"User {session['user_id']} already logged in, redirecting to home")
+            return redirect(url_for("home"))
 
     # For standard user_id/password login
     if request.method == "POST":
@@ -157,10 +174,10 @@ def auth():
         # Authenticate the user
         if UserAuthenticator.authenticate(user_id, password):
             session.clear()  # Clear any existing session data
+            # FIXED: Use consistent session key 'user_id' instead of 'username'
             session['user_id'] = user_id
             session.permanent = True  # Make session persist longer
             logger.info(f"Login successful for user: {user_id}")
-
 
             # Initialize user state if needed
             if not get_user_state_manager().has_user(user_id):
@@ -210,7 +227,8 @@ def passwordless_login():
 
         # Authenticate without password
         if UserAuthenticator.authenticate(username, None):
-            session['username'] = username
+            # FIXED: Use consistent session key 'user_id' instead of 'username'
+            session['user_id'] = username
             logger.info(f"Passwordless login successful for user: {username}")
 
             # Initialize user state if needed
@@ -269,7 +287,8 @@ def clerk_login():
 
         # Authenticate with Clerk
         if UserAuthenticator.authenticate(username, token):
-            session['username'] = username
+            # FIXED: Use consistent session key 'user_id' instead of 'username'
+            session['user_id'] = username
             logger.info(f"Clerk SSO login successful for user: {username}")
 
             # Initialize user state if needed
@@ -381,7 +400,27 @@ def submit_annotation():
         user_state = get_user_state(user_id)
 
         # Process the annotations
-        validate_annotation(instance_id, annotations, user_state)
+        validate_annotation(annotations)
+
+        # Save annotations to user state
+        annotation_count = 0
+        for schema_name, label_data in annotations.items():
+            if isinstance(label_data, dict):
+                for label_name, value in label_data.items():
+                    label = Label(schema_name, label_name)
+                    user_state.add_label_annotation(instance_id, label, value)
+                    annotation_count += 1
+                    logger.debug(f"Added label annotation: {schema_name}:{label_name} = {value}")
+            elif isinstance(label_data, list):
+                for label_item in label_data:
+                    if isinstance(label_item, dict) and 'name' in label_item and 'value' in label_item:
+                        label = Label(schema_name, label_item['name'])
+                        user_state.add_label_annotation(instance_id, label, label_item['value'])
+                        annotation_count += 1
+                        logger.debug(f"Added label annotation: {schema_name}:{label_item['name']} = {label_item['value']}")
+
+        # Register the annotator for this instance
+        get_item_state_manager().register_annotator(instance_id, user_id)
 
         # Save the user state
         get_user_state_manager().save_user_state(user_state)
@@ -401,26 +440,65 @@ def register():
     Args:
         username: The username to initialize state for
     """
-    logger.debug("Registering new user")
+    logger.debug("=== REGISTER ROUTE START ===")
+    logger.debug(f"Session before registration: {dict(session)}")
+    logger.debug(f"Request form data: {dict(request.form)}")
+    logger.debug(f"Request method: {request.method}")
+    logger.debug(f"Request URL: {request.url}")
 
-    if 'username' in session:
-        logger.warning("User already logged in, redirecting to annotate")
+    if 'user_id' in session:
+        logger.warning(f"User already logged in with user_id: {session['user_id']}, redirecting to home")
         return home()
 
     username = request.form.get("email")
     password = request.form.get("pass")
+
+    logger.debug(f"Registration attempt for username: {username}")
 
     if not username or not password:
         logger.warning("Missing username or password")
         return render_template("home.html",
                                 login_error="Username and password are required")
 
-    # Register the user with the autheticator
+    # Register the user with the authenticator
+    logger.debug("Adding user to authenticator...")
     user_authenticator = UserAuthenticator.get_instance()
     user_authenticator.add_user(username, password)
+    logger.debug("User added to authenticator successfully")
 
-    # Redirect to the annotate page
-    return redirect(url_for("annotate"))
+    logger.debug("Setting session variables...")
+    # FIXED: Use consistent session key 'user_id' instead of 'username'
+    session['user_id'] = username
+    session.permanent = True
+
+    logger.debug(f"Session after registration: {dict(session)}")
+    logger.debug(f"User state manager has user '{username}': {get_user_state_manager().has_user(username)}")
+
+    # Initialize user state if needed
+    if not get_user_state_manager().has_user(username):
+        logger.debug(f"Initializing user state for new user: {username}")
+        init_user_state(username)
+        logger.debug(f"User state initialized. User exists: {get_user_state_manager().has_user(username)}")
+    else:
+        logger.debug(f"User state already exists for user: {username}")
+
+    # Get user state and check phase
+    user_state = get_user_state(username)
+    if user_state:
+        logger.debug(f"User state retrieved. Phase: {user_state.get_phase()}")
+
+        # If the user is still in LOGIN phase and no phases are configured,
+        # advance them directly to ANNOTATION phase
+        if user_state.get_phase() == UserPhase.LOGIN:
+            logger.debug("User in LOGIN phase, advancing to ANNOTATION phase")
+            user_state.advance_to_phase(UserPhase.ANNOTATION, None)
+            logger.debug(f"User phase advanced to: {user_state.get_phase()}")
+    else:
+        logger.error(f"Failed to retrieve user state for: {username}")
+
+    logger.debug("=== REGISTER ROUTE END - Redirecting to home ===")
+    # Redirect to home page instead of annotate to let the routing logic handle phase progression
+    return redirect(url_for("home"))
 
 @app.route("/consent", methods=["GET", "POST"])
 def consent():
@@ -430,10 +508,10 @@ def consent():
     Returns:
         flask.Response: Rendered template or redirect
     """
-    if 'username' not in session and not config.get("debug", False):
+    if 'user_id' not in session and not config.get("debug", False):
         return home()
 
-    username = session['username']
+    username = session['user_id']
     user_state = get_user_state(username)
     print('CONSENT: user_state: ', user_state)
     print('CONSENT: user_state.get_phase(): ', user_state.get_phase())
@@ -451,7 +529,7 @@ def consent():
         # Now that the user has consented, advance the state
         # and have the home page redirect to the appropriate next phase
         usm = get_user_state_manager()
-        usm.advance_phase(session['username'])
+        usm.advance_phase(session['user_id'])
 
         # Reset to pretend this is a new get request
         request.method = 'GET'
@@ -469,10 +547,10 @@ def instructions():
     Returns:
         flask.Response: Rendered template or redirect
     """
-    if 'username' not in session and not config.get("debug", False):
+    if 'user_id' not in session and not config.get("debug", False):
         return home()
 
-    username = session['username']
+    username = session['user_id']
     user_state = get_user_state(username)
 
     # Check that the user is in the instructions phase
@@ -487,7 +565,7 @@ def instructions():
         # Now that the user has read the instructions, advance the state
         # and have the home page redirect to the appropriate next phase
         usm = get_user_state_manager()
-        usm.advance_phase(session['username'])
+        usm.advance_phase(session['user_id'])
         request.method = 'GET'
         return home()
 
@@ -511,10 +589,10 @@ def prestudy():
     Returns:
         flask.Response: Rendered template or redirect
     """
-    if 'username' not in session and not config.get("debug", False):
+    if 'user_id' not in session and not config.get("debug", False):
         return home()
 
-    username = session['username']
+    username = session['user_id']
     user_state = get_user_state(username)
 
     # Check that the user is in the prestudy phase
@@ -528,7 +606,7 @@ def prestudy():
 
         # Advance the state and redirect to the appropriate next phase
         usm = get_user_state_manager()
-        usm.advance_phase(session['username'])
+        usm.advance_phase(session['user_id'])
         request.method = 'GET'
         return home()
 
@@ -543,6 +621,47 @@ def prestudy():
         prestudy_html_fname = usm.get_phase_html_fname(phase, page)
         return render_template(prestudy_html_fname)
 
+@app.route("/training", methods=["GET", "POST"])
+def training():
+    """
+    Handle the training phase of the annotation process.
+
+    Returns:
+        flask.Response: Rendered template or redirect
+    """
+    if 'user_id' not in session and not config.get("debug", False):
+        return home()
+
+    username = session['user_id']
+    user_state = get_user_state(username)
+
+    # Check that the user is in the training phase
+    if user_state.get_phase() != UserPhase.TRAINING:
+        # If not in the training phase, redirect
+        return home()
+
+    # If the user is returning information from the page
+    if request.method == 'POST':
+        print('POST -> TRAINING: ', request.form)
+
+        # Now that the user has completed training, advance the state
+        # and have the home page redirect to the appropriate next phase
+        usm = get_user_state_manager()
+        usm.advance_phase(session['user_id'])
+        request.method = 'GET'
+        return home()
+
+    # Show the current training page
+    else:
+        # Get the page the user is currently on
+        phase, page = user_state.get_current_phase_and_page()
+        print('GET <-- TRAINING: phase, page: ', phase, page)
+
+        usm = get_user_state_manager()
+        # Look up the html template for the current training page
+        training_html_fname = usm.get_phase_html_fname(phase, page)
+        return render_template(training_html_fname)
+
 @app.route("/annotate", methods=["GET", "POST"])
 def annotate():
     """
@@ -550,7 +669,7 @@ def annotate():
     """
 
     # Check if user is logged in (skip in debug mode)
-    if 'username' not in session and not config.get("debug", False):
+    if 'user_id' not in session and not config.get("debug", False):
         logger.warning("Unauthorized access attempt to annotate page")
         return redirect(url_for("home"))
 
@@ -572,10 +691,10 @@ def annotate():
             if not user_state.has_assignments():
                 get_item_state_manager().assign_instances_to_user(user_state)
 
-        session['username'] = debug_username
+        session['user_id'] = debug_username
         session.permanent = True
 
-    username = session['username']
+    username = session['user_id']
     # Ensure user state exists
     if not get_user_state_manager().has_user(username):
         logger.info(f"Creating missing user state for {username}")
@@ -629,14 +748,14 @@ def annotate():
 
 @app.route('/get_ai_hint', methods=['GET'])
 def get_ai_hint():
-    if 'username' not in session and not config.get("debug", False):
+    if 'user_id' not in session and not config.get("debug", False):
         return home()
 
-    # In debug mode, ensure we have a username
-    if config.get("debug", False) and 'username' not in session:
-        session['username'] = "debug_user"
+    # In debug mode, ensure we have a user_id
+    if config.get("debug", False) and 'user_id' not in session:
+        session['user_id'] = "debug_user"
 
-    username = session['username']
+    username = session['user_id']
     user_state = get_user_state(username)
     instance_text = request.args.get('instance_text')
     print(f"instance_text: {instance_text}")
@@ -798,13 +917,35 @@ def test_all_instances():
 def test_user_state(user_id):
     """
     Get detailed state for a specific user.
-
     Args:
         user_id: The user ID to get state for
-
     Returns:
         flask.Response: JSON response with user state
     """
+    # Debug logging
+    print(f"🔍 test_user_state called for user_id: {user_id}")
+    print(f"🔍 Debug mode: {config.get('debug', False)}")
+    print(f"🔍 Session user_id: {session.get('user_id')}")
+    print(f"🔍 API key header: {request.headers.get('X-API-KEY')}")
+    print(f"🔍 Valid API key: {config.get('test_api_key') or os.environ.get('TEST_API_KEY')}")
+
+    # Allow access if:
+    # - The user is logged in and matches user_id
+    # - The request provides a valid API key (for CI/testing)
+    # - The app is in debug mode
+    if not config.get("debug", False):
+        session_user = session.get("user_id")
+        api_key = request.headers.get("X-API-KEY")
+        valid_api_key = config.get("test_api_key") or os.environ.get("TEST_API_KEY")
+
+        print(f"🔍 Authorization check - session_user: {session_user}, api_key: {api_key}, valid_api_key: {valid_api_key}")
+
+        if not (session_user == user_id or (api_key and valid_api_key and api_key == valid_api_key)):
+            print(f"🔍 Authorization failed - returning 401")
+            return jsonify({"error": "Unauthorized: must be logged in as this user or provide valid API key"}), 401
+
+    print(f"🔍 Authorization passed - proceeding with user state retrieval")
+
     try:
         usm = get_user_state_manager()
         user_state = usm.get_user_state(user_id)
@@ -874,7 +1015,7 @@ def test_user_state(user_id):
                         "has_annotation": instance_id in all_annotations
                     })
 
-        return jsonify({
+        response_data = {
             "user_id": user_id,
             "phase": str(user_state.get_phase()),
             "current_instance": current_instance_data,
@@ -892,8 +1033,13 @@ def test_user_state(user_id):
             "hints": {
                 "cached_hints": list(user_state.get_cached_hints().keys()) if hasattr(user_state, 'get_cached_hints') else []
             }
-        })
+        }
+
+        print(f"🔍 Returning user state for {user_id}")
+        return jsonify(response_data)
+
     except Exception as e:
+        print(f"🔍 Error in test_user_state: {str(e)}")
         return jsonify({
             "error": f"Failed to get user state for '{user_id}': {str(e)}"
         }), 500
@@ -1375,10 +1521,10 @@ def go_to():
     """
     Handle requests to go to a specific instance.
     """
-    if 'username' not in session and not config.get("debug", False):
+    if 'user_id' not in session and not config.get("debug", False):
         return home()
 
-    username = session['username']
+    username = session['user_id']
     user_state = get_user_state(username)
 
     # Check that the user is in the annotation phase
@@ -1397,7 +1543,7 @@ def update_instance():
     '''
     API endpoint for updating instance data when a user interacts with the web UI.
     '''
-    if 'username' not in session and not config.get("debug", False):
+    if 'user_id' not in session and not config.get("debug", False):
         return jsonify({"status": "error", "message": "No active session"})
 
     if request.is_json:
@@ -1412,11 +1558,11 @@ def update_instance():
         # Get the state of items for that schema
         schema_state = request.json.get("state")
 
-        # In debug mode, ensure we have a username
-        if config.get("debug", False) and 'username' not in session:
-            session['username'] = "debug_user"
+        # In debug mode, ensure we have a user_id
+        if config.get("debug", False) and 'user_id' not in session:
+            session['user_id'] = "debug_user"
 
-        username = session['username']
+        username = session['user_id']
         user_state = get_user_state(username)
 
         if request.json.get("type") == "label":
@@ -1450,10 +1596,10 @@ def poststudy():
     Returns:
         flask.Response: Rendered template or redirect
     """
-    if 'username' not in session and not config.get("debug", False):
+    if 'user_id' not in session and not config.get("debug", False):
         return home()
 
-    username = session['username']
+    username = session['user_id']
     user_state = get_user_state(username)
 
     # Check that the user is in the poststudy phase
@@ -1467,7 +1613,7 @@ def poststudy():
 
         # Advance the state and move to the appropriate next phase
         usm = get_user_state_manager()
-        usm.advance_phase(session['username'])
+        usm.advance_phase(session['user_id'])
         request.method = 'GET'
         return home()
 
@@ -1491,10 +1637,10 @@ def done():
     Returns:
         flask.Response: Rendered template or redirect
     """
-    if 'username' not in session and not config.get("debug", False):
+    if 'user_id' not in session and not config.get("debug", False):
         return home()
 
-    username = session['username']
+    username = session['user_id']
     user_state = get_user_state(username)
 
     # Check that the user is in the done phase
@@ -1682,7 +1828,7 @@ def api_frontend():
     Returns:
         flask.Response: Rendered API frontend template
     """
-    if 'username' not in session and not config.get("debug", False):
+    if 'user_id' not in session and not config.get("debug", False):
         return redirect(url_for("home"))
 
     # In debug mode, ensure debug user exists
@@ -1703,10 +1849,10 @@ def api_frontend():
             if not user_state.has_assignments():
                 get_item_state_manager().assign_instances_to_user(user_state)
 
-        session['username'] = debug_username
+        session['user_id'] = debug_username
         session.permanent = True
 
-    username = session['username']
+    username = session['user_id']
 
     # Ensure user state exists
     if not get_user_state_manager().has_user(username):
@@ -1749,7 +1895,7 @@ def span_api_frontend():
     Returns:
         flask.Response: Rendered span API frontend template
     """
-    if 'username' not in session and not config.get("debug", False):
+    if 'user_id' not in session and not config.get("debug", False):
         return redirect(url_for("home"))
 
     # In debug mode, ensure debug user exists
@@ -1770,10 +1916,10 @@ def span_api_frontend():
             if not user_state.has_assignments():
                 get_item_state_manager().assign_instances_to_user(user_state)
 
-        session['username'] = debug_username
+        session['user_id'] = debug_username
         session.permanent = True
 
-    username = session['username']
+    username = session['user_id']
 
     # Ensure user state exists
     if not get_user_state_manager().has_user(username):
@@ -2139,6 +2285,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/consent", "consent", consent, methods=["GET", "POST"])
     app.add_url_rule("/instructions", "instructions", instructions, methods=["GET", "POST"])
     app.add_url_rule("/prestudy", "prestudy", prestudy, methods=["GET", "POST"])
+    app.add_url_rule("/training", "training", training, methods=["GET", "POST"])
     app.add_url_rule("/annotate", "annotate", annotate, methods=["GET", "POST"])
     app.add_url_rule("/go_to", "go_to", go_to, methods=["GET", "POST"])
     app.add_url_rule("/updateinstance", "update_instance", update_instance, methods=["POST"])

@@ -86,7 +86,13 @@ def generate_element_identifier(schema_name: str, label_name: str, element_type:
 
     # Generate unique identifier (using underscore to avoid conflicts with CSS selectors)
     element_id = f"{safe_schema}_{safe_label}_{element_type}".replace(":::", "_")
-    element_name = f"{safe_schema}:::{safe_label}"
+
+    # For radio buttons, use just the schema name to ensure proper radio group behavior
+    # For other input types, use the schema:::label format for unique identification
+    if element_type == "radio":
+        element_name = safe_schema
+    else:
+        element_name = f"{safe_schema}:::{safe_label}"
 
     return {
         "id": element_id,

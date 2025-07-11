@@ -253,7 +253,6 @@ class ItemStateManager:
             return 0
 
         # Determine how many instances to assign
-        # If user has very few assignments left (less than 3), assign more to reduce server calls
         current_assignments = user_state.get_assigned_instance_count()
         max_assignments = user_state.get_max_assignments()
 
@@ -261,12 +260,17 @@ class ItemStateManager:
             remaining_capacity = max_assignments - current_assignments
             if remaining_capacity <= 0:
                 return 0
-            # If user has less than 3 assignments, assign up to 3 more (or remaining capacity)
-            if current_assignments < 3:
-                instances_to_assign = min(3, remaining_capacity)
+            # For fixed_order strategy, assign all remaining capacity at once
+            # For other strategies, use the original incremental logic
+            if self.assignment_strategy == AssignmentStrategy.FIXED_ORDER:
+                instances_to_assign = remaining_capacity
             else:
-                # Otherwise, assign one at a time
-                instances_to_assign = 1
+                # If user has less than 3 assignments, assign up to 3 more (or remaining capacity)
+                if current_assignments < 3:
+                    instances_to_assign = min(3, remaining_capacity)
+                else:
+                    # Otherwise, assign one at a time
+                    instances_to_assign = 1
         else:
             # No maximum, assign one at a time
             instances_to_assign = 1
@@ -300,7 +304,8 @@ class ItemStateManager:
         elif self.assignment_strategy == AssignmentStrategy.FIXED_ORDER:
             assigned = 0
             for iid in self.remaining_instance_ids:
-                if not user_state.has_annotated(iid):
+                # Check if user has already been assigned this instance
+                if iid not in user_state.get_assigned_instance_ids():
                     #print("assigning item %s to user %s" % (iid, user_state.get_user_id()))
                     user_state.assign_instance(self.instance_id_to_item[iid])
                     assigned += 1

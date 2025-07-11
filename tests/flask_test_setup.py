@@ -22,9 +22,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 class FlaskTestServer:
     """A test server that can be started and stopped for integration tests."""
 
-    def __init__(self, port: int = 9001, debug: bool = True):
+    def __init__(self, port: int = 9001, debug: bool = False, config_file: Optional[str] = None):
         self.port = port
         self.debug = debug
+        self.config_file = config_file
         self.server_process = None
         self.server_thread = None
         self.app = None
@@ -213,19 +214,25 @@ class FlaskTestServer:
 
     def start_server(self, config_dir: Optional[str] = None) -> bool:
         """Start the Flask server in a separate thread."""
-        if config_dir is None:
-            config_dir = tempfile.mkdtemp()
+        if self.config_file:
+            # Use the provided config file (production config)
+            config_file = self.config_file
+            config_dir = os.path.dirname(os.path.abspath(config_file))
+        else:
+            # Use test config
+            if config_dir is None:
+                config_dir = tempfile.mkdtemp()
 
-        # Create test data file first
-        data_file = self.create_test_data(config_dir)
-        template_file = self.create_test_template(config_dir)
+            # Create test data file first
+            data_file = self.create_test_data(config_dir)
+            template_file = self.create_test_template(config_dir)
 
-        # Create phase files
-        self.create_phase_files(config_dir)
+            # Create phase files
+            self.create_phase_files(config_dir)
 
-        # Use just the filename for data_files
-        data_file_name = os.path.basename(data_file)
-        config_file = self.create_test_config(config_dir, data_file_name)
+            # Use just the filename for data_files
+            data_file_name = os.path.basename(data_file)
+            config_file = self.create_test_config(config_dir, data_file_name)
 
         # Set environment variables for the server
         os.environ['POTATO_CONFIG_FILE'] = config_file
@@ -320,6 +327,58 @@ class FlaskTestServer:
         print(f"❌ Failed to start server on {self.base_url}")
         return False
 
+    def register_user(self, username: str, password: str) -> bool:
+        """Register a new user via the registration endpoint."""
+        try:
+            response = self.session.post(f"{self.base_url}/register", data={
+                'action': 'signup',
+                'email': username,
+                'pass': password
+            }, timeout=5)
+
+            print(f"🔍 Registration response: {response.status_code}")
+            print(f"🔍 Registration redirect: {response.url}")
+
+            # Check if registration was successful (should redirect to home or annotation page)
+            return response.status_code in [200, 302] and 'error' not in response.text.lower()
+        except Exception as e:
+            print(f"❌ Registration failed: {e}")
+            return False
+
+    def login_user(self, username: str, password: str) -> bool:
+        """Login a user via the auth endpoint."""
+        try:
+            response = self.session.post(f"{self.base_url}/auth", data={
+                'action': 'login',
+                'email': username,
+                'pass': password
+            }, timeout=5)
+
+            print(f"🔍 Login response: {response.status_code}")
+            print(f"🔍 Login redirect: {response.url}")
+
+            # Check if login was successful (should redirect to annotation page)
+            return response.status_code in [200, 302] and 'error' not in response.text.lower()
+        except Exception as e:
+            print(f"❌ Login failed: {e}")
+            return False
+
+    def get_user_state(self, username: str) -> Optional[Dict[str, Any]]:
+        """Get the current user state."""
+        try:
+            if self.debug:
+                response = self.session.get(f"{self.base_url}/test/user_state/{username}", timeout=5)
+            else:
+                # In production mode, we might need to use a different endpoint
+                response = self.session.get(f"{self.base_url}/user_state", timeout=5)
+
+            if response.status_code == 200:
+                return response.json()
+            return None
+        except Exception as e:
+            print(f"❌ Failed to get user state: {e}")
+            return None
+
     @contextmanager
     def server_context(self):
         """Context manager for server lifecycle."""
@@ -369,8 +428,8 @@ class FlaskTestServer:
 class FlaskTestBase:
     """Base class for tests that need a running Flask server."""
 
-    def __init__(self, port: int = 9001, debug: bool = True):
-        self.server = FlaskTestServer(port=port, debug=debug)
+    def __init__(self, port: int = 9001, debug: bool = False, config_file: Optional[str] = None):
+        self.server = FlaskTestServer(port=port, debug=debug, config_file=config_file)
         self.server_started = False
 
     def setUp(self):
@@ -396,9 +455,9 @@ class FlaskTestBase:
             self.tearDown()
 
 
-def create_test_server(port: int = 9001, debug: bool = True) -> FlaskTestServer:
+def create_test_server(port: int = 9001, debug: bool = False, config_file: Optional[str] = None) -> FlaskTestServer:
     """Factory function to create a test server."""
-    return FlaskTestServer(port=port, debug=debug)
+    return FlaskTestServer(port=port, debug=debug, config_file=config_file)
 
 
 if __name__ == "__main__":

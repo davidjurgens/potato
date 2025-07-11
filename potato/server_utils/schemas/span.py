@@ -15,6 +15,7 @@ from .identifier_utils import (
 )
 
 from potato.item_state_management import SpanAnnotation
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -95,59 +96,49 @@ def set_span_color(schema, span_label, color):
     span_colors[schema][span_label] = color
 
 def render_span_annotations(text, span_annotations: list[SpanAnnotation]):
+    """
+    For the v2 overlay system, return only the raw text (no markup).
+    The overlays will be rendered by JS using the span metadata.
+    """
     print(f"🔍 render_span_annotations called with text: '{text[:50]}...' and {len(span_annotations)} spans")
+    print(f"🔍 render_span_annotations returning raw text: '{text[:100]}...'")
+    # Just return the raw text (no markup)
+    return text
 
-    rev_order_sa = sorted(span_annotations, key=lambda d: d.get_start(), reverse=True)
-
-    print('🔍 rev_order_sa: ', rev_order_sa)
-
-    ann_wrapper = (
-        '<span class="span_container" selection_label="{annotation}" '
-        + 'schema="{schema}" style="background-color:rgb{bg_color};">'
-        + "{span}"
-        + '<div class="span_label" schema="{schema}" name="{annotation}" '
-        + 'style="background-color:white;border:2px solid rgb{color};">'
-        + "{annotation_title}</div>"
-        + "<div class=\"span_close\" style=\"background-color:white;\""
-         " onclick=\"deleteSpanAnnotation(this, {schema}, {annotation}, {annotation_title}, {start}, {end});\">×</div>"
-        + "</span>"
-    )
-    for a in rev_order_sa:
-
-        # Spans are colored according to their order in the list and we need to
-        # retrofit the color
-        color = get_span_color(a.get_schema(), a.get_name())
+def get_span_annotations_script(span_annotations: list[SpanAnnotation]):
+    """
+    Get the JavaScript script tag for span annotations.
+    Returns:
+      - A <script> tag with a JS variable containing the span annotation metadata
+    """
+    # Prepare span metadata for JS
+    span_data = []
+    for span in span_annotations:
+        color = get_span_color(span.get_schema(), span.get_name())
         if color is None:
-            # Default to gray if no color is found
             color = "(128, 128, 128)"
-        # The color is an RGB triple like (1,2,3)
-        # Convert to hex with alpha for background if test expects it
         rgb = tuple(int(x.strip()) for x in color.strip("() ").split(","))
         hex_color = '#{:02x}{:02x}{:02x}80'.format(*rgb)  # 80 = 50% alpha
-        # For border, use rgb as before
-        bg_color = hex_color
+        span_data.append({
+            "start": span.get_start(),
+            "end": span.get_end(),
+            "label": span.get_name(),
+            "title": span.get_title(),
+            "schema": span.get_schema(),
+            "color": hex_color,
+            "border_rgb": color,
+            "id": span.get_id(),
+        })
 
-        # The text above the span is its title and we display whatever its set to
-        annotation_title= a.get_title()
-
-        print(text, a)
-        span = text[a.get_start():a.get_end()]
-
-        ann = (
-            f'<span class="span-highlight" selection_label="{a.get_name()}" '
-            f'data-label="{a.get_name()}" '
-            f'schema="{a.get_schema()}" style="background-color: {bg_color};" data-annotation-id="{a.get_id()}">'  # new attribute
-            f'{span}'
-            f'<div class="span_label" schema="{a.get_schema()}" name="{a.get_name()}" '
-            f'style="background-color:white;border:2px solid rgb{color};">'
-            f'{annotation_title}</div>'
-            f'<div class="span_close" style="background-color:white;"'
-            f' onclick="deleteSpanAnnotation(this, {a.get_schema()}, {a.get_name()}, {annotation_title}, {a.get_start()}, {a.get_end()});">×</div>'
-            f'</span>'
-        )
-        text = text[:a.get_start()] + ann + text[a.get_end():]
-
-    return text
+    # Return the script tag
+    script = f'''
+    <script id="span-annotation-data">
+      console.log('🔍 Span annotation script executing');
+      window.spanAnnotations = {json.dumps(span_data)};
+      console.log('🔍 window.spanAnnotations set to:', window.spanAnnotations);
+    </script>
+    '''
+    return script
 
 def render_span_annotations_old(text, span_annotations):
     """
