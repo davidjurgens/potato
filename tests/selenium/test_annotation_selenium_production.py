@@ -7,7 +7,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from tests.flask_test_setup import FlaskTestServer
+from tests.helpers.flask_test_setup import FlaskTestServer
 
 @pytest.fixture(scope="module")
 def flask_server():

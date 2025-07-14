@@ -26,7 +26,7 @@ import os
 import tempfile
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from tests.flask_test_setup import FlaskTestServer
+from tests.helpers.flask_test_setup import FlaskTestServer
 from collections import defaultdict
 import requests
 

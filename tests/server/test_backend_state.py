@@ -10,7 +10,7 @@ import pytest
 import time
 import tempfile
 import os
-from tests.flask_test_setup import FlaskTestServer
+from tests.helpers.flask_test_setup import FlaskTestServer
 from unittest.mock import patch, MagicMock
 import requests
 

@@ -25,7 +25,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import TimeoutException, WebDriverException, NoSuchElementException
-from tests.flask_test_setup import FlaskTestServer
+from tests.helpers.flask_test_setup import FlaskTestServer
 import sys
 import shutil
 import logging

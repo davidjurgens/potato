@@ -28,14 +28,29 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 class FlaskTestServer:
     """A test server that can be started and stopped for integration tests."""
 
-    def __init__(self, app_factory, config=None, debug=False):
+    def __init__(self, app_factory=None, config=None, debug=False, port=None, config_file=None, test_data_file=None):
+        # Support both old and new constructor patterns
+        # Old pattern: FlaskTestServer(app_factory, config, debug)
+        # New pattern: FlaskTestServer(port=port, debug=debug, config_file=config_file, test_data_file=test_data_file)
+
         self.app_factory = app_factory
         self.config = None
         self.temp_config_file = None
-        self.debug = debug  # Use the debug parameter passed to constructor
-        self.port = self._find_free_port()
+        self.debug = debug
+        self.test_data_file = test_data_file
+
+        # Handle port parameter
+        if port is not None:
+            self.port = port
+        else:
+            self.port = self._find_free_port()
+
         self.base_url = f"http://localhost:{self.port}"
-        if config is not None:
+
+        # Handle config_file parameter (new pattern)
+        if config_file is not None:
+            self.config = config_file
+        elif config is not None:
             if isinstance(config, dict):
                 # Ensure debug is false and add all required config keys
                 config = dict(config)
@@ -112,6 +127,39 @@ class FlaskTestServer:
 
     def start(self):
         """Start the Flask server in a separate thread."""
+        return self._start_server()
+
+    def start_server(self, config_dir=None):
+        """Alias for start() method for backward compatibility."""
+        return self._start_server(config_dir)
+
+    def _start_server(self, config_dir=None):
+        """Internal method to start the Flask server in a separate thread."""
+        # Handle config_dir parameter for backward compatibility
+        if config_dir is not None:
+            # This is the old pattern - we need to handle config file creation
+            if self.config is None:
+                # Create a temporary config file in the config_dir
+                import tempfile
+                config_file = os.path.join(config_dir, 'test_config.yaml')
+                # For now, we'll use a simple config - this can be enhanced if needed
+                simple_config = {
+                    "debug": self.debug,
+                    "port": self.port,
+                    "host": "0.0.0.0",
+                    "task_dir": config_dir,
+                    "output_annotation_dir": os.path.join(config_dir, "output"),
+                    "data_files": [],
+                    "annotation_schemes": [],
+                    "item_properties": {"id_key": "id", "text_key": "text"},
+                    "authentication": {"method": "in_memory"},
+                    "require_password": False,
+                    "persist_sessions": False
+                }
+                with open(config_file, 'w') as f:
+                    yaml.dump(simple_config, f)
+                self.config = config_file
+
         # Set environment variables for the server
         os.environ['POTATO_CONFIG_FILE'] = self.config
         os.environ['POTATO_DEBUG'] = 'false'  # Always false for test servers
@@ -410,6 +458,10 @@ class FlaskTestServer:
                 # On Unix, we can try to send SIGKILL to the process
                 import os
                 os._exit(0)
+
+    def stop(self):
+        """Alias for stop_server() method for backward compatibility."""
+        self.stop_server()
 
     def is_server_running(self) -> bool:
         """Check if the server is running."""

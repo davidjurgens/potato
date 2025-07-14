@@ -25,7 +25,7 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from tests.flask_test_setup import FlaskTestServer
+from tests.helpers.flask_test_setup import FlaskTestServer
 
 
 class TestAllAnnotationTypes:

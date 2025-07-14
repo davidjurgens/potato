@@ -12,7 +12,7 @@ import time
 import os
 import tempfile
 from unittest.mock import patch, MagicMock
-from tests.flask_test_setup import FlaskTestServer
+from tests.helpers.flask_test_setup import FlaskTestServer
 
 
 class TestMultiPhaseWorkflow:
