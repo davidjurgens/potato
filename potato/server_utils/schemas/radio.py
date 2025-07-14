@@ -87,6 +87,10 @@ def _generate_radio_layout_internal(annotation_scheme, horizontal=False):
         key_value = generate_element_value(label_data, i, annotation_scheme)
         validation = generate_validation_attribute(annotation_scheme)
 
+        # Debug logging
+        logger.debug(f"Schema: {schema_name}, Label: {label}, Validation: '{validation}'")
+        logger.debug(f"Label requirement: {annotation_scheme.get('label_requirement', 'NOT_FOUND')}")
+
         # Handle tooltips and keyboard shortcuts
         tooltip = ""
         if isinstance(label_data, Mapping):

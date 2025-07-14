@@ -160,6 +160,8 @@
         document.addEventListener('DOMContentLoaded', function() {
             loadCurrentInstance();
             setupEventListeners();
+            // Initial validation check
+            validateRequiredFields();
         });
 
         function setupEventListeners() {
@@ -329,6 +331,7 @@
             // The server generates the forms, so we just need to set up event listeners
             // The forms are already in the HTML from server-side generation
             setupInputEventListeners();
+            validateRequiredFields();
         }
 
 
@@ -496,6 +499,47 @@
             }
         }
 
+        function validateRequiredFields() {
+            // Check all inputs with validation="required"
+            const requiredInputs = document.querySelectorAll('input[validation="required"]');
+            let allRequiredFilled = true;
+
+            // Group inputs by their name (for radio buttons) or individual inputs
+            const inputGroups = {};
+            requiredInputs.forEach(input => {
+                if (input.type === 'radio') {
+                    // For radio buttons, check if any in the group is selected
+                    const name = input.name;
+                    if (!inputGroups[name]) {
+                        inputGroups[name] = [];
+                    }
+                    inputGroups[name].push(input);
+                } else {
+                    // For other inputs, check individually
+                    if (!input.value || input.value.trim() === '') {
+                        allRequiredFilled = false;
+                    }
+                }
+            });
+
+            // Check radio button groups
+            for (const [name, inputs] of Object.entries(inputGroups)) {
+                const anySelected = inputs.some(input => input.checked);
+                if (!anySelected) {
+                    allRequiredFilled = false;
+                    break;
+                }
+            }
+
+            // Update Next button state
+            const nextBtn = document.getElementById('next-btn');
+            if (nextBtn) {
+                nextBtn.disabled = !allRequiredFilled;
+            }
+
+            return allRequiredFilled;
+        }
+
         function setLoading(loading) {
             isLoading = loading;
             const loadingState = document.getElementById('loading-state');
@@ -512,7 +556,8 @@
                 loadingState.style.display = 'none';
                 mainContent.style.display = 'block';
                 prevBtn.disabled = false;
-                nextBtn.disabled = false;
+                // Don't enable next button here - let validateRequiredFields handle it
+                validateRequiredFields();
             }
         }
 
@@ -616,6 +661,9 @@
                 console.warn('Missing schema or label_name for input:', element);
                 return;
             }
+
+            // Validate required fields after input change
+            validateRequiredFields();
 
             let value;
 
@@ -756,6 +804,8 @@
                     console.log(`Populated number ${input.id} with value:`, currentAnnotations[schema][labelName]);
                 }
             });
+
+            validateRequiredFields();
         }
 
         // Span annotation functions

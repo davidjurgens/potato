@@ -30,7 +30,10 @@
         "negative",
         "neutral"
       ],
-      "sequential_key_binding": true
+      "sequential_key_binding": true,
+      "label_requirement": {
+        "required": true
+      }
     }
   ],
   "site_dir": "default",

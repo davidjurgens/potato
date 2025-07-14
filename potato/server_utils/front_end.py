@@ -6,6 +6,7 @@ import os
 import logging
 import json
 import re
+import hashlib
 from collections import OrderedDict
 
 #add local module
@@ -45,6 +46,16 @@ DEFAULT_ANNOTATION_LAYOUT_SUBDIR = "layouts"
 DEFAULT_ANNOTATION_LAYOUT_FILENAME = "task_layout.html"
 
 
+def compute_config_md5(config):
+    """
+    Compute MD5 hash of the config dict for template invalidation.
+    """
+    # Remove unserializable fields if needed
+    config_copy = {k: v for k, v in config.items() if k not in ['__config_file__', 'site_file']}
+    config_str = json.dumps(config_copy, sort_keys=True, default=str)
+    return hashlib.md5(config_str.encode('utf-8')).hexdigest()
+
+
 def generate_annotation_layout_file(config: dict, annotation_schemes: list[dict]) -> str:
     """
     Generate a dedicated annotation layout file in the task directory under layouts/task_layout.html.
@@ -70,8 +81,12 @@ def generate_annotation_layout_file(config: dict, annotation_schemes: list[dict]
         schema_layouts += schema_layout + "\n"
         all_keybindings.extend(keybindings)
 
-    # Create the layout HTML content
-    layout_content = f"""<!-- Generated annotation layout file -->
+    # Compute config hash
+    config_hash = compute_config_md5(config)
+
+    # Create the layout HTML content with config hash at the top
+    layout_content = f"""<!-- CONFIG_HASH: {config_hash} -->
+<!-- Generated annotation layout file -->
 <!-- This file was automatically generated based on the annotation schemes in your config -->
 <!-- You can customize this file to modify the layout of your annotation interface -->
 <!-- Changes to this file will be preserved across server restarts -->
@@ -91,7 +106,7 @@ def generate_annotation_layout_file(config: dict, annotation_schemes: list[dict]
 
 def get_or_generate_annotation_layout(config: dict, annotation_schemes: list[dict]) -> str:
     """
-    Get the annotation layout file path, generating it if it doesn't exist.
+    Get the annotation layout file path, generating it if it doesn't exist or if the config hash has changed.
     """
     task_dir = config.get("task_dir")
     if not task_dir:
@@ -99,13 +114,24 @@ def get_or_generate_annotation_layout(config: dict, annotation_schemes: list[dic
     layout_dir = os.path.join(task_dir, DEFAULT_ANNOTATION_LAYOUT_SUBDIR)
     layout_file_path = os.path.join(layout_dir, DEFAULT_ANNOTATION_LAYOUT_FILENAME)
 
-    # Check if the layout file already exists
-    if os.path.exists(layout_file_path):
-        logger.info(f"Using existing annotation layout file: {layout_file_path}")
-        return layout_file_path
+    current_hash = compute_config_md5(config)
 
-    # Generate the layout file if it doesn't exist
-    logger.info(f"Annotation layout file not found, generating: {layout_file_path}")
+    # Check if the layout file already exists and if the hash matches
+    if os.path.exists(layout_file_path):
+        with open(layout_file_path, "rt") as f:
+            for _ in range(2):  # Only need to check the first two lines
+                line = f.readline()
+                if line.startswith("<!-- CONFIG_HASH:"):
+                    file_hash = line.strip().split(":", 1)[1].replace('-->', '').strip()
+                    if file_hash == current_hash:
+                        logger.info(f"Using existing annotation layout file: {layout_file_path} (hash match)")
+                        return layout_file_path
+                    else:
+                        logger.info(f"Config hash mismatch, regenerating annotation layout file: {layout_file_path}")
+                    break
+
+    # Generate the layout file if it doesn't exist or hash mismatches
+    logger.info(f"Annotation layout file not found or hash mismatch, generating: {layout_file_path}")
     return generate_annotation_layout_file(config, annotation_schemes)
 
 
@@ -359,9 +385,13 @@ def generate_annotation_html_template(config: dict) -> str:
     # Cache this path as a shortcut to figure out which page to render
     config["site_file"] = site_name
 
+    # Compute config hash and add it to the template
+    config_hash = compute_config_md5(config)
+    html_template_with_hash = f"<!-- CONFIG_HASH: {config_hash} -->\n{html_template}"
+
     # Write the file
     with open(output_html_fname, "wt") as outf:
-        outf.write(html_template)
+        outf.write(html_template_with_hash)
 
     logger.debug("writing annotation html to %s" % output_html_fname)
 

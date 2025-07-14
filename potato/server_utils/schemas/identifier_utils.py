@@ -86,7 +86,12 @@ def generate_element_identifier(schema_name: str, label_name: str, element_type:
 
     # Generate unique identifier (using underscore to avoid conflicts with CSS selectors)
     element_id = f"{safe_schema}_{safe_label}_{element_type}".replace(":::", "_")
-    element_name = f"{safe_schema}:::{safe_label}"
+
+    # For radio buttons, use schema name as the group name to ensure mutual exclusivity
+    if element_type == "radio":
+        element_name = safe_schema
+    else:
+        element_name = f"{safe_schema}:::{safe_label}"
 
     return {
         "id": element_id,
@@ -184,16 +189,24 @@ def generate_validation_attribute(annotation_scheme: dict, label_name: str = Non
     """
     label_requirement = annotation_scheme.get("label_requirement", {})
 
+    # Debug logging
+    logger.debug(f"generate_validation_attribute called with label_requirement: {label_requirement}")
+    logger.debug(f"label_name: {label_name}")
+
     # Check for required_label validation
     if label_name and label_requirement.get("required_label"):
         required_labels = label_requirement["required_label"]
         if isinstance(required_labels, str) and label_name == required_labels:
+            logger.debug(f"Returning 'required_label' for label: {label_name}")
             return "required_label"
         elif isinstance(required_labels, list) and label_name in required_labels:
+            logger.debug(f"Returning 'required_label' for label: {label_name}")
             return "required_label"
 
     # Check for general required validation
     if label_requirement.get("required"):
+        logger.debug(f"Returning 'required' for general requirement")
         return "required"
 
+    logger.debug(f"Returning empty string - no validation requirements met")
     return ""
