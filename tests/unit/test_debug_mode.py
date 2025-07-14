@@ -21,7 +21,7 @@ def test_debug_mode_config():
     args.config_file = "test_config.yaml"
     args.verbose = False
     args.very_verbose = False
-            args.debug = False
+    args.debug = False
     args.customjs = False
     args.customjs_hostname = None
     args.port = 8080

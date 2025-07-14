@@ -347,12 +347,13 @@ def generate_annotation_html_template(config: dict) -> str:
         + os.path.basename(html_template_file)
     )
 
-    cur_program_dir = os.path.dirname(os.path.abspath(__file__))
-    print('cur_program_dir: ', cur_program_dir)
-    flask_templates_dir = os.path.join(cur_program_dir,'templates') #get the dir where the flask templates are saved
-    print('flask_templates_dir: ', flask_templates_dir)
+    # Create generated subdirectory within the templates directory
+    generated_dir = os.path.join(config["site_dir"], "generated")
+    if not os.path.exists(generated_dir):
+        os.makedirs(generated_dir)
+        logger.info(f"Created generated templates directory: {generated_dir}")
 
-    output_html_fname = os.path.join(config["site_dir"], site_name)
+    output_html_fname = os.path.join(generated_dir, site_name)
     print('output_html_fname: ', output_html_fname)
 
     # Cache this path as a shortcut to figure out which page to render
@@ -549,7 +550,13 @@ def generate_html_from_schematic(annotation_schemas: list[dict],
             + "%s.html" % phase_name
         )
 
-    output_html_fname = os.path.join(config["site_dir"], site_name)
+    # Create generated subdirectory within the templates directory
+    generated_dir = os.path.join(config["site_dir"], "generated")
+    if not os.path.exists(generated_dir):
+        os.makedirs(generated_dir)
+        logger.info(f"Created generated templates directory: {generated_dir}")
+
+    output_html_fname = os.path.join(generated_dir, site_name)
 
     # Write the file
     logger.debug("writing %s html to %s.html" % (phase_name, output_html_fname))
