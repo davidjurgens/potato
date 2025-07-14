@@ -245,8 +245,20 @@ class FlaskTestServer:
                 init_item_state_manager(config)
                 load_all_data(config)
 
-                # Create a fresh Flask app instance
+                                # Create a fresh Flask app instance
                 app = Flask(__name__, template_folder=real_templates_dir)
+
+                # Configure Jinja2 to also look in the generated templates directory
+                generated_templates_dir = os.path.join(real_templates_dir, 'generated')
+                if not os.path.exists(generated_templates_dir):
+                    os.makedirs(generated_templates_dir, exist_ok=True)
+
+                # Add the generated directory to the template search path
+                from jinja2 import ChoiceLoader, FileSystemLoader
+                app.jinja_loader = ChoiceLoader([
+                    FileSystemLoader(real_templates_dir),
+                    FileSystemLoader(generated_templates_dir)
+                ])
 
                 # Configure the app
                 if config.get("persist_sessions", False):
