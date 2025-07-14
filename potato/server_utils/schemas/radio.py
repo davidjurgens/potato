@@ -82,9 +82,8 @@ def _generate_radio_layout_internal(annotation_scheme, horizontal=False):
         # Extract label information
         label = label_data if isinstance(label_data, str) else label_data["name"]
 
-        # Generate consistent identifiers (use element_type='radio')
+        # Generate consistent identifiers
         identifiers = generate_element_identifier(schema_name, label, "radio")
-
         key_value = generate_element_value(label_data, i, annotation_scheme)
         validation = generate_validation_attribute(annotation_scheme)
 

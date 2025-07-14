@@ -1,0 +1,48 @@
+annotation_task_name: All Phases Example Test
+task_dir: output/all-phases-example
+output_annotation_dir: output/all-phases-example/annotations
+output_annotation_format: jsonl
+data_files:
+- ../data/test_data.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 0
+phases:
+- name: consent
+  description: Consent phase
+  annotation_schemes:
+  - annotation_type: radio
+    name: consent
+    description: Do you consent to participate?
+    labels:
+    - 'Yes'
+    - 'No'
+- name: general_instructions
+  description: General instructions phase
+  annotation_schemes:
+  - annotation_type: pure_display
+    name: instructions
+    description: Please read the instructions carefully
+- name: personality
+  description: Personality assessment phase
+  annotation_schemes:
+  - annotation_type: likert
+    name: personality
+    description: Rate your personality traits
+    min_label: Strongly Disagree
+    max_label: Strongly Agree
+    size: 5
+- name: annotation
+  description: Main annotation phase
+  annotation_schemes:
+  - annotation_type: likert
+    name: sentiment
+    description: Rate the sentiment of the text
+    min_label: Very Negative
+    max_label: Very Positive
+    size: 5
+site_dir: output

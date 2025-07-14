@@ -1,0 +1,44 @@
+port: 9003
+server_name: potato likert annotation test
+annotation_task_name: Likert Scale Annotation Test
+debug: true
+task_dir: output/likert-annotation
+output_annotation_dir: output/likert-annotation
+output_annotation_format: json
+annotation_codebook_url: ''
+max_annotations_per_user: 10
+assignment_strategy: fixed_order
+data_files:
+- ../data/test_data.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: likert
+  name: quality
+  description: How would you rate the quality of this text?
+  min_label: Very Poor
+  max_label: Excellent
+  size: 5
+  sequential_key_binding: true
+- annotation_type: likert
+  name: clarity
+  description: How clear and understandable is this text?
+  min_label: Very Unclear
+  max_label: Very Clear
+  size: 7
+  sequential_key_binding: true
+- annotation_type: likert
+  name: relevance
+  description: How relevant is this text to the topic?
+  min_label: Not Relevant
+  max_label: Highly Relevant
+  size: 4
+  sequential_key_binding: true
+site_dir: default
+customjs: null
+customjs_hostname: null

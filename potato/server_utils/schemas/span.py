@@ -15,7 +15,6 @@ from .identifier_utils import (
 )
 
 from potato.item_state_management import SpanAnnotation
-import json
 
 logger = logging.getLogger(__name__)
 
@@ -96,49 +95,50 @@ def set_span_color(schema, span_label, color):
     span_colors[schema][span_label] = color
 
 def render_span_annotations(text, span_annotations: list[SpanAnnotation]):
-    """
-    For the v2 overlay system, return only the raw text (no markup).
-    The overlays will be rendered by JS using the span metadata.
-    """
     print(f"🔍 render_span_annotations called with text: '{text[:50]}...' and {len(span_annotations)} spans")
-    print(f"🔍 render_span_annotations returning raw text: '{text[:100]}...'")
-    # Just return the raw text (no markup)
-    return text
 
-def get_span_annotations_script(span_annotations: list[SpanAnnotation]):
-    """
-    Get the JavaScript script tag for span annotations.
-    Returns:
-      - A <script> tag with a JS variable containing the span annotation metadata
-    """
-    # Prepare span metadata for JS
-    span_data = []
-    for span in span_annotations:
-        color = get_span_color(span.get_schema(), span.get_name())
+    if not span_annotations:
+        return text
+
+    # Prepare tag insertions
+    opens = {}  # start index -> list of opening tags
+    closes = {}  # end index -> list of closing tags
+
+    for a in span_annotations:
+        color = get_span_color(a.get_schema(), a.get_name())
         if color is None:
             color = "(128, 128, 128)"
         rgb = tuple(int(x.strip()) for x in color.strip("() ").split(","))
-        hex_color = '#{:02x}{:02x}{:02x}80'.format(*rgb)  # 80 = 50% alpha
-        span_data.append({
-            "start": span.get_start(),
-            "end": span.get_end(),
-            "label": span.get_name(),
-            "title": span.get_title(),
-            "schema": span.get_schema(),
-            "color": hex_color,
-            "border_rgb": color,
-            "id": span.get_id(),
-        })
+        hex_color = '#{:02x}{:02x}{:02x}80'.format(*rgb)
+        bg_color = hex_color
+        annotation_title = a.get_title()
+        open_tag = (
+            f'<span class="span-highlight" selection_label="{a.get_name()}" '
+            f'data-label="{a.get_name()}" '
+            f'schema="{a.get_schema()}" style="background-color: {bg_color};" data-annotation-id="{a.get_id()}">'  # new attribute
+        )
+        # The label and close button go at the end, before the closing span
+        close_tag = (
+            f'<div class="span_label" schema="{a.get_schema()}" name="{a.get_name()}" '
+            f'style="background-color:white;border:2px solid rgb{color};">'
+            f'{annotation_title}</div>'
+            f'<div class="span_close" style="background-color:white;"'
+            f' onclick="deleteSpanAnnotation(this, \'{a.get_schema()}\', \'{a.get_name()}\', \'{annotation_title}\', {a.get_start()}, {a.get_end()});">×</div>'
+            f'</span>'
+        )
+        opens.setdefault(a.get_start(), []).append(open_tag)
+        closes.setdefault(a.get_end(), []).insert(0, close_tag)  # insert at front for correct nesting
 
-    # Return the script tag
-    script = f'''
-    <script id="span-annotation-data">
-      console.log('🔍 Span annotation script executing');
-      window.spanAnnotations = {json.dumps(span_data)};
-      console.log('🔍 window.spanAnnotations set to:', window.spanAnnotations);
-    </script>
-    '''
-    return script
+    # Build the output
+    out = []
+    for i in range(len(text) + 1):
+        if i in opens:
+            out.extend(opens[i])
+        if i < len(text):
+            out.append(text[i])
+        if i + 1 in closes:
+            out.extend(closes[i + 1])
+    return ''.join(out)
 
 def render_span_annotations_old(text, span_annotations):
     """

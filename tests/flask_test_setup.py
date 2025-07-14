@@ -19,19 +19,50 @@ import signal
 # Add the project root to the path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+def create_chrome_options(headless: bool = True):
+    """Create Chrome options for Selenium WebDriver."""
+    from selenium.webdriver.chrome.options import Options
+
+    options = Options()
+    if headless:
+        options.add_argument("--headless")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1920,1080")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-plugins")
+    options.add_argument("--disable-images")
+    options.add_argument("--disable-javascript")
+    options.add_argument("--disable-web-security")
+    options.add_argument("--allow-running-insecure-content")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option('useAutomationExtension', False)
+
+    return options
+
 class FlaskTestServer:
     """A test server that can be started and stopped for integration tests."""
 
-    def __init__(self, port: int = 9001, debug: bool = False, config_file: Optional[str] = None):
+    def __init__(self, port: int = 9001, debug: bool = False, config_file: Optional[str] = None, test_data_file: Optional[str] = None):
+        """Initialize the Flask test server.
+
+        Args:
+            port: Port to run the server on
+            debug: Whether to run in debug mode
+            config_file: Path to config file to use
+            test_data_file: Path to custom test data file to use (optional)
+        """
         self.port = port
         self.debug = debug
         self.config_file = config_file
-        self.server_process = None
+        self.test_data_file = test_data_file
+        self.base_url = f"http://localhost:{port}"
+        self.session = requests.Session()
         self.server_thread = None
         self.app = None
-        self.base_url = f"http://localhost:{self.port}"
         self.server_error = None
-        self.session = requests.Session()  # Use a session to persist cookies
 
     def create_test_config(self, config_dir: str, data_file: str) -> str:
         """Create a simple test configuration file."""
@@ -78,9 +109,6 @@ class FlaskTestServer:
             "site_file": "base_template.html",
             "output_annotation_dir": os.path.join(config_dir, "output"),
             "task_dir": os.path.join(config_dir, "task"),
-            "base_html_template": "default",
-            "header_file": "default",
-            "html_layout": "default",
             "site_dir": os.path.join(config_dir, "templates"),
             "alert_time_each_instance": 0
         }
@@ -214,25 +242,59 @@ class FlaskTestServer:
 
     def start_server(self, config_dir: Optional[str] = None) -> bool:
         """Start the Flask server in a separate thread."""
-        if self.config_file:
-            # Use the provided config file (production config)
-            config_file = self.config_file
-            config_dir = os.path.dirname(os.path.abspath(config_file))
+        if config_dir is None:
+            config_dir = tempfile.mkdtemp()
+
+        # Use provided config file or create test config
+        if self.config_file and os.path.exists(self.config_file):
+            # Use the provided config file directly
+            config_file = os.path.abspath(self.config_file)
+            print(f"Using provided config file: {config_file}")
+
+            # Use custom test data file if provided, otherwise create default test data
+            if self.test_data_file and os.path.exists(self.test_data_file):
+                # Copy the custom test data file to the config directory
+                import shutil
+                data_file = os.path.join(config_dir, 'test_data.json')
+                shutil.copy2(self.test_data_file, data_file)
+                print(f"Using custom test data file: {self.test_data_file}")
+            else:
+                # Create test data file in the config directory for the provided config
+                data_file = self.create_test_data(config_dir)
+
+            # Copy the config file to the temp directory and update data file path
+            import shutil
+            import yaml
+            with open(config_file, 'r') as f:
+                config_yaml = yaml.safe_load(f)
+
+            # Update the data file path to point to our test data
+            if 'data_files' in config_yaml:
+                config_yaml['data_files'] = [os.path.basename(data_file)]
+
+            # Update output paths to use temp directory
+            if 'output_annotation_dir' in config_yaml:
+                config_yaml['output_annotation_dir'] = os.path.join(config_dir, 'output')
+            if 'task_dir' in config_yaml:
+                config_yaml['task_dir'] = os.path.join(config_dir, 'task')
+            if 'site_dir' in config_yaml:
+                config_yaml['site_dir'] = os.path.join(config_dir, 'templates')
+
+            # Write the updated config to temp directory
+            temp_config_file = os.path.join(config_dir, 'config.yaml')
+            with open(temp_config_file, 'w') as f:
+                yaml.dump(config_yaml, f)
+
+            print(f"[DEBUG] Updated config file written to: {temp_config_file}")
+            with open(temp_config_file, 'r') as f:
+                print(f"[DEBUG] Updated config contents:\n{f.read()}")
+
+            config_file = temp_config_file
         else:
-            # Use test config
-            if config_dir is None:
-                config_dir = tempfile.mkdtemp()
-
-            # Create test data file first
+            # Create test config with phases for backward compatibility
             data_file = self.create_test_data(config_dir)
-            template_file = self.create_test_template(config_dir)
-
-            # Create phase files
+            config_file = self.create_test_config(config_dir, data_file)
             self.create_phase_files(config_dir)
-
-            # Use just the filename for data_files
-            data_file_name = os.path.basename(data_file)
-            config_file = self.create_test_config(config_dir, data_file_name)
 
         # Set environment variables for the server
         os.environ['POTATO_CONFIG_FILE'] = config_file
@@ -247,10 +309,19 @@ class FlaskTestServer:
             try:
                 # Change working directory to config_dir so relative paths work
                 os.chdir(config_dir)
-                # Import and configure the Flask app properly
-                from potato.flask_server import app
+
+                # Create a fresh Flask app instance instead of importing the existing one
+                from flask import Flask
                 from potato.server_utils.config_module import init_config
                 from potato.server_utils.arg_utils import arguments
+
+                # Create a new Flask app instance
+                app = Flask(__name__)
+
+                # Configure template and static folders
+                app.template_folder = os.path.join(os.path.dirname(__file__), '..', 'potato', 'templates')
+                app.static_folder = os.path.join(os.path.dirname(__file__), '..', 'potato', 'static')
+                app.static_url_path = '/static'
 
                 # Create args object for config initialization
                 class Args:
@@ -262,6 +333,7 @@ class FlaskTestServer:
                 args.customjs = None
                 args.customjs_hostname = None
                 args.debug = self.debug
+                args.persist_sessions = False
 
                 # Initialize config
                 init_config(args)
@@ -284,7 +356,7 @@ class FlaskTestServer:
                 init_item_state_manager(config)
                 load_all_data(config)
 
-                # Configure routes
+                # Configure routes on the fresh app instance
                 from potato.routes import configure_routes
                 configure_routes(app, config)
 
@@ -313,7 +385,9 @@ class FlaskTestServer:
                     # Force session initialization by making a request that sets the session
                     if self.debug:
                         # Set debug session by calling the new endpoint
-                        response = self.session.post(f"{self.base_url}/test/set_debug_session", timeout=1)
+                        response = self.session.post(f"{self.base_url}/test/set_debug_session",
+                                                   json={"user_id": "debug_user"},
+                                                   timeout=1)
                         print(f"🔍 /test/set_debug_session response: {response.status_code}")
                         print(f"🔍 Session cookies after set_debug_session: {dict(self.session.cookies)}")
 
@@ -326,58 +400,6 @@ class FlaskTestServer:
 
         print(f"❌ Failed to start server on {self.base_url}")
         return False
-
-    def register_user(self, username: str, password: str) -> bool:
-        """Register a new user via the registration endpoint."""
-        try:
-            response = self.session.post(f"{self.base_url}/register", data={
-                'action': 'signup',
-                'email': username,
-                'pass': password
-            }, timeout=5)
-
-            print(f"🔍 Registration response: {response.status_code}")
-            print(f"🔍 Registration redirect: {response.url}")
-
-            # Check if registration was successful (should redirect to home or annotation page)
-            return response.status_code in [200, 302] and 'error' not in response.text.lower()
-        except Exception as e:
-            print(f"❌ Registration failed: {e}")
-            return False
-
-    def login_user(self, username: str, password: str) -> bool:
-        """Login a user via the auth endpoint."""
-        try:
-            response = self.session.post(f"{self.base_url}/auth", data={
-                'action': 'login',
-                'email': username,
-                'pass': password
-            }, timeout=5)
-
-            print(f"🔍 Login response: {response.status_code}")
-            print(f"🔍 Login redirect: {response.url}")
-
-            # Check if login was successful (should redirect to annotation page)
-            return response.status_code in [200, 302] and 'error' not in response.text.lower()
-        except Exception as e:
-            print(f"❌ Login failed: {e}")
-            return False
-
-    def get_user_state(self, username: str) -> Optional[Dict[str, Any]]:
-        """Get the current user state."""
-        try:
-            if self.debug:
-                response = self.session.get(f"{self.base_url}/test/user_state/{username}", timeout=5)
-            else:
-                # In production mode, we might need to use a different endpoint
-                response = self.session.get(f"{self.base_url}/user_state", timeout=5)
-
-            if response.status_code == 200:
-                return response.json()
-            return None
-        except Exception as e:
-            print(f"❌ Failed to get user state: {e}")
-            return None
 
     @contextmanager
     def server_context(self):
@@ -404,9 +426,9 @@ class FlaskTestServer:
             self.server_thread.join(timeout=5)
             if self.server_thread.is_alive():
                 print("[DEBUG] Server thread still alive after join. Forcibly killing.")
-                # On Unix, we can try to send SIGKILL to the process
-                import os
-                os._exit(0)
+                # Instead of os._exit(0) which kills the entire process,
+                # we'll just let the thread die naturally since it's a daemon thread
+                pass
 
     def is_server_running(self) -> bool:
         """Check if the server is running."""
@@ -428,8 +450,8 @@ class FlaskTestServer:
 class FlaskTestBase:
     """Base class for tests that need a running Flask server."""
 
-    def __init__(self, port: int = 9001, debug: bool = False, config_file: Optional[str] = None):
-        self.server = FlaskTestServer(port=port, debug=debug, config_file=config_file)
+    def __init__(self, port: int = 9001, debug: bool = False):
+        self.server = FlaskTestServer(port=port, debug=debug)
         self.server_started = False
 
     def setUp(self):
@@ -455,16 +477,16 @@ class FlaskTestBase:
             self.tearDown()
 
 
-def create_test_server(port: int = 9001, debug: bool = False, config_file: Optional[str] = None) -> FlaskTestServer:
+def create_test_server(port: int = 9001, debug: bool = False) -> FlaskTestServer:
     """Factory function to create a test server."""
-    return FlaskTestServer(port=port, debug=debug, config_file=config_file)
+    return FlaskTestServer(port=port, debug=debug)
 
 
 if __name__ == "__main__":
     # Test the server setup
     print("🧪 Testing Flask server setup...")
 
-    server = create_test_server(port=9001, debug=True)
+    server = create_test_server(port=9001, debug=False)
 
     try:
         if server.start_server():

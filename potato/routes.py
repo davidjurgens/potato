@@ -16,7 +16,6 @@ import logging
 import datetime
 from datetime import timedelta
 from flask import Flask, session, render_template, request, redirect, url_for, jsonify, make_response
-import os
 
 # Import from the main flask_server.py module
 from potato.flask_server import (
@@ -45,61 +44,15 @@ def home():
     Returns:
         flask.Response: Rendered template or redirect based on user state
     """
-    logger.debug("=== HOME ROUTE START ===")
-    logger.debug(f"Request method: {request.method}")
-    logger.debug(f"Request URL: {request.url}")
-    logger.debug(f"Session contents: {dict(session)}")
-    logger.debug(f"Debug mode: {config.get('debug', False)}")
+    logger.debug("Processing home page request")
 
-    # Check if debug mode is enabled and bypass authentication
-    if config.get("debug", False):
-        logger.debug("Debug mode enabled, bypassing authentication")
 
-        # Create debug user if not exists
-        debug_user_id = "debug_user"
-        if not get_user_state_manager().has_user(debug_user_id):
-            logger.debug(f"Creating debug user: {debug_user_id}")
-            usm = get_user_state_manager()
-            usm.add_user(debug_user_id)
 
-            # Set debug user directly to annotation phase
-            user_state = usm.get_user_state(debug_user_id)
-            # Set phase directly to annotation instead of advancing through all phases
-            user_state.advance_to_phase(UserPhase.ANNOTATION, None)
-            logger.debug(f"Debug user phase set directly to: {user_state.get_phase()}")
-
-            # Assign instances if needed
-            if not user_state.has_assignments():
-                # Create some test data for the debug user
-                ism = get_item_state_manager()
-                # Check if there are any items available
-                try:
-                    items = ism.items()
-                    if not items:
-                        # Create a test item if no items exist
-                        from potato.item_state_management import Item
-                        test_item = Item("test_1", {"id": "test_1", "text": "This is a test item for debugging."})
-                        ism.add_item("test_1", {
-                            "id": "test_1",
-                            "text": "This is a test item for debugging.",
-                            "displayed_text": "This is a test item for debugging."
-                        })
-                except Exception as e:
-                    logger.warning(f"Could not check/create test items: {e}")
-
-                # Assign instances to the debug user
-                ism.assign_instances_to_user(user_state)
-
-        # Set session for debug user
-        session['user_id'] = debug_user_id
-        session.permanent = True
-        logger.info(f"Debug mode: auto-logged in as {debug_user_id}")
-
-    if 'user_id' not in session:
+    if 'username' not in session:
         logger.debug("No active session, rendering login page")
-        return redirect(url_for("auth"))
+        return render_template("home.html", title=config.get("annotation_task_name", "Annotation Platform"))
 
-    user_id = session['user_id']
+    user_id = session['username']
     logger.debug(f"Active session for user: {user_id}")
 
     user_state = get_user_state(user_id)
@@ -113,28 +66,20 @@ def home():
     logger.debug(f"User phase: {phase}")
 
     if phase == UserPhase.LOGIN:
-        logger.debug("User in LOGIN phase, calling auth()")
         return auth() #redirect(url_for("auth"))
     elif phase == UserPhase.CONSENT:
-        logger.debug("User in CONSENT phase, calling consent()")
         return consent() #redirect(url_for("consent"))
     elif phase == UserPhase.PRESTUDY:
-        logger.debug("User in PRESTUDY phase, calling prestudy()")
         return prestudy() #redirect(url_for("prestudy"))
     elif phase == UserPhase.INSTRUCTIONS:
-        logger.debug("User in INSTRUCTIONS phase, calling instructions()")
         return instructions() #redirect(url_for("instructions"))
     elif phase == UserPhase.TRAINING:
-        logger.debug("User in TRAINING phase, calling training()")
         return training() #redirect(url_for("training"))
     elif phase == UserPhase.ANNOTATION:
-        logger.debug("User in ANNOTATION phase, calling annotate()")
         return annotate() # redirect(url_for("annotate"))
     elif phase == UserPhase.POSTSTUDY:
-        logger.debug("User in POSTSTUDY phase, calling poststudy()")
         return poststudy() #redirect(url_for("poststudy"))
     elif phase == UserPhase.DONE:
-        logger.debug("User in DONE phase, calling done()")
         return done() #redirect(url_for("done"))
 
     logger.error(f"Invalid phase for user {user_id}: {phase}")
@@ -149,14 +94,10 @@ def auth():
     Returns:
         flask.Response: Rendered template or redirect
     """
-    # Check if user is already logged in (but only if not called from home route)
-    # If called from home route with a user in LOGIN phase, we should show the login form
-    if 'user_id' in session and get_user_state_manager().has_user(session['user_id']):
-        user_state = get_user_state(session['user_id'])
-        # Only redirect if user is not in LOGIN phase (to avoid redirect loop)
-        if user_state.get_phase() != UserPhase.LOGIN:
-            logger.debug(f"User {session['user_id']} already logged in, redirecting to home")
-            return redirect(url_for("home"))
+    # Check if user is already logged in
+    if 'username' in session and get_user_state_manager().has_user(session['username']):
+        logger.debug(f"User {session['username']} already logged in, redirecting to annotate")
+        return redirect(url_for("annotate"))
 
     # For standard user_id/password login
     if request.method == "POST":
@@ -174,10 +115,10 @@ def auth():
         # Authenticate the user
         if UserAuthenticator.authenticate(user_id, password):
             session.clear()  # Clear any existing session data
-            # FIXED: Use consistent session key 'user_id' instead of 'username'
-            session['user_id'] = user_id
+            session['username'] = user_id
             session.permanent = True  # Make session persist longer
             logger.info(f"Login successful for user: {user_id}")
+
 
             # Initialize user state if needed
             if not get_user_state_manager().has_user(user_id):
@@ -185,9 +126,8 @@ def auth():
                 usm = get_user_state_manager()
                 usm.add_user(user_id)
                 usm.advance_phase(user_id)
-                request.method = 'GET'
-                return home()
-            return redirect(url_for("home"))
+                return redirect(url_for("annotate"))
+            return redirect(url_for("annotate"))
         else:
             logger.warning(f"Login failed for user: {user_id}")
             return render_template("home.html",
@@ -227,8 +167,7 @@ def passwordless_login():
 
         # Authenticate without password
         if UserAuthenticator.authenticate(username, None):
-            # FIXED: Use consistent session key 'user_id' instead of 'username'
-            session['user_id'] = username
+            session['username'] = username
             logger.info(f"Passwordless login successful for user: {username}")
 
             # Initialize user state if needed
@@ -287,8 +226,7 @@ def clerk_login():
 
         # Authenticate with Clerk
         if UserAuthenticator.authenticate(username, token):
-            # FIXED: Use consistent session key 'user_id' instead of 'username'
-            session['user_id'] = username
+            session['username'] = username
             logger.info(f"Clerk SSO login successful for user: {username}")
 
             # Initialize user state if needed
@@ -311,13 +249,13 @@ def clerk_login():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     """
-    Handle login requests - now just redirects to home which handles login
+    Handle login requests - render the auth page directly
 
     Returns:
-        flask.Response: Redirect to home
+        flask.Response: Rendered auth template
     """
-    logger.debug("Redirecting /login to home")
-    return redirect(url_for("home"))
+    logger.debug("Rendering auth page for /login")
+    return auth()
 
 @app.route("/logout", methods=["GET"])
 def logout_page():
@@ -354,7 +292,14 @@ def logout():
 @app.route("/submit_annotation", methods=["POST"])
 def submit_annotation():
     """
-    Handle annotation submission requests.
+    DEPRECATED: Handle annotation submission requests.
+
+    This route was added by Cursor and duplicates functionality from /updateinstance.
+    It only handles label annotations (not span annotations) and is used primarily
+    for saving annotations during navigation in newer templates.
+
+    TODO: This route should be deprecated and all functionality moved to /updateinstance
+    to reduce confusion and ensure consistent handling of both label and span annotations.
 
     Features:
     - Validation checking
@@ -363,73 +308,123 @@ def submit_annotation():
     - AI integration
     - Data persistence
 
-    Args (from form):
-        annotation_data: JSON-encoded annotation data
+    Args (from form or JSON):
         instance_id: ID of annotated instance
+        annotations: annotation data (either JSON string or dict) - LABEL ANNOTATIONS ONLY
+        user_id: user ID (optional, defaults to session)
 
     Returns:
         flask.Response: JSON response with submission result
     """
-    logger.debug("Processing annotation submission")
+    logger.debug("=== SUBMIT ANNOTATION ROUTE START ===")
+    logger.debug(f"Session: {dict(session)}")
+    logger.debug(f"Session username: {session.get('username', 'NOT_SET')}")
+    logger.debug(f"Request content type: {request.content_type}")
+    logger.debug(f"Request is JSON: {request.is_json}")
+    logger.debug(f"Request headers: {dict(request.headers)}")
+    logger.debug(f"Debug mode: {config.get('debug', False)}")
 
     print(f"[DEBUG] /submit_annotation: id(get_user_state_manager())={id(get_user_state_manager())}")
     print(f"[DEBUG] /submit_annotation: user IDs in manager: {get_user_state_manager().get_user_ids()}")
-    print(f"[DEBUG] /submit_annotation: session user_id = {session.get('user_id', 'NOT_SET')}")
+    print(f"[DEBUG] /submit_annotation: session username = {session.get('username', 'NOT_SET')}")
 
-    if 'user_id' not in session and not config.get("debug", False):
+    if 'username' not in session:
         logger.warning("Annotation submission without active session")
         return jsonify({"status": "error", "message": "No active session"})
 
-    # In debug mode, ensure we have a user_id
-    if config.get("debug", False) and 'user_id' not in session:
-        session['user_id'] = "debug_user"
+    user_id = session['username']
+    logger.debug(f"Using user_id: {user_id}")
+    logger.debug(f"All users in state manager: {get_user_state_manager().get_user_ids()}")
+    logger.debug(f"User state manager has user '{user_id}': {get_user_state_manager().has_user(user_id)}")
 
-    user_id = session['user_id']
-    instance_id = request.form.get("instance_id")
-    annotation_data = request.form.get("annotation_data")
+    # Handle both form data and JSON data
+    if request.is_json:
+        data = request.get_json()
+        instance_id = data.get("instance_id")
+        annotations = data.get("annotations", {})
+        logger.debug(f"Received JSON data: {data}")
+        print(f"🔍 submit_annotation - JSON data: {data}")
+    else:
+        instance_id = request.form.get("instance_id")
+        annotation_data = request.form.get("annotation_data")
+        logger.debug(f"Received form data: {dict(request.form)}")
+        if annotation_data:
+            annotations = json.loads(annotation_data)
+            logger.debug(f"Parsed annotation_data: {annotations}")
+        else:
+            annotations = {}
+            logger.debug("No annotation_data found in form")
+        print(f"🔍 submit_annotation - Form data: {dict(request.form)}")
 
-    logger.debug(f"Annotation from {user_id} for instance {instance_id}")
+    logger.debug(f"Instance ID: {instance_id}")
+    logger.debug(f"Annotations: {annotations}")
 
-    if not instance_id or not annotation_data:
-        logger.warning("Missing instance_id or annotation_data")
-        return jsonify({"status": "error", "message": "Missing required data"})
+    if not instance_id:
+        logger.warning("Missing instance_id")
+        return jsonify({"status": "error", "message": "Missing instance_id"})
 
     try:
-        # Parse the annotation data
-        annotations = json.loads(annotation_data)
+        logger.debug(f"Getting user state for user_id: {user_id}")
         user_state = get_user_state(user_id)
+        logger.debug(f"Retrieved user state: {user_state}")
+        logger.debug(f"User state phase: {user_state.get_phase() if user_state else 'No user state'}")
+
+        print(f"🔍 submit_annotation - Processing annotations: {annotations}")
 
         # Process the annotations
-        validate_annotation(annotations)
-
-        # Save annotations to user state
-        annotation_count = 0
+        annotations_processed = 0
         for schema_name, label_data in annotations.items():
+            logger.debug(f"Processing schema: {schema_name}, label_data: {label_data}, type: {type(label_data)}")
+
             if isinstance(label_data, dict):
+                # Nested structure: {'schema': {'label': 'value'}}
                 for label_name, value in label_data.items():
                     label = Label(schema_name, label_name)
+                    logger.debug(f"Adding annotation: {schema_name}:{label_name} = {value}")
                     user_state.add_label_annotation(instance_id, label, value)
-                    annotation_count += 1
-                    logger.debug(f"Added label annotation: {schema_name}:{label_name} = {value}")
-            elif isinstance(label_data, list):
-                for label_item in label_data:
-                    if isinstance(label_item, dict) and 'name' in label_item and 'value' in label_item:
-                        label = Label(schema_name, label_item['name'])
-                        user_state.add_label_annotation(instance_id, label, label_item['value'])
-                        annotation_count += 1
-                        logger.debug(f"Added label annotation: {schema_name}:{label_item['name']} = {label_item['value']}")
+                    annotations_processed += 1
+                    print(f"🔍 Added annotation: {schema_name}:{label_name} = {value}")
+            elif isinstance(label_data, str):
+                # Direct string value for text annotations: {'schema': 'value'}
+                # For text annotations, we need to create a label with a default name
+                label = Label(schema_name, "text_box")
+                logger.debug(f"Adding text annotation: {schema_name}:text_box = {label_data}")
+                user_state.add_label_annotation(instance_id, label, label_data)
+                annotations_processed += 1
+                print(f"🔍 Added text annotation: {schema_name}:text_box = {label_data}")
+            else:
+                logger.warning(f"Unexpected label_data type: {type(label_data)} for schema {schema_name}")
+
+        logger.debug(f"Processed {annotations_processed} annotations")
 
         # Register the annotator for this instance
+        logger.debug(f"Registering annotator {user_id} for instance {instance_id}")
         get_item_state_manager().register_annotator(instance_id, user_id)
 
         # Save the user state
+        logger.debug(f"Saving user state for {user_id}")
         get_user_state_manager().save_user_state(user_state)
+        logger.debug(f"User state saved successfully")
+
+        # Log the saved annotations
+        all_annotations = user_state.get_all_annotations()
+        logger.debug(f"All annotations after save: {all_annotations}")
+        logger.debug(f"Annotations for instance {instance_id}: {all_annotations.get(instance_id, 'Not found')}")
+
+        print(f"🔍 submit_annotation - Successfully processed {annotations_processed} annotations")
+        print(f"🔍 submit_annotation - User state after save: {dict(user_state.instance_id_to_label_to_value)}")
 
         logger.info(f"Successfully saved annotation for {instance_id} from {user_id}")
-        return jsonify({"status": "success", "message": "Annotation saved successfully"})
+        logger.debug("=== SUBMIT ANNOTATION ROUTE END ===")
+        return jsonify({"status": "success", "message": "Annotation saved successfully", "annotations_processed": annotations_processed})
 
     except Exception as e:
         logger.error(f"Error saving annotation: {str(e)}")
+        logger.debug(f"Exception details: {type(e).__name__}: {str(e)}")
+        print(f"🔍 submit_annotation - Error: {str(e)}")
+        import traceback
+        logger.debug(f"Traceback: {traceback.format_exc()}")
+        traceback.print_exc()
         return jsonify({"status": "error", "message": f"Failed to save annotation: {str(e)}"})
 
 @app.route("/register", methods=["POST"])
@@ -443,11 +438,10 @@ def register():
     logger.debug("=== REGISTER ROUTE START ===")
     logger.debug(f"Session before registration: {dict(session)}")
     logger.debug(f"Request form data: {dict(request.form)}")
-    logger.debug(f"Request method: {request.method}")
-    logger.debug(f"Request URL: {request.url}")
+    logger.debug(f"Request headers: {dict(request.headers)}")
 
-    if 'user_id' in session:
-        logger.warning(f"User already logged in with user_id: {session['user_id']}, redirecting to home")
+    if 'username' in session:
+        logger.warning(f"User already logged in with username: {session['username']}, redirecting to annotate")
         return home()
 
     username = request.form.get("email")
@@ -460,45 +454,48 @@ def register():
         return render_template("home.html",
                                 login_error="Username and password are required")
 
-    # Register the user with the authenticator
+    # Register the user with the autheticator
     logger.debug("Adding user to authenticator...")
     user_authenticator = UserAuthenticator.get_instance()
     user_authenticator.add_user(username, password)
-    logger.debug("User added to authenticator successfully")
 
     logger.debug("Setting session variables...")
-    # FIXED: Use consistent session key 'user_id' instead of 'username'
-    session['user_id'] = username
+    session['username'] = username
     session.permanent = True
 
     logger.debug(f"Session after registration: {dict(session)}")
+    logger.debug(f"Session ID: {session.sid if hasattr(session, 'sid') else 'No session ID'}")
     logger.debug(f"User state manager has user '{username}': {get_user_state_manager().has_user(username)}")
+    logger.debug(f"All users in state manager: {get_user_state_manager().get_user_ids()}")
 
     # Initialize user state if needed
     if not get_user_state_manager().has_user(username):
         logger.debug(f"Initializing user state for new user: {username}")
         init_user_state(username)
         logger.debug(f"User state initialized. User exists: {get_user_state_manager().has_user(username)}")
-    else:
-        logger.debug(f"User state already exists for user: {username}")
+        logger.debug(f"All users in state manager after init: {get_user_state_manager().get_user_ids()}")
 
-    # Get user state and check phase
-    user_state = get_user_state(username)
-    if user_state:
-        logger.debug(f"User state retrieved. Phase: {user_state.get_phase()}")
+    # Ensure user is in annotation phase and has assignments
+    usm = get_user_state_manager()
+    user_state = usm.get_user_state(username)
+    logger.debug(f"Retrieved user state for '{username}': {user_state}")
+    logger.debug(f"User state phase: {user_state.get_phase() if user_state else 'No user state'}")
 
-        # If the user is still in LOGIN phase and no phases are configured,
-        # advance them directly to ANNOTATION phase
-        if user_state.get_phase() == UserPhase.LOGIN:
-            logger.debug("User in LOGIN phase, advancing to ANNOTATION phase")
-            user_state.advance_to_phase(UserPhase.ANNOTATION, None)
-            logger.debug(f"User phase advanced to: {user_state.get_phase()}")
-    else:
-        logger.error(f"Failed to retrieve user state for: {username}")
+    # Advance user to annotation phase if not already there
+    if user_state and user_state.get_phase() != UserPhase.ANNOTATION:
+        logger.debug(f"Advancing user {username} to annotation phase")
+        user_state.advance_to_phase(UserPhase.ANNOTATION, None)
+        logger.debug(f"User state phase after advancement: {user_state.get_phase()}")
 
-    logger.debug("=== REGISTER ROUTE END - Redirecting to home ===")
-    # Redirect to home page instead of annotate to let the routing logic handle phase progression
-    return redirect(url_for("home"))
+    # Assign instances if user doesn't have any
+    if user_state and not user_state.has_assignments():
+        logger.debug(f"Assigning instances to user {username}")
+        get_item_state_manager().assign_instances_to_user(user_state)
+        logger.debug(f"User has assignments after assignment: {user_state.has_assignments()}")
+
+    logger.debug("=== REGISTER ROUTE END - Redirecting to annotate ===")
+    # Redirect to the annotate page
+    return redirect(url_for("annotate"))
 
 @app.route("/consent", methods=["GET", "POST"])
 def consent():
@@ -508,10 +505,10 @@ def consent():
     Returns:
         flask.Response: Rendered template or redirect
     """
-    if 'user_id' not in session and not config.get("debug", False):
+    if 'username' not in session:
         return home()
 
-    username = session['user_id']
+    username = session['username']
     user_state = get_user_state(username)
     print('CONSENT: user_state: ', user_state)
     print('CONSENT: user_state.get_phase(): ', user_state.get_phase())
@@ -529,7 +526,7 @@ def consent():
         # Now that the user has consented, advance the state
         # and have the home page redirect to the appropriate next phase
         usm = get_user_state_manager()
-        usm.advance_phase(session['user_id'])
+        usm.advance_phase(session['username'])
 
         # Reset to pretend this is a new get request
         request.method = 'GET'
@@ -547,10 +544,10 @@ def instructions():
     Returns:
         flask.Response: Rendered template or redirect
     """
-    if 'user_id' not in session and not config.get("debug", False):
+    if 'username' not in session:
         return home()
 
-    username = session['user_id']
+    username = session['username']
     user_state = get_user_state(username)
 
     # Check that the user is in the instructions phase
@@ -565,7 +562,7 @@ def instructions():
         # Now that the user has read the instructions, advance the state
         # and have the home page redirect to the appropriate next phase
         usm = get_user_state_manager()
-        usm.advance_phase(session['user_id'])
+        usm.advance_phase(session['username'])
         request.method = 'GET'
         return home()
 
@@ -589,10 +586,10 @@ def prestudy():
     Returns:
         flask.Response: Rendered template or redirect
     """
-    if 'user_id' not in session and not config.get("debug", False):
+    if 'username' not in session:
         return home()
 
-    username = session['user_id']
+    username = session['username']
     user_state = get_user_state(username)
 
     # Check that the user is in the prestudy phase
@@ -606,7 +603,7 @@ def prestudy():
 
         # Advance the state and redirect to the appropriate next phase
         usm = get_user_state_manager()
-        usm.advance_phase(session['user_id'])
+        usm.advance_phase(session['username'])
         request.method = 'GET'
         return home()
 
@@ -621,141 +618,115 @@ def prestudy():
         prestudy_html_fname = usm.get_phase_html_fname(phase, page)
         return render_template(prestudy_html_fname)
 
-@app.route("/training", methods=["GET", "POST"])
-def training():
-    """
-    Handle the training phase of the annotation process.
-
-    Returns:
-        flask.Response: Rendered template or redirect
-    """
-    if 'user_id' not in session and not config.get("debug", False):
-        return home()
-
-    username = session['user_id']
-    user_state = get_user_state(username)
-
-    # Check that the user is in the training phase
-    if user_state.get_phase() != UserPhase.TRAINING:
-        # If not in the training phase, redirect
-        return home()
-
-    # If the user is returning information from the page
-    if request.method == 'POST':
-        print('POST -> TRAINING: ', request.form)
-
-        # Now that the user has completed training, advance the state
-        # and have the home page redirect to the appropriate next phase
-        usm = get_user_state_manager()
-        usm.advance_phase(session['user_id'])
-        request.method = 'GET'
-        return home()
-
-    # Show the current training page
-    else:
-        # Get the page the user is currently on
-        phase, page = user_state.get_current_phase_and_page()
-        print('GET <-- TRAINING: phase, page: ', phase, page)
-
-        usm = get_user_state_manager()
-        # Look up the html template for the current training page
-        training_html_fname = usm.get_phase_html_fname(phase, page)
-        return render_template(training_html_fname)
-
 @app.route("/annotate", methods=["GET", "POST"])
 def annotate():
     """
     Handle annotation page requests.
     """
+    logger.debug("=== ANNOTATE ROUTE START ===")
+    logger.debug(f"Session: {dict(session)}")
+    logger.debug(f"Session username: {session.get('username', 'NOT_SET')}")
+    logger.debug(f"Debug mode: {config.get('debug', False)}")
+    logger.debug(f"Request method: {request.method}")
+    logger.debug(f"Request headers: {dict(request.headers)}")
+    logger.debug(f"Request content type: {request.content_type}")
+    logger.debug(f"Request is JSON: {request.is_json}")
 
-    # Check if user is logged in (skip in debug mode)
-    if 'user_id' not in session and not config.get("debug", False):
+    # Check if user is logged in
+    if 'username' not in session:
         logger.warning("Unauthorized access attempt to annotate page")
         return redirect(url_for("home"))
 
-    # In debug mode, ensure debug user exists
-    if config.get("debug", False):
-        debug_username = "debug_user"
-        if not get_user_state_manager().has_user(debug_username):
-            logger.debug(f"Creating debug user: {debug_username}")
-            usm = get_user_state_manager()
-            usm.add_user(debug_username)
+    username = session['username']
+    logger.debug(f"Using username: {username}")
+    logger.debug(f"All users in state manager: {get_user_state_manager().get_user_ids()}")
 
-            # Set debug user directly to annotation phase
-            user_state = usm.get_user_state(debug_username)
-            while user_state.get_phase() != UserPhase.ANNOTATION:
-                usm.advance_phase(debug_username)
-                user_state = usm.get_user_state(debug_username)
-
-            # Assign instances if needed
-            if not user_state.has_assignments():
-                get_item_state_manager().assign_instances_to_user(user_state)
-
-        session['user_id'] = debug_username
-        session.permanent = True
-
-    username = session['user_id']
     # Ensure user state exists
     if not get_user_state_manager().has_user(username):
         logger.info(f"Creating missing user state for {username}")
         init_user_state(username)
+        logger.debug(f"User state created. User exists: {get_user_state_manager().has_user(username)}")
 
     logger.debug("Handling annotation request")
 
     user_state = get_user_state(username)
-    # logger.info(vars(user_state))
     logger.debug(f"Retrieved state for user: {username}")
+    logger.debug(f"User state: {user_state}")
+    logger.debug(f"User state phase: {user_state.get_phase() if user_state else 'No user state'}")
 
     # Check user phase
-    if user_state.get_phase() != UserPhase.ANNOTATION:
-        logger.info(f"User {username} not in annotation phase, redirecting")
+    if not user_state or user_state.get_phase() != UserPhase.ANNOTATION:
+        logger.info(f"User {username} not in annotation phase, redirecting. Phase: {user_state.get_phase() if user_state else 'No user state'}")
         return home()
 
     # If the user hasn't yet been assigned anything to annotate, do so now
     if not user_state.has_assignments():
+        logger.debug(f"User {username} has no assignments, assigning instances")
         get_item_state_manager().assign_instances_to_user(user_state)
+        logger.debug(f"User has assignments after assignment: {user_state.has_assignments()}")
 
     # See if this user has finished annotating all of their assigned instances
     if not user_state.has_remaining_assignments():
+        logger.debug(f"User {username} has no remaining assignments, advancing phase")
         # If the user is done annotating, advance to the next phase
         get_user_state_manager().advance_phase(username)
         return home()
 
+    # Handle POST requests
+    if request.method == 'POST':
+        logger.debug(f"POST request to annotate")
+        if request.is_json:
+            logger.debug(f"POST JSON data: {request.get_json()}")
+        else:
+            logger.debug(f"POST form data: {dict(request.form)}")
+
     if request.is_json and 'action' in request.json:
-       print(f"request.json: {request.json}")
+       logger.debug(f"Action from JSON: {request.json['action']}")
        action = request.json['action']
     else:
-       print(f"request.form: {request.form}")
+       logger.debug(f"Action from form: {request.form.get('action', 'init')}")
        action = request.form['action'] if 'action' in request.form else "init"
+
+    logger.debug(f"Processing action: {action}")
 
      # Process any annotation updates if they were submitted
     if request.method == 'POST' and request.json and 'instance_id' in request.json:
         if action == "prev_instance" or action == "next_instance" or action == "go_to":
+            logger.debug(f"Updating annotation state for user: {username}")
             update_annotation_state(username, request.json)
 
     if action == "prev_instance":
+        logger.debug(f"Moving to previous instance for user: {username}")
         move_to_prev_instance(username)
     elif action == "next_instance":
+        logger.debug(f"Moving to next instance for user: {username}")
         move_to_next_instance(username)
     elif action == "go_to":
-        go_to_id(username, request.form.get("go_to"))
+        # Try to get go_to from JSON first, then form
+        go_to_value = None
+        if request.is_json and request.json.get("go_to") is not None:
+            go_to_value = request.json.get("go_to")
+        elif request.form.get("go_to") is not None:
+            go_to_value = request.form.get("go_to")
+
+        logger.debug(f"go_to action with value: {go_to_value}")
+        if go_to_value is not None:
+            go_to_id(username, go_to_value)
+        else:
+            logger.warning('go_to action requested but no go_to value provided')
     else:
-        logger.warning('unrecognized action request: "%s"' % action)
+        logger.debug(f'Action "{action}" - no specific handling')
 
-
+    logger.debug("=== ANNOTATE ROUTE END ===")
     # Render the page with any existing annotations
     return render_page_with_annotations(username)
 
 @app.route('/get_ai_hint', methods=['GET'])
 def get_ai_hint():
-    if 'user_id' not in session and not config.get("debug", False):
+    if 'username' not in session:
         return home()
 
-    # In debug mode, ensure we have a user_id
-    if config.get("debug", False) and 'user_id' not in session:
-        session['user_id'] = "debug_user"
-
-    username = session['user_id']
+    username = session['username']
     user_state = get_user_state(username)
     instance_text = request.args.get('instance_text')
     print(f"instance_text: {instance_text}")
@@ -776,15 +747,22 @@ def get_ai_hint():
     return jsonify({'reasoning': reasoning})
 
 
-# Test routes for exposing system state
-@app.route("/test/health", methods=["GET"])
-def test_health():
+# Admin routes for system inspection (read-only)
+@app.route("/admin/health", methods=["GET"])
+def admin_health():
     """
-    Health check endpoint for testing server status.
+    Health check endpoint for administrators.
 
     Returns:
         flask.Response: JSON response with server status
     """
+    # Check API key
+    api_key = request.headers.get('X-API-Key')
+    if not config.get("debug", False) and api_key != "admin_api_key":
+        return jsonify({
+            "error": "Health check only available in debug mode or with valid API key"
+        }), 403
+
     try:
         # Check if core managers are accessible
         usm = get_user_state_manager()
@@ -810,14 +788,22 @@ def test_health():
         }), 500
 
 
-@app.route("/test/system_state", methods=["GET"])
-def test_system_state():
+@app.route("/admin/system_state", methods=["GET"])
+def admin_system_state():
     """
     Get overall system state including user and item statistics.
+    Admin-only endpoint requiring API key.
 
     Returns:
         flask.Response: JSON response with system state
     """
+    # Check API key
+    api_key = request.headers.get('X-API-Key')
+    if not config.get("debug", False) and api_key != "admin_api_key":
+        return jsonify({
+            "error": "System state only available in debug mode or with valid API key"
+        }), 403
+
     try:
         usm = get_user_state_manager()
         ism = get_item_state_manager()
@@ -878,17 +864,20 @@ def test_system_state():
         }), 500
 
 
-@app.route("/test/all_instances", methods=["GET"])
-def test_all_instances():
+@app.route("/admin/all_instances", methods=["GET"])
+def admin_all_instances():
     """
     Get all available instances for navigation purposes.
+    Admin-only endpoint requiring API key.
 
     Returns:
         flask.Response: JSON response with all instances
     """
-    if not config.get("debug", False):
+    # Check API key
+    api_key = request.headers.get('X-API-Key')
+    if not config.get("debug", False) and api_key != "admin_api_key":
         return jsonify({
-            "error": "All instances endpoint only available in debug mode"
+            "error": "All instances only available in debug mode or with valid API key"
         }), 403
 
     try:
@@ -913,44 +902,48 @@ def test_all_instances():
         }), 500
 
 
-@app.route("/test/user_state/<user_id>", methods=["GET"])
-def test_user_state(user_id):
+
+
+
+@app.route("/admin/user_state/<user_id>", methods=["GET"])
+def admin_user_state(user_id):
     """
     Get detailed state for a specific user.
+    Admin-only endpoint requiring API key.
+
     Args:
         user_id: The user ID to get state for
+
     Returns:
         flask.Response: JSON response with user state
     """
-    # Debug logging
-    print(f"🔍 test_user_state called for user_id: {user_id}")
-    print(f"🔍 Debug mode: {config.get('debug', False)}")
-    print(f"🔍 Session user_id: {session.get('user_id')}")
-    print(f"🔍 API key header: {request.headers.get('X-API-KEY')}")
-    print(f"🔍 Valid API key: {config.get('test_api_key') or os.environ.get('TEST_API_KEY')}")
+    logger.debug("=== ADMIN USER STATE ROUTE START ===")
+    logger.debug(f"Requested user_id: {user_id}")
+    logger.debug(f"Request headers: {dict(request.headers)}")
+    logger.debug(f"Debug mode: {config.get('debug', False)}")
 
-    # Allow access if:
-    # - The user is logged in and matches user_id
-    # - The request provides a valid API key (for CI/testing)
-    # - The app is in debug mode
-    if not config.get("debug", False):
-        session_user = session.get("user_id")
-        api_key = request.headers.get("X-API-KEY")
-        valid_api_key = config.get("test_api_key") or os.environ.get("TEST_API_KEY")
+    # Check API key
+    api_key = request.headers.get('X-API-Key')
+    logger.debug(f"API key provided: {api_key}")
+    logger.debug(f"Expected API key: admin_api_key")
 
-        print(f"🔍 Authorization check - session_user: {session_user}, api_key: {api_key}, valid_api_key: {valid_api_key}")
-
-        if not (session_user == user_id or (api_key and valid_api_key and api_key == valid_api_key)):
-            print(f"🔍 Authorization failed - returning 401")
-            return jsonify({"error": "Unauthorized: must be logged in as this user or provide valid API key"}), 401
-
-    print(f"🔍 Authorization passed - proceeding with user state retrieval")
-
+    if not config.get("debug", False) and api_key != "admin_api_key":
+        logger.warning(f"Access denied - debug mode: {config.get('debug', False)}, api_key: {api_key}")
+        return jsonify({
+            "error": "User state only available in debug mode or with valid API key"
+        }), 403
     try:
+        logger.debug(f"Getting user state manager")
         usm = get_user_state_manager()
+        logger.debug(f"All users in state manager: {usm.get_user_ids()}")
+        logger.debug(f"Looking for user: {user_id}")
+        logger.debug(f"User exists: {usm.has_user(user_id)}")
+
         user_state = usm.get_user_state(user_id)
+        logger.debug(f"Retrieved user state: {user_state}")
 
         if not user_state:
+            logger.warning(f"User '{user_id}' not found in state manager")
             return jsonify({
                 "error": f"User '{user_id}' not found"
             }), 404
@@ -959,10 +952,22 @@ def test_user_state(user_id):
         current_instance = user_state.get_current_instance()
         current_instance_data = None
         if current_instance:
+            # Get the base text
+            base_text = current_instance.get_text()
+
+            # Get span annotations for this instance and user
+            span_annotations = get_span_annotations_for_user_on(user_id, current_instance.get_id())
+
+            # Render the text with span annotations
+            from potato.server_utils.schemas.span import render_span_annotations
+            displayed_text = render_span_annotations(base_text, span_annotations)
+
+            print(f"[DEBUG] /admin/user_state: instance_id={current_instance.get_id()} displayed_text=\n{displayed_text}\n---END---")
+
             current_instance_data = {
                 "id": current_instance.get_id(),
-                "text": current_instance.get_text(),
-                "displayed_text": current_instance.get_displayed_text()
+                "text": base_text,
+                "displayed_text": displayed_text
             }
 
         # Helper to recursively convert all dict keys to strings
@@ -977,24 +982,32 @@ def test_user_state(user_id):
         # Get all annotations
         all_annotations = user_state.get_all_annotations()
         print(f"🔍 test_user_state - all_annotations raw: {all_annotations}")
+        print(f"🔍 test_user_state - instance_id_to_label_to_value: {dict(user_state.instance_id_to_label_to_value)}")
+        print(f"🔍 test_user_state - instance_id_to_span_to_value: {dict(user_state.instance_id_to_span_to_value)}")
 
         # Convert all keys to strings for JSON serialization
         serializable_annotations = {}
         for instance_id, annotations in all_annotations.items():
             instance_id_str = str(instance_id)
             serializable_annotations[instance_id_str] = {}
+            print(f"🔍 Processing instance {instance_id_str}: {annotations}")
 
             # Process labels
             if "labels" in annotations:
+                print(f"🔍 Processing labels for instance {instance_id_str}: {annotations['labels']}")
                 for label, value in annotations["labels"].items():
+                    print(f"🔍 Processing label: {label} (type: {type(label)}) = {value}")
                     if hasattr(label, 'schema_name') and hasattr(label, 'label_name'):
                         label_str = f"{label.schema_name}:{label.label_name}"
+                        print(f"🔍 Converted label to string: {label_str}")
                     else:
                         label_str = str(label)
+                        print(f"🔍 Using string representation: {label_str}")
                     serializable_annotations[instance_id_str][label_str] = value
 
             # Process spans
             if "spans" in annotations:
+                print(f"🔍 Processing spans for instance {instance_id_str}: {annotations['spans']}")
                 for span, value in annotations["spans"].items():
                     span_str = str(span)
                     serializable_annotations[instance_id_str][span_str] = value
@@ -1015,7 +1028,7 @@ def test_user_state(user_id):
                         "has_annotation": instance_id in all_annotations
                     })
 
-        response_data = {
+        return jsonify({
             "user_id": user_id,
             "phase": str(user_state.get_phase()),
             "current_instance": current_instance_data,
@@ -1033,26 +1046,29 @@ def test_user_state(user_id):
             "hints": {
                 "cached_hints": list(user_state.get_cached_hints().keys()) if hasattr(user_state, 'get_cached_hints') else []
             }
-        }
-
-        print(f"🔍 Returning user state for {user_id}")
-        return jsonify(response_data)
-
+        })
     except Exception as e:
-        print(f"🔍 Error in test_user_state: {str(e)}")
         return jsonify({
             "error": f"Failed to get user state for '{user_id}': {str(e)}"
         }), 500
 
 
-@app.route("/test/item_state", methods=["GET"])
-def test_item_state():
+@app.route("/admin/item_state", methods=["GET"])
+def admin_item_state():
     """
     Get state for all items in the system.
+    Admin-only endpoint requiring API key.
 
     Returns:
         flask.Response: JSON response with item state
     """
+    # Check API key
+    api_key = request.headers.get('X-API-Key')
+    if not config.get("debug", False) and api_key != "admin_api_key":
+        return jsonify({
+            "error": "Item state only available in debug mode or with valid API key"
+        }), 403
+
     try:
         ism = get_item_state_manager()
         items = ism.items()
@@ -1088,10 +1104,11 @@ def test_item_state():
         }), 500
 
 
-@app.route("/test/item_state/<item_id>", methods=["GET"])
-def test_item_state_detail(item_id):
+@app.route("/admin/item_state/<item_id>", methods=["GET"])
+def admin_item_state_detail(item_id):
     """
     Get detailed state for a specific item.
+    Admin-only endpoint requiring API key.
 
     Args:
         item_id: The item ID to get state for
@@ -1099,6 +1116,12 @@ def test_item_state_detail(item_id):
     Returns:
         flask.Response: JSON response with item state
     """
+    # Check API key
+    api_key = request.headers.get('X-API-Key')
+    if not config.get("debug", False) and api_key != "admin_api_key":
+        return jsonify({
+            "error": "Item state detail only available in debug mode or with valid API key"
+        }), 403
     try:
         ism = get_item_state_manager()
         item = ism.get_item(item_id)
@@ -1135,385 +1158,16 @@ def test_item_state_detail(item_id):
         }), 500
 
 
-@app.route("/test/reset", methods=["POST"])
-def test_reset():
-    """
-    Reset the system state (for testing purposes only).
-
-    Returns:
-        flask.Response: JSON response with reset status
-    """
-    print("[DEBUG] /test/reset called")
-    if not config.get("debug", False):
-        print("[DEBUG] Debug mode not enabled")
-        return jsonify({
-            "error": "Reset only available in debug mode"
-        }), 403
-
-    print("[DEBUG] Debug mode is enabled, proceeding with reset")
-    try:
-        print("[DEBUG] Getting user state manager...")
-        usm = get_user_state_manager()
-        print("[DEBUG] Getting item state manager...")
-        ism = get_item_state_manager()
-
-        print(f"[DEBUG] Before reset: user count = {len(usm.get_user_ids())}, item count = {len(ism.get_instance_ids())}")
-        # Clear all state
-        print("[DEBUG] Clearing user state...")
-        usm.clear()
-        print("[DEBUG] Clearing item state...")
-        ism.clear()
-        print(f"[DEBUG] After reset: user count = {len(usm.get_user_ids())}, item count = {len(ism.get_instance_ids())}")
-
-        return jsonify({
-            "status": "reset_complete",
-            "message": "All user and item state has been cleared"
-        })
-    except Exception as e:
-        print(f"[DEBUG] Exception in /test/reset: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({
-            "error": f"Failed to reset system: {str(e)}"
-        }), 500
 
 
-@app.route("/test/create_user", methods=["POST"])
-def test_create_user():
-    """
-    Create a test user (for testing purposes only).
-
-    This route is only available when debug mode is enabled.
-    It allows programmatic creation of users for testing scenarios.
-
-    Request Body:
-        {
-            "user_id": "test_user_name",
-            "initial_phase": "ANNOTATION" (optional),
-            "assign_items": true (optional)
-        }
-
-    Returns:
-        flask.Response: JSON response with user creation status
-    """
-    # Security check: Only available in debug mode
-    if not config.get("debug", False):
-        return jsonify({
-            "error": "User creation only available in debug mode",
-            "debug_mode_required": True
-        }), 403
-
-    try:
-        data = request.get_json()
-        if not data or 'user_id' not in data:
-            return jsonify({
-                "error": "Missing user_id in request",
-                "required_fields": ["user_id"],
-                "optional_fields": ["initial_phase", "assign_items"]
-            }), 400
-
-        user_id = data['user_id']
-        initial_phase = data.get('initial_phase', None)
-        assign_items = data.get('assign_items', False)
-
-        # Validate user_id format
-        if not isinstance(user_id, str) or len(user_id.strip()) == 0:
-            return jsonify({
-                "error": "user_id must be a non-empty string"
-            }), 400
-
-        user_id = user_id.strip()
-
-        # Validate initial phase if provided
-        valid_phases = ['LOGIN', 'CONSENT', 'PRESTUDY', 'INSTRUCTIONS', 'TRAINING', 'ANNOTATION', 'POSTSTUDY', 'DONE']
-        if initial_phase and initial_phase.upper() not in valid_phases:
-            return jsonify({
-                "error": f"Invalid initial phase: {initial_phase}",
-                "valid_phases": valid_phases
-            }), 400
-
-        usm = get_user_state_manager()
-
-        # Check if user already exists
-        if usm.has_user(user_id):
-            return jsonify({
-                "error": f"User '{user_id}' already exists",
-                "user_id": user_id,
-                "status": "exists"
-            }), 409
-
-        # Create the user
-        usm.add_user(user_id)
-        user_state = usm.get_user_state(user_id)
-
-        # Set initial phase if specified
-        if initial_phase:
-            from potato.flask_server import UserPhase
-            # Convert to uppercase for mapping, but accept both cases
-            phase_upper = initial_phase.upper()
-            phase_mapping = {
-                'LOGIN': UserPhase.LOGIN,
-                'CONSENT': UserPhase.CONSENT,
-                'PRESTUDY': UserPhase.PRESTUDY,
-                'INSTRUCTIONS': UserPhase.INSTRUCTIONS,
-                'TRAINING': UserPhase.TRAINING,
-                'ANNOTATION': UserPhase.ANNOTATION,
-                'POSTSTUDY': UserPhase.POSTSTUDY,
-                'DONE': UserPhase.DONE
-            }
-            if phase_upper not in phase_mapping:
-                return jsonify({
-                    "error": f"Invalid initial phase: {initial_phase}",
-                    "valid_phases": list(phase_mapping.keys())
-                }), 400
-            user_state.advance_to_phase(phase_mapping[phase_upper], None)
-
-        # Assign items if requested
-        if assign_items:
-            ism = get_item_state_manager()
-            ism.assign_instances_to_user(user_state)
-
-        return jsonify({
-            "status": "created",
-            "user_id": user_id,
-            "initial_phase": initial_phase or "LOGIN",
-            "assign_items": assign_items,
-            "message": f"User '{user_id}' created successfully",
-            "user_state": {
-                "phase": str(user_state.get_phase()),
-                "has_assignments": user_state.has_assignments(),
-                "assignments_count": len(user_state.get_assigned_instance_ids()) if user_state.has_assignments() else 0
-            }
-        })
-    except Exception as e:
-        return jsonify({
-            "error": f"Failed to create user: {str(e)}",
-            "user_id": data.get('user_id') if 'data' in locals() else None
-        }), 500
 
 
-@app.route("/test/create_users", methods=["POST"])
-def test_create_users():
-    """
-    Create multiple test users (for testing purposes only).
-
-    This route is only available when debug mode is enabled.
-    It allows programmatic creation of multiple users for testing scenarios.
-
-    Request Body:
-        {
-            "users": [
-                {
-                    "user_id": "user_1",
-                    "initial_phase": "ANNOTATION" (optional),
-                    "assign_items": true (optional)
-                },
-                {
-                    "user_id": "user_2",
-                    "initial_phase": "CONSENT" (optional),
-                    "assign_items": false (optional)
-                }
-            ]
-        }
-
-    Returns:
-        flask.Response: JSON response with user creation status
-    """
-    # Security check: Only available in debug mode
-    if not config.get("debug", False):
-        return jsonify({
-            "error": "User creation only available in debug mode",
-            "debug_mode_required": True
-        }), 403
-
-    try:
-        data = request.get_json()
-        if not data or 'users' not in data:
-            return jsonify({
-                "error": "Missing users array in request",
-                "required_fields": ["users"],
-                "example": {
-                    "users": [
-                        {"user_id": "user_1", "initial_phase": "ANNOTATION"},
-                        {"user_id": "user_2", "initial_phase": "CONSENT"}
-                    ]
-                }
-            }), 400
-
-        users_data = data['users']
-        if not isinstance(users_data, list):
-            return jsonify({
-                "error": "users must be an array"
-            }), 400
-
-        usm = get_user_state_manager()
-        results = {
-            "created": [],
-            "already_exists": [],
-            "failed": []
-        }
-
-        for user_data in users_data:
-            try:
-                if not isinstance(user_data, dict) or 'user_id' not in user_data:
-                    results["failed"].append({
-                        "data": user_data,
-                        "error": "Invalid user data format - missing user_id"
-                    })
-                    continue
-
-                user_id = user_data['user_id']
-                initial_phase = user_data.get('initial_phase', None)
-                assign_items = user_data.get('assign_items', False)
-
-                # Validate user_id
-                if not isinstance(user_id, str) or len(user_id.strip()) == 0:
-                    results["failed"].append({
-                        "user_id": user_id,
-                        "error": "user_id must be a non-empty string"
-                    })
-                    continue
-
-                user_id = user_id.strip()
-
-                # Validate initial phase if provided
-                valid_phases = ['LOGIN', 'CONSENT', 'PRESTUDY', 'INSTRUCTIONS', 'TRAINING', 'ANNOTATION', 'POSTSTUDY', 'DONE']
-                if initial_phase and initial_phase.upper() not in valid_phases:
-                    results["failed"].append({
-                        "user_id": user_id,
-                        "error": f"Invalid initial phase: {initial_phase}",
-                        "valid_phases": valid_phases
-                    })
-                    continue
-
-                # Check if user already exists
-                if usm.has_user(user_id):
-                    results["already_exists"].append({
-                        "user_id": user_id,
-                        "status": "exists"
-                    })
-                    continue
-
-                # Create the user
-                usm.add_user(user_id)
-                user_state = usm.get_user_state(user_id)
-
-                # Set initial phase if specified
-                if initial_phase:
-                    from potato.flask_server import UserPhase
-                    # Convert to uppercase for mapping, but accept both cases
-                    phase_upper = initial_phase.upper()
-                    phase_mapping = {
-                        'LOGIN': UserPhase.LOGIN,
-                        'CONSENT': UserPhase.CONSENT,
-                        'PRESTUDY': UserPhase.PRESTUDY,
-                        'INSTRUCTIONS': UserPhase.INSTRUCTIONS,
-                        'TRAINING': UserPhase.TRAINING,
-                        'ANNOTATION': UserPhase.ANNOTATION,
-                        'POSTSTUDY': UserPhase.POSTSTUDY,
-                        'DONE': UserPhase.DONE
-                    }
-                    if phase_upper not in phase_mapping:
-                        return jsonify({
-                            "error": f"Invalid initial phase: {initial_phase}",
-                            "valid_phases": list(phase_mapping.keys())
-                        }), 400
-                    user_state.advance_to_phase(phase_mapping[phase_upper], None)
-
-                # Assign items if requested
-                if assign_items:
-                    ism = get_item_state_manager()
-                    ism.assign_instances_to_user(user_state)
-
-                results["created"].append({
-                    "user_id": user_id,
-                    "initial_phase": initial_phase or "LOGIN",
-                    "assign_items": assign_items,
-                    "user_state": {
-                        "phase": str(user_state.get_phase()),
-                        "has_assignments": user_state.has_assignments(),
-                        "assignments_count": len(user_state.get_assigned_instance_ids()) if user_state.has_assignments() else 0
-                    }
-                })
-
-            except Exception as e:
-                results["failed"].append({
-                    "user_id": user_data.get('user_id') if isinstance(user_data, dict) else "unknown",
-                    "error": f"Failed to create user: {str(e)}"
-                })
-
-        return jsonify({
-            "status": "completed",
-            "summary": {
-                "created": len(results["created"]),
-                "already_exists": len(results["already_exists"]),
-                "failed": len(results["failed"]),
-                "total_requested": len(users_data)
-            },
-            "results": results
-        })
-
-    except Exception as e:
-        return jsonify({
-            "error": f"Failed to process user creation request: {str(e)}"
-        }), 500
 
 
-@app.route("/test/advance_user_phase/<user_id>", methods=["POST"])
-def test_advance_user_phase(user_id):
-    """
-    Advance a user to the next phase (for testing purposes only).
 
-    This route is only available when debug mode is enabled.
-    It allows programmatic advancement of user phases for testing scenarios.
 
-    Args:
-        user_id (str): The ID of the user to advance
 
-    Returns:
-        flask.Response: JSON response with advancement status
-    """
-    # Security check: Only available in debug mode
-    if not config.get("debug", False):
-        return jsonify({
-            "error": "Phase advancement only available in debug mode",
-            "debug_mode_required": True
-        }), 403
 
-    try:
-        usm = get_user_state_manager()
-
-        # Check if user exists
-        if not usm.has_user(user_id):
-            return jsonify({
-                "error": f"User '{user_id}' not found",
-                "available_users": usm.get_user_ids()
-            }), 404
-
-        # Get current phase before advancement
-        user_state = usm.get_user_state(user_id)
-        current_phase_before = user_state.get_phase()
-
-        # Advance the user's phase
-        usm.advance_phase(user_id)
-
-        # Get phase after advancement
-        user_state = usm.get_user_state(user_id)
-        current_phase_after = user_state.get_phase()
-
-        return jsonify({
-            "status": "advanced",
-            "user_id": user_id,
-            "previous_phase": str(current_phase_before),
-            "current_phase": str(current_phase_after),
-            "message": f"User '{user_id}' advanced from {current_phase_before} to {current_phase_after}"
-        })
-
-    except Exception as e:
-        return jsonify({
-            "error": f"Failed to advance user phase: {str(e)}",
-            "user_id": user_id
-        }), 500
 
 
 @app.route("/go_to", methods=["GET", "POST"])
@@ -1521,10 +1175,10 @@ def go_to():
     """
     Handle requests to go to a specific instance.
     """
-    if 'user_id' not in session and not config.get("debug", False):
+    if 'username' not in session:
         return home()
 
-    username = session['user_id']
+    username = session['username']
     user_state = get_user_state(username)
 
     # Check that the user is in the annotation phase
@@ -1538,55 +1192,189 @@ def go_to():
 
     return render_page_with_annotations(username)
 
-@app.route("/updateinstance", methods=["POST"])
+@app.route('/get_annotations', methods=['GET'])
+def get_annotations():
+    """Get annotations for the current user and instance."""
+    try:
+        # Get user from session
+        if 'username' not in session:
+            return jsonify({"error": "No user session"}), 401
+
+        username = session['username']
+
+        # Get instance ID from query parameters
+        instance_id = request.args.get('instance_id')
+        if not instance_id:
+            return jsonify({"error": "No instance_id provided"}), 400
+
+        # Get user state
+        user_state = get_user_state_manager().get_user_state(username)
+        if not user_state:
+            return jsonify({"error": "User not found"}), 404
+
+        # Get annotations for the instance
+        label_annotations = user_state.get_label_annotations(instance_id)
+        span_annotations = user_state.get_span_annotations(instance_id)
+
+        # Convert span annotations to serializable format
+        serializable_span_annotations = {}
+        for span, value in span_annotations.items():
+            serializable_span_annotations[str(span)] = value
+
+        # Combine annotations
+        annotations = {
+            "label_annotations": label_annotations,
+            "span_annotations": serializable_span_annotations
+        }
+
+        return jsonify(annotations)
+
+    except Exception as e:
+        logger.error(f"Error getting annotations: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
 def update_instance():
-    '''
-    API endpoint for updating instance data when a user interacts with the web UI.
-    '''
-    if 'user_id' not in session and not config.get("debug", False):
+    """
+    PRIMARY ANNOTATION ENDPOINT: Handle all annotation updates for instances.
+
+    This is the main endpoint for adding, updating, and deleting both label and span
+    annotations. It handles real-time annotation updates and is called whenever
+    a user interacts with annotation elements in the UI.
+
+    Features:
+    - Label annotation handling (radio buttons, checkboxes, text inputs, sliders, etc.)
+    - Span annotation handling (text selection and highlighting)
+    - Annotation deletion (span annotations with value=None)
+    - Real-time updates without page reload
+    - Automatic annotator registration
+    - State persistence
+
+    Args (JSON):
+        instance_id: ID of the instance being annotated
+        type: "label" or "span" - the type of annotation
+        schema: The annotation schema name
+        state: Array of annotation objects with format:
+            For labels: [{"name": "label_name", "value": "label_value"}]
+            For spans: [{"name": "span_name", "title": "span_title", "start": start_pos, "end": end_pos, "value": "span_text"}]
+
+    Returns:
+        flask.Response: JSON response with status
+    """
+    logger.debug("=== UPDATEINSTANCE ROUTE START ===")
+    logger.debug(f"Session: {dict(session)}")
+    logger.debug(f"Session username: {session.get('username', 'NOT_SET')}")
+    logger.debug(f"Request content type: {request.content_type}")
+    logger.debug(f"Request is JSON: {request.is_json}")
+    logger.debug(f"Debug mode: {config.get('debug', False)}")
+
+    if 'username' not in session:
+        logger.warning("Update instance without active session")
         return jsonify({"status": "error", "message": "No active session"})
 
     if request.is_json:
-        print("updateinstance request.json: ", request.json)
+        print("🔍 updateinstance request.json: ", request.json)
+        logger.debug(f"Received JSON data: {request.json}")
 
         # Get the instance id
         instance_id = request.json.get("instance_id")
+        logger.debug(f"Instance ID: {instance_id}")
 
         # Get the schema name
         schema_name = request.json.get("schema")
+        logger.debug(f"Schema name: {schema_name}")
 
         # Get the state of items for that schema
         schema_state = request.json.get("state")
+        logger.debug(f"Schema state: {schema_state}")
 
-        # In debug mode, ensure we have a user_id
-        if config.get("debug", False) and 'user_id' not in session:
-            session['user_id'] = "debug_user"
+        # Get the annotation type
+        annotation_type = request.json.get("type")
+        logger.debug(f"Annotation type: {annotation_type}")
 
-        username = session['user_id']
+        username = session['username']
+        logger.debug(f"Using username: {username}")
+        logger.debug(f"All users in state manager: {get_user_state_manager().get_user_ids()}")
+        logger.debug(f"User state manager has user '{username}': {get_user_state_manager().has_user(username)}")
+
         user_state = get_user_state(username)
+        logger.debug(f"Retrieved user state: {user_state}")
+        logger.debug(f"User state phase: {user_state.get_phase() if user_state else 'No user state'}")
 
-        if request.json.get("type") == "label":
-            for lv in schema_state:
-                label = Label(schema_name, lv['name'])
-                value = lv['value']
-                user_state.add_label_annotation(instance_id, label, value)
-        elif request.json.get("type") == "span":
+        print(f"🔍 [BEFORE] instance_id_to_span_to_value: {dict(user_state.instance_id_to_span_to_value)}")
+
+        if not user_state:
+            logger.error(f"User state not found for user: {username}")
+            return jsonify({"status": "error", "message": "User state not found"})
+
+        # Debug: Print current span annotations before processing
+        current_spans = get_span_annotations_for_user_on(username, instance_id)
+        logger.debug(f"Current span annotations for {username} on {instance_id}: {current_spans}")
+        print(f"🔍 Current span annotations for {username} on {instance_id}: {current_spans}")
+
+        if annotation_type == "span":
             for sv in schema_state:
-                span = SpanAnnotation(schema_name, sv['name'], sv['title'], sv['start'], sv['end'])
-                value = sv['value']
-                user_state.add_span_annotation(instance_id, span, value)
-        else:
-            raise Exception("Unknown annotation type: ", request.json.get("type"))
+                span = SpanAnnotation(schema_name, sv["name"], sv.get("title", sv["name"]), int(sv["start"]), int(sv["end"]))
+                value = sv["value"]
+                if value is None:
+                    # Remove the span annotation if value is None (deletion)
+                    logger.debug(f"Deleting span annotation: {span}")
+                    print(f"🔍 Deleting span annotation: {span}")
+                    if instance_id in user_state.instance_id_to_span_to_value:
+                        # Find and remove the matching span
+                        spans_to_remove = []
+                        for existing_span in user_state.instance_id_to_span_to_value[instance_id]:
+                            if (existing_span.get_schema() == span.get_schema() and
+                                existing_span.get_name() == span.get_name() and
+                                existing_span.get_start() == span.get_start() and
+                                existing_span.get_end() == span.get_end()):
+                                spans_to_remove.append(existing_span)
+                                logger.debug(f"Found matching span to remove: {existing_span}")
+
+                        for span_to_remove in spans_to_remove:
+                            del user_state.instance_id_to_span_to_value[instance_id][span_to_remove]
+                            logger.debug(f"Removed span: {span_to_remove}")
+                            print(f"🔍 Removed span: {span_to_remove}")
+                else:
+                    # Add or update the span annotation
+                    logger.debug(f"Adding/updating span annotation: {span} = {value}")
+                    print(f"🔍 Adding/updating span annotation: {span} = {value}")
+                    user_state.add_span_annotation(instance_id, span, value)
+
+        print(f"🔍 [AFTER] instance_id_to_span_to_value: {dict(user_state.instance_id_to_span_to_value)}")
 
         # If we're annotating
         if user_state.get_phase() == UserPhase.ANNOTATION:
             # Update that we got some annotation on this instance
+            logger.debug(f"Registering annotator {username} for instance {instance_id}")
             get_item_state_manager().register_annotator(instance_id, username)
 
-        # Save these new instance labels
-        get_user_state_manager().save_user_state(user_state)
+        # Debug: Print span annotations after processing
+        updated_spans = get_span_annotations_for_user_on(username, instance_id)
+        logger.debug(f"Updated span annotations for {username} on {instance_id}: {updated_spans}")
+        print(f"🔍 Updated span annotations for {username} on {instance_id}: {updated_spans}")
 
-    return jsonify({"status": "success"})
+        # Debug: Print user state before saving
+        logger.debug(f"User state before save - instance_id_to_span_to_value: {dict(user_state.instance_id_to_span_to_value)}")
+        print(f"🔍 User state before save - instance_id_to_span_to_value: {dict(user_state.instance_id_to_span_to_value)}")
+
+        # Save these new instance annotations
+        logger.debug(f"Saving user state for {username}")
+        get_user_state_manager().save_user_state(user_state)
+        logger.debug(f"User state saved successfully")
+
+        # Debug: Verify the save worked by reloading user state
+        reloaded_user_state = get_user_state(username)
+        reloaded_spans = get_span_annotations_for_user_on(username, instance_id)
+        logger.debug(f"Reloaded span annotations for {username} on {instance_id}: {reloaded_spans}")
+        print(f"🔍 Reloaded span annotations for {username} on {instance_id}: {reloaded_spans}")
+        logger.debug(f"Reloaded user state - instance_id_to_span_to_value: {dict(reloaded_user_state.instance_id_to_span_to_value)}")
+        print(f"🔍 Reloaded user state - instance_id_to_span_to_value: {dict(reloaded_user_state.instance_id_to_span_to_value)}")
+
+        logger.debug("=== UPDATEINSTANCE ROUTE END ===")
+        return jsonify({"status": "success"})
+    else:
+        logger.warning("Update instance called without JSON data")
+        return jsonify({"status": "error", "message": "JSON data required"})
 
 @app.route("/poststudy", methods=["GET", "POST"])
 def poststudy():
@@ -1596,10 +1384,10 @@ def poststudy():
     Returns:
         flask.Response: Rendered template or redirect
     """
-    if 'user_id' not in session and not config.get("debug", False):
+    if 'username' not in session:
         return home()
 
-    username = session['user_id']
+    username = session['username']
     user_state = get_user_state(username)
 
     # Check that the user is in the poststudy phase
@@ -1613,7 +1401,7 @@ def poststudy():
 
         # Advance the state and move to the appropriate next phase
         usm = get_user_state_manager()
-        usm.advance_phase(session['user_id'])
+        usm.advance_phase(session['username'])
         request.method = 'GET'
         return home()
 
@@ -1637,10 +1425,10 @@ def done():
     Returns:
         flask.Response: Rendered template or redirect
     """
-    if 'user_id' not in session and not config.get("debug", False):
+    if 'username' not in session:
         return home()
 
-    username = session['user_id']
+    username = session['username']
     user_state = get_user_state(username)
 
     # Check that the user is in the done phase
@@ -1661,160 +1449,10 @@ def admin():
     }
     return render_template("admin.html", **context)
 
-@app.route("/test/create_dataset", methods=["POST"])
-def test_create_dataset():
-    """
-    Create a test dataset with specified items and configuration.
-
-    Args:
-        JSON payload with:
-        - items: dict of item_id -> item_data
-        - max_annotations_per_item: int (optional)
-        - assignment_strategy: str (optional)
-
-    Returns:
-        flask.Response: JSON response with dataset creation status
-    """
-    if not config.get("debug", False):
-        return jsonify({
-            "error": "Dataset creation only available in debug mode"
-        }), 403
-
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({
-                "error": "No JSON data provided"
-            }), 400
-
-        items = data.get("items", {})
-        max_annotations_per_item = data.get("max_annotations_per_item", -1)
-        assignment_strategy = data.get("assignment_strategy", "fixed_order")
-
-        # Create new config with the specified parameters
-        test_config = config.copy()
-        test_config["max_annotations_per_item"] = max_annotations_per_item
-        test_config["assignment_strategy"] = assignment_strategy
-
-        # Initialize item state manager with new config
-        from potato.item_state_management import init_item_state_manager, ITEM_STATE_MANAGER
-        import potato.item_state_management
-        potato.item_state_management.ITEM_STATE_MANAGER = None  # Reset singleton
-        ism = init_item_state_manager(test_config)
-
-        # Add items to the dataset
-        ism.add_items(items)
-
-        return jsonify({
-            "status": "created",
-            "summary": {
-                "created": len(items),
-                "max_annotations_per_item": max_annotations_per_item,
-                "assignment_strategy": assignment_strategy
-            },
-            "items": list(items.keys())
-        })
-    except Exception as e:
-        return jsonify({
-            "error": f"Failed to create dataset: {str(e)}"
-        }), 500
 
 
-@app.route("/test/submit_annotation", methods=["POST"])
-def test_submit_annotation():
-    """
-    Submit an annotation for testing purposes.
 
-    Args:
-        JSON payload with:
-        - instance_id: str
-        - annotations: dict of schema -> label_data
-        - user_id: str (optional, defaults to debug_user)
 
-    Returns:
-        flask.Response: JSON response with annotation submission status
-    """
-    if not config.get("debug", False):
-        return jsonify({
-            "error": "Annotation submission only available in debug mode"
-        }), 403
-
-    try:
-        data = request.get_json()
-        print(f"🔍 test_submit_annotation received data: {data}")
-
-        if not data:
-            return jsonify({
-                "error": "No JSON data provided"
-            }), 400
-
-        instance_id = data.get("instance_id")
-        annotations = data.get("annotations", {})
-        user_id = data.get("user_id", "debug_user")
-
-        print(f"🔍 Processing annotation for instance {instance_id}, user {user_id}")
-        print(f"🔍 Annotations structure: {annotations}")
-
-        if not instance_id:
-            return jsonify({
-                "error": "instance_id is required"
-            }), 400
-
-        usm = get_user_state_manager()
-
-        # Ensure user exists and is in annotation phase
-        if not usm.has_user(user_id):
-            usm.add_user(user_id)
-            user_state = usm.get_user_state(user_id)
-            user_state.advance_to_phase(UserPhase.ANNOTATION, None)
-            print(f"🔍 Created new user {user_id} in annotation phase")
-        else:
-            user_state = usm.get_user_state(user_id)
-            # Ensure user is in annotation phase
-            if user_state.get_phase() != UserPhase.ANNOTATION:
-                user_state.advance_to_phase(UserPhase.ANNOTATION, None)
-                print(f"🔍 Advanced user {user_id} to annotation phase")
-
-        # Submit annotations
-        annotation_count = 0
-        for schema_name, label_data in annotations.items():
-            if isinstance(label_data, dict):
-                for label_name, value in label_data.items():
-                    label = Label(schema_name, label_name)
-                    user_state.add_label_annotation(instance_id, label, value)
-                    annotation_count += 1
-                    print(f"🔍 Added label annotation: {schema_name}:{label_name} = {value}")
-            elif isinstance(label_data, list):
-                for label_item in label_data:
-                    if isinstance(label_item, dict) and 'name' in label_item and 'value' in label_item:
-                        label = Label(schema_name, label_item['name'])
-                        user_state.add_label_annotation(instance_id, label, label_item['value'])
-                        annotation_count += 1
-                        print(f"🔍 Added label annotation: {schema_name}:{label_item['name']} = {label_item['value']}")
-
-        # Register the annotator for this instance
-        get_item_state_manager().register_annotator(instance_id, user_id)
-
-        # Save user state
-        usm.save_user_state(user_state)
-
-        print(f"🔍 Successfully submitted {annotation_count} annotations for instance {instance_id} by user {user_id}")
-
-        return jsonify({
-            "status": "success",
-            "user_id": user_id,
-            "instance_id": instance_id,
-            "annotations_submitted": annotation_count,
-            "message": f"Successfully submitted {annotation_count} annotations for instance {instance_id}"
-        })
-
-    except Exception as e:
-        print(f"🔍 Error in test_submit_annotation: {str(e)}")
-        return jsonify({
-            "error": f"Failed to submit annotation: {str(e)}",
-            "user_id": data.get("user_id") if 'data' in locals() else None,
-            "instance_id": data.get("instance_id") if 'data' in locals() else None
-        }), 500
 
 
 @app.route("/api-frontend", methods=["GET"])
@@ -1828,31 +1466,11 @@ def api_frontend():
     Returns:
         flask.Response: Rendered API frontend template
     """
-    if 'user_id' not in session and not config.get("debug", False):
+    if 'username' not in session:
         return redirect(url_for("home"))
 
-    # In debug mode, ensure debug user exists
-    if config.get("debug", False):
-        debug_username = "debug_user"
-        if not get_user_state_manager().has_user(debug_username):
-            logger.debug(f"Creating debug user: {debug_username}")
-            usm = get_user_state_manager()
-            usm.add_user(debug_username)
 
-            # Set debug user directly to annotation phase
-            user_state = usm.get_user_state(debug_username)
-            while user_state.get_phase() != UserPhase.ANNOTATION:
-                usm.advance_phase(debug_username)
-                user_state = usm.get_user_state(debug_username)
-
-            # Assign instances if needed
-            if not user_state.has_assignments():
-                get_item_state_manager().assign_instances_to_user(user_state)
-
-        session['user_id'] = debug_username
-        session.permanent = True
-
-    username = session['user_id']
+    username = session['username']
 
     # Ensure user state exists
     if not get_user_state_manager().has_user(username):
@@ -1895,31 +1513,11 @@ def span_api_frontend():
     Returns:
         flask.Response: Rendered span API frontend template
     """
-    if 'user_id' not in session and not config.get("debug", False):
+    if 'username' not in session:
         return redirect(url_for("home"))
 
-    # In debug mode, ensure debug user exists
-    if config.get("debug", False):
-        debug_username = "debug_user"
-        if not get_user_state_manager().has_user(debug_username):
-            logger.debug(f"Creating debug user: {debug_username}")
-            usm = get_user_state_manager()
-            usm.add_user(debug_username)
 
-            # Set debug user directly to annotation phase
-            user_state = usm.get_user_state(debug_username)
-            while user_state.get_phase() != UserPhase.ANNOTATION:
-                usm.advance_phase(debug_username)
-                user_state = usm.get_user_state(debug_username)
-
-            # Assign instances if needed
-            if not user_state.has_assignments():
-                get_item_state_manager().assign_instances_to_user(user_state)
-
-        session['user_id'] = debug_username
-        session.permanent = True
-
-    username = session['user_id']
+    username = session['username']
 
     # Ensure user state exists
     if not get_user_state_manager().has_user(username):
@@ -1951,309 +1549,6 @@ def span_api_frontend():
                          alert_time_each_instance=config.get("alert_time_each_instance", 10000000))
 
 
-@app.route("/test/assign_multiple_items/<username>", methods=["POST"])
-def test_assign_multiple_items(username):
-    """
-    Test endpoint to assign multiple items to a user for testing navigation.
-    Only available in debug mode.
-    """
-    if not config.get("debug", False):
-        return jsonify({
-            "error": "Multiple item assignment only available in debug mode"
-        }), 403
-
-    try:
-        data = request.get_json() or {}
-        item_ids = data.get("item_ids", ["1", "2", "3", "4", "5"])
-
-        user_state = get_user_state(username)
-        if not user_state:
-            return jsonify({
-                "error": f"User '{username}' not found"
-            }), 404
-
-        ism = get_item_state_manager()
-        assigned_count = 0
-
-        for item_id in item_ids:
-            if ism.has_item(item_id) and not user_state.has_annotated(item_id):
-                item = ism.get_item(item_id)
-                user_state.assign_instance(item)
-                assigned_count += 1
-
-        return jsonify({
-            "status": "success",
-            "assigned_count": assigned_count,
-            "item_ids": item_ids
-        })
-
-    except Exception as e:
-        return jsonify({
-            "error": f"Failed to assign items to '{username}': {str(e)}"
-        }), 500
-
-
-@app.route("/test/clear_annotations/<username>", methods=["POST"])
-def test_clear_annotations(username):
-    """
-    Test endpoint to clear all annotations for a user.
-    Only available in debug mode.
-    """
-    if not config.get("debug", False):
-        return jsonify({
-            "error": "Clear annotations only available in debug mode"
-        }), 403
-
-    try:
-        user_state = get_user_state(username)
-        if not user_state:
-            return jsonify({
-                "error": f"User '{username}' not found"
-            }), 404
-
-        print(f"🔍 CLEARING annotations for user '{username}'")
-        print(f"🔍 Before clearing - Label annotations: {dict(user_state.instance_id_to_label_to_value)}")
-        print(f"🔍 Before clearing - Span annotations: {dict(user_state.instance_id_to_span_to_value)}")
-
-        # Clear all annotations
-        user_state.clear_all_annotations()
-
-        print(f"🔍 After clearing - Label annotations: {dict(user_state.instance_id_to_label_to_value)}")
-        print(f"🔍 After clearing - Span annotations: {dict(user_state.instance_id_to_span_to_value)}")
-
-        # Save the updated user state
-        usm = get_user_state_manager()
-        usm.save_user_state(user_state)
-
-        print(f"🔍 Successfully cleared and saved annotations for user '{username}'")
-
-        return jsonify({
-            "status": "success",
-            "message": f"Cleared all annotations for user '{username}'"
-        })
-
-    except Exception as e:
-        print(f"🔍 Error clearing annotations for '{username}': {str(e)}")
-        return jsonify({
-            "error": f"Failed to clear annotations for '{username}': {str(e)}"
-        }), 500
-
-
-@app.route("/test/clear_debug_annotations", methods=["POST"])
-def test_clear_debug_annotations():
-    """
-    Test endpoint to clear all annotations for the debug user.
-    Only available in debug mode.
-    """
-    if not config.get("debug", False):
-        return jsonify({
-            "error": "Clear debug annotations only available in debug mode"
-        }), 403
-
-    try:
-        username = "debug_user"
-        user_state = get_user_state(username)
-
-        if not user_state:
-            return jsonify({
-                "error": f"Debug user '{username}' not found"
-            }), 404
-
-        print(f"🔍 CLEARING DEBUG annotations for user '{username}'")
-        print(f"🔍 Before clearing - Label annotations: {dict(user_state.instance_id_to_label_to_value)}")
-        print(f"🔍 Before clearing - Span annotations: {dict(user_state.instance_id_to_span_to_value)}")
-
-        # Clear all annotations
-        user_state.clear_all_annotations()
-
-        print(f"🔍 After clearing - Label annotations: {dict(user_state.instance_id_to_label_to_value)}")
-        print(f"🔍 After clearing - Span annotations: {dict(user_state.instance_id_to_span_to_value)}")
-
-        # Save the updated user state
-        usm = get_user_state_manager()
-        usm.save_user_state(user_state)
-
-        print(f"🔍 Successfully cleared and saved debug annotations")
-
-        return jsonify({
-            "status": "success",
-            "message": f"Cleared all annotations for debug user",
-            "cleared_user": username
-        })
-
-    except Exception as e:
-        print(f"🔍 Error clearing debug annotations: {str(e)}")
-        return jsonify({
-            "error": f"Failed to clear debug annotations: {str(e)}"
-        }), 500
-
-
-@app.route("/test/delete_span", methods=["POST"])
-def test_delete_span():
-    """
-    Test endpoint to delete a specific span annotation.
-    Only available in debug mode.
-
-    Expected POST data:
-        instance_id: ID of the instance
-        span_key: The span annotation key to delete
-        username: Username (optional, defaults to debug_user)
-
-    Returns:
-        flask.Response: JSON response with deletion status
-    """
-    if not config.get("debug", False):
-        return jsonify({
-            "error": "Delete span only available in debug mode"
-        }), 403
-
-    try:
-        # Get request data
-        data = request.get_json()
-        if not data:
-            data = request.form.to_dict()
-
-        instance_id = data.get('instance_id')
-        span_key = data.get('span_key')
-        username = data.get('username', 'debug_user')
-
-        print(f"🔍 Delete span request - instance: {instance_id}, span_key: {span_key}, user: {username}")
-
-        if not instance_id or not span_key:
-            return jsonify({
-                "status": "error",
-                "message": "Missing instance_id or span_key"
-            }), 400
-
-        # Get user state
-        user_state = get_user_state(username)
-        if not user_state:
-            return jsonify({
-                "error": f"User '{username}' not found"
-            }), 404
-
-        # Get span annotations for the user
-        span_annotations = user_state.instance_id_to_span_to_value
-
-        # Check if the instance has any span annotations
-        if instance_id not in span_annotations:
-            print(f"🔍 No span annotations found for instance {instance_id}")
-            return jsonify({
-                "status": "success",
-                "message": "Instance has no span annotations",
-                "instance_id": instance_id
-            })
-
-        instance_spans = span_annotations[instance_id]
-        print(f"🔍 Current spans for instance {instance_id}: {list(str(span) for span in instance_spans.keys())}")
-
-        # Find the matching span annotation object
-        span_to_delete = None
-        for span_obj, span_value in instance_spans.items():
-            if str(span_obj) == span_key and span_value == 'true':
-                span_to_delete = span_obj
-                break
-
-        if span_to_delete:
-            # Delete the span
-            del instance_spans[span_to_delete]
-            print(f"🔍 Deleted span: {span_to_delete}")
-
-            # If no spans left for this instance, remove the instance entry
-            if not instance_spans:
-                del span_annotations[instance_id]
-                print(f"🔍 Removed empty instance {instance_id} from span annotations")
-
-            # Save the changes
-            usm = get_user_state_manager()
-            usm.save_user_state(user_state)
-
-            print("🔍 Successfully deleted span and saved changes")
-
-            return jsonify({
-                "status": "success",
-                "message": f"Deleted span annotation",
-                "instance_id": instance_id,
-                "span_key": span_key,
-                "username": username
-            })
-        else:
-            print(f"🔍 Span not found: {span_key}")
-            return jsonify({
-                "status": "error",
-                "message": "Span not found",
-                "instance_id": instance_id,
-                "span_key": span_key
-            }), 404
-
-    except Exception as e:
-        print(f"🔍 Error deleting span: {str(e)}")
-        return jsonify({
-            "status": "error",
-            "message": f"Error deleting span: {str(e)}"
-        }), 500
-
-
-@app.route("/test/set_debug_session", methods=["POST"])
-def test_set_debug_session():
-    """
-    Set the debug session for testing purposes.
-
-    Args:
-        JSON payload with:
-        - user_id: str
-
-    Returns:
-        flask.Response: JSON response with session status
-    """
-    if not config.get("debug", False):
-        return jsonify({
-            "error": "Debug session setting only available in debug mode"
-        }), 403
-
-    try:
-        data = request.get_json()
-        if not data or 'user_id' not in data:
-            return jsonify({
-                "error": "Missing user_id in request",
-                "required_fields": ["user_id"]
-            }), 400
-
-        user_id = data['user_id']
-
-        # Validate user_id
-        if not isinstance(user_id, str) or len(user_id.strip()) == 0:
-            return jsonify({
-                "error": "user_id must be a non-empty string"
-            }), 400
-
-        user_id = user_id.strip()
-
-        # Check if user exists
-        usm = get_user_state_manager()
-        if not usm.has_user(user_id):
-            return jsonify({
-                "error": f"User '{user_id}' not found",
-                "user_id": user_id
-            }), 404
-
-        # Set the session
-        session['user_id'] = user_id
-        session.permanent = True
-
-        return jsonify({
-            "status": "success",
-            "user_id": user_id,
-            "message": f"Debug session set for user '{user_id}'"
-        })
-
-    except Exception as e:
-        return jsonify({
-            "error": f"Failed to set debug session: {str(e)}",
-            "user_id": data.get('user_id') if 'data' in locals() else None
-        }), 500
-
-
 def configure_routes(flask_app, app_config):
     """
     Initialize the Flask routes with the given Flask app instance
@@ -2270,7 +1565,14 @@ def configure_routes(flask_app, app_config):
     config = app_config
 
     # Set up session configuration
-    app.secret_key = config.get("secret_key", "potato-annotation-platform")
+    # Use a random secret key if sessions shouldn't persist, otherwise use the configured one
+    if config.get("persist_sessions", False):
+        app.secret_key = config.get("secret_key", "potato-annotation-platform")
+    else:
+        # Generate a random secret key to ensure sessions don't persist between restarts
+        import secrets
+        app.secret_key = secrets.token_hex(32)
+
     app.permanent_session_lifetime = timedelta(days=config.get("session_lifetime_days", 7))
 
     # Register all routes with the flask app instance
@@ -2285,7 +1587,6 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/consent", "consent", consent, methods=["GET", "POST"])
     app.add_url_rule("/instructions", "instructions", instructions, methods=["GET", "POST"])
     app.add_url_rule("/prestudy", "prestudy", prestudy, methods=["GET", "POST"])
-    app.add_url_rule("/training", "training", training, methods=["GET", "POST"])
     app.add_url_rule("/annotate", "annotate", annotate, methods=["GET", "POST"])
     app.add_url_rule("/go_to", "go_to", go_to, methods=["GET", "POST"])
     app.add_url_rule("/updateinstance", "update_instance", update_instance, methods=["POST"])
@@ -2295,33 +1596,21 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/get_ai_hint", "get_ai_hint", get_ai_hint, methods=["GET"])
     app.add_url_rule("/api-frontend", "api_frontend", api_frontend, methods=["GET"])
     app.add_url_rule("/span-api-frontend", "span_api_frontend", span_api_frontend, methods=["GET"])
-    app.add_url_rule("/test/assign_multiple_items/<username>", "test_assign_multiple_items", test_assign_multiple_items, methods=["POST"])
-    app.add_url_rule("/test/clear_annotations/<username>", "test_clear_annotations", test_clear_annotations, methods=["POST"])
-    app.add_url_rule("/test/clear_debug_annotations", "test_clear_debug_annotations", test_clear_debug_annotations, methods=["POST"])
-    app.add_url_rule("/test/delete_span", "test_delete_span", test_delete_span, methods=["POST"])
-    app.add_url_rule("/test/set_debug_session", "test_set_debug_session", test_set_debug_session, methods=["POST"])
 
-    # Test routes for debugging and testing
-    app.add_url_rule("/test/health", "test_health", test_health, methods=["GET"])
-    app.add_url_rule("/test/system_state", "test_system_state", test_system_state, methods=["GET"])
-    app.add_url_rule("/test/all_instances", "test_all_instances", test_all_instances, methods=["GET"])
-    app.add_url_rule("/test/user_state/<user_id>", "test_user_state", test_user_state, methods=["GET"])
-    app.add_url_rule("/test/item_state", "test_item_state", test_item_state, methods=["GET"])
-    app.add_url_rule("/test/item_state/<item_id>", "test_item_state_detail", test_item_state_detail, methods=["GET"])
-    app.add_url_rule("/test/reset", "test_reset", test_reset, methods=["POST"])
-    app.add_url_rule("/test/create_user", "test_create_user", test_create_user, methods=["POST"])
-    app.add_url_rule("/test/create_users", "test_create_users", test_create_users, methods=["POST"])
-    app.add_url_rule("/test/advance_user_phase/<user_id>", "test_advance_user_phase", test_advance_user_phase, methods=["POST"])
-    app.add_url_rule("/test/create_dataset", "test_create_dataset", test_create_dataset, methods=["POST"])
-    app.add_url_rule("/test/submit_annotation", "test_submit_annotation", test_submit_annotation, methods=["POST"])
+    app.add_url_rule("/admin/user_state/<user_id>", "admin_user_state", admin_user_state, methods=["GET"])
+    app.add_url_rule("/admin/health", "admin_health", admin_health, methods=["GET"])
+    app.add_url_rule("/admin/system_state", "admin_system_state", admin_system_state, methods=["GET"])
+    app.add_url_rule("/admin/all_instances", "admin_all_instances", admin_all_instances, methods=["GET"])
+    app.add_url_rule("/admin/item_state", "admin_item_state", admin_item_state, methods=["GET"])
+    app.add_url_rule("/admin/item_state/<item_id>", "admin_item_state_detail", admin_item_state_detail, methods=["GET"])
+    app.add_url_rule("/shutdown", "shutdown", shutdown, methods=["POST"])
 
 @app.route('/shutdown', methods=['POST'])
 def shutdown():
-    if not config.get('debug', False):
-        return jsonify({'error': 'Shutdown only available in debug mode'}), 403
     func = request.environ.get('werkzeug.server.shutdown')
     if func is None:
         return jsonify({'error': 'Not running with the Werkzeug Server'}), 500
     print('[DEBUG] Shutting down server via /shutdown')
     func()
     return jsonify({'status': 'Server shutting down...'})
+

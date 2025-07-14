@@ -1,0 +1,43 @@
+port: 9007
+server_name: potato multirate annotation test
+annotation_task_name: Multirate Annotation Test
+debug: true
+task_dir: output/multirate-annotation
+output_annotation_dir: output/multirate-annotation
+output_annotation_format: json
+annotation_codebook_url: ''
+max_annotations_per_user: 10
+assignment_strategy: fixed_order
+data_files:
+- ../data/test_data.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: multirate
+  name: quality_ratings
+  description: 'Rate the following aspects of this text:'
+  display_config:
+    num_columns: 1
+  options:
+  - Clarity
+  - Accuracy
+  - Relevance
+  - Completeness
+  labels:
+  - Strongly Disagree
+  - Disagree
+  - Neutral
+  - Agree
+  - Strongly Agree
+  label_requirement:
+    required: true
+  sequential_key_binding: true
+  option_randomization: false
+site_dir: default
+customjs: null
+customjs_hostname: null

@@ -293,6 +293,7 @@ class UserAuthenticator:
     def add_user(self, username, password: Optional[str], **kwargs):
         # For passwordless mode, don't enforce authorization checks
         if not self.require_password:
+            # Passwordless mode - allow any user
             logger.debug(f"Passwordless mode - allowing any user: {username}")
         elif self.allow_all_users == False and not self.is_authorized_user(username):
             return "Unauthorized user"
@@ -309,6 +310,7 @@ class UserAuthenticator:
         """
         # For passwordless mode, don't enforce authorization checks
         if not self.require_password:
+            # Passwordless mode - allow any user
             logger.debug(f"Passwordless mode - allowing any user: {single_user['username']}")
         elif self.allow_all_users == False and not self.is_authorized_user(single_user["username"]):
             return "Unauthorized user"

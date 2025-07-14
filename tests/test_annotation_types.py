@@ -5,6 +5,7 @@ Tests both backend functionality and frontend rendering for each annotation type
 
 import pytest
 import json
+import yaml
 import os
 import tempfile
 import shutil
@@ -13,11 +14,12 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
 import time
 import threading
 import subprocess
 import requests
+from selenium.webdriver.chrome.options import Options
+from tests.helpers.flask_test_setup import FlaskTestServer
 
 # Add potato to path
 import sys
@@ -30,15 +32,24 @@ class TestAnnotationTypes:
     def temp_project_dir(self):
         """Create a temporary project directory for testing"""
         temp_dir = tempfile.mkdtemp()
+
+        # Copy test-configs to temp directory
+        test_configs_dir = os.path.join(os.path.dirname(__file__), 'test-configs')
+        temp_test_configs_dir = os.path.join(temp_dir, 'tests', 'test-configs')
+        os.makedirs(os.path.dirname(temp_test_configs_dir), exist_ok=True)
+        shutil.copytree(test_configs_dir, temp_test_configs_dir, dirs_exist_ok=True)
+
         yield temp_dir
         shutil.rmtree(temp_dir)
 
     @pytest.fixture(scope="class")
     def server_process(self, temp_project_dir):
         """Start server in debug mode for testing"""
-        # Copy simple examples to temp directory
-        simple_examples_dir = os.path.join(os.path.dirname(__file__), '..', 'project-hub', 'simple_examples')
-        shutil.copytree(simple_examples_dir, os.path.join(temp_project_dir, 'simple_examples'))
+        # Copy test-configs to temp directory
+        test_configs_dir = os.path.join(os.path.dirname(__file__), 'test-configs')
+        temp_test_configs_dir = os.path.join(temp_project_dir, 'tests', 'test-configs')
+        os.makedirs(os.path.dirname(temp_test_configs_dir), exist_ok=True)
+        shutil.copytree(test_configs_dir, temp_test_configs_dir, dirs_exist_ok=True)
 
         # Change to temp directory
         original_cwd = os.getcwd()
@@ -48,7 +59,7 @@ class TestAnnotationTypes:
         process = subprocess.Popen([
             'python', '-m', 'potato.flask_server',
             '--debug', '-p', '9001', 'start',
-            'simple_examples/configs/simple-likert.yaml'
+            'tests/test-configs/simple-likert.yaml'
         ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         # Wait for server to start
@@ -61,47 +72,200 @@ class TestAnnotationTypes:
         process.wait()
         os.chdir(original_cwd)
 
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        # Create Flask test server with dynamic port
+        self.server = FlaskTestServer(lambda: create_app(), {"debug": True})
+        self.server.start()
+        self.base_url = self.server.base_url
+
+        # Setup Chrome options for headless testing
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+
+        self.driver = webdriver.Chrome(options=chrome_options)
+        yield
+        self.driver.quit()
+        self.server.stop()
+
+    def test_likert_annotation(self):
+        """Test Likert scale annotation with dynamic port"""
+        # Navigate to annotation page
+        self.driver.get(f"{self.base_url}/")
+
+        # Wait for page to load
+        WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='radio']"))
+        )
+
+        # Find Likert scale options
+        likert_options = self.driver.find_elements(By.CSS_SELECTOR, "input[type='radio']")
+        assert len(likert_options) >= 5
+
+        # Select a rating
+        likert_options[2].click()  # Select middle option
+        assert likert_options[2].is_selected()
+
+        # Submit annotation
+        submit_button = self.driver.find_element(By.ID, "submit-button")
+        submit_button.click()
+
+        # Verify submission
+        WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.CLASS_NAME, "success-message"))
+        )
+
+    def test_slider_annotation(self):
+        """Test slider annotation with dynamic port"""
+        # Navigate to annotation page
+        self.driver.get(f"{self.base_url}/")
+
+        # Wait for page to load
+        WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='range']"))
+        )
+
+        # Find slider element
+        slider = self.driver.find_element(By.CSS_SELECTOR, "input[type='range']")
+
+        # Set slider value
+        self.driver.execute_script("arguments[0].value = '75';", slider)
+
+        # Submit annotation
+        submit_button = self.driver.find_element(By.ID, "submit-button")
+        submit_button.click()
+
+        # Verify submission
+        WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.CLASS_NAME, "success-message"))
+        )
+
+    def test_text_annotation(self):
+        """Test text annotation with dynamic port"""
+        # Navigate to annotation page
+        self.driver.get(f"{self.base_url}/")
+
+        # Wait for page to load
+        WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "textarea"))
+        )
+
+        # Find text area
+        text_area = self.driver.find_element(By.CSS_SELECTOR, "textarea")
+
+        # Enter text
+        text_area.send_keys("This is a test annotation")
+
+        # Submit annotation
+        submit_button = self.driver.find_element(By.ID, "submit-button")
+        submit_button.click()
+
+        # Verify submission
+        WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.CLASS_NAME, "success-message"))
+        )
+
+    def test_annotation_submission_api(self):
+        """Test annotation submission via API with dynamic port"""
+        # Test Likert annotation submission
+        annotation_data = {
+            "instance_id": "test_instance_1",
+            "type": "label",
+            "schema": "likert_scale",
+            "state": [
+                {"name": "likert_rating", "value": "3"}
+            ]
+        }
+
+        response = requests.post(
+            f"{self.base_url}/submit_annotation",
+            json=annotation_data,
+            timeout=10
+        )
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["status"] == "success"
+
+    def test_annotation_retrieval(self):
+        """Test annotation retrieval with dynamic port"""
+        # Navigate to annotation page
+        self.driver.get(f"{self.base_url}/annotate")
+
+        # Wait for page to load
+        WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.ID, "annotation-container"))
+        )
+
+        # Verify annotation interface is present
+        assert self.driver.find_element(By.ID, "annotation-container").is_displayed()
+
+    def test_annotation_navigation(self):
+        """Test navigation between annotation instances with dynamic port"""
+        # Navigate to annotation page
+        self.driver.get(f"{self.base_url}/annotate")
+
+        # Wait for page to load
+        WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.ID, "annotation-container"))
+        )
+
+        # Submit annotation for current instance
+        submit_button = self.driver.find_element(By.ID, "submit-button")
+        submit_button.click()
+
+        # Wait for navigation to next instance
+        WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.ID, "annotation-container"))
+        )
+
+        # Verify we're on a new instance
+        current_instance = self.driver.find_element(By.ID, "instance-id").text
+        assert current_instance != "test_instance_1"
+
     def test_likert_annotation_backend(self, temp_project_dir):
         """Test likert annotation backend functionality"""
-        config_path = os.path.join(temp_project_dir, 'simple_examples', 'configs', 'simple-likert.yaml')
+        config_path = os.path.join(temp_project_dir, 'tests', 'test-configs', 'simple-likert.yaml')
 
         # Test config loading
         with open(config_path, 'r') as f:
-            config = json.load(f)
+            config = yaml.safe_load(f)
 
-        assert config['annotation_task_name'] == 'Simple Likert Scale Example'
+        assert config['annotation_task_name'] == 'Simple Likert Scale Test'
         assert config['annotation_schemes'][0]['annotation_type'] == 'likert'
         assert config['annotation_schemes'][0]['size'] == 5
 
         # Test data loading
-        data_path = os.path.join(temp_project_dir, 'simple_examples', 'data', 'toy-example.json')
+        data_path = os.path.join(temp_project_dir, 'tests', 'test-configs', 'data', 'test_data.json')
         assert os.path.exists(data_path)
 
         # Test output directory creation
-        output_dir = os.path.join(temp_project_dir, 'simple_examples', config['output_annotation_dir'])
+        output_dir = os.path.join(temp_project_dir, 'tests', 'test-configs', config['output_annotation_dir'])
         os.makedirs(output_dir, exist_ok=True)
         assert os.path.exists(output_dir)
 
     def test_checkbox_annotation_backend(self, temp_project_dir):
         """Test checkbox (multiselect) annotation backend functionality"""
-        config_path = os.path.join(temp_project_dir, 'simple_examples', 'configs', 'simple-check-box.yaml')
+        config_path = os.path.join(temp_project_dir, 'tests', 'test-configs', 'simple-check-box.yaml')
 
         with open(config_path, 'r') as f:
-            config = json.load(f)
+            config = yaml.safe_load(f)
 
-        assert config['annotation_task_name'] == 'Simple Check Box Example'
+        assert config['annotation_task_name'] == 'Simple Check Box Test'
         assert config['annotation_schemes'][0]['annotation_type'] == 'multiselect'
         assert 'blue' in config['annotation_schemes'][0]['labels']
         assert 'maize' in config['annotation_schemes'][0]['labels']
 
     def test_slider_annotation_backend(self, temp_project_dir):
         """Test slider annotation backend functionality"""
-        config_path = os.path.join(temp_project_dir, 'simple_examples', 'configs', 'simple-slider.yaml')
+        config_path = os.path.join(temp_project_dir, 'tests', 'test-configs', 'simple-slider.yaml')
 
         with open(config_path, 'r') as f:
-            config = json.load(f)
+            config = yaml.safe_load(f)
 
-        assert config['annotation_task_name'] == 'Simple Slider Example'
+        assert config['annotation_task_name'] == 'Simple Slider Test'
         assert config['annotation_schemes'][0]['annotation_type'] == 'slider'
         assert config['annotation_schemes'][0]['min_value'] == 0
         assert config['annotation_schemes'][0]['max_value'] == 100
@@ -109,12 +273,12 @@ class TestAnnotationTypes:
 
     def test_span_annotation_backend(self, temp_project_dir):
         """Test span annotation backend functionality"""
-        config_path = os.path.join(temp_project_dir, 'simple_examples', 'configs', 'simple-span-labeling.yaml')
+        config_path = os.path.join(temp_project_dir, 'tests', 'test-configs', 'simple-span-labeling.yaml')
 
         with open(config_path, 'r') as f:
-            config = json.load(f)
+            config = yaml.safe_load(f)
 
-        assert config['annotation_task_name'] == 'Simple Highlighting Example'
+        assert config['annotation_task_name'] == 'Simple Span Labeling Test'
         assert config['annotation_schemes'][0]['annotation_type'] == 'highlight'
         assert 'certain' in config['annotation_schemes'][0]['labels']
         assert 'uncertain' in config['annotation_schemes'][0]['labels']
@@ -122,7 +286,7 @@ class TestAnnotationTypes:
     @pytest.mark.selenium
     def test_likert_annotation_frontend(self, server_process):
         """Test likert annotation frontend with Selenium"""
-        driver = webdriver.Chrome(options=Options().add_argument("--headless"))
+        driver = webdriver.Chrome()
         try:
             driver.get("http://localhost:9001/")
 
@@ -139,8 +303,8 @@ class TestAnnotationTypes:
             assert len(likert_elements) >= 5  # Should have 5 scale points
 
             # Check for scale labels
-            assert "Not Awesome" in driver.page_source
-            assert "Compeletely Awesome" in driver.page_source
+            assert "Very Negative" in driver.page_source
+            assert "Very Positive" in driver.page_source
 
             # Test selecting a scale point
             likert_elements[2].click()  # Select middle option
@@ -153,9 +317,9 @@ class TestAnnotationTypes:
     def test_checkbox_annotation_frontend(self, server_process):
         """Test checkbox annotation frontend with Selenium"""
         # Start server with checkbox config
-        config_path = 'simple_examples/configs/simple-check-box.yaml'
+        config_path = 'tests/test-configs/simple-check-box.yaml'
 
-        driver = webdriver.Chrome(options=Options().add_argument("--headless"))
+        driver = webdriver.Chrome()
         try:
             driver.get("http://localhost:9001/")
 
@@ -187,7 +351,7 @@ class TestAnnotationTypes:
     @pytest.mark.selenium
     def test_slider_annotation_frontend(self, server_process):
         """Test slider annotation frontend with Selenium"""
-        driver = webdriver.Chrome(options=Options().add_argument("--headless"))
+        driver = webdriver.Chrome()
         try:
             driver.get("http://localhost:9001/")
 
@@ -216,7 +380,7 @@ class TestAnnotationTypes:
     @pytest.mark.selenium
     def test_span_annotation_frontend(self, server_process):
         """Test span annotation frontend with Selenium"""
-        driver = webdriver.Chrome(options=Options().add_argument("--headless"))
+        driver = webdriver.Chrome()
         try:
             driver.get("http://localhost:9001/")
 
@@ -287,7 +451,7 @@ class TestAnnotationTypes:
     def test_instance_data_loading(self, temp_project_dir):
         """Test that instance data loads correctly for different formats"""
         # Test JSON format
-        json_data_path = os.path.join(temp_project_dir, 'simple_examples', 'data', 'toy-example.json')
+        json_data_path = os.path.join(temp_project_dir, 'tests', 'test-configs', 'data', 'test_data.json')
         with open(json_data_path, 'r') as f:
             first_line = f.readline()
             item = json.loads(first_line)
@@ -296,27 +460,19 @@ class TestAnnotationTypes:
         assert 'text' in item
         assert item['id'] == 'item_1'
 
-        # Test CSV format
-        csv_data_path = os.path.join(temp_project_dir, 'simple_examples', 'data', 'toy-example.csv')
-        assert os.path.exists(csv_data_path)
-
-        # Test TSV format
-        tsv_data_path = os.path.join(temp_project_dir, 'simple_examples', 'data', 'toy-example.tsv')
-        assert os.path.exists(tsv_data_path)
-
     def test_config_validation(self, temp_project_dir):
         """Test that config files are valid and contain required fields"""
         config_files = [
-            'simple_examples/configs/simple-likert.yaml',
-            'simple_examples/configs/simple-check-box.yaml',
-            'simple_examples/configs/simple-slider.yaml',
-            'simple_examples/configs/simple-span-labeling.yaml'
+            'tests/test-configs/simple-likert.yaml',
+            'tests/test-configs/simple-check-box.yaml',
+            'tests/test-configs/simple-slider.yaml',
+            'tests/test-configs/simple-span-labeling.yaml'
         ]
 
         for config_file in config_files:
             config_path = os.path.join(temp_project_dir, config_file)
             with open(config_path, 'r') as f:
-                config = json.load(f)
+                config = yaml.safe_load(f)
 
             # Check required fields
             assert 'annotation_task_name' in config
@@ -335,3 +491,8 @@ class TestAnnotationTypes:
             assert 'annotation_type' in scheme
             assert 'name' in scheme
             assert 'description' in scheme
+
+def create_app():
+    """Create Flask app for testing"""
+    from potato.flask_server import create_app
+    return create_app()

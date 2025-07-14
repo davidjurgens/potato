@@ -80,6 +80,7 @@ def init_config(args):
         "__config_file__": args.config_file,
         "customjs": args.customjs,
         "customjs_hostname": args.customjs_hostname,
+        "persist_sessions": args.persist_sessions,
     }
 
     # Only override debug if explicitly set to True via command line

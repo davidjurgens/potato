@@ -9,6 +9,7 @@ from enum import Enum
 from collections import OrderedDict, deque, Counter, defaultdict
 import random
 import uuid
+import logging
 
 # Singleton instance of the ItemStateManager
 ITEM_STATE_MANAGER = None
@@ -23,6 +24,13 @@ def init_item_state_manager(config: dict) -> ItemStateManager:
         ITEM_STATE_MANAGER = ItemStateManager(config)
 
     return ITEM_STATE_MANAGER
+
+def clear_item_state_manager():
+    '''
+    Clear the singleton item state manager instance (for testing).
+    '''
+    global ITEM_STATE_MANAGER
+    ITEM_STATE_MANAGER = None
 
 def get_item_state_manager() -> ItemStateManager:
     # TODO: make the manager type configurable between in-memory and DB-backed.
@@ -195,6 +203,7 @@ class ItemStateManager:
 
         # Cache the config for later
         self.config = config
+        self.logger = logging.getLogger(__name__)
 
         # This data structure keeps the ordering of the items that are being annotated
         # and a mapping from item ID to the Item object
@@ -213,6 +222,9 @@ class ItemStateManager:
         # O(1) tests of whether an item needs to be removed from the remaining list
         self.completed_instance_ids = set()
 
+        # Initialize item annotation counts for tracking
+        self.item_annotation_counts = defaultdict(int)
+
         # Load how we want to assign items to users
         if 'assignment_strategy' in config:
             strat = config['assignment_strategy']
@@ -224,6 +236,11 @@ class ItemStateManager:
                 raise ValueError("Invalid assignment_strategy in config")
         else:
             self.assignment_strategy = AssignmentStrategy.FIXED_ORDER
+
+        # Set up random seed for assignment strategies
+        self.random_seed = config.get('random_seed', 1234)
+        self.random = random.Random(self.random_seed)
+        self.logger.info(f"ItemStateManager initialized with random_seed={self.random_seed}")
 
     def has_item(self, instance_id: str) -> bool:
         '''Returns True if the item is in the state manager'''
@@ -247,6 +264,7 @@ class ItemStateManager:
     def assign_instances_to_user(self, user_state: UserState) -> int:
         '''Assigns a set of instances to a user based on the current state of the system
         and returns the number of instances assigned'''
+        self.logger.debug(f"Assigning instances to user {getattr(user_state, 'user_id', None)} with strategy {self.assignment_strategy} and random_seed={self.random_seed}")
 
         # Decline to assign new items to users that have completed the maximum
         if not user_state.has_remaining_assignments():
@@ -289,102 +307,112 @@ class ItemStateManager:
         #
         # FOR NOW, just assign all instances to the user
         if self.assignment_strategy == AssignmentStrategy.RANDOM:
-            # TODO: make this a lot more efficient
-
-            unlabeled_items = [iid for iid in self.remaining_instance_ids if not user_state.has_annotated(iid)]
+            unlabeled_items = []
+            for iid in self.remaining_instance_ids:
+                annotation_count = len(self.item_annotators[iid])
+                self.logger.debug(f"[ASSIGNMENT] Considering {iid}: annotation_count={annotation_count}, cap={self.max_annotations_per_item}")
+                # Always skip items that have reached max annotations, but do not remove here
+                if self.max_annotations_per_item >= 0 and annotation_count >= self.max_annotations_per_item:
+                    self.logger.debug(f"[ASSIGNMENT] Skipping {iid}: reached annotation cap")
+                    continue
+                if not user_state.has_annotated(iid):
+                    unlabeled_items.append(iid)
+                else:
+                    self.logger.debug(f"User {getattr(user_state, 'user_id', None)} already annotated {iid}, skipping.")
+            self.logger.debug(f"Unlabeled items for user: {unlabeled_items}")
             if not unlabeled_items:
+                self.logger.info(f"No unlabeled items available for user {getattr(user_state, 'user_id', None)}")
                 return 0
-
-            # Assign the determined number of instances
-            to_assign = random.sample(unlabeled_items, min(instances_to_assign, len(unlabeled_items)))
+            to_assign = self.random.sample(unlabeled_items, min(instances_to_assign, len(unlabeled_items)))
+            self.logger.debug(f"Randomly assigning items {to_assign} to user {getattr(user_state, 'user_id', None)}")
             for item_id in to_assign:
-                #print("assigning item %s to user %s" % (item_id, user_state.get_user_id()))
                 user_state.assign_instance(self.instance_id_to_item[item_id])
             return len(to_assign)
         elif self.assignment_strategy == AssignmentStrategy.FIXED_ORDER:
             assigned = 0
-            for iid in self.remaining_instance_ids:
-                # Check if user has already been assigned this instance
+            for iid in list(self.remaining_instance_ids):
+                if self.max_annotations_per_item >= 0 and len(self.item_annotators[iid]) >= self.max_annotations_per_item:
+                    if iid in self.remaining_instance_ids:
+                        self.remaining_instance_ids.remove(iid)
+                    continue
                 if iid not in user_state.get_assigned_instance_ids():
-                    #print("assigning item %s to user %s" % (iid, user_state.get_user_id()))
                     user_state.assign_instance(self.instance_id_to_item[iid])
                     assigned += 1
-
-                    # Stop if we've reached the target number of assignments
                     if assigned >= instances_to_assign:
                         break
             return assigned
         elif self.assignment_strategy == AssignmentStrategy.MAX_DIVERSITY:
-            # Assign items with highest disagreement (most diverse annotations)
-            # This strategy prioritizes items that have conflicting annotations
-            unlabeled_items = [iid for iid in self.remaining_instance_ids if not user_state.has_annotated(iid)]
+            unlabeled_items = []
+            for iid in list(self.remaining_instance_ids):
+                if self.max_annotations_per_item >= 0 and len(self.item_annotators[iid]) >= self.max_annotations_per_item:
+                    if iid in self.remaining_instance_ids:
+                        self.remaining_instance_ids.remove(iid)
+                    continue
+                if not user_state.has_annotated(iid):
+                    unlabeled_items.append(iid)
             if not unlabeled_items:
                 return 0
-
-            # Calculate disagreement scores for each item
             item_disagreement_scores = {}
             for iid in unlabeled_items:
                 disagreement_score = self._calculate_disagreement_score(iid)
                 item_disagreement_scores[iid] = disagreement_score
-
-            # Sort items by disagreement score (highest first)
-            sorted_items = sorted(item_disagreement_scores.keys(),
-                                key=lambda x: item_disagreement_scores[x], reverse=True)
-
-            # Assign the determined number of instances
+            sorted_items = sorted(item_disagreement_scores.keys(), key=lambda x: item_disagreement_scores[x], reverse=True)
             assigned = 0
             for item_id in sorted_items[:instances_to_assign]:
                 user_state.assign_instance(self.instance_id_to_item[item_id])
                 assigned += 1
-
             return assigned
         elif self.assignment_strategy == AssignmentStrategy.ACTIVE_LEARNING:
-            # For now, fall back to random assignment
-            # TODO: Implement active learning strategy
-            unlabeled_items = [iid for iid in self.remaining_instance_ids if not user_state.has_annotated(iid)]
+            unlabeled_items = []
+            for iid in list(self.remaining_instance_ids):
+                if self.max_annotations_per_item >= 0 and len(self.item_annotators[iid]) >= self.max_annotations_per_item:
+                    if iid in self.remaining_instance_ids:
+                        self.remaining_instance_ids.remove(iid)
+                    continue
+                if not user_state.has_annotated(iid):
+                    unlabeled_items.append(iid)
             if not unlabeled_items:
                 return 0
-
-            # Assign the determined number of instances
-            to_assign = random.sample(unlabeled_items, min(instances_to_assign, len(unlabeled_items)))
+            to_assign = self.random.sample(unlabeled_items, min(instances_to_assign, len(unlabeled_items)))
+            self.logger.debug(f"Active learning (random fallback): assigning items {to_assign} to user {getattr(user_state, 'user_id', None)}")
             for item_id in to_assign:
                 user_state.assign_instance(self.instance_id_to_item[item_id])
-
             return len(to_assign)
         elif self.assignment_strategy == AssignmentStrategy.LLM_CONFIDENCE:
-            # For now, fall back to random assignment
-            # TODO: Implement LLM confidence strategy
-            unlabeled_items = [iid for iid in self.remaining_instance_ids if not user_state.has_annotated(iid)]
+            unlabeled_items = []
+            for iid in list(self.remaining_instance_ids):
+                if self.max_annotations_per_item >= 0 and len(self.item_annotators[iid]) >= self.max_annotations_per_item:
+                    if iid in self.remaining_instance_ids:
+                        self.remaining_instance_ids.remove(iid)
+                    continue
+                if not user_state.has_annotated(iid):
+                    unlabeled_items.append(iid)
             if not unlabeled_items:
                 return 0
-
-            # Assign the determined number of instances
-            to_assign = random.sample(unlabeled_items, min(instances_to_assign, len(unlabeled_items)))
+            to_assign = self.random.sample(unlabeled_items, min(instances_to_assign, len(unlabeled_items)))
+            self.logger.debug(f"LLM confidence (random fallback): assigning items {to_assign} to user {getattr(user_state, 'user_id', None)}")
             for item_id in to_assign:
                 user_state.assign_instance(self.instance_id_to_item[item_id])
-
             return len(to_assign)
         elif self.assignment_strategy == AssignmentStrategy.LEAST_ANNOTATED:
-            # Assign items with the fewest annotations
-            unlabeled_items = [iid for iid in self.remaining_instance_ids if not user_state.has_annotated(iid)]
+            unlabeled_items = []
+            for iid in list(self.remaining_instance_ids):
+                if self.max_annotations_per_item >= 0 and len(self.item_annotators[iid]) >= self.max_annotations_per_item:
+                    if iid in self.remaining_instance_ids:
+                        self.remaining_instance_ids.remove(iid)
+                    continue
+                if not user_state.has_annotated(iid):
+                    unlabeled_items.append(iid)
             if not unlabeled_items:
                 return 0
-
-            # Calculate annotation counts for each item
             item_annotation_counts = {}
             for iid in unlabeled_items:
                 item_annotation_counts[iid] = len(self.item_annotators[iid])
-
-            # Sort items by annotation count (fewest first)
-            sorted_items = sorted(item_annotation_counts.keys(),
-                                 key=lambda x: item_annotation_counts[x])
-
-            # Assign the determined number of instances
+            sorted_items = sorted(item_annotation_counts.keys(), key=lambda x: item_annotation_counts[x])
             assigned = 0
             for item_id in sorted_items[:instances_to_assign]:
                 user_state.assign_instance(self.instance_id_to_item[item_id])
                 assigned += 1
-
             return assigned
         else:
             print("Unsupported assignment strategy: %s" % self.assignment_strategy)
@@ -467,29 +495,49 @@ class ItemStateManager:
     def register_annotator(self, instance_id: str, user_id: str):
         '''Registers that a user has annotated an item'''
 
+        print(f"[REGISTER_ANNOTATOR] Called for instance_id={instance_id}, user_id={user_id}")
+
         if instance_id not in self.instance_id_to_item:
             raise ValueError(f"Unknown instance ID: {instance_id}")
 
+        print(f"[REGISTER_ANNOTATOR] Pool before: {list(self.remaining_instance_ids)}")
+        self.logger.debug(f"[REGISTER_ANNOTATOR] Pool before: {list(self.remaining_instance_ids)}")
+        # Check for duplicates
+        pool_list = list(self.remaining_instance_ids)
+        if len(pool_list) != len(set(pool_list)):
+            self.logger.warning(f"[REGISTER_ANNOTATOR] Duplicate entries found in remaining_instance_ids: {pool_list}")
+
         self.item_annotators[instance_id].add(user_id)
+        print(f"[REGISTER_ANNOTATOR] Added {user_id} to annotators for {instance_id}. Current annotators: {list(self.item_annotators[instance_id])}")
 
         # If we allow unlimited annotations per item
         if self.max_annotations_per_item < 0:
+            print(f"[REGISTER_ANNOTATOR] Unlimited annotations allowed, returning")
             return
 
         # Remove this instance from the remaining list if it has been annotated enough
-        #
-        # NOTE: We keep track of the number of annotators for each item, rather than the
-        # number of annotations because users register annotations dynamically and some
-        # items may receive multiple updates (e.g., a user edits their annotation), so
-        # we don't want to double count those.
-        if len(self.item_annotators[instance_id]) >= self.max_annotations_per_item:
-            self.remaining_instance_ids.remove(instance_id)
+        current_count = len(self.item_annotators[instance_id])
+        print(f"[REGISTER_ANNOTATOR] Current annotation count for {instance_id}: {current_count}, max: {self.max_annotations_per_item}")
+
+        if current_count >= self.max_annotations_per_item:
+            if instance_id in self.remaining_instance_ids:
+                self.remaining_instance_ids.remove(instance_id)
+                print(f"[REGISTER_ANNOTATOR] Removed {instance_id} from remaining_instance_ids after reaching cap. Pool now: {list(self.remaining_instance_ids)}")
+                self.logger.debug(f"[REGISTER_ANNOTATOR] Removed {instance_id} from remaining_instance_ids after reaching cap. Pool now: {list(self.remaining_instance_ids)}")
+            else:
+                print(f"[REGISTER_ANNOTATOR] {instance_id} not in remaining_instance_ids at cap time. Pool: {list(self.remaining_instance_ids)}")
+                self.logger.debug(f"[REGISTER_ANNOTATOR] {instance_id} not in remaining_instance_ids at cap time. Pool: {list(self.remaining_instance_ids)}")
+        else:
+            print(f"[REGISTER_ANNOTATOR] {instance_id} not at cap yet ({current_count}/{self.max_annotations_per_item})")
+
+        print(f"[REGISTER_ANNOTATOR] Pool after: {list(self.remaining_instance_ids)}")
+        self.logger.debug(f"[REGISTER_ANNOTATOR] Pool after: {list(self.remaining_instance_ids)}")
 
     def update_annotation_count(self, instance_id: str, delta=1):
         if self.max_annotations_per_item < 0:
             return
 
-        # Otherwise, udpate the count
+        # Otherwise, update the count
         self.item_annotation_counts[instance_id] += delta
 
         # Remove this instance from the remaining list if it has been annotated enough

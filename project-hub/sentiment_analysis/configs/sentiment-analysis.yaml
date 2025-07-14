@@ -16,7 +16,7 @@
     # * csv
     # * tsv
     #
-    "output_annotation_format": "tsv", 
+    "output_annotation_format": "tsv",
 
     # If annotators are using a codebook, this will be linked at the top to the
     # instance for easy access
@@ -36,7 +36,7 @@
     "user_config": {
 
       "allow_all_users": True,
-      
+
       "users": [  ],
     },
 
@@ -44,43 +44,18 @@
     # that, an alert will be sent per alert_time_each_instance seconds.
     "alert_time_each_instance": 10000000,
 
-    "annotation_schemes": [      
-        {
-            "annotation_type": "radio",
-            "name": "sentiment",
-            "description": "What kind of sentiment does the given text hold?",
-            "labels": [
-               "positive", "neutral", "negative",
-            ],
-
-            # If true, numbers [1-len(labels)] will be bound to each
-            # label. Aannotations with more than 10 are not supported with this
-            # simple keybinding and will need to use the full item specification
-            # to bind all labels to keys.
-            "sequential_key_binding": True,                        
-        },       
+    "annotation_schemes": [
+      {
+        "annotation_type": "likert",
+        "name": "sentiment",
+        "description": "What is the sentiment of this text?",
+        "min_label": "Very negative",
+        "max_label": "Very positive",
+        "label_requirement": { "required": True },
+        "size": 5,
+        "sequential_key_binding": True,
+      }
     ],
-
-    # The html that changes the visualiztation for your task. Change this file
-    # to influence the layout and description of your task. This is not a full
-    # HTML page, just the piece that does lays out your task's pieces
-    # you may use templates in our lib, if you want to use your own template,
-    # please replace the string as a path to the template
-    "html_layout": "default",
-
-    # The core UI files for Potato. You should not need to change these normally.
-    #
-    # Exceptions to this might include:
-    # 1) You want to add custom CSS/fonts to style your task
-    # 2) Your layout requires additional JS/assets to render
-    # 3) You want to support additional keybinding magic
-    #
-    # if you want to use your own template,
-    # please replace the string as a path to the template
-    "base_html_template": "default",
-    "header_file": "default",
-
-    # This is where the actual HTML files will be generated
     "site_dir": "default"
 
 }

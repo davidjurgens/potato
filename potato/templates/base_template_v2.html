@@ -13,14 +13,12 @@
 
     <!-- Custom Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+
+    <!-- jQuery (required for span annotation) -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
 </head>
 
 <body>
-    <!-- Hidden fields for server communication -->
-    <input type="hidden" name="username" id="username" value="{{username}}" />
-    <input type="hidden" name="instance_id" id="instance_id" value="{{instance_id}}" />
-    <input type="hidden" name="alert_time_each_instance" id="alert_time_each_instance" value="{{alert_time_each_instance}}" />
-
     <!-- Header navigation bar -->
     <nav class="navbar sticky-top shadow-sm" style="background-color: var(--primary-color); padding: 0.75rem 1rem; margin-bottom: 1.5rem;">
         <div class="container-fluid d-flex align-items-center">
@@ -95,11 +93,12 @@
                             <!-- Instance text will be loaded here -->
                         </div>
                     </div>
+                    <!-- Hidden input for instance_id -->
+                    <input type="hidden" id="instance_id" name="instance_id" value="">
 
                     <!-- Annotation forms -->
                     <div id="annotation-forms">
-                      <!-- TEMPLATE_MARKER: This should appear in the HTML if the correct template is used -->
-                      {{ TASK_LAYOUT|safe }}
+                        {{ TASK_LAYOUT }}
                     </div>
                 </div>
             </div>
@@ -139,14 +138,12 @@
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 
-    <!-- jQuery (required for span annotation) -->
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-
     <!-- Configuration from server -->
-    <script>
+    <script type="text/javascript">
         window.config = {
             annotation_task_name: "{{ annotation_task_name }}",
-            debug: {{ debug | tojson | safe }}
+            debug: {{ debug | tojson }},
+            api_key: "test_api_key"
         };
     </script>
 
@@ -157,6 +154,7 @@
         let userState = null;
         let isLoading = false;
         let textSaveTimer = null;
+        let currentSpanAnnotations = [];
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
@@ -197,127 +195,6 @@
                         break;
                 }
             });
-
-            // Span annotation event listeners
-            setupSpanAnnotationListeners();
-        }
-
-        function setupSpanAnnotationListeners() {
-            // Add event listeners for span annotation checkboxes
-            const spanCheckboxes = document.querySelectorAll('input[for_span="true"]');
-            spanCheckboxes.forEach(checkbox => {
-                checkbox.addEventListener('change', function() {
-                    console.log('Span checkbox changed:', this);
-
-                    // Get the schema and label from the checkbox attributes or surrounding elements
-                    const schema = this.getAttribute('name')?.split(':::')[1] || this.closest('fieldset')?.getAttribute('schema');
-                    const value = this.value;
-
-                    // Map value to label name (this is a simplified mapping - in practice you'd need to get this from the config)
-                    const labelMappings = {
-                        'emotion': {
-                            '1': 'happy', '2': 'sad', '3': 'angry', '4': 'surprised', '5': 'neutral'
-                        },
-                        'intensity': {
-                            '1': 'low', '2': 'medium', '3': 'high'
-                        }
-                    };
-
-                    const labelName = labelMappings[schema]?.[value] || value;
-                    const color = this.closest('.shadcn-span-option')?.querySelector('span')?.style.backgroundColor || '(255, 230, 230)';
-
-                    console.log('Calling changeSpanLabel with:', {schema, labelName, color, checked: this.checked});
-
-                    // Call the span annotation functions
-                    if (typeof onlyOne === 'function') {
-                        onlyOne(this);
-                    }
-                    if (typeof changeSpanLabel === 'function') {
-                        changeSpanLabel(this, schema, labelName, labelName, color);
-                    }
-                });
-            });
-        }
-
-        // Add validation for annotation form
-        function validateAnnotationForm() {
-            // Find all required annotation inputs (radio, checkbox, text, select, etc.)
-            const requiredInputs = document.querySelectorAll('.annotation-input[validation="required"]');
-            let allFilled = true;
-            let radioGroups = {};
-
-            requiredInputs.forEach(input => {
-                const type = input.type;
-                if (type === 'radio') {
-                    // Group radios by name
-                    if (!radioGroups[input.name]) radioGroups[input.name] = [];
-                    radioGroups[input.name].push(input);
-                } else if (type === 'checkbox') {
-                    // At least one required checkbox in group must be checked
-                    if (!input.checked) allFilled = false;
-                } else if (type === 'text' || type === 'number' || input.tagName.toLowerCase() === 'textarea' || input.tagName.toLowerCase() === 'select') {
-                    if (!input.value) allFilled = false;
-                }
-            });
-            // Check radio groups
-            for (const groupName in radioGroups) {
-                const group = radioGroups[groupName];
-                if (!group.some(r => r.checked)) allFilled = false;
-            }
-            // Enable/disable Next button
-            const nextBtn = document.getElementById('next-btn');
-            nextBtn.disabled = !allFilled;
-        }
-
-        function setupInputEventListeners() {
-            // Set up event listeners for all annotation inputs
-            const inputs = document.querySelectorAll('.annotation-input');
-
-            inputs.forEach(input => {
-                const inputType = input.type;
-                const tagName = input.tagName.toLowerCase();
-
-                if (inputType === 'text' || tagName === 'textarea') {
-                    let timer;
-                    input.addEventListener('input', function(event) {
-                        clearTimeout(timer);
-                        timer = setTimeout(() => {
-                            handleInputChange(event.target);
-                            validateAnnotationForm();
-                        }, 1000);
-                    });
-                } else if (inputType === 'radio' || inputType === 'checkbox') {
-                    input.addEventListener('change', function(event) {
-                        handleInputChange(event.target);
-                        validateAnnotationForm();
-                    });
-                } else if (inputType === 'range') {
-                    input.addEventListener('input', function(event) {
-                        const valueDisplay = document.getElementById(`${input.name}-value`);
-                        if (valueDisplay) {
-                            valueDisplay.textContent = event.target.value;
-                        }
-                        handleInputChange(event.target);
-                        validateAnnotationForm();
-                    });
-                } else if (tagName === 'select') {
-                    input.addEventListener('change', function(event) {
-                        handleInputChange(event.target);
-                        validateAnnotationForm();
-                    });
-                } else if (inputType === 'number') {
-                    let timer;
-                    input.addEventListener('input', function(event) {
-                        clearTimeout(timer);
-                        timer = setTimeout(() => {
-                            handleInputChange(event.target);
-                            validateAnnotationForm();
-                        }, 1000);
-                    });
-                }
-            });
-            // Initial validation
-            validateAnnotationForm();
         }
 
         async function loadCurrentInstance() {
@@ -326,12 +203,22 @@
                 showError(false);
 
                 // Get current user state
-                const response = await fetch('/test/user_state/{{username}}');
+                const headers = {};
+                if (window.config.api_key) {
+                    headers['X-API-Key'] = window.config.api_key;
+                }
+                const response = await fetch('/admin/user_state/{{username}}', {
+                    headers: {
+                        ...headers,
+                        'X-API-Key': 'admin_api_key'
+                    }
+                });
                 if (!response.ok) {
                     throw new Error('Failed to load user state');
                 }
 
                 userState = await response.json();
+                console.log('[DEBUG] loadCurrentInstance: userState =', userState);
 
                 if (!userState.current_instance) {
                     showError(true, 'No instances available for annotation');
@@ -341,11 +228,13 @@
                 currentInstance = userState.current_instance;
                 updateProgressDisplay();
                 updateInstanceDisplay();
+                restoreSpanAnnotationsFromHTML();
                 loadAnnotations();
                 generateAnnotationForms();
+
+                // Populate input values with existing annotations AFTER forms are generated
                 setTimeout(() => {
                     populateInputValues();
-                    validateAnnotationForm(); // <-- validate after populating
                 }, 0);
 
             } catch (error) {
@@ -365,41 +254,71 @@
         function updateInstanceDisplay() {
             const instanceText = document.getElementById('instance-text');
             if (currentInstance && currentInstance.displayed_text) {
+                console.log('[DEBUG] updateInstanceDisplay: setting #instance-text.innerHTML to:', currentInstance.displayed_text);
                 instanceText.innerHTML = currentInstance.displayed_text;
             } else {
+                console.log('[DEBUG] updateInstanceDisplay: setting #instance-text.textContent to: No text available');
                 instanceText.textContent = 'No text available';
+            }
+            // Update the hidden input for instance_id
+            const instanceIdInput = document.getElementById('instance_id');
+            if (instanceIdInput && currentInstance && currentInstance.id) {
+                instanceIdInput.value = currentInstance.id;
             }
         }
 
         async function loadAnnotations() {
             try {
+                console.log('🔍 Loading annotations for instance:', currentInstance.id);
+                console.log('🔍 User state annotations:', userState.annotations);
+                console.log('🔍 User state annotations by_instance:', userState.annotations.by_instance);
+
                 const rawAnnotations = userState.annotations.by_instance[currentInstance.id] || {};
+                console.log('🔍 Raw annotations for current instance:', rawAnnotations);
 
                 // Transform the server format to frontend format
-                // Server format: {"Label(schema:sentiment, name:neutral)": "true"}
-                // Frontend format: {"sentiment": {"neutral": "true"}}
+                // Server format: {"schema:label": "value"} (e.g., {"feedback:text_box": "value"})
+                // Frontend format: {"schema": {"label": "value"}} (e.g., {"feedback": {"text_box": "value"}})
                 currentAnnotations = {};
 
                 for (const [labelKey, value] of Object.entries(rawAnnotations)) {
-                    // Parse the label key format: "Label(schema:sentiment, name:neutral)"
-                    const match = labelKey.match(/Label\(schema:([^,]+), name:([^)]+)\)/);
-                    if (match) {
-                        const schemaName = match[1];
-                        const labelName = match[2];
+                    console.log('🔍 Processing annotation key:', labelKey, 'value:', value);
+
+                    // Parse the label key format: "schema:label"
+                    const parts = labelKey.split(':');
+                    if (parts.length === 2) {
+                        const schemaName = parts[0];
+                        const labelName = parts[1];
+                        console.log('🔍 Parsed schema:', schemaName, 'label:', labelName);
 
                         if (!currentAnnotations[schemaName]) {
                             currentAnnotations[schemaName] = {};
                         }
                         currentAnnotations[schemaName][labelName] = value;
+                        console.log('🔍 Added annotation:', schemaName, labelName, value);
                     } else {
-                        // Handle direct key-value pairs (fallback)
-                        console.warn('Could not parse annotation key:', labelKey);
+                        // Handle legacy format: "Label(schema:sentiment, name:neutral)"
+                        const match = labelKey.match(/Label\(schema:([^,]+), name:([^)]+)\)/);
+                        if (match) {
+                            const schemaName = match[1];
+                            const labelName = match[2];
+                            console.log('🔍 Parsed legacy format - schema:', schemaName, 'label:', labelName);
+
+                            if (!currentAnnotations[schemaName]) {
+                                currentAnnotations[schemaName] = {};
+                            }
+                            currentAnnotations[schemaName][labelName] = value;
+                            console.log('🔍 Added legacy annotation:', schemaName, labelName, value);
+                        } else {
+                            // Handle direct key-value pairs (fallback)
+                            console.warn('❌ Could not parse annotation key:', labelKey);
+                        }
                     }
                 }
 
-                console.log('Loaded annotations for instance', currentInstance.id, ':', currentAnnotations);
+                console.log('🔍 Final currentAnnotations:', currentAnnotations);
             } catch (error) {
-                console.error('Error loading annotations:', error);
+                console.error('❌ Error loading annotations:', error);
                 currentAnnotations = {};
             }
         }
@@ -426,22 +345,45 @@
             if (!currentInstance) return;
 
             try {
-                // Convert frontend format to server format
-                const formData = new FormData();
-                formData.append('instance_id', currentInstance.id);
-                formData.append('annotation_data', JSON.stringify(currentAnnotations));
+                const headers = {
+                    'Content-Type': 'application/json',
+                };
 
-                const response = await fetch('/submit_annotation', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (!response.ok) {
-                    throw new Error('Failed to save annotations');
+                // Add API key if available
+                if (window.config.api_key) {
+                    headers['X-API-Key'] = window.config.api_key;
                 }
 
-                const result = await response.json();
-                console.log('Annotations saved:', result);
+                // Save both label and span annotations via /updateinstance
+                const spanAnnotations = extractSpanAnnotationsFromDOM();
+                console.log('[DEBUG] saveAnnotations: spanAnnotations to send:', spanAnnotations);
+
+                // Transform currentAnnotations to the format expected by /updateinstance
+                const labelAnnotations = {};
+                for (const [schema, labels] of Object.entries(currentAnnotations)) {
+                    for (const [label, value] of Object.entries(labels)) {
+                        const key = `${schema}:${label}`;
+                        labelAnnotations[key] = value;
+                    }
+                }
+
+                const response = await fetch('/updateinstance', {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({
+                        instance_id: currentInstance.id,
+                        annotations: labelAnnotations,
+                        span_annotations: spanAnnotations
+                    })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log('[DEBUG] saveAnnotations: annotations saved:', result);
+                } else {
+                    console.warn('[DEBUG] saveAnnotations: failed to save annotations:', await response.text());
+                }
+
                 return true;
 
             } catch (error) {
@@ -456,11 +398,15 @@
 
             try {
                 setLoading(true);
+                const headers = {
+                    'Content-Type': 'application/json',
+                };
+                if (window.config.api_key) {
+                    headers['X-API-Key'] = window.config.api_key;
+                }
                 const response = await fetch('/annotate', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: headers,
                     body: JSON.stringify({
                         action: 'prev_instance',
                         instance_id: currentInstance?.id
@@ -489,11 +435,15 @@
 
             try {
                 setLoading(true);
+                const headers = {
+                    'Content-Type': 'application/json',
+                };
+                if (window.config.api_key) {
+                    headers['X-API-Key'] = window.config.api_key;
+                }
                 const response = await fetch('/annotate', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: headers,
                     body: JSON.stringify({
                         action: 'next_instance',
                         instance_id: currentInstance?.id
@@ -518,11 +468,15 @@
 
             try {
                 setLoading(true);
+                const headers = {
+                    'Content-Type': 'application/json',
+                };
+                if (window.config.api_key) {
+                    headers['X-API-Key'] = window.config.api_key;
+                }
                 const response = await fetch('/annotate', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: headers,
                     body: JSON.stringify({
                         action: 'go_to',
                         go_to: instanceIndex
@@ -600,6 +554,56 @@
         }
 
         // Input event handling functions
+        function setupInputEventListeners() {
+            // Set up event listeners for all annotation inputs
+            const inputs = document.querySelectorAll('.annotation-input');
+
+            inputs.forEach(input => {
+                const inputType = input.type;
+                const tagName = input.tagName.toLowerCase();
+
+                if (inputType === 'text' || tagName === 'textarea') {
+                    // Text inputs and textareas - debounced saving
+                    let timer;
+                    input.addEventListener('input', function(event) {
+                        clearTimeout(timer);
+                        timer = setTimeout(() => {
+                            handleInputChange(event.target);
+                        }, 1000);
+                    });
+                    console.log(`Set up event listener for ${tagName} element:`, input.id);
+                } else if (inputType === 'radio' || inputType === 'checkbox') {
+                    // Radio/checkbox inputs - immediate saving
+                    input.addEventListener('change', function(event) {
+                        handleInputChange(event.target);
+                    });
+                } else if (inputType === 'range') {
+                    // Slider inputs - immediate saving with value display
+                    input.addEventListener('input', function(event) {
+                        const valueDisplay = document.getElementById(`${input.name}-value`);
+                        if (valueDisplay) {
+                            valueDisplay.textContent = event.target.value;
+                        }
+                        handleInputChange(event.target);
+                    });
+                } else if (tagName === 'select') {
+                    // Select inputs - immediate saving
+                    input.addEventListener('change', function(event) {
+                        handleInputChange(event.target);
+                    });
+                } else if (inputType === 'number') {
+                    // Number inputs - debounced saving
+                    let timer;
+                    input.addEventListener('input', function(event) {
+                        clearTimeout(timer);
+                        timer = setTimeout(() => {
+                            handleInputChange(event.target);
+                        }, 1000);
+                    });
+                }
+            });
+        }
+
         function handleInputChange(element) {
             const schema = element.getAttribute('schema');
             const labelName = element.getAttribute('label_name');
@@ -663,17 +667,27 @@
         function populateInputValues() {
             if (!currentAnnotations || !userState) return;
 
-            console.log('Populating input values with annotations:', currentAnnotations);
+            console.log('🔍 Populating input values with annotations:', currentAnnotations);
 
             // Populate text inputs and textareas
             const textInputs = document.querySelectorAll('input[type="text"], textarea.annotation-input');
+            console.log('🔍 Found text inputs and textareas:', textInputs.length);
+
             textInputs.forEach(input => {
                 const schema = input.getAttribute('schema');
                 const labelName = input.getAttribute('label_name');
+                console.log('🔍 Checking input:', input.id, 'schema:', schema, 'label:', labelName);
 
                 if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
                     input.value = currentAnnotations[schema][labelName];
-                    console.log(`Populated ${input.tagName} ${input.id} with value:`, currentAnnotations[schema][labelName]);
+                    console.log(`✅ Populated ${input.tagName} ${input.id} with value:`, currentAnnotations[schema][labelName]);
+                } else {
+                    console.log(`❌ Could not populate ${input.tagName} ${input.id}:`, {
+                        hasSchema: !!schema,
+                        hasLabelName: !!labelName,
+                        hasSchemaInAnnotations: !!(currentAnnotations[schema]),
+                        hasLabelInSchema: !!(currentAnnotations[schema] && currentAnnotations[schema][labelName])
+                    });
                 }
             });
 
@@ -744,9 +758,8 @@
             });
         }
 
-        // Span Annotation Functions
+        // Span annotation functions
         function onlyOne(checkbox) {
-            // This function is used for the single-choice setting
             var x = document.getElementsByClassName(checkbox.className);
             var i;
             for (i = 0; i < x.length; i++) {
@@ -902,29 +915,6 @@
             });
         }
 
-        function getEarlierChildren(n, skipMe) {
-            var r = [];
-            for (; n; n = n.nextSibling)
-                if (n.nodeType == 1 && n != skipMe) r.push(n);
-                else if (n == skipMe) break;
-            return r;
-        }
-
-        function getEarlierSiblings(n) {
-            return getEarlierChildren(n.parentNode.firstChild, n);
-        }
-
-        function getTextOfSpans(elems) {
-            text = "";
-            for (i = 0; i < elems.length; i++) {
-                e = elems[i].cloneNode(true);
-                // Delete all the nested <div> elements with jquery to get the plain text
-                $(e).find("div").remove();
-                text += " " + e.textContent;
-            }
-            return text.trim();
-        }
-
         function getSelectionIndices() {
             // Get the user selection
             var selection = window.getSelection();
@@ -949,187 +939,262 @@
             // Get the selected text
             var selectedText = selection.toString();
 
-            // Find the start position by looking for the selected text in the full text
-            var startPos = fullText.indexOf(selectedText);
+            // Find the start and end indices
+            var startIndex = fullText.indexOf(selectedText);
+            var endIndex = startIndex + selectedText.length;
 
-            if (startPos === -1) {
-                // If exact match not found, try to find a partial match
-                startPos = 0;
+            return { start: startIndex, end: endIndex };
+        }
+
+        // Extract all current span annotations from the DOM
+        function extractSpanAnnotationsFromDOM() {
+            // Instead of extracting from the DOM, return the global currentSpanAnnotations
+            console.log('[DEBUG] extractSpanAnnotationsFromDOM: returning', currentSpanAnnotations.length, 'spans:', currentSpanAnnotations);
+            return currentSpanAnnotations;
+        }
+
+        function restoreSpanAnnotationsFromHTML() {
+            const instanceText = document.getElementById('instance-text');
+            if (!instanceText) return;
+            const spanElements = instanceText.querySelectorAll('.span-highlight');
+            const found = [];
+            spanElements.forEach(span => {
+                const schema = span.getAttribute('schema');
+                const name = span.getAttribute('data-label');
+                const title = span.querySelector('.span_label')?.textContent || name;
+                const onclick = span.querySelector('.span_close')?.getAttribute('onclick');
+                let start = null, end = null;
+                if (onclick) {
+                    const match = onclick.match(/deleteSpanAnnotation\([^,]+,\s*'[^']+',\s*'[^']+',\s*'[^']+',\s*(\d+),\s*(\d+)\)/);
+                    if (match) {
+                        start = parseInt(match[1]);
+                        end = parseInt(match[2]);
+                    }
+                }
+                found.push({schema, name, title, start, end, value: span.textContent.replace(title, '').replace('×', '').trim()});
+            });
+            currentSpanAnnotations = found;
+            console.log('[DEBUG] restoreSpanAnnotationsFromHTML: found', found.length, 'spans:', found);
+        }
+
+        // Function to save current annotations before navigation
+        function saveAnnotationsBeforeNavigation() {
+            console.log('=== SAVE ANNOTATIONS BEFORE NAVIGATION ===');
+
+            // Get current instance ID
+            const instanceId = document.getElementById('instance_id').value;
+            console.log('Current instance ID:', instanceId);
+
+            // Get current label annotations
+            const labelAnnotations = {};
+            document.querySelectorAll('input[name^="annotation_"]:checked').forEach(input => {
+                const label = input.getAttribute('data-label');
+                labelAnnotations[label] = true;
+            });
+            console.log('Current label annotations:', labelAnnotations);
+
+            // Get current span annotations from DOM
+            const currentSpans = [];
+            document.querySelectorAll('.span-highlight').forEach(span => {
+                const text = span.textContent;
+                const label = span.getAttribute('data-label');
+                const start = parseInt(span.getAttribute('data-start'));
+                const end = parseInt(span.getAttribute('data-end'));
+                currentSpans.push({ text, label, start, end });
+            });
+            console.log('Current spans from DOM:', currentSpans);
+
+            // Also check global variable
+            console.log('Global currentSpanAnnotations:', window.currentSpanAnnotations);
+
+            // Use global variable if available, otherwise use DOM spans
+            let spansToSave = window.currentSpanAnnotations || currentSpans;
+            // Filter out invalid spans (missing start/end)
+            const validSpans = spansToSave.filter(span => {
+                const valid = typeof span.start === 'number' && typeof span.end === 'number' && !isNaN(span.start) && !isNaN(span.end);
+                if (!valid) {
+                    console.warn('Filtering out invalid span annotation:', span);
+                }
+                return valid;
+            });
+            console.log('Spans to save (filtered):', validSpans);
+
+            // Prepare data to send
+            const data = {
+                instance_id: instanceId,
+                annotations: labelAnnotations,
+                span_annotations: validSpans
+            };
+            console.log('Data to send to backend:', data);
+
+            // Send to backend
+            fetch('/updateinstance', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                console.log('Save response:', result);
+            })
+            .catch(error => {
+                console.error('Error saving annotations:', error);
+            });
+        }
+
+        // Function to restore annotations after navigation
+        function restoreAnnotations() {
+            console.log('=== RESTORE ANNOTATIONS ===');
+
+            // Get current instance ID
+            const instanceId = document.getElementById('instance_id').value;
+            console.log('Restoring for instance ID:', instanceId);
+
+            if (!instanceId) {
+                console.log('No instance ID found, skipping restoration');
+                return;
             }
 
-            var endPos = startPos + selectedText.length;
+            // Get annotations from backend
+            fetch(`/get_annotations?instance_id=${instanceId}`)
+            .then(response => {
+                console.log('get_annotations response status:', response.status);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Backend annotation data:', data);
 
-            console.log('getSelectionIndices - fullText:', fullText);
-            console.log('getSelectionIndices - selectedText:', selectedText);
-            console.log('getSelectionIndices - startPos:', startPos, 'endPos:', endPos);
+                // Restore label annotations
+                if (data.annotations) {
+                    console.log('Restoring label annotations:', data.annotations);
+                    Object.keys(data.annotations).forEach(label => {
+                        const input = document.querySelector(`input[data-label="${label}"]`);
+                        if (input) {
+                            input.checked = true;
+                            console.log('Checked label:', label);
+                        } else {
+                            console.log('Label input not found:', label);
+                        }
+                    });
+                }
 
-            return { start: startPos, end: endPos };
+                // Restore span annotations
+                if (data.span_annotations && data.span_annotations.length > 0) {
+                    console.log('Restoring span annotations:', data.span_annotations);
+
+                    // Clear existing spans
+                    document.querySelectorAll('.span-highlight').forEach(span => {
+                        span.remove();
+                    });
+
+                    // Add new spans
+                    data.span_annotations.forEach(spanData => {
+                        console.log('Adding span:', spanData);
+                        surroundSelection(spanData.text, spanData.label, spanData.start, spanData.end);
+                    });
+
+                    // Update global variable
+                    window.currentSpanAnnotations = data.span_annotations;
+                    console.log('Updated global currentSpanAnnotations:', window.currentSpanAnnotations);
+                } else {
+                    console.log('No span annotations to restore');
+                    window.currentSpanAnnotations = [];
+                }
+
+                console.log('Restoration complete');
+            })
+            .catch(error => {
+                console.error('Error restoring annotations:', error);
+            });
+        }
+
+        // Enhanced navigation functions with better logging
+        function navigateToInstance(instanceId) {
+            console.log('=== NAVIGATE TO INSTANCE ===');
+            console.log('Navigating to instance ID:', instanceId);
+
+            // Save current annotations first
+            saveAnnotationsBeforeNavigation();
+
+            // Wait a bit for save to complete, then navigate
+            setTimeout(() => {
+                console.log('Proceeding with navigation...');
+                window.location.href = `/annotate?instance_id=${instanceId}`;
+            }, 500);
+        }
+
+                // Enhanced button event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('=== DOM CONTENT LOADED ===');
+
+            // Set up navigation buttons
+            const prevBtn = document.getElementById('prev-btn');
+            const nextBtn = document.getElementById('next-btn');
+
+            if (prevBtn) {
+                prevBtn.addEventListener('click', function() {
+                    console.log('Previous button clicked');
+                    const currentId = document.getElementById('instance_id').value;
+                    console.log('Current ID:', currentId);
+
+                    // Get previous instance ID (this would need to be implemented based on your data structure)
+                    const prevId = getPreviousInstanceId(currentId);
+                    console.log('Previous ID:', prevId);
+
+                    if (prevId) {
+                        navigateToInstance(prevId);
+                    }
+                });
+            }
+
+            if (nextBtn) {
+                nextBtn.addEventListener('click', function() {
+                    console.log('Next button clicked');
+                    const currentId = document.getElementById('instance_id').value;
+                    console.log('Current ID:', currentId);
+
+                    // Get next instance ID (this would need to be implemented based on your data structure)
+                    const nextId = getNextInstanceId(currentId);
+                    console.log('Next ID:', nextId);
+
+                    if (nextId) {
+                        navigateToInstance(nextId);
+                    }
+                });
+            }
+
+            // Restore annotations on page load after a short delay to ensure DOM is ready
+            setTimeout(() => {
+                console.log('Calling restoreAnnotations...');
+                restoreAnnotations();
+            }, 1000);
+        });
+
+        // Helper functions for navigation (these would need to be implemented based on your data structure)
+        function getPreviousInstanceId(currentId) {
+            // This is a placeholder - implement based on your instance ordering
+            const instances = ['ai_1', 'sad_2', 'happy_3', 'angry_4'];
+            const currentIndex = instances.indexOf(currentId);
+            if (currentIndex > 0) {
+                return instances[currentIndex - 1];
+            }
+            return null;
+        }
+
+        function getNextInstanceId(currentId) {
+            // This is a placeholder - implement based on your instance ordering
+            const instances = ['ai_1', 'sad_2', 'happy_3', 'angry_4'];
+            const currentIndex = instances.indexOf(currentId);
+            if (currentIndex < instances.length - 1) {
+                return instances[currentIndex + 1];
+            }
+            return null;
         }
     </script>
-    <div id="annotated-text-container" style="position: relative; width: 100%;">
-      <div id="instance-text" style="position: relative; font-family: inherit;">{{ instance|safe }}</div>
-      {{ span_script|safe }}
-      <div id="span-overlays" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"></div>
-    </div>
-    <script>
-(function() {
-  function clearOverlays() {
-    const overlays = document.getElementById('span-overlays');
-    if (overlays) overlays.innerHTML = '';
-  }
-
-  function renderSpanOverlays() {
-    console.log('🔍 renderSpanOverlays called');
-    clearOverlays();
-    const overlays = document.getElementById('span-overlays');
-    const textDiv = document.getElementById('instance-text');
-
-    console.log('🔍 overlays element:', overlays);
-    console.log('🔍 textDiv element:', textDiv);
-    console.log('🔍 window.spanAnnotations:', window.spanAnnotations);
-
-    if (!overlays) {
-      console.error('❌ span-overlays element not found');
-      return;
-    }
-    if (!textDiv) {
-      console.error('❌ instance-text element not found');
-      return;
-    }
-    if (!window.spanAnnotations) {
-      console.error('❌ window.spanAnnotations not found');
-      return;
-    }
-
-    console.log('🔍 textDiv.innerHTML:', textDiv.innerHTML);
-    console.log('🔍 textDiv.textContent:', textDiv.textContent);
-    console.log('🔍 textDiv.childNodes.length:', textDiv.childNodes.length);
-
-    // Find the actual text node - it might not be the first child
-    let textNode = null;
-    for (let i = 0; i < textDiv.childNodes.length; i++) {
-      const node = textDiv.childNodes[i];
-      console.log(`🔍 child ${i}:`, node.nodeType, node.nodeName, node.textContent?.substring(0, 50));
-      if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
-        textNode = node;
-        console.log('🔍 Found text node at index', i);
-        break;
-      }
-    }
-
-    if (!textNode) {
-      console.error('❌ No text node found in instance-text');
-      return;
-    }
-
-    console.log('🔍 textNode.textContent:', textNode.textContent);
-    console.log('🔍 textNode.length:', textNode.length);
-
-    window.spanAnnotations.forEach((span, idx) => {
-      console.log(`🔍 Processing span ${idx}:`, span);
-      try {
-        const range = document.createRange();
-        range.setStart(textNode, span.start);
-        range.setEnd(textNode, span.end);
-        console.log(`🔍 Created range from ${span.start} to ${span.end}`);
-
-        const rects = range.getClientRects();
-        console.log(`🔍 Got ${rects.length} client rects for span ${idx}`);
-
-        Array.from(rects).forEach((rect, rectIdx) => {
-          console.log(`🔍 Processing rect ${rectIdx}:`, rect);
-          const overlay = document.createElement('div');
-          overlay.className = 'span-overlay';
-          overlay.style.position = 'absolute';
-          overlay.style.left = (rect.left - textDiv.getBoundingClientRect().left + textDiv.scrollLeft) + 'px';
-          overlay.style.top = (rect.top - textDiv.getBoundingClientRect().top + textDiv.scrollTop) + 'px';
-          overlay.style.width = rect.width + 'px';
-          overlay.style.height = rect.height + 'px';
-          overlay.style.background = span.color;
-          overlay.style.border = '2px solid rgb' + span.border_rgb;
-          overlay.style.zIndex = 10 + idx;
-          overlay.style.pointerEvents = 'auto';
-          overlay.style.boxSizing = 'border-box';
-
-          // Label
-          const label = document.createElement('div');
-          label.className = 'span-label';
-          label.textContent = span.title;
-          label.style.position = 'absolute';
-          label.style.top = '-20px';
-          label.style.left = '0';
-          label.style.background = 'white';
-          label.style.border = '1px solid rgb' + span.border_rgb;
-          label.style.fontSize = '12px';
-          label.style.padding = '2px 4px';
-          label.style.whiteSpace = 'nowrap';
-          label.style.zIndex = 20 + idx;
-          label.style.pointerEvents = 'auto';
-          overlay.appendChild(label);
-
-          // Close button
-          const closeBtn = document.createElement('div');
-          closeBtn.className = 'span-close';
-          closeBtn.textContent = '×';
-          closeBtn.style.position = 'absolute';
-          closeBtn.style.top = '-20px';
-          closeBtn.style.right = '0';
-          closeBtn.style.background = 'white';
-          closeBtn.style.border = '1px solid rgb' + span.border_rgb;
-          closeBtn.style.width = '16px';
-          closeBtn.style.height = '16px';
-          closeBtn.style.textAlign = 'center';
-          closeBtn.style.lineHeight = '14px';
-          closeBtn.style.cursor = 'pointer';
-          closeBtn.style.zIndex = 21 + idx;
-          closeBtn.style.pointerEvents = 'auto';
-          closeBtn.onclick = function(e) {
-            e.stopPropagation();
-            // Send delete request
-            var instance_id = document.getElementById('instance_id').value;
-            var post_req = {
-              type: 'span',
-              schema: span.schema,
-              state: [{
-                name: span.label,
-                start: span.start,
-                end: span.end,
-                title: span.title,
-                value: null
-              }],
-              instance_id: instance_id
-            };
-            fetch('/updateinstance', {
-              method: 'POST',
-              body: JSON.stringify(post_req),
-              credentials: 'same-origin',
-              headers: {
-                'Content-type': 'application/json; charset=UTF-8',
-              },
-            }).then(response => {
-              if (response.ok) {
-                location.reload();
-              } else {
-                alert('Failed to delete span annotation');
-              }
-            });
-          };
-          overlay.appendChild(closeBtn);
-
-          overlays.appendChild(overlay);
-          console.log(`✅ Added overlay for span ${idx}, rect ${rectIdx}`);
-        });
-      } catch (err) {
-        console.error('❌ Error rendering span overlay:', err);
-      }
-    });
-
-    console.log('🔍 renderSpanOverlays completed');
-  }
-  window.addEventListener('resize', renderSpanOverlays);
-  document.addEventListener('DOMContentLoaded', renderSpanOverlays);
-  window.renderSpanOverlays = renderSpanOverlays;
-})();
-</script>
 </body>
 </html>

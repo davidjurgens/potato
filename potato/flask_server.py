@@ -23,7 +23,7 @@ from itertools import zip_longest
 import string
 import threading
 import yaml
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -56,7 +56,7 @@ from potato.phase import UserPhase
 from potato.create_task_cli import create_task_cli, yes_or_no
 from potato.server_utils.arg_utils import arguments
 from potato.server_utils.config_module import init_config, config
-from potato.server_utils.schemas.span import render_span_annotations, get_span_annotations_script, generate_span_layout
+from potato.server_utils.schemas.span import render_span_annotations
 from potato.server_utils.cli_utlis import get_project_from_hub, show_project_hub
 from potato.server_utils.prolific_apis import ProlificStudy
 from potato.server_utils.json import easy_json
@@ -138,27 +138,7 @@ COLOR_PALETTE = [
 ]
 
 # Mapping the base html template str to the real file
-template_dict = {
-    "base_html_template":{
-        'base': os.path.join(cur_program_dir, 'base_html/base_template_v2.html'),
-        'default': os.path.join(cur_program_dir, 'base_html/base_template_v2.html'),
-    },
-    "header_file":{
-        'default': os.path.join(cur_program_dir, 'base_html/header.html'),
-    },
-    "html_layout":{
-        'default': os.path.join(cur_program_dir, 'base_html/examples/plain_layout.html'),
-        'plain': os.path.join(cur_program_dir, 'base_html/examples/plain_layout.html'),
-        'kwargs': os.path.join(cur_program_dir, 'base_html/examples/kwargs_example.html'),
-        'fixed_keybinding': os.path.join(cur_program_dir, 'base_html/examples/fixed_keybinding_layout.html')
-    },
-    "surveyflow_html_layout": {
-        'default': os.path.join(cur_program_dir, 'base_html/examples/plain_layout.html'),
-        'plain': os.path.join(cur_program_dir, 'base_html/examples/plain_layout.html'),
-        'kwargs': os.path.join(cur_program_dir, 'base_html/examples/kwargs_example.html'),
-        'fixed_keybinding': os.path.join(cur_program_dir, 'base_html/examples/fixed_keybinding_layout.html')
-    }
-}
+# REMOVED: template_dict is no longer needed since we use hardcoded template paths
 
 class ActiveLearningState:
     """
@@ -178,7 +158,7 @@ class ActiveLearningState:
             self.id_to_update_round[iid] = self.cur_round
 
 # Set session timeout duration (e.g., 30 minutes)
-SESSION_TIMEOUT = timedelta(minutes=30)
+SESSION_TIMEOUT = timedelta(minutes=1)
 
 def load_instance_data(config: dict):
     '''Loads the instance data from the files specified in the config.'''
@@ -321,13 +301,7 @@ def load_annotation_schematic_data(config: dict) -> None:
     # Lazy import - only when this function is called
     from server_utils.front_end import generate_annotation_html_template
 
-    # Swap in the right file paths if the user specified the default templates
-    if config["base_html_template"] == "default":
-        config["base_html_template"] = template_dict["base_html_template"]["default"]
-    if config["header_file"] == "default":
-        config["header_file"] = template_dict["header_file"]["default"]
-    if config["html_layout"] == "default":
-        config["html_layout"] = template_dict["html_layout"]["default"]
+    # No longer need to swap in template paths - they are hardcoded in front_end.py
 
     task_dir = config["task_dir"]
     # Swap in the right file paths if the user specified the default templates
@@ -337,7 +311,6 @@ def load_annotation_schematic_data(config: dict) -> None:
             # make the directory
             os.makedirs(templates_dir)
         config["site_dir"] = templates_dir
-
 
     # Creates the templates we'll use in flask by mashing annotation
     # specification on top of the proto-templates
@@ -365,55 +338,74 @@ def load_phase_data(config: dict) -> None:
         return
 
     phases = config["phases"]
-    if "order" in phases:
-        phase_order = phases["order"]
-    else:
-        phase_order = [k for k in phases.keys() if k != "order"]
 
-    logger.debug(f"[PHASE LOAD] phases dict: {phases}")
+    # Handle both list and dictionary formats for phases
+    if isinstance(phases, list):
+        # If phases is a list, use the order as defined in the list
+        phase_order = [phase["name"] for phase in phases]
+        # Convert list to dict for easier access
+        phases_dict = {phase["name"]: phase for phase in phases}
+    else:
+        # Original dictionary format
+        if "order" in phases:
+            phase_order = phases["order"]
+        else:
+            phase_order = [k for k in phases.keys() if k != "order"]
+        phases_dict = phases
+
+    logger.debug(f"[PHASE LOAD] phases: {phases}")
     logger.debug(f"[PHASE LOAD] phase_order: {phase_order}")
 
     logger.debug("Loading %d phases in order: %s" % (len(phase_order), phase_order))
 
     for phase_name in phase_order:
         try:
-            phase = phases[phase_name]
-            if not "type" in phase or not phase['type']:
-                logger.error(f"Phase {phase_name} does not have a type")
-                raise Exception("Phase %s does not have a type" % phase_name)
-            if not "file" in phase or not phase['file']:
-                logger.error(f"Phase {phase_name} is specified but does not have a file")
-                raise Exception("Phase %s is specified but does not have a file" % phase_name)
+            phase = phases_dict[phase_name]
 
-            # Get the phase labeling schemes, being robust to relative or absolute paths
-            phase_scheme_fname = get_abs_or_rel_path(phase['file'], config)
-            logger.debug(f"Resolved phase file for {phase_name}: {phase_scheme_fname}")
-            phase_labeling_schemes = get_phase_annotation_schemes(phase_scheme_fname)
+            # Handle new format with annotation_schemes directly in phase
+            if "annotation_schemes" in phase:
+                phase_labeling_schemes = phase["annotation_schemes"]
+                # Determine phase type from the first annotation scheme
+                if phase_labeling_schemes:
+                    first_scheme = phase_labeling_schemes[0]
+                    if first_scheme.get("annotation_type") == "pure_display":
+                        phase_type = UserPhase.INSTRUCTIONS
+                    else:
+                        phase_type = UserPhase.ANNOTATION
+                else:
+                    phase_type = UserPhase.ANNOTATION
+            else:
+                # Legacy format with file and type
+                if not "type" in phase or not phase['type']:
+                    logger.error(f"Phase {phase_name} does not have a type")
+                    raise Exception("Phase %s does not have a type" % phase_name)
+                if not "file" in phase or not phase['file']:
+                    logger.error(f"Phase {phase_name} is specified but does not have a file")
+                    raise Exception("Phase %s is specified but does not have a file" % phase_name)
+
+                # Get the phase labeling schemes, being robust to relative or absolute paths
+                phase_scheme_fname = get_abs_or_rel_path(phase['file'], config)
+                logger.debug(f"Resolved phase file for {phase_name}: {phase_scheme_fname}")
+                phase_labeling_schemes = get_phase_annotation_schemes(phase_scheme_fname)
+                phase_type = UserPhase.fromstr(phase['type'])
 
             # Use the default templates unless specified in the phase config
-            html_template_filename = config["base_html_template"]
-            if 'template' in phase:
-                html_template_filename = phase['template']
-            html_header_filename = config["header_file"]
-            if 'header' in phase:
-                html_header_filename = phase['header']
-            html_layout_filename = config["html_layout"]
-            if 'layout' in phase:
-                html_layout_filename = phase['layout']
+            # Note: Template paths are now hardcoded in front_end.py
+            # Only handle custom task_layout if specified
+            task_layout_file = None
+            if 'task_layout' in phase:
+                task_layout_file = phase['task_layout']
 
             try:
-                phase_html_fname = generate_html_from_schematic(html_template_filename,
-                                                html_header_filename,
-                                                html_layout_filename,
+                phase_html_fname = generate_html_from_schematic(
                                                 phase_labeling_schemes,
                                                 False, False,
-                                                phase_name, config)
+                                                phase_name, config,
+                                                task_layout_file)
             except KeyError as e:
-                logger.error(f"Error generating HTML for phase {phase_name} (file: {phase['file']}): {e}")
-                raise Exception("Error generating HTML for phase %s (file: %s): %s" \
-                                % (phase_name, phase['file'], str(e)))
-
-            phase_type = UserPhase.fromstr(phase['type'])
+                logger.error(f"Error generating HTML for phase {phase_name}: {e}")
+                raise Exception("Error generating HTML for phase %s: %s" \
+                                % (phase_name, str(e)))
 
             # Register the HTML so it's easy to find later
             user_state_manager = get_user_state_manager()
@@ -515,56 +507,39 @@ def init_user_state(username):
     usm.add_user(username)
 
     # Store the session creation time
-    session['created_at'] = datetime.now(timezone.utc).isoformat()
+    session['created_at'] = datetime.now()
 
     return usm.get_user_state(username)
 
 def is_session_valid() -> bool:
     """
-    Checks if the session is still valid based on the session timeout.
-    Returns:
-        bool: True if session is valid, False otherwise
+    Check if the current session is valid based on the creation time.
     """
     if 'created_at' not in session:
         return False
-    # Always use UTC-aware datetimes
-    created_at = session['created_at']
-    if isinstance(created_at, str):
-        created_at = datetime.fromisoformat(created_at)
-    if created_at.tzinfo is None:
-        created_at = created_at.replace(tzinfo=timezone.utc)
-    now = datetime.now(timezone.utc)
-    session_age = now - created_at
-    return session_age < timedelta(minutes=30)
+    return datetime.now() - session['created_at'] < SESSION_TIMEOUT
 
 @app.before_request
 def before_request():
+    """
+    Check session validity before processing any request.
+    Only enforce session validation for protected routes.
+    """
     # Skip session validation in debug mode
     if config.get("debug", False):
         return None
 
-    # Skip session validation for public/auth routes
-    public_paths = [
-        "/auth", "/register", "/passwordless-login", "/clerk-login"
+    # Allow unauthenticated access to these endpoints
+    allowed_paths = [
+        '/', '/auth', '/register', '/static/', '/favicon.ico', '/robots.txt', '/health', '/api/', '/api/instance/', '/api/instances', '/api/config', '/api/status', '/api/heartbeat'
     ]
-    if request.path.startswith("/static") or request.path in public_paths:
+    path = request.path
+    if any(path == allowed or path.startswith(allowed) for allowed in allowed_paths):
         return None
 
-    # Skip session validation for test endpoints with valid API key
-    if request.path.startswith("/test/"):
-        api_key = request.headers.get("X-API-KEY")
-        valid_api_key = config.get("test_api_key") or os.environ.get("TEST_API_KEY")
-        if api_key and valid_api_key and api_key == valid_api_key:
-            return None
-
-    logger.debug(f"=== BEFORE_REQUEST ===")
-    logger.debug(f"Session contents: {dict(session)}")
-    logger.debug(f"Session valid: {is_session_valid()}")
-
     if not is_session_valid():
-        logger.warning("Session expired, clearing session and redirecting to auth")
         session.clear()  # Clear the session
-        return redirect(url_for('auth'))  # Redirect to auth page
+        return redirect(url_for('home'))  # Redirect to home page (login/register)
 
 def get_users():
     """
@@ -638,22 +613,6 @@ def render_page_with_annotations(username) -> str:
     # also save the displayed text in the metadata dict
     # instance_id_to_data[instance_id]['displayed_text'] = text
 
-    # Always get the latest span annotations for the current instance
-    span_annotations = get_span_annotations_for_user_on(username, instance_id)
-    print(f"🔍 DEBUG: Found {len(span_annotations) if span_annotations else 0} span annotations for instance {instance_id}")
-
-    if span_annotations is not None and len(span_annotations) > 0:
-        print(f"🔍 DEBUG: Calling render_span_annotations with {len(span_annotations)} spans")
-        text = render_span_annotations(text, span_annotations)
-        span_script = get_span_annotations_script(span_annotations)
-        print(f"🔍 DEBUG: render_span_annotations returned text: '{text[:100]}...'")
-        print(f"🔍 DEBUG: get_span_annotations_script returned script: '{span_script[:200]}...'")
-    else:
-        span_script = ""
-        print(f"🔍 DEBUG: No span annotations found, span_script is empty")
-
-    print(f"🔍 DEBUG: span_script for instance_id {instance_id} (len={len(span_script)}):\n{span_script[:300]}")
-
     # If the user has labeled spans within this instance before, replace the
     # current instance text with pre-annotated mark-up. We do this here before
     # the render_template call so that we can directly insert the span-marked-up
@@ -668,7 +627,18 @@ def render_page_with_annotations(username) -> str:
     #
     # NOTE2: We have to this here to account for any keyword highlighting before
     # the instance text gets marked up in the post-processing below
-    schema_content_to_prefill = []  # Initialize the variable
+    span_annotations = get_span_annotations_for_user_on(username, instance_id)
+    if span_annotations is not None and len(span_annotations) > 0:
+        # Mark up the instance text where the annotated spans were
+        text = render_span_annotations(text, span_annotations)
+
+    # If the admin has specified that certain keywords need to be highlighted,
+    # post-process the selected instance so that it now also has colored span
+    # overlays for keywords. This also include label suggestions for the user.
+    #
+    # NOTE: this code is probably going to break the span annotation's
+    # understanding of the instance. Need to check this...
+    schema_content_to_prefill = []
 
     #prepare label suggestions
     label_suggestion_json = get_label_suggestions(item, config, schema_content_to_prefill)
@@ -687,19 +657,9 @@ def render_page_with_annotations(username) -> str:
     # all_statistics['Agreement'] = get_agreement_score('all', 'all', return_type='overall_average')
     # print(all_statistics)
 
-    # For the v2 template, render the template directly instead of the static HTML file
-    # The static HTML file is generated by front_end.py but doesn't have the dynamic placeholders
-    print(f"🔍 DEBUG: config['base_html_template'] = {config.get('base_html_template', 'NOT_SET')}")
-    print(f"🔍 DEBUG: config['site_file'] = {config.get('site_file', 'NOT_SET')}")
-
-    if "base_template_v2.html" in config["base_html_template"]:
-        html_file = "base_template_v2.html"
-        print(f"🔍 DEBUG: Using v2 template: {html_file}")
-    else:
-        # Set the html file as surveyflow pages when the instance is a not an
-        # annotation page (survey pages, prestudy pass or fail page)
-        html_file = config["site_file"]
-        print(f"🔍 DEBUG: Using static file: {html_file}")
+    # Set the html file as surveyflow pages when the instance is a not an
+    # annotation page (survey pages, prestudy pass or fail page)
+    html_file = config["site_file"]
 
     var_elems_html = "".join(
         map(lambda item : (
@@ -732,23 +692,6 @@ def render_page_with_annotations(username) -> str:
 
     # Flask will fill in the things we need into the HTML template we've created,
     # replacing {{variable_name}} with t    he associated text for keyword arguments
-    print(f"🔍 DEBUG: FINAL annotation text passed to template (first 200 chars): {text[:200]}")
-
-    # Generate the annotation forms (TASK_LAYOUT) for each annotation scheme
-    task_layout_parts = []
-    for annotation_scheme in config["annotation_schemes"]:
-        try:
-            layout_html, key_bindings = generate_span_layout(annotation_scheme)
-            task_layout_parts.append(layout_html)
-            print(f"🔍 DEBUG: Generated layout for scheme '{annotation_scheme.get('name', 'unknown')}' (first 100 chars): {layout_html[:100]}")
-        except Exception as e:
-            print(f"🔍 ERROR: Failed to generate layout for scheme {annotation_scheme}: {e}")
-            # Fallback to a simple form
-            task_layout_parts.append(f"<div>Error generating form for {annotation_scheme.get('name', 'unknown')}</div>")
-
-    task_layout = "\n".join(task_layout_parts)
-    print(f"🔍 DEBUG: Generated TASK_LAYOUT (first 200 chars): {task_layout[:200]}")
-
     rendered_html = render_template(
         html_file,
         username=username,
@@ -767,8 +710,6 @@ def render_page_with_annotations(username) -> str:
         annotation_schemes=config["annotation_schemes"],
         annotation_task_name=config["annotation_task_name"],
         debug=config.get("debug", False),
-        span_script=span_script,
-        TASK_LAYOUT=task_layout,
         # ai=ai_hints,
         **kwargs
     )
@@ -1095,7 +1036,7 @@ def update_annotation_state(username, form):
 
     # Span annotations are a bit funkier since we're getting raw HTML that
     # we need to post-process on the server side.
-    span_annotations = []
+    span_annotations = None  # Changed from [] to None to preserve existing spans during navigation
     if "span-annotation" in form:
         span_annotation_html = form["span-annotation"]
         span_text, span_annotations = parse_html_span_annotation(span_annotation_html)
@@ -1138,9 +1079,35 @@ def get_span_annotations_for_user_on(username, instance_id):
     """
     Returns the span annotations made by this user on the instance.
     """
+    logger.debug(f"=== GET_SPAN_ANNOTATIONS_FOR_USER_ON START ===")
+    logger.debug(f"Username: {username}")
+    logger.debug(f"Instance ID: {instance_id}")
+
     user_state = get_user_state(username)
+    logger.debug(f"User state: {user_state}")
+
+    if not user_state:
+        logger.warning(f"User state not found for user: {username}")
+        return {}
+
     span_annotations = user_state.get_span_annotations(instance_id)
+    logger.debug(f"Raw span annotations from user state: {span_annotations}")
     print(f"🔍 get_span_annotations_for_user_on({username}, {instance_id}): {span_annotations}")
+
+    # Debug: Check the internal storage structure
+    if hasattr(user_state, 'instance_id_to_span_to_value'):
+        logger.debug(f"User state instance_id_to_span_to_value: {dict(user_state.instance_id_to_span_to_value)}")
+        print(f"🔍 User state instance_id_to_span_to_value: {dict(user_state.instance_id_to_span_to_value)}")
+
+        if instance_id in user_state.instance_id_to_span_to_value:
+            instance_spans = user_state.instance_id_to_span_to_value[instance_id]
+            logger.debug(f"Spans for instance {instance_id}: {instance_spans}")
+            print(f"🔍 Spans for instance {instance_id}: {instance_spans}")
+        else:
+            logger.debug(f"No spans found for instance {instance_id}")
+            print(f"🔍 No spans found for instance {instance_id}")
+
+    logger.debug(f"=== GET_SPAN_ANNOTATIONS_FOR_USER_ON END ===")
     return span_annotations
 
 def parse_html_span_annotation(html):
@@ -1180,7 +1147,14 @@ def configure_app(flask_app):
     app = flask_app
 
     # Set application configuration
-    app.secret_key = config.get("secret_key", "potato-annotation-platform")
+    # Use a random secret key if sessions shouldn't persist, otherwise use the configured one
+    if config.get("persist_sessions", False):
+        app.secret_key = config.get("secret_key", "potato-annotation-platform")
+    else:
+        # Generate a random secret key to ensure sessions don't persist between restarts
+        import secrets
+        app.secret_key = secrets.token_hex(32)
+
     app.permanent_session_lifetime = timedelta(days=config.get("session_lifetime_days", 2))
 
     # Configure routes from the routes module
@@ -1215,7 +1189,6 @@ def run_server(args):
     # Initialize configuration
     init_config(args)
 
-
     # Apply command line flags that override config settings
     if args.require_password is not None:
         # Command line flag takes precedence over config file
@@ -1226,6 +1199,17 @@ def run_server(args):
     if args.port is not None:
         config["port"] = args.port
         logger.debug(f"Port set from command line: {args.port}")
+
+    # Apply persist_sessions flag from command line
+    config["persist_sessions"] = args.persist_sessions
+    logger.debug(f"Session persistence set from command line: {args.persist_sessions}")
+
+    # --- Add support for random seed ---
+    # Admins can set 'random_seed' in config YAML to control assignment randomness (default 1234)
+    if "random_seed" not in config:
+        config["random_seed"] = 1234
+    logger.info(f"Assignment random seed set to: {config['random_seed']}")
+    # -----------------------------------
 
     # Set logging level based on verbosity flags
     if config.get("verbose"):

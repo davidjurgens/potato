@@ -1,12 +1,11 @@
 import pytest
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
 import time
 
 @pytest.mark.skip(reason="Requires running server and selenium setup.")
 def test_annotation_ui_loads():
-    driver = webdriver.Chrome(options=Options().add_argument("--headless"))
+    driver = webdriver.Chrome()
     driver.get("http://localhost:9000/")
     time.sleep(2)
     assert "annotation" in driver.page_source or "debug_user" in driver.page_source

@@ -1,0 +1,22 @@
+annotation_task_name: Simple Slider Test
+task_dir: output/simple-slider
+output_annotation_dir: output/simple-slider/annotations
+output_annotation_format: jsonl
+data_files:
+- ../data/test_data.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 0
+annotation_schemes:
+- annotation_type: slider
+  name: sentiment
+  description: Rate the sentiment of the text on a continuous scale
+  min_value: 0
+  max_value: 100
+  starting_value: 50
+  sequential_key_binding: true
+site_dir: output
