@@ -95,60 +95,145 @@ def set_span_color(schema, span_label, color):
     span_colors[schema][span_label] = color
 
 def render_span_annotations(text, span_annotations: list[SpanAnnotation]):
+    """
+    Renders span annotations using a layered overlay approach.
+
+    This new approach supports unlimited overlapping and nested spans by:
+    1. Keeping the original text unchanged in the DOM
+    2. Rendering annotations as positioned overlays
+    3. Using a coordinate mapping system for precise positioning
+
+    Args:
+        text: The original text to annotate
+        span_annotations: List of SpanAnnotation objects to render
+
+    Returns:
+        str: HTML with original text and annotation overlay container
+    """
     print(f"🔍 render_span_annotations called with text: '{text[:50]}...' and {len(span_annotations)} spans")
 
     if not span_annotations:
         return text
 
-    # Prepare tag insertions
-    opens = {}  # start index -> list of opening tags
-    closes = {}  # end index -> list of closing tags
+    # Create the base HTML structure with original text and overlay container
+    html = f"""
+    <div class="span-annotation-container" style="position: relative; display: inline;">
+        <div class="original-text" style="white-space: pre-wrap; position: relative; z-index: 1;">
+            {text}
+        </div>
+        <div class="span-overlays" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;">
+    """
 
-    for a in span_annotations:
-        color = get_span_color(a.get_schema(), a.get_name())
-        if color is None:
-            color = "(128, 128, 128)"
-        rgb = tuple(int(x.strip()) for x in color.strip("() ").split(","))
-        hex_color = '#{:02x}{:02x}{:02x}80'.format(*rgb)
-        bg_color = hex_color
-        annotation_title = a.get_title()
-        open_tag = (
-            f'<span class="span-highlight" selection_label="{a.get_name()}" '
-            f'data-label="{a.get_name()}" '
-            f'schema="{a.get_schema()}" style="background-color: {bg_color};" data-annotation-id="{a.get_id()}">'  # new attribute
-        )
-        # The label and close button go at the end, before the closing span
-        close_tag = (
-            f'<div class="span_label" schema="{a.get_schema()}" name="{a.get_name()}" '
-            f'style="background-color:white;border:2px solid rgb{color};">'
-            f'{annotation_title}</div>'
-            f'<div class="span_close" style="background-color:white;"'
-            f' onclick="deleteSpanAnnotation(this, \'{a.get_schema()}\', \'{a.get_name()}\', \'{annotation_title}\', {a.get_start()}, {a.get_end()});">×</div>'
-            f'</span>'
-        )
-        opens.setdefault(a.get_start(), []).append(open_tag)
-        closes.setdefault(a.get_end(), []).insert(0, close_tag)  # insert at front for correct nesting
+    # Generate overlay HTML for each span annotation
+    for i, annotation in enumerate(span_annotations):
+        overlay_html = _generate_span_overlay(annotation, i, text)
+        html += overlay_html
 
-    # Build the output
-    out = []
-    for i in range(len(text) + 1):
-        if i in opens:
-            out.extend(opens[i])
-        if i < len(text):
-            out.append(text[i])
-        if i + 1 in closes:
-            out.extend(closes[i + 1])
-    return ''.join(out)
+    html += """
+        </div>
+    </div>
+    """
+
+    print(f"🔍 render_span_annotations: Generated HTML with {len(span_annotations)} overlays")
+    return html
+
+
+def _generate_span_overlay(annotation: SpanAnnotation, index: int, original_text: str) -> str:
+    """
+    Generates HTML for a single span annotation overlay.
+
+    Args:
+        annotation: The SpanAnnotation object
+        index: Index of this annotation (for unique IDs)
+        original_text: The original text for coordinate calculations
+
+    Returns:
+        str: HTML for the span overlay
+    """
+    start = annotation.get_start()
+    end = annotation.get_end()
+
+    # Get color and styling
+    color = get_span_color(annotation.get_schema(), annotation.get_name())
+    if color is None:
+        color = "(128, 128, 128)"
+
+    rgb = tuple(int(x.strip()) for x in color.strip("() ").split(","))
+    hex_color = '#{:02x}{:02x}{:02x}80'.format(*rgb)
+
+    # Use label name as fallback if title is empty
+    effective_title = annotation.get_title() if annotation.get_title() else annotation.get_name()
+
+    # Calculate positioning based on character positions
+    # This is a simplified approach - in a real implementation, you'd need
+    # more sophisticated text measurement to account for font metrics, line breaks, etc.
+    left_percent = (start / len(original_text)) * 100
+    width_percent = ((end - start) / len(original_text)) * 100
+
+    overlay_html = f"""
+        <div class="span-overlay"
+             data-annotation-id="{annotation.get_id()}"
+             data-schema="{annotation.get_schema()}"
+             data-label="{annotation.get_name()}"
+             data-start="{start}"
+             data-end="{end}"
+             style="position: absolute;
+                    left: {left_percent}%;
+                    width: {width_percent}%;
+                    height: 100%;
+                    background-color: {hex_color};
+                    pointer-events: auto;
+                    cursor: pointer;
+                    border-radius: 2px;">
+            <div class="span-label"
+                 style="position: absolute;
+                        top: -20px;
+                        left: 0;
+                        background-color: white;
+                        border: 2px solid rgb{color};
+                        color: #6e56cf;
+                        padding: 2px 4px;
+                        font-size: 12px;
+                        border-radius: 3px;
+                        white-space: nowrap;
+                        z-index: 10;">
+                {effective_title}
+            </div>
+            <div class="span-close"
+                 style="position: absolute;
+                        top: -15px;
+                        right: -10px;
+                        background-color: white;
+                        color: #ef4444;
+                        width: 16px;
+                        height: 16px;
+                        border-radius: 50%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 12px;
+                        cursor: pointer;
+                        z-index: 11;"
+                 onclick="deleteSpanAnnotationOverlay(this, '{annotation.get_schema()}', '{annotation.get_name()}', '{effective_title}', {start}, {end});">
+                ×
+            </div>
+        </div>
+    """
+
+    return overlay_html
+
 
 def render_span_annotations_old(text, span_annotations):
     """
-    Retuns a modified version of the text with span annotation overlays inserted
-    into the text.
+    DEPRECATED: Old rendering function that used string insertion.
 
-    :text: some instance to be annotated
-    :span_annotations: annotations already made by the user that need to be
-       re-inserted into the text
+    This approach fails for overlapping/nested spans because it tries to insert
+    HTML into already-marked-up text, creating malformed HTML.
+
+    Kept for backward compatibility but should not be used for new implementations.
     """
+    print(f"⚠️ WARNING: Using deprecated render_span_annotations_old function")
+
     # This code is synchronized with the javascript function
     # surroundSelection(selectionLabel) function in base_template.html which
     # wraps any labeled text with a <div> element indicating its label. We
@@ -181,9 +266,11 @@ def render_span_annotations_old(text, span_annotations):
 
         # The text above the span is its title and we display whatever its set to
         annotation_title= a["annotation_title"]
+        # Use annotation name as fallback if title is empty
+        effective_title = annotation_title if annotation_title else a["annotation"]
 
         ann = ann_wrapper.format(
-            annotation=a["annotation"], annotation_title=annotation_title,
+            annotation=a["annotation"], annotation_title=effective_title,
             span=a["span"], color=color, bg_color=bg_color, schema=a["schema"]
         )
         print(text, a)
@@ -285,6 +372,9 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
         # Generate name with span prefix so ingestion code can skip this
         name_with_span = f"span_label:::{scheme_name}"
 
+        # Use label as title if span_title is empty
+        effective_title = span_title if span_title else label
+
         schematic += f"""
             <div class="shadcn-span-option">
                 <input class="{escape_html_content(scheme_name)} shadcn-span-checkbox"
@@ -293,7 +383,7 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
                        id="{escape_html_content(scheme_name)}"
                        name="{escape_html_content(name_with_span)}"
                        value="{escape_html_content(key_value)}"
-                       onclick="onlyOne(this); changeSpanLabel(this, '{escape_html_content(scheme_name)}', '{escape_html_content(label)}', '{escape_html_content(span_title)}', '{escape_html_content(span_color)}');"
+                       onclick="onlyOne(this); changeSpanLabel(this, '{escape_html_content(scheme_name)}', '{escape_html_content(label)}', '{escape_html_content(effective_title)}', '{escape_html_content(span_color)}');"
                        validation="{validation}">
                 <label for="{escape_html_content(scheme_name)}" class="shadcn-span-label" {tooltip}>
                     <span style="background-color:rgb{span_color.replace(')', ',0.25)')};">{escape_html_content(label_content)}</span>

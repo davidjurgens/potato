@@ -197,12 +197,38 @@ class RobustSpanAnnotationHelper:
                             // Clear any existing selection
                             window.getSelection().removeAllRanges();
 
-                            // Get the text content to validate indices
-                            const fullText = element.textContent || element.innerText;
-                            if (startIndex < 0 || endIndex > fullText.length || startIndex >= endIndex) {
+                            // Get the original text content (without HTML markup) for validation
+                            // We need to extract the original text from the instance data, not the DOM
+                            let originalText = '';
+                            try {
+                                // Try to get the original text from the instance data
+                                const instanceId = document.getElementById('instance_id')?.value;
+                                if (instanceId) {
+                                    // For now, we'll use a simpler approach - get text content but filter out span labels
+                                    const fullText = element.textContent || element.innerText;
+                                    // Remove common span label patterns (like "happy×" or "sad×")
+                                    originalText = fullText.replace(/[a-zA-Z]+×/g, '').replace(/\s+/g, ' ').trim();
+                                } else {
+                                    originalText = element.textContent || element.innerText;
+                                }
+                            } catch (e) {
+                                originalText = element.textContent || element.innerText;
+                            }
+
+                            // Print debug info
+                            console.log('[TEST DEBUG] robust_text_selection:', {
+                                originalText,
+                                domText: element.textContent || element.innerText,
+                                startIndex,
+                                endIndex,
+                                expectedSubstring: originalText.substring(startIndex, endIndex),
+                                domSubstring: (element.textContent || element.innerText).substring(startIndex, endIndex)
+                            });
+
+                            if (startIndex < 0 || endIndex > originalText.length || startIndex >= endIndex) {
                                 return {
                                     success: false,
-                                    error: `Invalid indices: start=${startIndex}, end=${endIndex}, textLength=${fullText.length}`
+                                    error: `Invalid indices: start=${startIndex}, end=${endIndex}, textLength=${originalText.length}`
                                 };
                             }
 
@@ -269,7 +295,7 @@ class RobustSpanAnnotationHelper:
                             }
 
                             // Get the expected text from the original text
-                            const expectedText = fullText.substring(startIndex, endIndex).trim();
+                            const expectedText = originalText.substring(startIndex, endIndex).trim();
 
                             if (selectedText !== expectedText) {
                                 return {
@@ -295,6 +321,13 @@ class RobustSpanAnnotationHelper:
                 """, instance_text, start_index, end_index)
 
                 print(f"   Selection result: {result}")
+
+                # Fetch and print browser console logs after each attempt
+                try:
+                    for entry in driver.get_log('browser'):
+                        print(f"   [BROWSER LOG] {entry['level']}: {entry['message']}")
+                except Exception as e:
+                    print(f"   [BROWSER LOG] Error fetching logs: {e}")
 
                 if result.get('success'):
                     print(f"   ✅ Text selection successful: '{result.get('selectedText')}'")
@@ -716,14 +749,56 @@ class TestSpanAnnotationComprehensive:
 
         return temp_dir, temp_config_path
 
+    def login_test_user(self, driver, base_url, username, password):
+        """Login a test user using the UI if not already on annotation page."""
+        # If already on annotation page, return
+        if "/annotate" in driver.current_url or "instance-text" in driver.page_source:
+            return
+        # Go to home page
+        driver.get(base_url)
+        time.sleep(1)
+        # Switch to login tab
+        login_tab = RobustSpanAnnotationHelper.wait_for_element(
+            driver, By.ID, "login-tab", description="login tab"
+        )
+        RobustSpanAnnotationHelper.safe_click(driver, login_tab, "login tab")
+        # Wait for login form
+        login_email = RobustSpanAnnotationHelper.wait_for_element(
+            driver, By.ID, "login-email", description="login email"
+        )
+        login_pass = RobustSpanAnnotationHelper.wait_for_element(
+            driver, By.ID, "login-pass", description="login pass"
+        )
+        login_email.clear()
+        login_email.send_keys(username)
+        login_pass.clear()
+        login_pass.send_keys(password)
+        # Submit login form
+        login_form = RobustSpanAnnotationHelper.wait_for_element(
+            driver, By.CSS_SELECTOR, "#login-content form", description="login form"
+        )
+        login_form.submit()
+        time.sleep(2)
+        # Wait for annotation page
+        RobustSpanAnnotationHelper.wait_for_page_load(driver)
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.ID, "instance-text"))
+        )
+
+    def setup_and_login(self, browser, base_url, test_name):
+        """Register and login a unique test user, return username."""
+        username = self.register_test_user(browser, base_url, test_name)
+        password = self.test_password
+        # If not on annotation page, login
+        self.login_test_user(browser, base_url, username, password)
+        return username
+
     def test_1_basic_span_annotation_robust(self, flask_server, browser):
         """Test 1: Robust basic span annotation with enhanced error handling."""
         print("\n=== Test 1: Robust Basic Span Annotation ===")
 
         base_url = f"http://localhost:{flask_server.port}"
-
-        # Register a unique test user
-        username = self.register_test_user(browser, base_url, "test_1")
+        username = self.setup_and_login(browser, base_url, "test_1")
 
         try:
             # Navigate to instance ai_1 and get clean text
@@ -785,9 +860,7 @@ class TestSpanAnnotationComprehensive:
         print("\n=== Test 2: Robust Span Creation and Deletion ===")
 
         base_url = f"http://localhost:{flask_server.port}"
-
-        # Register a unique test user
-        username = self.register_test_user(browser, base_url, "test_2")
+        username = self.setup_and_login(browser, base_url, "test_2")
 
         try:
             # Navigate to annotation page
@@ -848,9 +921,7 @@ class TestSpanAnnotationComprehensive:
         print("\n=== Test 3: Robust Two Non-Overlapping Spans ===")
 
         base_url = f"http://localhost:{flask_server.port}"
-
-        # Register a unique test user
-        username = self.register_test_user(browser, base_url, "test_3")
+        username = self.setup_and_login(browser, base_url, "test_3")
 
         try:
             # Navigate to annotation page
@@ -944,10 +1015,10 @@ class TestSpanAnnotationComprehensive:
         """Test 4: Annotating two spans that partially overlap."""
         print("\n=== Test 4: Two Partially Overlapping Spans ===")
 
-        try:
-            base_url = f"http://localhost:{flask_server.port}"
-            username = "debug_user"  # Use debug user since server is in debug mode
+        base_url = f"http://localhost:{flask_server.port}"
+        username = self.setup_and_login(browser, base_url, "test_4")
 
+        try:
             # In debug mode, user is auto-logged in, so go directly to annotation page
             print("1. Navigating to annotation page (debug mode)...")
             browser.get(f"{base_url}/annotate")
@@ -1043,7 +1114,7 @@ class TestSpanAnnotationComprehensive:
         print("\n=== Test 5: Nested Spans ===")
 
         base_url = f"http://localhost:{flask_server.port}"
-        username = "debug_user"  # Use debug user since server is in debug mode
+        username = self.setup_and_login(browser, base_url, "test_5")
 
         # In debug mode, user is auto-logged in, so go directly to annotation page
         print("1. Navigating to annotation page (debug mode)...")
@@ -1103,7 +1174,7 @@ class TestSpanAnnotationComprehensive:
         print("\n=== Test 6: Delete First of Two Non-Overlapping Spans ===")
 
         base_url = f"http://localhost:{flask_server.port}"
-        username = "debug_user"  # Use debug user since server is in debug mode
+        username = self.setup_and_login(browser, base_url, "test_6")
 
         # In debug mode, user is auto-logged in, so go directly to annotation page
         print("1. Navigating to annotation page (debug mode)...")
@@ -1169,7 +1240,7 @@ class TestSpanAnnotationComprehensive:
         print("\n=== Test 7: Delete First of Two Partially Overlapping Spans ===")
 
         base_url = f"http://localhost:{flask_server.port}"
-        username = "debug_user"
+        username = self.setup_and_login(browser, base_url, "test_7")
 
         print("1. Navigating to annotation page (debug mode)...")
         browser.get(f"{base_url}/annotate")
@@ -1240,7 +1311,7 @@ class TestSpanAnnotationComprehensive:
         print("\n=== Test 8: Delete Inner Nested Span ===")
 
         base_url = f"http://localhost:{flask_server.port}"
-        username = "debug_user"
+        username = self.setup_and_login(browser, base_url, "test_8")
 
         print("1. Navigating to annotation page (debug mode)...")
         browser.get(f"{base_url}/annotate")
@@ -1311,7 +1382,7 @@ class TestSpanAnnotationComprehensive:
         print("\n=== Test 9: Delete Second of Two Non-Overlapping Spans ===")
 
         base_url = f"http://localhost:{flask_server.port}"
-        username = "debug_user"
+        username = self.setup_and_login(browser, base_url, "test_9")
 
         print("1. Navigating to annotation page (debug mode)...")
         browser.get(f"{base_url}/annotate")
@@ -1382,7 +1453,7 @@ class TestSpanAnnotationComprehensive:
         print("\n=== Test 10: Delete Second of Two Partially Overlapping Spans ===")
 
         base_url = f"http://localhost:{flask_server.port}"
-        username = "debug_user"
+        username = self.setup_and_login(browser, base_url, "test_10")
 
         print("1. Navigating to annotation page (debug mode)...")
         browser.get(f"{base_url}/annotate")
@@ -1453,7 +1524,7 @@ class TestSpanAnnotationComprehensive:
         print("\n=== Test 11: Delete Outer Nested Span ===")
 
         base_url = f"http://localhost:{flask_server.port}"
-        username = "debug_user"
+        username = self.setup_and_login(browser, base_url, "test_11")
 
         print("1. Navigating to annotation page (debug mode)...")
         browser.get(f"{base_url}/annotate")
@@ -1524,9 +1595,7 @@ class TestSpanAnnotationComprehensive:
         print("\n=== Test 12: Navigation and Annotation Restoration ===")
 
         base_url = f"http://localhost:{flask_server.port}"
-
-        # Register a unique test user
-        username = self.register_test_user(browser, base_url, "test_12")
+        username = self.setup_and_login(browser, base_url, "test_12")
 
         print("1. Navigating to annotation page...")
         browser.get(f"{base_url}/annotate")
@@ -1929,6 +1998,83 @@ class TestSpanAnnotationComprehensive:
         except Exception as e:
             print(f"❌ Test failed: {e}")
             RobustSpanAnnotationHelper.capture_browser_logs(browser, "styling_failure")
+            raise
+
+    def test_span_label_text_color_visibility(self, flask_server, browser):
+        """Test that span label text is visible with correct color."""
+        print("\n=== Test: Span Label Text Color and Visibility ===")
+
+        base_url = f"http://localhost:{flask_server.port}"
+
+        # Register a unique test user
+        username = self.register_test_user(browser, base_url, "color")
+
+        try:
+            # Navigate to annotation page
+            print("1. Navigating to annotation page...")
+            browser.get(f"{base_url}/annotate")
+            RobustSpanAnnotationHelper.wait_for_page_load(browser)
+            time.sleep(2)
+
+            # Create a span annotation
+            print("2. Creating span annotation...")
+            RobustSpanAnnotationHelper.safe_click(browser, RobustSpanAnnotationHelper.wait_for_clickable(
+                browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+                description="emotion label"
+            ), "emotion label")
+            time.sleep(1)
+
+            selection_success = RobustSpanAnnotationHelper.robust_text_selection(browser, 5, 15)
+            assert selection_success, "Text selection failed"
+            time.sleep(3)
+
+            # Verify span was created
+            spans = RobustSpanAnnotationHelper.get_span_elements(browser)
+            assert len(spans) == 1, f"Expected 1 span, got {len(spans)}"
+
+            # Test 3: Verify span label text color
+            print("3. Verifying span label text color...")
+            span_label = browser.find_element(By.CSS_SELECTOR, ".span-highlight .span_label")
+
+            # Check text color
+            color = span_label.value_of_css_property("color")
+            print(f"   🎨 Label text color: {color}")
+
+            # The color should be the purple color we set (#6e56cf)
+            # Selenium might return it as rgb(110, 86, 207)
+            assert color in ["#6e56cf", "rgb(110, 86, 207)", "rgba(110, 86, 207, 1)"], f"Label should have purple color, got {color}"
+
+            # Check that text is actually visible
+            label_text = span_label.text
+            print(f"   📝 Label text content: '{label_text}'")
+            assert label_text == "happy", f"Label should contain 'happy', got '{label_text}'"
+
+            # Check background color
+            background_color = span_label.value_of_css_property("background-color")
+            print(f"   🎨 Label background color: {background_color}")
+            assert background_color in ["white", "rgb(255, 255, 255)", "rgba(255, 255, 255, 1)"], f"Label should have white background, got {background_color}"
+
+            # Test 4: Verify delete button text color
+            print("4. Verifying delete button text color...")
+            delete_button = browser.find_element(By.CSS_SELECTOR, ".span-highlight .span_close")
+
+            # Check text color
+            color = delete_button.value_of_css_property("color")
+            print(f"   🎨 Delete button text color: {color}")
+
+            # The color should be the red color we set (#ef4444)
+            assert color in ["#ef4444", "rgb(239, 68, 68)", "rgba(239, 68, 68, 1)"], f"Delete button should have red color, got {color}"
+
+            # Check that text is actually visible
+            delete_text = delete_button.text
+            print(f"   📝 Delete button text content: '{delete_text}'")
+            assert delete_text == "×", f"Delete button should contain '×', got '{delete_text}'"
+
+            print("✅ Test passed: Span label text color and visibility is correct")
+
+        except Exception as e:
+            print(f"❌ Test failed: {e}")
+            RobustSpanAnnotationHelper.capture_browser_logs(browser, "color_failure")
             raise
 
     def test_span_annotation_with_test_client(self, test_data):
