@@ -264,14 +264,27 @@ input[type="range"]::-moz-range-thumb {
     border-radius: var(--radius);
 }
 
+.span-highlight {
+    position: relative;
+    display: inline-block;
+    border-radius: var(--radius);
+    padding: 1px 2px;
+    margin: 0 1px;
+}
+
 .span_label {
     position: absolute;
     top: -18px;
     left: 0;
     font-size: 10px;
     border-radius: 3px;
-    padding: 0 3px;
+    padding: 2px 4px;
     color: var(--primary);
+    background-color: white;
+    border: 1px solid var(--border);
+    z-index: 10;
+    white-space: nowrap;
+    font-weight: 500;
 }
 
 .span_close {
@@ -280,9 +293,21 @@ input[type="range"]::-moz-range-thumb {
     right: 0;
     font-size: 12px;
     border-radius: 3px;
-    padding: 0 3px;
+    padding: 2px 4px;
     cursor: pointer;
     color: var(--destructive);
+    background-color: white;
+    border: 1px solid var(--destructive);
+    z-index: 10;
+    font-weight: bold;
+    line-height: 1;
+    min-width: 16px;
+    text-align: center;
+}
+
+.span_close:hover {
+    background-color: var(--destructive);
+    color: white;
 }
 
 /* Loading states */

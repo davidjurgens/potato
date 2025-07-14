@@ -38,8 +38,8 @@ logger = logging.getLogger(__name__)
 @pytest.fixture(scope="module")
 def flask_server():
     """Start the Flask server with span annotation configuration."""
-    config_file = os.path.abspath("tests/test-configs/span-annotation.yaml")
-    test_data_file = os.path.abspath("tests/test-configs/data/test_data.json")
+    config_file = os.path.abspath("tests/configs/span-annotation.yaml")
+    test_data_file = os.path.abspath("tests/data/test_data.json")
     # Force debug=False for Selenium tests
     server = FlaskTestServer(port=9006, debug=False, config_file=config_file, test_data_file=test_data_file)
     started = server.start_server()
@@ -1738,6 +1738,198 @@ class TestSpanAnnotationComprehensive:
             print(f"   Script content: {script_content[:200]}...")
 
         print("✅ Debug overlay JavaScript test completed")
+
+    def test_span_visual_elements_display(self, flask_server, browser):
+        """Test that span annotations display with proper visual elements (labels and delete buttons)."""
+        print("\n=== Test: Span Visual Elements Display ===")
+
+        base_url = f"http://localhost:{flask_server.port}"
+
+        # Register a unique test user
+        username = self.register_test_user(browser, base_url, "visual_elements")
+
+        try:
+            # Navigate to annotation page
+            print("1. Navigating to annotation page...")
+            browser.get(f"{base_url}/annotate")
+            RobustSpanAnnotationHelper.wait_for_page_load(browser)
+            time.sleep(2)
+
+            # Verify we're on the annotation page
+            instance_text = RobustSpanAnnotationHelper.wait_for_element(
+                browser, By.ID, "instance-text", description="instance text"
+            )
+            print("   ✅ Annotation page loaded successfully")
+
+            # Create a span annotation
+            print("2. Creating span annotation...")
+            RobustSpanAnnotationHelper.safe_click(browser, RobustSpanAnnotationHelper.wait_for_clickable(
+                browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+                description="emotion label"
+            ), "emotion label")
+            time.sleep(1)
+
+            selection_success = RobustSpanAnnotationHelper.robust_text_selection(browser, 5, 15)
+            assert selection_success, "Text selection failed"
+            time.sleep(3)
+
+            # Verify span was created
+            spans = RobustSpanAnnotationHelper.get_span_elements(browser)
+            assert len(spans) == 1, f"Expected 1 span, got {len(spans)}"
+            print("   ✅ Span created successfully")
+
+            # Test 3: Verify span label is visible
+            print("3. Verifying span label is visible...")
+            span_labels = browser.find_elements(By.CSS_SELECTOR, ".span-highlight .span_label")
+            assert len(span_labels) == 1, f"Expected 1 span label, got {len(span_labels)}"
+
+            label_text = span_labels[0].text
+            print(f"   📝 Span label text: '{label_text}'")
+            assert label_text.strip() != "", "Span label should not be empty"
+            assert "happy" in label_text.lower(), f"Expected 'happy' in label text, got '{label_text}'"
+            print("   ✅ Span label is visible and contains expected text")
+
+            # Test 4: Verify delete button is visible
+            print("4. Verifying delete button is visible...")
+            delete_buttons = browser.find_elements(By.CSS_SELECTOR, ".span-highlight .span_close")
+            assert len(delete_buttons) == 1, f"Expected 1 delete button, got {len(delete_buttons)}"
+
+            delete_button = delete_buttons[0]
+            delete_text = delete_button.text
+            print(f"   🗑️ Delete button text: '{delete_text}'")
+            assert "×" in delete_text, f"Expected '×' in delete button, got '{delete_text}'"
+            print("   ✅ Delete button is visible and contains '×' symbol")
+
+            # Test 5: Verify delete button is clickable
+            print("5. Verifying delete button is clickable...")
+            assert delete_button.is_displayed(), "Delete button should be displayed"
+            assert delete_button.is_enabled(), "Delete button should be enabled"
+
+            # Check if delete button has onclick attribute
+            onclick_attr = delete_button.get_attribute("onclick")
+            print(f"   🔗 Delete button onclick: {onclick_attr}")
+            assert onclick_attr is not None, "Delete button should have onclick attribute"
+            assert "deleteSpanAnnotation" in onclick_attr, "Delete button should call deleteSpanAnnotation function"
+            print("   ✅ Delete button is properly configured for deletion")
+
+            # Test 6: Test delete button functionality
+            print("6. Testing delete button functionality...")
+            RobustSpanAnnotationHelper.safe_click(browser, delete_button, "delete button")
+            time.sleep(3)
+
+            # Wait for page reload after deletion
+            RobustSpanAnnotationHelper.wait_for_page_load(browser, timeout=10)
+
+            # Verify span was deleted
+            spans_after_delete = RobustSpanAnnotationHelper.get_span_elements(browser)
+            assert len(spans_after_delete) == 0, f"Expected 0 spans after deletion, got {len(spans_after_delete)}"
+            print("   ✅ Span was successfully deleted via delete button")
+
+            print("✅ Test passed: Span visual elements display and function correctly")
+
+        except Exception as e:
+            print(f"❌ Test failed: {e}")
+            RobustSpanAnnotationHelper.capture_browser_logs(browser, "visual_elements_failure")
+            raise
+
+    def test_span_label_and_delete_button_styling(self, flask_server, browser):
+        """Test that span labels and delete buttons have proper styling and positioning."""
+        print("\n=== Test: Span Label and Delete Button Styling ===")
+
+        base_url = f"http://localhost:{flask_server.port}"
+
+        # Register a unique test user
+        username = self.register_test_user(browser, base_url, "styling")
+
+        try:
+            # Navigate to annotation page
+            print("1. Navigating to annotation page...")
+            browser.get(f"{base_url}/annotate")
+            RobustSpanAnnotationHelper.wait_for_page_load(browser)
+            time.sleep(2)
+
+            # Create a span annotation
+            print("2. Creating span annotation...")
+            RobustSpanAnnotationHelper.safe_click(browser, RobustSpanAnnotationHelper.wait_for_clickable(
+                browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+                description="emotion label"
+            ), "emotion label")
+            time.sleep(1)
+
+            selection_success = RobustSpanAnnotationHelper.robust_text_selection(browser, 5, 15)
+            assert selection_success, "Text selection failed"
+            time.sleep(3)
+
+            # Verify span was created
+            spans = RobustSpanAnnotationHelper.get_span_elements(browser)
+            assert len(spans) == 1, f"Expected 1 span, got {len(spans)}"
+
+            # Test 3: Verify span label positioning
+            print("3. Verifying span label positioning...")
+            span_label = browser.find_element(By.CSS_SELECTOR, ".span-highlight .span_label")
+
+            # Check CSS properties
+            label_position = span_label.value_of_css_property("position")
+            label_top = span_label.value_of_css_property("top")
+            label_left = span_label.value_of_css_property("left")
+            label_z_index = span_label.value_of_css_property("z-index")
+
+            print(f"   📍 Label position: {label_position}")
+            print(f"   📍 Label top: {label_top}")
+            print(f"   📍 Label left: {label_left}")
+            print(f"   📍 Label z-index: {label_z_index}")
+
+            assert label_position == "absolute", f"Label should have position absolute, got {label_position}"
+            assert label_top == "-18px", f"Label should be positioned at top -18px, got {label_top}"
+            assert label_left == "0px", f"Label should be positioned at left 0px, got {label_left}"
+            assert label_z_index == "10", f"Label should have z-index 10, got {label_z_index}"
+            print("   ✅ Span label has correct positioning")
+
+            # Test 4: Verify delete button positioning
+            print("4. Verifying delete button positioning...")
+            delete_button = browser.find_element(By.CSS_SELECTOR, ".span-highlight .span_close")
+
+            # Check CSS properties
+            delete_position = delete_button.value_of_css_property("position")
+            delete_top = delete_button.value_of_css_property("top")
+            delete_right = delete_button.value_of_css_property("right")
+            delete_z_index = delete_button.value_of_css_property("z-index")
+            delete_cursor = delete_button.value_of_css_property("cursor")
+
+            print(f"   📍 Delete position: {delete_position}")
+            print(f"   📍 Delete top: {delete_top}")
+            print(f"   📍 Delete right: {delete_right}")
+            print(f"   📍 Delete z-index: {delete_z_index}")
+            print(f"   📍 Delete cursor: {delete_cursor}")
+
+            assert delete_position == "absolute", f"Delete button should have position absolute, got {delete_position}"
+            assert delete_top == "-18px", f"Delete button should be positioned at top -18px, got {delete_top}"
+            assert delete_right == "0px", f"Delete button should be positioned at right 0px, got {delete_right}"
+            assert delete_z_index == "10", f"Delete button should have z-index 10, got {delete_z_index}"
+            assert delete_cursor == "pointer", f"Delete button should have cursor pointer, got {delete_cursor}"
+            print("   ✅ Delete button has correct positioning and styling")
+
+            # Test 5: Verify span highlight positioning
+            print("5. Verifying span highlight positioning...")
+            span_highlight = browser.find_element(By.CSS_SELECTOR, ".span-highlight")
+
+            # Check CSS properties
+            highlight_position = span_highlight.value_of_css_property("position")
+            highlight_display = span_highlight.value_of_css_property("display")
+
+            print(f"   📍 Highlight position: {highlight_position}")
+            print(f"   📍 Highlight display: {highlight_display}")
+
+            assert highlight_position == "relative", f"Span highlight should have position relative, got {highlight_position}"
+            assert highlight_display == "inline-block", f"Span highlight should have display inline-block, got {highlight_display}"
+            print("   ✅ Span highlight has correct positioning")
+
+            print("✅ Test passed: Span label and delete button styling is correct")
+
+        except Exception as e:
+            print(f"❌ Test failed: {e}")
+            RobustSpanAnnotationHelper.capture_browser_logs(browser, "styling_failure")
+            raise
 
     def test_span_annotation_with_test_client(self, test_data):
         """Test span annotation using Flask test client (same thread, no session isolation)."""

@@ -1173,8 +1173,24 @@ def create_app():
     """
     global app
 
-    # Initialize the app
-    app = Flask(__name__)
+    # Initialize the app with explicit static folder configuration
+    static_folder = os.path.join(cur_program_dir, 'static')
+    app = Flask(__name__, static_folder=static_folder)
+
+    # Configure Jinja2 to look in both main templates and generated templates directories
+    real_templates_dir = os.path.join(cur_program_dir, 'templates')
+    generated_templates_dir = os.path.join(real_templates_dir, 'generated')
+
+    # Ensure the generated directory exists
+    if not os.path.exists(generated_templates_dir):
+        os.makedirs(generated_templates_dir, exist_ok=True)
+
+    # Add the generated directory to the template search path
+    from jinja2 import ChoiceLoader, FileSystemLoader
+    app.jinja_loader = ChoiceLoader([
+        FileSystemLoader(real_templates_dir),
+        FileSystemLoader(generated_templates_dir)
+    ])
 
     # Configure the app
     configure_app(app)

@@ -293,8 +293,9 @@ class FlaskTestServer:
                 init_item_state_manager(config)
                 load_all_data(config)
 
-                                # Create a fresh Flask app instance
-                app = Flask(__name__, template_folder=real_templates_dir)
+                                # Create a fresh Flask app instance with explicit static folder
+                static_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../potato/static'))
+                app = Flask(__name__, template_folder=real_templates_dir, static_folder=static_folder)
 
                 # Configure Jinja2 to also look in the generated templates directory
                 generated_templates_dir = os.path.join(real_templates_dir, 'generated')
