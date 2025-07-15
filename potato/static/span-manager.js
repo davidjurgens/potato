@@ -143,57 +143,66 @@ class SpanManager {
         }
     }
 
+    /**
+     * Render all spans in the text container
+     */
     renderSpans() {
-        console.log('SpanManager: renderSpans() called');
         const textContainer = document.getElementById('instance-text');
         if (!textContainer) {
             console.warn('SpanManager: Text container not found');
             return;
         }
 
-        // Use the original text from the global instance if available
-        let text = '';
-        if (window.currentInstance && window.currentInstance.text) {
-            text = window.currentInstance.text;
-        } else {
-            text = textContainer.textContent;
-        }
-
+        // Get spans from the correct property
         const spans = this.getSpans();
-        console.log('SpanManager: renderSpans - text length:', text.length);
-        console.log('SpanManager: renderSpans - spans:', spans);
-        console.log('SpanManager: renderSpans - spans.length:', spans.length);
+        console.log('SpanManager: Starting renderSpans with', spans?.length || 0, 'spans');
+        console.log('SpanManager: Spans data:', spans);
 
         // Clear existing content
         textContainer.innerHTML = '';
 
-        if (spans.length === 0) {
-            textContainer.textContent = text;
-            console.log('SpanManager: No spans to render, restored original text');
+        if (!spans || spans.length === 0) {
+            // Just display the original text
+            const originalText = window.currentInstance?.text || '';
+            textContainer.textContent = originalText;
+            console.log('SpanManager: No spans to render, displaying original text:', originalText);
             return;
         }
 
-        // Build boundary points
+        // Calculate overlap depths before rendering
+        const overlapData = this.calculateOverlapDepths(spans);
+        console.log('SpanManager: Overlap data:', overlapData);
+
+        // Sort spans by start position for proper rendering order
+        const sortedSpans = [...spans].sort((a, b) => a.start - b.start);
+
+        // Create boundary events for span start/end positions
         const boundaries = [];
-        spans.forEach(span => {
-            boundaries.push({ pos: span.start, type: 'start', span });
-            boundaries.push({ pos: span.end, type: 'end', span });
+        sortedSpans.forEach(span => {
+            boundaries.push({ position: span.start, span: span, type: 'start' });
+            boundaries.push({ position: span.end, span: span, type: 'end' });
         });
-        // Sort: by position, then 'end' before 'start' at same pos
-        boundaries.sort((a, b) => a.pos - b.pos || (a.type === 'end' ? -1 : 1));
+        boundaries.sort((a, b) => a.position - b.position);
 
-        let currentPos = 0;
-        let openSpans = [];
+        console.log('SpanManager: Boundaries:', boundaries);
+
+        // Get the original text
+        const text = window.currentInstance?.text || textContainer.textContent || '';
+        console.log('SpanManager: Original text length:', text.length);
+
+        // Render spans using boundary approach
         const fragmentStack = [document.createDocumentFragment()];
+        const openSpans = [];
+        let currentPos = 0;
 
-        for (let i = 0; i < boundaries.length; i++) {
-            const boundary = boundaries[i];
-            // Add text up to this boundary
-            if (boundary.pos > currentPos) {
-                const textNode = document.createTextNode(text.substring(currentPos, boundary.pos));
+        for (const boundary of boundaries) {
+            // Add text before this boundary
+            if (currentPos < boundary.position) {
+                const textNode = document.createTextNode(text.substring(currentPos, boundary.position));
                 fragmentStack[fragmentStack.length - 1].appendChild(textNode);
-                currentPos = boundary.pos;
             }
+            currentPos = boundary.position;
+
             if (boundary.type === 'start') {
                 // Open a new span
                 const spanElement = document.createElement('span');
@@ -269,8 +278,14 @@ class SpanManager {
         }
         // Append to container
         textContainer.appendChild(fragmentStack[0]);
+
+        // Apply overlap styling after rendering
+        const spanElements = textContainer.querySelectorAll('.annotation-span');
+        this.applyOverlapStyling(spanElements, overlapData);
+
         console.log('SpanManager: Rendered', spans.length, 'spans');
-        console.log('SpanManager: Final DOM has', textContainer.querySelectorAll('.annotation-span').length, 'span elements');
+        console.log('SpanManager: Final DOM has', spanElements.length, 'span elements');
+        console.log('SpanManager: Final text container content:', textContainer.innerHTML.substring(0, 200) + '...');
     }
 
     /**
@@ -569,6 +584,142 @@ class SpanManager {
         }
         // Fallback color if label not found in colors
         return '#f0f0f066'; // A neutral gray with 40% opacity
+    }
+
+    /**
+     * Calculate overlap depths and adjust span positioning for better visibility
+     */
+    calculateOverlapDepths(spans) {
+        if (!spans || spans.length === 0) return [];
+
+        console.log('SpanManager: Calculating overlap depths for', spans.length, 'spans');
+
+        // Sort spans by start position
+        const sortedSpans = [...spans].sort((a, b) => a.start - b.start);
+        const overlapMap = new Map();
+
+        // Calculate overlaps
+        for (let i = 0; i < sortedSpans.length; i++) {
+            const currentSpan = sortedSpans[i];
+            const currentKey = `${currentSpan.start}-${currentSpan.end}`;
+
+            if (!overlapMap.has(currentKey)) {
+                overlapMap.set(currentKey, {
+                    span: currentSpan,
+                    overlaps: [],
+                    depth: 0
+                });
+            }
+
+            // Check for overlaps with other spans
+            for (let j = i + 1; j < sortedSpans.length; j++) {
+                const otherSpan = sortedSpans[j];
+
+                // Check if spans overlap
+                if (this.spansOverlap(currentSpan, otherSpan)) {
+                    const otherKey = `${otherSpan.start}-${otherSpan.end}`;
+
+                    // Add to current span's overlaps
+                    overlapMap.get(currentKey).overlaps.push(otherSpan);
+
+                    // Add to other span's overlaps
+                    if (!overlapMap.has(otherKey)) {
+                        overlapMap.set(otherKey, {
+                            span: otherSpan,
+                            overlaps: [],
+                            depth: 0
+                        });
+                    }
+                    overlapMap.get(otherKey).overlaps.push(currentSpan);
+                }
+            }
+        }
+
+        // Calculate depths using a simpler approach to avoid recursion issues
+        let changed = true;
+        let maxIterations = 100; // Prevent infinite loops
+        let iteration = 0;
+
+        while (changed && iteration < maxIterations) {
+            changed = false;
+            iteration++;
+
+            for (const [spanKey, spanData] of overlapMap) {
+                let maxOverlapDepth = 0;
+
+                // Find the maximum depth of overlapping spans
+                for (const overlappingSpan of spanData.overlaps) {
+                    const overlappingKey = `${overlappingSpan.start}-${overlappingSpan.end}`;
+                    const overlappingData = overlapMap.get(overlappingKey);
+                    if (overlappingData) {
+                        maxOverlapDepth = Math.max(maxOverlapDepth, overlappingData.depth);
+                    }
+                }
+
+                // Set this span's depth to one more than the maximum overlap depth
+                const newDepth = maxOverlapDepth + 1;
+                if (newDepth !== spanData.depth) {
+                    spanData.depth = newDepth;
+                    changed = true;
+                }
+            }
+        }
+
+        if (iteration >= maxIterations) {
+            console.warn('SpanManager: Max iterations reached in overlap depth calculation');
+        }
+
+        const result = Array.from(overlapMap.values());
+        console.log('SpanManager: Overlap calculation complete:', result);
+        return result;
+    }
+
+    /**
+     * Check if two spans overlap
+     */
+    spansOverlap(span1, span2) {
+        return span1.start < span2.end && span2.start < span1.end;
+    }
+
+    /**
+     * Apply overlap-based styling to span elements
+     */
+    applyOverlapStyling(spanElements, overlapData) {
+        const maxDepth = Math.max(...overlapData.map(d => d.depth), 0);
+
+        spanElements.forEach(spanElement => {
+            const start = parseInt(spanElement.dataset.start);
+            const end = parseInt(spanElement.dataset.end);
+            const spanKey = `${start}-${end}`;
+
+            const data = overlapData.find(d =>
+                d.span.start === start && d.span.end === end
+            );
+
+            if (data && data.depth > 0) {
+                // Invert the depth so outermost is at base, innermost is on top
+                const layer = maxDepth - data.depth + 1;
+                const baseHeight = 1.2; // Base line height
+                const heightIncrement = 0.3; // Additional height per layer
+                const offsetIncrement = 0.2; // Vertical offset per layer
+
+                const height = baseHeight + (layer * heightIncrement);
+                const offset = (layer - 1) * offsetIncrement;
+
+                // Apply CSS custom properties for dynamic styling
+                spanElement.style.setProperty('--overlap-height', `${height}em`);
+                spanElement.style.setProperty('--overlap-offset', `${offset}em`);
+                spanElement.style.setProperty('--overlap-depth', layer);
+                spanElement.style.setProperty('--max-depth', maxDepth);
+
+                // Add overlap class for CSS targeting
+                spanElement.classList.add('span-overlap');
+                spanElement.classList.add(`overlap-depth-${layer}`);
+
+                // Add z-index to ensure proper layering (innermost on top)
+                spanElement.style.zIndex = layer;
+            }
+        });
     }
 }
 
