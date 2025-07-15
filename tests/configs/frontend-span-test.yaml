@@ -1,0 +1,104 @@
+# Test configuration for frontend span annotation system
+# This config includes both span and other annotation types to test integration
+
+annotation_task_name: "Frontend Span Integration Test"
+annotation_task_description: "Testing the new frontend-driven span annotation system with mixed annotation types"
+
+# Required fields for config validation
+task_dir: "tests/output/frontend-span-test"
+output_annotation_dir: "tests/output/frontend-span-test/annotation_output"
+data_files: ["tests/data/frontend_span_test_data.json"]
+item_properties:
+  id_key: "id"
+  text_key: "text"
+alert_time_each_instance: 10000000
+
+# Data configuration
+data:
+  file_path: "tests/data/frontend_span_test_data.json"
+  file_type: "json"
+
+# Annotation scheme with multiple types
+annotation_scheme:
+  # Span annotation type
+  emotion_spans:
+    type: "span"
+    labels: ["positive", "negative", "neutral", "mixed"]
+    description: "Annotate emotional content in text spans"
+    color_scheme:
+      positive: "#d4edda"
+      negative: "#f8d7da"
+      neutral: "#d1ecf1"
+      mixed: "#fff3cd"
+
+  # Text annotation type
+  overall_sentiment:
+    type: "text"
+    description: "Overall sentiment of the text"
+    required: true
+
+  # Select annotation type
+  topic:
+    type: "select"
+    labels: ["politics", "technology", "sports", "entertainment", "other"]
+    description: "Main topic of the text"
+    required: true
+
+  # Slider annotation type
+  confidence:
+    type: "slider"
+    min: 0
+    max: 100
+    default: 50
+    description: "Confidence in your annotation"
+    required: false
+
+  # Radio annotation type
+  quality:
+    type: "radio"
+    labels: ["excellent", "good", "fair", "poor"]
+    description: "Quality of the text"
+    required: true
+
+# Interface configuration
+interface:
+  show_progress: true
+  show_navigation: true
+  allow_go_to: true
+  auto_save: true
+  auto_save_interval: 30
+
+# Output configuration
+output:
+  directory: "tests/output/frontend-span-test"
+  format: "jsonl"
+  include_metadata: true
+  include_timestamps: true
+
+# Validation rules
+validation:
+  require_all_required: true
+  allow_partial_save: false
+  validate_span_overlaps: false  # Allow overlapping spans for testing
+
+# Frontend specific settings
+frontend:
+  enable_span_manager: true
+  span_rendering: "boundary-based"
+  show_span_labels: true
+  enable_span_deletion: true
+  span_hover_effects: true
+
+# User configuration
+user_config:
+  allow_all_users: true
+  users: []
+
+# Authentication
+authentication:
+  method: "in_memory"
+
+# Session configuration
+session_lifetime_days: 1
+persist_sessions: false
+secret_key: "test-secret-key-for-frontend-span-tests"

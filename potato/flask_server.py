@@ -1054,6 +1054,9 @@ def get_annotations_for_user_on(username, instance_id):
     """
     Returns the label-based annotations made by this user on the instance.
     """
+    # Normalize instance_id to string for consistent key lookup
+    instance_id = str(instance_id)
+
     user_state = get_user_state(username)
     print("instance_id", instance_id)
     raw_annotations = user_state.get_label_annotations(instance_id)
@@ -1083,16 +1086,30 @@ def get_span_annotations_for_user_on(username, instance_id):
     logger.debug(f"Username: {username}")
     logger.debug(f"Instance ID: {instance_id}")
 
+    # Normalize instance_id to string for consistent key lookup
+    instance_id = str(instance_id)
+    logger.debug(f"Normalized Instance ID: {instance_id}")
+
     user_state = get_user_state(username)
     logger.debug(f"User state: {user_state}")
 
     if not user_state:
         logger.warning(f"User state not found for user: {username}")
-        return {}
+        return []
 
-    span_annotations = user_state.get_span_annotations(instance_id)
-    logger.debug(f"Raw span annotations from user state: {span_annotations}")
-    print(f"🔍 get_span_annotations_for_user_on({username}, {instance_id}): {span_annotations}")
+    span_annotations_dict = user_state.get_span_annotations(instance_id)
+    logger.debug(f"Raw span annotations from user state: {span_annotations_dict}")
+    print(f"🔍 get_span_annotations_for_user_on({username}, {instance_id}): {span_annotations_dict}")
+
+    # Convert dictionary to list of SpanAnnotation objects
+    span_annotations = list(span_annotations_dict.keys()) if span_annotations_dict else []
+    logger.debug(f"Converted to list: {span_annotations}")
+    print(f"🔍 Converted to list: {span_annotations}")
+
+    # Debug: Print details of each span
+    for span in span_annotations:
+        print(f"[DEBUG SPAN] schema={span.get_schema()} label={span.get_name()} start={span.get_start()} end={span.get_end()} id={span.get_id()}")
+        logger.debug(f"[DEBUG SPAN] schema={span.get_schema()} label={span.get_name()} start={span.get_start()} end={span.get_end()} id={span.get_id()}")
 
     # Debug: Check the internal storage structure
     if hasattr(user_state, 'instance_id_to_span_to_value'):

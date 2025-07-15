@@ -1,0 +1,7 @@
+{
+  "title": "Consent Form",
+  "description": "Please read and agree to participate in this annotation study.",
+  "content": "By participating in this study, you agree to provide honest and thoughtful annotations. Your responses will be used for research purposes only.",
+  "required": true,
+  "type": "consent"
+}

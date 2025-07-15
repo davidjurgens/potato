@@ -14,6 +14,138 @@
     <!-- Custom Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 
+    <!-- Robust Span Annotation Styles -->
+    <style>
+        /* Robust Span Annotation Styling */
+        .span-highlight {
+            position: relative;
+            display: inline;
+            border-radius: 4px;
+            padding: 2px 4px;
+            margin: 0 1px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .span-highlight:hover {
+            filter: brightness(0.9);
+        }
+
+        /* Nested spans get progressively smaller padding to show hierarchy */
+        .span-highlight .span-highlight {
+            padding: 0px 1px !important;
+            margin: 2px !important;
+            border-radius: 2px !important;
+            box-shadow: 0 1px 1px rgba(0,0,0,0.1) !important;
+        }
+
+        .span-highlight .span-highlight .span-highlight {
+            padding: 0px 0px !important;
+            margin: 3px !important;
+            border-radius: 1px !important;
+            box-shadow: none !important;
+        }
+
+        .span-delete {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            z-index: 15;
+        }
+
+        .span-highlight:hover .span-delete {
+            display: flex;
+        }
+
+        /* Nested span delete buttons are positioned closer */
+        .span-highlight .span-highlight .span-delete {
+            top: -10px !important;
+            right: -10px !important;
+            width: 22px !important;
+            height: 22px !important;
+            font-size: 13px !important;
+            z-index: 25 !important;
+        }
+
+        .span-highlight .span-highlight .span-highlight .span-delete {
+            top: -8px !important;
+            right: -8px !important;
+            width: 20px !important;
+            height: 20px !important;
+            font-size: 12px !important;
+            z-index: 35 !important;
+        }
+
+        .span-label {
+            position: absolute;
+            top: -25px;
+            left: 0;
+            background: #333;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            white-space: nowrap;
+            display: none;
+            z-index: 10;
+        }
+
+        .span-tooltip {
+            display: none;
+            position: absolute;
+            top: -30px;
+            left: 0;
+            background: #333;
+            color: #fff;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            white-space: nowrap;
+            z-index: 100;
+        }
+
+        .span-highlight:hover .span-label {
+            display: block;
+        }
+
+        /* Nested span labels are positioned higher to avoid overlap */
+        .span-highlight .span-highlight .span-label {
+            top: -30px !important;
+            z-index: 20 !important;
+        }
+
+        .span-highlight .span-highlight .span-highlight .span-label {
+            top: -35px !important;
+            z-index: 30 !important;
+        }
+
+        /* Text container styling for span annotation */
+        #instance-text {
+            position: relative;
+            cursor: text;
+            user-select: text;
+            line-height: 1.8;
+            font-size: 18px;
+        }
+
+        #instance-text:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+    </style>
+
     <!-- jQuery (required for span annotation) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
 </head>
@@ -90,9 +222,20 @@
                     <div class="mb-4">
                         <h5 class="mb-3">Text to Annotate:</h5>
                         <div id="instance-text" class="p-3 border rounded" style="background-color: var(--light-bg); min-height: 100px;">
-                            <!-- Instance text will be loaded here -->
+                            <!-- Instance text will be loaded here by JS; no server-rendered spans -->
                         </div>
                     </div>
+
+                    <!-- Span annotation label selector -->
+                    <div id="span-label-selector" class="label-selector mb-4" style="display: none;">
+                        <h3>Select Span Label:</h3>
+                        <div class="label-buttons" id="label-buttons">
+                            <!-- Label buttons will be dynamically generated -->
+                        </div>
+                    </div>
+
+                    <!-- Status messages -->
+                    <div id="status" class="status" style="display: none;"></div>
                     <!-- Hidden input for instance_id -->
                     <input type="hidden" id="instance_id" name="instance_id" value="">
 
@@ -142,13 +285,14 @@
     <script type="text/javascript">
         window.config = {
             annotation_task_name: "{{ annotation_task_name }}",
-            debug: {{ debug | tojson | safe }},
+            debug: false,
             api_key: "test_api_key",
             username: "{{ username }}"
         };
     </script>
 
     <!-- Load annotation JavaScript -->
+    <script src="{{ url_for('static', filename='span-manager.js') }}"></script>
     <script src="{{ url_for('static', filename='annotation.js') }}"></script>
 </body>
 </html>

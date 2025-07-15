@@ -12,3 +12,288 @@ mark.emphasis {
 .suggestion {
     background: #90EE9090;
 }
+
+/* Span Annotation Styles */
+
+/* Span annotation container */
+.annotation-span {
+    position: relative;
+    display: inline;
+    border-radius: 4px;
+    padding: 2px 4px;
+    margin: 0 1px;
+    cursor: pointer;
+    transition: all 0.2s;
+    background-color: #ffeaa7;
+}
+
+.annotation-span:hover {
+    filter: brightness(0.9);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Delete button for spans */
+.span-delete-btn {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    z-index: 15;
+    transition: all 0.2s;
+}
+
+.span-delete-btn:hover {
+    background: #c82333;
+    transform: scale(1.1);
+}
+
+.annotation-span:hover .span-delete-btn {
+    display: flex;
+}
+
+/* Label display for spans */
+.span-label {
+    position: absolute;
+    top: -25px;
+    left: 0;
+    background: #333;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+    white-space: nowrap;
+    display: none;
+    z-index: 10;
+    pointer-events: none;
+}
+
+.annotation-span:hover .span-label {
+    display: block;
+}
+
+/* Label selector buttons */
+.label-selector {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border: 1px solid #dee2e6;
+}
+
+.label-selector h3 {
+    margin-bottom: 15px;
+    color: #333;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.label-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.label-button {
+    padding: 10px 20px;
+    border: 2px solid #dee2e6;
+    background: white;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.3s;
+    font-weight: 500;
+}
+
+.label-button:hover {
+    border-color: #007bff;
+    background: #f8f9ff;
+    transform: translateY(-1px);
+}
+
+.label-button.active {
+    border-color: #007bff;
+    background: #007bff;
+    color: white;
+    box-shadow: 0 2px 4px rgba(0,123,255,0.3);
+}
+
+/* Status messages */
+.status {
+    text-align: center;
+    padding: 10px;
+    margin-bottom: 20px;
+    border-radius: 6px;
+    font-weight: 500;
+    transition: all 0.3s;
+}
+
+.status.success {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.status.error {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.status.info {
+    background: #d1ecf1;
+    color: #0c5460;
+    border: 1px solid #bee5eb;
+}
+
+/* Text container enhancements */
+.text-container {
+    position: relative;
+    background: white;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    padding: 30px;
+    margin-bottom: 30px;
+    min-height: 200px;
+    line-height: 1.8;
+    font-size: 18px;
+    cursor: text;
+    user-select: text;
+    transition: border-color 0.3s;
+}
+
+.text-container:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0,123,255,0.1);
+}
+
+/* Instructions panel */
+.instructions {
+    background: #e7f3ff;
+    border-left: 4px solid #007bff;
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 0 6px 6px 0;
+}
+
+.instructions h3 {
+    color: #0056b3;
+    margin-bottom: 10px;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.instructions ul {
+    margin-left: 20px;
+    margin-bottom: 0;
+}
+
+.instructions li {
+    margin-bottom: 5px;
+    color: #0056b3;
+}
+
+/* Loading state */
+.loading {
+    text-align: center;
+    padding: 40px;
+    color: #6c757d;
+    font-style: italic;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .text-container {
+        padding: 20px;
+        font-size: 16px;
+    }
+
+    .label-buttons {
+        gap: 8px;
+    }
+
+    .label-button {
+        padding: 8px 16px;
+        font-size: 13px;
+    }
+
+    .annotation-span {
+        padding: 1px 2px;
+        margin: 0 0.5px;
+    }
+}
+
+/* Animation for span creation */
+@keyframes spanFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.annotation-span {
+    animation: spanFadeIn 0.2s ease-out;
+}
+
+/* Selection highlighting */
+.text-container::selection {
+    background: rgba(0, 123, 255, 0.3);
+}
+
+.text-container::-moz-selection {
+    background: rgba(0, 123, 255, 0.3);
+}
+
+/* Focus indicators for accessibility */
+.annotation-span:focus {
+    outline: 2px solid #007bff;
+    outline-offset: 2px;
+}
+
+.label-button:focus {
+    outline: 2px solid #007bff;
+    outline-offset: 2px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .annotation-span {
+        border: 1px solid #000;
+    }
+
+    .span-delete-btn {
+        border: 1px solid #fff;
+    }
+
+    .span-label {
+        border: 1px solid #fff;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .annotation-span,
+    .label-button,
+    .span-delete-btn {
+        transition: none;
+    }
+
+    .annotation-span {
+        animation: none;
+    }
+}

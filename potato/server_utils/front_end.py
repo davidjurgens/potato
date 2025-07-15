@@ -147,6 +147,7 @@ def generate_schematic(annotation_scheme):
         "multirate": generate_multirate_layout,
         "radio": generate_radio_layout,
         "highlight": generate_span_layout,
+        "span": generate_span_layout,
         "likert": generate_likert_layout,
         "text": generate_textbox_layout,
         "number": generate_number_layout,

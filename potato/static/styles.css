@@ -1257,3 +1257,61 @@ fieldset[schema] {
         background-color: #000;
     }
 }
+
+.annotation-span {
+    position: relative;
+    display: inline;
+    border-radius: 4px;
+    padding: 2px 4px;
+    margin: 0 1px;
+    cursor: pointer;
+    transition: all 0.2s;
+    background-color: #ffeaa7;
+}
+.annotation-span:hover {
+    filter: brightness(0.9);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.span-delete-btn {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    z-index: 15;
+    transition: all 0.2s;
+}
+.span-delete-btn:hover {
+    background: #c82333;
+    transform: scale(1.1);
+}
+.annotation-span:hover .span-delete-btn {
+    display: flex;
+}
+.span-label {
+    position: absolute;
+    top: -25px;
+    left: 0;
+    background: #333;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+    white-space: nowrap;
+    display: none;
+    z-index: 10;
+    pointer-events: none;
+}
+.annotation-span:hover .span-label {
+    display: block;
+}

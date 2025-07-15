@@ -1233,32 +1233,73 @@ def get_annotations():
         logger.error(f"Error getting annotations: {e}")
         return jsonify({"error": "Internal server error"}), 500
 
+@app.route("/api/spans/<instance_id>")
+def get_span_data(instance_id):
+    """
+    Get span annotations as structured data for frontend rendering.
+
+    Returns:
+        JSON with instance text and span annotations in a format
+        suitable for frontend DOM manipulation.
+    """
+    logger.debug(f"=== GET_SPAN_DATA START ===")
+    logger.debug(f"Instance ID: {instance_id}")
+
+    if 'username' not in session:
+        logger.warning("Get span data without active session")
+        return jsonify({"error": "No active session"}), 401
+
+    username = session['username']
+    logger.debug(f"Username: {username}")
+
+    # Get the original text for this instance
+    try:
+        # Get the text from the item state manager
+        item_state_manager = get_item_state_manager()
+        instance = item_state_manager.get_item(instance_id)
+        if not instance:
+            logger.error(f"Instance not found: {instance_id}")
+            return jsonify({"error": "Instance not found"}), 404
+
+        original_text = instance.get_text()
+        logger.debug(f"Original text: {original_text[:100]}...")
+    except Exception as e:
+        logger.error(f"Error getting instance text: {e}")
+        return jsonify({"error": f"Instance not found: {instance_id}"}), 404
+
+    # Get span annotations
+    spans = get_span_annotations_for_user_on(username, instance_id)
+    logger.debug(f"Found {len(spans)} spans")
+
+    # Convert to frontend-friendly format
+    span_data = []
+    for span in spans:
+        span_info = {
+            'id': span.get_id(),
+            'schema': span.get_schema(),
+            'label': span.get_name(),
+            'title': span.get_title(),
+            'start': span.get_start(),
+            'end': span.get_end(),
+            'text': original_text[span.get_start():span.get_end()]
+        }
+        span_data.append(span_info)
+        logger.debug(f"Span data: {span_info}")
+
+    response_data = {
+        'instance_id': instance_id,
+        'text': original_text,
+        'spans': span_data
+    }
+
+    logger.debug(f"=== GET_SPAN_DATA END ===")
+    return jsonify(response_data)
+
+@app.route("/updateinstance", methods=["POST"])
 def update_instance():
     """
     PRIMARY ANNOTATION ENDPOINT: Handle all annotation updates for instances.
-
-    This is the main endpoint for adding, updating, and deleting both label and span
-    annotations. It handles real-time annotation updates and is called whenever
-    a user interacts with annotation elements in the UI.
-
-    Features:
-    - Label annotation handling (radio buttons, checkboxes, text inputs, sliders, etc.)
-    - Span annotation handling (text selection and highlighting)
-    - Annotation deletion (span annotations with value=None)
-    - Real-time updates without page reload
-    - Automatic annotator registration
-    - State persistence
-
-    Args (JSON):
-        instance_id: ID of the instance being annotated
-        type: "label" or "span" - the type of annotation
-        schema: The annotation schema name
-        state: Array of annotation objects with format:
-            For labels: [{"name": "label_name", "value": "label_value"}]
-            For spans: [{"name": "span_name", "title": "span_title", "start": start_pos, "end": end_pos, "value": "span_text"}]
-
-    Returns:
-        flask.Response: JSON response with status
+    This endpoint only updates backend state for spans and labels. It does not generate or return any HTML.
     """
     logger.debug("=== UPDATEINSTANCE ROUTE START ===")
     logger.debug(f"Session: {dict(session)}")
@@ -1272,55 +1313,23 @@ def update_instance():
         return jsonify({"status": "error", "message": "No active session"})
 
     if request.is_json:
-        print("🔍 updateinstance request.json: ", request.json)
         logger.debug(f"Received JSON data: {request.json}")
-
-        # Get the instance id
-        instance_id = request.json.get("instance_id")
-        logger.debug(f"Instance ID: {instance_id}")
-
-        # Get the schema name
+        instance_id = str(request.json.get("instance_id"))  # Normalize to string
         schema_name = request.json.get("schema")
-        logger.debug(f"Schema name: {schema_name}")
-
-        # Get the state of items for that schema
         schema_state = request.json.get("state")
-        logger.debug(f"Schema state: {schema_state}")
-
-        # Get the annotation type
         annotation_type = request.json.get("type")
-        logger.debug(f"Annotation type: {annotation_type}")
-
         username = session['username']
-        logger.debug(f"Using username: {username}")
-        logger.debug(f"All users in state manager: {get_user_state_manager().get_user_ids()}")
-        logger.debug(f"User state manager has user '{username}': {get_user_state_manager().has_user(username)}")
-
         user_state = get_user_state(username)
-        logger.debug(f"Retrieved user state: {user_state}")
-        logger.debug(f"User state phase: {user_state.get_phase() if user_state else 'No user state'}")
-
-        print(f"🔍 [BEFORE] instance_id_to_span_to_value: {dict(user_state.instance_id_to_span_to_value)}")
-
         if not user_state:
             logger.error(f"User state not found for user: {username}")
             return jsonify({"status": "error", "message": "User state not found"})
-
-        # Debug: Print current span annotations before processing
-        current_spans = get_span_annotations_for_user_on(username, instance_id)
-        logger.debug(f"Current span annotations for {username} on {instance_id}: {current_spans}")
-        print(f"🔍 Current span annotations for {username} on {instance_id}: {current_spans}")
 
         if annotation_type == "span":
             for sv in schema_state:
                 span = SpanAnnotation(schema_name, sv["name"], sv.get("title", sv["name"]), int(sv["start"]), int(sv["end"]))
                 value = sv["value"]
                 if value is None:
-                    # Remove the span annotation if value is None (deletion)
-                    logger.debug(f"Deleting span annotation: {span}")
-                    print(f"🔍 Deleting span annotation: {span}")
                     if instance_id in user_state.instance_id_to_span_to_value:
-                        # Find and remove the matching span
                         spans_to_remove = []
                         for existing_span in user_state.instance_id_to_span_to_value[instance_id]:
                             if (existing_span.get_schema() == span.get_schema() and
@@ -1328,49 +1337,19 @@ def update_instance():
                                 existing_span.get_start() == span.get_start() and
                                 existing_span.get_end() == span.get_end()):
                                 spans_to_remove.append(existing_span)
-                                logger.debug(f"Found matching span to remove: {existing_span}")
-
                         for span_to_remove in spans_to_remove:
                             del user_state.instance_id_to_span_to_value[instance_id][span_to_remove]
-                            logger.debug(f"Removed span: {span_to_remove}")
-                            print(f"🔍 Removed span: {span_to_remove}")
                 else:
-                    # Add or update the span annotation
-                    logger.debug(f"Adding/updating span annotation: {span} = {value}")
-                    print(f"🔍 Adding/updating span annotation: {span} = {value}")
+                    if instance_id not in user_state.instance_id_to_span_to_value:
+                        user_state.instance_id_to_span_to_value[instance_id] = {}
                     user_state.add_span_annotation(instance_id, span, value)
-
-        print(f"🔍 [AFTER] instance_id_to_span_to_value: {dict(user_state.instance_id_to_span_to_value)}")
-
-        # If we're annotating
-        if user_state.get_phase() == UserPhase.ANNOTATION:
-            # Update that we got some annotation on this instance
-            logger.debug(f"Registering annotator {username} for instance {instance_id}")
-            get_item_state_manager().register_annotator(instance_id, username)
-
-        # Debug: Print span annotations after processing
-        updated_spans = get_span_annotations_for_user_on(username, instance_id)
-        logger.debug(f"Updated span annotations for {username} on {instance_id}: {updated_spans}")
-        print(f"🔍 Updated span annotations for {username} on {instance_id}: {updated_spans}")
-
-        # Debug: Print user state before saving
-        logger.debug(f"User state before save - instance_id_to_span_to_value: {dict(user_state.instance_id_to_span_to_value)}")
-        print(f"🔍 User state before save - instance_id_to_span_to_value: {dict(user_state.instance_id_to_span_to_value)}")
-
-        # Save these new instance annotations
-        logger.debug(f"Saving user state for {username}")
+        elif annotation_type == "label":
+            for sv in schema_state:
+                label = Label(schema_name, sv["name"])
+                value = sv["value"]
+                user_state.add_label_annotation(instance_id, label, value)
+        # Save state
         get_user_state_manager().save_user_state(user_state)
-        logger.debug(f"User state saved successfully")
-
-        # Debug: Verify the save worked by reloading user state
-        reloaded_user_state = get_user_state(username)
-        reloaded_spans = get_span_annotations_for_user_on(username, instance_id)
-        logger.debug(f"Reloaded span annotations for {username} on {instance_id}: {reloaded_spans}")
-        print(f"🔍 Reloaded span annotations for {username} on {instance_id}: {reloaded_spans}")
-        logger.debug(f"Reloaded user state - instance_id_to_span_to_value: {dict(reloaded_user_state.instance_id_to_span_to_value)}")
-        print(f"🔍 Reloaded user state - instance_id_to_span_to_value: {dict(reloaded_user_state.instance_id_to_span_to_value)}")
-
-        logger.debug("=== UPDATEINSTANCE ROUTE END ===")
         return jsonify({"status": "success"})
     else:
         logger.warning("Update instance called without JSON data")
@@ -1548,6 +1527,71 @@ def span_api_frontend():
                          annotation_codebook_url=config.get("annotation_codebook_url", ""),
                          alert_time_each_instance=config.get("alert_time_each_instance", 10000000))
 
+@app.route("/api/colors")
+def get_span_colors():
+    """
+    Return the span color mapping for all schemas/labels as JSON.
+    """
+    # Try to get annotation scheme from config
+    color_map = {}
+    annotation_scheme = config.get('annotation_scheme') or config.get('annotation_schemes')
+    if annotation_scheme:
+        # If dict (new style), iterate items
+        if isinstance(annotation_scheme, dict):
+            for schema_name, schema in annotation_scheme.items():
+                if schema.get('type') == 'span':
+                    label_colors = {}
+                    # Prefer color_scheme, fallback to default
+                    color_scheme = schema.get('color_scheme')
+                    labels = schema.get('labels', [])
+                    for label in labels:
+                        if isinstance(label, dict):
+                            label_name = label.get('name', label)
+                        else:
+                            label_name = label
+                        if color_scheme and label_name in color_scheme:
+                            label_colors[label_name] = color_scheme[label_name]
+                        else:
+                            # Fallback color
+                            label_colors[label_name] = '#f0f0f0'
+                    color_map[schema_name] = label_colors
+        # If list (legacy style), iterate list
+        elif isinstance(annotation_scheme, list):
+            for schema in annotation_scheme:
+                if schema.get('type') == 'span' or schema.get('annotation_type') == 'highlight':
+                    schema_name = schema.get('name', 'span')
+                    label_colors = {}
+                    color_scheme = schema.get('color_scheme') or schema.get('colors')
+                    labels = schema.get('labels', [])
+                    for label in labels:
+                        if isinstance(label, dict):
+                            label_name = label.get('name', label)
+                        else:
+                            label_name = label
+                        if color_scheme and label_name in color_scheme:
+                            label_colors[label_name] = color_scheme[label_name]
+                        else:
+                            label_colors[label_name] = '#f0f0f0'
+                    color_map[schema_name] = label_colors
+    # Fallback: provide all expected keys
+    if not color_map:
+        default_colors = {
+            'positive': '#d4edda',
+            'negative': '#f8d7da',
+            'neutral': '#d1ecf1',
+            'mixed': '#fff3cd',
+            'happy': '#FFE6E6',
+            'sad': '#E6F3FF',
+            'angry': '#FFE6CC',
+            'surprised': '#E6FFE6',
+        }
+        color_map = {
+            'sentiment': default_colors,
+            'entity': default_colors,
+            'topic': default_colors,
+        }
+    return jsonify(color_map)
+
 
 def configure_routes(flask_app, app_config):
     """
@@ -1596,6 +1640,8 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/get_ai_hint", "get_ai_hint", get_ai_hint, methods=["GET"])
     app.add_url_rule("/api-frontend", "api_frontend", api_frontend, methods=["GET"])
     app.add_url_rule("/span-api-frontend", "span_api_frontend", span_api_frontend, methods=["GET"])
+    app.add_url_rule("/api/spans/<instance_id>", "get_span_data", get_span_data, methods=["GET"])
+    app.add_url_rule("/api/colors", "get_span_colors", get_span_colors, methods=["GET"])
 
     app.add_url_rule("/admin/user_state/<user_id>", "admin_user_state", admin_user_state, methods=["GET"])
     app.add_url_rule("/admin/health", "admin_health", admin_health, methods=["GET"])
