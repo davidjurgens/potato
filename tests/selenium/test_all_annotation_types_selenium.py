@@ -388,7 +388,7 @@ class TestIndividualAnnotationTypes(TestAllAnnotationTypes):
         """Test Likert scale annotation using likert-annotation.yaml config."""
         # Create unique test environment
         temp_dir, config_path, test_data_file, instance_ids = self.create_unique_test_environment(
-            test_data, os.path.join(os.path.dirname(__file__), "..", "test-configs", "likert-annotation.yaml"), "likert"
+            test_data, os.path.join(os.path.dirname(__file__), "..", "configs", "likert-annotation.yaml"), "likert"
         )
 
         try:
@@ -468,7 +468,7 @@ class TestIndividualAnnotationTypes(TestAllAnnotationTypes):
         """Test text input annotation using simple-text-box.yaml config."""
         # Create unique test environment
         temp_dir, config_path, test_data_file, instance_ids = self.create_unique_test_environment(
-            test_data, os.path.join(os.path.dirname(__file__), "..", "test-configs", "simple-text-box.yaml"), "text"
+            test_data, os.path.join(os.path.dirname(__file__), "..", "configs", "simple-text-box.yaml"), "text"
         )
 
         try:
@@ -554,7 +554,7 @@ class TestIndividualAnnotationTypes(TestAllAnnotationTypes):
         """Test text input annotation using Flask test client (same thread)."""
         # Create unique test environment
         temp_dir, config_path, test_data_file, instance_ids = self.create_unique_test_environment(
-            test_data, os.path.join(os.path.dirname(__file__), "..", "test-configs", "simple-text-box.yaml"), "text"
+            test_data, os.path.join(os.path.dirname(__file__), "..", "configs", "simple-text-box.yaml"), "text"
         )
 
         try:
@@ -666,7 +666,7 @@ class TestIndividualAnnotationTypes(TestAllAnnotationTypes):
         """Test slider annotation using slider-annotation.yaml config."""
         # Create unique test environment
         temp_dir, config_path, test_data_file, instance_ids = self.create_unique_test_environment(
-            test_data, os.path.join(os.path.dirname(__file__), "..", "test-configs", "slider-annotation.yaml"), "slider"
+            test_data, os.path.join(os.path.dirname(__file__), "..", "configs", "slider-annotation.yaml"), "slider"
         )
 
         try:
@@ -753,7 +753,7 @@ class TestIndividualAnnotationTypes(TestAllAnnotationTypes):
         """Test span annotation using span-annotation.yaml config with comprehensive checks."""
         # Create unique test environment
         temp_dir, config_path, test_data_file, instance_ids = self.create_unique_test_environment(
-            test_data, os.path.join(os.path.dirname(__file__), "..", "test-configs", "span-annotation.yaml"), "span"
+            test_data, os.path.join(os.path.dirname(__file__), "..", "configs", "span-annotation.yaml"), "span"
         )
 
         try:
@@ -877,7 +877,7 @@ class TestIndividualAnnotationTypes(TestAllAnnotationTypes):
         """Test radio button annotation using radio-annotation.yaml config."""
         # Create unique test environment
         temp_dir, config_path, test_data_file, instance_ids = self.create_unique_test_environment(
-            test_data, os.path.join(os.path.dirname(__file__), "..", "test-configs", "radio-annotation.yaml"), "radio"
+            test_data, os.path.join(os.path.dirname(__file__), "..", "configs", "radio-annotation.yaml"), "radio"
         )
 
         try:
@@ -964,7 +964,7 @@ class TestIndividualAnnotationTypes(TestAllAnnotationTypes):
         """Test select dropdown annotation using select-annotation.yaml config."""
         # Create unique test environment
         temp_dir, config_path, test_data_file, instance_ids = self.create_unique_test_environment(
-            test_data, os.path.join(os.path.dirname(__file__), "..", "test-configs", "select-annotation.yaml"), "select"
+            test_data, os.path.join(os.path.dirname(__file__), "..", "configs", "select-annotation.yaml"), "select"
         )
 
         try:
@@ -1051,7 +1051,7 @@ class TestIndividualAnnotationTypes(TestAllAnnotationTypes):
         """Test number input annotation using number-annotation.yaml config."""
         # Create unique test environment
         temp_dir, config_path, test_data_file, instance_ids = self.create_unique_test_environment(
-            test_data, os.path.join(os.path.dirname(__file__), "..", "test-configs", "number-annotation.yaml"), "number"
+            test_data, os.path.join(os.path.dirname(__file__), "..", "configs", "number-annotation.yaml"), "number"
         )
 
         try:
@@ -1140,7 +1140,7 @@ class TestIndividualAnnotationTypes(TestAllAnnotationTypes):
         """Test multiselect annotation using multiselect-annotation.yaml config."""
         # Create unique test environment
         temp_dir, config_path, test_data_file, instance_ids = self.create_unique_test_environment(
-            test_data, os.path.join(os.path.dirname(__file__), "..", "test-configs", "multiselect-annotation.yaml"), "multiselect"
+            test_data, os.path.join(os.path.dirname(__file__), "..", "configs", "multiselect-annotation.yaml"), "multiselect"
         )
 
         try:
@@ -1227,7 +1227,7 @@ class TestIndividualAnnotationTypes(TestAllAnnotationTypes):
         """Test multirate annotation using multirate-annotation.yaml config."""
         # Create unique test environment
         temp_dir, config_path, test_data_file, instance_ids = self.create_unique_test_environment(
-            test_data, os.path.join(os.path.dirname(__file__), "..", "test-configs", "multirate-annotation.yaml"), "multirate"
+            test_data, os.path.join(os.path.dirname(__file__), "..", "configs", "multirate-annotation.yaml"), "multirate"
         )
 
         try:
@@ -1314,7 +1314,7 @@ class TestIndividualAnnotationTypes(TestAllAnnotationTypes):
         """Test pure display annotation using pure-display-annotation.yaml config."""
         # Create unique test environment
         temp_dir, config_path, test_data_file, instance_ids = self.create_unique_test_environment(
-            test_data, os.path.join(os.path.dirname(__file__), "..", "test-configs", "pure-display-annotation.yaml"), "pure_display"
+            test_data, os.path.join(os.path.dirname(__file__), "..", "configs", "pure-display-annotation.yaml"), "pure_display"
         )
 
         try:
@@ -1396,7 +1396,7 @@ class TestIndividualAnnotationTypes(TestAllAnnotationTypes):
         """Test complete workflow with all phases using all-phases-example.yaml config."""
         # Create unique test environment
         temp_dir, config_path, test_data_file, instance_ids = self.create_unique_test_environment(
-            test_data, os.path.join(os.path.dirname(__file__), "..", "test-configs", "all-phases-example.yaml"), "mixed"
+            test_data, os.path.join(os.path.dirname(__file__), "..", "configs", "all-phases-example.yaml"), "mixed"
         )
 
         try:
@@ -1468,7 +1468,7 @@ class TestNavigationAndRestore(TestAllAnnotationTypes):
         """Test navigation and annotation restoration for span annotation."""
         # Create unique test environment
         temp_dir, config_path, test_data_file, instance_ids = self.create_unique_test_environment(
-            test_data, os.path.join(os.path.dirname(__file__), "..", "test-configs", "span-annotation.yaml"), "span_nav"
+            test_data, os.path.join(os.path.dirname(__file__), "..", "configs", "span-annotation.yaml"), "span_nav"
         )
 
         try:
@@ -1548,7 +1548,7 @@ class TestNavigationAndRestore(TestAllAnnotationTypes):
         """Test navigation and annotation restoration for likert annotation."""
         # Create unique test environment
         temp_dir, config_path, test_data_file, instance_ids = self.create_unique_test_environment(
-            test_data, os.path.join(os.path.dirname(__file__), "..", "test-configs", "likert-annotation.yaml"), "likert_nav"
+            test_data, os.path.join(os.path.dirname(__file__), "..", "configs", "likert-annotation.yaml"), "likert_nav"
         )
 
         try:
@@ -1634,7 +1634,7 @@ class TestNavigationAndRestore(TestAllAnnotationTypes):
         """Test navigation and annotation restoration for text annotation."""
         # Create unique test environment
         temp_dir, config_path, test_data_file, instance_ids = self.create_unique_test_environment(
-            test_data, os.path.join(os.path.dirname(__file__), "..", "test-configs", "text-annotation.yaml"), "text_nav"
+            test_data, os.path.join(os.path.dirname(__file__), "..", "configs", "text-annotation.yaml"), "text_nav"
         )
 
         try:
@@ -1718,7 +1718,7 @@ class TestNavigationAndRestore(TestAllAnnotationTypes):
         """Test navigation and annotation restoration for slider annotation."""
         # Create unique test environment
         temp_dir, config_path, test_data_file, instance_ids = self.create_unique_test_environment(
-            test_data, os.path.join(os.path.dirname(__file__), "..", "test-configs", "slider-annotation.yaml"), "slider_nav"
+            test_data, os.path.join(os.path.dirname(__file__), "..", "configs", "slider-annotation.yaml"), "slider_nav"
         )
 
         try:
@@ -1802,7 +1802,7 @@ class TestNavigationAndRestore(TestAllAnnotationTypes):
         """Test navigation and annotation restoration for radio annotation."""
         # Create unique test environment
         temp_dir, config_path, test_data_file, instance_ids = self.create_unique_test_environment(
-            test_data, os.path.join(os.path.dirname(__file__), "..", "test-configs", "radio-annotation.yaml"), "radio_nav"
+            test_data, os.path.join(os.path.dirname(__file__), "..", "configs", "radio-annotation.yaml"), "radio_nav"
         )
 
         try:
@@ -1888,7 +1888,7 @@ class TestNavigationAndRestore(TestAllAnnotationTypes):
         """Test navigation and annotation restoration for select annotation."""
         # Create unique test environment
         temp_dir, config_path, test_data_file, instance_ids = self.create_unique_test_environment(
-            test_data, os.path.join(os.path.dirname(__file__), "..", "test-configs", "select-annotation.yaml"), "select_nav"
+            test_data, os.path.join(os.path.dirname(__file__), "..", "configs", "select-annotation.yaml"), "select_nav"
         )
 
         try:
@@ -1977,7 +1977,7 @@ class TestNavigationAndRestore(TestAllAnnotationTypes):
         """Test navigation and annotation restoration for number annotation."""
         # Create unique test environment
         temp_dir, config_path, test_data_file, instance_ids = self.create_unique_test_environment(
-            test_data, os.path.join(os.path.dirname(__file__), "..", "test-configs", "number-annotation.yaml"), "number_nav"
+            test_data, os.path.join(os.path.dirname(__file__), "..", "configs", "number-annotation.yaml"), "number_nav"
         )
 
         try:
@@ -2060,7 +2060,7 @@ class TestNavigationAndRestore(TestAllAnnotationTypes):
         """Test navigation and annotation restoration for multiselect annotation."""
         # Create unique test environment
         temp_dir, config_path, test_data_file, instance_ids = self.create_unique_test_environment(
-            test_data, os.path.join(os.path.dirname(__file__), "..", "test-configs", "multiselect-annotation.yaml"), "multiselect_nav"
+            test_data, os.path.join(os.path.dirname(__file__), "..", "configs", "multiselect-annotation.yaml"), "multiselect_nav"
         )
 
         try:
@@ -2146,7 +2146,7 @@ class TestNavigationAndRestore(TestAllAnnotationTypes):
         """Test navigation and annotation restoration for multirate annotation."""
         # Create unique test environment
         temp_dir, config_path, test_data_file, instance_ids = self.create_unique_test_environment(
-            test_data, os.path.join(os.path.dirname(__file__), "..", "test-configs", "multirate-annotation.yaml"), "multirate_nav"
+            test_data, os.path.join(os.path.dirname(__file__), "..", "configs", "multirate-annotation.yaml"), "multirate_nav"
         )
 
         try:

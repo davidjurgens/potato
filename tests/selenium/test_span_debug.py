@@ -28,7 +28,7 @@ import sys
 # Add the project root to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from tests.helpers.flask_test_setup import FlaskTestSetup
+from tests.helpers.flask_test_setup import FlaskTestServer
 
 
 class TestSpanDebug:

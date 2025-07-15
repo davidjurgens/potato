@@ -12,7 +12,7 @@ from tests.helpers.flask_test_setup import FlaskTestServer
 @pytest.fixture(scope="module")
 def flask_server():
     # Start the server in production mode (debug=False) using the actual config
-    config_file = os.path.abspath("tests/test-configs/configs/radio-annotation.yaml")
+    config_file = os.path.abspath("tests/configs/configs/radio-annotation.yaml")
     server = FlaskTestServer(port=9001, debug=False, config_file=config_file)
     started = server.start_server()
     assert started, "Failed to start Flask server"

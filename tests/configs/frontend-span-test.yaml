@@ -18,10 +18,10 @@ data:
   file_path: "tests/data/frontend_span_test_data.json"
   file_type: "json"
 
-# Annotation scheme with multiple types
-annotation_scheme:
+# Annotation schemes with multiple types
+annotation_schemes:
   # Span annotation type
-  emotion_spans:
+  - name: "emotion_spans"
     type: "span"
     labels: ["positive", "negative", "neutral", "mixed"]
     description: "Annotate emotional content in text spans"
@@ -32,20 +32,20 @@ annotation_scheme:
       mixed: "#fff3cd"
 
   # Text annotation type
-  overall_sentiment:
+  - name: "overall_sentiment"
     type: "text"
     description: "Overall sentiment of the text"
     required: true
 
   # Select annotation type
-  topic:
+  - name: "topic"
     type: "select"
     labels: ["politics", "technology", "sports", "entertainment", "other"]
     description: "Main topic of the text"
     required: true
 
   # Slider annotation type
-  confidence:
+  - name: "confidence"
     type: "slider"
     min: 0
     max: 100
@@ -54,7 +54,7 @@ annotation_scheme:
     required: false
 
   # Radio annotation type
-  quality:
+  - name: "quality"
     type: "radio"
     labels: ["excellent", "good", "fair", "poor"]
     description: "Quality of the text"

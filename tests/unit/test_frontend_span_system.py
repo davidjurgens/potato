@@ -204,7 +204,7 @@ class TestFrontendSpanManager:
         """Test that the span manager initializes correctly"""
         # This would be tested with a JavaScript testing framework
         # For now, we'll verify the JavaScript file exists and has expected structure
-        span_manager_path = 'potato/static/span-manager.js'
+        span_manager_path = '../potato/static/span-manager.js'
         assert os.path.exists(span_manager_path)
 
         with open(span_manager_path, 'r') as f:
@@ -221,7 +221,7 @@ class TestFrontendSpanManager:
         """Test that the span manager makes correct API calls"""
         # This would be tested with a JavaScript testing framework
         # For now, we'll verify the API endpoints are correctly referenced
-        span_manager_path = 'potato/static/span-manager.js'
+        span_manager_path = '../potato/static/span-manager.js'
 
         with open(span_manager_path, 'r') as f:
             content = f.read()
