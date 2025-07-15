@@ -50,6 +50,7 @@ sys.path.insert(0, cur_program_dir)
 from item_state_management import ItemStateManager, Item, Label, SpanAnnotation
 from item_state_management import get_item_state_manager, init_item_state_manager
 from user_state_management import UserStateManager, UserState, get_user_state_manager, init_user_state_manager
+from ai_state_mangement import init_ai_state, get_ai_state
 from authentificaton import UserAuthenticator
 from phase import UserPhase
 
@@ -813,34 +814,7 @@ def add_ai_hints(soup: BeautifulSoup, instance_id: str) -> BeautifulSoup:
     
     return soup
 
-# Shea: a function to get some suggestions from AI
-def ai_hints(text: str) -> str:
-    """
-    Returns the AI hints for the given instance.
-    """
-    import requests
-    print(text)
-    description = config["annotation_schemes"][0]["description"]
-    annotation_type = config["annotation_schemes"][0]["annotation_type"]
-    print(description)
-    prompt = f'''You are assisting a user with an annotation task. Here is the annotation instruction: {description} 
-    Here is the annotation task type: {annotation_type}
-    Here is the sentence (or item) to annotate: {text}
-    Based on the instruction, task type, and the given sentence, generate a short, helpful hint that guides the user on how to approach this annotation. 
-    Also, give a short reason of your answer and the relevant part(keyword or text).
-    The hint should not provide the label or answer directly, but should highlight what the user might consider or look for.'''
 
-    response = requests.post(
-        'http://localhost:11434/api/generate',
-        json={
-            # 'model': 'llama3.2',
-            'model': 'qwen3:0.6b',
-            'prompt': prompt,
-            'stream': False
-        }
-    )
-    print(response.json()['response'])
-    return response.json()['response']
 
 
 
@@ -1116,6 +1090,7 @@ def run_server(args):
     init_user_state_manager(config)
     init_item_state_manager(config)
     load_all_data(config)
+    init_ai_state(config)
 
     # Log password requirement status
     logger.info(f"Password authentication required: {config.get('require_password', True)}")
