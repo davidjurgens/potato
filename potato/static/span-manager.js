@@ -203,6 +203,12 @@ class SpanManager {
                 spanElement.dataset.end = boundary.span.end;
                 spanElement.dataset.label = boundary.span.label;
 
+                // Apply the correct color for this label
+                const backgroundColor = this.getSpanColor(boundary.span.label);
+                if (backgroundColor) {
+                    spanElement.style.backgroundColor = backgroundColor;
+                }
+
                 // Add delete button
                 const deleteBtn = document.createElement('button');
                 deleteBtn.className = 'span-delete-btn';
@@ -544,6 +550,25 @@ class SpanManager {
     clearAnnotations() {
         this.annotations = {spans: []};
         this.renderSpans();
+    }
+
+    /**
+     * Get the background color for a given label
+     */
+    getSpanColor(label) {
+        // The colors structure is nested: {schema: {label: color}}
+        // We need to search through all schemas to find the label
+        if (this.colors) {
+            for (const schema in this.colors) {
+                if (this.colors[schema] && this.colors[schema][label]) {
+                    const color = this.colors[schema][label];
+                    // Add 40% opacity (66 in hex) to match backend rendering
+                    return color + '66';
+                }
+            }
+        }
+        // Fallback color if label not found in colors
+        return '#f0f0f066'; // A neutral gray with 40% opacity
     }
 }
 

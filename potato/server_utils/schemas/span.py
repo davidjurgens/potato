@@ -19,28 +19,28 @@ from potato.item_state_management import SpanAnnotation
 logger = logging.getLogger(__name__)
 
 SPAN_COLOR_PALETTE = [
-    "(230, 25, 75)",
-    "(60, 180, 75)",
-    "(255, 225, 25)",
-    "(0, 130, 200)",
-    "(245, 130, 48)",
-    "(145, 30, 180)",
-    "(70, 240, 240)",
-    "(240, 50, 230)",
-    "(210, 245, 60)",
-    "(250, 190, 212)",
-    "(0, 128, 128)",
-    "(220, 190, 255)",
-    "(170, 110, 40)",
-    "(255, 250, 200)",
-    "(128, 0, 0)",
-    "(170, 255, 195)",
-    "(128, 128, 0)",
-    "(255, 215, 180)",
-    "(0, 0, 128)",
-    "(128, 128, 128)",
-    "(255, 255, 255)",
-    "(0, 0, 0)",
+    "(110, 86, 207)",   # Primary purple #6E56CF
+    "(239, 68, 68)",    # Destructive red #EF4444
+    "(113, 113, 122)",  # Gray #71717A
+    "(245, 158, 11)",   # Amber #F59E0B
+    "(16, 185, 129)",   # Success green #10B981
+    "(59, 130, 246)",   # Blue #3B82F6
+    "(220, 38, 38)",    # Red #DC2626
+    "(139, 92, 246)",   # Purple #8B5CF6
+    "(156, 163, 175)",  # Light gray #9CA3AF
+    "(107, 114, 128)",  # Medium gray #6B7280
+    "(55, 65, 81)",     # Dark gray #374151
+    "(249, 115, 22)",   # Orange #F97316
+    "(6, 182, 212)",    # Cyan #06B6D4
+    "(236, 72, 153)",   # Pink #EC4899
+    "(5, 150, 105)",    # Dark green #059669
+    "(124, 58, 237)",   # Violet #7C3AED
+    "(22, 163, 74)",    # Green #16A34A
+    "(234, 88, 12)",    # Dark orange #EA580C
+    "(37, 99, 235)",    # Blue #2563EB
+    "(127, 29, 29)",    # Dark red #7F1D1D
+    "(168, 85, 247)",   # Purple #A855F7
+    "(34, 197, 94)",    # Green #22C55E
 ]
 
 span_counter = 0
@@ -180,7 +180,7 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
                        onclick="onlyOne(this); changeSpanLabel(this, '{escape_html_content(scheme_name)}', '{escape_html_content(label)}', '{escape_html_content(effective_title)}', '{escape_html_content(span_color)}');"
                        validation="{validation}">
                 <label for="{escape_html_content(scheme_name)}" class="shadcn-span-label" {tooltip}>
-                    <span style="background-color:rgb{span_color.replace(')', ',0.25)')};">{escape_html_content(label_content)}</span>
+                    <span style="background-color:rgb{span_color.replace(')', ',0.4)')};">{escape_html_content(label_content)}</span>
                 </label>
             </div>
         """
@@ -307,7 +307,7 @@ def render_span_annotations(text, span_annotations):
             # Convert RGB to hex with alpha
             color_parts = color.strip("()").split(", ")
             r, g, b = int(color_parts[0]), int(color_parts[1]), int(color_parts[2])
-            hex_color = f"#{r:02x}{g:02x}{b:02x}80"  # 80 = 50% alpha
+            hex_color = f"#{r:02x}{g:02x}{b:02x}66"  # 66 = 40% alpha to match label background
 
             result += f'<span class="span-highlight" data-annotation-id="{span.get_id()}" data-label="{span.get_name()}" schema="{span.get_schema()}" style="background-color: {hex_color};">'
 

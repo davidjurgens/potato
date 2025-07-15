@@ -29,6 +29,9 @@ from potato.flask_server import (
     get_users, get_total_annotations, update_annotation_state, ai_hints
 )
 
+# Import span color functions
+from potato.server_utils.schemas.span import get_span_color
+
 @app.route("/", methods=["GET", "POST"])
 def home():
     """
@@ -1274,6 +1277,22 @@ def get_span_data(instance_id):
     # Convert to frontend-friendly format
     span_data = []
     for span in spans:
+        # Get color for this span
+        color = get_span_color(span.get_schema(), span.get_name())
+        hex_color = None
+        if color:
+            # Convert RGB format to hex
+            if isinstance(color, str) and color.startswith("(") and color.endswith(")"):
+                try:
+                    rgb_parts = color.strip("()").split(", ")
+                    if len(rgb_parts) == 3:
+                        r, g, b = int(rgb_parts[0]), int(rgb_parts[1]), int(rgb_parts[2])
+                        hex_color = f"#{r:02x}{g:02x}{b:02x}"
+                except (ValueError, IndexError):
+                    hex_color = "#f0f0f0"
+            else:
+                hex_color = color
+
         span_info = {
             'id': span.get_id(),
             'schema': span.get_schema(),
@@ -1281,7 +1300,8 @@ def get_span_data(instance_id):
             'title': span.get_title(),
             'start': span.get_start(),
             'end': span.get_end(),
-            'text': original_text[span.get_start():span.get_end()]
+            'text': original_text[span.get_start():span.get_end()],
+            'color': hex_color
         }
         span_data.append(span_info)
         logger.debug(f"Span data: {span_info}")
@@ -1527,69 +1547,133 @@ def span_api_frontend():
                          annotation_codebook_url=config.get("annotation_codebook_url", ""),
                          alert_time_each_instance=config.get("alert_time_each_instance", 10000000))
 
+@app.route("/test-span-colors")
+def test_span_colors():
+    """
+    Serve a test page for visually verifying span colors.
+    """
+    return render_template("test_span_colors.html")
+
 @app.route("/api/colors")
 def get_span_colors():
     """
     Return the span color mapping for all schemas/labels as JSON.
     """
-    # Try to get annotation scheme from config
+    logger.debug("=== GET_SPAN_COLORS START ===")
+    logger.debug(f"Config keys: {list(config.keys())}")
+    logger.debug(f"UI config: {config.get('ui', 'NOT_FOUND')}")
+
+    # First, try to get colors from ui.spans.span_colors (current config format)
     color_map = {}
-    annotation_scheme = config.get('annotation_scheme') or config.get('annotation_schemes')
-    if annotation_scheme:
-        # If dict (new style), iterate items
-        if isinstance(annotation_scheme, dict):
-            for schema_name, schema in annotation_scheme.items():
-                if schema.get('type') == 'span':
-                    label_colors = {}
-                    # Prefer color_scheme, fallback to default
-                    color_scheme = schema.get('color_scheme')
-                    labels = schema.get('labels', [])
-                    for label in labels:
-                        if isinstance(label, dict):
-                            label_name = label.get('name', label)
+    if "ui" in config and "spans" in config["ui"] and "span_colors" in config["ui"]["spans"]:
+        logger.debug("Found ui.spans.span_colors in config")
+        span_colors = config["ui"]["spans"]["span_colors"]
+        logger.debug(f"Span colors from config: {span_colors}")
+        # Convert RGB format to hex for frontend compatibility
+        for schema_name, label_colors in span_colors.items():
+            color_map[schema_name] = {}
+            for label_name, rgb_color in label_colors.items():
+                # Convert RGB format "(r, g, b)" to hex
+                if isinstance(rgb_color, str) and rgb_color.startswith("(") and rgb_color.endswith(")"):
+                    try:
+                        # Parse RGB values
+                        rgb_parts = rgb_color.strip("()").split(", ")
+                        if len(rgb_parts) == 3:
+                            r, g, b = int(rgb_parts[0]), int(rgb_parts[1]), int(rgb_parts[2])
+                            hex_color = f"#{r:02x}{g:02x}{b:02x}"
+                            color_map[schema_name][label_name] = hex_color
+                            logger.debug(f"Converted {rgb_color} to {hex_color}")
                         else:
-                            label_name = label
-                        if color_scheme and label_name in color_scheme:
-                            label_colors[label_name] = color_scheme[label_name]
-                        else:
-                            # Fallback color
-                            label_colors[label_name] = '#f0f0f0'
-                    color_map[schema_name] = label_colors
-        # If list (legacy style), iterate list
-        elif isinstance(annotation_scheme, list):
-            for schema in annotation_scheme:
-                if schema.get('type') == 'span' or schema.get('annotation_type') == 'highlight':
-                    schema_name = schema.get('name', 'span')
-                    label_colors = {}
-                    color_scheme = schema.get('color_scheme') or schema.get('colors')
-                    labels = schema.get('labels', [])
-                    for label in labels:
-                        if isinstance(label, dict):
-                            label_name = label.get('name', label)
-                        else:
-                            label_name = label
-                        if color_scheme and label_name in color_scheme:
-                            label_colors[label_name] = color_scheme[label_name]
-                        else:
-                            label_colors[label_name] = '#f0f0f0'
-                    color_map[schema_name] = label_colors
-    # Fallback: provide all expected keys
+                            color_map[schema_name][label_name] = "#f0f0f0"
+                    except (ValueError, IndexError):
+                        color_map[schema_name][label_name] = "#f0f0f0"
+                else:
+                    color_map[schema_name][label_name] = rgb_color
+    else:
+        logger.debug("No ui.spans.span_colors found in config")
+
+    # If no colors found in ui.spans.span_colors, try annotation_scheme format
     if not color_map:
-        default_colors = {
-            'positive': '#d4edda',
-            'negative': '#f8d7da',
-            'neutral': '#d1ecf1',
-            'mixed': '#fff3cd',
-            'happy': '#FFE6E6',
-            'sad': '#E6F3FF',
-            'angry': '#FFE6CC',
-            'surprised': '#E6FFE6',
+        logger.debug("Trying annotation_scheme format")
+        annotation_scheme = config.get('annotation_scheme') or config.get('annotation_schemes')
+        logger.debug(f"Annotation scheme: {annotation_scheme}")
+        if annotation_scheme:
+            # If dict (new style), iterate items
+            if isinstance(annotation_scheme, dict):
+                for schema_name, schema in annotation_scheme.items():
+                    if schema.get('type') == 'span':
+                        label_colors = {}
+                        # Prefer color_scheme, fallback to default
+                        color_scheme = schema.get('color_scheme')
+                        labels = schema.get('labels', [])
+                        for label in labels:
+                            if isinstance(label, dict):
+                                label_name = label.get('name', label)
+                            else:
+                                label_name = label
+                            if color_scheme and label_name in color_scheme:
+                                label_colors[label_name] = color_scheme[label_name]
+                            else:
+                                # Fallback color
+                                label_colors[label_name] = '#f0f0f0'
+                        color_map[schema_name] = label_colors
+            # If list (legacy style), iterate list
+            elif isinstance(annotation_scheme, list):
+                for schema in annotation_scheme:
+                    if schema.get('type') == 'span' or schema.get('annotation_type') == 'highlight':
+                        schema_name = schema.get('name', 'span')
+                        label_colors = {}
+                        color_scheme = schema.get('color_scheme') or schema.get('colors')
+                        labels = schema.get('labels', [])
+                        for label in labels:
+                            if isinstance(label, dict):
+                                label_name = label.get('name', label)
+                            else:
+                                label_name = label
+                            if color_scheme and label_name in color_scheme:
+                                label_colors[label_name] = color_scheme[label_name]
+                            else:
+                                label_colors[label_name] = '#f0f0f0'
+                        color_map[schema_name] = label_colors
+
+    # Fallback: provide all expected keys with better colors that match the design system
+    if not color_map:
+        logger.debug("Using fallback colors")
+        # Enhanced color palette that matches the design system and provides good contrast
+        enhanced_colors = {
+            # Primary colors (based on the purple theme)
+            'positive': '#6E56CF',  # Primary purple
+            'negative': '#EF4444',  # Destructive red
+            'neutral': '#71717A',   # Gray
+            'mixed': '#F59E0B',     # Amber
+            'happy': '#10B981',     # Success green
+            'sad': '#3B82F6',       # Blue
+            'angry': '#DC2626',     # Red
+            'surprised': '#8B5CF6', # Purple
+            'low': '#9CA3AF',       # Light gray
+            'medium': '#6B7280',    # Medium gray
+            'high': '#374151',      # Dark gray
+            # Additional colors for variety
+            'excited': '#F97316',   # Orange
+            'calm': '#06B6D4',      # Cyan
+            'confused': '#EC4899',  # Pink
+            'confident': '#059669', # Dark green
+            'uncertain': '#7C3AED', # Violet
+            'satisfied': '#16A34A', # Green
+            'dissatisfied': '#EA580C', # Dark orange
+            'optimistic': '#2563EB', # Blue
+            'pessimistic': '#7F1D1D', # Dark red
         }
         color_map = {
-            'sentiment': default_colors,
-            'entity': default_colors,
-            'topic': default_colors,
+            'sentiment': enhanced_colors,
+            'emotion': enhanced_colors,
+            'entity': enhanced_colors,
+            'topic': enhanced_colors,
+            'intensity': enhanced_colors,
         }
+
+    logger.debug(f"Final color map: {color_map}")
+    logger.debug("=== GET_SPAN_COLORS END ===")
     return jsonify(color_map)
 
 
@@ -1642,6 +1726,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/span-api-frontend", "span_api_frontend", span_api_frontend, methods=["GET"])
     app.add_url_rule("/api/spans/<instance_id>", "get_span_data", get_span_data, methods=["GET"])
     app.add_url_rule("/api/colors", "get_span_colors", get_span_colors, methods=["GET"])
+    app.add_url_rule("/test-span-colors", "test_span_colors", test_span_colors, methods=["GET"])
 
     app.add_url_rule("/admin/user_state/<user_id>", "admin_user_state", admin_user_state, methods=["GET"])
     app.add_url_rule("/admin/health", "admin_health", admin_health, methods=["GET"])
