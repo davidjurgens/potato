@@ -127,7 +127,7 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
         # Extract label information
         if isinstance(label_data, str):
             label = label_data
-            key_value = str(i)
+            key_value = label  # Use label name as value
             tooltip = ""
         else:
             label = label_data["name"]
@@ -174,12 +174,12 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
                 <input class="{escape_html_content(scheme_name)} shadcn-span-checkbox"
                        for_span="true"
                        type="checkbox"
-                       id="{escape_html_content(scheme_name)}"
+                       id="{escape_html_content(scheme_name)}_{escape_html_content(label)}"
                        name="{escape_html_content(name_with_span)}"
                        value="{escape_html_content(key_value)}"
                        onclick="onlyOne(this); changeSpanLabel(this, '{escape_html_content(scheme_name)}', '{escape_html_content(label)}', '{escape_html_content(effective_title)}', '{escape_html_content(span_color)}');"
                        validation="{validation}">
-                <label for="{escape_html_content(scheme_name)}" class="shadcn-span-label" {tooltip}>
+                <label for="{escape_html_content(scheme_name)}_{escape_html_content(label)}" class="shadcn-span-label" {tooltip}>
                     <span style="background-color:rgb{span_color.replace(')', ',0.4)')};">{escape_html_content(label_content)}</span>
                 </label>
             </div>

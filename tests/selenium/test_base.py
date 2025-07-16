@@ -45,7 +45,8 @@ class BaseSeleniumTest(unittest.TestCase):
         from tests.helpers.flask_test_setup import FlaskTestServer
 
         # Start the Flask server using the proper test setup
-        config_file = "tests/configs/frontend-span-test.yaml"
+        import os
+        config_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "tests/configs/frontend-span-test.yaml")
         cls.server = FlaskTestServer(port=9008, debug=False, config_file=config_file)
         started = cls.server.start_server()
         assert started, "Failed to start Flask server"

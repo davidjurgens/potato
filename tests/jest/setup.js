@@ -8,7 +8,16 @@ global.fetch = jest.fn();
 
 // Mock DOM elements that might not exist in jsdom
 document.body.innerHTML = `
-  <div id="instance-text">I am absolutely thrilled about the new technology announcement! This is going to revolutionize how we work. The possibilities are endless and I can't wait to see what the future holds.</div>
+  <div id="instance-text" class="p-3 border rounded" style="background-color: var(--light-bg); min-height: 100px; position: relative;">
+    <!-- Text content layer (for selection) -->
+    <div id="text-content" class="text-content" style="position: relative; z-index: 1; pointer-events: auto;">
+      I am absolutely thrilled about the new technology announcement! This is going to revolutionize how we work. The possibilities are endless and I can't wait to see what the future holds.
+    </div>
+    <!-- Span overlays layer -->
+    <div id="span-overlays" class="span-overlays" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 2; pointer-events: none;">
+      <!-- Spans will be rendered here as overlays -->
+    </div>
+  </div>
   <div id="annotation-forms"></div>
   <div id="progress-counter">0/10</div>
   <div id="loading-state" style="display: none;">Loading...</div>
@@ -143,8 +152,15 @@ beforeEach(() => {
 
   // Reset DOM state
   const textElement = document.getElementById('instance-text');
-  if (textElement) {
-    textElement.innerHTML = 'I am absolutely thrilled about the new technology announcement! This is going to revolutionize how we work. The possibilities are endless and I can\'t wait to see what the future holds.';
+  const textContent = document.getElementById('text-content');
+  const spanOverlays = document.getElementById('span-overlays');
+
+  if (textElement && textContent) {
+    textContent.innerHTML = 'I am absolutely thrilled about the new technology announcement! This is going to revolutionize how we work. The possibilities are endless and I can\'t wait to see what the future holds.';
+  }
+
+  if (spanOverlays) {
+    spanOverlays.innerHTML = '';
   }
 
   // Clear any existing spans using parentNode.removeChild

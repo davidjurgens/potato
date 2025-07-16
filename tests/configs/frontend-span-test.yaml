@@ -22,7 +22,7 @@ data:
 annotation_schemes:
   # Span annotation type
   - name: "emotion_spans"
-    type: "span"
+    annotation_type: "span"
     labels: ["positive", "negative", "neutral", "mixed"]
     description: "Annotate emotional content in text spans"
     color_scheme:
@@ -33,20 +33,20 @@ annotation_schemes:
 
   # Text annotation type
   - name: "overall_sentiment"
-    type: "text"
+    annotation_type: "text"
     description: "Overall sentiment of the text"
     required: true
 
   # Select annotation type
   - name: "topic"
-    type: "select"
+    annotation_type: "select"
     labels: ["politics", "technology", "sports", "entertainment", "other"]
     description: "Main topic of the text"
     required: true
 
   # Slider annotation type
   - name: "confidence"
-    type: "slider"
+    annotation_type: "slider"
     min: 0
     max: 100
     default: 50
@@ -55,7 +55,7 @@ annotation_schemes:
 
   # Radio annotation type
   - name: "quality"
-    type: "radio"
+    annotation_type: "radio"
     labels: ["excellent", "good", "fair", "poor"]
     description: "Quality of the text"
     required: true
@@ -84,7 +84,7 @@ validation:
 # Frontend specific settings
 frontend:
   enable_span_manager: true
-  span_rendering: "boundary-based"
+  span_rendering: "interval-based"
   show_span_labels: true
   enable_span_deletion: true
   span_hover_effects: true

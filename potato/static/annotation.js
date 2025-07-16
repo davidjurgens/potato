@@ -6,8 +6,13 @@ let isLoading = false;
 let textSaveTimer = null;
 let currentSpanAnnotations = [];
 
+// DEBUG: Add overlay tracking
+let debugOverlayCount = 0;
+let debugLastInstanceId = null;
+
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('🔍 [DEBUG] DOM Content Loaded - Starting application initialization');
     loadCurrentInstance();
     setupEventListeners();
     // Initial validation check
@@ -15,6 +20,53 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize span manager integration
     initializeSpanManagerIntegration();
 });
+
+// DEBUG: Add overlay tracking function
+function debugTrackOverlays(action, instanceId = null) {
+    const spanOverlays = document.getElementById('span-overlays');
+    const overlayCount = spanOverlays ? spanOverlays.children.length : 0;
+    const instanceText = document.getElementById('instance-text');
+    const textContent = document.getElementById('text-content');
+
+    console.log(`🔍 [DEBUG OVERLAY TRACKING] ${action}:`, {
+        instanceId: instanceId || currentInstance?.id,
+        lastInstanceId: debugLastInstanceId,
+        overlayCount: overlayCount,
+        spanOverlaysExists: !!spanOverlays,
+        instanceTextExists: !!instanceText,
+        textContentExists: !!textContent,
+        spanOverlaysHTML: spanOverlays ? spanOverlays.innerHTML.substring(0, 200) + '...' : 'null',
+        timestamp: new Date().toISOString()
+    });
+
+    debugOverlayCount = overlayCount;
+    if (instanceId) debugLastInstanceId = instanceId;
+}
+
+// DEBUG: Add overlay cleanup verification
+function debugVerifyOverlayCleanup() {
+    const spanOverlays = document.getElementById('span-overlays');
+    if (!spanOverlays) {
+        console.warn('🔍 [DEBUG] span-overlays container not found during cleanup verification');
+        return;
+    }
+
+    const overlayCount = spanOverlays.children.length;
+    console.log(`🔍 [DEBUG] Overlay cleanup verification:`, {
+        overlayCount: overlayCount,
+        containerEmpty: overlayCount === 0,
+        containerInnerHTML: spanOverlays.innerHTML,
+        containerChildren: Array.from(spanOverlays.children).map(child => ({
+            tagName: child.tagName,
+            className: child.className,
+            dataset: child.dataset
+        }))
+    });
+
+    if (overlayCount > 0) {
+        console.warn('🔍 [DEBUG] WARNING: Overlays still present after expected cleanup!');
+    }
+}
 
 function setupEventListeners() {
     // Go to button
@@ -79,13 +131,23 @@ function setupSpanLabelSelector() {
         return;
     }
 
-    // Check if current instance has span annotations
-    const hasSpanAnnotations = checkForSpanAnnotations();
+    // Check if there are span annotation forms in the DOM
+    const spanForms = document.querySelectorAll('.annotation-form.span');
 
-    if (hasSpanAnnotations) {
-        // Generate label buttons from annotation scheme
-        const labels = getSpanLabelsFromScheme();
+    if (spanForms.length > 0) {
+        // Extract labels from the existing span form checkboxes
+        const existingCheckboxes = document.querySelectorAll('.annotation-form.span input[type="checkbox"]');
+        const labels = [];
+
+        existingCheckboxes.forEach(checkbox => {
+            const label = checkbox.getAttribute('value');
+            if (label && !labels.includes(label)) {
+                labels.push(label);
+            }
+        });
+
         if (labels.length > 0) {
+            // Clear and regenerate label buttons
             labelButtons.innerHTML = '';
             labels.forEach(label => {
                 const button = document.createElement('button');
@@ -148,6 +210,9 @@ async function loadSpanAnnotations() {
     }
 
     try {
+        // DEBUG: Track overlays before loading span annotations
+        debugTrackOverlays('BEFORE_LOAD_SPAN_ANNOTATIONS', currentInstance.id);
+
         // Check if spans are already rendered in the displayed_text
         const instanceText = document.getElementById('instance-text');
         const hasRenderedSpans = instanceText.innerHTML.includes('span-highlight');
@@ -162,6 +227,9 @@ async function loadSpanAnnotations() {
         // If no spans are rendered, load and render them
         await window.spanManager.loadAnnotations(currentInstance.id);
         console.log('Annotation.js: Span annotations loaded for instance:', currentInstance.id);
+
+        // DEBUG: Track overlays after loading span annotations
+        debugTrackOverlays('AFTER_LOAD_SPAN_ANNOTATIONS', currentInstance.id);
     } catch (error) {
         console.error('Annotation.js: Error loading span annotations:', error);
     }
@@ -172,33 +240,57 @@ async function loadCurrentInstance() {
         setLoading(true);
         showError(false);
 
-        // Get current user state
-        const headers = {};
-        if (window.config.api_key) {
-            headers['X-API-Key'] = window.config.api_key;
-        }
-        const response = await fetch('/admin/user_state/' + window.config.username, {
-            headers: {
-                ...headers,
-                'X-API-Key': 'admin_api_key'
-            }
-        });
-        if (!response.ok) {
-            throw new Error('Failed to load user state');
+        // DEBUG: Track overlays at start of instance loading
+        debugTrackOverlays('START_LOAD_CURRENT_INSTANCE');
+
+        // Get current instance from server-rendered HTML
+        const instanceTextElement = document.getElementById('instance-text');
+        const instanceIdElement = document.getElementById('instance_id');
+
+        if (!instanceTextElement) {
+            throw new Error('Instance text element not found');
         }
 
-        userState = await response.json();
-        console.log('[DEBUG] loadCurrentInstance: userState =', userState);
+                // Get instance text from the rendered HTML (server-rendered)
+        const instanceText = instanceTextElement.innerHTML;
 
-        if (!userState.current_instance) {
-            showError(true, 'No instances available for annotation');
+        // Get instance ID from hidden input
+        const instanceId = instanceIdElement ? instanceIdElement.value : null;
+
+        if (!instanceText || instanceText.trim() === '') {
+            showError(true, 'No instance text available');
             return;
         }
 
-        currentInstance = userState.current_instance;
+        // Create current instance object from server-rendered data
+        currentInstance = {
+            id: instanceId,
+            text: instanceTextElement.textContent || instanceTextElement.innerText,
+            displayed_text: instanceText
+        };
 
         // Set global variable for span manager
         window.currentInstance = currentInstance;
+
+        // Get progress from the progress counter element
+        const progressCounter = document.getElementById('progress-counter');
+        if (progressCounter) {
+            const progressText = progressCounter.textContent;
+            const match = progressText.match(/(\d+)\/(\d+)/);
+            if (match) {
+                const annotated = parseInt(match[1]);
+                const total = parseInt(match[2]);
+                userState = {
+                    assignments: {
+                        annotated: annotated,
+                        total: total
+                    },
+                    annotations: {
+                        by_instance: {}
+                    }
+                };
+            }
+        }
 
         updateProgressDisplay();
         updateInstanceDisplay();
@@ -224,77 +316,31 @@ async function loadCurrentInstance() {
 }
 
 function updateProgressDisplay() {
-    const progress = userState.assignments;
-    const progressText = `${progress.annotated}/${progress.total}`;
-    document.getElementById('progress-counter').textContent = progressText;
+    // Progress is already displayed in the HTML template
+    // No need to update it since it's server-rendered
+    console.log('Progress display updated from server-rendered HTML');
 }
 
 function updateInstanceDisplay() {
-    const instanceText = document.getElementById('instance-text');
-    if (currentInstance && currentInstance.displayed_text) {
-        console.log('[DEBUG] updateInstanceDisplay: setting #instance-text.innerHTML to:', currentInstance.displayed_text);
-        instanceText.innerHTML = currentInstance.displayed_text;
-    } else {
-        console.log('[DEBUG] updateInstanceDisplay: setting #instance-text.textContent to: No text available');
-        instanceText.textContent = 'No text available';
-    }
-    // Update the hidden input for instance_id
+    // Instance text is already displayed in the HTML template
+    // Just ensure the instance_id is set correctly
     const instanceIdInput = document.getElementById('instance_id');
     if (instanceIdInput && currentInstance && currentInstance.id) {
         instanceIdInput.value = currentInstance.id;
     }
+    console.log('[DEBUG] updateInstanceDisplay: Instance display updated from server-rendered HTML');
 }
 
 async function loadAnnotations() {
     try {
         console.log('🔍 Loading annotations for instance:', currentInstance.id);
-        console.log('🔍 User state annotations:', userState.annotations);
-        console.log('🔍 User state annotations by_instance:', userState.annotations.by_instance);
 
-        const rawAnnotations = userState.annotations.by_instance[currentInstance.id] || {};
-        console.log('🔍 Raw annotations for current instance:', rawAnnotations);
-
-        // Transform the server format to frontend format
-        // Server format: {"schema:label": "value"} (e.g., {"feedback:text_box": "value"})
-        // Frontend format: {"schema": {"label": "value"}} (e.g., {"feedback": {"text_box": "value"}})
+        // Since we're not using the admin API, we'll get annotations from the DOM
+        // The server should have pre-populated the form fields with existing annotations
         currentAnnotations = {};
 
-        for (const [labelKey, value] of Object.entries(rawAnnotations)) {
-            console.log('🔍 Processing annotation key:', labelKey, 'value:', value);
-
-            // Parse the label key format: "schema:label"
-            const parts = labelKey.split(':');
-            if (parts.length === 2) {
-                const schemaName = parts[0];
-                const labelName = parts[1];
-                console.log('🔍 Parsed schema:', schemaName, 'label:', labelName);
-
-                if (!currentAnnotations[schemaName]) {
-                    currentAnnotations[schemaName] = {};
-                }
-                currentAnnotations[schemaName][labelName] = value;
-                console.log('🔍 Added annotation:', schemaName, labelName, value);
-            } else {
-                // Handle legacy format: "Label(schema:sentiment, name:neutral)"
-                const match = labelKey.match(/Label\(schema:([^,]+), name:([^)]+)\)/);
-                if (match) {
-                    const schemaName = match[1];
-                    const labelName = match[2];
-                    console.log('🔍 Parsed legacy format - schema:', schemaName, 'label:', labelName);
-
-                    if (!currentAnnotations[schemaName]) {
-                        currentAnnotations[schemaName] = {};
-                    }
-                    currentAnnotations[schemaName][labelName] = value;
-                    console.log('🔍 Added legacy annotation:', schemaName, labelName, value);
-                } else {
-                    // Handle direct key-value pairs (fallback)
-                    console.warn('❌ Could not parse annotation key:', labelKey);
-                }
-            }
-        }
-
-        console.log('🔍 Final currentAnnotations:', currentAnnotations);
+        // We'll populate annotations from the DOM in populateInputValues()
+        console.log('🔍 Annotations will be loaded from DOM in populateInputValues()');
     } catch (error) {
         console.error('❌ Error loading annotations:', error);
         currentAnnotations = {};
@@ -367,6 +413,10 @@ async function navigateToPrevious() {
 
     try {
         setLoading(true);
+
+        // DEBUG: Track overlays before navigation
+        debugTrackOverlays('BEFORE_PREV_NAVIGATION', currentInstance?.id);
+
         const headers = {
             'Content-Type': 'application/json',
         };
@@ -383,7 +433,16 @@ async function navigateToPrevious() {
         });
 
         if (response.ok) {
-            await loadCurrentInstance();
+            console.log('🔍 [DEBUG] Navigation successful, about to reload page');
+            // DEBUG: Clear overlays before reload
+            const spanOverlays = document.getElementById('span-overlays');
+            if (spanOverlays) {
+                console.log('🔍 [DEBUG] Clearing span overlays before page reload');
+                spanOverlays.innerHTML = '';
+                debugVerifyOverlayCleanup();
+            }
+            // Reload the page to get the new instance data from the server
+            window.location.reload();
         } else {
             throw new Error('Failed to navigate to previous instance');
         }
@@ -404,6 +463,10 @@ async function navigateToNext() {
 
     try {
         setLoading(true);
+
+        // DEBUG: Track overlays before navigation
+        debugTrackOverlays('BEFORE_NEXT_NAVIGATION', currentInstance?.id);
+
         const headers = {
             'Content-Type': 'application/json',
         };
@@ -420,7 +483,16 @@ async function navigateToNext() {
         });
 
         if (response.ok) {
-            await loadCurrentInstance();
+            console.log('🔍 [DEBUG] Navigation successful, about to reload page');
+            // DEBUG: Clear overlays before reload
+            const spanOverlays = document.getElementById('span-overlays');
+            if (spanOverlays) {
+                console.log('🔍 [DEBUG] Clearing span overlays before page reload');
+                spanOverlays.innerHTML = '';
+                debugVerifyOverlayCleanup();
+            }
+            // Reload the page to get the new instance data from the server
+            window.location.reload();
         } else {
             throw new Error('Failed to navigate to next instance');
         }
@@ -437,6 +509,10 @@ async function navigateToInstance(instanceIndex) {
 
     try {
         setLoading(true);
+
+        // DEBUG: Track overlays before navigation
+        debugTrackOverlays('BEFORE_GO_TO_NAVIGATION', currentInstance?.id);
+
         const headers = {
             'Content-Type': 'application/json',
         };
@@ -453,7 +529,16 @@ async function navigateToInstance(instanceIndex) {
         });
 
         if (response.ok) {
-            await loadCurrentInstance();
+            console.log('🔍 [DEBUG] Navigation successful, about to reload page');
+            // DEBUG: Clear overlays before reload
+            const spanOverlays = document.getElementById('span-overlays');
+            if (spanOverlays) {
+                console.log('🔍 [DEBUG] Clearing span overlays before page reload');
+                spanOverlays.innerHTML = '';
+                debugVerifyOverlayCleanup();
+            }
+            // Reload the page to get the new instance data from the server
+            window.location.reload();
         } else {
             throw new Error('Failed to navigate to instance');
         }
@@ -960,8 +1045,8 @@ function changeSpanLabel(checkbox, schema, spanLabel, spanTitle, spanColor) {
     if (window.spanManager && window.spanManager.isInitialized) {
         console.log('[DEBUG] changeSpanLabel: Using new span manager');
 
-        // Select the label in the span manager
-        window.spanManager.selectLabel(spanLabel);
+        // Select the label and schema in the span manager
+        window.spanManager.selectLabel(spanLabel, schema);
 
         // Set up text selection handler
         const textContainer = document.getElementById('instance-text');
@@ -1661,9 +1746,10 @@ function escapeHtml(text) {
 // Initialize robust span annotation when the page loads
 document.addEventListener('DOMContentLoaded', function() {
     // Wait for the initial load to complete, then initialize robust spans
-    setTimeout(() => {
-        initializeRobustSpanAnnotation();
-    }, 500);
+    // DISABLED: Legacy robust span system conflicts with new interval-based system
+    // setTimeout(() => {
+    //     initializeRobustSpanAnnotation();
+    // }, 500);
 });
 
 /**

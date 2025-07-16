@@ -102,6 +102,16 @@
             z-index: 10;
         }
 
+        /* Span manager labels should be visible by default */
+        .span-overlay .span-label {
+            display: block !important;
+        }
+
+        /* Span manager delete buttons should be visible by default */
+        .span-overlay .span-delete-btn {
+            display: block !important;
+        }
+
         .span-tooltip {
             display: none;
             position: absolute;
@@ -221,8 +231,15 @@
                     <!-- Instance text -->
                     <div class="mb-4">
                         <h5 class="mb-3">Text to Annotate:</h5>
-                        <div id="instance-text" class="p-3 border rounded" style="background-color: var(--light-bg); min-height: 100px;">
-                            <!-- Instance text will be loaded here by JS; no server-rendered spans -->
+                        <div id="instance-text" class="p-3 border rounded" style="background-color: var(--light-bg); min-height: 100px; position: relative;">
+                            <!-- Text content layer for span annotation -->
+                            <div id="text-content" style="position: relative; z-index: 1; pointer-events: auto;">
+                                {{instance | safe}}
+                            </div>
+                            <!-- Span overlays layer for span annotation -->
+                            <div id="span-overlays" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;">
+                                <!-- Individual overlays will have pointer-events: auto -->
+                            </div>
                         </div>
                     </div>
 
@@ -237,7 +254,7 @@
                     <!-- Status messages -->
                     <div id="status" class="status" style="display: none;"></div>
                     <!-- Hidden input for instance_id -->
-                    <input type="hidden" id="instance_id" name="instance_id" value="">
+                    <input type="hidden" id="instance_id" name="instance_id" value="{{instance_id}}">
 
                     <!-- Annotation forms -->
                     <div id="annotation-forms">

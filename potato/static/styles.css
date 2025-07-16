@@ -1374,3 +1374,24 @@ fieldset[schema] {
 .annotation-span:hover .span-label {
     display: block;
 }
+
+/* Overlay spans should allow text selection to pass through */
+.annotation-span.overlay-span {
+    pointer-events: none;
+}
+
+/* But allow pointer events on the span itself for hovering */
+.annotation-span.overlay-span:hover {
+    pointer-events: auto;
+}
+
+/* Overlay span labels should always be visible */
+.annotation-span.overlay-span .span-label {
+    display: block !important;
+    pointer-events: auto;
+}
+
+/* Overlay span delete buttons should always be clickable */
+.annotation-span.overlay-span .span-delete-btn {
+    pointer-events: auto;
+}
