@@ -592,8 +592,6 @@ class SpanManager {
     calculateOverlapDepths(spans) {
         if (!spans || spans.length === 0) return [];
 
-        console.log('SpanManager: Calculating overlap depths for', spans.length, 'spans');
-
         // Sort spans by start position
         const sortedSpans = [...spans].sort((a, b) => a.start - b.start);
         const overlapMap = new Map();
@@ -670,7 +668,6 @@ class SpanManager {
         }
 
         const result = Array.from(overlapMap.values());
-        console.log('SpanManager: Overlap calculation complete:', result);
         return result;
     }
 
@@ -685,6 +682,27 @@ class SpanManager {
      * Apply overlap-based styling to span elements
      */
     applyOverlapStyling(spanElements, overlapData) {
+        // Only apply overlap styling if there are actual overlaps
+        const spansWithOverlaps = overlapData.filter(d => d.overlaps.length > 0);
+
+        if (spansWithOverlaps.length === 0) {
+            // Remove all overlap styling from all spans
+            spanElements.forEach(spanElement => {
+                spanElement.classList.remove('span-overlap');
+                spanElement.classList.forEach(className => {
+                    if (className.startsWith('overlap-depth-')) {
+                        spanElement.classList.remove(className);
+                    }
+                });
+                spanElement.style.removeProperty('--overlap-height');
+                spanElement.style.removeProperty('--overlap-offset');
+                spanElement.style.removeProperty('--overlap-depth');
+                spanElement.style.removeProperty('--max-depth');
+                spanElement.style.removeProperty('z-index');
+            });
+            return;
+        }
+
         const maxDepth = Math.max(...overlapData.map(d => d.depth), 0);
 
         spanElements.forEach(spanElement => {
@@ -696,7 +714,8 @@ class SpanManager {
                 d.span.start === start && d.span.end === end
             );
 
-            if (data && data.depth > 0) {
+            // Only apply overlap styling if the span actually has overlaps
+            if (data && data.overlaps.length > 0) {
                 // Invert the depth so outermost is at base, innermost is on top
                 const layer = maxDepth - data.depth + 1;
                 const baseHeight = 1.2; // Base line height
@@ -718,6 +737,19 @@ class SpanManager {
 
                 // Add z-index to ensure proper layering (innermost on top)
                 spanElement.style.zIndex = layer;
+            } else {
+                // Remove any existing overlap styling for non-overlapping spans
+                spanElement.classList.remove('span-overlap');
+                spanElement.classList.forEach(className => {
+                    if (className.startsWith('overlap-depth-')) {
+                        spanElement.classList.remove(className);
+                    }
+                });
+                spanElement.style.removeProperty('--overlap-height');
+                spanElement.style.removeProperty('--overlap-offset');
+                spanElement.style.removeProperty('--overlap-depth');
+                spanElement.style.removeProperty('--max-depth');
+                spanElement.style.removeProperty('z-index');
             }
         });
     }
