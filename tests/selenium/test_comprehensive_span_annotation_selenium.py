@@ -2231,6 +2231,122 @@ class TestSpanAnnotationComprehensive:
             RobustSpanAnnotationHelper.capture_browser_logs(browser, "color_failure")
             raise
 
+    def test_span_overlay_height_adjustments(self, flask_server, browser):
+        """Test that span overlays have dynamic height adjustments for better visual distinction."""
+        print("\n=== Test: Span Overlay Height Adjustments ===")
+
+        try:
+            # Setup and login
+            base_url = f"http://localhost:{flask_server.port}"
+            username = self.setup_and_login(browser, base_url, "height_adjustment_test")
+
+            # Clear existing annotations
+            text_content = RobustSpanAnnotationHelper.clear_existing_annotations(browser, base_url)
+            print(f"   📝 Working with text: '{text_content}'")
+
+            # Select the "happy" label (using the same approach as other working tests)
+            happy_label = RobustSpanAnnotationHelper.wait_for_clickable(
+                browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+                description="emotion label"
+            )
+            RobustSpanAnnotationHelper.safe_click(browser, happy_label, "emotion label")
+            time.sleep(1)
+
+            # Test 1: Create a large span that will contain smaller spans
+            print("1. Creating large containing span...")
+            RobustSpanAnnotationHelper.robust_text_selection(browser, 0, len(text_content))
+            time.sleep(2)
+
+            # Verify the large span was created
+            spans = RobustSpanAnnotationHelper.get_span_elements(browser)
+            assert len(spans) == 1, f"Expected 1 span, got {len(spans)}"
+
+            # Get the height of the large span
+            large_span = spans[0]
+            large_span_height = large_span.size['height']
+            print(f"   📏 Large span height: {large_span_height}px")
+
+            # Test 2: Create a smaller span inside the large span
+            print("2. Creating smaller span inside the large span...")
+            RobustSpanAnnotationHelper.robust_text_selection(browser, 5, 15)
+            time.sleep(2)
+
+            # Verify we now have 2 spans
+            spans = RobustSpanAnnotationHelper.get_span_elements(browser)
+            assert len(spans) == 2, f"Expected 2 spans, got {len(spans)}"
+
+            # Check that the large span is now taller
+            spans = RobustSpanAnnotationHelper.get_span_elements(browser)
+            large_span_new = spans[0]  # First span should be the large one
+            large_span_new_height = large_span_new.size['height']
+            print(f"   📏 Large span height after adding inner span: {large_span_new_height}px")
+
+            # The large span should be taller now
+            assert large_span_new_height > large_span_height, f"Large span should be taller after adding inner span. Original: {large_span_height}px, New: {large_span_new_height}px"
+
+            # Test 3: Create a partially overlapping span
+            print("3. Creating partially overlapping span...")
+            RobustSpanAnnotationHelper.robust_text_selection(browser, 10, 25)
+            time.sleep(2)
+
+            # Verify we now have 3 spans
+            spans = RobustSpanAnnotationHelper.get_span_elements(browser)
+            assert len(spans) == 3, f"Expected 3 spans, got {len(spans)}"
+
+            # Check that the partially overlapping span is also taller
+            partial_span = spans[2]  # Third span should be the partially overlapping one
+            partial_span_height = partial_span.size['height']
+            print(f"   📏 Partially overlapping span height: {partial_span_height}px")
+
+            # The partially overlapping span should be taller than the base height
+            assert partial_span_height > large_span_height, f"Partially overlapping span should be taller than base height. Base: {large_span_height}px, Partial: {partial_span_height}px"
+
+            # Test 4: Delete the inner span and verify heights adjust
+            print("4. Deleting inner span and verifying height adjustment...")
+            inner_span = spans[1]  # Second span should be the inner one
+            RobustSpanAnnotationHelper.delete_span(browser, inner_span, "inner span")
+            time.sleep(2)
+
+            # Verify we now have 2 spans
+            spans = RobustSpanAnnotationHelper.get_span_elements(browser)
+            assert len(spans) == 2, f"Expected 2 spans after deletion, got {len(spans)}"
+
+            # Check that the large span height has been reduced
+            large_span_final = spans[0]
+            large_span_final_height = large_span_final.size['height']
+            print(f"   📏 Large span height after deleting inner span: {large_span_final_height}px")
+
+            # The large span should be shorter now (closer to original height)
+            assert large_span_final_height < large_span_new_height, f"Large span should be shorter after deleting inner span. Before deletion: {large_span_new_height}px, After deletion: {large_span_final_height}px"
+
+            # Test 5: Verify that the remaining spans are still visually distinct
+            print("5. Verifying remaining spans are visually distinct...")
+            spans = RobustSpanAnnotationHelper.get_span_elements(browser)
+
+            # Get heights of remaining spans
+            span_heights = [span.size['height'] for span in spans]
+            print(f"   📏 Remaining span heights: {span_heights}")
+
+            # All spans should have reasonable heights (not too small)
+            for i, height in enumerate(span_heights):
+                assert height >= 15, f"Span {i} height too small: {height}px"
+
+            # If there are multiple spans, they should have different heights for visual distinction
+            if len(span_heights) > 1:
+                height_differences = [abs(span_heights[i] - span_heights[i-1]) for i in range(1, len(span_heights))]
+                max_difference = max(height_differences)
+                print(f"   📏 Maximum height difference between spans: {max_difference}px")
+
+                # There should be some height difference for visual distinction
+                assert max_difference >= 2, f"Spans should have height differences for visual distinction. Max difference: {max_difference}px"
+
+            print("✅ Test passed: Span overlay height adjustments work correctly")
+
+        except Exception as e:
+            print(f"❌ Test failed: {e}")
+            RobustSpanAnnotationHelper.capture_browser_logs(browser, "height_adjustment_failure")
+            raise
+
     def test_span_annotation_with_test_client(self, test_data):
         """Test span annotation using Flask test client (same thread, no session isolation)."""
         print("\n=== Test: Span Annotation with Flask Test Client ===")

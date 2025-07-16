@@ -268,7 +268,10 @@ class SpanManager {
         const overlapDataMap = new Map();
         overlapDataArray.forEach(data => {
             const spanKey = `${data.span.start}-${data.span.end}`;
-            overlapDataMap.set(spanKey, data.depth);
+            overlapDataMap.set(spanKey, {
+                depth: data.depth,
+                heightMultiplier: data.heightMultiplier
+            });
         });
 
         // Render each span as an overlay
@@ -378,10 +381,22 @@ class SpanManager {
                 overlay.style.backgroundColor = backgroundColor;
             }
 
-            // Set z-index based on overlap depth
+            // Set z-index and height based on overlap data
             const spanKey = `${span.start}-${span.end}`;
-            const overlapDepth = overlapData.get(spanKey) || 0;
-            overlay.style.zIndex = 10 + overlapDepth;
+            const overlapInfo = overlapData.get(spanKey) || { depth: 0, heightMultiplier: 1.0 };
+            overlay.style.zIndex = 10 + overlapInfo.depth;
+
+            // Apply height multiplier for visual distinction
+            if (overlapInfo.heightMultiplier > 1.0) {
+                const originalHeight = rect.bottom - rect.top;
+                const adjustedHeight = originalHeight * overlapInfo.heightMultiplier;
+                overlay.style.height = `${adjustedHeight}px`;
+
+                // Center the overlay vertically around the original text position
+                const heightDifference = adjustedHeight - originalHeight;
+                const newTop = top - (heightDifference / 2);
+                overlay.style.top = `${newTop}px`;
+            }
 
             // Add label
             const label = document.createElement('span');
@@ -930,7 +945,7 @@ class SpanManager {
         const sortedSpans = [...spans].sort((a, b) => a.start - b.start);
         const overlapMap = new Map();
 
-        // Calculate overlaps
+        // Calculate overlaps and containment relationships
         for (let i = 0; i < sortedSpans.length; i++) {
             const currentSpan = sortedSpans[i];
             const currentKey = `${currentSpan.start}-${currentSpan.end}`;
@@ -939,7 +954,10 @@ class SpanManager {
                 overlapMap.set(currentKey, {
                     span: currentSpan,
                     overlaps: [],
-                    depth: 0
+                    containedBy: [],
+                    contains: [],
+                    depth: 0,
+                    heightMultiplier: 1.0
                 });
             }
 
@@ -959,10 +977,24 @@ class SpanManager {
                         overlapMap.set(otherKey, {
                             span: otherSpan,
                             overlaps: [],
-                            depth: 0
+                            containedBy: [],
+                            contains: [],
+                            depth: 0,
+                            heightMultiplier: 1.0
                         });
                     }
                     overlapMap.get(otherKey).overlaps.push(currentSpan);
+
+                    // Check for containment relationships
+                    if (this.spansContain(currentSpan, otherSpan)) {
+                        // currentSpan completely contains otherSpan
+                        overlapMap.get(currentKey).contains.push(otherSpan);
+                        overlapMap.get(otherKey).containedBy.push(currentSpan);
+                    } else if (this.spansContain(otherSpan, currentSpan)) {
+                        // otherSpan completely contains currentSpan
+                        overlapMap.get(otherKey).contains.push(currentSpan);
+                        overlapMap.get(currentKey).containedBy.push(currentSpan);
+                    }
                 }
             }
         }
@@ -1001,6 +1033,9 @@ class SpanManager {
             console.warn('SpanManager: Max iterations reached in overlap depth calculation');
         }
 
+        // Calculate height multipliers for visual distinction
+        this.calculateHeightMultipliers(overlapMap);
+
         const result = Array.from(overlapMap.values());
         return result;
     }
@@ -1010,6 +1045,82 @@ class SpanManager {
      */
     spansOverlap(span1, span2) {
         return span1.start < span2.end && span2.start < span1.end;
+    }
+
+    /**
+     * Check if span1 completely contains span2
+     */
+    spansContain(span1, span2) {
+        return span1.start <= span2.start && span1.end >= span2.end;
+    }
+
+    /**
+     * Calculate height multipliers for overlays based on overlap relationships
+     */
+    calculateHeightMultipliers(overlapMap) {
+        // Base height for all overlays
+        const baseHeight = 1.0;
+        const heightIncrement = 0.3; // Additional height per level
+        const maxHeightMultiplier = 3.0; // Cap the maximum height
+
+        // First pass: calculate height for containing spans
+        for (const [spanKey, spanData] of overlapMap) {
+            if (spanData.contains.length > 0) {
+                // This span contains other spans - make it taller
+                const containmentLevel = this.getContainmentLevel(spanData, overlapMap);
+                spanData.heightMultiplier = Math.min(
+                    baseHeight + (containmentLevel * heightIncrement),
+                    maxHeightMultiplier
+                );
+            }
+        }
+
+        // Second pass: adjust heights for partially overlapping spans
+        for (const [spanKey, spanData] of overlapMap) {
+            if (spanData.overlaps.length > 0 && spanData.contains.length === 0) {
+                // This span overlaps but doesn't contain others - make it slightly taller
+                const overlapLevel = this.getOverlapLevel(spanData, overlapMap);
+                const currentHeight = spanData.heightMultiplier;
+                const newHeight = Math.min(
+                    currentHeight + (overlapLevel * heightIncrement * 0.5),
+                    maxHeightMultiplier
+                );
+                spanData.heightMultiplier = newHeight;
+            }
+        }
+    }
+
+    /**
+     * Get the containment level (how many levels of containment this span has)
+     */
+    getContainmentLevel(spanData, overlapMap) {
+        let maxLevel = 0;
+        const visited = new Set();
+
+        const traverseContainment = (span, level) => {
+            if (visited.has(`${span.start}-${span.end}`)) return;
+            visited.add(`${span.start}-${span.end}`);
+
+            maxLevel = Math.max(maxLevel, level);
+
+            for (const containedSpan of spanData.contains) {
+                const containedKey = `${containedSpan.start}-${containedSpan.end}`;
+                const containedData = overlapMap.get(containedKey);
+                if (containedData && containedData.contains.length > 0) {
+                    traverseContainment(containedSpan, level + 1);
+                }
+            }
+        };
+
+        traverseContainment(spanData.span, 1);
+        return maxLevel;
+    }
+
+    /**
+     * Get the overlap level (how many spans this overlaps with)
+     */
+    getOverlapLevel(spanData, overlapMap) {
+        return spanData.overlaps.length;
     }
 
     /**
