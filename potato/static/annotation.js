@@ -5,6 +5,8 @@ let userState = null;
 let isLoading = false;
 let textSaveTimer = null;
 let currentSpanAnnotations = [];
+let debugLastInstanceId = null;
+let debugOverlayCount = 0;
 
 
 
@@ -476,16 +478,70 @@ function updateInstanceDisplay() {
     console.log('[DEBUG] updateInstanceDisplay: Instance display updated from server');
 }
 
+// Add this function to clear all form inputs
+function clearAllFormInputs() {
+    console.log('🔍 Clearing all form inputs');
+
+    // Clear text inputs and textareas
+    const textInputs = document.querySelectorAll('input[type="text"], textarea.annotation-input');
+    textInputs.forEach(input => {
+        input.value = '';
+    });
+
+    // Clear radio buttons
+    const radioInputs = document.querySelectorAll('input[type="radio"]');
+    radioInputs.forEach(input => {
+        input.checked = false;
+    });
+
+    // Clear checkboxes
+    const checkboxInputs = document.querySelectorAll('input[type="checkbox"]');
+    checkboxInputs.forEach(input => {
+        input.checked = false;
+    });
+
+    // Clear sliders
+    const sliderInputs = document.querySelectorAll('input[type="range"]');
+    sliderInputs.forEach(input => {
+        input.value = input.getAttribute('min') || input.getAttribute('starting_value') || '0';
+        const valueDisplay = document.getElementById(`${input.name}-value`);
+        if (valueDisplay) {
+            valueDisplay.textContent = input.value;
+        }
+    });
+
+    // Clear select dropdowns
+    const selectInputs = document.querySelectorAll('select.annotation-input');
+    selectInputs.forEach(input => {
+        input.selectedIndex = 0;
+    });
+
+    // Clear number inputs
+    const numberInputs = document.querySelectorAll('input[type="number"].annotation-input');
+    numberInputs.forEach(input => {
+        input.value = '';
+    });
+
+    console.log('✅ All form inputs cleared');
+}
+
 async function loadAnnotations() {
     try {
         console.log('🔍 Loading annotations for instance:', currentInstance.id);
 
-        // Since we're not using the admin API, we'll get annotations from the DOM
-        // The server should have pre-populated the form fields with existing annotations
+        // CLEAR ALL INPUTS FIRST to prevent persistence
+        clearAllFormInputs();
+
+        // Reset currentAnnotations
         currentAnnotations = {};
 
-        // We'll populate annotations from the DOM in populateInputValues()
-        console.log('🔍 Annotations will be loaded from DOM in populateInputValues()');
+        // TODO: Load annotations from server instead of relying on DOM
+        // const response = await fetch(`/api/annotations/${currentInstance.id}`);
+        // if (response.ok) {
+        //     currentAnnotations = await response.json();
+        // }
+
+        console.log('🔍 Annotations loaded:', currentAnnotations);
     } catch (error) {
         console.error('❌ Error loading annotations:', error);
         currentAnnotations = {};

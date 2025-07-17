@@ -55,6 +55,435 @@ The `FlaskTestServer` class provides a complete Flask server environment for tes
 ### 7. Span Annotation Tests
 - **Robust Span Annotation** (`test_robust_span_annotation.py`): Span annotation edge cases
 
+## Annotation Persistence Testing
+
+This section documents patterns and common fixes for testing annotation persistence across different annotation types using server-side API endpoints.
+
+### Key Testing Patterns
+
+#### 1. Annotation Submission via API
+- **Use `/updateinstance` endpoint**: Submit annotations via POST to `/updateinstance`
+- **Correct request format**: Include `instance_id`, `type`, `schema`, and `state`
+- **Session management**: Maintain session cookies across requests
+
+```python
+def submit_annotation(self, session, instance_id, annotation_type, schema, state):
+    """Submit annotation via API endpoint."""
+    annotation_data = {
+        "instance_id": instance_id,
+        "type": annotation_type,
+        "schema": schema,
+        "state": state
+    }
+
+    response = session.post(
+        f"{self.flask_server.base_url}/updateinstance",
+        json=annotation_data
+    )
+    assert response.status_code == 200
+    return response
+```
+
+#### 2. Annotation Retrieval
+- **Use `/api/current_instance`**: Get current instance data including annotations
+- **Check response format**: Verify annotations are included in the response
+- **Parse annotation state**: Extract and verify annotation values
+
+```python
+def get_current_annotations(self, session):
+    """Get current instance annotations."""
+    response = session.get(f"{self.flask_server.base_url}/api/current_instance")
+    assert response.status_code == 200
+
+    data = response.json()
+    return data.get('annotations', {})
+```
+
+#### 3. Instance Navigation
+- **Use `/annotate` with POST**: Navigate between instances using POST to `/annotate`
+- **Include navigation parameters**: Use `next` or `prev` parameters
+- **Verify instance changes**: Check that instance ID changes after navigation
+
+```python
+def navigate_to_next(self, session):
+    """Navigate to next instance."""
+    response = session.post(f"{self.flask_server.base_url}/annotate", data={"next": "true"})
+    assert response.status_code == 200
+    return response
+
+def navigate_to_prev(self, session):
+    """Navigate to previous instance."""
+    response = session.post(f"{self.flask_server.base_url}/annotate", data={"prev": "true"})
+    assert response.status_code == 200
+    return response
+```
+
+#### 4. Annotation Isolation Testing
+- **Test per-instance isolation**: Verify annotations don't persist across instances
+- **Test within-instance persistence**: Verify annotations persist when navigating away and back
+- **Clear annotations**: Test annotation clearing functionality
+
+```python
+def test_annotation_isolation(self, flask_server):
+    """Test that annotations are isolated per instance."""
+    session = requests.Session()
+
+    # Setup user
+    user_data = {"email": "test_user", "pass": "test_password"}
+    session.post(f"{flask_server.base_url}/register", data=user_data)
+    session.post(f"{flask_server.base_url}/auth", data=user_data)
+
+    # Submit annotation on instance 1
+    annotation_data = {
+        "instance_id": "test_1",
+        "type": "likert",
+        "schema": "likert_rating",
+        "state": [{"name": "likert_rating", "value": "4"}]
+    }
+    response = session.post(f"{flask_server.base_url}/updateinstance", json=annotation_data)
+    assert response.status_code == 200
+
+    # Navigate to instance 2
+    response = session.post(f"{flask_server.base_url}/annotate", data={"next": "true"})
+    assert response.status_code == 200
+
+    # Verify instance 2 has no annotations (isolation)
+    response = session.get(f"{flask_server.base_url}/api/current_instance")
+    assert response.status_code == 200
+
+    data = response.json()
+    annotations = data.get('annotations', {})
+    assert len(annotations) == 0  # No annotations on new instance
+```
+
+### Common Fixes Applied
+
+#### 1. Session Management
+**Problem**: Tests losing session state between requests
+**Solution**: Use `requests.Session()` to maintain cookies and session state
+
+```python
+# Good - Use session for state persistence
+session = requests.Session()
+session.post(f"{flask_server.base_url}/register", data=user_data)
+session.post(f"{flask_server.base_url}/auth", data=user_data)
+
+# Use same session for all subsequent requests
+response = session.get(f"{flask_server.base_url}/annotate")
+```
+
+#### 2. Request Format
+**Problem**: Incorrect JSON format for annotation submission
+**Solution**: Use correct request structure with proper nesting
+
+```python
+# Correct annotation request format
+annotation_data = {
+    "instance_id": "test_1",
+    "type": "likert",
+    "schema": "likert_rating",
+    "state": [
+        {
+            "name": "likert_rating",
+            "value": "4"
+        }
+    ]
+}
+```
+
+#### 3. Response Validation
+**Problem**: Not properly validating API responses
+**Solution**: Check status codes and response content
+
+```python
+def validate_annotation_response(self, response, expected_status=200):
+    """Validate annotation API response."""
+    assert response.status_code == expected_status
+
+    if expected_status == 200:
+        data = response.json()
+        assert "success" in data or "status" in data
+```
+
+#### 4. Instance ID Management
+**Problem**: Using hardcoded instance IDs that don't match test data
+**Solution**: Get instance IDs dynamically from API responses
+
+```python
+def get_current_instance_id(self, session):
+    """Get current instance ID from API."""
+    response = session.get(f"{flask_server.base_url}/api/current_instance")
+    assert response.status_code == 200
+
+    data = response.json()
+    return data.get('instance_id')
+```
+
+### Comprehensive Test Config
+
+For testing multiple annotation types, use a comprehensive config:
+
+```python
+config = {
+    "debug": False,
+    "annotation_task_name": "Comprehensive Annotation Test",
+    "require_password": False,
+    "authentication": {"method": "in_memory"},
+    "data_files": ["test_data.jsonl"],
+    "item_properties": {"text_key": "text", "id_key": "id"},
+    "annotation_schemes": [
+        {
+            "name": "likert_rating",
+            "type": "likert",
+            "labels": ["1", "2", "3", "4", "5"],
+            "description": "Rate on a scale of 1-5"
+        },
+        {
+            "name": "radio_choice",
+            "type": "radio",
+            "labels": ["option_a", "option_b", "option_c"],
+            "description": "Choose one option"
+        },
+        {
+            "name": "slider_value",
+            "type": "slider",
+            "min_value": 1,
+            "max_value": 10,
+            "starting_value": 5,
+            "description": "Rate on a scale of 1-10"
+        },
+        {
+            "name": "text_input",
+            "type": "text",
+            "description": "Enter your response"
+        },
+        {
+            "name": "span_annotation",
+            "type": "span",
+            "labels": ["positive", "negative"],
+            "description": "Mark spans of text"
+        }
+    ],
+    "output_annotation_dir": "/tmp/test_output",
+    "task_dir": "/tmp/test_task",
+    "site_file": "base_template.html",
+    "alert_time_each_instance": 0
+}
+```
+
+### Debugging Tips
+
+#### 1. Print Request/Response Details
+```python
+def debug_api_call(self, method, url, data=None, cookies=None):
+    """Debug API call with detailed logging."""
+    print(f"Making {method} request to {url}")
+    if data:
+        print(f"Request data: {data}")
+    if cookies:
+        print(f"Cookies: {cookies}")
+
+    if method == "GET":
+        response = requests.get(url, cookies=cookies)
+    else:
+        response = requests.post(url, json=data, cookies=cookies)
+
+    print(f"Response status: {response.status_code}")
+    print(f"Response content: {response.text[:500]}")
+    return response
+```
+
+#### 2. Verify Session State
+```python
+def verify_session_state(self, session):
+    """Verify current session state."""
+    response = session.get(f"{self.flask_server.base_url}/api/current_instance")
+    print(f"Current instance response: {response.status_code}")
+    if response.status_code == 200:
+        data = response.json()
+        print(f"Current instance: {data.get('instance_id')}")
+        print(f"Current annotations: {data.get('annotations')}")
+```
+
+#### 3. Check Server Logs
+```python
+def check_server_logs(self):
+    """Check for relevant server log messages."""
+    # Server logs are automatically captured by FlaskTestServer
+    # Look for authentication, annotation, and navigation messages
+    pass
+```
+
+### Example: Complete Annotation Persistence Test
+
+```python
+import pytest
+import requests
+import json
+import tempfile
+import os
+from tests.helpers.flask_test_setup import FlaskTestServer
+
+class TestAnnotationPersistence:
+    """Test annotation persistence across different annotation types."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def flask_server(self, request):
+        """Create a Flask test server with comprehensive annotation config."""
+        test_dir = tempfile.mkdtemp()
+
+        # Create test data
+        test_data = [
+            {"id": "test_1", "text": "Test item 1"},
+            {"id": "test_2", "text": "Test item 2"},
+            {"id": "test_3", "text": "Test item 3"}
+        ]
+
+        data_file = os.path.join(test_dir, 'test_data.jsonl')
+        with open(data_file, 'w') as f:
+            for item in test_data:
+                f.write(json.dumps(item) + '\n')
+
+        # Create comprehensive config
+        config = {
+            "debug": False,
+            "annotation_task_name": "Comprehensive Annotation Test",
+            "require_password": False,
+            "authentication": {"method": "in_memory"},
+            "data_files": [os.path.basename(data_file)],
+            "item_properties": {"text_key": "text", "id_key": "id"},
+            "annotation_schemes": [
+                {
+                    "name": "likert_rating",
+                    "type": "likert",
+                    "labels": ["1", "2", "3", "4", "5"],
+                    "description": "Rate on a scale of 1-5"
+                },
+                {
+                    "name": "radio_choice",
+                    "type": "radio",
+                    "labels": ["option_a", "option_b", "option_c"],
+                    "description": "Choose one option"
+                },
+                {
+                    "name": "slider_value",
+                    "type": "slider",
+                    "min_value": 1,
+                    "max_value": 10,
+                    "starting_value": 5,
+                    "description": "Rate on a scale of 1-10"
+                },
+                {
+                    "name": "text_input",
+                    "type": "text",
+                    "description": "Enter your response"
+                }
+            ],
+            "output_annotation_dir": os.path.join(test_dir, "output"),
+            "task_dir": test_dir,
+            "site_file": "base_template.html",
+            "alert_time_each_instance": 0
+        }
+
+        # Write config file
+        config_file = os.path.join(test_dir, 'test_config.yaml')
+        import yaml
+        with open(config_file, 'w') as f:
+            yaml.dump(config, f)
+
+        # Create and start server
+        server = FlaskTestServer(
+            port=9007,
+            debug=False,
+            config_file=config_file
+        )
+
+        if not server.start():
+            pytest.fail("Failed to start Flask test server")
+
+        yield server
+
+        # Cleanup
+        server.stop()
+        import shutil
+        shutil.rmtree(test_dir)
+
+    def test_likert_annotation_persistence(self, flask_server):
+        """Test that likert annotations persist within the same instance."""
+        session = requests.Session()
+
+        # Setup user
+        user_data = {"email": "test_user", "pass": "test_password"}
+        session.post(f"{flask_server.base_url}/register", data=user_data)
+        session.post(f"{flask_server.base_url}/auth", data=user_data)
+
+        # Get current instance
+        response = session.get(f"{flask_server.base_url}/api/current_instance")
+        assert response.status_code == 200
+        data = response.json()
+        instance_id = data['instance_id']
+
+        # Submit likert annotation
+        annotation_data = {
+            "instance_id": instance_id,
+            "type": "likert",
+            "schema": "likert_rating",
+            "state": [{"name": "likert_rating", "value": "3"}]
+        }
+        response = session.post(f"{flask_server.base_url}/updateinstance", json=annotation_data)
+        assert response.status_code == 200
+
+        # Navigate away and back
+        session.post(f"{flask_server.base_url}/annotate", data={"next": "true"})
+        session.post(f"{flask_server.base_url}/annotate", data={"prev": "true"})
+
+        # Verify annotation persists
+        response = session.get(f"{flask_server.base_url}/api/current_instance")
+        assert response.status_code == 200
+
+        data = response.json()
+        annotations = data.get('annotations', {})
+        assert 'likert_rating' in annotations
+        assert annotations['likert_rating'] == '3'
+
+    def test_annotation_isolation(self, flask_server):
+        """Test that annotations don't persist across different instances."""
+        session = requests.Session()
+
+        # Setup user
+        user_data = {"email": "test_user2", "pass": "test_password"}
+        session.post(f"{flask_server.base_url}/register", data=user_data)
+        session.post(f"{flask_server.base_url}/auth", data=user_data)
+
+        # Get current instance
+        response = session.get(f"{flask_server.base_url}/api/current_instance")
+        assert response.status_code == 200
+        data = response.json()
+        instance_id = data['instance_id']
+
+        # Submit annotation on first instance
+        annotation_data = {
+            "instance_id": instance_id,
+            "type": "likert",
+            "schema": "likert_rating",
+            "state": [{"name": "likert_rating", "value": "4"}]
+        }
+        response = session.post(f"{flask_server.base_url}/updateinstance", json=annotation_data)
+        assert response.status_code == 200
+
+        # Navigate to next instance
+        response = session.post(f"{flask_server.base_url}/annotate", data={"next": "true"})
+        assert response.status_code == 200
+
+        # Verify new instance has no annotations
+        response = session.get(f"{flask_server.base_url}/api/current_instance")
+        assert response.status_code == 200
+
+        data = response.json()
+        annotations = data.get('annotations', {})
+        assert len(annotations) == 0  # No annotations on new instance
+```
+
 ## Creating New Server Tests
 
 ### Basic Test Structure

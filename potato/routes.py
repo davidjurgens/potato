@@ -29,6 +29,9 @@ from potato.flask_server import (
     get_users, get_total_annotations, update_annotation_state, ai_hints
 )
 
+# Import admin dashboard functionality
+from potato.admin import admin_dashboard
+
 # Import span color functions
 from potato.server_utils.schemas.span import get_span_color
 
@@ -1181,6 +1184,122 @@ def admin_item_state_detail(item_id):
         }), 500
 
 
+# New Admin Dashboard API Endpoints
+
+@app.route("/admin/api/overview", methods=["GET"])
+def admin_api_overview():
+    """
+    Get dashboard overview data.
+    Admin-only endpoint requiring API key.
+
+    Returns:
+        flask.Response: JSON response with overview statistics
+    """
+    result = admin_dashboard.get_dashboard_overview()
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
+@app.route("/admin/api/annotators", methods=["GET"])
+def admin_api_annotators():
+    """
+    Get detailed annotator data including timing information.
+    Admin-only endpoint requiring API key.
+
+    Returns:
+        flask.Response: JSON response with annotator data
+    """
+    result = admin_dashboard.get_annotators_data()
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
+@app.route("/admin/api/instances", methods=["GET"])
+def admin_api_instances():
+    """
+    Get paginated instances data with sorting and filtering.
+    Admin-only endpoint requiring API key.
+
+    Query Parameters:
+        page: Page number (default: 1)
+        page_size: Items per page (default: 25)
+        sort_by: Sort field (annotation_count, completion_percentage, disagreement, id, average_time)
+        sort_order: Sort order (asc, desc)
+        filter_completion: Filter by completion (completed, incomplete, all)
+
+    Returns:
+        flask.Response: JSON response with paginated instances data
+    """
+    # Get query parameters
+    page = int(request.args.get('page', 1))
+    page_size = int(request.args.get('page_size', 25))
+    sort_by = request.args.get('sort_by', 'annotation_count')
+    sort_order = request.args.get('sort_order', 'desc')
+    filter_completion = request.args.get('filter_completion')
+
+    result = admin_dashboard.get_instances_data(
+        page=page,
+        page_size=page_size,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        filter_completion=filter_completion
+    )
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
+@app.route("/admin/api/config", methods=["GET", "POST"])
+def admin_api_config():
+    """
+    Get or update system configuration.
+    Admin-only endpoint requiring API key.
+
+    GET: Returns current configuration
+    POST: Updates configuration with provided data
+
+    Returns:
+        flask.Response: JSON response with configuration data or update result
+    """
+    if request.method == "GET":
+        # Return current configuration
+        return jsonify({
+            "max_annotations_per_user": config.get("max_annotations_per_user", -1),
+            "max_annotations_per_item": config.get("max_annotations_per_item", -1),
+            "assignment_strategy": config.get("assignment_strategy", "fixed_order"),
+            "annotation_task_name": config.get("annotation_task_name", "Unknown"),
+            "debug_mode": config.get("debug", False)
+        })
+
+    elif request.method == "POST":
+        # Update configuration
+        config_updates = request.get_json()
+        if not config_updates:
+            return jsonify({"error": "No configuration updates provided"}), 400
+
+        result = admin_dashboard.update_config(config_updates)
+        if isinstance(result, tuple):
+            return jsonify(result[0]), result[1]
+        return jsonify(result)
+
+
+@app.route("/admin/api/questions", methods=["GET"])
+def admin_api_questions():
+    """
+    Get aggregate analysis data for all annotation schemas/questions.
+    Admin-only endpoint requiring API key.
+
+    Returns:
+        flask.Response: JSON response with questions data and visualizations
+    """
+    result = admin_dashboard.get_questions_data()
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
 
 
 
@@ -1498,10 +1617,32 @@ def done():
 
 @app.route("/admin", methods=["GET"])
 def admin():
-    num_annotations = get_total_annotations()
+    """
+    Serve the admin dashboard page.
+
+    This route serves the main admin dashboard interface with API key authentication.
+    The dashboard provides comprehensive system monitoring and management capabilities.
+
+    Returns:
+        flask.Response: Rendered admin dashboard template or login form
+    """
+    # Check if admin API key is provided in session or headers
+    api_key = request.headers.get('X-API-Key') or session.get('admin_api_key')
+
+    if not config.get("debug", False) and api_key != "admin_api_key":
+        # Show API key entry form
+        return render_template("admin_login.html",
+                             title=config.get("annotation_task_name", "Admin Dashboard"))
+
+    # Store API key in session for future requests
+    session['admin_api_key'] = api_key
+
+    # Get basic context for the dashboard
     context = {
-        "total_annotations": num_annotations,
+        "annotation_task_name": config.get("annotation_task_name", "Annotation Platform"),
+        "debug_mode": config.get("debug", False)
     }
+
     return render_template("admin.html", **context)
 
 
@@ -1858,6 +1999,14 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/all_instances", "admin_all_instances", admin_all_instances, methods=["GET"])
     app.add_url_rule("/admin/item_state", "admin_item_state", admin_item_state, methods=["GET"])
     app.add_url_rule("/admin/item_state/<item_id>", "admin_item_state_detail", admin_item_state_detail, methods=["GET"])
+
+    # New admin dashboard API routes
+    app.add_url_rule("/admin/api/overview", "admin_api_overview", admin_api_overview, methods=["GET"])
+    app.add_url_rule("/admin/api/annotators", "admin_api_annotators", admin_api_annotators, methods=["GET"])
+    app.add_url_rule("/admin/api/instances", "admin_api_instances", admin_api_instances, methods=["GET"])
+    app.add_url_rule("/admin/api/config", "admin_api_config", admin_api_config, methods=["GET", "POST"])
+    app.add_url_rule("/admin/api/questions", "admin_api_questions", admin_api_questions, methods=["GET"])
+
     app.add_url_rule("/shutdown", "shutdown", shutdown, methods=["POST"])
 
 @app.route('/shutdown', methods=['POST'])

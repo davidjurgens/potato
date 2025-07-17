@@ -222,6 +222,266 @@ tests/selenium/
 └── ...                       # Other test files
 ```
 
+## Annotation Persistence Testing
+
+This section documents patterns and common fixes for testing annotation persistence across different annotation types (likert, radio, slider, text, span).
+
+### Key Testing Patterns
+
+#### 1. Form Element Interaction
+- **Click labels, not inputs**: For radio buttons and checkboxes, click the visible label instead of the hidden input
+- **Use correct element names**: Ensure form element names match the config schema names
+- **Wait for elements**: Always wait for form elements to be present before interacting
+
+```python
+# Good - Click the label
+self.wait_for_element(By.ID, "likert_rating_label").click()
+
+# Bad - Click the hidden input
+self.driver.find_element(By.NAME, "likert_rating").click()
+```
+
+#### 2. Slider Configuration
+- **Correct config keys**: Use `min_value` and `max_value` (not `min`/`max`)
+- **Include starting_value**: Always specify a starting value for sliders
+
+```yaml
+# Good slider config
+annotation_schemes:
+  - name: complexity
+    type: slider
+    min_value: 1
+    max_value: 5
+    starting_value: 3
+    description: "Rate complexity"
+```
+
+#### 3. Navigation Button IDs
+- **Use correct button IDs**: Navigation buttons have specific IDs that must match
+- **Check button visibility**: Ensure buttons are visible before clicking
+
+```python
+# Correct button IDs
+next_button = self.wait_for_element(By.ID, "next-button")
+prev_button = self.wait_for_element(By.ID, "prev-button")
+```
+
+#### 4. Annotation Isolation vs Persistence
+- **Understand system behavior**: Annotations are isolated per instance, not persisted across instances
+- **Test isolation**: Verify that annotations don't carry over between instances
+- **Test persistence within instance**: Verify annotations persist when navigating away and back to the same instance
+
+```python
+# Test annotation isolation (correct behavior)
+def test_annotation_isolation(self):
+    # Submit annotation on instance 1
+    self.submit_annotation("instance_1", "value1")
+
+    # Navigate to instance 2
+    self.navigate_to_next()
+
+    # Verify instance 2 has no annotations (isolation)
+    annotations = self.get_current_annotations()
+    assert len(annotations) == 0
+```
+
+### Common Fixes Applied
+
+#### 1. Form Element Selectors
+**Problem**: Tests using incorrect element names or selectors
+**Solution**: Use exact schema names from config and click visible labels
+
+```python
+# Fixed selector pattern
+def submit_likert_annotation(self, value):
+    # Click the label, not the input
+    label = self.wait_for_element(By.ID, f"likert_rating_{value}_label")
+    label.click()
+
+    # Submit the form
+    submit_button = self.wait_for_element(By.ID, "submit-button")
+    submit_button.click()
+```
+
+#### 2. Slider Configuration
+**Problem**: Slider config using wrong keys (`min`/`max` instead of `min_value`/`max_value`)
+**Solution**: Use correct config keys and include `starting_value`
+
+```yaml
+# Fixed slider config
+annotation_schemes:
+  - name: complexity
+    type: slider
+    min_value: 1
+    max_value: 5
+    starting_value: 3
+    description: "Rate complexity"
+```
+
+#### 3. Navigation Button IDs
+**Problem**: Tests using incorrect button IDs
+**Solution**: Use correct button IDs from the template
+
+```python
+# Fixed navigation
+def navigate_to_next(self):
+    next_button = self.wait_for_element(By.ID, "next-button")
+    next_button.click()
+    time.sleep(1)  # Wait for navigation
+```
+
+#### 4. Test Logic Corrections
+**Problem**: Tests expecting annotations to persist across instances
+**Solution**: Update tests to verify annotation isolation (correct behavior)
+
+```python
+# Fixed test logic
+def test_annotation_persistence_within_instance(self):
+    # Submit annotation
+    self.submit_annotation("test_value")
+
+    # Navigate away and back
+    self.navigate_to_next()
+    self.navigate_to_prev()
+
+    # Verify annotation persists on same instance
+    current_value = self.get_current_annotation_value()
+    assert current_value == "test_value"
+
+def test_annotation_isolation_between_instances(self):
+    # Submit annotation on instance 1
+    self.submit_annotation("value1")
+
+    # Navigate to instance 2
+    self.navigate_to_next()
+
+    # Verify instance 2 has no annotations (isolation)
+    annotations = self.get_current_annotations()
+    assert len(annotations) == 0
+```
+
+### Comprehensive Test Config
+
+For testing multiple annotation types, use a comprehensive config:
+
+```yaml
+annotation_schemes:
+  - name: likert_rating
+    type: likert
+    labels: ["1", "2", "3", "4", "5"]
+    description: "Rate on a scale of 1-5"
+
+  - name: radio_choice
+    type: radio
+    labels: ["option_a", "option_b", "option_c"]
+    description: "Choose one option"
+
+  - name: slider_value
+    type: slider
+    min_value: 1
+    max_value: 10
+    starting_value: 5
+    description: "Rate on a scale of 1-10"
+
+  - name: text_input
+    type: text
+    description: "Enter your response"
+
+  - name: span_annotation
+    type: span
+    labels: ["positive", "negative"]
+    description: "Mark spans of text"
+```
+
+### Debugging Tips
+
+#### 1. Print Debug Information
+```python
+def debug_current_state(self):
+    print(f"Current instance: {self.get_current_instance_id()}")
+    print(f"Current annotations: {self.get_current_annotations()}")
+    print(f"Available form elements: {self.get_form_elements()}")
+```
+
+#### 2. Check Element Visibility
+```python
+def verify_element_visible(self, element_id):
+    element = self.wait_for_element(By.ID, element_id)
+    assert element.is_displayed(), f"Element {element_id} is not visible"
+```
+
+#### 3. Verify Config Compatibility
+```python
+def verify_config_compatibility(self):
+    # Check that all expected form elements exist
+    expected_elements = ["likert_rating", "radio_choice", "slider_value", "text_input"]
+    for element in expected_elements:
+        self.wait_for_element(By.NAME, element)
+```
+
+### Example: Complete Annotation Persistence Test
+
+```python
+from tests.selenium.test_base import BaseSeleniumTest
+from selenium.webdriver.common.by import By
+import time
+
+class TestAnnotationPersistence(BaseSeleniumTest):
+    """
+    Test annotation persistence across different annotation types.
+
+    Authentication: Handled automatically by BaseSeleniumTest
+    """
+
+    def test_likert_annotation_persistence(self):
+        """Test that likert annotations persist within the same instance."""
+        self.driver.get(f"{self.server.base_url}/annotate")
+        self.wait_for_element(By.ID, "instance-text")
+
+        # Submit likert annotation
+        likert_label = self.wait_for_element(By.ID, "likert_rating_3_label")
+        likert_label.click()
+
+        submit_button = self.wait_for_element(By.ID, "submit-button")
+        submit_button.click()
+        time.sleep(1)
+
+        # Navigate away and back
+        next_button = self.wait_for_element(By.ID, "next-button")
+        next_button.click()
+        time.sleep(1)
+
+        prev_button = self.wait_for_element(By.ID, "prev-button")
+        prev_button.click()
+        time.sleep(1)
+
+        # Verify annotation persists
+        selected_likert = self.driver.find_element(By.CSS_SELECTOR, "input[name='likert_rating']:checked")
+        assert selected_likert.get_attribute("value") == "3"
+
+    def test_annotation_isolation(self):
+        """Test that annotations don't persist across different instances."""
+        self.driver.get(f"{self.server.base_url}/annotate")
+        self.wait_for_element(By.ID, "instance-text")
+
+        # Submit annotation on first instance
+        likert_label = self.wait_for_element(By.ID, "likert_rating_4_label")
+        likert_label.click()
+
+        submit_button = self.wait_for_element(By.ID, "submit-button")
+        submit_button.click()
+        time.sleep(1)
+
+        # Navigate to next instance
+        next_button = self.wait_for_element(By.ID, "next-button")
+        next_button.click()
+        time.sleep(1)
+
+        # Verify no annotations on new instance
+        selected_elements = self.driver.find_elements(By.CSS_SELECTOR, "input[name='likert_rating']:checked")
+        assert len(selected_elements) == 0
+```
+
 ## Future Enhancements
 
 ### Potential Improvements

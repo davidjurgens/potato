@@ -1,0 +1,53 @@
+annotation_task_name: "Comprehensive Annotation Demo"
+task_dir: "output/comprehensive-annotation-test"
+output_annotation_dir: "output/comprehensive-annotation-test"
+output_annotation_format: "jsonl"
+max_annotations_per_user: 10
+assignment_strategy: "fixed_order"
+data_files:
+  - "../data/test_data.json"
+item_properties:
+  id_key: "id"
+  text_key: "text"
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+  - annotation_type: "likert"
+    name: "quality_rating"
+    description: "Rate the overall quality of this text:"
+    min_label: "Poor"
+    max_label: "Excellent"
+    size: 5
+    sequential_key_binding: true
+  
+  - annotation_type: "radio"
+    name: "sentiment"
+    description: "What is the overall sentiment of this text?"
+    labels:
+      - "Positive"
+      - "Neutral"
+      - "Negative"
+    sequential_key_binding: true
+  
+  - annotation_type: "slider"
+    name: "complexity"
+    description: "Rate the complexity of this text:"
+    max_value: 10
+    min_value: 1
+    step: 1
+    min_label: "Simple"
+    max_label: "Complex"
+    starting_value: 5
+  
+  - annotation_type: "text"
+    name: "summary"
+    description: "Please provide a brief summary of this text:"
+    multiline: true
+    rows: 4
+    cols: 60
+
+site_dir: "default"
+customjs: null
+customjs_hostname: null

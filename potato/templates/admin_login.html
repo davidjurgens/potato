@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - Admin Access</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .admin-login-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: var(--light-bg);
+        }
+
+        .admin-login-card {
+            background: white;
+            border-radius: var(--radius);
+            box-shadow: var(--box-shadow);
+            padding: 2rem;
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+
+        .admin-login-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--heading-color);
+            margin-bottom: 1rem;
+        }
+
+        .admin-login-description {
+            color: var(--text-color);
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+
+        .admin-login-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .admin-login-input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 0.875rem;
+            transition: var(--transition);
+        }
+
+        .admin-login-input:focus {
+            outline: none;
+            border-color: var(--ring);
+            box-shadow: 0 0 0 2px rgba(110, 86, 207, 0.25);
+        }
+
+        .admin-login-button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: var(--radius);
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .admin-login-button:hover {
+            background-color: var(--secondary-color);
+        }
+
+        .admin-login-error {
+            color: var(--destructive);
+            background-color: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--destructive);
+            border-radius: var(--radius);
+            padding: 0.75rem;
+            margin-top: 1rem;
+            display: none;
+        }
+
+        .admin-login-error.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="admin-login-container">
+        <div class="admin-login-card">
+            <h1 class="admin-login-title">🔐 Admin Access Required</h1>
+            <p class="admin-login-description">
+                This area requires administrator privileges. Please enter your API key to access the admin dashboard.
+            </p>
+
+            <form class="admin-login-form" id="adminLoginForm">
+                <input
+                    type="password"
+                    id="apiKey"
+                    name="apiKey"
+                    placeholder="Enter API Key"
+                    class="admin-login-input"
+                    required
+                >
+                <button type="submit" class="admin-login-button">
+                    Access Dashboard
+                </button>
+            </form>
+
+            <div class="admin-login-error" id="errorMessage">
+                Invalid API key. Please try again.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('adminLoginForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const apiKey = document.getElementById('apiKey').value;
+            const errorMessage = document.getElementById('errorMessage');
+
+            // Clear previous error
+            errorMessage.classList.remove('show');
+
+            // Make request to admin endpoint with API key
+            fetch('/admin', {
+                method: 'GET',
+                headers: {
+                    'X-API-Key': apiKey
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    // Success - redirect to admin dashboard
+                    window.location.href = '/admin';
+                } else {
+                    // Show error message
+                    errorMessage.classList.add('show');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                errorMessage.classList.add('show');
+            });
+        });
+    </script>
+</body>
+</html>
