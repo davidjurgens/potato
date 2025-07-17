@@ -6,9 +6,7 @@ let isLoading = false;
 let textSaveTimer = null;
 let currentSpanAnnotations = [];
 
-// DEBUG: Add overlay tracking
-let debugOverlayCount = 0;
-let debugLastInstanceId = null;
+
 
 // DEEP DEBUG: Enhanced tracking
 let deepDebugState = {
@@ -77,22 +75,12 @@ function getCurrentOverlayCount() {
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🔍 [DEBUG] DOM Content Loaded - Starting application initialization');
     loadCurrentInstance();
     setupEventListeners();
     // Initial validation check
     validateRequiredFields();
     // Initialize span manager integration
     initializeSpanManagerIntegration();
-    // Add visible DOM marker to confirm updated code is loading
-    console.log('=== ANNOTATION.JS UPDATED CODE LOADED ===');
-    // Add visible marker to DOM
-    const marker = document.createElement('div');
-    marker.id = 'annotation-js-updated-marker';
-    marker.style.cssText = 'position: fixed; top: 10:10x; background: red; color: white; padding: 5px; z-index:9999; font-size: 12;';
-    marker.textContent = 'ANNOTATION.JS UPDATED';
-    document.body.appendChild(marker);
-    console.log('Added visible DOM marker for annotation.js update');
 });
 
 /**

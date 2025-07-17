@@ -15,16 +15,6 @@
 //   - Defensive state clearing on navigation
 // =====================================================================================
 
-// Add visible DOM marker to confirm updated code is loading
-console.log('=== SPAN-MANAGER.JS UPDATED CODE LOADED ===');
-//Add visible marker to DOM
-const spanMarker = document.createElement('div');
-spanMarker.id = 'span-manager-updated-marker';
-spanMarker.style.cssText = 'position: fixed; top:50:10; background: blue; color: white; padding: 5px; z-index:9999; font-size: 12;';
-spanMarker.textContent = 'SPAN-MANAGER.JS UPDATED';
-document.body.appendChild(spanMarker);
-console.log('Addedvisible DOM marker for span-manager.js update');
-
 /**
  * Frontend Span Manager for Potato Annotation Platform
  * Handles span annotation rendering, interaction, and API communication
