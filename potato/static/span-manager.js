@@ -1,3 +1,30 @@
+// =====================================================================================
+// Potato Annotation Platform - Span Manager
+// -------------------------------------------------------------------------------------
+// This file manages all frontend span annotation logic, including:
+//   - Rendering and clearing span overlays
+//   - Handling navigation between annotation instances
+//   - Synchronizing frontend state with backend API
+//   - Defensive logic for browser quirks (esp. Firefox)
+//   - Debugging and diagnostics hooks
+//
+// Key Features:
+//   - Robust overlay management with Firefox-specific fixes
+//   - Instance ID synchronization with server
+//   - Comprehensive debug logging for troubleshooting
+//   - Defensive state clearing on navigation
+// =====================================================================================
+
+// Add visible DOM marker to confirm updated code is loading
+console.log('=== SPAN-MANAGER.JS UPDATED CODE LOADED ===');
+//Add visible marker to DOM
+const spanMarker = document.createElement('div');
+spanMarker.id = 'span-manager-updated-marker';
+spanMarker.style.cssText = 'position: fixed; top:50:10; background: blue; color: white; padding: 5px; z-index:9999; font-size: 12;';
+spanMarker.textContent = 'SPAN-MANAGER.JS UPDATED';
+document.body.appendChild(spanMarker);
+console.log('Addedvisible DOM marker for span-manager.js update');
+
 /**
  * Frontend Span Manager for Potato Annotation Platform
  * Handles span annotation rendering, interaction, and API communication
@@ -5,33 +32,165 @@
 
 class SpanManager {
     constructor() {
-        this.currentInstanceId = null;
+        console.log('[DEEPDEBUG] SpanManager constructor called');
+
+        // Core state
         this.annotations = {spans: []};
         this.colors = {};
         this.selectedLabel = null;
         this.currentSchema = null; // Track the current schema
         this.isInitialized = false;
+        this.currentInstanceId = null;
+        this.lastKnownInstanceId = null;
+
+        // Debug tracking
+        this.debugState = {
+            constructorCalls: 0,
+            initializeCalls: 0,
+            loadAnnotationsCalls: 0,
+            onInstanceChangeCalls: 0,
+            clearAllStateCalls: 0,
+            renderSpansCalls: 0,
+            lastInstanceIdFromServer: null,
+            lastInstanceIdFromDOM: null,
+            lastOverlayCount: 0,
+            stateTransitions: []
+        };
+
+        this.debugState.constructorCalls++;
+        this.debugState.stateTransitions.push({
+            timestamp: new Date().toISOString(),
+            action: 'constructor',
+            currentInstanceId: this.currentInstanceId,
+            lastKnownInstanceId: this.lastKnownInstanceId
+        });
+
+        // Retry logic for robustness
         this.retryCount = 0;
         this.maxRetries = 3;
+
+        // Aggressive state clearing on construction
+        this.clearAllStateAndOverlays();
+
+        console.log('[DEEPDEBUG] SpanManager constructor completed', {
+            debugState: this.debugState,
+            currentInstanceId: this.currentInstanceId,
+            isInitialized: this.isInitialized
+        });
+    }
+
+    /**
+     * Deep debug logging utility
+     */
+    logDebugState(action, extraData = {}) {
+        const state = {
+            timestamp: new Date().toISOString(),
+            action: action,
+            currentInstanceId: this.currentInstanceId,
+            lastKnownInstanceId: this.lastKnownInstanceId,
+            isInitialized: this.isInitialized,
+            annotationsCount: this.annotations?.spans?.length || 0,
+            debugState: { ...this.debugState },
+            ...extraData
+        };
+
+        console.log(`[DEEP DEBUG] ${action}:`, state);
+        this.debugState.stateTransitions.push(state);
+
+        // Keep only last 50 transitions to avoid memory bloat
+        if (this.debugState.stateTransitions.length > 50) {
+            this.debugState.stateTransitions = this.debugState.stateTransitions.slice(-50);
+        }
+    }
+
+    /**
+     * Alternative workflow: Fetch current instance ID from server before any operations
+     * This ensures we always have the correct instance ID, even if DOM is stale
+     */
+    async fetchCurrentInstanceIdFromServer() {
+        try {
+            console.log('[DEEP DEBUG] fetchCurrentInstanceIdFromServer called');
+
+            const response = await fetch('/api/current_instance');
+            if (!response.ok) {
+                throw new Error(`Failed to fetch current instance: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const serverInstanceId = data.instance_id;
+
+            console.log('[DEEP DEBUG] Server returned instance ID:', serverInstanceId);
+
+            // Update debug state
+            this.debugState.lastInstanceIdFromServer = serverInstanceId;
+
+            // Check if this is different from what we have
+            if (this.currentInstanceId !== serverInstanceId) {
+                console.log('[DEEP DEBUG] Instance ID mismatch detected!', {
+                    currentInstanceId: this.currentInstanceId,
+                    serverInstanceId: serverInstanceId,
+                    lastKnownInstanceId: this.lastKnownInstanceId
+                });
+
+                // Force state reset if instance ID changed
+                if (this.currentInstanceId !== null) {
+                    console.log('[DEEP DEBUG] Instance ID changed, forcing state reset');
+                    this.clearAllStateAndOverlays();
+                }
+            }
+
+            this.currentInstanceId = serverInstanceId;
+            this.lastKnownInstanceId = serverInstanceId;
+
+            this.logDebugState('fetchCurrentInstanceIdFromServer', {
+                serverInstanceId: serverInstanceId,
+                previousInstanceId: this.currentInstanceId
+            });
+
+            return serverInstanceId;
+        } catch (error) {
+            console.error('[DEEP DEBUG] Error fetching current instance ID:', error);
+            return null;
+        }
     }
 
     /**
      * Initialize the span manager
      */
     async initialize() {
+        console.log('[DEEP DEBUG] initialize called');
+        this.debugState.initializeCalls++;
+
         try {
-            console.log('SpanManager: Initializing...');
-            await this.loadColors();
-            this.setupEventListeners();
-            this.isInitialized = true;
-            console.log('SpanManager: Initialized successfully');
-        } catch (error) {
-            console.error('SpanManager: Initialization failed:', error);
-            if (this.retryCount < this.maxRetries) {
-                this.retryCount++;
-                console.log(`SpanManager: Retrying initialization (${this.retryCount}/${this.maxRetries})`);
-                setTimeout(() => this.initialize(), 1000);
+            // Step 1: Fetch current instance ID from server first
+            const serverInstanceId = await this.fetchCurrentInstanceIdFromServer();
+            if (!serverInstanceId) {
+                console.error('[DEEP DEBUG] Failed to get server instance ID during initialization');
+                return false;
             }
+
+            // Step 2: Load colors
+            await this.loadColors();
+
+            // Step 3: Setup event listeners
+            this.setupEventListeners();
+
+            // Step 4: Load annotations for the verified instance ID
+            await this.loadAnnotations(serverInstanceId);
+
+            this.isInitialized = true;
+
+            this.logDebugState('initialize_completed', {
+                serverInstanceId: serverInstanceId,
+                isInitialized: this.isInitialized
+            });
+
+            console.log('[DEEPDEBUG] SpanManager initialization completed successfully');
+            return true;
+        } catch (error) {
+            console.error('[DEEP DEBUG] SpanManager initialization failed:', error);
+            this.isInitialized = false;
+            return false;
         }
     }
 
@@ -62,13 +221,6 @@ class SpanManager {
      * Setup event listeners for span interaction
      */
     setupEventListeners() {
-        // Label selection
-        document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('label-button')) {
-                this.selectLabel(e.target.dataset.label);
-            }
-        });
-
         // Text selection handling
         const textContainer = document.getElementById('instance-text');
         const textContent = document.getElementById('text-content');
@@ -96,17 +248,19 @@ class SpanManager {
         });
     }
 
-    /**
+        /**
      * Select a label for annotation
      */
     selectLabel(label, schema = null) {
-        // Update UI
-        document.querySelectorAll('.label-button').forEach(btn => {
-            btn.classList.remove('active');
+        // Update UI - uncheck all span checkboxes first
+        document.querySelectorAll('.annotation-form.span input[type="checkbox"]').forEach(checkbox => {
+            checkbox.checked = false;
         });
-        const button = document.querySelector(`[data-label="${label}"]`);
-        if (button) {
-            button.classList.add('active');
+
+        // Find and check the checkbox for this label
+        const checkbox = document.querySelector(`.annotation-form.span input[type="checkbox"][value="${label}"]`);
+        if (checkbox) {
+            checkbox.checked = true;
         }
 
         this.selectedLabel = label;
@@ -117,27 +271,54 @@ class SpanManager {
     }
 
     /**
+     * Get the currently selected label from checkbox inputs
+     */
+    getSelectedLabel() {
+        // Check if any span checkbox is checked
+        const checkedCheckbox = document.querySelector('.annotation-form.span input[type="checkbox"]:checked');
+        if (checkedCheckbox) {
+            return checkedCheckbox.value;
+        }
+        return this.selectedLabel;
+    }
+
+    /**
      * Load annotations for current instance
      */
     async loadAnnotations(instanceId) {
-        if (!instanceId) return Promise.resolve();
+        console.log('[DEEP DEBUG] loadAnnotations called with instanceId:', instanceId);
+        this.debugState.loadAnnotationsCalls++;
 
         try {
-            console.log('SpanManager: Loading annotations for instance:', instanceId);
+            // Step 1Verify instance ID with server
+            const serverInstanceId = await this.fetchCurrentInstanceIdFromServer();
+            if (serverInstanceId !== instanceId) {
+                console.warn('[DEEP DEBUG] Instance ID mismatch in loadAnnotations!', {
+                    requestedInstanceId: instanceId,
+                    serverInstanceId: serverInstanceId
+                });
 
-            // DEBUG: Track overlays before loading annotations
-            const spanOverlays = document.getElementById('span-overlays');
-            const overlaysBeforeLoad = spanOverlays ? spanOverlays.children.length : 0;
-            console.log(`🔍 [DEBUG] SpanManager.loadAnnotations() - Before loading: ${overlaysBeforeLoad} overlays for instance ${instanceId}`);
+                // Use server instance ID instead
+                instanceId = serverInstanceId;
+            }
 
+            this.logDebugState('loadAnnotations_start', {
+                requestedInstanceId: instanceId,
+                serverInstanceId: serverInstanceId
+            });
+
+            // Step2ear existing state
+            this.clearAllStateAndOverlays();
+
+            // Step 3: Fetch annotations from server
             const response = await fetch(`/api/spans/${instanceId}`);
-
             if (!response.ok) {
                 if (response.status === 404) {
                     // No annotations yet
                     this.annotations = {spans: []};
-                    console.log('SpanManager: No annotations found, set to:', this.annotations);
+                    console.log('🔍 [DEBUG] SpanManager.loadAnnotations() - No annotations found (404), set to:', this.annotations);
                     this.renderSpans();
+                    console.log('🔍 [DEBUG] SpanManager.loadAnnotations() - EXIT POINT (404)');
                     return Promise.resolve();
                 }
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -145,7 +326,11 @@ class SpanManager {
 
             // Store the full API response, not just the spans array
             this.annotations = await response.json();
-            this.currentInstanceId = instanceId;
+            console.log('[DEEP DEBUG] Annotations loaded from server:', {
+                instanceId: instanceId,
+                annotationsCount: this.annotations?.spans?.length || 0,
+                annotations: this.annotations
+            });
 
             // Auto-set the schema from the first span if available
             if (this.annotations.spans && this.annotations.spans.length > 0) {
@@ -156,19 +341,21 @@ class SpanManager {
                 }
             }
 
-            console.log('SpanManager: Loaded annotations:', this.annotations);
-            console.log('SpanManager: this.annotations.spans:', this.annotations.spans);
-            console.log('SpanManager: getSpans() would return:', this.getSpans());
-            console.log('SpanManager: Current schema:', this.currentSchema);
+            console.log('🔍 [DEBUG] SpanManager.loadAnnotations() - Loaded annotations:', this.annotations);
+            console.log('🔍 [DEBUG] SpanManager.loadAnnotations() - this.annotations.spans:', this.annotations.spans);
+            console.log('🔍 [DEBUG] SpanManager.loadAnnotations() - getSpans() would return:', this.getSpans());
+            console.log('🔍 [DEBUG] SpanManager.loadAnnotations() - Current schema:', this.currentSchema);
 
             // Render spans
-            console.log('SpanManager: About to call renderSpans()');
+            console.log('🔍 [DEBUG] SpanManager.loadAnnotations() - About to call renderSpans()');
             this.renderSpans();
-            console.log('SpanManager: renderSpans() call completed');
+            console.log('🔍 [DEBUG] SpanManager.loadAnnotations() - renderSpans() call completed');
 
-            // DEBUG: Track overlays after loading annotations
-            const overlaysAfterLoad = spanOverlays ? spanOverlays.children.length : 0;
-            console.log(`🔍 [DEBUG] SpanManager.loadAnnotations() - After loading: ${overlaysAfterLoad} overlays for instance ${instanceId}`);
+            this.logDebugState('loadAnnotations_completed', {
+                instanceId: instanceId,
+                annotationsCount: this.annotations?.spans?.length || 0,
+                overlayCount: this.getCurrentOverlayCount()
+            });
 
             return Promise.resolve(this.annotations);
         } catch (error) {
@@ -184,7 +371,14 @@ class SpanManager {
      * This method properly handles partial overlaps by using position-based rendering
      */
     renderSpans() {
-        console.log('🔍 [DEBUG] SpanManager.renderSpans() called');
+        console.log('[DEEP DEBUG] renderSpans called');
+        this.debugState.renderSpansCalls++;
+
+        this.logDebugState('renderSpans_start', {
+            annotationsCount: this.annotations?.spans?.length || 0,
+            currentInstanceId: this.currentInstanceId,
+            overlayCount: this.getCurrentOverlayCount()
+        });
 
         // Wait for DOM elements to be available
         const waitForElements = () => {
@@ -202,10 +396,6 @@ class SpanManager {
                 return;
             }
 
-            // DEBUG: Track overlays before rendering
-            const overlayCount = spanOverlays.children.length;
-            console.log(`🔍 [DEBUG] SpanManager.renderSpans() - Before rendering: ${overlayCount} overlays present`);
-
             // Elements are available, proceed with rendering
             this._renderSpansInternal(textContainer, textContent, spanOverlays);
         };
@@ -217,6 +407,11 @@ class SpanManager {
      * Internal method to render spans once DOM elements are confirmed available
      */
     _renderSpansInternal(textContainer, textContent, spanOverlays) {
+        console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - ENTRY POINT');
+        console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - textContent exists:', !!textContent);
+        console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - textContainer exists:', !!textContainer);
+        console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - spanOverlays exists:', !!spanOverlays);
+
         if (!textContent) {
             console.error('SpanManager: #text-content element not found! The annotation text will not be selectable.');
             this.showStatus('Error: Annotation text not found. Please contact support.', 'error');
@@ -229,14 +424,55 @@ class SpanManager {
 
         // Get spans from the correct property
         const spans = this.getSpans();
+        console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - getSpans() returned:', spans);
+        console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - spans length:', spans?.length || 0);
         console.log('SpanManager: Starting interval-based renderSpans with', spans?.length || 0, 'spans');
 
         // DEBUG: Track overlays before clearing
         const overlaysBeforeClear = spanOverlays.children.length;
         console.log(`🔍 [DEBUG] SpanManager._renderSpansInternal() - Before clearing overlays: ${overlaysBeforeClear} overlays`);
 
-        // Clear existing overlays
-        spanOverlays.innerHTML = '';
+        // Log details of existing overlays before clearing
+        if (overlaysBeforeClear > 0) {
+            console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - Existing overlays before clear:');
+            Array.from(spanOverlays.children).forEach((overlay, index) => {
+                console.log(`  Overlay ${index}:`, {
+                    className: overlay.className,
+                    dataset: overlay.dataset,
+                    innerHTML: overlay.innerHTML.substring(0, 100) + '...'
+                });
+            });
+        }
+
+        // FIREFOX FIX: Force complete DOM cleanup
+        // Firefox sometimes doesn't immediately remove elements when innerHTML is cleared
+        const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
+        if (isFirefox) {
+            console.log('🔍 [DEBUG] Firefox detected - using enhanced overlay cleanup');
+
+            // Method 1: Remove each child individually
+            while (spanOverlays.firstChild) {
+                spanOverlays.removeChild(spanOverlays.firstChild);
+            }
+
+            // Method 2: Force a reflow to ensure DOM is updated
+            spanOverlays.offsetHeight;
+
+            // Method 3: Double-check that all overlays are gone
+            const remainingOverlays = spanOverlays.querySelectorAll('.span-overlay');
+            if (remainingOverlays.length > 0) {
+                console.warn('🔍 [DEBUG] Firefox: Some overlays still present after removal, forcing cleanup');
+                remainingOverlays.forEach(overlay => {
+                    if (overlay.parentNode) {
+                        overlay.parentNode.removeChild(overlay);
+                    }
+                });
+            }
+        } else {
+            // Standard cleanup for other browsers
+            console.log('🔍 [DEBUG] Standard overlay cleanup for non-Firefox browser');
+            spanOverlays.innerHTML = '';
+        }
 
         // DEBUG: Track overlays after clearing
         const overlaysAfterClear = spanOverlays.children.length;
@@ -246,7 +482,8 @@ class SpanManager {
             // Just display the original text in text content layer
             const originalText = window.currentInstance?.text || '';
             textContent.textContent = originalText;
-            console.log('SpanManager: No spans to render, displaying original text:', originalText);
+            console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - No spans to render, displaying original text:', originalText);
+            console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - EXIT POINT (no spans)');
             return;
         }
 
@@ -256,6 +493,11 @@ class SpanManager {
 
         // Display text in text content layer
         textContent.textContent = text;
+
+        // FIREFOX FIX: Force a reflow before calculating positions
+        if (isFirefox) {
+            textContent.offsetHeight;
+        }
 
         // Sort spans by start position for consistent rendering
         const sortedSpans = [...spans].sort((a, b) => a.start - b.start);
@@ -275,7 +517,9 @@ class SpanManager {
         });
 
         // Render each span as an overlay
+        console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - About to render', sortedSpans.length, 'spans');
         sortedSpans.forEach((span, index) => {
+            console.log(`🔍 [DEBUG] SpanManager._renderSpansInternal() - Rendering span ${index}:`, span);
             this.renderSpanOverlay(span, index, textContent, spanOverlays, overlapDataMap);
         });
 
@@ -283,10 +527,40 @@ class SpanManager {
         const spanElements = spanOverlays.querySelectorAll('.span-highlight');
         this.applyOverlapStyling(spanElements, overlapDataArray);
 
-        // DEBUG: Track overlays after rendering
-        const overlaysAfterRender = spanOverlays.children.length;
-        console.log(`🔍 [DEBUG] SpanManager._renderSpansInternal() - After rendering: ${overlaysAfterRender} overlays created`);
-        console.log('SpanManager: Interval-based rendering completed');
+        // FIREFOX FIX: Add delay before checking overlay count to account for asynchronous creation
+        const checkOverlays = () => {
+            // DEBUG: Track overlays after rendering
+            const overlaysAfterRender = spanOverlays.children.length;
+            console.log(`🔍 [DEBUG] SpanManager._renderSpansInternal() - After rendering: ${overlaysAfterRender} overlays created`);
+            console.log(`🔍 [DEBUG] SpanManager._renderSpansInternal() - Is Firefox: ${isFirefox}`);
+
+            // Log details of created overlays
+            if (overlaysAfterRender > 0) {
+                console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - Created overlays:');
+                Array.from(spanOverlays.children).forEach((overlay, index) => {
+                    console.log(`  Created Overlay ${index}:`, {
+                        className: overlay.className,
+                        dataset: overlay.dataset,
+                        innerHTML: overlay.innerHTML.substring(0, 100) + '...'
+                    });
+                });
+            } else {
+                console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - WARNING: No overlays created!');
+                console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - spanOverlays container:', spanOverlays);
+                console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - spanOverlays.innerHTML:', spanOverlays.innerHTML.substring(0, 200) + '...');
+            }
+
+            console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - EXIT POINT (with spans)');
+            console.log('SpanManager: Interval-based rendering completed');
+        };
+
+        if (isFirefox) {
+            console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - Firefox detected, delaying overlay count check');
+            setTimeout(checkOverlays, 10); // Small delay to allow async overlay creation
+        } else {
+            console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - Not Firefox, checking overlay count immediately');
+            checkOverlays();
+        }
     }
 
     /**
@@ -330,6 +604,12 @@ class SpanManager {
      * Render a span as an overlay using interval-based positioning
      */
     renderSpanOverlay(span, layerIndex, textContent, spanOverlays, overlapData) {
+        console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - ENTRY POINT');
+        console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - span:', span);
+        console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - layerIndex:', layerIndex);
+        console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - spanOverlays container exists:', !!spanOverlays);
+        console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - spanOverlays children before:', spanOverlays?.children?.length || 0);
+
         // Defensive check: ensure text node exists
         const textNode = textContent.firstChild;
         if (!textNode || textNode.nodeType !== Node.TEXT_NODE) {
@@ -338,112 +618,161 @@ class SpanManager {
                 textContentChildNodes: textContent.childNodes.length,
                 firstChildType: textNode ? textNode.nodeType : 'null'
             });
+            console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - EXIT POINT (no text node)');
             return; // Skip rendering this span
+        }
+
+        // FIREFOX FIX: Ensure text content is properly rendered before getting bounding rects
+        const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
+        console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - Is Firefox:', isFirefox);
+
+        if (isFirefox) {
+            // Force a reflow to ensure text is properly laid out
+            textContent.offsetHeight;
+            console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - Forced reflow for Firefox');
         }
 
         // Get bounding rects for the span's character range
         const rects = getCharRangeBoundingRect(textContent, span.start, span.end);
+        console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - bounding rects:', rects);
         if (!rects || rects.length === 0) {
             console.warn('SpanManager: Could not get bounding rect for span', span);
+            console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - EXIT POINT (no bounding rect)');
             return;
         }
 
         // Get the instance-text container's bounding rect for relative positioning
         const instanceTextContainer = document.getElementById('instance-text');
         const containerRect = instanceTextContainer.getBoundingClientRect();
+        console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - containerRect:', containerRect);
 
-        // Create overlay for each rect (handles line wrapping)
-        rects.forEach((rect, rectIndex) => {
-            const overlay = document.createElement('div');
-            overlay.className = 'span-overlay annotation-span';
-            overlay.dataset.annotationId = span.id;
-            overlay.dataset.start = span.start;
-            overlay.dataset.end = span.end;
-            overlay.dataset.label = span.label;
-            overlay.style.position = 'absolute';
-            overlay.style.pointerEvents = 'none'; // <-- Always allow selection through overlay
+        // FIREFOX FIX: Add small delay to ensure positioning is accurate
+        const createOverlay = () => {
+            console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - createOverlay() called');
+            console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - rects.length:', rects.length);
 
-            // Position the overlay relative to the instance-text container
-            const left = rect.left - containerRect.left;
-            const top = rect.top - containerRect.top;
-            const width = rect.right - rect.left;
-            const height = rect.bottom - rect.top;
+            // Create overlay for each rect (handles line wrapping)
+            rects.forEach((rect, rectIndex) => {
+                console.log(`🔍 [DEBUG] SpanManager.renderSpanOverlay() - Creating overlay for rect ${rectIndex}:`, rect);
+                const overlay = document.createElement('div');
+                overlay.className = 'span-overlay annotation-span';
+                overlay.dataset.annotationId = span.id;
+                overlay.dataset.start = span.start;
+                overlay.dataset.end = span.end;
+                overlay.dataset.label = span.label;
+                overlay.style.position = 'absolute';
+                overlay.style.pointerEvents = 'none'; // <-- Always allow selection through overlay
 
-            overlay.style.left = `${left}px`;
-            overlay.style.top = `${top}px`;
-            overlay.style.width = `${width}px`;
-            overlay.style.height = `${height}px`;
-            // overlay.style.pointerEvents = 'auto'; // Enable pointer events for this overlay
+                // Position the overlay relative to the instance-text container
+                const left = rect.left - containerRect.left;
+                const top = rect.top - containerRect.top;
+                const width = rect.right - rect.left;
+                const height = rect.bottom - rect.top;
 
-            // Apply the correct color for this label
-            const backgroundColor = this.getSpanColor(span.label);
-            if (backgroundColor) {
-                overlay.style.backgroundColor = backgroundColor;
-            }
+                // FIREFOX FIX: Ensure positive dimensions and add safety checks
+                const safeWidth = Math.max(1, width);
+                const safeHeight = Math.max(1, height);
 
-            // Set z-index and height based on overlap data
-            const spanKey = `${span.start}-${span.end}`;
-            const overlapInfo = overlapData.get(spanKey) || { depth: 0, heightMultiplier: 1.0 };
-            overlay.style.zIndex = 10 + overlapInfo.depth;
+                overlay.style.left = `${left}px`;
+                overlay.style.top = `${top}px`;
+                overlay.style.width = `${safeWidth}px`;
+                overlay.style.height = `${safeHeight}px`;
+                // overlay.style.pointerEvents = 'auto'; // Enable pointer events for this overlay
 
-            // Apply height multiplier for visual distinction
-            if (overlapInfo.heightMultiplier > 1.0) {
-                const originalHeight = rect.bottom - rect.top;
-                const adjustedHeight = originalHeight * overlapInfo.heightMultiplier;
-                overlay.style.height = `${adjustedHeight}px`;
+                // Apply the correct color for this label
+                const backgroundColor = this.getSpanColor(span.label);
+                if (backgroundColor) {
+                    overlay.style.backgroundColor = backgroundColor;
+                }
 
-                // Center the overlay vertically around the original text position
-                const heightDifference = adjustedHeight - originalHeight;
-                const newTop = top - (heightDifference / 2);
-                overlay.style.top = `${newTop}px`;
-            }
+                // Set z-index and height based on overlap data
+                const spanKey = `${span.start}-${span.end}`;
+                const overlapInfo = overlapData.get(spanKey) || { depth: 0, heightMultiplier: 1.0 };
+                overlay.style.zIndex = 10 + overlapInfo.depth;
 
-            // Add label
-            const label = document.createElement('span');
-            label.className = 'span-label';
-            label.textContent = span.label;
-            label.style.position = 'absolute';
-            label.style.top = '-25px';
-            label.style.left = '0';
-            label.style.fontSize = '11px';
-            label.style.fontWeight = 'bold';
-            label.style.backgroundColor = 'rgba(0,0,0,0.9)';
-            label.style.color = 'white';
-            label.style.padding = '3px 6px';
-            label.style.borderRadius = '4px';
-            label.style.pointerEvents = 'auto'; // <-- Allow interaction with label
-            label.style.zIndex = '1000';
-            label.style.whiteSpace = 'nowrap';
-            overlay.appendChild(label);
+                // Apply height multiplier for visual distinction
+                if (overlapInfo.heightMultiplier > 1.0) {
+                    const originalHeight = rect.bottom - rect.top;
+                    const adjustedHeight = originalHeight * overlapInfo.heightMultiplier;
+                    overlay.style.height = `${Math.max(1, adjustedHeight)}px`;
 
-            // Add delete button
-            const deleteBtn = document.createElement('button');
-            deleteBtn.className = 'span-delete-btn';
-            deleteBtn.innerHTML = '×';
-            deleteBtn.title = 'Delete span';
-            deleteBtn.style.position = 'absolute';
-            deleteBtn.style.top = '-25px';
-            deleteBtn.style.right = '0';
-            deleteBtn.style.backgroundColor = 'rgba(255,0,0,0.9)';
-            deleteBtn.style.color = 'white';
-            deleteBtn.style.border = 'none';
-            deleteBtn.style.borderRadius = '50%';
-            deleteBtn.style.width = '18px';
-            deleteBtn.style.height = '18px';
-            deleteBtn.style.fontSize = '14px';
-            deleteBtn.style.fontWeight = 'bold';
-            deleteBtn.style.cursor = 'pointer';
-            deleteBtn.style.pointerEvents = 'auto'; // <-- Allow interaction with delete button
-            deleteBtn.style.zIndex = '1001';
-            deleteBtn.style.lineHeight = '1';
-            deleteBtn.onclick = (e) => {
-                e.stopPropagation();
-                this.deleteSpan(span.id);
-            };
-            overlay.appendChild(deleteBtn);
+                    // Center the overlay vertically around the original text position
+                    const heightDifference = adjustedHeight - originalHeight;
+                    const newTop = top - (heightDifference / 2);
+                    overlay.style.top = `${newTop}px`;
+                }
 
-            spanOverlays.appendChild(overlay);
-        });
+                // Add label
+                const label = document.createElement('span');
+                label.className = 'span-label';
+                label.textContent = span.label;
+                label.style.position = 'absolute';
+                label.style.top = '-25px';
+                label.style.left = '0';
+                label.style.fontSize = '11px';
+                label.style.fontWeight = 'bold';
+                label.style.backgroundColor = 'rgba(0,0,0,0.9)';
+                label.style.color = 'white';
+                label.style.padding = '3px 6px';
+                label.style.borderRadius = '4px';
+                label.style.pointerEvents = 'auto'; // <-- Allow interaction with label
+                label.style.zIndex = '1000';
+                label.style.whiteSpace = 'nowrap';
+                overlay.appendChild(label);
+
+                // Add delete button
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'span-delete-btn';
+                deleteBtn.innerHTML = '×';
+                deleteBtn.title = 'Delete span';
+                deleteBtn.style.position = 'absolute';
+                deleteBtn.style.top = '-25px';
+                deleteBtn.style.right = '0';
+                deleteBtn.style.backgroundColor = 'rgba(255,0,0,0.9)';
+                deleteBtn.style.color = 'white';
+                deleteBtn.style.border = 'none';
+                deleteBtn.style.borderRadius = '50%';
+                deleteBtn.style.width = '18px';
+                deleteBtn.style.height = '18px';
+                deleteBtn.style.fontSize = '14px';
+                deleteBtn.style.fontWeight = 'bold';
+                deleteBtn.style.cursor = 'pointer';
+                deleteBtn.style.pointerEvents = 'auto'; // <-- Allow interaction with delete button
+                deleteBtn.style.zIndex = '1001';
+                deleteBtn.style.lineHeight = '1';
+                deleteBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.deleteSpan(span.id);
+                };
+                overlay.appendChild(deleteBtn);
+
+                console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - About to append overlay to container');
+                spanOverlays.appendChild(overlay);
+                console.log(`🔍 [DEBUG] SpanManager.renderSpanOverlay() - Overlay appended. Container now has ${spanOverlays.children.length} children`);
+
+                // Track overlay creation for debugging
+                if (typeof trackOverlayCreation === 'function') {
+                    trackOverlayCreation(overlay, 'SpanManager.renderSpanOverlay');
+                }
+            });
+
+            console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - createOverlay() completed');
+        };
+
+        // FIREFOX FIX: Use setTimeout for Firefox to ensure DOM is ready
+        if (isFirefox) {
+            console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - Scheduling createOverlay with setTimeout for Firefox');
+            setTimeout(() => {
+                console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - setTimeout callback executing');
+                createOverlay();
+                console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - setTimeout callback completed');
+            }, 0);
+        } else {
+            console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - Calling createOverlay immediately (not Firefox)');
+            createOverlay();
+        }
+
+        console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - EXIT POINT (function returning, overlay may be created asynchronously)');
     }
 
     /**
@@ -512,7 +841,8 @@ class SpanManager {
         console.log('🔍 [DEBUG] handleTextSelection entered, selection:', selection ? selection.toString() : '(none)', 'rangeCount:', selection ? selection.rangeCount : '(none)', 'isCollapsed:', selection ? selection.isCollapsed : '(none)');
         if (!selection.rangeCount || selection.isCollapsed) return;
 
-        if (!this.selectedLabel) {
+        const selectedLabel = this.getSelectedLabel();
+        if (!selectedLabel) {
             this.showStatus('Please select a label first', 'error');
             return;
         }
@@ -532,7 +862,7 @@ class SpanManager {
             text: selectedText,
             start: start,
             end: end,
-            label: this.selectedLabel
+            label: selectedLabel
         });
 
         // Validate the selection
@@ -544,7 +874,7 @@ class SpanManager {
         }
 
         // Create annotation
-        this.createAnnotation(selectedText, start, end, this.selectedLabel)
+        this.createAnnotation(selectedText, start, end, selectedLabel)
             .then(result => {
                 console.log('🔍 [DEBUG] SpanManager: Annotation creation successful:', result);
             })
@@ -867,8 +1197,11 @@ class SpanManager {
 
     /**
      * Show status message
+     * DISABLED: Status messages are suppressed but code is preserved for future diagnostics
      */
     showStatus(message, type) {
+        // Status messages are disabled - uncomment the code below to re-enable
+        /*
         const statusDiv = document.getElementById('status');
         if (statusDiv) {
             statusDiv.textContent = message;
@@ -879,6 +1212,9 @@ class SpanManager {
                 statusDiv.style.display = 'none';
             }, 3000);
         }
+        */
+
+        // Keep console logging for debugging (can be disabled if needed)
         console.log(`SpanManager: ${type.toUpperCase()} - ${message}`);
     }
 
@@ -1198,6 +1534,118 @@ class SpanManager {
             }
         });
     }
+
+    /**
+     * Aggressively clear all overlays and internal state with deep logging
+     */
+    clearAllStateAndOverlays() {
+        console.log('[DEEP DEBUG] clearAllStateAndOverlays called');
+        this.debugState.clearAllStateCalls++;
+
+        // Log state before clearing
+        this.logDebugState('clearAllStateAndOverlays_before', {
+            overlayCount: this.getCurrentOverlayCount(),
+            annotationsCount: this.annotations?.spans?.length || 0
+        });
+
+        // Clear overlays
+        const spanOverlays = document.getElementById('span-overlays');
+        if (spanOverlays) {
+            const beforeCount = spanOverlays.children.length;
+            console.log('[DEEP DEBUG] Clearing overlays, count before:', beforeCount);
+
+            while (spanOverlays.firstChild) {
+                spanOverlays.removeChild(spanOverlays.firstChild);
+            }
+
+            // Force reflow
+            spanOverlays.offsetHeight;
+
+            // Double-check
+            const remaining = spanOverlays.querySelectorAll('.span-overlay');
+            if (remaining.length > 0) {
+                console.warn('[DEEP DEBUG] Overlays still present after clear, forcing removal');
+                remaining.forEach(node => {
+                    if (node.parentNode) {
+                        node.parentNode.removeChild(node);
+                    }
+                });
+            }
+
+            const afterCount = spanOverlays.children.length;
+            console.log('[DEEP DEBUG] Overlays cleared, count after:', afterCount);
+        }
+
+        // Reset internal state
+        this.annotations = {spans: []};
+        this.currentSchema = null;
+        this.selectedLabel = null;
+        this.isInitialized = false;
+
+        this.logDebugState('clearAllStateAndOverlays_after', {
+            overlayCount: this.getCurrentOverlayCount(),
+            annotationsCount: this.annotations?.spans?.length || 0
+        });
+
+        console.log('[DEEP DEBUG] Internal state reset complete');
+    }
+
+    /**
+     * Get current overlay count for debugging
+     */
+    getCurrentOverlayCount() {
+        const spanOverlays = document.getElementById('span-overlays');
+        return spanOverlays ? spanOverlays.children.length : 0;
+    }
+
+    /**
+     * Enhanced onInstanceChange with deep logging
+     */
+    onInstanceChange(newInstanceId) {
+        console.log('[DEEP DEBUG] onInstanceChange called with newInstanceId:', newInstanceId);
+        this.debugState.onInstanceChangeCalls++;
+
+        this.logDebugState('onInstanceChange_start', {
+            newInstanceId: newInstanceId,
+            currentInstanceId: this.currentInstanceId,
+            overlayCount: this.getCurrentOverlayCount()
+        });
+
+        // Clear all state first
+        this.clearAllStateAndOverlays();
+
+        // If newInstanceId is provided, use it; otherwise fetch from server
+        if (typeof newInstanceId !== 'undefined') {
+            console.log('[DEEP DEBUG] Using provided newInstanceId:', newInstanceId);
+            this.loadAnnotations(newInstanceId);
+        } else {
+            console.log('[DEEP DEBUG] No newInstanceId provided, fetching from server');
+            this.fetchCurrentInstanceIdFromServer().then(serverInstanceId => {
+                if (serverInstanceId) {
+                    this.loadAnnotations(serverInstanceId);
+                }
+            });
+        }
+
+        this.logDebugState('onInstanceChange_completed', {
+            newInstanceId: newInstanceId,
+            currentInstanceId: this.currentInstanceId
+        });
+    }
+
+    /**
+     * Remove all span overlays from the DOM and reset internal state
+     */
+    clearAllSpanOverlays() {
+        const spanOverlays = document.getElementById('span-overlays');
+        if (spanOverlays) {
+            while (spanOverlays.firstChild) {
+                spanOverlays.removeChild(spanOverlays.firstChild);
+            }
+        }
+        this.annotations = {spans: []};
+        console.log('[DEFENSIVE] Cleared all span overlays and reset annotations');
+    }
 }
 
 /**
@@ -1212,7 +1660,49 @@ function getCharRangeBoundingRect(container, start, end) {
     range.setStart(textNode, start);
     range.setEnd(textNode, end);
 
-    const rects = range.getClientRects();
+    // FIREFOX FIX: Handle Firefox's different behavior with getClientRects
+    const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
+
+    let rects;
+    if (isFirefox) {
+        // Firefox sometimes returns empty rects if the text hasn't been fully rendered
+        // Force a reflow and try multiple times
+        let attempts = 0;
+        const maxAttempts = 3;
+
+        while (attempts < maxAttempts) {
+            // Force a reflow
+            container.offsetHeight;
+
+            rects = range.getClientRects();
+            if (rects.length > 0) {
+                break;
+            }
+
+            attempts++;
+            if (attempts < maxAttempts) {
+                // Small delay before retry
+                const startTime = Date.now();
+                while (Date.now() - startTime < 10) {
+                    // Busy wait for 10ms
+                }
+            }
+        }
+
+        // If still no rects, try alternative method for Firefox
+        if (rects.length === 0) {
+            console.warn('Firefox: getClientRects returned empty, trying alternative method');
+
+            // Alternative: use getBoundingClientRect on the range
+            const boundingRect = range.getBoundingClientRect();
+            if (boundingRect.width > 0 && boundingRect.height > 0) {
+                rects = [boundingRect];
+            }
+        }
+    } else {
+        rects = range.getClientRects();
+    }
+
     if (rects.length === 0) return null;
 
     // If the range wraps lines, return all rects
@@ -1229,3 +1719,13 @@ window.spanManager = new SpanManager();
 document.addEventListener('DOMContentLoaded', () => {
     window.spanManager.initialize();
 });
+
+/**
+ * ===================== DEBUGGING & MAINTENANCE NOTES =====================
+ * - All major state changes are logged with [DEBUG] or [DEFENSIVE] tags.
+ * - If overlays persist across navigation, check onInstanceChange and clearAllSpanOverlays.
+ * - If overlays are missing, check loadAnnotations and renderSpans logic.
+ * - For browser-specific issues (esp. Firefox), see FIREFOX FIX comments.
+ * - Selenium tests in tests/selenium/ can be used to automate bug reproduction.
+ * ========================================================================
+ */

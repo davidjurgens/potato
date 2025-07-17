@@ -803,3 +803,79 @@ class TestBackendStateManagement:
         assert span['schema'] == 'sentiment'
         assert span['start'] == 0
         assert span['end'] == 4
+
+    def test_clear_span_annotations_endpoint(self, client):
+        """Test POST /api/spans/<instance_id>/clear endpoint"""
+        # Create authenticated session and user state
+        with client.session_transaction() as sess:
+            sess['username'] = 'test_user'
+
+        # Create user state for test_user
+        self.create_test_user('test_user')
+
+        # Create test instance first
+        item_manager = get_item_state_manager()
+        test_instance = {
+            "id": "test_instance_456",
+            "text": "Test text for span annotation."
+        }
+        item_manager.add_item(test_instance["id"], test_instance)
+
+        # First, create some spans via the updateinstance endpoint
+        span_data = {
+            'instance_id': 'test_instance_456',
+            'type': 'span',
+            'schema': 'sentiment',
+            'state': [
+                {
+                    'name': 'positive',
+                    'title': 'Positive sentiment',
+                    'start': 0,
+                    'end': 4,
+                    'value': 'positive'
+                }
+            ]
+        }
+
+        # Add spans to user state
+        response = client.post('/updateinstance',
+                              data=json.dumps(span_data),
+                              content_type='application/json')
+        assert response.status_code == 200
+
+        # Verify spans exist
+        response = client.get('/api/spans/test_instance_456')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert len(data['spans']) == 1
+
+        # Clear the spans
+        response = client.post('/api/spans/test_instance_456/clear')
+        assert response.status_code == 200
+
+        data = json.loads(response.data)
+        assert data['status'] == 'success'
+        assert data['spans_cleared'] == 1
+
+        # Verify spans are cleared
+        response = client.get('/api/spans/test_instance_456')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert len(data['spans']) == 0
+
+    def test_clear_span_annotations_nonexistent(self, client):
+        """Test POST /api/spans/<instance_id>/clear with no spans"""
+        # Create authenticated session and user state
+        with client.session_transaction() as sess:
+            sess['username'] = 'test_user'
+
+        # Create user state for test_user
+        self.create_test_user('test_user')
+
+        # Try to clear spans for an instance that has no spans
+        response = client.post('/api/spans/test_instance_456/clear')
+        assert response.status_code == 200
+
+        data = json.loads(response.data)
+        assert data['status'] == 'success'
+        assert data['spans_cleared'] == 0

@@ -12,26 +12,30 @@ class TestApiSpansContract(BaseSeleniumTest):
         # User is already registered and logged in by BaseSeleniumTest
         username = self.test_user
 
-        # Get the current instance ID from user state
-        user_state_script = f"""
-            return fetch('{base_url}/admin/user_state/{username}', {{credentials: 'same-origin'}})
-                .then(r => r.json())
-                .then(data => data.current_instance.id)
-                .catch(e => 'ERROR: ' + e.message);
-        """
-        instance_id = self.execute_script_safe(user_state_script)
-        self.assertFalse(isinstance(instance_id, str) and instance_id.startswith("ERROR:"), f"Failed to get instance ID: {instance_id}")
+        # Navigate to annotation page to establish session
+        self.driver.get(f"{base_url}/annotate")
+        WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.ID, "instance-text")))
 
-        # Fetch spans for this instance
-        spans_script = f"""
-            return fetch('{base_url}/api/spans/{instance_id}', {{credentials: 'same-origin'}})
-                .then(r => r.json())
-                .then(data => JSON.stringify(data))
-                .catch(e => 'ERROR: ' + e.message);
-        """
-        spans_json = self.execute_script_safe(spans_script)
-        self.assertFalse(isinstance(spans_json, str) and spans_json.startswith("ERROR:"), f"Failed to fetch spans: {spans_json}")
-        spans = json.loads(spans_json)
+        # Get the current instance ID from user state using server's get method
+        response = self.server.get(f"/admin/user_state/{username}")
+        if response.status_code != 200:
+            self.fail(f"Failed to get user state: HTTP {response.status_code} - {response.text}")
+
+        user_state = response.json()
+        instance_id = user_state.get("current_instance", {}).get("id")
+        if not instance_id:
+            self.fail("No current instance found in user state")
+
+        # Get session cookies from browser
+        session_cookies = self.get_session_cookies()
+
+        # Fetch spans for this instance using requests with session cookies
+        import requests
+        response = requests.get(f"{base_url}/api/spans/{instance_id}", cookies=session_cookies)
+        if response.status_code != 200:
+            self.fail(f"Failed to fetch spans: HTTP {response.status_code} - {response.text}")
+
+        spans = response.json()
 
         # Assert spans contract
         self.assertIsInstance(spans, dict, "Spans should be a dictionary")

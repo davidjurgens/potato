@@ -42,6 +42,7 @@ class TestUserStateFrontendIntegration:
             }
         ]
 
+        # Create data file in the test directory
         data_file = os.path.join(test_dir, 'frontend_test_data.jsonl')
         with open(data_file, 'w') as f:
             for item in test_data:
@@ -57,7 +58,7 @@ class TestUserStateFrontendIntegration:
             "authentication": {
                 "method": "in_memory"
             },
-            "data_files": [os.path.basename(data_file)],
+            "data_files": [data_file],  # Use absolute path to the data file
             "item_properties": {
                 "text_key": "text",
                 "id_key": "id"
@@ -78,7 +79,7 @@ class TestUserStateFrontendIntegration:
             ],
             "site_file": "base_template_v2.html",
             "output_annotation_dir": os.path.join(test_dir, "output"),
-            "task_dir": os.path.join(test_dir, "task"),
+            "task_dir": test_dir,  # Set task_dir to test_dir so data files are found
             "site_dir": os.path.join(test_dir, "templates"),
             "alert_time_each_instance": 0
         }
@@ -93,11 +94,10 @@ class TestUserStateFrontendIntegration:
         server = FlaskTestServer(
             port=9013,
             debug=False,
-            config_file=config_file,
-            test_data_file=data_file
+            config_file=config_file
         )
 
-        # Start server
+        # Start server with the test directory as the working directory
         if not server.start_server(test_dir):
             pytest.fail("Failed to start Flask test server")
 

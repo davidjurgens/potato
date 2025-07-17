@@ -4,26 +4,69 @@ This directory contains comprehensive tests for the Potato annotation platform, 
 
 ## Test Structure
 
-### Backend Tests
-- **`test_app_lifecycle.py`** - Server startup, debug mode, home page functionality
-- **`test_auth.py`** - Authentication and session management
-- **`test_annotation_api.py`** - Annotation submission and retrieval APIs
-- **`test_user_state.py`** - User state transitions and phase logic
-- **`test_annotation_types.py`** - Tests for different annotation types using simple examples
-- **`test_annotation_schemas.py`** - Tests for annotation schema HTML generation
-- **`test_annotation_workflow.py`** - End-to-end annotation workflow testing
+### Server Tests (`tests/server/`)
+Server tests use the `FlaskTestServer` class to test against real Flask server instances. These are integration tests that verify actual HTTP endpoints and server behavior.
 
-### Config Validation Tests
-- **`test_config_validation.py`** - Config file validation, required fields, annotation scheme validation, and stress testing
-- **`test_config_server_integration.py`** - How Flask server uses config values, error handling, and various config scenarios
+**📖 [Server Test Documentation](server/README.md)** - Complete guide to server testing
+**📋 [Quick Reference](server/QUICK_REFERENCE.md)** - Common patterns and code snippets
+**📝 [Test Template](server/test_template.py)** - Template for creating new server tests
 
-### Frontend Tests (Selenium)
-- **`test_frontend_annotation.py`** - Annotation UI interaction testing
-- **`test_frontend_login.py`** - Login UI and session flow testing
+**Key Server Test Files:**
+- **`test_backend_state.py`** - User and item state management
+- **`test_annotation_workflow.py`** - Complete annotation process testing
+- **`test_multi_phase_workflow.py`** - Phase transitions and consent workflows
+- **`test_agreement_workflow.py`** - Multi-annotator agreement testing
+- **`test_assignment_strategies.py`** - Different assignment algorithms
+- **`test_annotation_types.py`** - Various annotation scheme testing
+- **`test_error_handling_workflow.py`** - Error scenarios and recovery
+- **`test_robust_span_annotation.py`** - Span annotation edge cases
 
-### Configuration
-- **`conftest.py`** - Pytest fixtures and shared test setup
-- **`pytest.ini`** - Pytest configuration and markers
+### Selenium Tests (`tests/selenium/`)
+Frontend tests using Selenium WebDriver to test the user interface and browser interactions.
+
+**📖 [Selenium Test Documentation](selenium/README.md)** - Complete guide to Selenium testing
+
+**Key Selenium Test Files:**
+- **`test_frontend_span_system.py`** - Span annotation UI testing
+- **`test_user_state_contract.py`** - User state contract verification
+- **`test_api_contract.py`** - API contract testing via frontend
+- **`test_multirate_annotation.py`** - Multi-rate annotation UI testing
+
+### Unit Tests (`tests/unit/`)
+Pure unit tests that test individual functions and classes without external dependencies.
+
+**Key Unit Test Files:**
+- **`test_annotation_types.py`** - Annotation type validation
+- **`test_config_validation.py`** - Configuration validation
+- **`test_user_state.py`** - User state management logic
+
+### Test Infrastructure
+- **`tests/helpers/flask_test_setup.py`** - FlaskTestServer class and test utilities
+- **`tests/selenium/test_base.py`** - BaseSeleniumTest class for Selenium tests
+- **`tests/conftest.py`** - Pytest fixtures and shared test setup
+- **`tests/configs/`** - Test configuration files
+- **`tests/data/`** - Test data files
+
+## Test Architecture
+
+### Server Tests (Integration)
+- **FlaskTestServer**: Real Flask server instance for testing
+- **Production Mode**: Tests run against production server (not debug mode)
+- **Admin Authentication**: Automatic admin API key for admin endpoints
+- **Session Management**: Full user session and authentication testing
+- **Config Management**: File-based and dict-based configuration testing
+
+### Selenium Tests (UI Integration)
+- **BaseSeleniumTest**: Base class with automatic user registration/login
+- **Headless Chrome**: Browser runs in headless mode for CI compatibility
+- **Production Server**: Tests against real Flask server (not debug mode)
+- **User Isolation**: Each test gets unique user account
+- **Session Persistence**: Maintains user sessions across requests
+
+### Unit Tests (Isolated)
+- **Mock Interfaces**: No external dependencies
+- **Fast Execution**: Quick feedback for development
+- **Pure Functions**: Test individual components in isolation
 
 ## Annotation Types Tested
 
@@ -32,7 +75,7 @@ The test suite covers all major annotation types supported by Potato:
 1. **Likert Scale** (`likert`) - Rating scales with radio buttons
 2. **Checkbox/Multiselect** (`multiselect`) - Multiple choice selections
 3. **Slider** (`slider`) - Range-based ratings
-4. **Span Annotation** (`highlight`) - Text highlighting and labeling
+4. **Span Annotation** (`span`) - Text highlighting and labeling
 5. **Radio Buttons** (`radio`) - Single choice selections
 6. **Text Input** (`text`) - Free text responses
 7. **Multirate** (`multirate`) - Rating matrices
@@ -70,47 +113,70 @@ pytest --cov=potato --cov-report=html
 ### Running Specific Test Categories
 
 ```bash
-# Run only backend tests (exclude Selenium)
-pytest -m "not selenium"
+# Run only server tests (integration)
+pytest tests/server/ -v
 
-# Run only Selenium tests
-pytest -m selenium
+# Run only Selenium tests (UI)
+pytest tests/selenium/ -v
 
-# Run only unit tests
-pytest -m unit
-
-# Run only integration tests
-pytest -m integration
+# Run only unit tests (isolated)
+pytest tests/unit/ -v
 
 # Run specific test file
-pytest tests/test_annotation_types.py
+pytest tests/server/test_backend_state.py -v
 
 # Run specific test class
-pytest tests/test_annotation_types.py::TestAnnotationTypes
+pytest tests/server/test_backend_state.py::TestBackendState -v
 
 # Run specific test method
-pytest tests/test_annotation_types.py::TestAnnotationTypes::test_likert_annotation_backend
+pytest tests/server/test_backend_state.py::TestBackendState::test_health_check -v
 
-# Run config validation tests
-pytest tests/test_config_validation.py
-
-# Run config stress tests only
-pytest tests/test_config_validation.py::TestConfigStressTesting
-
-# Run config server integration tests
-pytest tests/test_config_server_integration.py
+# Run with debug output
+pytest tests/server/ -v -s
 ```
 
-### Debug Mode Testing
+### Test Categories by Type
 
-The tests use the `--debug` flag to bypass authentication and automatically log in as `debug_user`. This allows for faster testing without manual authentication steps.
+```bash
+# Integration tests (server + Selenium)
+pytest tests/server/ tests/selenium/ -v
+
+# Unit tests only
+pytest tests/unit/ -v
+
+# All tests except Selenium (faster)
+pytest tests/server/ tests/unit/ -v
+
+# All tests except server (faster)
+pytest tests/selenium/ tests/unit/ -v
+```
+
+## Creating New Tests
+
+### Server Tests
+1. **Use the template**: Copy `tests/server/test_template.py`
+2. **Follow patterns**: See `tests/server/QUICK_REFERENCE.md`
+3. **Use FlaskTestServer**: Always use the FlaskTestServer class
+4. **Test production mode**: Server runs in production mode (`debug=False`)
+5. **Use unique ports**: Each test class should use a different port
+
+### Selenium Tests
+1. **Inherit from BaseSeleniumTest**: Automatic user registration/login
+2. **Use headless mode**: Chrome runs in headless mode
+3. **Test production server**: Tests against real Flask server
+4. **Follow UI patterns**: See `tests/selenium/README.md`
+
+### Unit Tests
+1. **No external dependencies**: Use mocks for external services
+2. **Fast execution**: Keep tests quick for development feedback
+3. **Pure functions**: Test individual components in isolation
 
 ## Test Data
 
-Tests use the simple examples from `project-hub/simple_examples/`:
-- Config files in `configs/`
-- Sample data in `data/`
-- Various annotation types and formats
+Tests use various data sources:
+- **Server tests**: Create temporary test data files
+- **Selenium tests**: Use `tests/configs/` and `tests/data/`
+- **Unit tests**: Use mock data or simple test fixtures
 
 ## Test Output
 
@@ -118,65 +184,36 @@ Tests use the simple examples from `project-hub/simple_examples/`:
 - **Coverage Reports**: Generated in `test-results/coverage/`
 - **Console Output**: Verbose test results with pass/fail status
 
-## Adding New Tests
-
-### Backend Tests
-1. Create test functions with descriptive names
-2. Use the `client` fixture for Flask app testing
-3. Test both success and error cases
-4. Mock external dependencies when needed
-
-### Frontend Tests
-1. Mark tests with `@pytest.mark.selenium`
-2. Use the `driver` fixture for Selenium WebDriver
-3. Test user interactions and UI elements
-4. Include proper cleanup in `finally` blocks
-
-### Example Test Structure
-```python
-def test_new_feature(client):
-    """Test description"""
-    # Arrange
-    # Act
-    response = client.get("/some-endpoint")
-    # Assert
-    assert response.status_code == 200
-    assert "expected content" in response.data
-
-@pytest.mark.selenium
-def test_new_ui_feature(driver):
-    """Test UI feature"""
-    try:
-        driver.get("http://localhost:9000/")
-        # Test UI interactions
-        element = driver.find_element(By.ID, "some-element")
-        element.click()
-        assert "expected result" in driver.page_source
-    finally:
-        driver.quit()
-```
-
 ## Continuous Integration
 
 The test suite is designed to work with CI/CD pipelines:
-- Fast unit tests for quick feedback
-- Integration tests for end-to-end validation
-- Selenium tests for UI validation (can be run separately)
-- Coverage reporting for code quality metrics
+- **Unit tests**: Fast feedback for development
+- **Server tests**: Integration validation
+- **Selenium tests**: UI validation (can be run separately)
+- **Coverage reporting**: Code quality metrics
 
 ## Troubleshooting
 
-### Selenium Issues
-- Ensure ChromeDriver is installed and in PATH
-- Check Chrome browser version compatibility
-- Use `--headless` mode for CI environments
+### Server Test Issues
+- **Port conflicts**: Use unique ports for each test class
+- **File paths**: Ensure data files use absolute paths or are relative to project root
+- **Admin endpoints**: FlaskTestServer automatically adds admin API key
+- **Session management**: Use proper session handling for user endpoints
 
-### Server Issues
-- Tests use different ports (9001, 9002) to avoid conflicts
-- Debug mode is enabled for all tests
-- Temporary directories are cleaned up automatically
+### Selenium Test Issues
+- **ChromeDriver**: Ensure ChromeDriver is installed and in PATH
+- **Browser compatibility**: Check Chrome browser version compatibility
+- **Headless mode**: Tests run in headless mode for CI environments
+- **User authentication**: BaseSeleniumTest handles user registration/login
 
-### Import Issues
-- Ensure `potato` module is in Python path
-- Check that all dependencies are installed
-- Verify test file structure matches imports
+### Unit Test Issues
+- **Import paths**: Ensure `potato` module is in Python path
+- **Dependencies**: Check that all dependencies are installed
+- **Mock setup**: Verify mock objects are properly configured
+
+## Documentation
+
+- **[Server Test Guide](server/README.md)** - Complete server testing documentation
+- **[Selenium Test Guide](selenium/README.md)** - Complete Selenium testing documentation
+- **[Quick Reference](server/QUICK_REFERENCE.md)** - Common test patterns and code snippets
+- **[Test Template](server/test_template.py)** - Template for new server tests

@@ -186,17 +186,12 @@ class TestRobustSpanAnnotationSelenium:
 
                 # Verify that the span annotation was created
                 # Check the user state via admin endpoint
-                driver.execute_script(f"""
-                    fetch('{server_url}/admin/user_state/test_user', {{
-                        headers: {{
-                            'X-API-Key': 'admin_api_key'
-                        }}
-                    }})
-                    .then(response => response.json())
-                    .then(data => console.log('User state:', data));
-                """)
+                user_state_response = server.get("/admin/user_state/test_user")
+                assert user_state_response.status_code == 200, f"Failed to get user state: {user_state_response.status_code}"
+                user_state = user_state_response.json()
+                print('User state:', user_state)
 
-                # Wait a moment for the fetch to complete
+                # Wait a moment for the backend check to complete
                 time.sleep(2)
 
                 # The span annotation should be visible in the DOM

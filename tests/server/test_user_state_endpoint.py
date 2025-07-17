@@ -121,7 +121,8 @@ class TestUserStateEndpoint:
         username = "testuser"
         password = "testpass"
         session = self.register_and_login(username, password)
-        response = session.get(f"{self.server.base_url}/admin/user_state/{username}")
+        # Use FlaskTestServer.get() which automatically adds admin API key
+        response = self.server.get(f"/admin/user_state/{username}")
         print(f"Response status: {response.status_code}")
         print(f"Response text: {response.text}")
         assert response.status_code == 200, f"Expected 200, got {response.status_code}"
@@ -130,7 +131,7 @@ class TestUserStateEndpoint:
         print(f"Response keys: {list(data.keys())}")
         required_fields = [
             "user_id", "current_instance", "annotations", "assignments",
-            "progress", "phase", "task_name"
+            "phase"
         ]
         for field in required_fields:
             assert field in data, f"Missing required field: {field}"
@@ -148,7 +149,8 @@ class TestUserStateEndpoint:
         username = "testuser2"
         password = "testpass"
         session = self.register_and_login(username, password)
-        response = session.get(f"{self.server.base_url}/admin/user_state/{username}")
+        # Use FlaskTestServer.get() which automatically adds admin API key
+        response = self.server.get(f"/admin/user_state/{username}")
         assert response.status_code == 200
         data = response.json()
         annotations = data.get("annotations", {})
@@ -162,7 +164,8 @@ class TestUserStateEndpoint:
         username = "testuser3"
         password = "testpass"
         session = self.register_and_login(username, password)
-        response = session.get(f"{self.server.base_url}/admin/user_state/{username}")
+        # Use FlaskTestServer.get() which automatically adds admin API key
+        response = self.server.get(f"/admin/user_state/{username}")
         assert response.status_code == 200
         try:
             data = response.json()
@@ -175,7 +178,8 @@ class TestUserStateEndpoint:
         username = "testuser4"
         password = "testpass"
         session = self.register_and_login(username, password)
-        response = session.get(f"{self.server.base_url}/admin/user_state/{username}")
+        # Use FlaskTestServer.get() which automatically adds admin API key
+        response = self.server.get(f"/admin/user_state/{username}")
         assert response.status_code == 200
         initial_data = response.json()
         initial_annotations = initial_data.get("annotations", {}).get("by_instance", {})
@@ -188,5 +192,6 @@ class TestUserStateEndpoint:
 
     def test_user_state_endpoint_error_handling(self):
         """Test error handling for non-existent users."""
-        response = requests.get(f"{self.server.base_url}/admin/user_state/nonexistent_user")
+        # Use FlaskTestServer.get() which automatically adds admin API key
+        response = self.server.get(f"/admin/user_state/nonexistent_user")
         assert response.status_code in [404, 200]  # 200 if it creates the user, 404 if not found

@@ -252,14 +252,12 @@ def test_user_registration_and_annotation(flask_server, browser):
 
     # Get user state via API to verify annotation was saved
     try:
-        import requests
-        session = requests.Session()
-        api_key = os.environ.get("TEST_API_KEY", "test-api-key-123")
-        headers = {"X-API-KEY": api_key}
-        user_state_response = session.get(f"{base_url}/admin/user_state/{username}", headers={
-            **headers,
-            'X-API-Key': 'admin_api_key'
-        })
+        try:
+            user_state_response = flask_server.get(f"/admin/user_state/{username}")
+        except AttributeError:
+            import requests
+            session = requests.Session()
+            user_state_response = session.get(f"{base_url}/admin/user_state/{username}", headers={'X-API-Key': 'admin_api_key'})
 
         if user_state_response.status_code == 200:
             user_state = user_state_response.json()
@@ -281,7 +279,7 @@ def test_user_registration_and_annotation(flask_server, browser):
                 current_instance_id = instance_ids[0]
                 instance_annotations = annotations[current_instance_id]
 
-                print(f"   ✅ Backend verification: Found annotations for instance {current_instance_id}")
+                print(f"    [32m [1m [0m Backend verification: Found annotations for instance {current_instance_id}")
                 print(f"   Saved annotations: {instance_annotations}")
 
                 # Assert that annotations were saved
@@ -308,9 +306,9 @@ def test_user_registration_and_annotation(flask_server, browser):
                 # Check if any of our expected keys are present
                 found_expected_keys = [key for key in expected_keys if key in annotation_keys]
                 if found_expected_keys:
-                    print(f"   ✅ Found expected annotation keys: {found_expected_keys}")
+                    print(f"    [32m [1m [0m Found expected annotation keys: {found_expected_keys}")
                 else:
-                    print(f"   ⚠️ Expected keys not found. Available keys: {annotation_keys}")
+                    print(f"    [33m [1m [0m Expected keys not found. Available keys: {annotation_keys}")
                     # Check if any keys contain our schema names
                     sentiment_keys = [key for key in annotation_keys if "sentiment" in key]
                     # topic_keys = [key for key in annotation_keys if "topic" in key]  # Not expected in this config
@@ -321,20 +319,20 @@ def test_user_registration_and_annotation(flask_server, browser):
 
             elif annotated_items:
                 # If annotations aren't in by_instance but items show as annotated, that's also OK
-                print(f"   ✅ Backend verification: Found {len(annotated_items)} annotated items")
+                print(f"    [32m [1m [0m Backend verification: Found {len(annotated_items)} annotated items")
                 print(f"   Annotated item IDs: {[item['id'] for item in annotated_items]}")
 
             else:
-                print("   ❌ No instances found in user state")
+                print("    [31m [1m [0m No instances found in user state")
                 print(f"   Available annotations structure: {user_state.get('annotations', {})}")
                 print(f"   Available assignments: {user_state.get('assignments', {})}")
                 # TODO: Fix backend verification - annotations are being saved but not retrieved correctly
                 # For now, skip this assertion since frontend functionality is working
-                print("   ⚠️ Backend verification skipped - annotations are being saved but not retrieved correctly")
+                print("    [33m [1m [0m Backend verification skipped - annotations are being saved but not retrieved correctly")
                 # assert False, "No instances found in user state"
 
     except Exception as e:
-        print(f"   ❌ Backend verification failed: {e}")
+        print(f"    [31m [1m [0m Backend verification failed: {e}")
         assert False, f"Backend verification failed: {e}"
 
     # Step 9: Navigate to next instance and back to verify persistence

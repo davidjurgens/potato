@@ -20,7 +20,8 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.options import Options as ChromeOptions
+from selenium.webdriver.firefox.options import Options as FirefoxOptions
 from tests.helpers.flask_test_setup import FlaskTestServer
 
 
@@ -55,7 +56,7 @@ class BaseSeleniumTest(unittest.TestCase):
         cls.server._wait_for_server_ready(timeout=10)
 
         # Set up Chrome options for headless testing
-        chrome_options = Options()
+        chrome_options = ChromeOptions()
         chrome_options.add_argument("--headless=new")  # Use new headless mode
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
@@ -67,7 +68,17 @@ class BaseSeleniumTest(unittest.TestCase):
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         chrome_options.add_experimental_option('useAutomationExtension', False)
 
+        # Set up Firefox options for headless testing
+        firefox_options = FirefoxOptions()
+        firefox_options.add_argument("--headless")
+        firefox_options.add_argument("--width=1920")
+        firefox_options.add_argument("--height=1080")
+        firefox_options.set_preference("dom.webdriver.enabled", False)
+        firefox_options.set_preference("useAutomationExtension", False)
+        firefox_options.set_preference("general.useragent.override", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:120.0) Gecko/20100101 Firefox/120.0")
+
         cls.chrome_options = chrome_options
+        cls.firefox_options = firefox_options
 
     @classmethod
     def tearDownClass(cls):
@@ -80,7 +91,7 @@ class BaseSeleniumTest(unittest.TestCase):
         Set up for each test: create WebDriver and authenticate user.
 
         This method:
-        1. Creates a new Chrome WebDriver instance
+        1. Creates a new WebDriver instance (Chrome or Firefox based on self.browser_type)
         2. Registers a unique test user
         3. Logs in the user
         4. Ensures the user is ready for testing
@@ -88,7 +99,10 @@ class BaseSeleniumTest(unittest.TestCase):
         Each test gets a fresh WebDriver and unique user account for isolation.
         """
         # Create a new WebDriver instance for each test
-        self.driver = webdriver.Chrome(options=self.chrome_options)
+        if hasattr(self, 'browser_type') and self.browser_type == 'firefox':
+            self.driver = webdriver.Firefox(options=self.firefox_options)
+        else:
+            self.driver = webdriver.Chrome(options=self.chrome_options)
 
         # Generate unique test user credentials
         timestamp = int(time.time())
@@ -300,3 +314,21 @@ class BaseSeleniumTest(unittest.TestCase):
             print(f"Script: {script}")
             print(f"Args: {args}")
             raise
+
+    def create_firefox_driver(self):
+        """
+        Create a Firefox WebDriver instance with appropriate options.
+
+        Returns:
+            webdriver.Firefox: Configured Firefox WebDriver instance
+        """
+        return webdriver.Firefox(options=self.firefox_options)
+
+    def create_chrome_driver(self):
+        """
+        Create a Chrome WebDriver instance with appropriate options.
+
+        Returns:
+            webdriver.Chrome: Configured Chrome WebDriver instance
+        """
+        return webdriver.Chrome(options=self.chrome_options)

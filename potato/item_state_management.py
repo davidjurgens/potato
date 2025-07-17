@@ -488,6 +488,32 @@ class ItemStateManager:
         '''Returns the set of annotators who have annotated a given item'''
         return self.item_annotators.get(instance_id, set())
 
+    def get_total_assignable_items_for_user(self, user_state: UserState) -> int:
+        '''Returns the total number of items that will be assigned to a user based on:
+        1. User's max_assignments limit
+        2. Available items in the dataset
+        3. Max annotations per item constraint
+        '''
+        max_assignments = user_state.get_max_assignments()
+
+        # If user has a specific limit, that's the total
+        if max_assignments > 0:
+            return max_assignments
+
+        # For unlimited assignments, calculate based on available items
+        # that the user hasn't already annotated
+        available_items = 0
+        for iid in self.remaining_instance_ids:
+            # Skip items that have reached max annotations
+            if self.max_annotations_per_item >= 0 and len(self.item_annotators[iid]) >= self.max_annotations_per_item:
+                continue
+            # Skip items the user has already annotated
+            if user_state.has_annotated(iid):
+                continue
+            available_items += 1
+
+        return available_items
+
     def items(self) -> list[Item]:
         '''Returns a list of all Item objects'''
         return list(self.instance_id_to_item.values())

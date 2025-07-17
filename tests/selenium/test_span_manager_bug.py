@@ -239,6 +239,17 @@ class TestSpanManagerBug(BaseSeleniumTest):
         debug_info = self.driver.execute_script("""
             const debug = {};
 
+            // Check for visible DOM markers
+            const annotationMarker = document.getElementById('annotation-js-updated-marker');
+            const spanManagerMarker = document.getElementById('span-manager-updated-marker');
+
+            debug.domMarkers = {
+                annotationMarkerExists: !!annotationMarker,
+                spanManagerMarkerExists: !!spanManagerMarker,
+                annotationMarkerText: annotationMarker ? annotationMarker.textContent : 'N/A',
+                spanManagerMarkerText: spanManagerMarker ? spanManagerMarker.textContent : 'N/A'
+            };
+
             // Check current instance
             debug.currentInstance = window.currentInstance;
             debug.currentInstanceKeys = window.currentInstance ? Object.keys(window.currentInstance) : [];
@@ -299,17 +310,18 @@ class TestSpanManagerBug(BaseSeleniumTest):
         """)
 
         print(f"\n🔍 DEBUG INFO:")
-        print(f"  Current Instance: {debug_info.get('currentInstance')}")
-        print(f"  Current Instance Keys: {debug_info.get('currentInstanceKeys')}")
-        print(f"  Span Manager: {debug_info.get('spanManager')}")
-        print(f"  Span Manager Current Instance ID: {debug_info.get('spanManagerCurrentInstanceId')}")
-        print(f"  Annotation Scheme: {debug_info.get('annotationScheme')}")
-        print(f"  Annotation Scheme Type: {debug_info.get('annotationSchemeType')}")
-        print(f"  Annotation Scheme Length: {debug_info.get('annotationSchemeLength')}")
-        print(f"  Span Labels: {debug_info.get('spanLabels')}")
-        print(f"  Label Selector: {debug_info.get('labelSelector')}")
-        print(f"  Label Buttons: {debug_info.get('labelButtons')}")
-        print(f"  Setup Span Label Selector Called: {debug_info.get('setupSpanLabelSelectorCalled')}")
+        print(f"  DOM Markers: {debug_info['domMarkers']}")
+        print(f"  Current Instance: {debug_info['currentInstance']}")
+        print(f"  Current Instance Keys: {debug_info['currentInstanceKeys']}")
+        print(f"  Span Manager: {debug_info['spanManager']}")
+        print(f"  Span Manager Current Instance ID: {debug_info['spanManagerCurrentInstanceId']}")
+        print(f"  Annotation Scheme: {debug_info['annotationScheme']}")
+        print(f"  Annotation Scheme Type: {debug_info['annotationSchemeType']}")
+        print(f"  Annotation Scheme Length: {debug_info['annotationSchemeLength']}")
+        print(f"  Span Labels: {debug_info['spanLabels']}")
+        print(f"  Label Selector: {debug_info['labelSelector']}")
+        print(f"  Label Buttons: {debug_info['labelButtons']}")
+        print(f"  Setup Span Label Selector Called: {debug_info['setupSpanLabelSelectorCalled']}")
 
         # Check network requests
         network_requests = debug_info.get('networkRequests', [])
@@ -360,3 +372,68 @@ class TestSpanManagerBug(BaseSeleniumTest):
         except Exception as e:
             print(f"\n❌ FINAL CHECK FAILED: {e}")
             raise
+
+    def test_dom_markers_check(self):
+        """
+        Simple test to check if the visible DOM markers are present,
+        confirming that the updated JavaScript files are loading.
+        """
+        print("\n" + "="*80)
+        print("🔍 DOM MARKERS CHECK TEST")
+        print("="*80)
+
+        # User is already authenticated by BaseSeleniumTest.setUp()
+        self.driver.get(f"{self.server.base_url}/annotate")
+        self.wait_for_element(By.ID, "instance-text")
+        time.sleep(3)  # Wait for JavaScript to load and execute
+
+        # Check for visible DOM markers
+        marker_info = self.driver.execute_script("""
+            const annotationMarker = document.getElementById('annotation-js-updated-marker');
+            const spanManagerMarker = document.getElementById('span-manager-updated-marker');
+
+            return {
+                annotationMarkerExists: !!annotationMarker,
+                spanManagerMarkerExists: !!spanManagerMarker,
+                annotationMarkerText: annotationMarker ? annotationMarker.textContent : 'N/A',
+                spanManagerMarkerText: spanManagerMarker ? spanManagerMarker.textContent : 'N/A',
+                annotationMarkerStyle: annotationMarker ? annotationMarker.style.cssText : 'N/A',
+                spanManagerMarkerStyle: spanManagerMarker ? spanManagerMarker.style.cssText : 'N/A'
+            };
+        """)
+
+        print(f"\n🔍 DOM MARKERS INFO:")
+        print(f"  Annotation Marker Exists: {marker_info['annotationMarkerExists']}")
+        print(f"  Span Manager Marker Exists: {marker_info['spanManagerMarkerExists']}")
+        print(f"  Annotation Marker Text: {marker_info['annotationMarkerText']}")
+        print(f"  Span Manager Marker Text: {marker_info['spanManagerMarkerText']}")
+        print(f"  Annotation Marker Style: {marker_info['annotationMarkerStyle']}")
+        print(f"  Span Manager Marker Style: {marker_info['spanManagerMarkerStyle']}")
+        # Also check if the JavaScript files are being loaded with the correct version
+        network_requests = self.driver.execute_script("""
+            if (window.performance && window.performance.getEntriesByType) {
+                const entries = window.performance.getEntriesByType('resource');
+                return entries
+                    .filter(entry => entry.name.includes('annotation.js') || entry.name.includes('span-manager.js'))
+                    .map(entry => ({
+                        name: entry.name,
+                        duration: entry.duration,
+                        transferSize: entry.transferSize
+                    }));
+            }
+            return [];
+        """)
+
+        print(f"\n🌐 JavaScript File Requests:")
+        for req in network_requests:
+            print(f"  {req['name']} ({req['duration']}ms, {req['transferSize']} bytes)")
+
+        # Assert that both markers should exist
+        self.assertTrue(marker_info['annotationMarkerExists'], "Annotation.js updated marker should exist")
+        self.assertTrue(marker_info['spanManagerMarkerExists'], "Span-manager.js updated marker should exist")
+
+        # Assert that the text content matches what we expect
+        self.assertEqual(marker_info['annotationMarkerText'], "ANNOTATION.JS UPDATED", "Annotation marker should have correct text")
+        self.assertEqual(marker_info['spanManagerMarkerText'], "SPAN-MANAGER.JS UPDATED", "Span manager marker should have correct text")
+
+        print(f"\n✅ DOM MARKERS CHECK COMPLETED SUCCESSFULLY")

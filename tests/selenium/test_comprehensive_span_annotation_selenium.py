@@ -584,27 +584,19 @@ class RobustSpanAnnotationHelper:
                 print("   [DEBUG] Before backend request")
                 with open("/tmp/potato_backend_debug.txt", "a") as f:
                     f.write("[DEBUG] Before backend request\n")
-                user_state_response = requests.get(
-                    f"{base_url}/admin/user_state/{username}",
-                    headers={'X-API-Key': 'admin_api_key'},
-                    timeout=10
-                )
-                print(f"   🔍 Backend response status: {user_state_response.status_code}")
-                print(f"   🔍 Backend response text: {user_state_response.text}")
-                with open("/tmp/potato_backend_debug.txt", "a") as f:
-                    f.write(f"status: {user_state_response.status_code}\n")
-                    f.write(f"response: {user_state_response.text}\n")
-                sys.stdout.flush()
+                try:
+                    user_state_response = self.server.get(f"/admin/user_state/{username}")
+                except AttributeError:
+                    import requests
+                    user_state_response = requests.get(f"{base_url}/admin/user_state/{username}", headers={'X-API-Key': 'admin_api_key'}, timeout=10)
+                print(f"   [1mBackend response status: {user_state_response.status_code}")
+                print(f"   [1mBackend response text: {user_state_response.text}")
                 if user_state_response.status_code == 200:
                     user_state = user_state_response.json()
                     annotations = user_state.get("annotations", {}).get("by_instance", {})
                     instance_annotations = annotations.get(instance_id, {})
-                    print(f"   📊 Backend annotations for instance {instance_id}: {instance_annotations}")
-                    print(f"   🔍 Values being checked for span: {[str(v) for v in instance_annotations.values()]}")
-                    with open("/tmp/potato_backend_debug.txt", "a") as f:
-                        f.write(f"annotations: {instance_annotations}\n")
-                        f.write(f"values: {[str(v) for v in instance_annotations.values()]}\n")
-                    sys.stdout.flush()
+                    print(f"   [1mBackend annotations for instance {instance_id}: {instance_annotations}")
+                    print(f"   [1mValues being checked for span: {[str(v) for v in instance_annotations.values()]}")
                     # Verify each expected span
                     all_found = True
                     for expected_span in expected_spans:
@@ -612,20 +604,20 @@ class RobustSpanAnnotationHelper:
                         for annotation_value in instance_annotations.values():
                             if expected_span["text"] in str(annotation_value):
                                 span_found = True
-                                print(f"   ✅ Found expected span '{expected_span['text']}' in annotation value")
+                                print(f"   [32m[1mFound expected span '{expected_span['text']}' in annotation value")
                                 break
                         if not span_found:
-                            print(f"   ❌ Expected span '{expected_span['text']}' not found in backend")
+                            print(f"   [31m[1mExpected span '{expected_span['text']}' not found in backend")
                             all_found = False
                     if all_found:
-                        print(f"   ✅ All {len(expected_spans)} expected spans found in backend")
+                        print(f"   [32m[1mAll {len(expected_spans)} expected spans found in backend")
                         return all_found
                     else:
-                        print(f"   ❌ Failed to get user state: {user_state_response.status_code}")
+                        print(f"   [31m[1mFailed to get user state: {user_state_response.status_code}")
                         print(f"   Response: {user_state_response.text}")
                         return False
                 else:
-                    print(f"   ❌ Failed to get user state: {user_state_response.status_code}")
+                    print(f"   [31m[1mFailed to get user state: {user_state_response.status_code}")
                     print(f"   Response: {user_state_response.text}")
                     return False
             except Exception as inner_exc:
@@ -970,8 +962,17 @@ class TestSpanAnnotationComprehensive:
             assert start_index != -1, f"Could not find suitable phrase in text: {text_content}"
             print(f"   📍 Annotating phrase '{phrase}' at indices {start_index}-{end_index}")
 
+            # Select emotion label first
+            print("2. Selecting emotion label...")
+            emotion_label = RobustSpanAnnotationHelper.wait_for_clickable(
+                browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+                description="emotion label"
+            )
+            RobustSpanAnnotationHelper.safe_click(browser, emotion_label, "emotion label")
+            time.sleep(1)
+
             # Create span annotation
-            print("2. Creating span annotation...")
+            print("3. Creating span annotation...")
             RobustSpanAnnotationHelper.robust_text_selection(browser, start_index, end_index)
             time.sleep(2)
 
@@ -981,7 +982,7 @@ class TestSpanAnnotationComprehensive:
             print(f"   ✅ Span created successfully")
 
             # Verify overlay positioning and data attributes
-            print("3. Verifying overlay positioning...")
+            print("4. Verifying overlay positioning...")
             expected_spans = [{"text": phrase, "schema": "emotion", "label": "happy"}]
             overlay_correct = RobustSpanAnnotationHelper.verify_overlay_positioning(browser, expected_spans)
             assert overlay_correct, "Overlay positioning verification failed"
@@ -994,7 +995,7 @@ class TestSpanAnnotationComprehensive:
             assert "intelligence" in span_text or "artificial" in span_text or "model" in span_text, f"Expected relevant text in span, got '{span_text}'"
 
             # Verify backend storage
-            print("4. Verifying backend storage...")
+            print("5. Verifying backend storage...")
             RobustSpanAnnotationHelper.verify_backend_spans(browser, base_url, username, expected_spans)
 
             print("   ✅ Test 1 completed successfully - basic span annotation works")

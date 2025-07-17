@@ -869,10 +869,17 @@ class InMemoryUserState(UserState):
         '''Moves the user forward to the next instance and returns True if successful'''
         #print('GO FORWARD current_instance_index ->', self.current_instance_index)
         #print('GO FORWARD instance_id_ordering ->', self.instance_id_ordering)
+
+        # DEBUG: Add detailed logging
+        print(f"🔍 GO_FORWARD: before_index={self.current_instance_index}, total_instances={len(self.instance_id_ordering)}")
+
         if self.current_instance_index < len(self.instance_id_ordering) - 1:
             self.current_instance_index += 1
+            print(f"🔍 GO_FORWARD: after_index={self.current_instance_index}, new_instance_id={self.instance_id_ordering[self.current_instance_index]}")
             return True
-        return False
+        else:
+            print(f"🔍 GO_FORWARD: at end, cannot move forward")
+            return False
 
     def get_current_phase_and_page(self) -> tuple[UserPhase, str]:
         '''Returns the current phase and page that the user is on'''

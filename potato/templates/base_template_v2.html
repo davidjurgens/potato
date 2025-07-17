@@ -173,7 +173,7 @@
             <div class="d-flex align-items-center justify-content-center flex-grow-1 gap-4">
                 <!-- Progress counter -->
                 <div class="d-flex align-items-center" style="color: var(--light-color); margin-right: 40px">
-                    <span>Progress: <span class="fw-medium" id="progress-counter">0/0</span></span>
+                    <span>Progress: <span class="fw-medium" id="progress-counter">{{finished}}/{{total_count}}</span></span>
                 </div>
 
                 <!-- Jump to item form -->
@@ -243,13 +243,7 @@
                         </div>
                     </div>
 
-                    <!-- Span annotation label selector -->
-                    <div id="span-label-selector" class="label-selector mb-4" style="display: none;">
-                        <h3>Select Span Label:</h3>
-                        <div class="label-buttons" id="label-buttons">
-                            <!-- Label buttons will be dynamically generated -->
-                        </div>
-                    </div>
+
 
                     <!-- Status messages -->
                     <div id="status" class="status" style="display: none;"></div>
@@ -309,7 +303,7 @@
     </script>
 
     <!-- Load annotation JavaScript -->
-    <script src="{{ url_for('static', filename='span-manager.js') }}"></script>
-    <script src="{{ url_for('static', filename='annotation.js') }}"></script>
+    <script src="{{ url_for('static', filename='span-manager.js') }}?v=11"></script>
+    <script src="{{ url_for('static', filename='annotation.js') }}?v=11"></script>
 </body>
 </html>

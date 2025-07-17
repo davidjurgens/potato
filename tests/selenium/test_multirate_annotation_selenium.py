@@ -100,7 +100,7 @@ class TestMultirateAnnotation:
             "authentication": {
                 "method": "in_memory"
             },
-            "data_files": ["test_data.json"],
+            "data_files": [data_file],  # Use absolute path to the data file
             "item_properties": config.get('item_properties', {"text_key": "text", "id_key": "id"}),
             "annotation_schemes": config.get('annotation_schemes', []),
             "phases": {
@@ -116,7 +116,7 @@ class TestMultirateAnnotation:
             },
             "site_file": "base_template.html",
             "output_annotation_dir": os.path.join(config_dir, "output"),
-            "task_dir": os.path.join(config_dir, "task"),
+            "task_dir": config_dir,  # Set task_dir to config_dir so data files are found
             "base_html_template": "default",
             "header_file": "default",
             "html_layout": "default",
@@ -169,12 +169,15 @@ class TestMultirateAnnotation:
     def verify_annotations_stored(self, driver, base_url, username, instance_id):
         """Verify that annotations are correctly stored by the server."""
         # Backend verification: Check that annotation was saved
-        api_key = os.environ.get("TEST_API_KEY", "test-api-key-123")
-        headers = {"X-API-KEY": api_key}
-        user_state_response = requests.get(f"{base_url}/admin/user_state/{username}", headers={
-            **headers,
-            'X-API-Key': 'admin_api_key'
-        })
+        # Use FlaskTestServer's .get() method for admin endpoints
+        from tests.helpers.flask_test_setup import FlaskTestServer
+        # Assume self.server is available or pass it as an argument if needed
+        # If not, fallback to requests.get with API key
+        try:
+            user_state_response = self.server.get(f"/admin/user_state/{username}")
+        except AttributeError:
+            import requests
+            user_state_response = requests.get(f"{base_url}/admin/user_state/{username}", headers={'X-API-Key': 'admin_api_key'})
         assert user_state_response.status_code == 200, f"Failed to get user state: {user_state_response.status_code}"
         user_state = user_state_response.json()
         annotations = user_state.get("annotations", {}).get("by_instance", {})
@@ -235,7 +238,7 @@ class TestMultirateAnnotation:
         # Create config file
         config_file = self.create_test_config_file(config, config_dir)
 
-        server = FlaskTestServer(port=config['port'], debug=config['debug'], config_file=config_file)
+        server = FlaskTestServer(port=config['port'], debug=False, config_file=config_file)
         with server.server_context():
             # Create WebDriver with headless mode
             chrome_options = Options()
@@ -348,7 +351,7 @@ class TestMultirateAnnotation:
         # Create config file
         config_file = self.create_test_config_file(config, config_dir)
 
-        server = FlaskTestServer(port=config['port'], debug=config['debug'], config_file=config_file)
+        server = FlaskTestServer(port=config['port'], debug=False, config_file=config_file)
         with server.server_context():
             # Create WebDriver with headless mode
             chrome_options = Options()

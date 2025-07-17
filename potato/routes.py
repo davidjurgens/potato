@@ -720,6 +720,26 @@ def annotate():
     else:
         logger.debug(f'Action "{action}" - no specific handling')
 
+    # Handle GET requests with instance_id query parameter
+    if request.method == 'GET' and request.args.get('instance_id'):
+        instance_id = request.args.get('instance_id')
+        logger.debug(f"GET request with instance_id parameter: {instance_id}")
+
+        # Find the index of this instance in the user's assigned instances
+        try:
+            instance_index = user_state.instance_id_ordering.index(instance_id)
+            logger.debug(f"Found instance {instance_id} at index {instance_index}")
+
+            # Update the user's current instance to match the URL parameter
+            if instance_index != user_state.current_instance_index:
+                logger.debug(f"Updating user's current instance from index {user_state.current_instance_index} to {instance_index}")
+                user_state.current_instance_index = instance_index
+            else:
+                logger.debug(f"User already on instance {instance_id} at index {instance_index}")
+        except ValueError:
+            logger.warning(f"Instance {instance_id} not found in user's assigned instances")
+            # Don't change the current instance if the requested one isn't assigned to this user
+
     logger.debug("=== ANNOTATE ROUTE END ===")
     # Render the page with any existing annotations
     return render_page_with_annotations(username)
@@ -1236,6 +1256,42 @@ def get_annotations():
         logger.error(f"Error getting annotations: {e}")
         return jsonify({"error": "Internal server error"}), 500
 
+@app.route("/api/current_instance", methods=["GET"])
+def get_current_instance():
+    """Get the current instance information for the current user."""
+    logger.debug(f"=== GET_CURRENT_INSTANCE START ===")
+
+    if 'username' not in session:
+        logger.warning("Get current instance without active session")
+        return jsonify({"error": "No active session"}), 401
+
+    username = session['username']
+    logger.debug(f"Username: {username}")
+
+    try:
+        user_state = get_user_state(username)
+        if not user_state:
+            logger.error(f"User state not found for user: {username}")
+            return jsonify({"error": "User state not found"}), 404
+
+        current_instance = user_state.get_current_instance()
+        if not current_instance:
+            logger.error(f"No current instance for user: {username}")
+            return jsonify({"error": "No current instance"}), 404
+
+        instance_id = current_instance.get_id()
+        logger.debug(f"Current instance ID: {instance_id}")
+
+        return jsonify({
+            "instance_id": instance_id,
+            "current_index": user_state.get_current_instance_index(),
+            "total_instances": len(user_state.instance_id_ordering)
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting current instance: {e}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/api/spans/<instance_id>")
 def get_span_data(instance_id):
     """
@@ -1676,6 +1732,72 @@ def get_span_colors():
     logger.debug("=== GET_SPAN_COLORS END ===")
     return jsonify(color_map)
 
+@app.route("/api/spans/<instance_id>/clear", methods=["POST"])
+def clear_span_annotations(instance_id):
+    """
+    Clear all span annotations for a specific instance and user.
+    This is useful for debugging and fixing persistent overlay issues.
+    """
+    logger.debug(f"=== CLEAR_SPAN_ANNOTATIONS START ===")
+    logger.debug(f"Instance ID: {instance_id}")
+
+    if 'username' not in session:
+        logger.warning("Clear span annotations without active session")
+        return jsonify({"error": "No active session"}), 401
+
+    username = session['username']
+    logger.debug(f"Username: {username}")
+
+    try:
+        user_state = get_user_state(username)
+        if not user_state:
+            logger.error(f"User state not found for user: {username}")
+            return jsonify({"error": "User state not found"}), 404
+
+        # Normalize instance_id to string
+        instance_id = str(instance_id)
+
+        # Check if instance has span annotations
+        if hasattr(user_state, 'instance_id_to_span_to_value'):
+            if instance_id in user_state.instance_id_to_span_to_value:
+                spans_before = len(user_state.instance_id_to_span_to_value[instance_id])
+                logger.debug(f"Found {spans_before} spans for instance {instance_id}")
+                print(f"🔍 Found {spans_before} spans for instance {instance_id}")
+
+                # Clear the spans
+                del user_state.instance_id_to_span_to_value[instance_id]
+                logger.debug(f"Cleared {spans_before} spans for instance {instance_id}")
+                print(f"🔍 Cleared {spans_before} spans for instance {instance_id}")
+
+                return jsonify({
+                    "status": "success",
+                    "message": f"Cleared {spans_before} span annotations for instance {instance_id}",
+                    "spans_cleared": spans_before
+                })
+            else:
+                logger.debug(f"No spans found for instance {instance_id}")
+                print(f"🔍 No spans found for instance {instance_id}")
+                return jsonify({
+                    "status": "success",
+                    "message": f"No span annotations found for instance {instance_id}",
+                    "spans_cleared": 0
+                })
+        else:
+            logger.debug("User state has no span annotations")
+            print(f"🔍 User state has no span annotations")
+            return jsonify({
+                "status": "success",
+                "message": "User state has no span annotations",
+                "spans_cleared": 0
+            })
+
+    except Exception as e:
+        logger.error(f"Error clearing span annotations: {e}")
+        return jsonify({"error": f"Failed to clear span annotations: {str(e)}"}), 500
+
+    finally:
+        logger.debug(f"=== CLEAR_SPAN_ANNOTATIONS END ===")
+
 
 def configure_routes(flask_app, app_config):
     """
@@ -1727,6 +1849,8 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/api/spans/<instance_id>", "get_span_data", get_span_data, methods=["GET"])
     app.add_url_rule("/api/colors", "get_span_colors", get_span_colors, methods=["GET"])
     app.add_url_rule("/test-span-colors", "test_span_colors", test_span_colors, methods=["GET"])
+    app.add_url_rule("/api/spans/<instance_id>/clear", "clear_span_annotations", clear_span_annotations, methods=["POST"])
+    app.add_url_rule("/api/current_instance", "get_current_instance", get_current_instance, methods=["GET"])
 
     app.add_url_rule("/admin/user_state/<user_id>", "admin_user_state", admin_user_state, methods=["GET"])
     app.add_url_rule("/admin/health", "admin_health", admin_health, methods=["GET"])

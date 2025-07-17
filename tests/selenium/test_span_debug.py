@@ -141,8 +141,11 @@ phases:
 
     def _get_user_state(self):
         """Get current user state for debugging."""
-        response = requests.get(f"{self.server_url}/admin/user_state/{self.test_user}",
-                              headers={"X-API-Key": "admin_api_key"})
+        try:
+            response = self.server.get(f"/admin/user_state/{self.test_user}")
+        except AttributeError:
+            import requests
+            response = requests.get(f"{self.server_url}/admin/user_state/{self.test_user}", headers={"X-API-Key": "admin_api_key"})
 
         if response.status_code == 200:
             return response.json()

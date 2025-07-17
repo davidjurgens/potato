@@ -560,7 +560,13 @@ def move_to_prev_instance(user_id) -> bool:
 
 def move_to_next_instance(user_id) -> bool:
     '''Moves the user forward to the next instance and returns True if successful'''
+    logger.debug(f"=== MOVE_TO_NEXT_INSTANCE START ===")
+    logger.debug(f"User ID: {user_id}")
+
     user_state = get_user_state(user_id)
+    logger.debug(f"Before navigation - current_instance_index: {user_state.get_current_instance_index()}")
+    logger.debug(f"Before navigation - instance_id_ordering: {user_state.instance_id_ordering}")
+    print(f"🔍 MOVE_NEXT: user={user_id}, before_index={user_state.get_current_instance_index()}")
 
     # If the user is at the end of the list, try to assign instances to the user
     if user_state.is_at_end_index():
@@ -568,7 +574,13 @@ def move_to_next_instance(user_id) -> bool:
         num_assigned = get_item_state_manager().assign_instances_to_user(user_state)
         logger.debug(f"Assigned {num_assigned} new instances to user {user_id}")
 
-    return user_state.go_forward()
+    result = user_state.go_forward()
+    logger.debug(f"After navigation - current_instance_index: {user_state.get_current_instance_index()}")
+    logger.debug(f"Navigation result: {result}")
+    print(f"🔍 MOVE_NEXT: user={user_id}, after_index={user_state.get_current_instance_index()}, result={result}")
+
+    logger.debug(f"=== MOVE_TO_NEXT_INSTANCE END ===")
+    return result
 
 def go_to_id(user_id: str, instance_index: int):
     '''Causes the user's view to change to the Item at the given index.'''
@@ -599,6 +611,15 @@ def render_page_with_annotations(username) -> str:
     user_state = get_user_state_manager().get_user_state(username)
     item = user_state.get_current_instance()
     instance_id = item.get_id()
+
+    # DEBUG: Add detailed logging
+    logger.debug(f"=== RENDER_PAGE_WITH_ANNOTATIONS START ===")
+    logger.debug(f"Username: {username}")
+    logger.debug(f"User state current_instance_index: {user_state.get_current_instance_index()}")
+    logger.debug(f"User state instance_id_ordering: {user_state.instance_id_ordering}")
+    logger.debug(f"Current instance ID: {instance_id}")
+    print(f"🔍 RENDER_PAGE: username={username}, current_instance_index={user_state.get_current_instance_index()}, instance_id={instance_id}")
+
     # print('instance_id: ', instance_id)
 
     # directly display the prepared displayed_text
@@ -691,7 +712,12 @@ def render_page_with_annotations(username) -> str:
     # ai_hints = get_ai_hints(text)
 
     # Flask will fill in the things we need into the HTML template we've created,
-    # replacing {{variable_name}} with t    he associated text for keyword arguments
+    # replacing {{variable_name}} with the associated text for keyword arguments
+
+        # Calculate progress counter values
+    # Use the total number of items that will be assigned to the user
+    total_count = get_item_state_manager().get_total_assignable_items_for_user(get_user_state(username))
+
     rendered_html = render_template(
         html_file,
         username=username,
@@ -701,7 +727,7 @@ def render_page_with_annotations(username) -> str:
         instance_id=instance_id,
         instance_index=user_state.get_current_instance_index(),
         finished=get_user_state(username).get_annotation_count(),
-        total_count=get_user_state(username).get_max_assignments(),
+        total_count=total_count,
         alert_time_each_instance=config["alert_time_each_instance"],
         statistics_nav=all_statistics,
         var_elems=var_elems_html,
@@ -1097,6 +1123,35 @@ def get_span_annotations_for_user_on(username, instance_id):
         logger.warning(f"User state not found for user: {username}")
         return []
 
+    # DEBUG: Check if this instance has any span annotations at all
+    if hasattr(user_state, 'instance_id_to_span_to_value'):
+        logger.debug(f"User state instance_id_to_span_to_value keys: {list(user_state.instance_id_to_span_to_value.keys())}")
+        print(f"🔍 User state instance_id_to_span_to_value keys: {list(user_state.instance_id_to_span_to_value.keys())}")
+
+        if instance_id in user_state.instance_id_to_span_to_value:
+            instance_spans = user_state.instance_id_to_span_to_value[instance_id]
+            logger.debug(f"Spans for instance {instance_id}: {instance_spans}")
+            print(f"🔍 Spans for instance {instance_id}: {instance_spans}")
+
+            # DEBUG: Show each span in detail
+            for span, value in instance_spans.items():
+                logger.debug(f"Span: {span}, Value: {value}")
+                print(f"🔍 Span: {span}, Value: {value}")
+                if hasattr(span, 'get_schema'):
+                    logger.debug(f"  Schema: {span.get_schema()}")
+                    logger.debug(f"  Name: {span.get_name()}")
+                    logger.debug(f"  Start: {span.get_start()}")
+                    logger.debug(f"  End: {span.get_end()}")
+                    logger.debug(f"  ID: {span.get_id()}")
+                    print(f"🔍   Schema: {span.get_schema()}")
+                    print(f"🔍   Name: {span.get_name()}")
+                    print(f"🔍   Start: {span.get_start()}")
+                    print(f"🔍   End: {span.get_end()}")
+                    print(f"🔍   ID: {span.get_id()}")
+        else:
+            logger.debug(f"No spans found for instance {instance_id}")
+            print(f"🔍 No spans found for instance {instance_id}")
+
     span_annotations_dict = user_state.get_span_annotations(instance_id)
     logger.debug(f"Raw span annotations from user state: {span_annotations_dict}")
     print(f"🔍 get_span_annotations_for_user_on({username}, {instance_id}): {span_annotations_dict}")
@@ -1110,19 +1165,6 @@ def get_span_annotations_for_user_on(username, instance_id):
     for span in span_annotations:
         print(f"[DEBUG SPAN] schema={span.get_schema()} label={span.get_name()} start={span.get_start()} end={span.get_end()} id={span.get_id()}")
         logger.debug(f"[DEBUG SPAN] schema={span.get_schema()} label={span.get_name()} start={span.get_start()} end={span.get_end()} id={span.get_id()}")
-
-    # Debug: Check the internal storage structure
-    if hasattr(user_state, 'instance_id_to_span_to_value'):
-        logger.debug(f"User state instance_id_to_span_to_value: {dict(user_state.instance_id_to_span_to_value)}")
-        print(f"🔍 User state instance_id_to_span_to_value: {dict(user_state.instance_id_to_span_to_value)}")
-
-        if instance_id in user_state.instance_id_to_span_to_value:
-            instance_spans = user_state.instance_id_to_span_to_value[instance_id]
-            logger.debug(f"Spans for instance {instance_id}: {instance_spans}")
-            print(f"🔍 Spans for instance {instance_id}: {instance_spans}")
-        else:
-            logger.debug(f"No spans found for instance {instance_id}")
-            print(f"🔍 No spans found for instance {instance_id}")
 
     logger.debug(f"=== GET_SPAN_ANNOTATIONS_FOR_USER_ON END ===")
     return span_annotations

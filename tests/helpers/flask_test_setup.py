@@ -251,19 +251,17 @@ class FlaskTestServer:
                 if 'alert_time_each_instance' not in config:
                     config['alert_time_each_instance'] = 10000000
 
-                # Fix data file paths to be relative to project root
+                # Fix data file paths to be relative to the config file directory
                 if 'data_files' in config:
-                    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+                    config_dir = os.path.dirname(config_file) if config_file else os.getcwd()
                     fixed_data_files = []
                     for data_file in config['data_files']:
-                        # If it's a relative path starting with ../, resolve it from project root
-                        if data_file.startswith('../'):
-                            # Remove the ../ prefix and resolve from project root
-                            relative_path = data_file[3:]  # Remove '../'
-                            full_path = os.path.join(project_root, relative_path)
+                        # If it's an absolute path, use it as is
+                        if os.path.isabs(data_file):
+                            full_path = data_file
+                        # If it's a relative path, resolve it from the config file directory
                         else:
-                            # Assume it's relative to project root
-                            full_path = os.path.join(project_root, data_file)
+                            full_path = os.path.join(config_dir, data_file)
                         fixed_data_files.append(full_path)
                     config['data_files'] = fixed_data_files
 

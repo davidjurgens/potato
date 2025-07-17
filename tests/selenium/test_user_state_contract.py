@@ -23,7 +23,7 @@ REQUIRED_USER_STATE_FIELDS = [
 @pytest.fixture(scope="module")
 def flask_server():
     # Use a valid span annotation config
-    config_file = "../configs/span-annotation.yaml"
+    config_file = "configs/span-annotation.yaml"
     server = FlaskTestServer(config_file=config_file, debug=False)
     server.start()
     yield server
@@ -65,21 +65,13 @@ def test_user_state_contract(flask_server, browser):
     # Wait for redirect to annotation page
     WebDriverWait(browser, 10).until(EC.url_contains("/annotate"))
 
-    # Use JS to fetch user state JSON (with session cookie)
-    user_state_url = f"{base_url}/admin/user_state/{username}"
-    script = f"""
-        return fetch('{user_state_url}', {{credentials: 'same-origin'}})
-            .then(r => r.json())
-            .then(data => JSON.stringify(data))
-            .catch(e => 'ERROR: ' + e.message);
-    """
-    user_state_json = browser.execute_script(script)
+    # Use the server's get method which automatically includes admin API key
+    response = flask_server.get(f"/admin/user_state/{username}")
 
-    # Check if there was an error
-    if user_state_json.startswith("ERROR:"):
-        pytest.fail(f"Failed to fetch user state: {user_state_json}")
+    if response.status_code != 200:
+        pytest.fail(f"Failed to fetch user state: HTTP {response.status_code} - {response.text}")
 
-    user_state = json.loads(user_state_json)
+    user_state = response.json()
 
     # Assert contract fields
     for field in REQUIRED_USER_STATE_FIELDS:

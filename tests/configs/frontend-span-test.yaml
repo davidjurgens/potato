@@ -7,7 +7,8 @@ annotation_task_description: "Testing the new frontend-driven span annotation sy
 # Required fields for config validation
 task_dir: "tests/output/frontend-span-test"
 output_annotation_dir: "tests/output/frontend-span-test/annotation_output"
-data_files: ["tests/data/frontend_span_test_data.json"]
+data_files: ["../data/frontend_span_test_data.json"]
+site_dir: "default"
 item_properties:
   id_key: "id"
   text_key: "text"
@@ -15,7 +16,7 @@ alert_time_each_instance: 10000000
 
 # Data configuration
 data:
-  file_path: "tests/data/frontend_span_test_data.json"
+  file_path: "../data/frontend_span_test_data.json"
   file_type: "json"
 
 # Annotation schemes with multiple types
@@ -50,6 +51,7 @@ annotation_schemes:
     min: 0
     max: 100
     default: 50
+    starting_value: 50
     description: "Confidence in your annotation"
     required: false
 
