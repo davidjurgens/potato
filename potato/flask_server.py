@@ -9,6 +9,27 @@ Features include:
 - Survey flow support
 - Data loading and persistence
 - AI augmentation support
+- Active learning integration
+- Admin dashboard functionality
+
+The server handles:
+1. Data loading from various file formats (JSON, CSV, TSV, JSONL)
+2. User session management and authentication
+3. Annotation submission and validation
+4. Phase progression and workflow management
+5. AI hint generation and integration
+6. Active learning model training and instance reordering
+7. Admin dashboard data generation
+8. Configuration management and validation
+
+Key Components:
+- Flask application setup and configuration
+- Data loading and preprocessing
+- User state initialization
+- Annotation scheme processing
+- Template rendering and customization
+- Session timeout management
+- Error handling and logging
 """
 from __future__ import annotations
 
@@ -39,6 +60,7 @@ import shutil
 
 from dataclasses import dataclass
 
+# Get current working directory and program directory
 cur_working_dir = os.getcwd() #get the current working dir
 cur_program_dir = os.path.dirname(os.path.abspath(__file__)) #get the current program dir (for the case of pypi, it will be the path where potato is installed)
 flask_templates_dir = os.path.join(cur_program_dir,'templates') #get the dir where the flask templates are saved
@@ -75,8 +97,10 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
+# Set random seed for reproducible behavior
 random.seed(0)
 
+# Global variables for file management and user tracking
 domain_file_path = ""
 file_list = []
 file_list_size = 0
@@ -85,6 +109,7 @@ user_dict = {}
 
 file_to_read_from = ""
 
+# User story position tracking and response queue management
 user_story_pos = defaultdict(lambda: 0, dict())
 user_response_dicts_queue = defaultdict(deque)
 
@@ -92,29 +117,44 @@ user_response_dicts_queue = defaultdict(deque)
 USER_CONFIG_PATH = "user_config.json"
 DEFAULT_LABELS_PER_INSTANCE = 3
 
-# Hacky nonsense
+# Hacky nonsense - schema label to color mapping
 schema_label_to_color = {}
 
 # Keyword Highlights File Data
 @dataclass(frozen=True)
 class HighlightSchema:
+    """
+    Data class for highlight schema information.
+
+    This class represents a highlight schema with a label and schema name.
+    It's used for organizing highlight data and ensuring consistent
+    color assignments across the annotation interface.
+    """
     label: str
     schema: str
 
     def __hash__(self):
         return hash((self.label, self.schema))
 
+# Global emphasis corpus to schemas mapping
 emphasis_corpus_to_schemas = defaultdict(set)
 
 # Response Highlight Class
 @dataclass(frozen=True)
 class SuggestedResponse:
+    """
+    Data class for suggested response information.
+
+    This class represents a suggested response with a name and label.
+    It's used for AI-generated suggestions and pre-filled annotation values.
+    """
     name: str
     label: str
 
     def __hash__(self):
         return hash((self.name, self.label))
 
+# Color palette for annotation interface
 COLOR_PALETTE = [
     "rgb(179,226,205)",
     "rgb(253,205,172)",
@@ -143,14 +183,25 @@ COLOR_PALETTE = [
 class ActiveLearningState:
     """
     A class for maintaining state on active learning.
+
+    This class tracks active learning selection types and update rounds
+    to ensure proper coordination between active learning cycles and
+    user assignment updates.
     """
 
     def __init__(self):
+        """Initialize the active learning state tracker."""
         self.id_to_selection_type = {}
         self.id_to_update_round = {}
         self.cur_round = 0
 
     def update_selection_types(self, id_to_selection_type):
+        """
+        Update the selection types for active learning.
+
+        Args:
+            id_to_selection_type: Dictionary mapping instance IDs to selection types
+        """
         self.cur_round += 1
 
         for iid, st in id_to_selection_type.items():
@@ -161,8 +212,24 @@ class ActiveLearningState:
 SESSION_TIMEOUT = timedelta(minutes=1)
 
 def load_instance_data(config: dict):
-    '''Loads the instance data from the files specified in the config.'''
+    """
+    Load instance data from the files specified in the config.
 
+    This function reads annotation data from various file formats (JSON, CSV, TSV, JSONL)
+    and populates the ItemStateManager with the data. It handles different data structures
+    and validates that required fields are present.
+
+    Args:
+        config: Configuration dictionary containing data file paths and item properties
+
+    Side Effects:
+        - Populates ItemStateManager with loaded data
+        - Validates data structure and required fields
+        - Logs loading progress and statistics
+
+    Raises:
+        Exception: If file format is unsupported or required fields are missing
+    """
     ism = get_item_state_manager()
 
     # Where to look in the JSON item object for the text to annotate
@@ -182,7 +249,7 @@ def load_instance_data(config: dict):
         print(f"[DEBUG] Current working directory: {os.getcwd()}")
         print(f"[DEBUG] File exists: {os.path.exists(data_fname)}")
 
-        # Read and print first few lines of the file
+        # Read and print first few lines of the file for debugging
         try:
             with open(data_fname, "rt") as f:
                 first_lines = [f.readline().strip() for _ in range(3)]
@@ -191,6 +258,7 @@ def load_instance_data(config: dict):
             print(f"[DEBUG] Error reading file: {e}")
 
         if fmt in ["json", "jsonl"]:
+            # Handle JSON and JSONL formats
             with open(data_fname, "rt") as f:
                 for line_no, line in enumerate(f):
                     item = json.loads(line)

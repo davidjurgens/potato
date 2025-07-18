@@ -1,3 +1,34 @@
+"""
+User State Management Module
+
+This module provides comprehensive user state tracking and management for the Potato
+annotation platform. It handles user progress through annotation phases, instance
+assignments, annotation storage, and state persistence.
+
+Key Components:
+- UserStateManager: Singleton manager for all user states
+- UserState: Abstract interface for user state implementations
+- InMemoryUserState: In-memory implementation of user state
+- MysqlUserState: Database-backed implementation (placeholder)
+
+The system supports:
+- Multi-phase annotation workflows (consent, instructions, training, annotation, post-study)
+- Instance assignment and navigation
+- Annotation storage (labels and spans)
+- Progress tracking and statistics
+- State persistence to disk
+- Active learning integration
+- Behavioral data collection
+
+User states track:
+- Current phase and page in the annotation workflow
+- Assigned instances and current position
+- Completed annotations (labels and spans)
+- Timing information and statistics
+- Pre-study and consent status
+- Assignment limits and progress
+"""
+
 from __future__ import annotations
 
 import json
@@ -22,9 +53,18 @@ USER_STATE_MANAGER = None
 
 @staticmethod
 def init_user_state_manager(config: dict) -> UserStateManager:
-    '''
-    Returns the manager for tracking all the users' states in where they are in the annotation process.
-    '''
+    """
+    Initialize the singleton UserStateManager instance.
+
+    This function creates the global UserStateManager that will be shared
+    across all users. It's designed to be called once during application startup.
+
+    Args:
+        config: Configuration dictionary containing user management settings
+
+    Returns:
+        UserStateManager: The initialized singleton instance
+    """
     global USER_STATE_MANAGER
 
     if USER_STATE_MANAGER is None:
@@ -33,26 +73,48 @@ def init_user_state_manager(config: dict) -> UserStateManager:
 
 @staticmethod
 def clear_user_state_manager():
-    '''
+    """
     Clear the singleton user state manager instance (for testing).
-    '''
+
+    This function is primarily used for testing purposes to reset the
+    global state between test runs.
+    """
     global USER_STATE_MANAGER
     USER_STATE_MANAGER = None
 
 def get_user_state_manager() -> UserStateManager:
-    '''
-    Returns the manager for tracking all the users' states in where they are in the annotation process.
-    '''
+    """
+    Get the singleton UserStateManager instance.
+
+    Returns:
+        UserStateManager: The singleton instance
+
+    Raises:
+        ValueError: If the manager has not been initialized
+    """
     global USER_STATE_MANAGER
     if USER_STATE_MANAGER is None:
         raise ValueError('User state manager has not been initialized')
     return USER_STATE_MANAGER
 
 class UserStateManager:
-    '''Manages all the users'''
+    """
+    Manages all user states in the annotation system.
+
+    This singleton class provides centralized management of all user states,
+    including user creation, state tracking, phase management, and persistence.
+    It coordinates with the ItemStateManager for instance assignments and
+    supports various annotation workflows.
+    """
 
 
     def __init__(self, config: dict):
+        """
+        Initialize the user state manager.
+
+        Args:
+            config: Configuration dictionary containing user management settings
+        """
         self.config = config
         self.user_to_annotation_state = {}
         self.task_assignment = {}
@@ -69,10 +131,29 @@ class UserStateManager:
         logging.basicConfig()
 
     def add_phase(self, phase_type: UserPhase, phase_name: str, page_fname: str):
+        """
+        Add a phase page to the phase mapping.
+
+        Args:
+            phase_type: The type of phase (e.g., CONSENT, INSTRUCTIONS)
+            phase_name: The name of the page within the phase
+            page_fname: The filename of the HTML page
+        """
         self.phase_type_to_name_to_page[phase_type][phase_name] = page_fname
 
     def add_user(self, user_id: str) -> UserState:
-        '''Adds a user to the user state manager'''
+        """
+        Add a new user to the user state manager.
+
+        Args:
+            user_id: Unique identifier for the new user
+
+        Returns:
+            UserState: The created user state object
+
+        Raises:
+            ValueError: If a user with the same ID already exists
+        """
         logger.debug(f"=== ADD USER START ===")
         logger.debug(f"Adding user: {user_id}")
         logger.debug(f"Current users: {list(self.user_to_annotation_state.keys())}")
@@ -93,7 +174,15 @@ class UserStateManager:
         return user_state
 
     def get_or_create_user(self, user_id: str) -> UserState:
-        '''Gets a user from the user state manager, creating a new user if they don't exist'''
+        """
+        Get a user from the user state manager, creating a new user if they don't exist.
+
+        Args:
+            user_id: Unique identifier for the user
+
+        Returns:
+            UserState: The user state object (existing or newly created)
+        """
         if user_id not in self.user_to_annotation_state:
             self.logger.debug('Previously unknown user "%s"; creating new annotation state' % (user_id))
             user_state = self.add_user(user_id)
@@ -102,11 +191,21 @@ class UserStateManager:
         return user_state
 
     def get_max_annotations_per_user(self) -> int:
-        '''Returns the maximum number of items that each annotator should annotate'''
+        """
+        Get the maximum number of items that each annotator should annotate.
+
+        Returns:
+            int: Maximum annotations per user (-1 for unlimited)
+        """
         return self.max_annotations_per_user
 
     def set_max_annotations_per_user(self, max_annotations_per_user: int) -> None:
-        '''Sets the maximum number of items that each annotator should annotate'''
+        """
+        Set the maximum number of items that each annotator should annotate.
+
+        Args:
+            max_annotations_per_user: Maximum annotations per user (-1 for unlimited)
+        """
         self.max_annotations_per_user = max_annotations_per_user
 
     def old_get_or_create_user(self, user_id: str) -> UserState:
@@ -141,7 +240,8 @@ class UserStateManager:
             user_state = self.user_to_annotation_state[user_id]
 
     def get_user_state(self, user_id: str) -> UserState:
-        '''Gets a user from the user state manager or None if the user does not exist'''
+        '''
+        Gets a user from the user state manager or None if the user does not exist'''
         if user_id not in self.user_to_annotation_state:
             # Try to load the user state from disk if it exists
             try:

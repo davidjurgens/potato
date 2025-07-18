@@ -3,11 +3,27 @@ Flask Routes Module
 
 This module contains all the route handlers for the Flask server.
 It defines the HTTP endpoints and their associated logic for:
-- User authentication
+- User authentication and session management
 - Navigation between annotation phases
-- Form handling
-- Annotation submission
-- User registration
+- Form handling and validation
+- Annotation submission and processing
+- User registration and management
+- Admin dashboard functionality
+- API endpoints for frontend integration
+
+The routes handle the complete annotation workflow from initial login
+through completion, including consent, instructions, training, annotation,
+and post-study phases. They also provide admin functionality for monitoring
+progress and managing the annotation system.
+
+Key Features:
+- Session-based authentication with timeout management
+- Multi-phase workflow support with configurable phases
+- Annotation submission with validation and persistence
+- AI hint integration for improved annotation quality
+- Admin dashboard with comprehensive statistics
+- API endpoints for real-time frontend updates
+- Error handling and user feedback
 """
 from __future__ import annotations
 
@@ -40,20 +56,28 @@ def home():
     """
     Handle requests to the home page.
 
+    This route serves as the main entry point for the annotation platform.
+    It handles session management, user authentication, and phase routing
+    based on the user's current state in the annotation workflow.
+
     Features:
-    - Session management
-    - User authentication
-    - Phase routing
+    - Session validation and timeout management
+    - User authentication and state initialization
+    - Phase-based routing to appropriate pages
     - Survey flow management
-    - Progress tracking
+    - Progress tracking and validation
 
     Returns:
         flask.Response: Rendered template or redirect based on user state
+
+    Side Effects:
+        - May initialize new user state
+        - May advance user phases
+        - May clear invalid sessions
     """
     logger.debug("Processing home page request")
 
-
-
+    # Check if user has an active session
     if 'username' not in session:
         logger.debug("No active session, rendering login page")
         return render_template("home.html", title=config.get("annotation_task_name", "Annotation Platform"))
@@ -61,16 +85,18 @@ def home():
     user_id = session['username']
     logger.debug(f"Active session for user: {user_id}")
 
+    # Get user state and validate it exists
     user_state = get_user_state(user_id)
     if user_state is None:
         logger.warning(f"User {user_id} not found in user state")
         session.clear()
         return redirect(url_for("auth"))
 
-    # Get the phase of the user
+    # Get the current phase of the user and route accordingly
     phase = user_state.get_phase()
     logger.debug(f"User phase: {phase}")
 
+    # Route to appropriate phase handler based on current phase
     if phase == UserPhase.LOGIN:
         return auth() #redirect(url_for("auth"))
     elif phase == UserPhase.CONSENT:
@@ -97,34 +123,50 @@ def auth():
     """
     Handle authentication requests.
 
+    This route manages user authentication for the annotation platform.
+    It supports both password-based and passwordless authentication modes
+    depending on the system configuration.
+
+    Features:
+    - Session validation and management
+    - User authentication against configured backends
+    - User state initialization for new users
+    - Error handling and user feedback
+    - Redirect logic based on authentication success
+
     Returns:
         flask.Response: Rendered template or redirect
+
+    Side Effects:
+        - May create new user sessions
+        - May initialize new user states
+        - May clear existing sessions
     """
     # Check if user is already logged in
     if 'username' in session and get_user_state_manager().has_user(session['username']):
         logger.debug(f"User {session['username']} already logged in, redirecting to annotate")
         return redirect(url_for("annotate"))
 
-    # For standard user_id/password login
+    # Handle POST requests for user authentication
     if request.method == "POST":
         user_id = request.form.get("email")
         password = request.form.get("pass")
 
         logger.debug(f"Login attempt for user: {user_id}")
 
+        # Validate that user ID is provided
         if not user_id:
             logger.warning("Login attempt with empty user_id")
             return render_template("home.html",
                                   login_error="User ID is required",
                                   title=config.get("annotation_task_name", "Annotation Platform"))
 
-        # Authenticate the user
+        # Authenticate the user against the configured backend
         if UserAuthenticator.authenticate(user_id, password):
             session.clear()  # Clear any existing session data
             session['username'] = user_id
             session.permanent = True  # Make session persist longer
             logger.info(f"Login successful for user: {user_id}")
-
 
             # Initialize user state if needed
             if not get_user_state_manager().has_user(user_id):
@@ -151,8 +193,22 @@ def passwordless_login():
     """
     Handle passwordless login page requests.
 
+    This route provides a simplified login interface for systems configured
+    to use passwordless authentication. Users only need to provide their
+    username to access the annotation platform.
+
+    Features:
+    - Passwordless authentication flow
+    - Configuration-based access control
+    - User state initialization
+    - Error handling and validation
+
     Returns:
         flask.Response: Rendered template or redirect
+
+    Side Effects:
+        - May create new user sessions
+        - May initialize new user states
     """
     logger.debug("Processing passwordless login page request")
 
@@ -161,10 +217,11 @@ def passwordless_login():
         logger.debug("Passwords required, redirecting to regular login")
         return redirect(url_for("home"))
 
-    # Check if username was submitted via POST
+    # Handle POST requests for passwordless authentication
     if request.method == "POST":
         username = request.form.get("email")
 
+        # Validate that username is provided
         if not username:
             logger.warning("Passwordless login attempt with empty username")
             return render_template("passwordless_login.html",
@@ -198,8 +255,21 @@ def clerk_login():
     """
     Handle Clerk SSO login process.
 
+    This route manages authentication through Clerk's single sign-on service.
+    It handles token validation and user session creation for SSO users.
+
+    Features:
+    - Clerk SSO integration
+    - Token validation and verification
+    - User session management
+    - Error handling for SSO failures
+
     Returns:
         flask.Response: Rendered template or redirect
+
+    Side Effects:
+        - May create new user sessions
+        - May initialize new user states
     """
     logger.debug("Processing Clerk SSO login request")
 

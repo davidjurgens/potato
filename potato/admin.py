@@ -3,6 +3,33 @@ Admin Dashboard Module
 
 This module provides comprehensive admin functionality for the annotation platform,
 including dashboard data generation, timing analysis, and configuration management.
+
+The admin dashboard offers:
+- Real-time overview of annotation progress and statistics
+- Detailed annotator performance metrics and timing analysis
+- Instance-level annotation tracking and disagreement analysis
+- Configuration management and system state monitoring
+- Question and annotation scheme analysis
+- User progress tracking and completion statistics
+
+Key Components:
+- AdminDashboard: Main class for admin functionality
+- AnnotatorTimingData: Data class for annotator timing information
+- InstanceData: Data class for instance information and statistics
+- Dashboard data generation and analysis functions
+- Configuration update and management functions
+
+The dashboard provides insights into:
+- Overall annotation progress and completion rates
+- Individual annotator performance and efficiency
+- Annotation quality through disagreement analysis
+- System configuration and operational status
+- Real-time monitoring of active annotation sessions
+
+Access Control:
+- Admin access is controlled via API key authentication
+- Debug mode allows admin access without API key
+- All admin endpoints require proper authentication
 """
 
 import json
@@ -20,7 +47,12 @@ from potato.flask_server import (
 
 @dataclass
 class AnnotatorTimingData:
-    """Data class for annotator timing information"""
+    """
+    Data class for annotator timing information.
+
+    This class encapsulates timing metrics for individual annotators,
+    including total annotations, working time, and performance statistics.
+    """
     user_id: str
     total_annotations: int
     total_seconds: int
@@ -34,7 +66,12 @@ class AnnotatorTimingData:
 
 @dataclass
 class InstanceData:
-    """Data class for instance information"""
+    """
+    Data class for instance information.
+
+    This class encapsulates information about annotation instances,
+    including annotation counts, disagreement scores, and annotator lists.
+    """
     id: str
     text: str
     displayed_text: str
@@ -46,9 +83,16 @@ class InstanceData:
     average_time_per_annotation: Optional[float]
 
 class AdminDashboard:
-    """Main class for admin dashboard functionality"""
+    """
+    Main class for admin dashboard functionality.
+
+    This class provides comprehensive admin features including dashboard
+    data generation, timing analysis, configuration management, and
+    system monitoring capabilities.
+    """
 
     def __init__(self):
+        """Initialize the admin dashboard."""
         self.logger = logging.getLogger(__name__)
 
     def check_admin_access(self) -> bool:
@@ -67,8 +111,16 @@ class AdminDashboard:
         """
         Get comprehensive dashboard overview data.
 
+        This method generates a complete overview of the annotation system,
+        including user statistics, annotation progress, and system configuration.
+
         Returns:
-            Dict containing overview statistics
+            Dict containing overview statistics with the following structure:
+            - overview: User counts, annotation counts, completion percentages
+            - config: System configuration and settings
+
+        Side Effects:
+            - Logs errors if data generation fails
         """
         if not self.check_admin_access():
             return {"error": "Admin access required"}, 403
@@ -150,8 +202,14 @@ class AdminDashboard:
         """
         Get detailed data for all annotators including timing information.
 
+        This method generates comprehensive statistics for each annotator,
+        including performance metrics, timing data, and progress information.
+
         Returns:
-            Dict containing annotator data with timing metrics
+            Dict containing annotator data with timing metrics and summary statistics
+
+        Side Effects:
+            - Logs errors if data generation fails
         """
         if not self.check_admin_access():
             return {"error": "Admin access required"}, 403
