@@ -107,6 +107,13 @@ def validate_database_config(config):
 CONFIG_DIR = os.path.join(os.path.dirname(__file__), '../configs')
 CONFIG_FILES = glob.glob(os.path.join(CONFIG_DIR, '*.yaml'))
 
+# Filter out malicious config files that are intentionally invalid
+MALICIOUS_CONFIGS = [
+    'malicious-path-traversal.yaml',
+    'malicious-invalid-structure.yaml'
+]
+CONFIG_FILES = [f for f in CONFIG_FILES if not any(malicious in f for malicious in MALICIOUS_CONFIGS)]
+
 @pytest.mark.parametrize('config_path', CONFIG_FILES)
 def test_config_file_validates(config_path):
     with open(config_path, 'r') as f:
