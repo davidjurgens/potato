@@ -12,7 +12,7 @@ from io import StringIO
 import pytest
 
 # Import the classes and functions we're testing
-from potato.instance_state_management import SpanAnnotation, get_instance_state_manager, init_instance_state_manager, clear_instance_state_manager
+from potato.item_state_management import SpanAnnotation, get_item_state_manager, init_item_state_manager, clear_item_state_manager
 from potato.user_state_management import InMemoryUserState, get_user_state_manager, init_user_state_manager, clear_user_state_manager, UserPhase
 from potato.server_utils.schemas.span import get_span_color
 
@@ -23,7 +23,7 @@ class TestSpanAPIEndpoints:
     def setup_method(self):
         """Set up test data and managers"""
         # Clear state managers to avoid duplicate item errors
-        clear_instance_state_manager()
+        clear_item_state_manager()
         clear_user_state_manager()
         # Initialize managers with test config
         test_config = {
@@ -45,31 +45,31 @@ class TestSpanAPIEndpoints:
         }
 
         init_user_state_manager(test_config)
-        init_instance_state_manager(test_config)
+        init_item_state_manager(test_config)
 
         # Create test instances in item state manager
-        item_manager = get_instance_state_manager()
+        item_manager = get_item_state_manager()
 
         # Create test instance 1
         test_instance_1 = {
             "id": "test_instance_456",
             "text": "This is a test text for span annotation."
         }
-        item_manager.add_instance(test_instance_1["id"], test_instance_1)
+        item_manager.add_item(test_instance_1["id"], test_instance_1)
 
         # Create test instance 2
         test_instance_2 = {
-            "id": "test_instance_789",
-            "text": "Another test text for span annotation testing."
+            "id": "integration_test_instance",
+            "text": "Another test instance for integration testing."
         }
-        item_manager.add_instance(test_instance_2["id"], test_instance_2)
+        item_manager.add_item(test_instance_2["id"], test_instance_2)
 
         # Create test instance 3
         test_instance_3 = {
-            "id": "test_instance_123",
-            "text": "Third test text for comprehensive span testing."
+            "id": "update_test_instance",
+            "text": "Test instance for update workflow testing."
         }
-        item_manager.add_instance(test_instance_3["id"], test_instance_3)
+        item_manager.add_item(test_instance_3["id"], test_instance_3)
 
     def create_test_user(self, username="test_user"):
         """Helper method to create a test user state"""
@@ -265,7 +265,7 @@ class TestSpanAnnotationIntegration:
     def setup_method(self):
         """Set up test data and managers"""
         # Clear state managers to avoid duplicate item errors
-        clear_instance_state_manager()
+        clear_item_state_manager()
         clear_user_state_manager()
         # Initialize managers with test config
         test_config = {
@@ -287,24 +287,24 @@ class TestSpanAnnotationIntegration:
         }
 
         init_user_state_manager(test_config)
-        init_instance_state_manager(test_config)
+        init_item_state_manager(test_config)
 
         # Create test instances in item state manager
-        item_manager = get_instance_state_manager()
+        item_manager = get_item_state_manager()
 
         # Create test instance 1
         test_instance_1 = {
             "id": "integration_test_instance",
             "text": "This is a test text for integration testing."
         }
-        item_manager.add_instance(test_instance_1["id"], test_instance_1)
+        item_manager.add_item(test_instance_1["id"], test_instance_1)
 
         # Create test instance 2
         test_instance_2 = {
             "id": "update_test_instance",
             "text": "Test instance for update workflow testing."
         }
-        item_manager.add_instance(test_instance_2["id"], test_instance_2)
+        item_manager.add_item(test_instance_2["id"], test_instance_2)
 
     def create_test_user(self, username="test_user"):
         """Helper method to create a test user state"""
@@ -647,7 +647,7 @@ class TestBackendStateManagement:
     def setup_method(self):
         """Set up test data and managers"""
         # Clear state managers to avoid duplicate item errors
-        clear_instance_state_manager()
+        clear_item_state_manager()
         clear_user_state_manager()
         # Initialize managers with test config
         test_config = {
@@ -669,15 +669,15 @@ class TestBackendStateManagement:
         }
 
         init_user_state_manager(test_config)
-        init_instance_state_manager(test_config)
+        init_item_state_manager(test_config)
 
         # Create test instance
-        item_manager = get_instance_state_manager()
+        item_manager = get_item_state_manager()
         test_instance = {
             "id": "state_test_instance",
             "text": "Test text for state management."
         }
-        item_manager.add_instance(test_instance["id"], test_instance)
+        item_manager.add_item(test_instance["id"], test_instance)
 
     def create_test_user(self, username="test_user"):
         """Helper method to create a test user state"""
@@ -699,12 +699,12 @@ class TestBackendStateManagement:
         self.create_test_user('test_user')
 
         # Create test instance first
-        item_manager = get_instance_state_manager()
+        item_manager = get_item_state_manager()
         test_instance = {
             "id": "backend_stores_test_instance",
             "text": "Test text for state management."
         }
-        item_manager.add_instance(test_instance["id"], test_instance)
+        item_manager.add_item(test_instance["id"], test_instance)
 
         # Create span data
         span_data = {
@@ -750,12 +750,12 @@ class TestBackendStateManagement:
         self.create_test_user('test_user')
 
         # Create test instance first
-        item_manager = get_instance_state_manager()
+        item_manager = get_item_state_manager()
         test_instance = {
             "id": "raw_data_test_instance",
             "text": "Test text for state management."
         }
-        item_manager.add_instance(test_instance["id"], test_instance)
+        item_manager.add_item(test_instance["id"], test_instance)
 
         # Create span data
         span_data = {
@@ -803,3 +803,79 @@ class TestBackendStateManagement:
         assert span['schema'] == 'sentiment'
         assert span['start'] == 0
         assert span['end'] == 4
+
+    def test_clear_span_annotations_endpoint(self, client):
+        """Test POST /api/spans/<instance_id>/clear endpoint"""
+        # Create authenticated session and user state
+        with client.session_transaction() as sess:
+            sess['username'] = 'test_user'
+
+        # Create user state for test_user
+        self.create_test_user('test_user')
+
+        # Create test instance first
+        item_manager = get_item_state_manager()
+        test_instance = {
+            "id": "test_instance_456",
+            "text": "Test text for span annotation."
+        }
+        item_manager.add_item(test_instance["id"], test_instance)
+
+        # First, create some spans via the updateinstance endpoint
+        span_data = {
+            'instance_id': 'test_instance_456',
+            'type': 'span',
+            'schema': 'sentiment',
+            'state': [
+                {
+                    'name': 'positive',
+                    'title': 'Positive sentiment',
+                    'start': 0,
+                    'end': 4,
+                    'value': 'positive'
+                }
+            ]
+        }
+
+        # Add spans to user state
+        response = client.post('/updateinstance',
+                              data=json.dumps(span_data),
+                              content_type='application/json')
+        assert response.status_code == 200
+
+        # Verify spans exist
+        response = client.get('/api/spans/test_instance_456')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert len(data['spans']) == 1
+
+        # Clear the spans
+        response = client.post('/api/spans/test_instance_456/clear')
+        assert response.status_code == 200
+
+        data = json.loads(response.data)
+        assert data['status'] == 'success'
+        assert data['spans_cleared'] == 1
+
+        # Verify spans are cleared
+        response = client.get('/api/spans/test_instance_456')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert len(data['spans']) == 0
+
+    def test_clear_span_annotations_nonexistent(self, client):
+        """Test POST /api/spans/<instance_id>/clear with no spans"""
+        # Create authenticated session and user state
+        with client.session_transaction() as sess:
+            sess['username'] = 'test_user'
+
+        # Create user state for test_user
+        self.create_test_user('test_user')
+
+        # Try to clear spans for an instance that has no spans
+        response = client.post('/api/spans/test_instance_456/clear')
+        assert response.status_code == 200
+
+        data = json.loads(response.data)
+        assert data['status'] == 'success'
+        assert data['spans_cleared'] == 0

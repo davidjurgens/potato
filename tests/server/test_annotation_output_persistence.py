@@ -19,6 +19,7 @@ def annotation_configs():
 def test_annotation_output_persistence(atype, config, schema, value):
     temp_dir = tempfile.mkdtemp()
     try:
+        # Read and update config file first
         with open(config) as f:
             lines = f.readlines()
         new_lines = []
@@ -32,11 +33,31 @@ def test_annotation_output_persistence(atype, config, schema, value):
         temp_config = os.path.join(temp_dir, os.path.basename(config))
         with open(temp_config, "w") as f:
             f.writelines(new_lines)
+
+        # Create test data file in the correct location relative to config
+        config_dir = os.path.dirname(temp_config)
+        data_dir = os.path.join(config_dir, "..", "data")
+        os.makedirs(data_dir, exist_ok=True)
+        test_data_file = os.path.join(data_dir, "test_data.json")
+        test_data = [
+            {"id": "test_1", "text": "This is a test text for annotation."},
+            {"id": "test_2", "text": "Another test text for annotation testing."}
+        ]
+        with open(test_data_file, 'w') as f:
+            for item in test_data:
+                f.write(json.dumps(item) + '\n')
         abs_temp_config = os.path.abspath(temp_config)
 
+        # Start server with proper error handling
         server = FlaskTestServer(config_file=abs_temp_config)
-        server.start()
+        started = server.start()
+        if not started:
+            raise RuntimeError(f"Failed to start server with config {abs_temp_config}")
+
         try:
+            # Get test client with proper error handling
+            if server.app is None:
+                raise RuntimeError("Server app is None - server failed to initialize")
             client = server.app.test_client()
             client.post("/register", data={"username": "testuser", "password": "testpass"})
             client.post("/login", data={"username": "testuser", "password": "testpass"})

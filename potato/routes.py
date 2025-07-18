@@ -1559,8 +1559,31 @@ def update_instance():
 
             if annotation_type == "span":
                 for sv in schema_state:
-                    span = SpanAnnotation(schema_name, sv["name"], sv.get("title", sv["name"]), int(sv["start"]), int(sv["end"]))
+                    # Validate and correct negative offsets
+                    start_offset = int(sv["start"])
+                    end_offset = int(sv["end"])
+
+                    # Correct negative offsets to 0
+                    if start_offset < 0:
+                        start_offset = 0
+                        logger.warning(f"Corrected negative start offset {sv['start']} to 0")
+                    if end_offset < 0:
+                        end_offset = 0
+                        logger.warning(f"Corrected negative end offset {sv['end']} to 0")
+
+                    # Ensure end is not less than start
+                    if end_offset < start_offset:
+                        end_offset = start_offset
+                        logger.warning(f"Corrected end offset {sv['end']} to match start offset {start_offset}")
+
+                    span = SpanAnnotation(schema_name, sv["name"], sv.get("title", sv["name"]), start_offset, end_offset)
                     value = sv["value"]
+
+                    # Always add the span annotation, regardless of whether value is None
+                    user_state.add_span_annotation(instance_id, span, value)
+                    logger.debug(f"Added span annotation: {span} with value: {value}")
+
+                    # If value is None, also handle span removal logic
                     if value is None:
                         if instance_id in user_state.instance_id_to_span_to_value:
                             spans_to_remove = []
@@ -1572,10 +1595,6 @@ def update_instance():
                                     spans_to_remove.append(existing_span)
                             for span_to_remove in spans_to_remove:
                                 del user_state.instance_id_to_span_to_value[instance_id][span_to_remove]
-                        else:
-                            if instance_id not in user_state.instance_id_to_span_to_value:
-                                user_state.instance_id_to_span_to_value[instance_id] = {}
-                            user_state.add_span_annotation(instance_id, span, value)
             elif annotation_type == "label":
                 for sv in schema_state:
                     label = Label(schema_name, sv["name"])

@@ -193,19 +193,19 @@ class TestSpanOffsetCalculation:
                 "name": "Start of text",
                 "text": "The new artificial intelligence",
                 "expected_start": 0,
-                "expected_end": 30
+                "expected_end": 31
             },
             {
                 "name": "Middle of text",
                 "text": "artificial intelligence model",
                 "expected_start": 8,
-                "expected_end": 35
+                "expected_end": 37
             },
             {
                 "name": "End of text",
                 "text": "significant margin.",
-                "expected_start": 108,
-                "expected_end": 125
+                "expected_start": 143,
+                "expected_end": 162
             },
             {
                 "name": "Single word",
