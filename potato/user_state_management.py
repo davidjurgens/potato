@@ -42,6 +42,13 @@ from potato.authentificaton import UserAuthenticator
 from potato.phase import UserPhase
 from potato.item_state_management import get_item_state_manager, Item, SpanAnnotation, Label
 
+# Database imports
+try:
+    from potato.database import DatabaseManager, MysqlUserState
+    DATABASE_AVAILABLE = True
+except ImportError:
+    DATABASE_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logging.basicConfig()
@@ -121,9 +128,25 @@ class UserStateManager:
         self.prolific_study = None
         self.phase_type_to_name_to_page = defaultdict(OrderedDict)
 
-
         # TODO: load this from the config
         self.max_annotations_per_user = -1
+
+        # Database support
+        self.db_manager = None
+        self.use_database = False
+
+        # Initialize database if configured
+        if DATABASE_AVAILABLE and 'database' in config:
+            db_config = config['database']
+            if db_config.get('type') == 'mysql':
+                try:
+                    self.db_manager = DatabaseManager(config)
+                    self.use_database = True
+                    self.db_manager.create_tables()
+                    logger.info("Initialized MySQL database backend")
+                except Exception as e:
+                    logger.error(f"Failed to initialize database: {e}")
+                    self.use_database = False
 
         self.logger = logging.getLogger(__name__)
         # setting to debug
@@ -163,9 +186,14 @@ class UserStateManager:
             logger.warning(f'User "{user_id}" already exists in the user state manager')
             raise ValueError(f'User "{user_id}" already exists in the user state manager')
 
-        # TODO: make the user state type configurable between in-memory and DB-backed.
-        logger.debug(f"Creating InMemoryUserState for user: {user_id}")
-        user_state = InMemoryUserState(user_id, self.max_annotations_per_user)
+        # Create appropriate user state based on configuration
+        if self.use_database and self.db_manager:
+            logger.debug(f"Creating MysqlUserState for user: {user_id}")
+            user_state = MysqlUserState(user_id, self.db_manager, self.max_annotations_per_user)
+        else:
+            logger.debug(f"Creating InMemoryUserState for user: {user_id}")
+            user_state = InMemoryUserState(user_id, self.max_annotations_per_user)
+
         self.user_to_annotation_state[user_id] = user_state
         logger.debug(f"User state created and stored: {user_state}")
         logger.debug(f"Users after adding: {list(self.user_to_annotation_state.keys())}")
@@ -243,16 +271,25 @@ class UserStateManager:
         '''
         Gets a user from the user state manager or None if the user does not exist'''
         if user_id not in self.user_to_annotation_state:
-            # Try to load the user state from disk if it exists
-            try:
-                output_annotation_dir = self.config["output_annotation_dir"]
-                user_dir = os.path.join(output_annotation_dir, user_id)
-                if os.path.exists(user_dir):
-                    user_state = InMemoryUserState.load(user_dir)
+            if self.use_database and self.db_manager:
+                # Try to load from database
+                try:
+                    user_state = MysqlUserState(user_id, self.db_manager, self.max_annotations_per_user)
                     self.user_to_annotation_state[user_id] = user_state
                     return user_state
-            except Exception as e:
-                logger.warning(f"Failed to load user state for {user_id}: {e}")
+                except Exception as e:
+                    logger.warning(f"Failed to load user state from database for {user_id}: {e}")
+            else:
+                # Try to load the user state from disk if it exists
+                try:
+                    output_annotation_dir = self.config["output_annotation_dir"]
+                    user_dir = os.path.join(output_annotation_dir, user_id)
+                    if os.path.exists(user_dir):
+                        user_state = InMemoryUserState.load(user_dir)
+                        self.user_to_annotation_state[user_id] = user_state
+                        return user_state
+                except Exception as e:
+                    logger.warning(f"Failed to load user state for {user_id}: {e}")
 
         return self.user_to_annotation_state.get(user_id)
 
@@ -402,6 +439,15 @@ class UserStateManager:
         self.prolific_study = None
         self.phase_type_to_name_to_page.clear()
         self.max_annotations_per_user = -1
+
+        # Clear database if using it
+        if self.use_database and self.db_manager:
+            try:
+                self.db_manager.drop_tables()
+                self.db_manager.create_tables()
+                logger.info("Cleared database tables")
+            except Exception as e:
+                logger.error(f"Failed to clear database: {e}")
 
         # Reload phases after clearing to ensure phase_type_to_name_to_page is repopulated
         from potato.flask_server import load_phase_data

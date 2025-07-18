@@ -896,7 +896,7 @@ def render_page_with_annotations(username) -> str:
         if it['annotation_type'] == 'multirate' and it.get('option_randomization'):
             selected_schemas_for_option_randomization.append(it['description'])
 
-    if len(selected_schemas_for_option_randomization) > 0:
+
         soup = randomize_options(soup, selected_schemas_for_option_randomization,
                                  map_user_id_to_digit(username))
 

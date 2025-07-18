@@ -43,6 +43,9 @@ def validate_config(config):
     if not isinstance(config['data_files'], list):
         raise ValueError("data_files must be a list")
 
+    # Validate database configuration if present
+    validate_database_config(config)
+
     # Handle annotation schemes - either top-level or in phases
     if 'annotation_schemes' in config:
         # Old format: annotation_schemes at top level
@@ -74,6 +77,29 @@ def validate_config(config):
                     raise ValueError(f"Phase {phase_name} annotation_schemes cannot be empty")
     else:
         raise ValueError("Config must have either 'annotation_schemes' (top-level) or 'phases' with annotation_schemes")
+
+    return True
+
+
+def validate_database_config(config):
+    """Validate database configuration if present"""
+    if 'database' not in config:
+        return True  # Database is optional
+
+    db_config = config['database']
+    required_fields = ['type', 'host', 'database', 'username']
+
+    for field in required_fields:
+        if field not in db_config:
+            raise ValueError(f"Missing required database field: {field}")
+
+    if db_config['type'] not in ['mysql', 'file']:
+        raise ValueError(f"Unsupported database type: {db_config['type']}")
+
+    # Validate MySQL-specific fields
+    if db_config['type'] == 'mysql':
+        if 'password' not in db_config:
+            raise ValueError("MySQL database requires password")
 
     return True
 

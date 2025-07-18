@@ -270,6 +270,87 @@ jumping_to_id_disabled: true   # Disable go-to instance feature
 hide_navbar: true              # Hide navigation bar
 ```
 
+## Database Configuration
+
+### MySQL Database Setup
+
+Potato supports MySQL database backend for improved performance and scalability. To use MySQL:
+
+```yaml
+database:
+  type: mysql
+  host: localhost
+  port: 3306
+  database: potato_annotations
+  username: potato_user
+  password: ${POTATO_DB_PASSWORD}  # Use environment variable for security
+  charset: utf8mb4
+  pool_size: 10
+  max_overflow: 20
+  pool_timeout: 30
+  pool_recycle: 3600
+```
+
+### Database Configuration Options
+
+- **`type`**: Database type (`mysql` or `file` for file-based storage)
+- **`host`**: Database server hostname
+- **`port`**: Database server port (default: 3306)
+- **`database`**: Database name
+- **`username`**: Database username
+- **`password`**: Database password (use environment variables for security)
+- **`charset`**: Character encoding (default: utf8mb4)
+- **`pool_size`**: Connection pool size (default: 10)
+- **`max_overflow`**: Maximum overflow connections (default: 20)
+- **`pool_timeout`**: Connection timeout in seconds (default: 30)
+- **`pool_recycle`**: Connection recycle time in seconds (default: 3600)
+
+### Environment Variables
+
+For security, use environment variables for database credentials:
+
+```bash
+export POTATO_DB_PASSWORD="your_secure_password"
+```
+
+Then reference it in your config:
+
+```yaml
+database:
+  password: ${POTATO_DB_PASSWORD}
+```
+
+### Database Setup
+
+1. **Create Database**:
+   ```sql
+   CREATE DATABASE potato_annotations CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+   ```
+
+2. **Create User**:
+   ```sql
+   CREATE USER 'potato_user'@'localhost' IDENTIFIED BY 'your_password';
+   GRANT ALL PRIVILEGES ON potato_annotations.* TO 'potato_user'@'localhost';
+   FLUSH PRIVILEGES;
+   ```
+
+3. **Tables**: Potato will automatically create the required tables on first startup.
+
+### Migration from File-Based Storage
+
+To migrate existing annotations from file-based to database storage:
+
+1. Backup your existing annotation data
+2. Configure the database connection
+3. Start Potato with the new configuration
+4. Existing data will be loaded from files and stored in the database
+
+### Performance Considerations
+
+- **Connection Pooling**: Adjust `pool_size` based on expected concurrent users
+- **Indexing**: Database tables include appropriate indexes for common queries
+- **Backup**: Regular database backups are recommended for production use
+
 ## Assignment Strategies
 
 Potato supports multiple strategies for assigning items to annotators.
