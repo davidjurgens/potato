@@ -1495,6 +1495,10 @@ def update_instance():
     """
     PRIMARY ANNOTATION ENDPOINT: Handle all annotation updates for instances.
     This endpoint only updates backend state for spans and labels. It does not generate or return any HTML.
+
+    Supports two formats:
+    1. Frontend format: {"instance_id": "...", "annotations": {...}, "span_annotations": [...]}
+    2. Backend format: {"instance_id": "...", "schema": "...", "state": [...], "type": "..."}
     """
     logger.debug("=== UPDATEINSTANCE ROUTE START ===")
     logger.debug(f"Session: {dict(session)}")
@@ -1510,41 +1514,80 @@ def update_instance():
     if request.is_json:
         logger.debug(f"Received JSON data: {request.json}")
         instance_id = str(request.json.get("instance_id"))  # Normalize to string
-        schema_name = request.json.get("schema")
-        schema_state = request.json.get("state")
-        annotation_type = request.json.get("type")
         username = session['username']
         user_state = get_user_state(username)
         if not user_state:
             logger.error(f"User state not found for user: {username}")
             return jsonify({"status": "error", "message": "User state not found"})
 
-        if annotation_type == "span":
-            for sv in schema_state:
-                span = SpanAnnotation(schema_name, sv["name"], sv.get("title", sv["name"]), int(sv["start"]), int(sv["end"]))
-                value = sv["value"]
-                if value is None:
-                    if instance_id in user_state.instance_id_to_span_to_value:
-                        spans_to_remove = []
-                        for existing_span in user_state.instance_id_to_span_to_value[instance_id]:
-                            if (existing_span.get_schema() == span.get_schema() and
-                                existing_span.get_name() == span.get_name() and
-                                existing_span.get_start() == span.get_start() and
-                                existing_span.get_end() == span.get_end()):
-                                spans_to_remove.append(existing_span)
-                        for span_to_remove in spans_to_remove:
-                            del user_state.instance_id_to_span_to_value[instance_id][span_to_remove]
-                else:
-                    if instance_id not in user_state.instance_id_to_span_to_value:
-                        user_state.instance_id_to_span_to_value[instance_id] = {}
-                    user_state.add_span_annotation(instance_id, span, value)
-        elif annotation_type == "label":
-            for sv in schema_state:
-                label = Label(schema_name, sv["name"])
-                value = sv["value"]
-                user_state.add_label_annotation(instance_id, label, value)
+        # Check if this is the frontend format (annotations, span_annotations)
+        if "annotations" in request.json:
+            logger.debug("Processing frontend format (annotations, span_annotations)")
+
+            # Handle label annotations from frontend format
+            annotations = request.json.get("annotations", {})
+            for key, value in annotations.items():
+                if ":" in key:
+                    schema_name, label_name = key.split(":", 1)
+                    label = Label(schema_name, label_name)
+                    user_state.add_label_annotation(instance_id, label, value)
+                    logger.debug(f"Added label annotation: {schema_name}:{label_name} = {value}")
+
+            # Handle span annotations from frontend format
+            span_annotations = request.json.get("span_annotations", [])
+            for span_data in span_annotations:
+                if isinstance(span_data, dict) and "schema" in span_data:
+                    span = SpanAnnotation(
+                        span_data["schema"],
+                        span_data["name"],
+                        span_data.get("title", span_data["name"]),
+                        int(span_data["start"]),
+                        int(span_data["end"])
+                    )
+                    value = span_data.get("value")
+                    if value is not None:
+                        user_state.add_span_annotation(instance_id, span, value)
+                        logger.debug(f"Added span annotation: {span_data}")
+
+        # Check if this is the backend format (schema, state, type)
+        elif "schema" in request.json and "state" in request.json and "type" in request.json:
+            logger.debug("Processing backend format (schema, state, type)")
+
+            schema_name = request.json.get("schema")
+            schema_state = request.json.get("state")
+            annotation_type = request.json.get("type")
+
+            if annotation_type == "span":
+                for sv in schema_state:
+                    span = SpanAnnotation(schema_name, sv["name"], sv.get("title", sv["name"]), int(sv["start"]), int(sv["end"]))
+                    value = sv["value"]
+                    if value is None:
+                        if instance_id in user_state.instance_id_to_span_to_value:
+                            spans_to_remove = []
+                            for existing_span in user_state.instance_id_to_span_to_value[instance_id]:
+                                if (existing_span.get_schema() == span.get_schema() and
+                                    existing_span.get_name() == span.get_name() and
+                                    existing_span.get_start() == span.get_start() and
+                                    existing_span.get_end() == span.get_end()):
+                                    spans_to_remove.append(existing_span)
+                            for span_to_remove in spans_to_remove:
+                                del user_state.instance_id_to_span_to_value[instance_id][span_to_remove]
+                        else:
+                            if instance_id not in user_state.instance_id_to_span_to_value:
+                                user_state.instance_id_to_span_to_value[instance_id] = {}
+                            user_state.add_span_annotation(instance_id, span, value)
+            elif annotation_type == "label":
+                for sv in schema_state:
+                    label = Label(schema_name, sv["name"])
+                    value = sv["value"]
+                    user_state.add_label_annotation(instance_id, label, value)
+        else:
+            logger.warning("Unknown data format in /updateinstance")
+            return jsonify({"status": "error", "message": "Unknown data format"})
+
         # Save state
         get_user_state_manager().save_user_state(user_state)
+        logger.debug(f"User state saved for {username}")
         return jsonify({"status": "success"})
     else:
         logger.warning("Update instance called without JSON data")

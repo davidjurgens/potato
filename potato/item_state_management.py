@@ -101,24 +101,24 @@ class Label:
     '''A utility class for representing a single label in any annotation scheme. Labels
        may have a integer value (likert), a string value (text), or a boolean value (binary).
        Span annotations are represented with a different class.'''
-    def __init__(self, schema: str, label_name: str):
+    def __init__(self, schema: str, name: str):
         self.schema = schema
-        self.label_name = label_name
+        self.name = name
 
     def get_schema(self):
         return self.schema
 
     def get_name(self):
-        return self.label_name
+        return self.name
 
     def __str__(self):
-        return f"Label(schema:{self.schema}, name:{self.label_name})"
+        return f"Label(schema:{self.schema}, name:{self.name})"
 
     def __eq__(self, other):
-        return self.schema == other.schema and self.label_name == other.label_name
+        return self.schema == other.schema and self.name == other.name
 
     def __hash__(self):
-        return hash((self.schema, self.label_name))
+        return hash((self.schema, self.name))
 
 class SpanAnnotation:
     '''A utility class for representing a single span annotation in any annotation scheme. Spans
@@ -158,11 +158,17 @@ class SpanAnnotation:
         return f"SpanAnnotation(schema:{self.schema}, name:{self.name}, start:{self.start}, end:{self.end}, id:{self._id})"
 
     def __eq__(self, other):
-        return self.schema == other.schema and self.start == other.start and self.end == other.end \
+        return (
+            isinstance(other, SpanAnnotation)
+            and self.schema == other.schema
             and self.name == other.name
+            and self.title == other.title
+            and self.start == other.start
+            and self.end == other.end
+        )
 
     def __hash__(self):
-        return hash((self.schema, self.start, self.end, self.name))
+        return hash((self.schema, self.name, self.title, self.start, self.end))
 
 class AssignmentStrategy(Enum):
     RANDOM = 'random'
