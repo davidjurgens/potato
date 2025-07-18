@@ -1,0 +1,39 @@
+port: 9010
+server_name: potato pure display annotation test
+annotation_task_name: Pure Display Annotation Test
+debug: true
+task_dir: output/pure-display-annotation
+output_annotation_dir: output/pure-display-annotation
+output_annotation_format: json
+annotation_codebook_url: ''
+max_annotations_per_user: 10
+assignment_strategy: fixed_order
+data_files:
+- ../data/test_data.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: pure_display
+  name: instructions
+  description: Task Instructions
+  labels:
+  - "Please read the following text carefully."
+  - "Consider the context and meaning of the content."
+  - "You will be asked to provide annotations in the next step."
+  - "Take your time to understand the material."
+- annotation_type: pure_display
+  name: guidelines
+  description: Annotation Guidelines
+  labels:
+  - "Be consistent in your annotations."
+  - "Consider the overall context."
+  - "If unsure, use your best judgment."
+  - "You can always go back to previous items."
+site_dir: default
+customjs: null
+customjs_hostname: null

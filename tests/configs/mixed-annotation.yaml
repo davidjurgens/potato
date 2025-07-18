@@ -1,0 +1,77 @@
+port: 9010
+server_name: potato mixed annotation test
+annotation_task_name: Mixed Annotation Types Test
+debug: true
+task_dir: output/mixed-annotation
+output_annotation_dir: output/mixed-annotation
+output_annotation_format: json
+annotation_codebook_url: ''
+max_annotations_per_user: 10
+assignment_strategy: fixed_order
+data_files:
+- ../data/test_data.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: radio
+  name: sentiment
+  description: What kind of sentiment does the given text hold?
+  labels:
+  - positive
+  - neutral
+  - negative
+  sequential_key_binding: true
+- annotation_type: multiselect
+  name: topics
+  description: What topics are mentioned in the text? (Select all that apply)
+  labels:
+  - politics
+  - technology
+  - sports
+  - entertainment
+  - science
+  sequential_key_binding: true
+- annotation_type: likert
+  name: quality
+  description: How would you rate the quality of this text?
+  min_label: Very Poor
+  max_label: Excellent
+  size: 5
+  sequential_key_binding: true
+- annotation_type: text
+  name: comments
+  description: Any additional comments about this text?
+  multiline: true
+  rows: 3
+  cols: 50
+- annotation_type: slider
+  name: confidence
+  description: How confident are you in your assessment?
+  min: 0
+  max: 10
+  step: 1
+  min_label: Not Confident
+  max_label: Very Confident
+- annotation_type: select
+  name: category
+  description: 'Select the most appropriate category:'
+  labels:
+  - News
+  - Opinion
+  - Review
+  - Tutorial
+  - Story
+- annotation_type: number
+  name: readability
+  description: 'Rate readability on a scale of 1-10:'
+  min: 1
+  max: 10
+  step: 1
+site_dir: default
+customjs: null
+customjs_hostname: null

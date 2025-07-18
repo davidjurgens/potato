@@ -5,35 +5,42 @@ Span Layout
 import logging
 from collections.abc import Mapping
 from collections import defaultdict
-from server_utils.config_module import config
+from potato.server_utils.config_module import config
+from .identifier_utils import (
+    safe_generate_layout,
+    generate_element_identifier,
+    generate_element_value,
+    generate_validation_attribute,
+    escape_html_content
+)
 
-from item_state_management import SpanAnnotation
+from potato.item_state_management import SpanAnnotation
 
 logger = logging.getLogger(__name__)
 
 SPAN_COLOR_PALETTE = [
-    "(230, 25, 75)",
-    "(60, 180, 75)",
-    "(255, 225, 25)",
-    "(0, 130, 200)",
-    "(245, 130, 48)",
-    "(145, 30, 180)",
-    "(70, 240, 240)",
-    "(240, 50, 230)",
-    "(210, 245, 60)",
-    "(250, 190, 212)",
-    "(0, 128, 128)",
-    "(220, 190, 255)",
-    "(170, 110, 40)",
-    "(255, 250, 200)",
-    "(128, 0, 0)",
-    "(170, 255, 195)",
-    "(128, 128, 0)",
-    "(255, 215, 180)",
-    "(0, 0, 128)",
-    "(128, 128, 128)",
-    "(255, 255, 255)",
-    "(0, 0, 0)",
+    "(110, 86, 207)",   # Primary purple #6E56CF
+    "(239, 68, 68)",    # Destructive red #EF4444
+    "(113, 113, 122)",  # Gray #71717A
+    "(245, 158, 11)",   # Amber #F59E0B
+    "(16, 185, 129)",   # Success green #10B981
+    "(59, 130, 246)",   # Blue #3B82F6
+    "(220, 38, 38)",    # Red #DC2626
+    "(139, 92, 246)",   # Purple #8B5CF6
+    "(156, 163, 175)",  # Light gray #9CA3AF
+    "(107, 114, 128)",  # Medium gray #6B7280
+    "(55, 65, 81)",     # Dark gray #374151
+    "(249, 115, 22)",   # Orange #F97316
+    "(6, 182, 212)",    # Cyan #06B6D4
+    "(236, 72, 153)",   # Pink #EC4899
+    "(5, 150, 105)",    # Dark green #059669
+    "(124, 58, 237)",   # Violet #7C3AED
+    "(22, 163, 74)",    # Green #16A34A
+    "(234, 88, 12)",    # Dark orange #EA580C
+    "(37, 99, 235)",    # Blue #2563EB
+    "(127, 29, 29)",    # Dark red #7F1D1D
+    "(168, 85, 247)",   # Purple #A855F7
+    "(34, 197, 94)",    # Green #22C55E
 ]
 
 span_counter = 0
@@ -87,234 +94,16 @@ def set_span_color(schema, span_label, color):
 
     span_colors[schema][span_label] = color
 
-def render_span_annotations(text, span_annotations: list[SpanAnnotation]):
-
-    rev_order_sa = sorted(span_annotations, key=lambda d: d.get_start(), reverse=True)
-
-    print('rev_order_sa: ', rev_order_sa)
-
-    ann_wrapper = (
-        '<span class="span_container" selection_label="{annotation}" '
-        + 'schema="{schema}" style="background-color:rgb{bg_color};">'
-        + "{span}"
-        + '<div class="span_label" schema="{schema}" name="{annotation}" '
-        + 'style="background-color:white;border:2px solid rgb{color};">'
-        + "{annotation_title}</div>"
-        + "<div class=\"span_close\" style=\"background-color:white;\""
-         " onclick=\"deleteSpanAnnotation(this, {schema}, {annotation}, {annotation_title}, {start}, {end});\">×</div>"
-        + "</span>"
-    )
-    for a in rev_order_sa:
-
-        # Spans are colored according to their order in the list and we need to
-        # retrofit the color
-        color = get_span_color(a.get_schema(), a.get_name())
-        if color is None:
-            # Default to gray if no color is found
-            color = "(128, 128, 128)"
-        # The color is an RGB triple like (1,2,3)
-        # Convert to hex with alpha for background if test expects it
-        rgb = tuple(int(x.strip()) for x in color.strip("() ").split(","))
-        hex_color = '#{:02x}{:02x}{:02x}80'.format(*rgb)  # 80 = 50% alpha
-        # For border, use rgb as before
-        bg_color = hex_color
-
-        # The text above the span is its title and we display whatever its set to
-        annotation_title= a.get_title()
-
-        print(text, a)
-        span = text[a.get_start():a.get_end()]
-
-        ann = (
-            f'<span class="span-highlight" selection_label="{a.get_name()}" '
-            f'data-label="{a.get_name()}" '
-            f'schema="{a.get_schema()}" style="background-color: {bg_color};" data-annotation-id="{a.get_id()}">'  # new attribute
-            f'{span}'
-            f'<div class="span_label" schema="{a.get_schema()}" name="{a.get_name()}" '
-            f'style="background-color:white;border:2px solid rgb{color};">'
-            f'{annotation_title}</div>'
-            f'<div class="span_close" style="background-color:white;"'
-            f' onclick="deleteSpanAnnotation(this, {a.get_schema()}, {a.get_name()}, {annotation_title}, {a.get_start()}, {a.get_end()});">×</div>'
-            f'</span>'
-        )
-        text = text[:a.get_start()] + ann + text[a.get_end():]
-
-    return text
-
-def render_span_annotations_old(text, span_annotations):
+def _generate_span_layout_internal(annotation_scheme, horizontal=False):
     """
-    Retuns a modified version of the text with span annotation overlays inserted
-    into the text.
-
-    :text: some instance to be annotated
-    :span_annotations: annotations already made by the user that need to be
-       re-inserted into the text
-    """
-    # This code is synchronized with the javascript function
-    # surroundSelection(selectionLabel) function in base_template.html which
-    # wraps any labeled text with a <div> element indicating its label. We
-    # replicate this code here (in python).
-    #
-    # This synchrony also means that any changes to the UI code for rendering
-    # need to be updated here too.
-
-    # We need to go in reverse order to make the string update in the right
-    # places, so make sure things are ordered in reverse of start
-
-    rev_order_sa = sorted(span_annotations, key=lambda d: d["start"], reverse=True)
-
-    ann_wrapper = (
-        '<span class="span_container" selection_label="{annotation}" '
-        + 'schema="{schema}" style="background-color:rgb{bg_color};">'
-        + "{span}"
-        + '<div class="span_label" schema="{schema}" name="{annotation}" '
-        + 'style="background-color:white;border:2px solid rgb{color};">'
-        + "{annotation_title}</div></span>"
-    )
-    for a in rev_order_sa:
-
-        # Spans are colored according to their order in the list and we need to
-        # retrofit the color
-        color = get_span_color(a["annotation"])
-        # The color is an RGB triple like (1,2,3) and we want the background for
-        # the text to be somewhat transparent so we switch to RGBA for bg
-        bg_color = color.replace(")", ",0.25)")
-
-        # The text above the span is its title and we display whatever its set to
-        annotation_title= a["annotation_title"]
-
-        ann = ann_wrapper.format(
-            annotation=a["annotation"], annotation_title=annotation_title,
-            span=a["span"], color=color, bg_color=bg_color, schema=a["schema"]
-        )
-        print(text, a)
-        text = text[: a["start"]] + ann + text[a["end"] :]
-
-    return text
-
-
-def generate_span_layout(annotation_scheme, horizontal=False):
-    """
-    Generate HTML for a span selection interface.
-
-    Args:
-        annotation_scheme (dict): Configuration including:
-            - name: Schema identifier
-            - description: Display description
-            - labels: List of label options for spans
-            - sequential_key_binding: Enable numeric key bindings
-            - displaying_score: Show numeric values with labels
-            - bad_text_label: Optional configuration for invalid text option
-            - tooltip: Optional hover text description
-
-    Returns:
-        tuple: (html_string, key_bindings)
-            html_string: Complete HTML for the span interface
-            key_bindings: List of (key, description) tuples for keyboard shortcuts
+    Internal function to generate span layout after validation.
     """
     # Initialize form wrapper
     scheme_name = annotation_scheme["name"]
-    name = scheme_name
-    class_name = scheme_name
     schematic = f"""
-    <style>
-        .shadcn-span-container {{
-            display: flex;
-            flex-direction: column;
-            width: 100%;
-            max-width: 100%;
-            margin: 1rem auto;
-            font-family: ui-sans-serif, system-ui, sans-serif;
-        }}
-
-        .shadcn-span-title {{
-            font-size: 1rem;
-            font-weight: 500;
-            color: var(--heading-color);
-            margin-bottom: 1rem;
-            text-align: left;
-            width: 100%;
-        }}
-
-        .shadcn-span-options {{
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-            gap: 0.75rem;
-            width: 100%;
-        }}
-
-        .shadcn-span-option {{
-            display: flex;
-            align-items: center;
-        }}
-
-        .shadcn-span-checkbox {{
-            appearance: none;
-            width: 1rem;
-            height: 1rem;
-            border-radius: 0.25rem;
-            border: 1px solid var(--border);
-            background-color: var(--background);
-            cursor: pointer;
-            margin-right: 0.5rem;
-            transition: var(--transition);
-            position: relative;
-        }}
-
-        .shadcn-span-checkbox:checked {{
-            background-color: var(--primary);
-            border-color: var(--primary);
-        }}
-
-        .shadcn-span-checkbox:checked::after {{
-            content: '';
-            position: absolute;
-            width: 0.3rem;
-            height: 0.5rem;
-            border: solid white;
-            border-width: 0 2px 2px 0;
-            top: 45%;
-            left: 50%;
-            transform: translate(-50%, -50%) rotate(45deg);
-        }}
-
-        .shadcn-span-checkbox:focus {{
-            outline: none;
-            border-color: var(--ring);
-            box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
-        }}
-
-        .shadcn-span-checkbox:hover {{
-            border-color: var(--primary);
-        }}
-
-        .shadcn-span-label {{
-            font-size: 0.875rem;
-            color: var(--foreground);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-        }}
-
-        .shadcn-span-label span {{
-            padding: 0.25rem 0.5rem;
-            border-radius: var(--radius);
-            display: inline-block;
-        }}
-
-        .shadcn-span-bad-text {{
-            margin-top: 1rem;
-        }}
-
-        [data-toggle="tooltip"] {{
-            position: relative;
-            cursor: help;
-        }}
-    </style>
-
-    <form id="{name}" class="annotation-form span shadcn-span-container" action="/action_page.php">
-        <fieldset schema="{scheme_name}">
-            <legend class="shadcn-span-title">{annotation_scheme["description"]}</legend>
+    <form id="{escape_html_content(scheme_name)}" class="annotation-form span shadcn-span-container" action="/action_page.php">
+        <fieldset schema="{escape_html_content(scheme_name)}">
+            <legend class="shadcn-span-title">{escape_html_content(annotation_scheme["description"])}</legend>
             <div class="shadcn-span-options">
     """
 
@@ -330,7 +119,7 @@ def generate_span_layout(annotation_scheme, horizontal=False):
     span_title = annotation_scheme.get("title", "")
 
     # Setup validation
-    validation = ""
+    validation = generate_validation_attribute(annotation_scheme)
     span_color = "var(--primary-color)"
 
     # Generate checkbox inputs for each label
@@ -338,7 +127,7 @@ def generate_span_layout(annotation_scheme, horizontal=False):
         # Extract label information
         if isinstance(label_data, str):
             label = label_data
-            key_value = str(i)
+            key_value = label  # Use label name as value
             tooltip = ""
         else:
             label = label_data["name"]
@@ -366,7 +155,7 @@ def generate_span_layout(annotation_scheme, horizontal=False):
             key_value = str(i % 10)
             key2label[key_value] = label
             label2key[label] = key_value
-            key_bindings.append((key_value, f"{class_name}: {label}"))
+            key_bindings.append((key_value, f"{scheme_name}: {label}"))
 
         # Format label content
         if "displaying_score" in annotation_scheme and annotation_scheme["displaying_score"]:
@@ -375,20 +164,23 @@ def generate_span_layout(annotation_scheme, horizontal=False):
             label_content = label
 
         # Generate name with span prefix so ingestion code can skip this
-        name_with_span = f"span_label:::{name}"
+        name_with_span = f"span_label:::{scheme_name}"
+
+        # Use label as title if span_title is empty
+        effective_title = span_title if span_title else label
 
         schematic += f"""
             <div class="shadcn-span-option">
-                <input class="{class_name} shadcn-span-checkbox"
+                <input class="{escape_html_content(scheme_name)} shadcn-span-checkbox"
                        for_span="true"
                        type="checkbox"
-                       id="{name}"
-                       name="{name_with_span}"
-                       value="{key_value}"
-                       onclick="onlyOne(this); changeSpanLabel(this, '{scheme_name}', '{label}', '{span_title}', '{span_color}');"
+                       id="{escape_html_content(scheme_name)}_{escape_html_content(label)}"
+                       name="{escape_html_content(name_with_span)}"
+                       value="{escape_html_content(key_value)}"
+                       onclick="onlyOne(this); changeSpanLabel(this, '{escape_html_content(scheme_name)}', '{escape_html_content(label)}', '{escape_html_content(effective_title)}', '{escape_html_content(span_color)}');"
                        validation="{validation}">
-                <label for="{name}" class="shadcn-span-label" {tooltip}>
-                    <span style="background-color:rgb{span_color.replace(')', ',0.25)')};">{label_content}</span>
+                <label for="{escape_html_content(scheme_name)}_{escape_html_content(label)}" class="shadcn-span-label" {tooltip}>
+                    <span style="background-color:rgb{span_color.replace(')', ',0.4)')};">{escape_html_content(label_content)}</span>
                 </label>
             </div>
         """
@@ -397,20 +189,20 @@ def generate_span_layout(annotation_scheme, horizontal=False):
 
     # Add optional bad text option
     if "label_content" in annotation_scheme.get("bad_text_label", {}):
-        name = f"{annotation_scheme['name']}:::bad_text"
+        bad_text_identifiers = generate_element_identifier(annotation_scheme['name'], "bad_text", "checkbox")
 
         schematic += f"""
             <div class="shadcn-span-bad-text">
-                <input class="{class_name} shadcn-span-checkbox"
+                <input class="{bad_text_identifiers['schema']} shadcn-span-checkbox"
                        for_span="true"
                        type="checkbox"
-                       id="{name}"
-                       name="{name}"
+                       id="{bad_text_identifiers['id']}"
+                       name="{bad_text_identifiers['name']}"
                        value="0"
                        onclick="onlyOne(this)"
                        validation="{validation}">
-                <label for="{name}" class="shadcn-span-label">
-                    {annotation_scheme["bad_text_label"]["label_content"]}
+                <label for="{bad_text_identifiers['id']}" class="shadcn-span-label">
+                    {escape_html_content(annotation_scheme["bad_text_label"]["label_content"])}
                 </label>
             </div>
         """
@@ -421,8 +213,114 @@ def generate_span_layout(annotation_scheme, horizontal=False):
             and len(annotation_scheme["labels"]) <= 10
         ):
             key_bindings.append(
-                (0, f"{class_name}: {annotation_scheme['bad_text_label']['label_content']}")
+                (0, f"{scheme_name}: {annotation_scheme['bad_text_label']['label_content']}")
             )
 
     schematic += "</fieldset></form>"
     return schematic, key_bindings
+
+def _generate_tooltip(label_data):
+    """
+    Generate tooltip HTML attribute from label data.
+
+    Args:
+        label_data (dict): Label configuration containing tooltip information
+
+    Returns:
+        str: Tooltip HTML attribute or empty string if no tooltip
+    """
+    tooltip_text = ""
+    if "tooltip" in label_data:
+        tooltip_text = label_data["tooltip"]
+    elif "tooltip_file" in label_data:
+        try:
+            with open(label_data["tooltip_file"], "rt") as f:
+                tooltip_text = "".join(f.readlines())
+        except Exception as e:
+            logger.error(f"Failed to read tooltip file: {e}")
+            return ""
+
+    if tooltip_text:
+        escaped_tooltip = escape_html_content(tooltip_text)
+        return f'data-toggle="tooltip" data-html="true" data-placement="top" title="{escaped_tooltip}"'
+    return ""
+
+
+def generate_span_layout(annotation_scheme, horizontal=False):
+    """
+    Generate span layout HTML for the given annotation scheme.
+
+    Args:
+        annotation_scheme (dict): The annotation scheme configuration
+        horizontal (bool): Whether to display horizontally
+
+    Returns:
+        tuple: (HTML string, key bindings list)
+    """
+    return safe_generate_layout(annotation_scheme, _generate_span_layout_internal, horizontal)
+
+
+def render_span_annotations(text, span_annotations):
+    """
+    Render span annotations into HTML with boundary-based algorithm.
+
+    Args:
+        text (str): The original text to annotate
+        span_annotations (list): List of SpanAnnotation objects
+
+    Returns:
+        str: HTML with span annotations rendered
+    """
+    if not span_annotations:
+        return text
+
+    # Sort annotations by start position
+    sorted_spans = sorted(span_annotations, key=lambda x: x.get_start())
+
+    # Create boundary points
+    boundaries = []
+    for span in sorted_spans:
+        boundaries.append((span.get_start(), 'start', span))
+        boundaries.append((span.get_end(), 'end', span))
+
+    # Sort boundaries by position
+    boundaries.sort(key=lambda x: x[0])
+
+    # Build the rendered text
+    result = ""
+    current_pos = 0
+    active_spans = []
+
+    for pos, boundary_type, span in boundaries:
+        # Add text before this boundary
+        if pos > current_pos:
+            result += text[current_pos:pos]
+
+        if boundary_type == 'start':
+            # Start a new span
+            active_spans.append(span)
+            # Get color for this span
+            color = get_span_color(span.get_schema(), span.get_name())
+            if not color:
+                color = "(128, 128, 128)"  # Default gray
+
+            # Convert RGB to hex with alpha
+            color_parts = color.strip("()").split(", ")
+            r, g, b = int(color_parts[0]), int(color_parts[1]), int(color_parts[2])
+            hex_color = f"#{r:02x}{g:02x}{b:02x}66"  # 66 = 40% alpha to match label background
+
+            result += f'<span class="span-highlight" data-annotation-id="{span.get_id()}" data-label="{span.get_name()}" schema="{span.get_schema()}" style="background-color: {hex_color};">'
+
+        elif boundary_type == 'end':
+            # End the span
+            result += "</span>"
+            # Remove from active spans
+            active_spans = [s for s in active_spans if s.get_id() != span.get_id()]
+
+        current_pos = pos
+
+    # Add remaining text
+    if current_pos < len(text):
+        result += text[current_pos:]
+
+    return result

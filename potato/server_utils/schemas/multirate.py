@@ -14,156 +14,17 @@ import logging
 import os
 from collections.abc import Mapping
 from jinja2 import Template
+from .identifier_utils import (
+    safe_generate_layout,
+    generate_element_identifier,
+    generate_validation_attribute,
+    escape_html_content
+)
 
 logger = logging.getLogger(__name__)
 
 # HTML template using Jinja2 with comprehensive styling that preserves horizontal layout
 MULTIRATE_TEMPLATE = """
-<style>
-    /* Container styling */
-    .shadcn-multirate-container {
-        font-family: ui-sans-serif, system-ui, sans-serif;
-        margin: 1rem auto;
-        max-width: 100%;
-        overflow-x: auto;
-        color: #374151;
-    }
-
-    .shadcn-multirate-title {
-        font-size: 1rem;
-        font-weight: 500;
-        margin-bottom: 0.5rem;
-        color: #f3f4f6;
-    }
-
-    /* Table styling */
-    .shadcn-multirate-table {
-        border-collapse: collapse;
-        width: 100%;
-        border: 1px solid #e5e7eb;
-        border-radius: 6px;
-    }
-
-    .shadcn-multirate-table th,
-    .shadcn-multirate-table td {
-        padding: 0.75rem 1rem;
-        text-align: center;
-        border-bottom: 1px solid #e5e7eb;
-        font-size: 0.875rem;
-    }
-
-    .shadcn-multirate-table th {
-        background-color: #f9fafb;
-        font-weight: 500;
-        color: #6b7280;
-    }
-
-    .shadcn-multirate-table thead th:first-child,
-    .shadcn-multirate-table tbody td:first-child {
-        text-align: left;
-        font-weight: 500;
-        min-width: 180px;
-        max-width: 300px;
-    }
-
-    .shadcn-multirate-table tbody tr:hover {
-        background-color: #f9fafb;
-    }
-
-    /* Radio button styling */
-    .shadcn-multirate-radio {
-        appearance: none;
-        -webkit-appearance: none;
-        width: 1.25rem;
-        height: 1.25rem;
-        border-radius: 50%;
-        border: 2px solid #d1d5db;
-        background-color: #fff;
-        cursor: pointer;
-        margin: 0 auto;
-        vertical-align: middle;
-        position: relative;
-        transition: all 0.2s ease;
-    }
-
-    .shadcn-multirate-radio:checked {
-        border-color: #3b82f6;
-        background-color: #3b82f6;
-    }
-
-    .shadcn-multirate-radio:checked::after {
-        content: '';
-        position: absolute;
-        width: 0.5rem;
-        height: 0.5rem;
-        border-radius: 50%;
-        background-color: white;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-    }
-
-    .shadcn-multirate-radio:hover:not(:checked) {
-        border-color: #3b82f6;
-    }
-
-    .shadcn-multirate-radio:focus {
-        outline: none;
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
-    }
-
-    /* Radio cell styling */
-    .shadcn-radio-cell {
-        text-align: center;
-    }
-
-    /* Tooltip styling */
-    [data-toggle="tooltip"] {
-        cursor: help;
-        border-bottom: 1px dotted #6b7280;
-        position: relative;
-    }
-
-    /* Responsive design for smaller screens */
-    @media (max-width: 768px) {
-        .shadcn-multirate-table th,
-        .shadcn-multirate-table td {
-            padding: 0.5rem;
-            font-size: 0.75rem;
-        }
-
-        .shadcn-multirate-table thead th:first-child,
-        .shadcn-multirate-table tbody td:first-child {
-            min-width: 120px;
-        }
-    }
-
-    /* Print styling */
-    @media print {
-        .shadcn-multirate-container {
-            margin: 0;
-            width: 100%;
-        }
-
-        .shadcn-multirate-table {
-            border: 1px solid #000;
-        }
-
-        .shadcn-multirate-table th,
-        .shadcn-multirate-table td {
-            border-bottom: 1px solid #000;
-        }
-
-        .shadcn-multirate-radio {
-            border: 2px solid #000;
-        }
-
-        .shadcn-multirate-radio:checked {
-            background-color: #000;
-        }
-    }
-</style>
-
 <form id="{{ schema_name }}" class="annotation-form multirate shadcn-multirate-container" action="/action_page.php">
     <fieldset schema="{{ schema_name }}">
         <legend class="shadcn-multirate-title">{{ description }}</legend>
@@ -188,11 +49,13 @@ MULTIRATE_TEMPLATE = """
                                     <td class="shadcn-radio-cell">
                                         <input name="{{ item.name }}"
                                                type="radio"
-                                               id="{{ item.name }}.{{ rating }}"
+                                               id="{{ item.id }}.{{ rating }}"
                                                value="{{ rating }}"
                                                onclick="this.blur();"
                                                validation="{{ validation }}"
-                                               class="shadcn-multirate-radio"
+                                               class="shadcn-multirate-radio annotation-input"
+                                               schema="{{ schema_name }}"
+                                               label_name="{{ item.label_name }}"
                                                aria-label="{{ item.label }}: {{ rating }}" />
                                     </td>
                                 {% endfor %}
@@ -230,6 +93,12 @@ def generate_multirate_layout(annotation_scheme):
             html_string: Complete HTML for the multirate interface
             key_bindings: List of (key, description) tuples for keyboard shortcuts
     """
+    return safe_generate_layout(annotation_scheme, _generate_multirate_layout_internal)
+
+def _generate_multirate_layout_internal(annotation_scheme):
+    """
+    Internal function to generate multirate layout after validation.
+    """
     logger.debug(f"Generating multirate layout for schema: {annotation_scheme['name']}")
 
     # Extract configuration
@@ -243,23 +112,27 @@ def generate_multirate_layout(annotation_scheme):
     num_columns = display_config.get('num_columns', 1)
 
     # Set validation
-    validation = ""
-    if annotation_scheme.get('label_requirement', {}).get('required'):
-        validation = "required"
+    validation = generate_validation_attribute(annotation_scheme)
 
     # Preprocess items for template
     processed_items = []
     for option in options:
         if isinstance(option, str):
+            identifiers = generate_element_identifier(schema_name, option, "radio")
             processed_items.append({
-                'label': option,
-                'name': f"{schema_name}:::{option}",
+                'label': escape_html_content(option),
+                'name': identifiers['name'],
+                'id': identifiers['id'],
+                'label_name': identifiers['label_name'],
                 'tooltip': ""
             })
         else:
+            identifiers = generate_element_identifier(schema_name, option['name'], "radio")
             processed_items.append({
-                'label': option['label'],
-                'name': f"{schema_name}:::{option['name']}",
+                'label': escape_html_content(option['label']),
+                'name': identifiers['name'],
+                'id': identifiers['id'],
+                'label_name': identifiers['label_name'],
                 'tooltip': _generate_tooltip(option)
             })
 
@@ -271,9 +144,9 @@ def generate_multirate_layout(annotation_scheme):
 
     # Format template data
     template_data = {
-        'schema_name': schema_name,
-        'description': description,
-        'ratings': ratings,
+        'schema_name': escape_html_content(schema_name),
+        'description': escape_html_content(description),
+        'ratings': [escape_html_content(rating) for rating in ratings],
         'num_headers': min(len(options), num_columns),
         'rows': arranged_items,
         'validation': validation
@@ -355,7 +228,6 @@ def _generate_tooltip(label_data):
         str: Tooltip HTML attribute or empty string if no tooltip
     """
     tooltip_text = ""
-
     if "tooltip" in label_data:
         tooltip_text = label_data["tooltip"]
     elif "tooltip_file" in label_data:
@@ -367,5 +239,6 @@ def _generate_tooltip(label_data):
             return ""
 
     if tooltip_text:
-        return f'data-toggle="tooltip" data-html="true" data-placement="top" title="{tooltip_text}"'
+        escaped_tooltip = escape_html_content(tooltip_text)
+        return f'data-toggle="tooltip" data-html="true" data-placement="top" title="{escaped_tooltip}"'
     return ""

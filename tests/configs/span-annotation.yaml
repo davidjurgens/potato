@@ -1,0 +1,50 @@
+annotation_task_name: "Span Annotation Test"
+task_dir: "output/span-annotation"
+output_annotation_dir: "output/span-annotation"
+output_annotation_format: "jsonl"
+max_annotations_per_user: 10
+assignment_strategy: "fixed_order"
+data_files:
+  - "../data/test_data.json"
+item_properties:
+  id_key: "id"
+  text_key: "text"
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+  - annotation_type: "highlight"
+    name: "emotion"
+    description: "Highlight which phrases express different emotions in the text"
+    labels:
+      - "happy"
+      - "sad"
+      - "angry"
+      - "surprised"
+      - "neutral"
+    sequential_key_binding: true
+  - annotation_type: "highlight"
+    name: "intensity"
+    description: "Highlight phrases that indicate the intensity of emotions"
+    labels:
+      - "low"
+      - "medium"
+      - "high"
+    sequential_key_binding: true
+ui:
+  spans:
+    span_colors:
+      emotion:
+        happy: "(255, 230, 230)"
+        sad: "(230, 243, 255)"
+        angry: "(255, 230, 204)"
+        surprised: "(230, 255, 230)"
+        neutral: "(240, 240, 240)"
+      intensity:
+        low: "(245, 245, 245)"
+        medium: "(200, 200, 200)"
+        high: "(150, 150, 150)"
+site_dir: "default"
+customjs: null
+customjs_hostname: null

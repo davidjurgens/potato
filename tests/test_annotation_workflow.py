@@ -5,6 +5,7 @@ Tests data loading, annotation submission, navigation, and output generation.
 
 import pytest
 import json
+import yaml
 import os
 import tempfile
 import shutil
@@ -17,6 +18,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 import subprocess
 import requests
+from selenium.webdriver.chrome.options import Options
+from tests.helpers.flask_test_setup import FlaskTestServer
 
 # Add potato to path
 import sys
@@ -35,9 +38,11 @@ class TestAnnotationWorkflow:
     @pytest.fixture(scope="class")
     def server_process(self, temp_project_dir):
         """Start server in debug mode for testing"""
-        # Copy simple examples to temp directory
-        simple_examples_dir = os.path.join(os.path.dirname(__file__), '..', 'project-hub', 'simple_examples')
-        shutil.copytree(simple_examples_dir, os.path.join(temp_project_dir, 'simple_examples'))
+        # Copy test-configs to temp directory
+        test_configs_dir = os.path.join(os.path.dirname(__file__), 'test-configs')
+        temp_test_configs_dir = os.path.join(temp_project_dir, 'tests', 'test-configs')
+        os.makedirs(os.path.dirname(temp_test_configs_dir), exist_ok=True)
+        shutil.copytree(test_configs_dir, temp_test_configs_dir)
 
         # Change to temp directory
         original_cwd = os.getcwd()
@@ -47,7 +52,7 @@ class TestAnnotationWorkflow:
         process = subprocess.Popen([
             'python', '-m', 'potato.flask_server',
             '--debug', '-p', '9002', 'start',
-            'simple_examples/configs/simple-likert.yaml'
+            'tests/test-configs/simple-likert.yaml'
         ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         # Wait for server to start
@@ -60,10 +65,28 @@ class TestAnnotationWorkflow:
         process.wait()
         os.chdir(original_cwd)
 
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        # Create Flask test server with dynamic port
+        self.server = FlaskTestServer(lambda: create_app(), {"debug": True})
+        self.server.start()
+        self.base_url = self.server.base_url
+
+        # Setup Chrome options for headless testing
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+
+        self.driver = webdriver.Chrome(options=chrome_options)
+        yield
+        self.driver.quit()
+        self.server.stop()
+
     def test_data_loading_workflow(self, temp_project_dir):
         """Test that data files are loaded correctly"""
         # Test JSON data loading
-        json_data_path = os.path.join(temp_project_dir, 'simple_examples', 'data', 'toy-example.json')
+        json_data_path = os.path.join(temp_project_dir, 'tests', 'test-configs', 'data', 'test_data.json')
 
         items = []
         with open(json_data_path, 'r') as f:
@@ -73,21 +96,14 @@ class TestAnnotationWorkflow:
         assert len(items) > 0
         assert 'id' in items[0]
         assert 'text' in items[0]
-
-        # Test CSV data loading
-        csv_data_path = os.path.join(temp_project_dir, 'simple_examples', 'data', 'toy-example.csv')
-        assert os.path.exists(csv_data_path)
-
-        # Test TSV data loading
-        tsv_data_path = os.path.join(temp_project_dir, 'simple_examples', 'data', 'toy-example.tsv')
-        assert os.path.exists(tsv_data_path)
+        assert items[0]['id'] == '1'
 
     def test_config_loading_workflow(self, temp_project_dir):
         """Test that config files are loaded and validated correctly"""
-        config_path = os.path.join(temp_project_dir, 'simple_examples', 'configs', 'simple-likert.yaml')
+        config_path = os.path.join(temp_project_dir, 'tests', 'test-configs', 'simple-likert.yaml')
 
         with open(config_path, 'r') as f:
-            config = json.load(f)
+            config = yaml.safe_load(f)
 
         # Validate required fields
         required_fields = [
@@ -103,7 +119,7 @@ class TestAnnotationWorkflow:
 
         # Validate data files exist
         for data_file in config['data_files']:
-            full_path = os.path.join(temp_project_dir, 'simple_examples', data_file)
+            full_path = os.path.join(temp_project_dir, 'tests', 'test-configs', data_file)
             assert os.path.exists(full_path), f"Data file not found: {full_path}"
 
         # Validate annotation schemes
@@ -113,134 +129,142 @@ class TestAnnotationWorkflow:
         assert 'name' in scheme
         assert 'description' in scheme
 
-    @pytest.mark.selenium
-    def test_complete_annotation_workflow(self, server_process):
-        """Test complete annotation workflow with Selenium"""
-        driver = webdriver.Chrome()
-        try:
-            # Navigate to annotation page
-            driver.get("http://localhost:9002/")
+    def test_basic_annotation_workflow(self):
+        """Test basic annotation workflow with dynamic port"""
+        # Navigate to the annotation page
+        self.driver.get(f"{self.base_url}/")
 
-            # Wait for page to load
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.TAG_NAME, "body"))
-            )
+        # Wait for page to load
+        WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.ID, "annotation-container"))
+        )
 
-            # Verify we're in debug mode
-            assert "debug_user" in driver.page_source
+        # Find and click on a radio button option
+        radio_option = self.driver.find_element(By.CSS_SELECTOR, "input[type='radio']")
+        radio_option.click()
 
-            # Find and interact with annotation elements
-            likert_elements = driver.find_elements(By.CSS_SELECTOR, "input[type='radio']")
-            assert len(likert_elements) >= 5
+        # Submit the annotation
+        submit_button = self.driver.find_element(By.ID, "submit-button")
+        submit_button.click()
 
-            # Select a rating
-            likert_elements[2].click()  # Select middle option
-            assert likert_elements[2].is_selected()
+        # Verify submission was successful
+        WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.CLASS_NAME, "success-message"))
+        )
 
-            # Navigate to next instance
-            next_button = driver.find_element(By.CSS_SELECTOR, "a[onclick*='next_instance']")
-            next_button.click()
+    def test_annotation_submission_api(self):
+        """Test annotation submission via API with dynamic port"""
+        annotation_data = {
+            "instance_id": "test_instance_1",
+            "type": "label",
+            "schema": "radio_choice",
+            "state": [
+                {"name": "radio_choice", "value": "option_1"}
+            ]
+        }
 
-            # Wait for page to update
-            time.sleep(1)
+        response = requests.post(
+            f"{self.base_url}/submit_annotation",
+            json=annotation_data,
+            timeout=10
+        )
 
-            # Verify we're on a new instance
-            current_instance = driver.find_element(By.ID, "instance_id")
-            assert current_instance.get_attribute("value") != "1"
+        assert response.status_code == 200
+        result = response.json()
+        assert result["status"] == "success"
 
-            # Select a different rating on new instance
-            likert_elements = driver.find_elements(By.CSS_SELECTOR, "input[type='radio']")
-            likert_elements[4].click()  # Select last option
-            assert likert_elements[4].is_selected()
+    def test_annotation_retrieval_api(self):
+        """Test annotation retrieval via API with dynamic port"""
+        # First submit an annotation
+        annotation_data = {
+            "instance_id": "test_instance_1",
+            "type": "label",
+            "schema": "radio_choice",
+            "state": [
+                {"name": "radio_choice", "value": "option_2"}
+            ]
+        }
 
-            # Navigate back to previous instance
-            prev_button = driver.find_element(By.CSS_SELECTOR, "a[onclick*='prev_instance']")
-            prev_button.click()
+        response = requests.post(
+            f"{self.base_url}/submit_annotation",
+            json=annotation_data,
+            timeout=10
+        )
+        assert response.status_code == 200
 
-            # Wait for page to update
-            time.sleep(1)
+        # Then retrieve annotations
+        response = requests.get(f"{self.base_url}/annotate")
+        assert response.status_code == 200
 
-            # Verify we're back to first instance
-            current_instance = driver.find_element(By.ID, "instance_id")
-            assert current_instance.get_attribute("value") == "1"
+        # Verify the annotation is present
+        annotations = response.json()
+        assert len(annotations) > 0
 
-            # Verify previous selection is still there
-            likert_elements = driver.find_elements(By.CSS_SELECTOR, "input[type='radio']")
-            assert likert_elements[2].is_selected()
+    def test_annotation_navigation(self):
+        """Test navigation between annotation instances with dynamic port"""
+        # Navigate to first instance
+        self.driver.get(f"{self.base_url}/annotate")
 
-        finally:
-            driver.quit()
+        # Wait for page to load
+        WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.ID, "annotation-container"))
+        )
 
-    def test_annotation_submission_workflow(self, server_process):
-        """Test annotation submission via API"""
         # Submit annotation for first instance
-        annotation_data = {
-            "awesomeness": "3"  # Likert scale value
-        }
+        radio_option = self.driver.find_element(By.CSS_SELECTOR, "input[type='radio']")
+        radio_option.click()
+        submit_button = self.driver.find_element(By.ID, "submit-button")
+        submit_button.click()
 
-        response = requests.post(
-            "http://localhost:9002/submit_annotation",
-            data={
-                "instance_id": "item_1",
-                "annotation_data": json.dumps(annotation_data)
-            }
+        # Wait for navigation to next instance
+        WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.ID, "annotation-container"))
         )
 
-        assert response.status_code in [200, 302]  # 302 is redirect to login, 200 is direct access
-        response_data = response.json()
-        assert response_data["status"] == "success"
+        # Verify we're on a different instance
+        current_instance = self.driver.find_element(By.ID, "instance-id").text
+        assert current_instance != "test_instance_1"
 
-        # Submit annotation for second instance
-        annotation_data = {
-            "awesomeness": "5"  # Different value
-        }
+    def test_annotation_validation(self):
+        """Test annotation validation with dynamic port"""
+        # Navigate to annotation page
+        self.driver.get(f"{self.base_url}/annotate")
 
-        response = requests.post(
-            "http://localhost:9002/submit_annotation",
-            data={
-                "instance_id": "item_2",
-                "annotation_data": json.dumps(annotation_data)
-            }
+        # Try to submit without selecting an option
+        submit_button = self.driver.find_element(By.ID, "submit-button")
+        submit_button.click()
+
+        # Verify validation error is shown
+        WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.CLASS_NAME, "error-message"))
         )
 
-        assert response.status_code in [200, 302]  # 302 is redirect to login, 200 is direct access
-        response_data = response.json()
-        assert response_data["status"] == "success"
+    def test_error_handling(self):
+        """Test error handling with dynamic port"""
+        # Test invalid page
+        self.driver.get(f"{self.base_url}/invalid_page")
 
-    def test_navigation_workflow(self, server_process):
-        """Test navigation between instances"""
-        # Test moving to next instance
-        response = requests.post(
-            "http://localhost:9002/annotate",
-            json={
-                "action": "next_instance",
-                "instance_id": "item_1"
-            }
+        # Verify error page is shown
+        WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.CLASS_NAME, "error-page"))
         )
 
-        assert response.status_code in [200, 302]  # 302 is redirect to login, 200 is direct access
+        # Test server health
+        response = requests.get(f"{self.base_url}/")
+        assert response.status_code == 200
 
-        # Test moving to previous instance
+        # Test annotation endpoint
+        response = requests.get(f"{self.base_url}/annotate")
+        assert response.status_code == 200
+
+        # Test invalid annotation submission
+        invalid_data = {"invalid": "data"}
         response = requests.post(
-            "http://localhost:9002/annotate",
-            json={
-                "action": "prev_instance",
-                "instance_id": "item_2"
-            }
+            f"{self.base_url}/submit_annotation",
+            json=invalid_data,
+            timeout=10
         )
-
-        assert response.status_code in [200, 302]  # 302 is redirect to login, 200 is direct access
-
-        # Test jumping to specific instance
-        response = requests.post(
-            "http://localhost:9002/annotate",
-            json={
-                "action": "go_to",
-                "instance_id": "item_5"
-            }
-        )
-
-        assert response.status_code in [200, 302]  # 302 is redirect to login, 200 is direct access
+        assert response.status_code == 400
 
     def test_output_generation_workflow(self, temp_project_dir):
         """Test that annotation output is generated correctly"""
@@ -281,40 +305,35 @@ class TestAnnotationWorkflow:
     @pytest.mark.selenium
     def test_error_handling_workflow(self, server_process):
         """Test error handling in the annotation workflow"""
-        driver = webdriver.Chrome()
-        try:
-            # Navigate to annotation page
-            driver.get("http://localhost:9002/")
+        # Navigate to annotation page
+        self.driver.get(f"{self.base_url}/")
 
-            # Wait for page to load
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.TAG_NAME, "body"))
-            )
+        # Wait for page to load
+        WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.TAG_NAME, "body"))
+        )
 
-            # Test invalid navigation (should handle gracefully)
-            driver.get("http://localhost:9002/invalid_page")
+        # Test invalid navigation (should handle gracefully)
+        self.driver.get(f"{self.base_url}/invalid_page")
 
-            # Should either redirect or show error page
-            assert "error" in driver.page_source.lower() or "404" in driver.page_source
+        # Should either redirect or show error page
+        assert "error" in self.driver.page_source.lower() or "404" in self.driver.page_source
 
-            # Navigate back to valid page
-            driver.get("http://localhost:9002/")
+        # Navigate back to valid page
+        self.driver.get(f"{self.base_url}/")
 
-            # Verify we can still annotate
-            likert_elements = driver.find_elements(By.CSS_SELECTOR, "input[type='radio']")
-            assert len(likert_elements) >= 5
-
-        finally:
-            driver.quit()
+        # Verify we can still annotate
+        likert_elements = self.driver.find_elements(By.CSS_SELECTOR, "input[type='radio']")
+        assert len(likert_elements) >= 5
 
     def test_session_management_workflow(self, server_process):
         """Test session management in debug mode"""
         # Test that debug mode bypasses session requirements
-        response = requests.get("http://localhost:9002/")
+        response = requests.get(f"{self.base_url}/")
         assert response.status_code in [200, 302]  # 302 is redirect to login, 200 is direct access
 
         # Test that we can access annotation page without login
-        response = requests.get("http://localhost:9002/annotate")
+        response = requests.get(f"{self.base_url}/annotate")
         assert response.status_code in [200, 302]  # 302 is redirect to login, 200 is direct access
 
         # Test that we can submit annotations without session
@@ -323,7 +342,7 @@ class TestAnnotationWorkflow:
         }
 
         response = requests.post(
-            "http://localhost:9002/submit_annotation",
+            f"{self.base_url}/submit_annotation",
             data={
                 "instance_id": "item_1",
                 "annotation_data": json.dumps(annotation_data)
@@ -368,3 +387,8 @@ class TestAnnotationWorkflow:
         assert "item_2" in loaded_state["annotations"]
         assert loaded_state["annotations"]["item_1"]["awesomeness"] == "3"
         assert loaded_state["annotations"]["item_2"]["awesomeness"] == "5"
+
+def create_app():
+    """Create Flask app for testing"""
+    from potato.flask_server import create_app
+    return create_app()

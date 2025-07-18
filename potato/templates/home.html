@@ -249,10 +249,13 @@
       document.getElementById(tabName + '-content').classList.add('active');
     }
 
-    // Check if there's an error message and we need to show register tab
-    {% if login_error and 'registration' in login_error %}
-      switchTab('register');
-    {% endif %}
+    // Check if we need to show register tab on page load
+    document.addEventListener('DOMContentLoaded', function() {
+      const errorElement = document.querySelector('.mb-4.p-3.rounded');
+      if (errorElement && errorElement.textContent.includes('registration')) {
+        switchTab('register');
+      }
+    });
   </script>
 </body>
 </html>

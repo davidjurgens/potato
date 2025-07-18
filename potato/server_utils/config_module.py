@@ -73,16 +73,22 @@ def init_config(args):
     with open(config_file, "r") as file_p:
         config.update(yaml.safe_load(file_p))
 
-    config.update(
-        {
-            "verbose": args.verbose,
-            "very_verbose": args.very_verbose,
-            "debug": args.debug,
-            "__config_file__": args.config_file,
-            "customjs": args.customjs,
-            "customjs_hostname": args.customjs_hostname,
-        }
-    )
+    # Only override config settings if command line arguments are explicitly provided
+    config_updates = {
+        "verbose": args.verbose,
+        "very_verbose": args.very_verbose,
+        "__config_file__": args.config_file,
+        "customjs": args.customjs,
+        "customjs_hostname": args.customjs_hostname,
+        "persist_sessions": args.persist_sessions,
+    }
+
+    # Only override debug if explicitly set to True via command line
+    # or if config file doesn't have a debug setting
+    if args.debug or "debug" not in config:
+        config_updates["debug"] = args.debug
+
+    config.update(config_updates)
 
     # update the current working dir for the server
     os.chdir(project_dir)

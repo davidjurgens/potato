@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{annotation_task_name}}</title>
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+
+    <!-- Robust Span Annotation Styles -->
+    <style>
+        /* Robust Span Annotation Styling */
+        .span-highlight {
+            position: relative;
+            display: inline;
+            border-radius: 4px;
+            padding: 2px 4px;
+            margin: 0 1px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .span-highlight:hover {
+            filter: brightness(0.9);
+        }
+
+        /* Nested spans get progressively smaller padding to show hierarchy */
+        .span-highlight .span-highlight {
+            padding: 0px 1px !important;
+            margin: 2px !important;
+            border-radius: 2px !important;
+            box-shadow: 0 1px 1px rgba(0,0,0,0.1) !important;
+        }
+
+        .span-highlight .span-highlight .span-highlight {
+            padding: 0px 0px !important;
+            margin: 3px !important;
+            border-radius: 1px !important;
+            box-shadow: none !important;
+        }
+
+        .span-delete {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            z-index: 15;
+        }
+
+        .span-highlight:hover .span-delete {
+            display: flex;
+        }
+
+        /* Nested span delete buttons are positioned closer */
+        .span-highlight .span-highlight .span-delete {
+            top: -10px !important;
+            right: -10px !important;
+            width: 22px !important;
+            height: 22px !important;
+            font-size: 13px !important;
+            z-index: 25 !important;
+        }
+
+        .span-highlight .span-highlight .span-highlight .span-delete {
+            top: -8px !important;
+            right: -8px !important;
+            width: 20px !important;
+            height: 20px !important;
+            font-size: 12px !important;
+            z-index: 35 !important;
+        }
+
+        .span-label {
+            position: absolute;
+            top: -25px;
+            left: 0;
+            background: #333;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            white-space: nowrap;
+            display: none;
+            z-index: 10;
+        }
+
+        /* Span manager labels should be visible by default */
+        .span-overlay .span-label {
+            display: block !important;
+        }
+
+        /* Span manager delete buttons should be visible by default */
+        .span-overlay .span-delete-btn {
+            display: block !important;
+        }
+
+        .span-tooltip {
+            display: none;
+            position: absolute;
+            top: -30px;
+            left: 0;
+            background: #333;
+            color: #fff;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            white-space: nowrap;
+            z-index: 100;
+        }
+
+        .span-highlight:hover .span-label {
+            display: block;
+        }
+
+        /* Nested span labels are positioned higher to avoid overlap */
+        .span-highlight .span-highlight .span-label {
+            top: -30px !important;
+            z-index: 20 !important;
+        }
+
+        .span-highlight .span-highlight .span-highlight .span-label {
+            top: -35px !important;
+            z-index: 30 !important;
+        }
+
+        /* Text container styling for span annotation */
+        #instance-text {
+            position: relative;
+            cursor: text;
+            user-select: text;
+            line-height: 1.8;
+            font-size: 18px;
+        }
+
+        #instance-text:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+    </style>
+
+    <!-- jQuery (required for span annotation) -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+</head>
+
+<body>
+    <!-- Header navigation bar -->
+    <nav class="navbar sticky-top shadow-sm" style="background-color: var(--primary-color); padding: 0.75rem 1rem; margin-bottom: 1.5rem;">
+        <div class="container-fluid d-flex align-items-center">
+            <!-- Task name (left aligned) -->
+            <div class="navbar-brand">
+                <span class="fw-bold" style="color: var(--light-color); font-size: 1.25rem">{{annotation_task_name}}</span>
+            </div>
+
+            <!-- Middle section with progress and navigation -->
+            <div class="d-flex align-items-center justify-content-center flex-grow-1 gap-4">
+                <!-- Progress counter -->
+                <div class="d-flex align-items-center" style="color: var(--light-color); margin-right: 40px">
+                    <span>Progress: <span class="fw-medium" id="progress-counter">{{finished}}/{{total_count}}</span></span>
+                </div>
+
+                <!-- Jump to item form -->
+                <div style="margin-left: 40px">
+                    <div class="d-flex align-items-center">
+                        <label for="go_to" class="me-2" style="color: var(--light-color); margin-bottom: 0">Go to:</label>
+                        <input type="number" id="go_to" class="form-control form-control-sm me-2"
+                               style="width: 70px; height: 31px; border: none; border-radius: var(--radius);"
+                               value="" min="0" required>
+                        <button type="button" class="shadcn-button" id="go-to-btn"
+                                style="height: 31px; line-height: 1; padding: 0 0.75rem; background-color: var(--light-color); color: var(--primary-color); border: none;">
+                            Go
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- User info and logout (right aligned) -->
+            <div class="d-flex align-items-center"
+                 style="background-color: rgba(255, 255, 255, 0.15); padding: 0.5rem 1rem; border-radius: var(--radius);">
+                <div class="me-3" style="color: var(--light-color)">
+                    <span>Logged in as <span class="fw-medium" id="username-display">{{username}}</span></span>
+                </div>
+                <div class="border-start" style="padding-left: 20px; height: 24px; display: flex; align-items: center;">
+                    <a href="/logout" class="shadcn-button"
+                       style="background-color: var(--light-color); color: var(--primary-color); height: auto; padding: 0.25rem 0.75rem !important; font-size: 0.875rem; min-width: 60px; text-align: center; border: none; text-decoration: none;">
+                        Logout
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <!-- Main annotation area -->
+        <div id="task_layout" class="shadcn-card mb-4">
+            <div class="shadcn-card-content">
+                <!-- Loading state -->
+                <div id="loading-state" class="text-center py-5">
+                    <div class="loading-spinner mb-3"></div>
+                    <p>Loading annotation interface...</p>
+                </div>
+
+                <!-- Error state -->
+                <div id="error-state" class="error-message" style="display: none;">
+                    <h5><i class="fas fa-exclamation-triangle me-2"></i>Error</h5>
+                    <p id="error-message-text"></p>
+                    <button class="shadcn-button shadcn-button-primary" onclick="loadCurrentInstance()">
+                        <i class="fas fa-redo me-2"></i>Retry
+                    </button>
+                </div>
+
+                <!-- Main content area -->
+                <div id="main-content" style="display: none;">
+                    <!-- Instance text -->
+                    <div class="mb-4">
+                        <h5 class="mb-3">Text to Annotate:</h5>
+                        <div id="instance-text" class="p-3 border rounded" style="background-color: var(--light-bg); min-height: 100px; position: relative;">
+                            <!-- Text content layer for span annotation -->
+                            <div id="text-content" style="position: relative; z-index: 1; pointer-events: auto;">
+                                {{instance | safe}}
+                            </div>
+                            <!-- Span overlays layer for span annotation -->
+                            <div id="span-overlays" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;">
+                                <!-- Individual overlays will have pointer-events: auto -->
+                            </div>
+                        </div>
+                    </div>
+
+
+
+                    <!-- Status messages -->
+                    <div id="status" class="status" style="display: none;"></div>
+                    <!-- Hidden input for instance_id -->
+                    <input type="hidden" id="instance_id" name="instance_id" value="{{instance_id}}">
+
+                    <!-- Annotation forms -->
+                    <div id="annotation-forms">
+                        {{ TASK_LAYOUT }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Navigation buttons -->
+        <div class="my-4">
+            <div class="d-flex justify-content-between align-items-center">
+                <!-- Previous button -->
+                <div>
+                    <button class="shadcn-button shadcn-button-outline me-2" id="prev-btn" onclick="navigateToPrevious()">
+                        <i class="fas fa-arrow-left me-2"></i>Previous
+                    </button>
+                </div>
+
+                <!-- Next button -->
+                <div>
+                    <button class="shadcn-button shadcn-button-primary" id="next-btn" onclick="navigateToNext()">
+                        Next<i class="fas fa-arrow-right ms-2"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <hr style="color: var(--border)">
+        <footer class="py-2 text-center" style="font-size: 0.75rem; color: var(--muted-foreground)">
+            Copyright &copy; 2025
+            <a href="https://blablablab.si.umich.edu/" style="color: var(--primary); text-decoration: none">Blablablab</a>
+            <span class="mx-2">|</span>
+            <a href="https://github.com/davidjurgens/potato" style="color: var(--primary); text-decoration: none">Chat with us on GitHub</a>
+            <span class="mx-2">|</span>
+            <a href="https://github.com/davidjurgens/potato#cite-us" style="color: var(--primary); text-decoration: none">Cite Us</a>
+        </footer>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Configuration from server -->
+    <script type="text/javascript">
+        window.config = {
+            annotation_task_name: "{{ annotation_task_name }}",
+            debug: false,
+            api_key: "test_api_key",
+            username: "{{ username }}"
+        };
+    </script>
+
+    <!-- Load annotation JavaScript -->
+    <script src="{{ url_for('static', filename='span-manager.js') }}?v=11"></script>
+    <script src="{{ url_for('static', filename='annotation.js') }}?v=11"></script>
+</body>
+</html>

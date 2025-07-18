@@ -1,0 +1,31 @@
+annotation_task_name: "Text Input Annotation Test"
+task_dir: "output/text-annotation"
+output_annotation_dir: "output/text-annotation"
+output_annotation_format: "jsonl"
+max_annotations_per_user: 10
+assignment_strategy: "fixed_order"
+data_files:
+  - "../data/test_data.json"
+item_properties:
+  id_key: "id"
+  text_key: "text"
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+  - annotation_type: "text"
+    name: "summary"
+    description: "Please provide a brief summary of this text in your own words:"
+    multiline: true
+    rows: 4
+    cols: 60
+  - annotation_type: "text"
+    name: "keywords"
+    description: "What are the key terms or concepts mentioned in this text?"
+    multiline: false
+    rows: 2
+    cols: 40
+site_dir: "default"
+customjs: null
+customjs_hostname: null

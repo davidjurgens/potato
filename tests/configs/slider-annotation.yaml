@@ -1,0 +1,51 @@
+port: 9005
+server_name: potato slider annotation test
+annotation_task_name: Slider Annotation Test
+debug: true
+task_dir: output/slider-annotation
+output_annotation_dir: output/slider-annotation
+output_annotation_format: json
+annotation_codebook_url: ''
+max_annotations_per_user: 10
+assignment_strategy: fixed_order
+data_files:
+- data/test_data.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: slider
+  name: sentiment_score
+  description: 'Rate the sentiment of this text on a scale from very negative to very
+    positive:'
+  min_value: 0
+  max_value: 100
+  starting_value: 50
+  step: 1
+  min_label: Very Negative
+  max_label: Very Positive
+- annotation_type: slider
+  name: confidence
+  description: How confident are you in your assessment?
+  min_value: 0
+  max_value: 10
+  starting_value: 5
+  step: 1
+  min_label: Not Confident
+  max_label: Very Confident
+- annotation_type: slider
+  name: complexity
+  description: 'Rate the complexity of this text:'
+  min_value: 1
+  max_value: 10
+  starting_value: 5
+  step: 1
+  min_label: Simple
+  max_label: Complex
+site_dir: default
+customjs: null
+customjs_hostname: null
