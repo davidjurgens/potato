@@ -39,7 +39,15 @@ def test_debug_mode_config():
             "id_key": "id",
             "text_key": "text"
         },
-        "annotation_schemes": []
+        "annotation_schemes": [
+            {
+                "name": "test_scheme",
+                "annotation_type": "radio",
+                "labels": ["option_a", "option_b"],
+                "description": "Test scheme for debug mode."
+            }
+        ],
+        "alert_time_each_instance": 0
     }
 
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:

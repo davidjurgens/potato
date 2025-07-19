@@ -11,6 +11,9 @@ The admin dashboard offers:
 - Configuration management and system state monitoring
 - Question and annotation scheme analysis
 - User progress tracking and completion statistics
+- Comprehensive annotation history tracking and suspicious activity detection
+- Performance metrics and quality assurance monitoring
+- Session tracking and behavioral analysis
 
 Key Components:
 - AdminDashboard: Main class for admin functionality
@@ -18,6 +21,7 @@ Key Components:
 - InstanceData: Data class for instance information and statistics
 - Dashboard data generation and analysis functions
 - Configuration update and management functions
+- AnnotationHistoryAnalyzer: Advanced history analysis and suspicious activity detection
 
 The dashboard provides insights into:
 - Overall annotation progress and completion rates
@@ -25,6 +29,9 @@ The dashboard provides insights into:
 - Annotation quality through disagreement analysis
 - System configuration and operational status
 - Real-time monitoring of active annotation sessions
+- Fine-grained annotation timing and behavioral patterns
+- Suspicious activity detection and quality assurance
+- Session-based performance analysis
 
 Access Control:
 - Admin access is controlled via API key authentication
@@ -44,6 +51,7 @@ from potato.flask_server import (
     config, logger, get_user_state_manager, get_item_state_manager,
     get_users, get_total_annotations
 )
+from potato.annotation_history import AnnotationHistoryManager, AnnotationAction
 
 @dataclass
 class AnnotatorTimingData:
@@ -52,6 +60,7 @@ class AnnotatorTimingData:
 
     This class encapsulates timing metrics for individual annotators,
     including total annotations, working time, and performance statistics.
+    Now enhanced with annotation history tracking and suspicious activity detection.
     """
     user_id: str
     total_annotations: int
@@ -63,6 +72,20 @@ class AnnotatorTimingData:
     phase: str
     has_assignments: bool
     remaining_assignments: bool
+
+    # Annotation history metrics
+    total_actions: int
+    average_action_time_ms: float
+    fastest_action_time_ms: int
+    slowest_action_time_ms: int
+    actions_per_minute: float
+    suspicious_score: float
+    suspicious_level: str
+    fast_actions_count: int
+    burst_actions_count: int
+    session_start_time: Optional[datetime.datetime]
+    current_session_duration_minutes: Optional[float]
+    recent_actions_count: int  # Actions in last 5 minutes
 
 @dataclass
 class InstanceData:
@@ -200,61 +223,166 @@ class AdminDashboard:
 
     def get_annotators_data(self) -> Dict[str, Any]:
         """
-        Get detailed data for all annotators including timing information.
-
-        This method generates comprehensive statistics for each annotator,
-        including performance metrics, timing data, and progress information.
+        Get detailed annotator data including timing information.
 
         Returns:
-            Dict containing annotator data with timing metrics and summary statistics
-
-        Side Effects:
-            - Logs errors if data generation fails
+            Dict containing annotator data with timing analysis
         """
         if not self.check_admin_access():
             return {"error": "Admin access required"}, 403
 
         try:
+            usm = get_user_state_manager()
             users = get_users()
             annotators_data = []
 
             for username in users:
-                timing_data = self._get_annotator_timing_data(username)
-                if timing_data:
-                    annotators_data.append({
-                        "user_id": timing_data.user_id,
-                        "phase": timing_data.phase,
-                        "total_annotations": timing_data.total_annotations,
-                        "total_working_time": self._format_seconds(timing_data.total_seconds),
-                        "average_time_per_annotation": self._format_seconds(timing_data.average_seconds_per_annotation),
-                        "annotations_per_hour": round(timing_data.annotations_per_hour, 1),
-                        "last_activity": timing_data.last_activity.isoformat() if timing_data.last_activity else None,
-                        "current_instance_time": self._format_seconds(timing_data.current_instance_time) if timing_data.current_instance_time else None,
-                        "has_assignments": timing_data.has_assignments,
-                        "remaining_assignments": timing_data.remaining_assignments,
-                        "completion_percentage": self._calculate_completion_percentage(username)
-                    })
+                user_state = usm.get_user_state(username)
+                if user_state:
+                    timing_data = self._get_annotator_timing_data(username)
+                    if timing_data:
+                        annotators_data.append({
+                            "user_id": timing_data.user_id,
+                            "total_annotations": timing_data.total_annotations,
+                            "total_seconds": timing_data.total_seconds,
+                            "average_seconds_per_annotation": timing_data.average_seconds_per_annotation,
+                            "annotations_per_hour": timing_data.annotations_per_hour,
+                            "phase": timing_data.phase,
+                            "has_assignments": timing_data.has_assignments,
+                            "remaining_assignments": timing_data.remaining_assignments,
+                            "last_activity": timing_data.last_activity.isoformat() if timing_data.last_activity else None,
+                            "current_instance_time": timing_data.current_instance_time,
 
-            # Sort by total annotations (descending)
-            annotators_data.sort(key=lambda x: x["total_annotations"], reverse=True)
+                            # NEW: Annotation history metrics
+                            "total_actions": timing_data.total_actions,
+                            "average_action_time_ms": timing_data.average_action_time_ms,
+                            "fastest_action_time_ms": timing_data.fastest_action_time_ms,
+                            "slowest_action_time_ms": timing_data.slowest_action_time_ms,
+                            "actions_per_minute": timing_data.actions_per_minute,
+                            "suspicious_score": timing_data.suspicious_score,
+                            "suspicious_level": timing_data.suspicious_level,
+                            "fast_actions_count": timing_data.fast_actions_count,
+                            "burst_actions_count": timing_data.burst_actions_count,
+                            "session_start_time": timing_data.session_start_time.isoformat() if timing_data.session_start_time else None,
+                            "current_session_duration_minutes": timing_data.current_session_duration_minutes,
+                            "recent_actions_count": timing_data.recent_actions_count
+                        })
+
+            # Sort by suspicious score (highest first)
+            annotators_data.sort(key=lambda x: x["suspicious_score"], reverse=True)
 
             return {
+                "total_annotators": len(annotators_data),
                 "annotators": annotators_data,
                 "summary": {
-                    "total_annotators": len(annotators_data),
-                    "active_annotators": len([a for a in annotators_data if a["phase"] == "ANNOTATION"]),
-                    "completed_annotators": len([a for a in annotators_data if a["phase"] == "DONE"]),
-                    "average_annotations_per_annotator": round(sum(a["total_annotations"] for a in annotators_data) / len(annotators_data), 1) if annotators_data else 0,
-                    "average_time_per_annotation": self._format_seconds(
-                        sum(a["total_annotations"] * a.get("average_time_per_annotation_seconds", 0) for a in annotators_data) /
-                        sum(a["total_annotations"] for a in annotators_data) if sum(a["total_annotations"] for a in annotators_data) > 0 else 0
-                    )
+                    "high_suspicious_count": len([a for a in annotators_data if a["suspicious_level"] in ["High", "Very High"]]),
+                    "medium_suspicious_count": len([a for a in annotators_data if a["suspicious_level"] == "Medium"]),
+                    "low_suspicious_count": len([a for a in annotators_data if a["suspicious_level"] == "Low"]),
+                    "normal_count": len([a for a in annotators_data if a["suspicious_level"] == "Normal"]),
+                    "average_suspicious_score": sum(a["suspicious_score"] for a in annotators_data) / len(annotators_data) if annotators_data else 0
                 }
             }
 
         except Exception as e:
             self.logger.error(f"Error getting annotators data: {e}")
             return {"error": f"Failed to get annotators data: {str(e)}"}, 500
+
+    def get_annotation_history_data(self, user_id: Optional[str] = None,
+                                   instance_id: Optional[str] = None,
+                                   minutes: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Get detailed annotation history data with filtering options.
+
+        Args:
+            user_id: Optional user ID to filter by
+            instance_id: Optional instance ID to filter by
+            minutes: Optional time window in minutes
+
+        Returns:
+            Dict containing annotation history data
+        """
+        if not self.check_admin_access():
+            return {"error": "Admin access required"}, 403
+
+        try:
+            usm = get_user_state_manager()
+
+            if user_id:
+                # Get history for specific user
+                user_state = usm.get_user_state(user_id)
+                if not user_state:
+                    return {"error": f"User {user_id} not found"}, 404
+
+                actions = user_state.get_annotation_history(instance_id)
+                if minutes:
+                    actions = user_state.get_recent_actions(minutes)
+
+                return self._format_annotation_history(actions, user_id)
+            else:
+                # Get history for all users
+                all_actions = []
+                users = get_users()
+
+                for username in users:
+                    user_state = usm.get_user_state(username)
+                    if user_state:
+                        user_actions = user_state.get_annotation_history(instance_id)
+                        if minutes:
+                            user_actions = user_state.get_recent_actions(minutes)
+                        all_actions.extend(user_actions)
+
+                return self._format_annotation_history(all_actions, "all_users")
+
+        except Exception as e:
+            self.logger.error(f"Error getting annotation history data: {e}")
+            return {"error": f"Failed to get annotation history data: {str(e)}"}, 500
+
+    def get_suspicious_activity_data(self) -> Dict[str, Any]:
+        """
+        Get comprehensive suspicious activity analysis.
+
+        Returns:
+            Dict containing suspicious activity data
+        """
+        if not self.check_admin_access():
+            return {"error": "Admin access required"}, 403
+
+        try:
+            usm = get_user_state_manager()
+            users = get_users()
+            suspicious_data = []
+
+            for username in users:
+                user_state = usm.get_user_state(username)
+                if user_state:
+                    suspicious_actions = user_state.get_suspicious_activity()
+                    if suspicious_actions:
+                        suspicious_data.append({
+                            "user_id": username,
+                            "suspicious_actions_count": len(suspicious_actions),
+                            "suspicious_actions": [
+                                {
+                                    "action_id": action.action_id,
+                                    "timestamp": action.timestamp.isoformat(),
+                                    "instance_id": action.instance_id,
+                                    "action_type": action.action_type,
+                                    "schema_name": action.schema_name,
+                                    "label_name": action.label_name,
+                                    "server_processing_time_ms": action.server_processing_time_ms,
+                                    "session_id": action.session_id
+                                }
+                                for action in suspicious_actions[:10]  # Limit to 10 most recent
+                            ]
+                        })
+
+            return {
+                "total_users_with_suspicious_activity": len(suspicious_data),
+                "suspicious_activity": suspicious_data
+            }
+
+        except Exception as e:
+            self.logger.error(f"Error getting suspicious activity data: {e}")
+            return {"error": f"Failed to get suspicious activity data: {str(e)}"}, 500
 
     def get_instances_data(self, page: int = 1, page_size: int = 25,
                           sort_by: str = "annotation_count", sort_order: str = "desc",
@@ -748,6 +876,19 @@ class AdminDashboard:
             # Estimate last activity (for now, use current time - this could be enhanced)
             last_activity = datetime.datetime.now()
 
+            # NEW: Get annotation history metrics
+            performance_metrics = user_state.get_performance_metrics()
+            suspicious_analysis = AnnotationHistoryManager.detect_suspicious_activity(
+                user_state.get_annotation_history()
+            )
+            recent_actions = user_state.get_recent_actions(5)  # Last 5 minutes
+
+            # Calculate session duration
+            current_session_duration_minutes = None
+            if user_state.session_start_time:
+                duration = datetime.datetime.now() - user_state.session_start_time
+                current_session_duration_minutes = duration.total_seconds() / 60
+
             return AnnotatorTimingData(
                 user_id=user_id,
                 total_annotations=total_annotations,
@@ -758,7 +899,21 @@ class AdminDashboard:
                 annotations_per_hour=annotations_per_hour,
                 phase=phase,
                 has_assignments=has_assignments,
-                remaining_assignments=remaining_assignments
+                remaining_assignments=remaining_assignments,
+
+                # NEW: Annotation history metrics
+                total_actions=performance_metrics.get('total_actions', 0),
+                average_action_time_ms=performance_metrics.get('average_action_time_ms', 0.0),
+                fastest_action_time_ms=performance_metrics.get('fastest_action_time_ms', 0),
+                slowest_action_time_ms=performance_metrics.get('slowest_action_time_ms', 0),
+                actions_per_minute=performance_metrics.get('actions_per_minute', 0.0),
+                suspicious_score=suspicious_analysis.get('suspicious_score', 0.0),
+                suspicious_level=suspicious_analysis.get('suspicious_level', 'Normal'),
+                fast_actions_count=suspicious_analysis.get('fast_actions_count', 0),
+                burst_actions_count=suspicious_analysis.get('burst_actions_count', 0),
+                session_start_time=user_state.session_start_time,
+                current_session_duration_minutes=current_session_duration_minutes,
+                recent_actions_count=len(recent_actions)
             )
 
         except Exception as e:
@@ -897,6 +1052,86 @@ class AdminDashboard:
             hours = int(seconds // 3600)
             remaining_minutes = int((seconds % 3600) // 60)
             return f"{hours}h {remaining_minutes}m"
+
+    def _format_annotation_history(self, actions: List[AnnotationAction], context: str) -> Dict[str, Any]:
+        """
+        Format annotation history data for API response.
+
+        Args:
+            actions: List of annotation actions
+            context: Context string (user_id or "all_users")
+
+        Returns:
+            Formatted annotation history data
+        """
+        if not actions:
+            return {
+                "context": context,
+                "total_actions": 0,
+                "actions": [],
+                "summary": {
+                    "action_types": {},
+                    "time_distribution": {},
+                    "performance_metrics": {}
+                }
+            }
+
+        # Calculate summary statistics
+        action_types = Counter(action.action_type for action in actions)
+        time_distribution = self._calculate_time_distribution(actions)
+        performance_metrics = AnnotationHistoryManager.calculate_performance_metrics(actions)
+
+        # Format actions for response
+        formatted_actions = []
+        for action in actions[-100:]:  # Limit to 100 most recent
+            formatted_actions.append({
+                "action_id": action.action_id,
+                "timestamp": action.timestamp.isoformat(),
+                "user_id": action.user_id,
+                "instance_id": action.instance_id,
+                "action_type": action.action_type,
+                "schema_name": action.schema_name,
+                "label_name": action.label_name,
+                "old_value": action.old_value,
+                "new_value": action.new_value,
+                "span_data": action.span_data,
+                "session_id": action.session_id,
+                "client_timestamp": action.client_timestamp.isoformat() if action.client_timestamp else None,
+                "server_processing_time_ms": action.server_processing_time_ms,
+                "metadata": action.metadata
+            })
+
+        return {
+            "context": context,
+            "total_actions": len(actions),
+            "actions": formatted_actions,
+            "summary": {
+                "action_types": dict(action_types),
+                "time_distribution": time_distribution,
+                "performance_metrics": performance_metrics
+            }
+        }
+
+    def _calculate_time_distribution(self, actions: List[AnnotationAction]) -> Dict[str, int]:
+        """
+        Calculate time distribution of actions.
+
+        Args:
+            actions: List of annotation actions
+
+        Returns:
+            Dictionary with time distribution data
+        """
+        if not actions:
+            return {}
+
+        # Group by hour of day
+        hour_distribution = defaultdict(int)
+        for action in actions:
+            hour = action.timestamp.hour
+            hour_distribution[f"{hour:02d}:00"] += 1
+
+        return dict(hour_distribution)
 
 # Global instance
 admin_dashboard = AdminDashboard()

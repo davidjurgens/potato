@@ -32,15 +32,18 @@ User states track:
 from __future__ import annotations
 
 import json
+import datetime
 from collections import defaultdict, OrderedDict
 import logging
 import os
+from typing import Optional, Dict, Any, List
 
 import logging
 
 from potato.authentificaton import UserAuthenticator
 from potato.phase import UserPhase
 from potato.item_state_management import get_item_state_manager, Item, SpanAnnotation, Label
+from potato.annotation_history import AnnotationAction, AnnotationHistoryManager
 
 # Database imports
 try:
@@ -840,6 +843,67 @@ class UserState:
         # Store the annotation as a dict under the instance_id
         self.instance_id_to_label_to_value[instance_id].update(annotation)
 
+    # Annotation history implementation
+    def add_annotation_action(self, action: AnnotationAction) -> None:
+        """Add an annotation action to the history."""
+        self.annotation_history.append(action)
+        self.instance_action_history[action.instance_id].append(action)
+
+        # Update performance metrics
+        self._update_performance_metrics()
+
+        # Update activity time
+        self.last_activity_time = action.timestamp
+
+    def _update_performance_metrics(self) -> None:
+        """Update performance metrics based on recent actions."""
+        if not self.annotation_history:
+            return
+
+        # Calculate metrics for last 100 actions (for performance)
+        recent_actions = self.annotation_history[-100:]
+        metrics = AnnotationHistoryManager.calculate_performance_metrics(recent_actions)
+
+        self.performance_metrics.update(metrics)
+        if self.annotation_history:
+            self.performance_metrics['last_action_timestamp'] = self.annotation_history[-1].timestamp
+
+    def get_annotation_history(self, instance_id: Optional[str] = None) -> List[AnnotationAction]:
+        """Get annotation history, optionally filtered by instance."""
+        if instance_id:
+            return self.instance_action_history.get(instance_id, [])
+        return self.annotation_history.copy()
+
+    def get_recent_actions(self, minutes: int = 5) -> List[AnnotationAction]:
+        """Get actions from the last N minutes."""
+        cutoff_time = datetime.datetime.now() - datetime.timedelta(minutes=minutes)
+        return [action for action in self.annotation_history if action.timestamp >= cutoff_time]
+
+    def get_suspicious_activity(self) -> List[AnnotationAction]:
+        """Identify potentially suspicious activity (very fast annotations)."""
+        if not self.annotation_history:
+            return []
+
+        # Get last 50 actions for analysis
+        recent_actions = self.annotation_history[-50:]
+        suspicious_analysis = AnnotationHistoryManager.detect_suspicious_activity(recent_actions)
+        return suspicious_analysis['suspicious_actions']
+
+    def get_performance_metrics(self) -> Dict[str, Any]:
+        """Get current performance metrics."""
+        return self.performance_metrics.copy()
+
+    def start_session(self, session_id: str) -> None:
+        """Start a new annotation session."""
+        self.session_start_time = datetime.datetime.now()
+        self.current_session_id = session_id
+        self.last_activity_time = self.session_start_time
+
+    def end_session(self) -> None:
+        """End the current annotation session."""
+        self.session_start_time = None
+        self.current_session_id = None
+
 
 class MysqlUserState(UserState):
 
@@ -900,6 +964,25 @@ class InMemoryUserState(UserState):
 
         # Caches the ai hints
         self.ai_hints = defaultdict(dict)
+
+        # New: Annotation history tracking
+        self.annotation_history: List[AnnotationAction] = []
+        self.instance_action_history: Dict[str, List[AnnotationAction]] = defaultdict(list)
+
+        # New: Session tracking
+        self.session_start_time: Optional[datetime.datetime] = None
+        self.last_activity_time: Optional[datetime.datetime] = None
+        self.current_session_id: Optional[str] = None
+
+        # New: Performance metrics
+        self.performance_metrics: Dict[str, Any] = {
+            'total_actions': 0,
+            'average_action_time_ms': 0,
+            'fastest_action_time_ms': float('inf'),
+            'slowest_action_time_ms': 0,
+            'actions_per_minute': 0,
+            'last_action_timestamp': None
+        }
 
     def hint_exists(self, instance_id: str) -> bool:
         return instance_id in self.ai_hints

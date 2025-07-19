@@ -32,6 +32,8 @@ import logging
 import datetime
 from datetime import timedelta
 from flask import Flask, session, render_template, request, redirect, url_for, jsonify, make_response
+import time
+import uuid
 
 # Import from the main flask_server.py module
 from potato.flask_server import (
@@ -50,6 +52,9 @@ from potato.admin import admin_dashboard
 
 # Import span color functions
 from potato.server_utils.schemas.span import get_span_color
+
+# Import annotation history
+from potato.annotation_history import AnnotationHistoryManager
 
 @app.route("/", methods=["GET", "POST"])
 def home():
@@ -1370,16 +1375,53 @@ def admin_api_questions():
     return jsonify(result)
 
 
+@app.route("/admin/api/annotation_history", methods=["GET"])
+def admin_api_annotation_history():
+    """
+    Get detailed annotation history data with filtering options.
+    Admin-only endpoint requiring API key.
+
+    Query Parameters:
+        user_id: Optional user ID to filter by
+        instance_id: Optional instance ID to filter by
+        minutes: Optional time window in minutes
+
+    Returns:
+        flask.Response: JSON response with annotation history data
+    """
+    user_id = request.args.get('user_id')
+    instance_id = request.args.get('instance_id')
+    minutes = request.args.get('minutes')
+
+    if minutes:
+        try:
+            minutes = int(minutes)
+        except ValueError:
+            return jsonify({"error": "Invalid minutes parameter"}), 400
+
+    result = admin_dashboard.get_annotation_history_data(
+        user_id=user_id,
+        instance_id=instance_id,
+        minutes=minutes
+    )
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
 
 
+@app.route("/admin/api/suspicious_activity", methods=["GET"])
+def admin_api_suspicious_activity():
+    """
+    Get comprehensive suspicious activity analysis.
+    Admin-only endpoint requiring API key.
 
-
-
-
-
-
-
-
+    Returns:
+        flask.Response: JSON response with suspicious activity data
+    """
+    result = admin_dashboard.get_suspicious_activity_data()
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
 
 
 @app.route("/go_to", methods=["GET", "POST"])
@@ -1570,6 +1612,12 @@ def update_instance():
     1. Frontend format: {"instance_id": "...", "annotations": {...}, "span_annotations": [...]}
     2. Backend format: {"instance_id": "...", "schema": "...", "state": [...], "type": "..."}
     """
+    import time
+    import datetime
+    from potato.annotation_history import AnnotationHistoryManager
+
+    start_time = time.time()
+
     logger.debug("=== UPDATEINSTANCE ROUTE START ===")
     logger.debug(f"Session: {dict(session)}")
     logger.debug(f"Session username: {session.get('username', 'NOT_SET')}")
@@ -1590,6 +1638,27 @@ def update_instance():
             logger.error(f"User state not found for user: {username}")
             return jsonify({"status": "error", "message": "User state not found"})
 
+        # Track session
+        if not user_state.session_start_time:
+            user_state.start_session(session.get('session_id', str(uuid.uuid4())))
+
+        # Get client timestamp if provided
+        client_timestamp = None
+        if request.json.get("client_timestamp"):
+            try:
+                client_timestamp = datetime.datetime.fromisoformat(request.json["client_timestamp"])
+            except ValueError:
+                logger.warning(f"Invalid client timestamp format: {request.json['client_timestamp']}")
+
+        # Prepare metadata
+        metadata = {
+            "request_id": request.json.get("request_id"),
+            "user_agent": request.headers.get("User-Agent"),
+            "ip_address": request.remote_addr,
+            "content_type": request.content_type,
+            "request_size": len(request.get_data()) if request.get_data() else 0
+        }
+
         # Check if this is the frontend format (annotations, span_annotations)
         if "annotations" in request.json:
             logger.debug("Processing frontend format (annotations, span_annotations)")
@@ -1600,6 +1669,33 @@ def update_instance():
                 if ":" in key:
                     schema_name, label_name = key.split(":", 1)
                     label = Label(schema_name, label_name)
+
+                    # Get old value for comparison
+                    old_value = None
+                    if instance_id in user_state.instance_id_to_label_to_value:
+                        old_value = user_state.instance_id_to_label_to_value[instance_id].get(label)
+
+                    # Determine action type
+                    action_type = "add_label" if old_value is None else "update_label"
+
+                    # Create annotation action
+                    action = AnnotationHistoryManager.create_action(
+                        user_id=username,
+                        instance_id=instance_id,
+                        action_type=action_type,
+                        schema_name=schema_name,
+                        label_name=label_name,
+                        old_value=old_value,
+                        new_value=value,
+                        session_id=user_state.current_session_id,
+                        client_timestamp=client_timestamp,
+                        metadata=metadata
+                    )
+
+                    # Add to history
+                    user_state.add_annotation_action(action)
+
+                    # Update annotation
                     user_state.add_label_annotation(instance_id, label, value)
                     logger.debug(f"Added label annotation: {schema_name}:{label_name} = {value}")
 
@@ -1615,7 +1711,39 @@ def update_instance():
                         int(span_data["end"])
                     )
                     value = span_data.get("value")
+
                     if value is not None:
+                        # Get old value for comparison
+                        old_value = None
+                        if instance_id in user_state.instance_id_to_span_to_value:
+                            old_value = user_state.instance_id_to_span_to_value[instance_id].get(span)
+
+                        # Determine action type
+                        action_type = "add_span" if old_value is None else "update_span"
+
+                        # Create annotation action
+                        action = AnnotationHistoryManager.create_action(
+                            user_id=username,
+                            instance_id=instance_id,
+                            action_type=action_type,
+                            schema_name=span_data["schema"],
+                            label_name=span_data["name"],
+                            old_value=old_value,
+                            new_value=value,
+                            span_data={
+                                "start": span_data["start"],
+                                "end": span_data["end"],
+                                "title": span_data.get("title", span_data["name"])
+                            },
+                            session_id=user_state.current_session_id,
+                            client_timestamp=client_timestamp,
+                            metadata=metadata
+                        )
+
+                        # Add to history
+                        user_state.add_annotation_action(action)
+
+                        # Update annotation
                         user_state.add_span_annotation(instance_id, span, value)
                         logger.debug(f"Added span annotation: {span_data}")
 
@@ -1649,6 +1777,39 @@ def update_instance():
                     span = SpanAnnotation(schema_name, sv["name"], sv.get("title", sv["name"]), start_offset, end_offset)
                     value = sv["value"]
 
+                    # Get old value for comparison
+                    old_value = None
+                    if instance_id in user_state.instance_id_to_span_to_value:
+                        old_value = user_state.instance_id_to_span_to_value[instance_id].get(span)
+
+                    # Determine action type
+                    if value is None:
+                        action_type = "delete_span"
+                    else:
+                        action_type = "add_span" if old_value is None else "update_span"
+
+                    # Create annotation action
+                    action = AnnotationHistoryManager.create_action(
+                        user_id=username,
+                        instance_id=instance_id,
+                        action_type=action_type,
+                        schema_name=schema_name,
+                        label_name=sv["name"],
+                        old_value=old_value,
+                        new_value=value,
+                        span_data={
+                            "start": start_offset,
+                            "end": end_offset,
+                            "title": sv.get("title", sv["name"])
+                        },
+                        session_id=user_state.current_session_id,
+                        client_timestamp=client_timestamp,
+                        metadata=metadata
+                    )
+
+                    # Add to history
+                    user_state.add_annotation_action(action)
+
                     # Always add the span annotation, regardless of whether value is None
                     user_state.add_span_annotation(instance_id, span, value)
                     logger.debug(f"Added span annotation: {span} with value: {value}")
@@ -1669,15 +1830,57 @@ def update_instance():
                 for sv in schema_state:
                     label = Label(schema_name, sv["name"])
                     value = sv["value"]
+
+                    # Get old value for comparison
+                    old_value = None
+                    if instance_id in user_state.instance_id_to_label_to_value:
+                        old_value = user_state.instance_id_to_label_to_value[instance_id].get(label)
+
+                    # Determine action type
+                    action_type = "add_label" if old_value is None else "update_label"
+
+                    # Create annotation action
+                    action = AnnotationHistoryManager.create_action(
+                        user_id=username,
+                        instance_id=instance_id,
+                        action_type=action_type,
+                        schema_name=schema_name,
+                        label_name=sv["name"],
+                        old_value=old_value,
+                        new_value=value,
+                        session_id=user_state.current_session_id,
+                        client_timestamp=client_timestamp,
+                        metadata=metadata
+                    )
+
+                    # Add to history
+                    user_state.add_annotation_action(action)
+
+                    # Update annotation
                     user_state.add_label_annotation(instance_id, label, value)
         else:
             logger.warning("Unknown data format in /updateinstance")
             return jsonify({"status": "error", "message": "Unknown data format"})
 
+        # Calculate processing time
+        processing_time_ms = int((time.time() - start_time) * 1000)
+
+        # Update the last action's processing time
+        if user_state.annotation_history:
+            user_state.annotation_history[-1].server_processing_time_ms = processing_time_ms
+
         # Save state
         get_user_state_manager().save_user_state(user_state)
         logger.debug(f"User state saved for {username}")
-        return jsonify({"status": "success"})
+
+        # Get performance metrics for response
+        performance_metrics = user_state.get_performance_metrics()
+
+        return jsonify({
+            "status": "success",
+            "processing_time_ms": processing_time_ms,
+            "performance_metrics": performance_metrics
+        })
     else:
         logger.warning("Update instance called without JSON data")
         return jsonify({"status": "error", "message": "JSON data required"})
@@ -2138,6 +2341,8 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/api/instances", "admin_api_instances", admin_api_instances, methods=["GET"])
     app.add_url_rule("/admin/api/config", "admin_api_config", admin_api_config, methods=["GET", "POST"])
     app.add_url_rule("/admin/api/questions", "admin_api_questions", admin_api_questions, methods=["GET"])
+    app.add_url_rule("/admin/api/annotation_history", "admin_api_annotation_history", admin_api_annotation_history, methods=["GET"])
+    app.add_url_rule("/admin/api/suspicious_activity", "admin_api_suspicious_activity", admin_api_suspicious_activity, methods=["GET"])
 
     app.add_url_rule("/shutdown", "shutdown", shutdown, methods=["POST"])
 
