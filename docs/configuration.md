@@ -456,19 +456,35 @@ prestudy:
 
 ### Active Learning
 
+Active learning uses machine learning to intelligently prioritize annotation tasks. For comprehensive configuration options, see the [Active Learning Guide](active_learning_guide.md).
+
 ```yaml
-active_learning_config:
-  enable_active_learning: true
-  classifier_name: sklearn.linear_model.LogisticRegression
-  classifier_kwargs: {}
-  vectorizer_name: sklearn.feature_extraction.text.CountVectorizer
-  vectorizer_kwargs: {}
-  resolution_strategy: random
-  random_sample_percent: 50
-  active_learning_schema:
-    - sentiment
-  update_rate: 5
-  max_inferred_predictions: 20
+active_learning:
+  enabled: true
+  schema_names: ["sentiment", "topic"]
+  min_annotations_per_instance: 2
+  min_instances_for_training: 20
+  update_frequency: 10
+  max_instances_to_reorder: 100
+  classifier_name: "sklearn.linear_model.LogisticRegression"
+  vectorizer_name: "sklearn.feature_extraction.text.TfidfVectorizer"
+  vectorizer_kwargs:
+    max_features: 1000
+    stop_words: "english"
+  resolution_strategy: "majority_vote"
+  random_sample_percent: 20
+
+  # Optional: LLM integration
+  llm_enabled: false
+  llm_config:
+    endpoint_url: "http://localhost:8000"
+    model_name: "llama-2-7b"
+    use_mock: true
+
+  # Optional: Model persistence
+  model_persistence_enabled: false
+  model_save_directory: "./models"
+  model_retention_count: 2
 ```
 
 ### List as Text Configuration

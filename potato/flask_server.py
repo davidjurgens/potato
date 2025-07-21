@@ -45,6 +45,7 @@ import string
 import threading
 import yaml
 from datetime import datetime, timedelta
+from typing import List, Dict, Any
 
 import numpy as np
 import pandas as pd
@@ -355,6 +356,154 @@ def load_user_data(config: dict):
 
     logger.info("Loaded user data for %d users" % len(usm.get_user_ids()))
 
+def load_training_data(config: dict) -> None:
+    """
+    Load training data from the training data file specified in the config.
+
+    This function loads training instances with correct answers and explanations
+    for the training phase. It validates the training data format and stores
+    the training instances for use during the training phase.
+
+    Args:
+        config: Configuration dictionary containing training settings
+
+    Side Effects:
+        - Stores training instances in global training data storage
+        - Validates training data format and consistency
+        - Logs loading progress and statistics
+
+    Raises:
+        Exception: If training data file is not found or invalid
+    """
+    if 'training' not in config or not config['training'].get('enabled', False):
+        logger.debug("Training not enabled, skipping training data loading")
+        return
+
+    training_config = config['training']
+    data_file = training_config.get('data_file')
+
+    if not data_file:
+        logger.warning("Training enabled but no data_file specified")
+        return
+
+    # Resolve the training data file path
+    try:
+        training_data_path = get_abs_or_rel_path(data_file, config)
+    except FileNotFoundError:
+        logger.error(f"Training data file not found: {data_file}")
+        raise Exception(f"Training data file not found: {data_file}")
+
+    logger.debug(f"Loading training data from {training_data_path}")
+
+    try:
+        with open(training_data_path, 'r', encoding='utf-8') as f:
+            training_data = json.load(f)
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        logger.error(f"Invalid training data file format: {e}")
+        raise Exception(f"Invalid training data file format: {e}")
+
+    if not isinstance(training_data, dict):
+        raise Exception("Training data must be a JSON object")
+
+    if 'training_instances' not in training_data:
+        raise Exception("Training data must contain 'training_instances' field")
+
+    training_instances = training_data['training_instances']
+    if not isinstance(training_instances, list):
+        raise Exception("training_instances must be a list")
+
+    if not training_instances:
+        raise Exception("training_instances cannot be empty")
+
+    # Validate training data against annotation schemes
+    annotation_schemes = training_config.get('annotation_schemes', config.get('annotation_schemes', []))
+
+    # Handle both string references and full scheme dictionaries
+    scheme_names = set()
+    for scheme in annotation_schemes:
+        if isinstance(scheme, str):
+            # String reference to existing scheme
+            scheme_names.add(scheme)
+        elif isinstance(scheme, dict) and 'name' in scheme:
+            # Full scheme dictionary
+            scheme_names.add(scheme['name'])
+        else:
+            logger.warning(f"Invalid annotation scheme format: {scheme}")
+
+    # Convert training instances to Item objects and store them
+    global training_items
+    training_items = []
+
+    for instance in training_instances:
+        # Validate required fields
+        if 'id' not in instance or 'text' not in instance or 'correct_answers' not in instance:
+            raise Exception(f"Training instance missing required fields: {instance}")
+
+        # Validate correct_answers correspond to annotation schemes
+        for scheme_name in instance['correct_answers'].keys():
+            if scheme_name not in scheme_names:
+                logger.warning(f"Training instance {instance['id']} contains unknown scheme: {scheme_name}")
+
+        # Create Item object for training instance
+        item_data = {
+            'id': instance['id'],
+            'text': instance['text'],
+            'correct_answers': instance['correct_answers'],
+            'explanation': instance.get('explanation', ''),
+            'displayed_text': get_displayed_text(instance['text'])
+        }
+
+        training_item = Item(instance['id'], item_data)
+        training_items.append(training_item)
+
+    logger.info(f"Loaded {len(training_items)} training instances")
+    logger.debug(f"Training instances: {[item.get_id() for item in training_items]}")
+
+
+def get_training_instances() -> List[Item]:
+    """
+    Get the loaded training instances.
+
+    Returns:
+        List of training Item objects
+    """
+    global training_items
+    return training_items if 'training_items' in globals() else []
+
+
+def get_training_correct_answers(instance_id: str) -> Dict[str, Any]:
+    """
+    Get the correct answers for a training instance.
+
+    Args:
+        instance_id: The ID of the training instance
+
+    Returns:
+        Dictionary of correct answers for the instance
+    """
+    training_items = get_training_instances()
+    for item in training_items:
+        if item.get_id() == instance_id:
+            return item.get_data().get('correct_answers', {})
+    return {}
+
+
+def get_training_explanation(instance_id: str) -> str:
+    """
+    Get the explanation for a training instance.
+
+    Args:
+        instance_id: The ID of the training instance
+
+    Returns:
+        Explanation string for the instance
+    """
+    training_items = get_training_instances()
+    for item in training_items:
+        if item.get_id() == instance_id:
+            return item.get_data().get('explanation', '')
+    return ''
+
 def load_all_data(config: dict):
     '''Loads instance and annotation data from the files specified in the config.'''
     load_annotation_schematic_data(config)
@@ -362,6 +511,7 @@ def load_all_data(config: dict):
     load_user_data(config)
     load_phase_data(config)
     load_highlights_data(config)
+    load_training_data(config)
 
     print("STATES: ", get_user_state_manager().phase_type_to_name_to_page)
 

@@ -87,6 +87,14 @@ class AnnotatorTimingData:
     current_session_duration_minutes: Optional[float]
     recent_actions_count: int  # Actions in last 5 minutes
 
+    # Training metrics
+    training_completed: bool
+    training_correct_answers: int
+    training_total_attempts: int
+    training_pass_rate: float
+    training_current_question: int
+    training_total_questions: int
+
 @dataclass
 class InstanceData:
     """
@@ -265,7 +273,15 @@ class AdminDashboard:
                             "burst_actions_count": timing_data.burst_actions_count,
                             "session_start_time": timing_data.session_start_time.isoformat() if timing_data.session_start_time else None,
                             "current_session_duration_minutes": timing_data.current_session_duration_minutes,
-                            "recent_actions_count": timing_data.recent_actions_count
+                            "recent_actions_count": timing_data.recent_actions_count,
+
+                            # Training metrics
+                            "training_completed": timing_data.training_completed,
+                            "training_correct_answers": timing_data.training_correct_answers,
+                            "training_total_attempts": timing_data.training_total_attempts,
+                            "training_pass_rate": round(timing_data.training_pass_rate, 2),
+                            "training_current_question": timing_data.training_current_question,
+                            "training_total_questions": timing_data.training_total_questions
                         })
 
             # Sort by suspicious score (highest first)
@@ -889,6 +905,15 @@ class AdminDashboard:
                 duration = datetime.datetime.now() - user_state.session_start_time
                 current_session_duration_minutes = duration.total_seconds() / 60
 
+            # Get training statistics
+            training_state = user_state.get_training_state()
+            training_completed = training_state.is_passed() if training_state else False
+            training_correct_answers = training_state.get_correct_answer_count() if training_state else 0
+            training_total_attempts = training_state.get_total_attempts() if training_state else 0
+            training_pass_rate = (training_correct_answers / training_total_attempts * 100) if training_total_attempts > 0 else 0
+            training_current_question = training_state.get_current_question_index() if training_state else 0
+            training_total_questions = len(training_state.get_training_instances()) if training_state else 0
+
             return AnnotatorTimingData(
                 user_id=user_id,
                 total_annotations=total_annotations,
@@ -913,7 +938,15 @@ class AdminDashboard:
                 burst_actions_count=suspicious_analysis.get('burst_actions_count', 0),
                 session_start_time=user_state.session_start_time,
                 current_session_duration_minutes=current_session_duration_minutes,
-                recent_actions_count=len(recent_actions)
+                recent_actions_count=len(recent_actions),
+
+                # Training metrics
+                training_completed=training_completed,
+                training_correct_answers=training_correct_answers,
+                training_total_attempts=training_total_attempts,
+                training_pass_rate=training_pass_rate,
+                training_current_question=training_current_question,
+                training_total_questions=training_total_questions
             )
 
         except Exception as e:

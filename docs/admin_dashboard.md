@@ -96,7 +96,7 @@ The Configuration tab allows administrators to modify system settings in real-ti
   - `fixed_order`: Sequential assignment
   - `least_annotated`: Prioritize items with fewest annotations
   - `max_diversity`: Prioritize items with highest disagreement
-  - `active_learning`: ML-based assignment (placeholder)
+  - `active_learning`: ML-based assignment with intelligent instance prioritization
   - `llm_confidence`: LLM-based assignment (placeholder)
 
 **Configuration Management:**

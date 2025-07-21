@@ -9,6 +9,7 @@ import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 from urllib.parse import urlparse
+import json
 
 config = {}
 
@@ -85,12 +86,14 @@ def validate_path_security(path: str, base_dir: str, project_dir: str = None) ->
     return normalized_path
 
 
-def validate_yaml_structure(config_data: Dict[str, Any]) -> None:
+def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None, config_file_dir: str = None) -> None:
     """
     Validate the structure and content of the YAML configuration.
 
     Args:
         config_data: The parsed YAML configuration
+        project_dir: The project directory
+        config_file_dir: The directory containing the config file
 
     Raises:
         ConfigValidationError: If the configuration is invalid
@@ -132,9 +135,15 @@ def validate_yaml_structure(config_data: Dict[str, Any]) -> None:
     # Validate annotation schemes
     validate_annotation_schemes(config_data)
 
+    # Validate training configuration if present
+    validate_training_config(config_data, project_dir, config_file_dir)
+
     # Validate database configuration if present
     if 'database' in config_data:
         validate_database_config(config_data['database'])
+
+    # Validate active learning configuration if present
+    validate_active_learning_config(config_data)
 
 
 def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
@@ -326,6 +335,187 @@ def validate_file_paths(config_data: Dict[str, Any], project_dir: str, config_fi
                 raise ConfigSecurityError(f"{field}: {str(e)}")
 
 
+def validate_training_config(config_data: Dict[str, Any], project_dir: str, config_file_dir: str = None) -> None:
+    """
+    Validate training configuration.
+
+    Args:
+        config_data: The configuration data
+        project_dir: The project directory
+        config_file_dir: The directory containing the config file
+
+    Raises:
+        ConfigValidationError: If training configuration is invalid
+        ConfigSecurityError: If training data file path is not secure
+    """
+    if 'training' not in config_data:
+        return  # Training is optional
+
+    training_config = config_data['training']
+    if not isinstance(training_config, dict):
+        raise ConfigValidationError("training configuration must be a dictionary")
+
+    # Validate enabled flag
+    if 'enabled' in training_config:
+        if not isinstance(training_config['enabled'], bool):
+            raise ConfigValidationError("training.enabled must be a boolean")
+
+    # If training is disabled or not specified, skip further validation
+    if not training_config.get('enabled', False):
+        return
+
+    # Validate training data file
+    if 'data_file' not in training_config:
+        raise ConfigValidationError("training.data_file is required when training is enabled")
+
+    data_file = training_config['data_file']
+    if not isinstance(data_file, str):
+        raise ConfigValidationError("training.data_file must be a string")
+
+    # Validate training data file path security and existence
+    try:
+        base_dir = config_file_dir if config_file_dir else project_dir
+        validated_path = validate_path_security(data_file, base_dir, project_dir)
+        if not os.path.exists(validated_path):
+            raise ConfigValidationError(f"Training data file not found: {data_file} (resolved to: {validated_path})")
+    except ConfigSecurityError as e:
+        raise ConfigSecurityError(f"training.data_file: {str(e)}")
+
+    # Validate annotation schemes
+    if 'annotation_schemes' in training_config:
+        schemes = training_config['annotation_schemes']
+        if not isinstance(schemes, list):
+            raise ConfigValidationError("training.annotation_schemes must be a list")
+        if not schemes:
+            raise ConfigValidationError("training.annotation_schemes cannot be empty")
+
+        for i, scheme in enumerate(schemes):
+            if isinstance(scheme, str):
+                # String reference to existing scheme - validate it's a valid string
+                if not scheme.strip():
+                    raise ConfigValidationError(f"training.annotation_schemes[{i}] cannot be empty")
+            elif isinstance(scheme, dict):
+                # Full scheme dictionary - validate it
+                validate_single_annotation_scheme(scheme, f"training.annotation_schemes[{i}]")
+            else:
+                raise ConfigValidationError(f"training.annotation_schemes[{i}] must be a string or dictionary")
+
+    # Validate passing criteria
+    if 'passing_criteria' in training_config:
+        criteria = training_config['passing_criteria']
+        if not isinstance(criteria, dict):
+            raise ConfigValidationError("training.passing_criteria must be a dictionary")
+
+        # Validate min_correct
+        if 'min_correct' in criteria:
+            min_correct = criteria['min_correct']
+            if not isinstance(min_correct, int) or min_correct < 1:
+                raise ConfigValidationError("training.passing_criteria.min_correct must be a positive integer")
+
+        # Validate max_attempts
+        if 'max_attempts' in criteria:
+            max_attempts = criteria['max_attempts']
+            if not isinstance(max_attempts, int) or max_attempts < 1:
+                raise ConfigValidationError("training.passing_criteria.max_attempts must be a positive integer")
+
+        # Validate require_all_correct
+        if 'require_all_correct' in criteria:
+            if not isinstance(criteria['require_all_correct'], bool):
+                raise ConfigValidationError("training.passing_criteria.require_all_correct must be a boolean")
+
+    # Validate feedback settings
+    if 'feedback' in training_config:
+        feedback = training_config['feedback']
+        if not isinstance(feedback, dict):
+            raise ConfigValidationError("training.feedback must be a dictionary")
+
+        # Validate show_explanations
+        if 'show_explanations' in feedback:
+            if not isinstance(feedback['show_explanations'], bool):
+                raise ConfigValidationError("training.feedback.show_explanations must be a boolean")
+
+        # Validate allow_retry
+        if 'allow_retry' in feedback:
+            if not isinstance(feedback['allow_retry'], bool):
+                raise ConfigValidationError("training.feedback.allow_retry must be a boolean")
+
+    # Validate failure action
+    if 'failure_action' in training_config:
+        failure_action = training_config['failure_action']
+        valid_actions = ['move_to_done', 'repeat_training']
+        if failure_action not in valid_actions:
+            raise ConfigValidationError(f"training.failure_action must be one of: {', '.join(valid_actions)}")
+
+
+def validate_training_data_file(data_file_path: str, annotation_schemes: List[Dict[str, Any]]) -> None:
+    """
+    Validate training data file format and consistency.
+
+    Args:
+        data_file_path: Path to the training data file
+        annotation_schemes: List of annotation schemes to validate against
+
+    Raises:
+        ConfigValidationError: If training data is invalid
+    """
+    try:
+        with open(data_file_path, 'r', encoding='utf-8') as f:
+            training_data = json.load(f)
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        raise ConfigValidationError(f"Training data file is not valid JSON: {str(e)}")
+    except FileNotFoundError:
+        raise ConfigValidationError(f"Training data file not found: {data_file_path}")
+
+    if not isinstance(training_data, dict):
+        raise ConfigValidationError("Training data must be a JSON object")
+
+    if 'training_instances' not in training_data:
+        raise ConfigValidationError("Training data must contain 'training_instances' field")
+
+    training_instances = training_data['training_instances']
+    if not isinstance(training_instances, list):
+        raise ConfigValidationError("training_instances must be a list")
+
+    if not training_instances:
+        raise ConfigValidationError("training_instances cannot be empty")
+
+    # Create a mapping of scheme names for validation
+    scheme_names = {scheme['name'] for scheme in annotation_schemes}
+
+    for i, instance in enumerate(training_instances):
+        if not isinstance(instance, dict):
+            raise ConfigValidationError(f"Training instance {i} must be a dictionary")
+
+        # Validate required fields
+        required_fields = ['id', 'text', 'correct_answers']
+        missing_fields = [field for field in required_fields if field not in instance]
+        if missing_fields:
+            raise ConfigValidationError(f"Training instance {i} missing required fields: {', '.join(missing_fields)}")
+
+        # Validate id
+        if not isinstance(instance['id'], str):
+            raise ConfigValidationError(f"Training instance {i}.id must be a string")
+
+        # Validate text
+        if not isinstance(instance['text'], str):
+            raise ConfigValidationError(f"Training instance {i}.text must be a string")
+
+        # Validate correct_answers
+        correct_answers = instance['correct_answers']
+        if not isinstance(correct_answers, dict):
+            raise ConfigValidationError(f"Training instance {i}.correct_answers must be a dictionary")
+
+        # Validate that all correct_answers correspond to annotation schemes
+        for scheme_name, answer in correct_answers.items():
+            if scheme_name not in scheme_names:
+                raise ConfigValidationError(f"Training instance {i}.correct_answers contains unknown scheme: {scheme_name}")
+
+        # Validate explanation if present
+        if 'explanation' in instance:
+            if not isinstance(instance['explanation'], str):
+                raise ConfigValidationError(f"Training instance {i}.explanation must be a string")
+
+
 def load_and_validate_config(config_file: str, project_dir: str) -> Dict[str, Any]:
     """
     Load and validate a YAML configuration file with security checks.
@@ -362,11 +552,11 @@ def load_and_validate_config(config_file: str, project_dir: str) -> Dict[str, An
     except Exception as e:
         raise ConfigValidationError(f"Error reading configuration file {config_file}: {str(e)}")
 
-    # Validate the configuration structure
-    validate_yaml_structure(config_data)
-
     # Get the directory containing the config file for relative path resolution
     config_file_dir = os.path.dirname(validated_config_path)
+
+    # Validate the configuration structure
+    validate_yaml_structure(config_data, project_dir, config_file_dir)
 
     # Validate file paths
     validate_file_paths(config_data, project_dir, config_file_dir)
@@ -461,3 +651,251 @@ def init_config(args):
         logger.error(f"Unexpected error during configuration initialization: {str(e)}")
         print(f"❌ Unexpected error: {str(e)}")
         raise
+
+
+def validate_active_learning_config(config_data: Dict[str, Any]) -> None:
+    """
+    Validate active learning configuration.
+
+    Args:
+        config_data: The configuration data containing active_learning section
+
+    Raises:
+        ConfigValidationError: If the active learning configuration is invalid
+    """
+    if "active_learning" not in config_data:
+        return  # Active learning is optional
+
+    al_config = config_data["active_learning"]
+
+    # Validate enabled flag
+    if not isinstance(al_config.get("enabled", False), bool):
+        raise ConfigValidationError("active_learning.enabled must be a boolean")
+
+    if not al_config.get("enabled", False):
+        return  # Skip validation if not enabled
+
+    # Validate classifier configuration
+    if "classifier" in al_config:
+        classifier_config = al_config["classifier"]
+        if not isinstance(classifier_config, dict):
+            raise ConfigValidationError("active_learning.classifier must be a dictionary")
+
+        if "name" not in classifier_config:
+            raise ConfigValidationError("active_learning.classifier.name is required")
+
+        if not isinstance(classifier_config["name"], str):
+            raise ConfigValidationError("active_learning.classifier.name must be a string")
+
+        # Validate hyperparameters if present
+        if "hyperparameters" in classifier_config:
+            if not isinstance(classifier_config["hyperparameters"], dict):
+                raise ConfigValidationError("active_learning.classifier.hyperparameters must be a dictionary")
+
+    # Validate vectorizer configuration
+    if "vectorizer" in al_config:
+        vectorizer_config = al_config["vectorizer"]
+        if not isinstance(vectorizer_config, dict):
+            raise ConfigValidationError("active_learning.vectorizer must be a dictionary")
+
+        if "name" not in vectorizer_config:
+            raise ConfigValidationError("active_learning.vectorizer.name is required")
+
+        if not isinstance(vectorizer_config["name"], str):
+            raise ConfigValidationError("active_learning.vectorizer.name must be a string")
+
+        # Validate hyperparameters if present
+        if "hyperparameters" in vectorizer_config:
+            if not isinstance(vectorizer_config["hyperparameters"], dict):
+                raise ConfigValidationError("active_learning.vectorizer.hyperparameters must be a dictionary")
+
+    # Validate training parameters
+    if "min_annotations_per_instance" in al_config:
+        min_ann = al_config["min_annotations_per_instance"]
+        if not isinstance(min_ann, int) or min_ann < 1:
+            raise ConfigValidationError("active_learning.min_annotations_per_instance must be a positive integer")
+
+    if "min_instances_for_training" in al_config:
+        min_inst = al_config["min_instances_for_training"]
+        if not isinstance(min_inst, int) or min_inst < 2:
+            raise ConfigValidationError("active_learning.min_instances_for_training must be an integer >= 2")
+
+    if "max_instances_to_reorder" in al_config:
+        max_inst = al_config["max_instances_to_reorder"]
+        if not isinstance(max_inst, int) or max_inst < 1:
+            raise ConfigValidationError("active_learning.max_instances_to_reorder must be a positive integer")
+
+    if "update_frequency" in al_config:
+        update_freq = al_config["update_frequency"]
+        if not isinstance(update_freq, int) or update_freq < 1:
+            raise ConfigValidationError("active_learning.update_frequency must be a positive integer")
+
+    # Validate resolution strategy
+    if "resolution_strategy" in al_config:
+        strategy = al_config["resolution_strategy"]
+        valid_strategies = ["majority_vote", "random", "consensus", "weighted_average"]
+        if strategy not in valid_strategies:
+            raise ConfigValidationError(f"active_learning.resolution_strategy must be one of: {', '.join(valid_strategies)}")
+
+    # Validate random sample percent
+    if "random_sample_percent" in al_config:
+        random_pct = al_config["random_sample_percent"]
+        if not isinstance(random_pct, (int, float)) or random_pct < 0 or random_pct > 1:
+            raise ConfigValidationError("active_learning.random_sample_percent must be between 0 and 1")
+
+    # Validate schema names
+    if "schema_names" in al_config:
+        schema_names = al_config["schema_names"]
+        if not isinstance(schema_names, list):
+            raise ConfigValidationError("active_learning.schema_names must be a list")
+
+        for schema in schema_names:
+            if not isinstance(schema, str):
+                raise ConfigValidationError("active_learning.schema_names must contain only strings")
+
+            # Check for unsupported schema types
+            if schema in ["text", "span"]:
+                raise ConfigValidationError(f"Text and span annotation schemes are not supported for active learning: {schema}")
+
+    # Validate database configuration
+    if "database" in al_config:
+        db_config = al_config["database"]
+        if not isinstance(db_config, dict):
+            raise ConfigValidationError("active_learning.database must be a dictionary")
+
+        if "enabled" in db_config and not isinstance(db_config["enabled"], bool):
+            raise ConfigValidationError("active_learning.database.enabled must be a boolean")
+
+    # Validate model persistence configuration
+    if "model_persistence" in al_config:
+        model_config = al_config["model_persistence"]
+        if not isinstance(model_config, dict):
+            raise ConfigValidationError("active_learning.model_persistence must be a dictionary")
+
+        if "enabled" in model_config and not isinstance(model_config["enabled"], bool):
+            raise ConfigValidationError("active_learning.model_persistence.enabled must be a boolean")
+
+        if "retention_count" in model_config:
+            retention = model_config["retention_count"]
+            if not isinstance(retention, int) or retention < 1:
+                raise ConfigValidationError("active_learning.model_persistence.retention_count must be a positive integer")
+
+    # Validate LLM configuration
+    if "llm" in al_config:
+        llm_config = al_config["llm"]
+        if not isinstance(llm_config, dict):
+            raise ConfigValidationError("active_learning.llm must be a dictionary")
+
+        if "enabled" in llm_config and not isinstance(llm_config["enabled"], bool):
+            raise ConfigValidationError("active_learning.llm.enabled must be a boolean")
+
+        if "endpoint_url" in llm_config and not isinstance(llm_config["endpoint_url"], str):
+            raise ConfigValidationError("active_learning.llm.endpoint_url must be a string")
+
+        if "model_name" in llm_config and not isinstance(llm_config["model_name"], str):
+            raise ConfigValidationError("active_learning.llm.model_name must be a string")
+
+
+def parse_active_learning_config(config_data: Dict[str, Any]) -> 'ActiveLearningConfig':
+    """
+    Parse active learning configuration from YAML data.
+
+    Args:
+        config_data: The configuration data containing active_learning section
+
+    Returns:
+        ActiveLearningConfig: Parsed active learning configuration
+
+    Raises:
+        ConfigValidationError: If the configuration is invalid
+    """
+    from potato.active_learning_manager import ActiveLearningConfig, ResolutionStrategy
+
+    if "active_learning" not in config_data:
+        return ActiveLearningConfig()  # Return default config
+
+    al_config = config_data["active_learning"]
+
+    # Parse classifier configuration
+    classifier_name = "sklearn.linear_model.LogisticRegression"
+    classifier_kwargs = {}
+    if "classifier" in al_config:
+        classifier_config = al_config["classifier"]
+        classifier_name = classifier_config.get("name", classifier_name)
+        classifier_kwargs = classifier_config.get("hyperparameters", {})
+
+    # Parse vectorizer configuration
+    vectorizer_name = "sklearn.feature_extraction.text.CountVectorizer"
+    vectorizer_kwargs = {}
+    if "vectorizer" in al_config:
+        vectorizer_config = al_config["vectorizer"]
+        vectorizer_name = vectorizer_config.get("name", vectorizer_name)
+        vectorizer_kwargs = vectorizer_config.get("hyperparameters", {})
+
+    # Parse resolution strategy
+    resolution_strategy = ResolutionStrategy.MAJORITY_VOTE
+    if "resolution_strategy" in al_config:
+        strategy_str = al_config["resolution_strategy"]
+        if strategy_str == "majority_vote":
+            resolution_strategy = ResolutionStrategy.MAJORITY_VOTE
+        elif strategy_str == "random":
+            resolution_strategy = ResolutionStrategy.RANDOM
+        elif strategy_str == "consensus":
+            resolution_strategy = ResolutionStrategy.CONSENSUS
+        elif strategy_str == "weighted_average":
+            resolution_strategy = ResolutionStrategy.WEIGHTED_AVERAGE
+
+    # Parse other parameters
+    min_annotations_per_instance = al_config.get("min_annotations_per_instance", 1)
+    min_instances_for_training = al_config.get("min_instances_for_training", 10)
+    max_instances_to_reorder = al_config.get("max_instances_to_reorder")
+    random_sample_percent = al_config.get("random_sample_percent", 0.2)
+    update_frequency = al_config.get("update_frequency", 5)
+    schema_names = al_config.get("schema_names", [])
+
+    # Parse database configuration
+    database_enabled = False
+    database_config = {}
+    if "database" in al_config:
+        db_config = al_config["database"]
+        database_enabled = db_config.get("enabled", False)
+        database_config = {k: v for k, v in db_config.items() if k != "enabled"}
+
+    # Parse model persistence configuration
+    model_persistence_enabled = False
+    model_save_directory = None
+    model_retention_count = 2
+    if "model_persistence" in al_config:
+        model_config = al_config["model_persistence"]
+        model_persistence_enabled = model_config.get("enabled", False)
+        model_save_directory = model_config.get("save_directory")
+        model_retention_count = model_config.get("retention_count", 2)
+
+    # Parse LLM configuration
+    llm_enabled = False
+    llm_config = {}
+    if "llm" in al_config:
+        llm_config = al_config["llm"]
+        llm_enabled = llm_config.get("enabled", False)
+
+    return ActiveLearningConfig(
+        enabled=al_config.get("enabled", False),
+        classifier_name=classifier_name,
+        classifier_kwargs=classifier_kwargs,
+        vectorizer_name=vectorizer_name,
+        vectorizer_kwargs=vectorizer_kwargs,
+        min_annotations_per_instance=min_annotations_per_instance,
+        min_instances_for_training=min_instances_for_training,
+        max_instances_to_reorder=max_instances_to_reorder,
+        resolution_strategy=resolution_strategy,
+        random_sample_percent=random_sample_percent,
+        update_frequency=update_frequency,
+        schema_names=schema_names,
+        database_enabled=database_enabled,
+        database_config=database_config,
+        model_persistence_enabled=model_persistence_enabled,
+        model_save_directory=model_save_directory,
+        model_retention_count=model_retention_count,
+        llm_enabled=llm_enabled,
+        llm_config=llm_config
+    )

@@ -1,0 +1,1 @@
+{"training_instances": [{"id": "train_1", "text": "This product is amazing!", "correct_answers": {"sentiment": "positive"}, "explanation": "The word amazing indicates positive sentiment."}]}

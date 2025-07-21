@@ -33,9 +33,11 @@ This document summarizes the implementation of comprehensive assignment strategy
 #### 🔄 Placeholder Strategies
 
 5. **Active Learning Assignment (`active_learning`)**
-   - Currently falls back to random assignment
-   - Ready for ML model integration
-   - Placeholder for future implementation
+   - Uses machine learning to prioritize uncertain instances
+   - Integrates with `ActiveLearningManager` for intelligent reordering
+   - Supports multiple classifiers and vectorizers
+   - Includes LLM integration for advanced confidence scoring
+   - See [Active Learning Guide](active_learning_guide.md) for configuration
 
 6. **LLM Confidence Assignment (`llm_confidence`)**
    - Currently falls back to random assignment

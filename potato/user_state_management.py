@@ -36,7 +36,7 @@ import datetime
 from collections import defaultdict, OrderedDict
 import logging
 import os
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple, Set
 
 import logging
 
@@ -44,6 +44,142 @@ from potato.authentificaton import UserAuthenticator
 from potato.phase import UserPhase
 from potato.item_state_management import get_item_state_manager, Item, SpanAnnotation, Label
 from potato.annotation_history import AnnotationAction, AnnotationHistoryManager
+from dataclasses import dataclass
+
+@dataclass
+class TrainingState:
+    """
+    Data class for tracking training phase state and performance.
+
+    This class encapsulates training metrics for individual users,
+    including completed questions, correct answers, attempts, and
+    pass/fail status.
+    """
+    completed_questions: Dict[str, Dict[str, Any]]  # instance_id -> {correct: bool, attempts: int, explanation: str}
+    total_correct: int
+    total_attempts: int
+    passed: bool
+    failed: bool
+    current_question_index: int
+    training_instances: List[str]  # List of training instance IDs
+    show_feedback: bool  # Whether to show feedback on the current question
+    feedback_message: str  # The feedback message to display
+    allow_retry: bool  # Whether to allow retry for the current question
+
+    def __init__(self):
+        self.completed_questions = {}
+        self.total_correct = 0
+        self.total_attempts = 0
+        self.passed = False
+        self.failed = False
+        self.current_question_index = 0
+        self.training_instances = []
+        self.show_feedback = False
+        self.feedback_message = ""
+        self.allow_retry = False
+
+    def add_answer(self, instance_id: str, is_correct: bool, attempts: int, explanation: str = "") -> None:
+        """Add a training answer and update statistics."""
+        self.completed_questions[instance_id] = {
+            'correct': is_correct,
+            'attempts': attempts,
+            'explanation': explanation
+        }
+
+        if is_correct:
+            self.total_correct += 1
+        self.total_attempts += attempts
+
+    def get_question_stats(self, instance_id: str) -> Optional[Dict[str, Any]]:
+        """Get statistics for a specific training question."""
+        return self.completed_questions.get(instance_id)
+
+    def has_completed_question(self, instance_id: str) -> bool:
+        """Check if a training question has been completed."""
+        return instance_id in self.completed_questions
+
+    def get_correct_answer_count(self) -> int:
+        """Get the total number of correct answers."""
+        return self.total_correct
+
+    def get_total_attempts(self) -> int:
+        """Get the total number of attempts across all questions."""
+        return self.total_attempts
+
+    def is_passed(self) -> bool:
+        """Check if the user has passed training."""
+        return self.passed
+
+    def is_failed(self) -> bool:
+        """Check if the user has failed training."""
+        return self.failed
+
+    def set_passed(self, passed: bool) -> None:
+        """Set the passed status."""
+        self.passed = passed
+
+    def set_failed(self, failed: bool) -> None:
+        """Set the failed status."""
+        self.failed = failed
+
+    def get_current_question_index(self) -> int:
+        """Get the current question index."""
+        return self.current_question_index
+
+    def set_current_question_index(self, index: int) -> None:
+        """Set the current question index."""
+        self.current_question_index = index
+
+    def get_training_instances(self) -> List[str]:
+        """Get the list of training instance IDs."""
+        return self.training_instances
+
+    def set_training_instances(self, instances: List[str]) -> None:
+        """Set the list of training instance IDs."""
+        self.training_instances = instances
+
+    def set_feedback(self, show_feedback: bool, message: str, allow_retry: bool) -> None:
+        """Set feedback state for the current question."""
+        self.show_feedback = show_feedback
+        self.feedback_message = message
+        self.allow_retry = allow_retry
+
+    def clear_feedback(self) -> None:
+        """Clear feedback state."""
+        self.show_feedback = False
+        self.feedback_message = ""
+        self.allow_retry = False
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert training state to dictionary for serialization."""
+        return {
+            'completed_questions': self.completed_questions,
+            'total_correct': self.total_correct,
+            'total_attempts': self.total_attempts,
+            'passed': self.passed,
+            'failed': self.failed,
+            'current_question_index': self.current_question_index,
+            'training_instances': self.training_instances,
+            'show_feedback': self.show_feedback,
+            'feedback_message': self.feedback_message,
+            'allow_retry': self.allow_retry
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'TrainingState':
+        """Create training state from dictionary."""
+        training_state = cls()
+        training_state.completed_questions = data.get('completed_questions', {})
+        training_state.total_correct = data.get('total_correct', 0)
+        training_state.total_attempts = data.get('total_attempts', 0)
+        training_state.passed = data.get('passed', False)
+        training_state.failed = data.get('failed', False)
+        training_state.current_question_index = data.get('current_question_index', 0)
+        training_state.training_instances = data.get('training_instances', [])
+        training_state.show_feedback = data.get('show_feedback', False)
+        training_state.feedback_message = data.get('feedback_message', "")
+        training_state.allow_retry = data.get('allow_retry', False)
+        return training_state
 
 # Database imports
 try:
@@ -904,6 +1040,83 @@ class UserState:
         self.session_start_time = None
         self.current_session_id = None
 
+    # Training-related method implementations
+    def get_training_state(self) -> TrainingState:
+        """Get the current training state."""
+        return self.training_state
+
+    def update_training_answer(self, instance_id: str, annotations: Dict[str, Any]) -> None:
+        """Update training answer and track attempts."""
+        # Count attempts for this question
+        attempts = 1
+        if instance_id in self.training_state.completed_questions:
+            attempts = self.training_state.completed_questions[instance_id]['attempts'] + 1
+
+        # Store the annotations in the phase-specific storage
+        if self.current_phase_and_page[0] == UserPhase.TRAINING:
+            for schema_name, label_value in annotations.items():
+                # Create a Label object for storage
+                label = Label(schema_name, schema_name)  # Using schema_name as both schema and name
+                self.phase_to_page_to_label_to_value[UserPhase.TRAINING][self.current_phase_and_page[1]][label] = label_value
+
+    def check_training_pass(self, instance_id: str, correct_answers: Dict[str, Any]) -> bool:
+        """Check if the user's answer for a specific instance is correct."""
+        # Get the user's annotations for this instance
+        user_annotations = {}
+        if self.current_phase_and_page[0] == UserPhase.TRAINING:
+            page = self.current_phase_and_page[1]
+            for label, value in self.phase_to_page_to_label_to_value[UserPhase.TRAINING][page].items():
+                user_annotations[label.get_schema()] = value
+
+        # Compare user annotations with correct answers
+        is_correct = True
+        for schema_name, correct_value in correct_answers.items():
+            if schema_name not in user_annotations:
+                is_correct = False
+                break
+            if user_annotations[schema_name] != correct_value:
+                is_correct = False
+                break
+
+        # Update training state with the result
+        attempts = 1
+        if instance_id in self.training_state.completed_questions:
+            attempts = self.training_state.completed_questions[instance_id]['attempts'] + 1
+
+        self.training_state.add_answer(instance_id, is_correct, attempts)
+        return is_correct
+
+    def get_current_training_instance(self) -> Optional[Item]:
+        """Get the current training instance."""
+        if not self.training_state.training_instances:
+            return None
+
+        current_index = self.training_state.get_current_question_index()
+        if current_index >= len(self.training_state.training_instances):
+            return None
+
+        instance_id = self.training_state.training_instances[current_index]
+        # Import here to avoid circular imports
+        from potato.flask_server import get_training_instances
+        training_items = get_training_instances()
+
+        for item in training_items:
+            if item.get_id() == instance_id:
+                return item
+        return None
+
+    def advance_training_question(self) -> bool:
+        """Advance to the next training question."""
+        current_index = self.training_state.get_current_question_index()
+        if current_index < len(self.training_state.training_instances) - 1:
+            self.training_state.set_current_question_index(current_index + 1)
+            return True
+        return False
+
+    def reset_training_state(self) -> None:
+        """Reset the training state."""
+        self.training_state = TrainingState()
+
 
 class MysqlUserState(UserState):
 
@@ -983,6 +1196,9 @@ class InMemoryUserState(UserState):
             'actions_per_minute': 0,
             'last_action_timestamp': None
         }
+
+        # New: Training state tracking
+        self.training_state = TrainingState()
 
     def hint_exists(self, instance_id: str) -> bool:
         return instance_id in self.ai_hints
@@ -1401,6 +1617,8 @@ class InMemoryUserState(UserState):
         d['instance_id_to_span_to_value'] = {k: convert_span_dict(v) for k,v in self.instance_id_to_span_to_value.items()}
         d['phase_to_page_to_label_to_value'] = {str(k): {k2: convert_label_dict(v2) for k2, v2 in v.items()} for k, v in self.phase_to_page_to_label_to_value.items()}
         d['phase_to_page_to_span_to_value'] = {str(k): {k2: convert_span_dict(v2) for k2, v2 in v.items()} for k, v in self.phase_to_page_to_span_to_value.items()}
+
+        d['training_state'] = self.training_state.to_dict()
 
         return d
 

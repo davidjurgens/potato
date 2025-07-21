@@ -701,6 +701,37 @@ class ItemStateManager:
         """
         self.item_annotation_counts[instance_id] += delta
 
+    def reorder_instances(self, new_order: List[str]):
+        """
+        Reorder instances based on active learning predictions.
+
+        Args:
+            new_order: List of instance IDs in the new desired order
+
+        Note:
+            This method preserves instances that are not in the new_order list
+            by appending them to the end of the ordering.
+        """
+        # Create a set of instances in the new order for efficient lookup
+        new_order_set = set(new_order)
+
+        # Filter out instances that don't exist in our manager
+        valid_new_order = [instance_id for instance_id in new_order if instance_id in self.instance_id_to_instance]
+
+        # Find instances that are not in the new order
+        remaining_instances = [instance_id for instance_id in self.instance_id_ordering if instance_id not in new_order_set]
+
+        # Combine the new order with remaining instances
+        self.instance_id_ordering = valid_new_order + remaining_instances
+
+        # Update the remaining_instance_ids queue to match the new ordering
+        self.remaining_instance_ids.clear()
+        for instance_id in self.instance_id_ordering:
+            if instance_id not in self.completed_instance_ids:
+                self.remaining_instance_ids.append(instance_id)
+
+        self.logger.info(f"Reordered {len(valid_new_order)} instances, {len(remaining_instances)} instances preserved")
+
     def clear(self):
         """Clear all data from the manager (for testing)"""
         self.instance_id_to_instance.clear()

@@ -44,7 +44,8 @@ from potato.flask_server import (
     get_annotations_for_user_on, get_span_annotations_for_user_on,
     render_page_with_annotations, get_current_page_html,
     validate_annotation, parse_html_span_annotation, Label, SpanAnnotation,
-    get_users, get_total_annotations, update_annotation_state, ai_hints
+    get_users, get_total_annotations, update_annotation_state, ai_hints,
+    get_training_instances, get_training_correct_answers, get_training_explanation
 )
 
 # Import admin dashboard functionality
@@ -658,6 +659,159 @@ def instructions():
         instructions_html_fname = usm.get_phase_html_fname(phase, page)
         # Render the instructions
         return render_template(instructions_html_fname)
+
+@app.route("/training", methods=["GET", "POST"])
+def training():
+    """
+    Handle the training phase of the annotation process.
+
+    This route manages the training phase where users practice annotation
+    with feedback on their performance. It supports:
+    - Displaying training instances with correct answers
+    - Processing user annotations and providing feedback
+    - Tracking training progress and performance
+    - Advancing users based on training performance criteria
+    - Allowing retries for failed attempts
+
+    Returns:
+        flask.Response: Rendered template or redirect
+    """
+    if 'username' not in session:
+        return home()
+
+    username = session['username']
+    user_state = get_user_state(username)
+
+    # Check that the user is in the training phase
+    if user_state.get_phase() != UserPhase.TRAINING:
+        logger.debug(f'User {username} not in training phase, redirecting')
+        return home()
+
+    # Check if training is enabled in config
+    if not config.get('training', {}).get('enabled', False):
+        logger.debug('Training not enabled, advancing to next phase')
+        usm = get_user_state_manager()
+        usm.advance_phase(username)
+        return home()
+
+    # Handle POST requests (annotation submission)
+    if request.method == 'POST':
+        logger.debug(f'POST -> TRAINING: {request.form}')
+
+        # Get the current training instance
+        current_instance = user_state.get_current_training_instance()
+        if not current_instance:
+            logger.error(f'No training instance available for user {username}')
+            return render_template("error.html", message="No training instance available")
+
+        instance_id = current_instance.get_id()
+
+        # Process the annotation
+        if request.is_json:
+            annotation_data = request.get_json()
+        else:
+            annotation_data = dict(request.form)
+
+        # Get correct answers for this training instance
+        correct_answers = get_training_correct_answers(instance_id)
+        if not correct_answers:
+            logger.error(f'No correct answers found for training instance {instance_id}')
+            return render_template("error.html", message="Training data error")
+
+        # Validate and process the annotation
+        try:
+            # Update user's training answer
+            user_state.update_training_answer(instance_id, annotation_data)
+
+            # Check if the answer is correct
+            is_correct = user_state.check_training_pass(instance_id, correct_answers)
+
+            if is_correct:
+                logger.info(f'User {username} answered training question {instance_id} correctly')
+                # Clear any previous feedback
+                user_state.get_training_state().clear_feedback()
+
+                # Move to next training question or complete training
+                if user_state.advance_training_question():
+                    # More questions available
+                    user_state.get_training_state().set_feedback(True, "Correct! Moving to next question.", False)
+                    return render_template("training.html",
+                                         instance=current_instance,
+                                         feedback="Correct! Moving to next question.",
+                                         show_feedback=True,
+                                         allow_retry=False,
+                                         annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
+                                         username=username)
+                else:
+                    # Training completed successfully
+                    logger.info(f'User {username} completed training successfully')
+                    usm = get_user_state_manager()
+                    usm.advance_phase(username)
+                    return home()
+            else:
+                logger.info(f'User {username} answered training question {instance_id} incorrectly')
+                # Get explanation for incorrect answer
+                explanation = get_training_explanation(instance_id)
+
+                # Check if user should be allowed to retry
+                training_config = config.get('training', {})
+                allow_retry = training_config.get('allow_retry', True)
+
+                if allow_retry:
+                    user_state.get_training_state().set_feedback(True, f"Incorrect. {explanation}", True)
+                    return render_template("training.html",
+                                         instance=current_instance,
+                                         feedback=f"Incorrect. {explanation}",
+                                         show_feedback=True,
+                                         allow_retry=True,
+                                         annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
+                                         username=username)
+                else:
+                    # Check failure action
+                    failure_action = training_config.get('failure_action', 'retry')
+                    if failure_action == 'advance':
+                        logger.info(f'User {username} failed training but advancing due to config')
+                        usm = get_user_state_manager()
+                        usm.advance_phase(username)
+                        return home()
+                    else:
+                        # Default to retry
+                        user_state.get_training_state().set_feedback(True, f"Incorrect. {explanation}", True)
+                        return render_template("training.html",
+                                             instance=current_instance,
+                                             feedback=f"Incorrect. {explanation}",
+                                             show_feedback=True,
+                                             allow_retry=True,
+                                             annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
+                                             username=username)
+
+        except Exception as e:
+            logger.error(f'Error processing training annotation: {e}')
+            return render_template("error.html", message="Error processing training annotation")
+
+    # Handle GET requests (display training question)
+    else:
+        logger.debug(f'GET <-- TRAINING for user {username}')
+
+        # Get the current training instance
+        current_instance = user_state.get_current_training_instance()
+        if not current_instance:
+            logger.error(f'No training instance available for user {username}')
+            return render_template("error.html", message="No training instance available")
+
+        # Check if we should show feedback from previous attempt
+        training_state = user_state.get_training_state()
+        show_feedback = training_state.show_feedback if training_state else False
+        feedback_message = training_state.feedback_message if training_state else ""
+        allow_retry = training_state.allow_retry if training_state else False
+
+        return render_template("training.html",
+                             instance=current_instance,
+                             feedback=feedback_message,
+                             show_feedback=show_feedback,
+                             allow_retry=allow_retry,
+                             annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
+                             username=username)
 
 @app.route("/prestudy", methods=["GET", "POST"])
 def prestudy():
@@ -1340,13 +1494,19 @@ def admin_api_config():
     """
     if request.method == "GET":
         # Return current configuration
-        return jsonify({
+        response_data = {
             "max_annotations_per_user": config.get("max_annotations_per_user", -1),
             "max_annotations_per_item": config.get("max_annotations_per_item", -1),
             "assignment_strategy": config.get("assignment_strategy", "fixed_order"),
             "annotation_task_name": config.get("annotation_task_name", "Unknown"),
             "debug_mode": config.get("debug", False)
-        })
+        }
+
+        # Add training configuration if present
+        if "training" in config:
+            response_data["training"] = config["training"]
+
+        return jsonify(response_data)
 
     elif request.method == "POST":
         # Update configuration

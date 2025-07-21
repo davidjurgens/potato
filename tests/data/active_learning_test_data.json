@@ -1,0 +1,402 @@
+[
+  {
+    "id": "sentiment_001",
+    "text": "I absolutely love this new smartphone! The camera quality is incredible and the battery life is amazing."
+  },
+  {
+    "id": "sentiment_002", 
+    "text": "This political decision is absolutely terrible for our country. I can't believe they would do this."
+  },
+  {
+    "id": "sentiment_003",
+    "text": "The weather today is quite pleasant with a gentle breeze and clear skies."
+  },
+  {
+    "id": "sentiment_004",
+    "text": "This technology is revolutionary and will change how we work forever."
+  },
+  {
+    "id": "sentiment_005",
+    "text": "I'm so disappointed with the election results. This is a huge setback for our community."
+  },
+  {
+    "id": "sentiment_006",
+    "text": "The new restaurant downtown has excellent food and great service."
+  },
+  {
+    "id": "sentiment_007",
+    "text": "This movie was boring and predictable. I wasted two hours of my life."
+  },
+  {
+    "id": "sentiment_008",
+    "text": "The scientific breakthrough in renewable energy is promising for our future."
+  },
+  {
+    "id": "sentiment_009",
+    "text": "The traffic today was horrible and made me late for my important meeting."
+  },
+  {
+    "id": "sentiment_010",
+    "text": "I'm neutral about the new policy changes. They seem reasonable but could be better."
+  },
+  {
+    "id": "sentiment_011",
+    "text": "This book is absolutely fantastic! I couldn't put it down."
+  },
+  {
+    "id": "sentiment_012",
+    "text": "The government's handling of this crisis has been completely inadequate."
+  },
+  {
+    "id": "sentiment_013",
+    "text": "The concert last night was okay, nothing special but not bad either."
+  },
+  {
+    "id": "sentiment_014",
+    "text": "I'm thrilled about the new job opportunity! This is exactly what I've been looking for."
+  },
+  {
+    "id": "sentiment_015",
+    "text": "The customer service at this company is absolutely terrible. I'm never shopping here again."
+  },
+  {
+    "id": "sentiment_016",
+    "text": "The new software update includes some useful features and bug fixes."
+  },
+  {
+    "id": "sentiment_017",
+    "text": "I'm devastated by the news of the natural disaster affecting thousands of people."
+  },
+  {
+    "id": "sentiment_018",
+    "text": "The coffee at this café is decent, but nothing to write home about."
+  },
+  {
+    "id": "sentiment_019",
+    "text": "This scientific discovery could revolutionize medicine and save countless lives."
+  },
+  {
+    "id": "sentiment_020",
+    "text": "The new regulations are frustrating and will make our work much more difficult."
+  },
+  {
+    "id": "sentiment_021",
+    "text": "I'm excited about the upcoming vacation! It's going to be amazing."
+  },
+  {
+    "id": "sentiment_022",
+    "text": "The internet connection is so slow today, it's driving me crazy."
+  },
+  {
+    "id": "sentiment_023",
+    "text": "The new park in our neighborhood is nice and provides a good place for families."
+  },
+  {
+    "id": "sentiment_024",
+    "text": "I'm concerned about the economic impact of these new policies."
+  },
+  {
+    "id": "sentiment_025",
+    "text": "The new album from my favorite band is incredible! Every song is perfect."
+  },
+  {
+    "id": "sentiment_026",
+    "text": "The construction noise outside is unbearable and making it impossible to work."
+  },
+  {
+    "id": "sentiment_027",
+    "text": "The new educational program seems well-designed and could benefit many students."
+  },
+  {
+    "id": "sentiment_028",
+    "text": "I'm worried about the environmental impact of this industrial project."
+  },
+  {
+    "id": "sentiment_029",
+    "text": "The new video game is absolutely brilliant! The graphics and gameplay are outstanding."
+  },
+  {
+    "id": "sentiment_030",
+    "text": "The food poisoning from that restaurant was horrible and ruined my entire weekend."
+  },
+  {
+    "id": "sentiment_031",
+    "text": "The new public transportation system is convenient and affordable."
+  },
+  {
+    "id": "sentiment_032",
+    "text": "I'm frustrated with the slow progress on this important project."
+  },
+  {
+    "id": "sentiment_033",
+    "text": "The sunset tonight was beautiful and peaceful."
+  },
+  {
+    "id": "sentiment_034",
+    "text": "The new security measures are excessive and inconvenient for everyone."
+  },
+  {
+    "id": "sentiment_035",
+    "text": "I'm grateful for the support from my friends during this difficult time."
+  },
+  {
+    "id": "sentiment_036",
+    "text": "The new smartphone app is confusing and poorly designed."
+  },
+  {
+    "id": "sentiment_037",
+    "text": "The community garden project is wonderful and brings people together."
+  },
+  {
+    "id": "sentiment_038",
+    "text": "I'm annoyed by the constant spam emails I'm receiving."
+  },
+  {
+    "id": "sentiment_039",
+    "text": "The new museum exhibit is interesting and educational."
+  },
+  {
+    "id": "sentiment_040",
+    "text": "The new tax policy is unfair and will hurt middle-class families."
+  },
+  {
+    "id": "sentiment_041",
+    "text": "I'm delighted with the new puppy! He's so adorable and playful."
+  },
+  {
+    "id": "sentiment_042",
+    "text": "The new operating system is buggy and keeps crashing my computer."
+  },
+  {
+    "id": "sentiment_043",
+    "text": "The new recycling program is effective and helps protect the environment."
+  },
+  {
+    "id": "sentiment_044",
+    "text": "I'm irritated by the loud neighbors who party every weekend."
+  },
+  {
+    "id": "sentiment_045",
+    "text": "The new library hours are convenient for working professionals."
+  },
+  {
+    "id": "sentiment_046",
+    "text": "The new immigration policy is controversial and has divided the country."
+  },
+  {
+    "id": "sentiment_047",
+    "text": "I'm overjoyed about the birth of my new niece! She's perfect."
+  },
+  {
+    "id": "sentiment_048",
+    "text": "The new streaming service is expensive and has limited content."
+  },
+  {
+    "id": "sentiment_049",
+    "text": "The new bike lanes make the city safer and more accessible."
+  },
+  {
+    "id": "sentiment_050",
+    "text": "I'm disappointed with the quality of the new product I purchased."
+  },
+  {
+    "id": "sentiment_051",
+    "text": "The new art installation in the park is beautiful and inspiring."
+  },
+  {
+    "id": "sentiment_052",
+    "text": "The new parking regulations are confusing and expensive."
+  },
+  {
+    "id": "sentiment_053",
+    "text": "I'm thankful for the healthcare workers who are helping people every day."
+  },
+  {
+    "id": "sentiment_054",
+    "text": "The new social media platform is addictive and wastes too much time."
+  },
+  {
+    "id": "sentiment_055",
+    "text": "The new community center provides valuable services for local residents."
+  },
+  {
+    "id": "sentiment_056",
+    "text": "I'm concerned about the privacy implications of this new technology."
+  },
+  {
+    "id": "sentiment_057",
+    "text": "The new hiking trail offers stunning views and great exercise."
+  },
+  {
+    "id": "sentiment_058",
+    "text": "The new work schedule is exhausting and leaves no time for family."
+  },
+  {
+    "id": "sentiment_059",
+    "text": "I'm impressed with the new student achievement program."
+  },
+  {
+    "id": "sentiment_060",
+    "text": "The new traffic light system is inefficient and causes more delays."
+  },
+  {
+    "id": "sentiment_061",
+    "text": "The new volunteer program is rewarding and makes a real difference."
+  },
+  {
+    "id": "sentiment_062",
+    "text": "I'm frustrated with the bureaucracy involved in getting a simple permit."
+  },
+  {
+    "id": "sentiment_063",
+    "text": "The new farmers market has fresh produce and a friendly atmosphere."
+  },
+  {
+    "id": "sentiment_064",
+    "text": "The new surveillance cameras make me feel uncomfortable and watched."
+  },
+  {
+    "id": "sentiment_065",
+    "text": "I'm excited about the new job training program for unemployed workers."
+  },
+  {
+    "id": "sentiment_066",
+    "text": "The new noise ordinance is too strict and limits community events."
+  },
+  {
+    "id": "sentiment_067",
+    "text": "The new playground equipment is safe and fun for children."
+  },
+  {
+    "id": "sentiment_068",
+    "text": "I'm worried about the safety of the new nuclear power plant."
+  },
+  {
+    "id": "sentiment_069",
+    "text": "The new book club has interesting discussions and great recommendations."
+  },
+  {
+    "id": "sentiment_070",
+    "text": "The new dress code policy is outdated and unnecessarily restrictive."
+  },
+  {
+    "id": "sentiment_071",
+    "text": "I'm grateful for the new emergency response system that saved lives."
+  },
+  {
+    "id": "sentiment_072",
+    "text": "The new software license agreement is confusing and full of legal jargon."
+  },
+  {
+    "id": "sentiment_073",
+    "text": "The new community theater production is entertaining and well-acted."
+  },
+  {
+    "id": "sentiment_074",
+    "text": "I'm annoyed by the constant software updates that interrupt my work."
+  },
+  {
+    "id": "sentiment_075",
+    "text": "The new wildlife sanctuary protects endangered species and educates visitors."
+  },
+  {
+    "id": "sentiment_076",
+    "text": "The new airport security procedures are time-consuming and invasive."
+  },
+  {
+    "id": "sentiment_077",
+    "text": "I'm delighted with the new community garden that provides fresh vegetables."
+  },
+  {
+    "id": "sentiment_078",
+    "text": "The new insurance policy has too many exclusions and high deductibles."
+  },
+  {
+    "id": "sentiment_079",
+    "text": "The new music festival brings together diverse artists and cultures."
+  },
+  {
+    "id": "sentiment_080",
+    "text": "I'm concerned about the environmental impact of the new highway project."
+  },
+  {
+    "id": "sentiment_081",
+    "text": "The new mentorship program helps young professionals develop their careers."
+  },
+  {
+    "id": "sentiment_082",
+    "text": "The new subscription service is expensive and has hidden fees."
+  },
+  {
+    "id": "sentiment_083",
+    "text": "The new historical museum preserves our cultural heritage beautifully."
+  },
+  {
+    "id": "sentiment_084",
+    "text": "I'm frustrated with the slow internet speed in our neighborhood."
+  },
+  {
+    "id": "sentiment_085",
+    "text": "The new community choir brings joy and music to our town."
+  },
+  {
+    "id": "sentiment_086",
+    "text": "The new tax increase will burden small businesses and families."
+  },
+  {
+    "id": "sentiment_087",
+    "text": "I'm impressed with the new solar panel installation program."
+  },
+  {
+    "id": "sentiment_088",
+    "text": "The new parking meters are expensive and difficult to use."
+  },
+  {
+    "id": "sentiment_089",
+    "text": "The new community kitchen helps feed families in need."
+  },
+  {
+    "id": "sentiment_090",
+    "text": "I'm worried about the safety of the new amusement park rides."
+  },
+  {
+    "id": "sentiment_091",
+    "text": "The new public art project beautifies our city and inspires creativity."
+  },
+  {
+    "id": "sentiment_092",
+    "text": "The new software bugs are causing data loss and system crashes."
+  },
+  {
+    "id": "sentiment_093",
+    "text": "The new community center provides valuable resources for everyone."
+  },
+  {
+    "id": "sentiment_094",
+    "text": "I'm disappointed with the poor customer service at the new store."
+  },
+  {
+    "id": "sentiment_095",
+    "text": "The new nature preserve protects local wildlife and provides hiking trails."
+  },
+  {
+    "id": "sentiment_096",
+    "text": "The new building codes are too strict and increase construction costs."
+  },
+  {
+    "id": "sentiment_097",
+    "text": "I'm thankful for the new emergency shelter that helps homeless families."
+  },
+  {
+    "id": "sentiment_098",
+    "text": "The new social media algorithm promotes misinformation and fake news."
+  },
+  {
+    "id": "sentiment_099",
+    "text": "The new community sports league promotes fitness and teamwork."
+  },
+  {
+    "id": "sentiment_100",
+    "text": "I'm concerned about the privacy implications of the new surveillance system."
+  }
+]
