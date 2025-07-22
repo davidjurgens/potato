@@ -48,14 +48,16 @@ Create a data file with your items to annotate. For example, create `data/my_dat
 
 ### 3. Create Your Configuration File
 
-Create a YAML configuration file `config.yaml`:
+**Important**: Your configuration file must be located within the `task_dir` that you specify in the configuration. This is a security requirement.
+
+Create a YAML configuration file `config.yaml` in your task directory:
 
 ```yaml
 # Basic Configuration
 port: 8000
 server_name: My First Annotation Task
 annotation_task_name: Sentiment Analysis
-task_dir: output/my_task/
+task_dir: my_annotation_task/  # This must contain the config file
 
 # Data Configuration
 data_files:
@@ -99,150 +101,84 @@ annotation_schemes:
 # Server Configuration
 server:
   port: 8000
-  host: "0.0.0.0"
-  require_password: false
+  host: 0.0.0.0
+  require_password: true
   persist_sessions: false
 
-# Template Configuration
+# Optional: Custom UI settings
 site_dir: default
-use_dedicated_layout: true
 customjs: null
 customjs_hostname: null
-
-# Alert Configuration
 alert_time_each_instance: 10000000
 ```
 
-### 4. Launch the Server
+### 4. Start the Server
 
-Start your annotation server:
+Start the annotation server with your configuration:
 
 ```bash
-python -m potato.flask_server start config.yaml
+# From the parent directory of your task
+python potato/flask_server.py start my_annotation_task/config.yaml -p 8000
 ```
 
-The server will be available at `http://localhost:8000`.
+## Project Structure
 
-## Task Directory Structure
-
-When you run Potato, it creates the following directory structure:
+Your final project structure should look like this:
 
 ```
 my_annotation_task/
-├── config.yaml              # Your configuration file
+├── config.yaml              # ✅ Config file in task_dir
 ├── data/
-│   └── my_data.json         # Your data file
-├── output/
-│   └── my_task/             # Task directory (created by Potato)
-│       ├── layouts/         # Generated layout files
-│       │   └── task_layout.html
-│       ├── annotations/     # Annotation output files
-│       │   ├── all_annotations.json
-│       │   └── user_annotations/
-│       └── state/          # Server state files
-└── README.md               # Optional: task documentation
+│   └── my_data.json         # Your annotation data
+├── output/                  # Will be created automatically
+│   └── annotations/         # Annotation results
+└── templates/               # Optional: custom templates
+    └── custom_layout.html
 ```
 
-## Available Annotation Types
+## Alternative: Multiple Config Files
 
-Potato supports multiple annotation types. Here are some common examples:
+If you want to have multiple configuration files for different experiments, you can use a `configs/` subdirectory:
 
-### Radio Buttons (Single Choice)
-```yaml
-annotation_schemes:
-  - annotation_type: radio
-    name: category
-    description: Select the category that best describes this text
-    labels:
-      - news
-      - opinion
-      - review
-    sequential_key_binding: true
+```
+my_annotation_task/
+├── configs/
+│   ├── experiment1.yaml     # ✅ Config files in configs/
+│   └── experiment2.yaml
+├── data/
+│   └── my_data.json
+└── output/
+    └── annotations/
 ```
 
-### Checkboxes (Multiple Choice)
-```yaml
-annotation_schemes:
-  - annotation_type: multiselect
-    name: topics
-    description: What topics are mentioned? (Select all that apply)
-    labels:
-      - politics
-      - technology
-      - sports
-    has_free_response:
-      instruction: Other topics:
-```
-
-### Likert Scale
-```yaml
-annotation_schemes:
-  - annotation_type: likert
-    name: quality
-    description: How would you rate the quality of this text?
-    min_label: Very Poor
-    max_label: Excellent
-    size: 5
-```
-
-### Text Input
-```yaml
-annotation_schemes:
-  - annotation_type: text
-    name: summary
-    description: Please provide a brief summary
-    multiline: true
-    rows: 4
-    cols: 60
-```
-
-## Assignment Strategies
-
-Potato supports different strategies for assigning items to annotators:
-
-- **`random`**: Assigns items randomly
-- **`fixed_order`**: Assigns items in the order they appear in the dataset
-- **`least_annotated`**: Prioritizes items with the fewest annotations
-- **`max_diversity`**: Prioritizes items with highest disagreement
-
-Example:
-```yaml
-assignment_strategy: least_annotated
-max_annotations_per_item: 3
-```
-
-## Advanced Configuration
-
-For more complex tasks, you can:
-
-- Add multiple annotation schemes
-- Configure SurveyFlow for pre/post annotation surveys
-- Set up active learning
-- Customize the UI layout
-- Add keyboard shortcuts
-
-See the [Configuration Guide](configuration.md) for complete documentation.
-
-## Example Projects
-
-If you want to see working examples, check out the project templates:
+Then start the server with:
 
 ```bash
-# List available templates
-potato list all
+# Start with project directory (will prompt to choose config)
+python potato/flask_server.py start my_annotation_task/ -p 8000
 
-# Get a specific template
-potato get sentiment_analysis
-
-# Start a template project
-potato start sentiment_analysis
+# Or start with a specific config file
+python potato/flask_server.py start my_annotation_task/configs/experiment1.yaml -p 8000
 ```
 
-## Next Steps
+## Path Resolution
 
-1. **Customize your configuration**: Modify the YAML file to match your annotation needs
-2. **Add more data**: Expand your data file with more items
-3. **Test thoroughly**: Try annotating a few items to ensure everything works
-4. **Deploy**: Set up the server for your annotators to access
+All relative paths in your configuration are resolved relative to the `task_dir`:
 
-For detailed configuration options, see the [Configuration Guide](configuration.md).
+- `data/my_data.json` → `{task_dir}/data/my_data.json`
+- `output/annotations/` → `{task_dir}/output/annotations/`
+- `templates/` → `{task_dir}/templates/`
+
+## Common Issues and Solutions
+
+### "Configuration file must be in the task_dir"
+- **Problem**: Your config file is outside the `task_dir` specified in the YAML
+- **Solution**: Move the config file into the `task_dir` or update the `task_dir` path
+
+### "Data file not found"
+- **Problem**: A referenced data file doesn't exist
+- **Solution**: Check that the file path is correct relative to the `task_dir`
+
+### "Missing required configuration fields"
+- **Problem**: Required fields are missing from your config
+- **Solution**: Ensure all required fields are present (see configuration guide for details)

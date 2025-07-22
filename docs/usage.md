@@ -78,23 +78,57 @@ There are a few other settings you can play with:
 And that's it! You can go ahead and get started labeling data in one of
 two ways:
 
-**Option 1 (recommended):** Follow the prompts given above to define a YAML file that
-specifies the data sources, server configuration, annotation schemes,
-and any custom visualizations
-([examples](https://github.com/davidjurgens/potato/tree/master/config/examples))
-and then launch potato.
+### Option 1: Direct Config File (Recommended)
 
-`potato start sentiment_analysis -p 8000`
+**Important**: Your YAML configuration file must be located within the `task_dir` specified in the configuration. This is a security requirement.
 
-here sentiment_analysis is a folder with a `configs` subfolder, and put your `.yaml` file into that folder,
-potato will automatically find all the config files under the `configs` folder
+```bash
+# Start with a specific config file
+python potato/flask_server.py start my_annotation_task/config.yaml -p 8000
+```
 
-**Option 2:** Launch potato without a YAML. In this case, the server
+Your project structure should look like this:
+```
+my_annotation_task/
+├── config.yaml              # ✅ Config file in task_dir
+├── data/
+│   └── my_data.json
+├── output/
+│   └── annotations/
+└── templates/
+    └── custom_layout.html
+```
+
+### Option 2: Project Directory with Configs Subfolder
+
+If you have multiple configuration files, you can organize them in a `configs/` subdirectory:
+
+```bash
+# Start with project directory (will prompt to choose config if multiple exist)
+python potato/flask_server.py start my_annotation_task/ -p 8000
+```
+
+Your project structure would look like this:
+```
+my_annotation_task/
+├── configs/
+│   ├── experiment1.yaml     # ✅ Config files in configs/
+│   └── experiment2.yaml
+├── data/
+│   └── my_data.json
+└── output/
+    └── annotations/
+```
+
+### Option 3: Interactive Setup (Legacy)
+
+Launch potato without a YAML. In this case, the server
 will have you follow a series of prompts about the task and
-automatically generate a YAML file for you. A YAML file is then passed
-to the server on the command line to launch the server for annotation.
+automatically generate a YAML file for you.
 
-`python3 potato/flask_server.py -p 8000`
+```bash
+python3 potato/flask_server.py -p 8000
+```
 
 This will launch the webserver on port 8000 which can be accessed at
 <http://localhost:8000>. You can [create an

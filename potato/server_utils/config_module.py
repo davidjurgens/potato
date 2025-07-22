@@ -145,6 +145,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Validate active learning configuration if present
     validate_active_learning_config(config_data)
 
+    # Validate AI support configuration if present
+    validate_ai_support_config(config_data)
+
 
 def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
     """
@@ -313,12 +316,29 @@ def validate_file_paths(config_data: Dict[str, Any], project_dir: str, config_fi
         ConfigSecurityError: If any file paths are not secure
         ConfigValidationError: If required files don't exist
     """
-    # Use config file directory if provided, otherwise use project directory
-    base_dir = config_file_dir if config_file_dir else project_dir
+    # Get the task_dir from config
+    task_dir = config_data.get('task_dir')
+    if not task_dir:
+        raise ConfigValidationError("task_dir is required in configuration")
+
+    # Validate task_dir exists and is secure
+    try:
+        validated_task_dir = validate_path_security(task_dir, project_dir)
+        # Don't require task_dir to exist - it's often an output directory that will be created
+        # Only validate that it's a valid path
+    except ConfigSecurityError as e:
+        raise ConfigSecurityError(f"task_dir: {str(e)}")
+
+    # Use task_dir as the base for resolving relative paths in the config
+    base_dir = validated_task_dir
 
     # Validate data files
     data_files = config_data.get('data_files', [])
     for i, data_file in enumerate(data_files):
+        # Skip validation for special values
+        if data_file in [None, "null", "default"]:
+            continue
+
         try:
             validated_path = validate_path_security(data_file, base_dir, project_dir)
             if not os.path.exists(validated_path):
@@ -326,13 +346,35 @@ def validate_file_paths(config_data: Dict[str, Any], project_dir: str, config_fi
         except ConfigSecurityError as e:
             raise ConfigSecurityError(f"Data file {i}: {str(e)}")
 
-    # Validate task_dir and output_annotation_dir
-    for field in ['task_dir', 'output_annotation_dir']:
-        if field in config_data:
+    # Validate output_annotation_dir
+    if 'output_annotation_dir' in config_data:
+        output_dir = config_data['output_annotation_dir']
+        # Skip validation for special values
+        if output_dir not in [None, "null", "default"]:
             try:
-                validate_path_security(config_data[field], project_dir)
+                validate_path_security(output_dir, project_dir)
             except ConfigSecurityError as e:
-                raise ConfigSecurityError(f"{field}: {str(e)}")
+                raise ConfigSecurityError(f"output_annotation_dir: {str(e)}")
+
+    # Validate site_dir
+    if 'site_dir' in config_data:
+        site_dir = config_data['site_dir']
+        # Skip validation for special values
+        if site_dir not in [None, "null", "default"]:
+            try:
+                validate_path_security(site_dir, base_dir, project_dir)
+            except ConfigSecurityError as e:
+                raise ConfigSecurityError(f"site_dir: {str(e)}")
+
+    # Validate custom_ds
+    if 'custom_ds' in config_data:
+        custom_ds = config_data['custom_ds']
+        # Skip validation for special values
+        if custom_ds not in [None, "null", "default"]:
+            try:
+                validate_path_security(custom_ds, base_dir, project_dir)
+            except ConfigSecurityError as e:
+                raise ConfigSecurityError(f"custom_ds: {str(e)}")
 
 
 def validate_training_config(config_data: Dict[str, Any], project_dir: str, config_file_dir: str = None) -> None:
@@ -569,6 +611,7 @@ def init_config(args):
 
     project_dir = os.getcwd() #get the current working dir as the default project_dir
     config_file = None
+    config_file_dir = None
 
     try:
         # if the .yaml config file is given, directly use it
@@ -576,12 +619,8 @@ def init_config(args):
             if os.path.exists(args.config_file):
                 print("INFO: when you run the server directly from a .yaml file, please make sure your config file is put in the annotation project folder")
                 config_file = args.config_file
-                path_sep = os.path.sep
-                split_path = os.path.abspath(config_file).split(path_sep)
-                if split_path[-2] == "configs":
-                    project_dir = path_sep.join(split_path[:-2])
-                else:
-                    project_dir = path_sep.join(split_path[:-1])
+                # For direct YAML file usage, we'll determine the project_dir from the config file content
+                # after loading it, not from the file path structure
             else:
                 raise FileNotFoundError(f"Configuration file not found: {args.config_file}")
 
@@ -601,6 +640,7 @@ def init_config(args):
             # if only one yaml file found, directly use it
             elif len(yamlfiles) == 1:
                 config_file = os.path.join(config_folder, yamlfiles[0])
+                config_file_dir = config_folder
 
             # if multiple yaml files found, ask the user to choose which one to use
             else:
@@ -611,6 +651,7 @@ def init_config(args):
                     input_id = input("number: ")
                     try:
                         config_file = os.path.join(config_folder, yamlfiles[int(input_id)])
+                        config_file_dir = config_folder
                         break
                     except Exception:
                         print("wrong input, please reselect")
@@ -619,7 +660,30 @@ def init_config(args):
             raise ConfigValidationError(f"Configuration file not found under {config_folder}, please make sure .yaml file exists in the given directory, or please directly give the path of the .yaml file")
 
         # Load and validate the configuration
-        config_data = load_and_validate_config(config_file, project_dir)
+        # For direct config file usage, use current working directory as base for config file path resolution
+        if args.config_file[-5:] == '.yaml':
+            # First, load the config without full validation to get the task_dir
+            try:
+                validated_config_path = validate_path_security(config_file, os.getcwd())
+                with open(validated_config_path, 'r', encoding='utf-8') as file_p:
+                    temp_config_data = yaml.safe_load(file_p)
+            except Exception as e:
+                raise ConfigValidationError(f"Error loading configuration file: {str(e)}")
+
+            # Validate that config file is in task_dir
+            if 'task_dir' in temp_config_data:
+                task_dir = temp_config_data['task_dir']
+                config_file_abs = os.path.abspath(config_file)
+                task_dir_abs = os.path.abspath(task_dir)
+                if not config_file_abs.startswith(task_dir_abs):
+                    raise ConfigValidationError(f"Configuration file must be in the task_dir. Config file is at '{config_file_abs}' but task_dir is '{task_dir_abs}'")
+                project_dir = task_dir
+
+            # Now load and validate with the correct project_dir
+            config_data = load_and_validate_config(config_file, os.getcwd())
+        else:
+            config_data = load_and_validate_config(config_file, project_dir)
+
         config.update(config_data)
 
         # Only override config settings if command line arguments are explicitly provided
@@ -794,6 +858,86 @@ def validate_active_learning_config(config_data: Dict[str, Any]) -> None:
 
         if "model_name" in llm_config and not isinstance(llm_config["model_name"], str):
             raise ConfigValidationError("active_learning.llm.model_name must be a string")
+
+
+def validate_ai_support_config(config_data: Dict[str, Any]) -> None:
+    """
+    Validate AI support configuration.
+
+    Args:
+        config_data: The configuration data containing ai_support section
+
+    Raises:
+        ConfigValidationError: If the AI support configuration is invalid
+    """
+    if "ai_support" not in config_data:
+        return  # AI support is optional
+
+    ai_config = config_data["ai_support"]
+
+    # Validate enabled flag
+    if not isinstance(ai_config.get("enabled", False), bool):
+        raise ConfigValidationError("ai_support.enabled must be a boolean")
+
+    if not ai_config.get("enabled", False):
+        return  # Skip validation if not enabled
+
+    # Validate endpoint type
+    if "endpoint_type" not in ai_config:
+        raise ConfigValidationError("ai_support.endpoint_type is required when ai_support is enabled")
+
+    endpoint_type = ai_config["endpoint_type"]
+    if not isinstance(endpoint_type, str):
+        raise ConfigValidationError("ai_support.endpoint_type must be a string")
+
+    valid_endpoint_types = ["openai", "anthropic", "huggingface", "ollama", "gemini", "vllm"]
+    if endpoint_type not in valid_endpoint_types:
+        raise ConfigValidationError(f"ai_support.endpoint_type must be one of: {', '.join(valid_endpoint_types)}")
+
+    # Validate ai_config section
+    if "ai_config" in ai_config:
+        ai_endpoint_config = ai_config["ai_config"]
+        if not isinstance(ai_endpoint_config, dict):
+            raise ConfigValidationError("ai_support.ai_config must be a dictionary")
+
+        # Validate model name
+        if "model" in ai_endpoint_config:
+            model = ai_endpoint_config["model"]
+            if not isinstance(model, str) or not model.strip():
+                raise ConfigValidationError("ai_support.ai_config.model must be a non-empty string")
+
+        # Validate API key for cloud-based endpoints
+        if endpoint_type in ["openai", "anthropic", "huggingface", "gemini"]:
+            api_key = ai_endpoint_config.get("api_key", "")
+            if not api_key or not isinstance(api_key, str):
+                raise ConfigValidationError(f"ai_support.ai_config.api_key is required for {endpoint_type} endpoint")
+
+        # Validate base_url for VLLM
+        if endpoint_type == "vllm":
+            base_url = ai_endpoint_config.get("base_url", "")
+            if base_url and not isinstance(base_url, str):
+                raise ConfigValidationError("ai_support.ai_config.base_url must be a string")
+
+        # Validate temperature
+        if "temperature" in ai_endpoint_config:
+            temperature = ai_endpoint_config["temperature"]
+            if not isinstance(temperature, (int, float)) or temperature < 0 or temperature > 2:
+                raise ConfigValidationError("ai_support.ai_config.temperature must be between 0 and 2")
+
+        # Validate max_tokens
+        if "max_tokens" in ai_endpoint_config:
+            max_tokens = ai_endpoint_config["max_tokens"]
+            if not isinstance(max_tokens, int) or max_tokens < 1:
+                raise ConfigValidationError("ai_support.ai_config.max_tokens must be a positive integer")
+
+        # Validate custom prompts
+        for prompt_key in ["hint_prompt", "keyword_prompt"]:
+            if prompt_key in ai_endpoint_config:
+                prompt = ai_endpoint_config[prompt_key]
+                if not isinstance(prompt, str):
+                    raise ConfigValidationError(f"ai_support.ai_config.{prompt_key} must be a string")
+                if not prompt.strip():
+                    raise ConfigValidationError(f"ai_support.ai_config.{prompt_key} cannot be empty")
 
 
 def parse_active_learning_config(config_data: Dict[str, Any]) -> 'ActiveLearningConfig':

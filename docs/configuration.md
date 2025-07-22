@@ -4,15 +4,122 @@ This document provides a comprehensive guide to configuring Potato annotation ta
 
 ## Table of Contents
 
-1. [Basic Configuration](#basic-configuration)
-2. [Server Configuration](#server-configuration)
-3. [Data Configuration](#data-configuration)
-4. [Annotation Schemes](#annotation-schemes)
-5. [User Management](#user-management)
-6. [Assignment Strategies](#assignment-strategies)
-7. [UI and Layout Configuration](#ui-and-layout-configuration)
-8. [Advanced Features](#advanced-features)
-9. [Complete Example](#complete-example)
+1. [Config File Structure and Validation](#config-file-structure-and-validation)
+2. [Basic Configuration](#basic-configuration)
+3. [Server Configuration](#server-configuration)
+4. [Data Configuration](#data-configuration)
+5. [Annotation Schemes](#annotation-schemes)
+6. [User Management](#user-management)
+7. [Assignment Strategies](#assignment-strategies)
+8. [UI and Layout Configuration](#ui-and-layout-configuration)
+9. [AI Support](#ai-support)
+10. [Advanced Features](#advanced-features)
+11. [Complete Example](#complete-example)
+
+## Config File Structure and Validation
+
+### Config File Location Requirements
+
+**Important**: Your YAML configuration file must be located within the `task_dir` specified in the configuration. This is a security requirement that ensures all project files are properly contained.
+
+#### Valid Config File Structure
+
+```
+my_annotation_project/
+├── config.yaml                    # ✅ Config file in task_dir
+├── data/
+│   └── my_data.json
+├── output/
+│   └── annotations/
+└── templates/
+    └── custom_layout.html
+```
+
+With this structure, your `config.yaml` would contain:
+```yaml
+task_dir: my_annotation_project/
+data_files:
+  - data/my_data.json
+output_annotation_dir: output/annotations/
+# ... other configuration
+```
+
+#### Alternative Structure with Configs Subdirectory
+
+```
+my_annotation_project/
+├── configs/
+│   ├── config1.yaml              # ✅ Config files in configs/ subdirectory
+│   └── config2.yaml
+├── data/
+│   └── my_data.json
+└── output/
+    └── annotations/
+```
+
+With this structure, your config files would contain:
+```yaml
+task_dir: my_annotation_project/
+data_files:
+  - data/my_data.json
+output_annotation_dir: output/annotations/
+# ... other configuration
+```
+
+### Starting the Server
+
+#### Option 1: Direct Config File (Recommended)
+```bash
+# Start with a specific config file
+python potato/flask_server.py start my_annotation_project/config.yaml -p 8000
+```
+
+#### Option 2: Project Directory (Multiple Configs)
+```bash
+# Start with a project directory (will prompt to choose config if multiple exist)
+python potato/flask_server.py start my_annotation_project/ -p 8000
+```
+
+### Path Resolution Rules
+
+All relative paths in your configuration are resolved relative to the `task_dir`:
+
+- **Data files**: `data/my_data.json` → `{task_dir}/data/my_data.json`
+- **Output directory**: `output/annotations/` → `{task_dir}/output/annotations/`
+- **Site directory**: `templates/` → `{task_dir}/templates/`
+- **Custom datasets**: `custom_data/` → `{task_dir}/custom_data/`
+
+### Special Path Values
+
+Some configuration fields accept special values instead of file paths:
+
+- `"null"` - Disable the feature
+- `"default"` - Use the default implementation
+- `null` (YAML null) - Disable the feature
+
+Example:
+```yaml
+site_dir: default          # Use default templates
+customjs: null            # No custom JavaScript
+custom_ds: "default"      # Use default dataset handling
+```
+
+### Validation Requirements
+
+Potato validates your configuration to ensure:
+
+1. **Config file location**: The config file must be within the specified `task_dir`
+2. **Required fields**: All mandatory configuration fields are present
+3. **File existence**: All referenced data files exist and are accessible
+4. **Path security**: All paths are secure and don't escape the project directory
+5. **Schema validation**: Annotation schemes have valid configurations
+
+### Common Validation Errors
+
+- **"Configuration file must be in the task_dir"**: Your config file is outside the `task_dir` specified in the YAML
+- **"Data file not found"**: A referenced data file doesn't exist at the specified path
+- **"Missing required configuration fields"**: Required fields like `task_dir`, `data_files`, etc. are missing
+- **"Path resolves outside project directory"**: A file path would escape the project directory (security violation)
 
 ## Basic Configuration
 
@@ -416,6 +523,30 @@ ui:
 horizontal_key_bindings: true
 sequential_key_binding: true
 ```
+
+## AI Support
+
+Potato provides integrated AI support to enhance annotation workflows with intelligent hints and keyword highlighting. This feature uses Large Language Models (LLMs) to provide contextual assistance to annotators.
+
+### Basic AI Configuration
+
+```yaml
+ai_support:
+  enabled: true
+  endpoint_type: "openai"  # or "anthropic", "huggingface", "ollama", "gemini", "vllm"
+  ai_config:
+    model: "gpt-4o-mini"
+    api_key: "your-api-key-here"
+    temperature: 0.7
+    max_tokens: 100
+```
+
+### Supported Providers
+
+- **Cloud-based**: OpenAI, Anthropic, Google Gemini, Hugging Face
+- **Local**: Ollama, VLLM
+
+For detailed setup instructions and configuration options, see [AI Support Documentation](ai_support.md).
 
 ## Advanced Features
 

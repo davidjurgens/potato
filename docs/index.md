@@ -10,6 +10,8 @@ range of features throughout your entire annotation pipeline.
 - [Quick Start](quick-start.md)
 - [Example Projects](example-projects.md)
 - [Configuration](configuration.md)
+- [Config File Structure](config_file_structure.md)
+- [AI Support](ai_support.md)
 - [Usage](usage.md)
 - [Data Format](data_format.md)
 - [Schemas and Templates](schemas_and_templates.md)
