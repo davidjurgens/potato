@@ -182,91 +182,169 @@ def render_span_annotations_old(text, span_annotations):
 
 def generate_span_layout(annotation_scheme, horizontal=False):
     """
-    Renders a span annotation option selection in the annotation panel and
-    returns the HTML code
+    Generate HTML for a span selection interface.
+
+    Args:
+        annotation_scheme (dict): Configuration including:
+            - name: Schema identifier
+            - description: Display description
+            - labels: List of label options for spans
+            - sequential_key_binding: Enable numeric key bindings
+            - displaying_score: Show numeric values with labels
+            - bad_text_label: Optional configuration for invalid text option
+            - tooltip: Optional hover text description
+
+    Returns:
+        tuple: (html_string, key_bindings)
+            html_string: Complete HTML for the span interface
+            key_bindings: List of (key, description) tuples for keyboard shortcuts
     """
-    # when horizontal is specified in the annotation_scheme, set horizontal = True
-    if "horizontal" in annotation_scheme and annotation_scheme["horizontal"]:
-        horizontal = True
-
+    # Initialize form wrapper
     scheme_name = annotation_scheme["name"]
+    name = scheme_name
+    class_name = scheme_name
+    schematic = f"""
+    <style>
+        .shadcn-span-container {{
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            max-width: 100%;
+            margin: 1rem auto;
+            font-family: ui-sans-serif, system-ui, sans-serif;
+        }}
 
-    schematic = (
-          ('<form id="%s" class="annotation-form span" action="/action_page.php">' % annotation_scheme["name"])
-        + "  <fieldset>"
-        + ("  <legend>%s</legend>" % annotation_scheme["description"])
-    )
+        .shadcn-span-title {{
+            font-size: 1rem;
+            font-weight: 500;
+            color: var(--heading-color);
+            margin-bottom: 1rem;
+            text-align: left;
+            width: 100%;
+        }}
 
-    # TODO: display keyboard shortcuts on the annotation page
+        .shadcn-span-options {{
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 0.75rem;
+            width: 100%;
+        }}
+
+        .shadcn-span-option {{
+            display: flex;
+            align-items: center;
+        }}
+
+        .shadcn-span-checkbox {{
+            appearance: none;
+            width: 1rem;
+            height: 1rem;
+            border-radius: 0.25rem;
+            border: 1px solid var(--border);
+            background-color: var(--background);
+            cursor: pointer;
+            margin-right: 0.5rem;
+            transition: var(--transition);
+            position: relative;
+        }}
+
+        .shadcn-span-checkbox:checked {{
+            background-color: var(--primary);
+            border-color: var(--primary);
+        }}
+
+        .shadcn-span-checkbox:checked::after {{
+            content: '';
+            position: absolute;
+            width: 0.3rem;
+            height: 0.5rem;
+            border: solid white;
+            border-width: 0 2px 2px 0;
+            top: 45%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(45deg);
+        }}
+
+        .shadcn-span-checkbox:focus {{
+            outline: none;
+            border-color: var(--ring);
+            box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+        }}
+
+        .shadcn-span-checkbox:hover {{
+            border-color: var(--primary);
+        }}
+
+        .shadcn-span-label {{
+            font-size: 0.875rem;
+            color: var(--foreground);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+        }}
+
+        .shadcn-span-label span {{
+            padding: 0.25rem 0.5rem;
+            border-radius: var(--radius);
+            display: inline-block;
+        }}
+
+        .shadcn-span-bad-text {{
+            margin-top: 1rem;
+        }}
+
+        [data-toggle="tooltip"] {{
+            position: relative;
+            cursor: help;
+        }}
+    </style>
+
+    <form id="{name}" class="annotation-form span shadcn-span-container" action="/action_page.php">
+        <fieldset schema="{scheme_name}">
+            <legend class="shadcn-span-title">{annotation_scheme["description"]}</legend>
+            <div class="shadcn-span-options">
+    """
+
+    if isinstance(annotation_scheme["labels"], list) and len(annotation_scheme["labels"]) > 0:
+        labels = annotation_scheme["labels"]
+    else:
+        labels = [annotation_scheme["labels"]]
+
+    # Initialize keyboard shortcuts
     key2label = {}
     label2key = {}
     key_bindings = []
+    span_title = annotation_scheme.get("title", "")
 
-    # setting up label validation for each label, if "required" is True, the annotators will be asked to finish the current instance to proceed
+    # Setup validation
     validation = ""
-    label_requirement = (
-        annotation_scheme["label_requirement"] if "label_requirement" in annotation_scheme else None
-    )
-    if label_requirement and ("required" in label_requirement) and label_requirement["required"]:
-        validation = "required"
+    span_color = "var(--primary-color)"
 
-    for i, label_data in enumerate(annotation_scheme["labels"], 1):
+    # Generate checkbox inputs for each label
+    for i, label_data in enumerate(labels, 1):
+        # Extract label information
+        if isinstance(label_data, str):
+            label = label_data
+            key_value = str(i)
+            tooltip = ""
+        else:
+            label = label_data["name"]
+            key_value = label_data.get("key_value", str(i))
+            tooltip = _generate_tooltip(label_data)
 
-        label = label_data if isinstance(label_data, str) else label_data["name"]
-        span_title = label
-        if isinstance(label_data, dict) and "abbreviation" in label_data:
-            span_title = label_data["abbreviation"]
-
-        name = annotation_scheme["name"] + ":::" + label
-        class_name = annotation_scheme["name"]
-        key_value = name
-
-        span_color = get_span_color(scheme_name, label)
-        if span_color is None:
+        # Check for color mappings
+        custom_color = get_span_color(scheme_name, label)
+        if custom_color:
+            span_color = custom_color
+        else:
+            # Assign a color from palette
             global span_counter
-            if span_counter > SPAN_COLOR_PALETTE_LENGTH:
-                logger.warning("Not enough colors to support annotation! please add more colors!")
-            elif span_counter > 65536:
-                raise RuntimeError("Span Counter Overflow")
-
-            span_color = SPAN_COLOR_PALETTE[(span_counter) % SPAN_COLOR_PALETTE_LENGTH]
+            idx = span_counter % SPAN_COLOR_PALETTE_LENGTH
+            span_color = SPAN_COLOR_PALETTE[idx]
             span_counter += 1
             set_span_color(scheme_name, label, span_color)
 
-        # For better or worse, we need to cache these label-color pairings
-        # somewhere so that we can render them in the colored instances later in
-        # render_span_annotations(). The config object seems like a reasonable
-        # place to do since it's global and the colors are persistent
-        config["ui"]
-
-        tooltip = ""
-        if isinstance(label_data, Mapping):
-            tooltip_text = ""
-            if "tooltip" in label_data:
-                tooltip_text = label_data["tooltip"]
-                # print('direct: ', tooltip_text)
-            elif "tooltip_file" in label_data:
-                with open(label_data["tooltip_file"], "rt") as f:
-                    lines = f.readlines()
-                tooltip_text = "".join(lines)
-                # print('file: ', tooltip_text)
-            if len(tooltip_text) > 0:
-                tooltip = (
-                    'data-toggle="tooltip" data-html="true" data-placement="top" title="%s"'
-                    % tooltip_text
-                )
-
-            # Bind the keys
-            if "key_value" in label_data:
-                key_value = label_data["key_value"]
-                if key_value in key2label:
-                    logger.warning("Keyboard input conflict: %s" % key_value)
-                    quit()
-                key2label[key_value] = label
-                label2key[label] = key_value
-                key_bindings.append((key_value, class_name + ": " + label))
-            # print(key_value)
-
+        # Handle sequential key bindings
         if (
             "sequential_key_binding" in annotation_scheme
             and annotation_scheme["sequential_key_binding"]
@@ -275,86 +353,63 @@ def generate_span_layout(annotation_scheme, horizontal=False):
             key_value = str(i % 10)
             key2label[key_value] = label
             label2key[label] = key_value
-            key_bindings.append((key_value, class_name + ": " + label))
+            key_bindings.append((key_value, f"{class_name}: {label}"))
 
+        # Format label content
         if "displaying_score" in annotation_scheme and annotation_scheme["displaying_score"]:
-            label_content = label_data["key_value"] + "." + label
+            label_content = f"{key_value}.{label}"
         else:
             label_content = label
 
-        # Check the first radio
-        if i == 1:
-            is_checked = 'xchecked="checked"'
-        else:
-            is_checked = ""
+        # Generate name with span prefix so ingestion code can skip this
+        name_with_span = f"span_label:::{name}"
 
-        # TODO: add support for horizontal layout
-        br_label = "<br/>"
-        if horizontal:
-            br_label = ""
+        schematic += f"""
+            <div class="shadcn-span-option">
+                <input class="{class_name} shadcn-span-checkbox"
+                       for_span="true"
+                       type="checkbox"
+                       id="{name}"
+                       name="{name_with_span}"
+                       value="{key_value}"
+                       onclick="onlyOne(this); changeSpanLabel(this, '{scheme_name}', '{label}', '{span_title}', '{span_color}');"
+                       validation="{validation}">
+                <label for="{name}" class="shadcn-span-label" {tooltip}>
+                    <span style="background-color:rgb{span_color.replace(')', ',0.25)')};">{label_content}</span>
+                </label>
+            </div>
+        """
 
-        # We want to mark that this input isn't actually an annotation (unlike,
-        # say, checkboxes) so we prefix the name with span_label so that the
-        # answer ingestion code in update_annotation_state() can skip over which
-        # radio was checked as being annotations that need saving (while the
-        # spans themselves are saved)
-        name_with_span = "span_label:::" + name
+    schematic += "</div>"
 
-        schematic += (
-            '      <input class="{class_name}" for_span="{for_span}" type="checkbox" id="{name}" name="{name_with_span}" '
-            + ' value="{key_value}" {is_checked} '
-            + "onclick=\"onlyOne(this); changeSpanLabel(this, '{schema}', '{label}', '{span_title}', '{span_color}');\" validation=\"{validation}\">"
-            + '  <label for="{name}" {tooltip}>'
-            + '<span style="background-color:rgb{bg_color};">{label_content}</span></label>{br_label}'
-        ).format(
-            class_name=class_name,
-            for_span = True,
-            name=name,
-            schema=scheme_name,
-            label=label,
-            span_title=span_title,
-            key_value=key_value,
-            label_content=label_content,
-            validation=validation,
-            tooltip=tooltip,
-            br_label=br_label,
-            is_checked=is_checked,
-            name_with_span=name_with_span,
-            bg_color=span_color.replace(")", ",0.25)"),
-            span_color=span_color,
-        )
-
-    # allow annotators to choose bad_text label
-    bad_text_schematic = ""
+    # Add optional bad text option
     if "label_content" in annotation_scheme.get("bad_text_label", {}):
-        name = annotation_scheme["name"] + ":::" + "bad_text"
-        bad_text_schematic = (
-            (
-                    ' <input class="{class_name}" for_span="{for_span}" type="checkbox" id="{id}" name="{name}" value="{value}" onclick="onlyOne(this)" validation="{validation}">'
-                    + ' {line_break} <label for="{label_for}" {label_args}>{label_text}</label>'
-            )
-        ).format(
-            class_name=annotation_scheme["name"],
-            for_span=True,
-            id=name,
-            name=name,
-            value=0,
-            validation=validation,
-            line_break="",
-            label_for=name,
-            label_args="",
-            label_text=annotation_scheme["bad_text_label"]["label_content"],
-        )
+        name = f"{annotation_scheme['name']}:::bad_text"
+
+        schematic += f"""
+            <div class="shadcn-span-bad-text">
+                <input class="{class_name} shadcn-span-checkbox"
+                       for_span="true"
+                       type="checkbox"
+                       id="{name}"
+                       name="{name}"
+                       value="0"
+                       onclick="onlyOne(this)"
+                       validation="{validation}">
+                <label for="{name}" class="shadcn-span-label">
+                    {annotation_scheme["bad_text_label"]["label_content"]}
+                </label>
+            </div>
+        """
+
         if (
-                "sequential_key_binding" in annotation_scheme
-                and annotation_scheme["sequential_key_binding"]
-                and len(annotation_scheme["labels"]) <= 10
+            "sequential_key_binding" in annotation_scheme
+            and annotation_scheme["sequential_key_binding"]
+            and len(annotation_scheme["labels"]) <= 10
         ):
             key_bindings.append(
-                (0, class_name + ": " + annotation_scheme["bad_text_label"]["label_content"])
+                (0, f"{class_name}: {annotation_scheme['bad_text_label']['label_content']}")
             )
 
-    schematic += bad_text_schematic
-
-    schematic += "  </fieldset>\n</form>\n"
+    schematic += "</fieldset></form>"
     return schematic, key_bindings

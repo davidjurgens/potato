@@ -1,18 +1,21 @@
-import ollama
+from huggingface_hub import InferenceClient
 
-DEFAULT_MODEL = "llama3.2"
-DEFAULT_HINT_PROMPT = '''You are assisting a user with an annotation task. 
-    The annotation instruction is : {description} 
-    The annotation task type is: {annotation_type}
-    The sentence (or item) to annotate is : {text}
-    Your goal is to generate a short, helpful hint that guides the annotator in how to think about the input — **without providing the answer**.
 
-    The hint should:
-    - Highlight key aspects of the input relevant to the task
-    - Encourage thoughtful reasoning or observation
-    - Point to subtle features (tone, wording, structure, implication) that matter for the annotation
-    - Be specific and informative, not vague or generic
-    '''
+
+DEFAULT_MODEL = "meta-llama/Llama-3.2-3B-Instruct"
+DEFAULT_HINT_PROMPT = '''
+    You are assisting a user with an annotation task. 
+        The annotation instruction is : {description} 
+        The annotation task type is: {annotation_type}
+        The sentence (or item) to annotate is : {text}
+        Your goal is to generate a short, helpful hint that guides the annotator in how to think about the input — **without providing the answer**.
+
+        The hint should:
+        - Highlight key aspects of the input relevant to the task
+        - Encourage thoughtful reasoning or observation
+        - Point to subtle features (tone, wording, structure, implication) that matter for the annotation
+        - Be specific and informative, not vague or generic
+        '''
 DEFAULT_KEYWORD_PROMPT = '''
     You are assisting a user with an annotation task. 
         The annotation instruction is : {description} 
@@ -21,7 +24,7 @@ DEFAULT_KEYWORD_PROMPT = '''
         Your goal is : Print out just a sequence of keywords, not sentences, in the text that most relate to the task. Do not explain your answer. Do not print out the entire text. If no part of the text relates to the task, print the empty string.
     '''
 
-class OllamaEndpoint:
+class HuggingfaceEndpoint:
 
     def __init__(self, config: dict):
         # TODO: Deal with custom Ollama options like port and model
@@ -40,29 +43,36 @@ class OllamaEndpoint:
         
         model_config = self.ai_config.get("model", DEFAULT_MODEL)
         self.model = DEFAULT_MODEL if model_config == "" else model_config
+        
+        self.api_key = self.ai_config.get("api_key", "")
+        self.client = InferenceClient(
+        model=self.model,
+        token=self.api_key, #Insert api key for testing
+        )
 
     def get_hint(self, text: str) -> str:
-        '''Interact with the local Ollama API to get a hint for how to annotate the instance'''
+        '''Interact with the local Huggingfcace API to get a hint for how to annotate the instance'''
 
-        # Generate the hint prompt
+        # Generate the default hint prompt or use the custom prompt
         prompt = self.hint_prompt.format(text=text, description=self.description, annotation_type=self.annotation_type)
         return self.query(prompt)
 
     def get_highlights(self, text: str) -> str:
-        '''Interact with the local Ollama API to get a hint for how to annotate the instance'''
+        '''Interact with the local Huggingfcace API to get a hint for how to annotate the instance'''
 
-        # Generate the prompt to get a highlight passage
+        # Generate the default keyword prompt or use the custom prompt
         prompt = self.keyword_prompt.format(text=text, description=self.description, annotation_type=self.annotation_type)
         return self.query(prompt)
 
     def query(self, prompt: str) -> str:
-        '''Interact with the local Ollama API to get the response to the prompt'''
-        response = ollama.chat(model=self.model, messages=[
-            {
-                'role': 'user',
-                'content': prompt,
-            },
-        ])
+        '''Interact with the local Huggingfcace API to get the response to the prompt'''
 
-        return response['message']['content']
-    
+        response = self.client.chat_completion(
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=100
+        )
+        # Extract the generated text from the conversational response
+        generated_text = response.choices[0].message.content
+        return generated_text

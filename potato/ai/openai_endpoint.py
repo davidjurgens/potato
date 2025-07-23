@@ -1,18 +1,19 @@
-import ollama
+from openai import OpenAI
 
-DEFAULT_MODEL = "llama3.2"
-DEFAULT_HINT_PROMPT = '''You are assisting a user with an annotation task. 
-    The annotation instruction is : {description} 
-    The annotation task type is: {annotation_type}
-    The sentence (or item) to annotate is : {text}
-    Your goal is to generate a short, helpful hint that guides the annotator in how to think about the input — **without providing the answer**.
+DEFAULT_MODEL = "gpt-4.1"
+DEFAULT_HINT_PROMPT = '''
+    You are assisting a user with an annotation task. 
+        The annotation instruction is : {description} 
+        The annotation task type is: {annotation_type}
+        The sentence (or item) to annotate is : {text}
+        Your goal is to generate a short, helpful hint that guides the annotator in how to think about the input — **without providing the answer**.
 
-    The hint should:
-    - Highlight key aspects of the input relevant to the task
-    - Encourage thoughtful reasoning or observation
-    - Point to subtle features (tone, wording, structure, implication) that matter for the annotation
-    - Be specific and informative, not vague or generic
-    '''
+        The hint should:
+        - Highlight key aspects of the input relevant to the task
+        - Encourage thoughtful reasoning or observation
+        - Point to subtle features (tone, wording, structure, implication) that matter for the annotation
+        - Be specific and informative, not vague or generic
+        '''
 DEFAULT_KEYWORD_PROMPT = '''
     You are assisting a user with an annotation task. 
         The annotation instruction is : {description} 
@@ -21,7 +22,7 @@ DEFAULT_KEYWORD_PROMPT = '''
         Your goal is : Print out just a sequence of keywords, not sentences, in the text that most relate to the task. Do not explain your answer. Do not print out the entire text. If no part of the text relates to the task, print the empty string.
     '''
 
-class OllamaEndpoint:
+class OpenAIEndpoint:
 
     def __init__(self, config: dict):
         # TODO: Deal with custom Ollama options like port and model
@@ -40,7 +41,10 @@ class OllamaEndpoint:
         
         model_config = self.ai_config.get("model", DEFAULT_MODEL)
         self.model = DEFAULT_MODEL if model_config == "" else model_config
-
+        
+        self.api_key = self.ai_config.get("api_key", "")
+        self.client = OpenAI(api_key=self.api_key) #Insert api key for testing
+        
     def get_hint(self, text: str) -> str:
         '''Interact with the local Ollama API to get a hint for how to annotate the instance'''
 
@@ -57,12 +61,12 @@ class OllamaEndpoint:
 
     def query(self, prompt: str) -> str:
         '''Interact with the local Ollama API to get the response to the prompt'''
-        response = ollama.chat(model=self.model, messages=[
-            {
-                'role': 'user',
-                'content': prompt,
-            },
-        ])
 
-        return response['message']['content']
+        response = self.client.responses.create(
+        model=self.model,
+        input=prompt
+        )
+
+        return response["output"][0]["content"][0]["text"]
+
     

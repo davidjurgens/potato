@@ -16,13 +16,40 @@ class AIEndpointClient:
 
 def get_ai_endpoint(config: dict):
     # Check what kind of endpoint the admin was requested
-    if 'ai_endpoint' in config:
-        endpoint_type = config["ai_endpoint"]
+
+    # Get the AI support option from the config
+    ai_support = config["ai_support"]
+
+    # If the AI support is enabled, get the endpoint type
+    if ai_support["enabled"]:
+        print("ai_support enabled")
+        endpoint_type = ai_support["endpoint_type"]
         if endpoint_type == "ollama":
 
             # Only do the import if we need it prevent unnecessary imports on small systems
-            from ollama_endpoint import OllamaEndpoint
+            from .ollama_endpoint import OllamaEndpoint
 
-            return OllamaEndpoint(config["ai_endpoint"])
+            return OllamaEndpoint(config)
+        # Open AI API
+        elif endpoint_type == "openai":
+            from .openai_endpoint import OpenAIEndpoint
 
-    raise ValueError(f"Unknown endpoint type: {endpoint_type}")
+            return OpenAIEndpoint(config)
+        
+        # Huggingface API
+        elif endpoint_type == "huggingface":
+            from .huggingface_endpoint import HuggingfaceEndpoint
+            return HuggingfaceEndpoint(config)
+        
+        # Gemini API
+        elif endpoint_type == "gemini":
+            from .gemini_endpoint import GeminiEndpoint
+
+            return GeminiEndpoint(config)
+        else:
+            raise ValueError(f"Unknown endpoint type: {endpoint_type}")
+
+    # If the AI support is disabled, return None
+    return None
+
+

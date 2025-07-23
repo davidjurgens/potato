@@ -815,6 +815,14 @@ def add_ai_hints(soup: BeautifulSoup, instance_id: str) -> BeautifulSoup:
     return soup
 
 
+# Shea: a function to get some suggestions from AI
+def ai_hints(text: str) -> str:
+    """
+    Returns the AI hints for the given instance.
+    """
+    
+    ai_endpoint = get_ai_endpoint(config)
+    return ai_endpoint.get_hint(text)
 
 
 

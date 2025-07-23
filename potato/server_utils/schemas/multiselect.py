@@ -52,9 +52,123 @@ def generate_multiselect_layout(annotation_scheme):
 
     # Initialize form wrapper
     schematic = f"""
-        <form id="{annotation_scheme['name']}" class="annotation-form multiselect" action="/action_page.php">
-            <fieldset schema="{annotation_scheme['name']}">
-                <legend>{annotation_scheme['description']}</legend>
+    <style>
+        .shadcn-multiselect-container {{
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            max-width: 100%;
+            margin: 1rem auto;
+            font-family: ui-sans-serif, system-ui, sans-serif;
+        }}
+
+        .shadcn-multiselect-title {{
+            font-size: 1rem;
+            font-weight: 500;
+            color: var(--heading-color);
+            margin-bottom: 1rem;
+            text-align: left;
+            width: 100%;
+        }}
+
+        .shadcn-multiselect-grid {{
+            display: grid;
+            gap: 1rem;
+        }}
+
+        .shadcn-multiselect-item {{
+            display: flex;
+            align-items: center;
+        }}
+
+        .shadcn-multiselect-checkbox {{
+            appearance: none;
+            width: 1rem;
+            height: 1rem;
+            border-radius: 0.25rem;
+            border: 1px solid var(--border);
+            background-color: var(--background);
+            cursor: pointer;
+            margin-right: 0.75rem;
+            transition: var(--transition);
+            position: relative;
+        }}
+
+        .shadcn-multiselect-checkbox:checked {{
+            background-color: var(--primary);
+            border-color: var(--primary);
+        }}
+
+        .shadcn-multiselect-checkbox:checked::after {{
+            content: '';
+            position: absolute;
+            width: 0.3rem;
+            height: 0.5rem;
+            border: solid white;
+            border-width: 0 2px 2px 0;
+            top: 45%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(45deg);
+        }}
+
+        .shadcn-multiselect-checkbox:focus {{
+            outline: none;
+            border-color: var(--ring);
+            box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+        }}
+
+        .shadcn-multiselect-checkbox:hover:not(:checked) {{
+            border-color: var(--primary);
+        }}
+
+        .shadcn-multiselect-label {{
+            font-size: 0.875rem;
+            color: var(--foreground);
+        }}
+
+        .shadcn-multiselect-key {{
+            margin-left: 0.25rem;
+            padding: 0.1rem 0.3rem;
+            font-size: 0.7rem;
+            background-color: var(--muted);
+            border-radius: 0.25rem;
+            color: var(--muted-foreground);
+        }}
+
+        .shadcn-multiselect-free-response {{
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+        }}
+
+        .shadcn-multiselect-free-input {{
+            flex: 1;
+            height: 2.5rem;
+            border-radius: var(--radius);
+            border: 1px solid var(--input);
+            padding: 0 0.75rem;
+            font-size: 0.875rem;
+            margin-left: 0.5rem;
+            transition: var(--transition);
+        }}
+
+        .shadcn-multiselect-free-input:focus {{
+            outline: none;
+            border-color: var(--ring);
+            box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+        }}
+
+        [data-toggle="tooltip"] {{
+            position: relative;
+            cursor: help;
+        }}
+    </style>
+
+    <form id="{annotation_scheme['name']}" class="annotation-form multiselect shadcn-multiselect-container" action="/action_page.php">
+        <fieldset schema="{annotation_scheme['name']}">
+            <legend class="shadcn-multiselect-title">{annotation_scheme['description']}</legend>
     """
 
     # Initialize keyboard shortcut mappings
@@ -67,7 +181,8 @@ def generate_multiselect_layout(annotation_scheme):
     n_columns = display_info.get("num_columns", 1)
     logger.debug(f"Using {n_columns} column layout")
 
-    schematic += "<table>"
+    # Add grid with appropriate columns
+    schematic += f'<div class="shadcn-multiselect-grid" style="grid-template-columns: repeat({n_columns}, 1fr);">'
 
     # Setup validation requirements
     validation = ""
@@ -90,11 +205,6 @@ def generate_multiselect_layout(annotation_scheme):
 
     # Generate checkbox inputs for each label
     for i, label_data in enumerate(annotation_scheme["labels"], 1):
-        # Start new row if needed
-        if (i - 1) % n_columns == 0:
-            schematic += "<tr>"
-        schematic += "<td>"
-
         # Extract label information
         label = label_data if isinstance(label_data, str) else label_data["name"]
         schema = annotation_scheme["name"]
@@ -131,10 +241,13 @@ def generate_multiselect_layout(annotation_scheme):
         # Set validation requirements
         final_validation = "required_label" if label in required_label else validation
 
+        # Display keyboard shortcut if available
+        key_display = f'<span class="shadcn-multiselect-key">{label2key[label].upper()}</span>' if label in label2key else ''
+
         # Generate checkbox input
         schematic += f"""
-            <label for="{name}" {tooltip} schema="{schema}">
-                <input class="{class_name}"
+            <div class="shadcn-multiselect-item">
+                <input class="{class_name} shadcn-multiselect-checkbox"
                        type="checkbox"
                        id="{name}"
                        name="{name}"
@@ -143,19 +256,19 @@ def generate_multiselect_layout(annotation_scheme):
                        schema="{schema}"
                        onclick="whetherNone(this);registerAnnotation(this)"
                        validation="{final_validation}">
-                {label_content}
-            </label><br/>
+                <label for="{name}" {tooltip} schema="{schema}" class="shadcn-multiselect-label">
+                    {label_content} {key_display}
+                </label>
+            </div>
         """
 
-        schematic += "</td>"
-        if i % n_columns == 0:
-            schematic += "</tr>"
+    schematic += "</div>"
 
     # Add optional free response field
     if annotation_scheme.get("has_free_response"):
         schematic += _generate_free_response(annotation_scheme, n_columns)
 
-    schematic += "</table></fieldset></form>"
+    schematic += "</fieldset></form>"
 
     logger.info(f"Successfully generated multiselect layout for {annotation_scheme['name']} "
                 f"with {len(annotation_scheme['labels'])} options")
@@ -228,16 +341,12 @@ def _generate_free_response(annotation_scheme, n_columns):
     instruction = (annotation_scheme["has_free_response"].get("instruction", "Other"))
 
     return f"""
-        <tr>
-            <td colspan="{n_columns}">
-                <div style="float:left; display:flex; flex-direction:row;">
-                    {instruction}
-                    <input class="{annotation_scheme['name']}"
-                           type="text"
-                           id="{name}"
-                           name="{name}">
-                    <label for="{name}"></label>
-                </div>
-            </td>
-        </tr>
+        <div class="shadcn-multiselect-free-response">
+            <span>{instruction}</span>
+            <input class="{annotation_scheme['name']} shadcn-multiselect-free-input"
+                   type="text"
+                   id="{name}"
+                   name="{name}">
+            <label for="{name}"></label>
+        </div>
     """

@@ -53,9 +53,123 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
     # Initialize form wrapper
     schema_name = annotation_scheme["name"]
     schematic = f"""
-        <form id="{schema_name}" class="annotation-form radio" action="/action_page.php">
-            <fieldset schema="{schema_name}">
-                <legend>{annotation_scheme['description']}</legend>
+    <style>
+        .shadcn-radio-container {{
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            max-width: 100%;
+            margin: 1rem auto;
+            font-family: ui-sans-serif, system-ui, sans-serif;
+        }}
+
+        .shadcn-radio-title {{
+            font-size: 1rem;
+            font-weight: 500;
+            color: var(--heading-color);
+            margin-bottom: 1rem;
+            text-align: left;
+            width: 100%;
+        }}
+
+        .shadcn-radio-options {{
+            display: {('flex' if horizontal else 'grid')};
+            {('flex-wrap: wrap;' if horizontal else 'grid-template-columns: 1fr;')}
+            gap: {('1rem' if horizontal else '0.5rem')};
+            width: 100%;
+        }}
+
+        .shadcn-radio-option {{
+            display: flex;
+            align-items: center;
+            {('margin-right: 1.5rem;' if horizontal else '')}
+        }}
+
+        .shadcn-radio-input {{
+            appearance: none;
+            width: 1rem;
+            height: 1rem;
+            border-radius: 50%;
+            border: 1px solid var(--border);
+            background-color: var(--background);
+            cursor: pointer;
+            margin-right: 0.5rem;
+            transition: var(--transition);
+            position: relative;
+        }}
+
+        .shadcn-radio-input:checked {{
+            border-color: var(--primary);
+        }}
+
+        .shadcn-radio-input:checked::after {{
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 0.5rem;
+            height: 0.5rem;
+            border-radius: 50%;
+            background-color: var(--primary);
+        }}
+
+        .shadcn-radio-input:focus {{
+            outline: none;
+            border-color: var(--ring);
+            box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+        }}
+
+        .shadcn-radio-input:hover {{
+            border-color: var(--primary);
+        }}
+
+        .shadcn-radio-label {{
+            font-size: 0.875rem;
+            color: var(--foreground);
+            cursor: pointer;
+        }}
+
+        .shadcn-radio-free-response {{
+            display: flex;
+            align-items: center;
+            margin-top: 1rem;
+            width: 100%;
+        }}
+
+        .shadcn-radio-free-input {{
+            width: 100%;
+            max-width: 300px;
+            margin-left: 0.5rem;
+            padding: 0.5rem;
+            border-radius: var(--radius);
+            border: 1px solid var(--input);
+            background-color: var(--background);
+            font-size: 0.875rem;
+            color: var(--foreground);
+            transition: var(--transition);
+        }}
+
+        .shadcn-radio-free-input:focus {{
+            outline: none;
+            border-color: var(--ring);
+            box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+        }}
+
+        .shadcn-radio-free-input:hover {{
+            border-color: var(--primary);
+        }}
+
+        [data-toggle="tooltip"] {{
+            position: relative;
+            cursor: help;
+        }}
+    </style>
+
+    <form id="{schema_name}" class="annotation-form radio shadcn-radio-container" action="/action_page.php">
+        <fieldset schema="{schema_name}">
+            <legend class="shadcn-radio-title">{annotation_scheme['description']}</legend>
+            <div class="shadcn-radio-options">
     """
 
     # Initialize keyboard shortcut mappings
@@ -77,7 +191,6 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
         name = f"{schema_name}:::{label}"
         class_name = schema_name
         key_value = name
-        br_label = "" if horizontal else "<br/>"
 
         # Handle tooltips and keyboard shortcuts
         tooltip = ""
@@ -102,18 +215,22 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
 
         # Generate radio input
         schematic += f"""
-            <input class="{class_name}"
-                   type="radio"
-                   id="{name}"
-                   name="{name}"
-                   value="{key_value}"
-                   selection_constraint="single"
-                   schema="{schema_name}"
-                   label_name="{label}"
-                   onclick="onlyOne(this);registerAnnotation(this);"
-                   validation="{validation}">
-            <label for="{name}" {tooltip}>{label_content}</label>{br_label}
+            <div class="shadcn-radio-option">
+                <input class="{class_name} shadcn-radio-input"
+                       type="radio"
+                       id="{name}"
+                       name="{name}"
+                       value="{key_value}"
+                       selection_constraint="single"
+                       schema="{schema_name}"
+                       label_name="{label}"
+                       onclick="onlyOne(this);registerAnnotation(this);"
+                       validation="{validation}">
+                <label for="{name}" class="shadcn-radio-label" {tooltip}>{label_content}</label>
+            </div>
         """
+
+    schematic += "</div>"
 
     # Add optional free response field
     if annotation_scheme.get("has_free_response"):
@@ -122,13 +239,15 @@ def generate_radio_layout(annotation_scheme, horizontal=False):
         instruction = annotation_scheme["has_free_response"].get("instruction", "Other")
 
         schematic += f"""
-            {instruction}
-            <input class="{schema_name}"
-                   type="text"
-                   id="{name}"
-                   name="{name}"
-                   label_name="free_response">
-            <label for="{name}"></label><br/>
+            <div class="shadcn-radio-free-response">
+                <span class="shadcn-radio-label">{instruction}</span>
+                <input class="{schema_name} shadcn-radio-free-input"
+                       type="text"
+                       id="{name}"
+                       name="{name}"
+                       label_name="free_response">
+                <label for="{name}"></label>
+            </div>
         """
 
     schematic += "</fieldset></form>"
