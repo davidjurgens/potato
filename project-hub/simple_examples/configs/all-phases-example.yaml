@@ -66,7 +66,7 @@ annotation_schemes:
     'on': false
     rows: 2
     cols: 40
-- annotation_type: highlight
+- annotation_type: span
   name: text_vibes
   description: Which parts have this kind of vibe?
   labels:

@@ -223,7 +223,7 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
         raise ConfigValidationError(f"{path} missing required fields: {', '.join(missing_fields)}")
 
     # Validate annotation_type
-    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'select', 'number']
+    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'select', 'number', 'multirate']
     if scheme['annotation_type'] not in valid_types:
         raise ConfigValidationError(f"{path}.annotation_type must be one of: {', '.join(valid_types)}")
 
@@ -260,6 +260,22 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
     elif annotation_type == 'span':
         if 'labels' not in scheme:
             raise ConfigValidationError(f"{path} missing 'labels' field for span annotation type")
+        if not isinstance(scheme['labels'], list):
+            raise ConfigValidationError(f"{path}.labels must be a list")
+        if not scheme['labels']:
+            raise ConfigValidationError(f"{path}.labels cannot be empty")
+
+    elif annotation_type == 'multirate':
+        required_multirate_fields = ['options', 'labels']
+        missing_multirate_fields = [field for field in required_multirate_fields if field not in scheme]
+        if missing_multirate_fields:
+            raise ConfigValidationError(f"{path} missing required fields for multirate: {', '.join(missing_multirate_fields)}")
+
+        if not isinstance(scheme['options'], list):
+            raise ConfigValidationError(f"{path}.options must be a list")
+        if not scheme['options']:
+            raise ConfigValidationError(f"{path}.options cannot be empty")
+
         if not isinstance(scheme['labels'], list):
             raise ConfigValidationError(f"{path}.labels must be a list")
         if not scheme['labels']:

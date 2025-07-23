@@ -766,7 +766,7 @@ class AdminDashboard:
             else:
                 analysis["error"] = "No valid text responses found"
 
-        elif annotation_type in ["span", "highlight"]:
+        elif annotation_type == "span":
             # Span data - show coverage and overlap statistics
             span_counts = []
             total_spans = 0

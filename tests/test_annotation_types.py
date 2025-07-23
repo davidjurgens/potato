@@ -279,7 +279,7 @@ class TestAnnotationTypes:
             config = yaml.safe_load(f)
 
         assert config['annotation_task_name'] == 'Simple Span Labeling Test'
-        assert config['annotation_schemes'][0]['annotation_type'] == 'highlight'
+        assert config['annotation_schemes'][0]['annotation_type'] == 'span'
         assert 'certain' in config['annotation_schemes'][0]['labels']
         assert 'uncertain' in config['annotation_schemes'][0]['labels']
 

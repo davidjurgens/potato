@@ -12,7 +12,7 @@ user_config:
   users: []
 alert_time_each_instance: 0
 annotation_schemes:
-- annotation_type: highlight
+- annotation_type: span
   name: certainty
   description: Highlight which phrases express certainty or uncertainty
   labels:

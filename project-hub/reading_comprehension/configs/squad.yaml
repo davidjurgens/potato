@@ -60,7 +60,7 @@ automatic_assignment:
 alert_time_each_instance: 10000000
 horizontal_key_bindings: true
 annotation_schemes:
-- annotation_type: highlight
+- annotation_type: span
   name: Answer the question through highlighting the paragraph
   description: Answer the question through highlighting the paragraph
   labels:

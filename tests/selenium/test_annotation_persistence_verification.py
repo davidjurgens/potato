@@ -613,9 +613,9 @@ class TestAnnotationPersistenceVerification(unittest.TestCase):
             return False
         elif annotation_type == "span":
             # Check span annotation
-            highlight_elements = self.driver.find_elements(By.CSS_SELECTOR, ".highlighted-span, .shadcn-span-highlight, span[data-annotation-label]")
-            print(f"Found {len(highlight_elements)} highlighted span elements")
-            return len(highlight_elements) >= 1
+            span_elements = self.driver.find_elements(By.CSS_SELECTOR, ".span-highlight, span[data-annotation-label]")
+            print(f"Found {len(span_elements)} span elements")
+            return len(span_elements) >= 1
         else:
             print(f"Unknown annotation type: {annotation_type}")
             return False

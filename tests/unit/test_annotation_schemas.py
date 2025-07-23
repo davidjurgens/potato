@@ -112,7 +112,7 @@ class TestAnnotationSchemas:
     def test_span_schema_generation(self):
         """Test span annotation schema HTML generation"""
         schema = {
-            "annotation_type": "highlight",
+            "annotation_type": "span",
             "name": "certainty",
             "description": "Highlight which phrases make the sentence more or less certain",
             "labels": ["certain", "uncertain"],
@@ -128,7 +128,7 @@ class TestAnnotationSchemas:
         assert "uncertain" in html_layout
 
         # Check for span annotation elements
-        assert "span" in html_layout or "highlight" in html_layout.lower()
+        assert "span" in html_layout
 
         # Check keybindings
         assert len(keybindings) >= 2  # Should have keybindings for each label

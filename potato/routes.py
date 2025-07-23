@@ -2312,7 +2312,7 @@ def get_span_colors():
             # If list (legacy style), iterate list
             elif isinstance(annotation_scheme, list):
                 for schema in annotation_scheme:
-                    if schema.get('type') == 'span' or schema.get('annotation_type') == 'highlight':
+                    if schema.get('type') == 'span' or schema.get('annotation_type') == 'span':
                         schema_name = schema.get('name', 'span')
                         label_colors = {}
                         color_scheme = schema.get('color_scheme') or schema.get('colors')
