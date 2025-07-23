@@ -9,6 +9,12 @@ Generates a form interface for numeric input. Features include:
 """
 
 import logging
+from .identifier_utils import (
+    safe_generate_layout,
+    generate_element_identifier,
+    generate_validation_attribute,
+    escape_html_content
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +42,12 @@ def generate_number_layout(annotation_scheme):
             html_string: Complete HTML for the number input interface
             key_bindings: Empty list (no keyboard shortcuts)
     """
+    return safe_generate_layout(annotation_scheme, _generate_number_layout_internal)
+
+def _generate_number_layout_internal(annotation_scheme):
+    """
+    Internal function to generate number layout after validation.
+    """
     logger.debug(f"Generating number layout for schema: {annotation_scheme['name']}")
 
     # Get custom dimensions from config
@@ -44,87 +56,32 @@ def generate_number_layout(annotation_scheme):
 
     # Initialize form wrapper
     schematic = f"""
-    <style>
-        .shadcn-number-container {{
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-            width: 100%;
-            max-width: 100%;
-            margin: 1rem auto;
-            font-family: ui-sans-serif, system-ui, sans-serif;
-        }}
-
-        .shadcn-number-title {{
-            font-size: 1rem;
-            font-weight: 500;
-            color: var(--heading-color);
-            margin-bottom: 1rem;
-            text-align: left;
-            width: 100%;
-        }}
-
-        .shadcn-number-input {{
-            display: flex;
-            align-items: center;
-            width: 100%;
-        }}
-
-        .shadcn-number-field {{
-            height: 2.5rem;
-            width: {width};
-            border-radius: var(--radius);
-            border: 1px solid var(--input);
-            background-color: var(--background);
-            padding: 0 0.75rem;
-            font-size: 0.875rem;
-            color: var(--foreground);
-            transition: var(--transition);
-        }}
-
-        .shadcn-number-field:focus {{
-            outline: none;
-            border-color: var(--ring);
-            box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
-        }}
-
-        .shadcn-number-field:hover {{
-            border-color: var(--primary);
-        }}
-
-        [data-toggle="tooltip"] {{
-            position: relative;
-            cursor: help;
-        }}
-    </style>
-
-    <form id="{annotation_scheme['name']}" class="annotation-form number shadcn-number-container" action="/action_page.php">
-        <fieldset schema="{annotation_scheme['name']}">
-            <legend class="shadcn-number-title">{annotation_scheme['description']}</legend>
+    <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form number shadcn-number-container" action="/action_page.php">
+        <fieldset schema="{escape_html_content(annotation_scheme['name'])}">
+            <legend class="shadcn-number-title">{escape_html_content(annotation_scheme['description'])}</legend>
             <div class="shadcn-number-input">
     """
 
-    # Setup validation
-    validation = ""
-    if annotation_scheme.get("label_requirement", {}).get("required"):
-        validation = "required"
-        logger.debug("Setting required validation")
+    # Generate consistent identifiers
+    identifiers = generate_element_identifier(annotation_scheme['name'], "number", "number")
+    validation = generate_validation_attribute(annotation_scheme)
 
     # Generate tooltip
     tooltip = _generate_tooltip(annotation_scheme)
 
     # Generate number input
-    name = f"{annotation_scheme['name']}:::number"
     input_attrs = _generate_input_attributes(annotation_scheme)
 
     schematic += f"""
-                <input class="{annotation_scheme['name']} shadcn-number-field"
+                <input class="{identifiers['schema']} shadcn-number-field annotation-input"
                        type="number"
-                       id="{name}"
-                       name="{name}"
+                       id="{identifiers['id']}"
+                       name="{identifiers['name']}"
                        validation="{validation}"
+                       schema="{identifiers['schema']}"
+                       label_name="{identifiers['label_name']}"
                        {input_attrs}>
-                <label for="{name}" {tooltip}></label>
+                <label for="{identifiers['id']}" {tooltip}></label>
             </div>
         </fieldset>
     </form>
@@ -182,7 +139,8 @@ def _generate_tooltip(annotation_scheme):
             return ""
 
     if tooltip_text:
-        return f'data-toggle="tooltip" data-html="true" data-placement="top" title="{tooltip_text}"'
+        escaped_tooltip = escape_html_content(tooltip_text)
+        return f'data-toggle="tooltip" data-html="true" data-placement="top" title="{escaped_tooltip}"'
     return ""
 
 def _generate_input_attributes(annotation_scheme):

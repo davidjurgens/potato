@@ -14,12 +14,18 @@ that can be used for collecting ordinal data responses. The scale supports:
 """
 
 import logging
+from .identifier_utils import (
+    safe_generate_layout,
+    generate_element_identifier,
+    generate_element_value,
+    generate_validation_attribute,
+    escape_html_content
+)
+from .radio import generate_radio_layout
 
 logger = logging.getLogger(__name__)
 
 def generate_likert_layout(annotation_scheme):
-    print("using likert")
-    print(annotation_scheme)
     """
     Generate HTML for a likert scale annotation interface.
 
@@ -46,6 +52,12 @@ def generate_likert_layout(annotation_scheme):
     Raises:
         Exception: If required fields are missing from annotation_scheme
     """
+    return safe_generate_layout(annotation_scheme, _generate_likert_layout_internal)
+
+def _generate_likert_layout_internal(annotation_scheme):
+    """
+    Internal function to generate likert layout after validation.
+    """
     logger.debug(f"Generating likert layout for schema: {annotation_scheme['name']}")
 
     # Use radio layout if complex labels specified
@@ -65,12 +77,9 @@ def generate_likert_layout(annotation_scheme):
 
     # Setup validation and key bindings
     key_bindings = []
-    validation = ""
-    if annotation_scheme.get("label_requirement", {}).get("required"):
-        validation = "required"
-        logger.debug(f"Setting required validation for {annotation_scheme['name']}")
+    validation = generate_validation_attribute(annotation_scheme)
 
-    # Initialize styles and container
+    # Initialize form wrapper
     schematic = f"""
     <style>
 
@@ -279,20 +288,21 @@ def generate_likert_layout(annotation_scheme):
     </style>
 
     <form id="{annotation_scheme['name']}" class="annotation-form likert shadcn-likert-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}">
+    <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form likert shadcn-likert-container" action="/action_page.php">
         <div class="ai-help">
     <h3 class="ai-help-word"><span class="hint">Hint</span> | <span>Keyword</span></h3>
-    <div class="tooltip"> 
+    <div class="tooltip">
             <p class="tooltip-text">
-                <span class="reasoning">Reasoning:</span> {{ai}} 
+                <span class="reasoning">Reasoning:</span> {{ai}}
             </p>
         </div>
     </div>
 
 
-        <fieldset schema="{annotation_scheme['name']}" style="border: none; padding: 0; margin: 0; width: auto; min-width: fit-content;">
-            <legend class="shadcn-likert-title">{annotation_scheme['description']}</legend>
+        <fieldset schema="{escape_html_content(annotation_scheme['name'])}" style="border: none; padding: 0; margin: 0; width: auto; min-width: fit-content;">
+            <legend class="shadcn-likert-title">{escape_html_content(annotation_scheme['description'])}</legend>
             <div class="shadcn-likert-scale" style="max-width: min(100%, calc(300px + {annotation_scheme['size']} * 40px + 250px));">
-                <div class="shadcn-likert-endpoint">{annotation_scheme['min_label']}</div>
+                <div class="shadcn-likert-endpoint">{escape_html_content(annotation_scheme['min_label'])}</div>
                 <div class="shadcn-likert-options">
                     <div class="shadcn-likert-track"></div>
     """
@@ -300,13 +310,13 @@ def generate_likert_layout(annotation_scheme):
     # Generate scale points
     for i in range(1, annotation_scheme["size"] + 1):
         label = f"{i}"
-        name = f"{annotation_scheme['name']}:::{label}"
-        key_value = str(i % 10)
+        identifiers = generate_element_identifier(annotation_scheme['name'], label, "radio")
+        key_value = generate_element_value(label, i, annotation_scheme)
 
         # Handle key bindings for scales with less than 10 points
         if (annotation_scheme.get("sequential_key_binding")
             and annotation_scheme["size"] < 10):
-            key_bindings.append((key_value, f"{annotation_scheme['name']}: {key_value}"))
+            key_bindings.append((key_value, f"{identifiers['schema']}: {key_value}"))
             logger.debug(f"Added key binding '{key_value}' for point {i}")
 
         # Format label content - show numbers if displaying_score is enabled
@@ -315,51 +325,53 @@ def generate_likert_layout(annotation_scheme):
         # Generate radio input for each scale point
         schematic += f"""
                     <div class="shadcn-likert-option">
-                        <input class="{annotation_scheme['name']} shadcn-likert-input"
+                        <input class="{identifiers['schema']} shadcn-likert-input annotation-input"
                                type="radio"
-                               id="{name}"
-                               name="{name}"
-                               value="{key_value}"
-                               schema="{annotation_scheme['name']}"
-                               label_name="{key_value}"
+                               id="{identifiers['id']}"
+                               name="{identifiers['name']}"
+                               value="{escape_html_content(key_value)}"
+                               schema="{identifiers['schema']}"
+                               label_name="{identifiers['label_name']}"
                                selection_constraint="single"
                                validation="{validation}"
                                onclick="onlyOne(this);registerAnnotation(this);">
-                        <label class="shadcn-likert-button" for="{name}"></label>
-                        {f'<span class="shadcn-likert-label">{label_content}</span>' if label_content else ''}
+                        <label class="shadcn-likert-button" for="{identifiers['id']}"></label>
+                        {f'<span class="shadcn-likert-label">{escape_html_content(label_content)}</span>' if label_content else ''}
                     </div>
         """
 
     # Add max label to complete the scale
     schematic += f"""
                 </div>
-                <div class="shadcn-likert-endpoint">{annotation_scheme['max_label']}</div>
+                <div class="shadcn-likert-endpoint">{escape_html_content(annotation_scheme['max_label'])}</div>
             </div>
     """
 
     # Add optional bad text input for invalid/problematic cases
     if "label_content" in annotation_scheme.get("bad_text_label", {}):
         logger.debug(f"Adding bad text option for {annotation_scheme['name']}")
-        name = f"{annotation_scheme['name']}:::bad_text"
+        bad_text_identifiers = generate_element_identifier(annotation_scheme['name'], "bad_text", "radio")
         schematic += f"""
             <div class="shadcn-likert-bad-text" style="width: 100%;">
-                <input class="{annotation_scheme['name']} shadcn-likert-input"
+                <input class="{bad_text_identifiers['schema']} shadcn-likert-input annotation-input"
                        type="radio"
-                       id="{name}"
-                       name="{name}"
+                       id="{bad_text_identifiers['id']}"
+                       name="{bad_text_identifiers['name']}"
                        value="0"
+                       schema="{bad_text_identifiers['schema']}"
+                       label_name="{bad_text_identifiers['label_name']}"
                        validation="{validation}"
                        onclick="onlyOne(this);registerAnnotation(this);">
-                <label class="shadcn-likert-button" for="{name}"></label>
+                <label class="shadcn-likert-button" for="{bad_text_identifiers['id']}"></label>
                 <span class="shadcn-likert-bad-text-label">
-                    {annotation_scheme['bad_text_label']['label_content']}
+                    {escape_html_content(annotation_scheme['bad_text_label']['label_content'])}
                 </span>
             </div>
         """
     schematic += """
         </fieldset></form>
     """
-    
+
     logger.info(f"Successfully generated likert layout for {annotation_scheme['name']} "
                 f"with {annotation_scheme['size']} points")
     return schematic, key_bindings

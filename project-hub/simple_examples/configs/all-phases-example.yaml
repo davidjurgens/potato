@@ -1,195 +1,86 @@
-{
-    "annotation_task_name": "All the Phases Annotations",
-
-    "task_dir": "annotation_output/example-with-all-phases/",
-
-    # Potato will write the annotation file for all annotations to this
-    # directory, as well as per-annotator output files and state information
-    # necessary to restart annotation.
-    "output_annotation_dir": "annotation_output/example-with-all-phases/annotations",
-
-    # The output format for the all-annotator data. Allowed formats are:
-    # * jsonl
-    # * json (same output as jsonl)
-    # * csv
-    # * tsv
-    #
-    "output_annotation_format": "jsonl",
-
-    # If annotators are using a codebook, this will be linked at the top to the
-    # instance for easy access
-    "annotation_codebook_url": "",
-
-    "data_files": [
-       "data/toy-example.3.json"
-    ],
-
-    "item_properties": {
-        "id_key": "id",
-        "text_key": "text",
-    },
-
-
-    "user_config": {
-      "allow_all_users": True,
-      "users": [  ],
-    },
-
-    # How many seconds do you want the annotators spend on each instance, after
-    # that, an alert will be sent per alert_time_each_instance seconds.
-    "alert_time_each_instance": 10000000,
-
-    "phases": {
-        "order": [
-            "consent",
-            "prescreen",
-            #"general_instructions",
-            #"specific_instructions",
-            # "baseline_check",
-            #"personality",
-            #"study_satisfaction",
-        ],
-        "consent": {
-            type: "consent",
-            file: "configs/all-phases-example/consent.json",
-        },
-        "general_instructions": {
-            type: "instructions",
-            file: "configs/all-phases-example/instructions.json",
-            #template: "configs/all-phases-example-templates/instructions-layout.html"
-        },
-        "specific_instructions": {
-            type: "instructions",
-            file: "configs/all-phases-example/specific-instructions.json",
-        },
-        "prescreen": {
-            type: "prestudy",
-            file: "configs/all-phases-example/prescreen.json",
-        },
-        "baseline_check": {
-            type: "training",
-            file: "configs/all-phases-example/baseline.json",
-        },
-        "personality": {
-            type: "poststudy",
-            file: "configs/all-phases-example/big5.json",
-        },
-        "study_satisfaction": {
-            type: "poststudy",
-            file: "configs/all-phases-example/studysatisfaction.json",
-        },
-    },
-
-    "annotation_schemes": [
-        {
-            "annotation_type": "radio",
-
-            # This name gets used in reporting the annotation results
-            "name": "thing_name",
-
-            # This text is shown to the user and can be a longer statement
-            "description": "What is this thing called?",
-
-            # The min and max labels are text shown at each end of the scale
-            "labels": [
-                { "name": "bug", "text": "a bug" },
-                { "name": "feature", "text": "a feature" },
-            ],
-
-
-            has_free_response: True,
-
-            # If true, keys [1-size] will be bound to scale responses. Likert
-            # scales larger than 10 are not supported with this simple
-            # keybinding and will need to use the full item specification to
-            # bind all scale points to keys.
-            "sequential_key_binding": True,
-        },
-        {
-            "annotation_type": "multiselect",
-
-            # This name gets used in reporting the annotation results
-            "name": "features",
-
-            # This text is shown to the user and can be a longer statement
-            "description": "What features does it have?",
-
-            # The min and max labels are text shown at each end of the scale
-            "labels": [
-                { "name": "fast", "text": "very fast" },
-                { "name": "shiny", "text": "nice UI" },
-                { "name": "cheap", "text": "cheap to use" },
-            ],
-
-            # If true, keys [1-size] will be bound to scale responses. Likert
-            # scales larger than 10 are not supported with this simple
-            # keybinding and will need to use the full item specification to
-            # bind all scale points to keys.
-            "sequential_key_binding": True,
-        },
-        {
-           "annotation_type": "text",
-            "name": "pure_vibes",
-            "description": "How does this product make you feel?",
-
-            # if you want to use multi-line textbox, turn on the text area and set the desired rows and cols of the textbox
-            "textarea": {
-              "on": False,
-              "rows": 2,
-              "cols": 40
-            }
-        },
-       {
-            "annotation_type": "highlight",
-            "name": "text_vibes",
-            "description": "Which parts have this kind of vibe?",
-            "labels": [
-                { "text": "good vibes", "name": "good", abbreviation": "good" },
-                { "text": "bad vibes", "name": "bad", abbreviation": "bad" },
-            ],
-
-            # If true, numbers [1-len(labels)] will be bound to each
-            # label. Highlight selection annotations with more than 10 are not supported
-            # with this simple keybinding and will need to use the full item
-            # specification to bind all labels to keys.
-            "sequential_key_binding": True,
-        },
-        {
-            "annotation_type": "slider",
-
-            # This name gets used in reporting the annotation results
-            "name": "vibe_level",
-
-            # This text is shown to the user and can be a longer statement
-            "description": "How many vibes?",
-
-            # The min and max labels are text shown at each end of the scale
-            "min_value": 1,
-            "max_value": 10,
-            "starting_value": 5,
-        }
-    ],
-
-    # The html that changes the visualiztation for your task. Change this file
-    # to influence the layout and description of your task. This is not a full
-    # HTML page, just the piece that does lays out your task's pieces
-    # you may use templates in our lib, if you want to use your own template,
-    # please replace the string as a path to the template
-    "html_layout": "default",
-
-    # The core UI files for Potato. You should not need to change these normally.
-    #
-    # Exceptions to this might include:
-    # 1) You want to add custom CSS/fonts to style your task
-    # 2) Your layout requires additional JS/assets to render
-    # 3) You want to support additional keybinding magic
-    #
-    # if you want to use your own template,
-    # please replace the string as a path to the template
-    "base_html_template": "default",
-    "header_file": "default",
-
-    # This is where the actual HTML files will be generated
-    "site_dir": "default"
-
-}
+annotation_task_name: All the Phases Annotations
+task_dir: annotation_output/example-with-all-phases/
+output_annotation_dir: annotation_output/example-with-all-phases/annotations
+output_annotation_format: jsonl
+annotation_codebook_url: ''
+data_files:
+- data/toy-example.3.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+phases:
+  order:
+  - consent
+  - prescreen
+  consent:
+    type: consent
+    file: configs/all-phases-example/consent.json
+  general_instructions:
+    type: instructions
+    file: configs/all-phases-example/instructions.json
+  specific_instructions:
+    type: instructions
+    file: configs/all-phases-example/specific-instructions.json
+  prescreen:
+    type: prestudy
+    file: configs/all-phases-example/prescreen.json
+  baseline_check:
+    type: training
+    file: configs/all-phases-example/baseline.json
+  personality:
+    type: poststudy
+    file: configs/all-phases-example/big5.json
+  study_satisfaction:
+    type: poststudy
+    file: configs/all-phases-example/studysatisfaction.json
+annotation_schemes:
+- annotation_type: radio
+  name: thing_name
+  description: What is this thing called?
+  labels:
+  - name: bug
+    text: a bug
+  - name: feature
+    text: a feature
+  has_free_response: true
+  sequential_key_binding: true
+- annotation_type: multiselect
+  name: features
+  description: What features does it have?
+  labels:
+  - name: fast
+    text: very fast
+  - name: shiny
+    text: nice UI
+  - name: cheap
+    text: cheap to use
+  sequential_key_binding: true
+- annotation_type: text
+  name: pure_vibes
+  description: How does this product make you feel?
+  textarea:
+    'on': false
+    rows: 2
+    cols: 40
+- annotation_type: highlight
+  name: text_vibes
+  description: Which parts have this kind of vibe?
+  labels:
+  - text: good vibes
+    name: good
+    abbreviation": good
+  - text: bad vibes
+    name: bad
+    abbreviation": bad
+  sequential_key_binding: true
+- annotation_type: slider
+  name: vibe_level
+  description: How many vibes?
+  min_value: 1
+  max_value: 10
+  starting_value: 5
+site_dir: default

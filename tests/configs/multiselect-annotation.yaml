@@ -1,0 +1,45 @@
+annotation_task_name: "Multiselect Annotation Test"
+task_dir: "output/multiselect-annotation"
+output_annotation_dir: "output/multiselect-annotation"
+output_annotation_format: "jsonl"
+max_annotations_per_user: 10
+assignment_strategy: "fixed_order"
+data_files:
+  - "../data/test_data.json"
+item_properties:
+  id_key: "id"
+  text_key: "text"
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+  - annotation_type: "multiselect"
+    name: "topics"
+    description: "What topics are mentioned in the text? (Select all that apply)"
+    labels:
+      - "politics"
+      - "technology"
+      - "sports"
+      - "entertainment"
+      - "science"
+      - "business"
+      - "health"
+    sequential_key_binding: true
+  - annotation_type: "multiselect"
+    name: "emotions"
+    description: "What emotions are expressed in this text?"
+    labels:
+      - "joy"
+      - "sadness"
+      - "anger"
+      - "fear"
+      - "surprise"
+      - "disgust"
+      - "trust"
+    sequential_key_binding: true
+    has_free_response:
+      instruction: "Please specify any other emotions not listed above:"
+site_dir: "default"
+customjs: null
+customjs_hostname: null

@@ -1,0 +1,24 @@
+annotation_task_name: Simple Check Box Test
+task_dir: output/simple-checkbox
+output_annotation_dir: output/simple-checkbox/annotations
+output_annotation_format: jsonl
+data_files:
+- ../data/test_data.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 0
+annotation_schemes:
+- annotation_type: multiselect
+  name: colors
+  description: Select all colors that are mentioned in the text
+  labels:
+  - blue
+  - maize
+  - green
+  - white
+  sequential_key_binding: true
+site_dir: output

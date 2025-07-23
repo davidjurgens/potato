@@ -10,6 +10,10 @@ interaction elements. This is useful for:
 """
 
 import logging
+from .identifier_utils import (
+    safe_generate_layout,
+    escape_html_content
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,13 +39,19 @@ def generate_pure_display_layout(annotation_scheme):
             "labels": ["Step 1: Read the text", "Step 2: Select options"]
         }
     """
+    return safe_generate_layout(annotation_scheme, _generate_pure_display_layout_internal)
+
+def _generate_pure_display_layout_internal(annotation_scheme):
+    """
+    Internal function to generate pure display layout after validation.
+    """
     logger.debug(f"Generating pure display layout for schema: {annotation_scheme['name']}")
 
     # Format content with header and body text
     schematic = f"""
-        <form id="{annotation_scheme['name']}" class="annotation-form pure-display" action="/action_page.php">
-            <fieldset schema="{annotation_scheme['name']}">
-                <legend>{annotation_scheme['description']}</legend>
+        <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form pure-display" action="/action_page.php">
+            <fieldset schema="{escape_html_content(annotation_scheme['name'])}">
+                <legend>{escape_html_content(annotation_scheme['description'])}</legend>
                 <div class="display-content">
                     {format_display_content(annotation_scheme.get('labels', []))}
                 </div>
@@ -67,4 +77,5 @@ def format_display_content(labels):
         return ""
 
     logger.debug(f"Formatting {len(labels)} content lines")
-    return "<br>".join(labels)
+    escaped_labels = [escape_html_content(label) for label in labels]
+    return "<br>".join(escaped_labels)

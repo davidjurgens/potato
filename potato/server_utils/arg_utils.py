@@ -72,4 +72,12 @@ def arguments():
         default=True,
     )
 
+    parser.add_argument(
+        "--persist-sessions",
+        action="store_true",
+        dest="persist_sessions",
+        help="Enable session persistence between server restarts (default: False)",
+        default=False,
+    )
+
     return parser.parse_args()

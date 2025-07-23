@@ -1,0 +1,29 @@
+annotation_task_name: Simple Multirate Test
+task_dir: output/simple-multirate
+output_annotation_dir: output/simple-multirate/annotations
+output_annotation_format: jsonl
+data_files:
+- ../data/test_data.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 0
+annotation_schemes:
+- annotation_type: multirate
+  name: aspects
+  description: Rate different aspects of the text
+  options:
+  - sentiment
+  - clarity
+  - relevance
+  labels:
+  - Very Low
+  - Low
+  - Neutral
+  - High
+  - Very High
+  sequential_key_binding: true
+site_dir: output

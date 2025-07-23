@@ -9,6 +9,27 @@ Features include:
 - Survey flow support
 - Data loading and persistence
 - AI augmentation support
+- Active learning integration
+- Admin dashboard functionality
+
+The server handles:
+1. Data loading from various file formats (JSON, CSV, TSV, JSONL)
+2. User session management and authentication
+3. Annotation submission and validation
+4. Phase progression and workflow management
+5. AI hint generation and integration
+6. Active learning model training and instance reordering
+7. Admin dashboard data generation
+8. Configuration management and validation
+
+Key Components:
+- Flask application setup and configuration
+- Data loading and preprocessing
+- User state initialization
+- Annotation scheme processing
+- Template rendering and customization
+- Session timeout management
+- Error handling and logging
 """
 from __future__ import annotations
 
@@ -24,6 +45,7 @@ import string
 import threading
 import yaml
 from datetime import datetime, timedelta
+from typing import List, Dict, Any
 
 import numpy as np
 import pandas as pd
@@ -39,6 +61,7 @@ import shutil
 
 from dataclasses import dataclass
 
+# Get current working directory and program directory
 cur_working_dir = os.getcwd() #get the current working dir
 cur_program_dir = os.path.dirname(os.path.abspath(__file__)) #get the current program dir (for the case of pypi, it will be the path where potato is installed)
 flask_templates_dir = os.path.join(cur_program_dir,'templates') #get the dir where the flask templates are saved
@@ -53,14 +76,19 @@ from user_state_management import UserStateManager, UserState, get_user_state_ma
 from ai.ai_endpoint import init_ai_cache_manager, get_ai_cache_manager
 from authentificaton import UserAuthenticator
 from phase import UserPhase
+from potato.item_state_management import ItemStateManager, Item, Label, SpanAnnotation
+from potato.item_state_management import get_item_state_manager, init_item_state_manager
+from potato.user_state_management import UserStateManager, UserState, get_user_state_manager, init_user_state_manager
+from potato.authentificaton import UserAuthenticator
+from potato.phase import UserPhase
 
-from create_task_cli import create_task_cli, yes_or_no
-from server_utils.arg_utils import arguments
-from server_utils.config_module import init_config, config
-from server_utils.schemas.span import render_span_annotations
-from server_utils.cli_utlis import get_project_from_hub, show_project_hub
-from server_utils.prolific_apis import ProlificStudy
-from server_utils.json import easy_json
+from potato.create_task_cli import create_task_cli, yes_or_no
+from potato.server_utils.arg_utils import arguments
+from potato.server_utils.config_module import init_config, config
+from potato.server_utils.schemas.span import render_span_annotations
+from potato.server_utils.cli_utlis import get_project_from_hub, show_project_hub
+from potato.server_utils.prolific_apis import ProlificStudy
+from potato.server_utils.json import easy_json
 
 # This allows us to create an AI endpoint for the system to interact with as needed (if configured)
 from ai.ai_endpoint import get_ai_endpoint
@@ -68,14 +96,18 @@ from ai.ai_endpoint import get_ai_endpoint
 # Initialize Flask app
 app = Flask(__name__)
 
+# Secret key will be set in configure_app() from config
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
+# Set random seed for reproducible behavior
 random.seed(0)
 
+# Global variables for file management and user tracking
 domain_file_path = ""
 file_list = []
 file_list_size = 0
@@ -84,6 +116,7 @@ user_dict = {}
 
 file_to_read_from = ""
 
+# User story position tracking and response queue management
 user_story_pos = defaultdict(lambda: 0, dict())
 user_response_dicts_queue = defaultdict(deque)
 
@@ -91,29 +124,44 @@ user_response_dicts_queue = defaultdict(deque)
 USER_CONFIG_PATH = "user_config.json"
 DEFAULT_LABELS_PER_INSTANCE = 3
 
-# Hacky nonsense
+# Hacky nonsense - schema label to color mapping
 schema_label_to_color = {}
 
 # Keyword Highlights File Data
 @dataclass(frozen=True)
 class HighlightSchema:
+    """
+    Data class for highlight schema information.
+
+    This class represents a highlight schema with a label and schema name.
+    It's used for organizing highlight data and ensuring consistent
+    color assignments across the annotation interface.
+    """
     label: str
     schema: str
 
     def __hash__(self):
         return hash((self.label, self.schema))
 
+# Global emphasis corpus to schemas mapping
 emphasis_corpus_to_schemas = defaultdict(set)
 
 # Response Highlight Class
 @dataclass(frozen=True)
 class SuggestedResponse:
+    """
+    Data class for suggested response information.
+
+    This class represents a suggested response with a name and label.
+    It's used for AI-generated suggestions and pre-filled annotation values.
+    """
     name: str
     label: str
 
     def __hash__(self):
         return hash((self.name, self.label))
 
+# Color palette for annotation interface
 COLOR_PALETTE = [
     "rgb(179,226,205)",
     "rgb(253,205,172)",
@@ -137,39 +185,30 @@ COLOR_PALETTE = [
 ]
 
 # Mapping the base html template str to the real file
-template_dict = {
-    "base_html_template":{
-        'base': os.path.join(cur_program_dir, 'base_html/base_template.html'),
-        'default': os.path.join(cur_program_dir, 'base_html/base_template.html'),
-    },
-    "header_file":{
-        'default': os.path.join(cur_program_dir, 'base_html/header.html'),
-    },
-    "html_layout":{
-        'default': os.path.join(cur_program_dir, 'base_html/examples/plain_layout.html'),
-        'plain': os.path.join(cur_program_dir, 'base_html/examples/plain_layout.html'),
-        'kwargs': os.path.join(cur_program_dir, 'base_html/examples/kwargs_example.html'),
-        'fixed_keybinding': os.path.join(cur_program_dir, 'base_html/examples/fixed_keybinding_layout.html')
-    },
-    "surveyflow_html_layout": {
-        'default': os.path.join(cur_program_dir, 'base_html/examples/plain_layout.html'),
-        'plain': os.path.join(cur_program_dir, 'base_html/examples/plain_layout.html'),
-        'kwargs': os.path.join(cur_program_dir, 'base_html/examples/kwargs_example.html'),
-        'fixed_keybinding': os.path.join(cur_program_dir, 'base_html/examples/fixed_keybinding_layout.html')
-    }
-}
+# REMOVED: template_dict is no longer needed since we use hardcoded template paths
 
 class ActiveLearningState:
     """
     A class for maintaining state on active learning.
+
+    This class tracks active learning selection types and update rounds
+    to ensure proper coordination between active learning cycles and
+    user assignment updates.
     """
 
     def __init__(self):
+        """Initialize the active learning state tracker."""
         self.id_to_selection_type = {}
         self.id_to_update_round = {}
         self.cur_round = 0
 
     def update_selection_types(self, id_to_selection_type):
+        """
+        Update the selection types for active learning.
+
+        Args:
+            id_to_selection_type: Dictionary mapping instance IDs to selection types
+        """
         self.cur_round += 1
 
         for iid, st in id_to_selection_type.items():
@@ -180,8 +219,24 @@ class ActiveLearningState:
 SESSION_TIMEOUT = timedelta(minutes=1)
 
 def load_instance_data(config: dict):
-    '''Loads the instance data from the files specified in the config.'''
+    """
+    Load instance data from the files specified in the config.
 
+    This function reads annotation data from various file formats (JSON, CSV, TSV, JSONL)
+    and populates the ItemStateManager with the data. It handles different data structures
+    and validates that required fields are present.
+
+    Args:
+        config: Configuration dictionary containing data file paths and item properties
+
+    Side Effects:
+        - Populates ItemStateManager with loaded data
+        - Validates data structure and required fields
+        - Logs loading progress and statistics
+
+    Raises:
+        Exception: If file format is unsupported or required fields are missing
+    """
     ism = get_item_state_manager()
 
     # Where to look in the JSON item object for the text to annotate
@@ -197,8 +252,20 @@ def load_instance_data(config: dict):
             raise Exception("Unsupported input file format %s for %s" % (fmt, data_fname))
 
         logger.debug("Reading data from " + data_fname)
+        print(f"[DEBUG] Loading data from file: {data_fname}")
+        print(f"[DEBUG] Current working directory: {os.getcwd()}")
+        print(f"[DEBUG] File exists: {os.path.exists(data_fname)}")
+
+        # Read and print first few lines of the file for debugging
+        try:
+            with open(data_fname, "rt") as f:
+                first_lines = [f.readline().strip() for _ in range(3)]
+                print(f"[DEBUG] First 3 lines of file: {first_lines}")
+        except Exception as e:
+            print(f"[DEBUG] Error reading file: {e}")
 
         if fmt in ["json", "jsonl"]:
+            # Handle JSON and JSONL formats
             with open(data_fname, "rt") as f:
                 for line_no, line in enumerate(f):
                     item = json.loads(line)
@@ -276,11 +343,172 @@ def load_user_data(config: dict):
     user_data_dir = config['output_annotation_dir']
     usm = get_user_state_manager()
 
+    # Check if the output directory exists
+    if not os.path.exists(user_data_dir):
+        os.makedirs(user_data_dir)
+        logger.info("Created output directory: %s" % user_data_dir)
+        return
+
     # For each user's directory, load in their state
-    for user_dir in os.listdir(user_data_dir):
-        usm.load_user_state(os.path.join(user_data_dir, user_dir))
+    user_dirs = [d for d in os.listdir(user_data_dir) if os.path.isdir(os.path.join(user_data_dir, d))]
+
+    for user_dir in user_dirs:
+        try:
+            usm.load_user_state(os.path.join(user_data_dir, user_dir))
+        except ValueError as e:
+            # Skip directories that don't have valid user state files
+            logger.warning("Skipping invalid user directory %s: %s" % (user_dir, str(e)))
+            continue
 
     logger.info("Loaded user data for %d users" % len(usm.get_user_ids()))
+
+def load_training_data(config: dict) -> None:
+    """
+    Load training data from the training data file specified in the config.
+
+    This function loads training instances with correct answers and explanations
+    for the training phase. It validates the training data format and stores
+    the training instances for use during the training phase.
+
+    Args:
+        config: Configuration dictionary containing training settings
+
+    Side Effects:
+        - Stores training instances in global training data storage
+        - Validates training data format and consistency
+        - Logs loading progress and statistics
+
+    Raises:
+        Exception: If training data file is not found or invalid
+    """
+    if 'training' not in config or not config['training'].get('enabled', False):
+        logger.debug("Training not enabled, skipping training data loading")
+        return
+
+    training_config = config['training']
+    data_file = training_config.get('data_file')
+
+    if not data_file:
+        logger.warning("Training enabled but no data_file specified")
+        return
+
+    # Resolve the training data file path
+    try:
+        training_data_path = get_abs_or_rel_path(data_file, config)
+    except FileNotFoundError:
+        logger.error(f"Training data file not found: {data_file}")
+        raise Exception(f"Training data file not found: {data_file}")
+
+    logger.debug(f"Loading training data from {training_data_path}")
+
+    try:
+        with open(training_data_path, 'r', encoding='utf-8') as f:
+            training_data = json.load(f)
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        logger.error(f"Invalid training data file format: {e}")
+        raise Exception(f"Invalid training data file format: {e}")
+
+    if not isinstance(training_data, dict):
+        raise Exception("Training data must be a JSON object")
+
+    if 'training_instances' not in training_data:
+        raise Exception("Training data must contain 'training_instances' field")
+
+    training_instances = training_data['training_instances']
+    if not isinstance(training_instances, list):
+        raise Exception("training_instances must be a list")
+
+    if not training_instances:
+        raise Exception("training_instances cannot be empty")
+
+    # Validate training data against annotation schemes
+    annotation_schemes = training_config.get('annotation_schemes', config.get('annotation_schemes', []))
+
+    # Handle both string references and full scheme dictionaries
+    scheme_names = set()
+    for scheme in annotation_schemes:
+        if isinstance(scheme, str):
+            # String reference to existing scheme
+            scheme_names.add(scheme)
+        elif isinstance(scheme, dict) and 'name' in scheme:
+            # Full scheme dictionary
+            scheme_names.add(scheme['name'])
+        else:
+            logger.warning(f"Invalid annotation scheme format: {scheme}")
+
+    # Convert training instances to Item objects and store them
+    global training_items
+    training_items = []
+
+    for instance in training_instances:
+        # Validate required fields
+        if 'id' not in instance or 'text' not in instance or 'correct_answers' not in instance:
+            raise Exception(f"Training instance missing required fields: {instance}")
+
+        # Validate correct_answers correspond to annotation schemes
+        for scheme_name in instance['correct_answers'].keys():
+            if scheme_name not in scheme_names:
+                logger.warning(f"Training instance {instance['id']} contains unknown scheme: {scheme_name}")
+
+        # Create Item object for training instance
+        item_data = {
+            'id': instance['id'],
+            'text': instance['text'],
+            'correct_answers': instance['correct_answers'],
+            'explanation': instance.get('explanation', ''),
+            'displayed_text': get_displayed_text(instance['text'])
+        }
+
+        training_item = Item(instance['id'], item_data)
+        training_items.append(training_item)
+
+    logger.info(f"Loaded {len(training_items)} training instances")
+    logger.debug(f"Training instances: {[item.get_id() for item in training_items]}")
+
+
+def get_training_instances() -> List[Item]:
+    """
+    Get the loaded training instances.
+
+    Returns:
+        List of training Item objects
+    """
+    global training_items
+    return training_items if 'training_items' in globals() else []
+
+
+def get_training_correct_answers(instance_id: str) -> Dict[str, Any]:
+    """
+    Get the correct answers for a training instance.
+
+    Args:
+        instance_id: The ID of the training instance
+
+    Returns:
+        Dictionary of correct answers for the instance
+    """
+    training_items = get_training_instances()
+    for item in training_items:
+        if item.get_id() == instance_id:
+            return item.get_data().get('correct_answers', {})
+    return {}
+
+
+def get_training_explanation(instance_id: str) -> str:
+    """
+    Get the explanation for a training instance.
+
+    Args:
+        instance_id: The ID of the training instance
+
+    Returns:
+        Explanation string for the instance
+    """
+    training_items = get_training_instances()
+    for item in training_items:
+        if item.get_id() == instance_id:
+            return item.get_data().get('explanation', '')
+    return ''
 
 def load_all_data(config: dict):
     '''Loads instance and annotation data from the files specified in the config.'''
@@ -289,6 +517,7 @@ def load_all_data(config: dict):
     load_user_data(config)
     load_phase_data(config)
     load_highlights_data(config)
+    load_training_data(config)
 
     print("STATES: ", get_user_state_manager().phase_type_to_name_to_page)
 
@@ -296,13 +525,7 @@ def load_annotation_schematic_data(config: dict) -> None:
     # Lazy import - only when this function is called
     from server_utils.front_end import generate_annotation_html_template
 
-    # Swap in the right file paths if the user specified the default templates
-    if config["base_html_template"] == "default":
-        config["base_html_template"] = template_dict["base_html_template"]["default"]
-    if config["header_file"] == "default":
-        config["header_file"] = template_dict["header_file"]["default"]
-    if config["html_layout"] == "default":
-        config["html_layout"] = template_dict["html_layout"]["default"]
+    # No longer need to swap in template paths - they are hardcoded in front_end.py
 
     task_dir = config["task_dir"]
     # Swap in the right file paths if the user specified the default templates
@@ -312,7 +535,6 @@ def load_annotation_schematic_data(config: dict) -> None:
             # make the directory
             os.makedirs(templates_dir)
         config["site_dir"] = templates_dir
-
 
     # Creates the templates we'll use in flask by mashing annotation
     # specification on top of the proto-templates
@@ -340,76 +562,86 @@ def load_phase_data(config: dict) -> None:
         return
 
     phases = config["phases"]
-    if "order" in phases:
-        phase_order = phases["order"]
+
+    # Handle both list and dictionary formats for phases
+    if isinstance(phases, list):
+        # If phases is a list, use the order as defined in the list
+        phase_order = [phase["name"] for phase in phases]
+        # Convert list to dict for easier access
+        phases_dict = {phase["name"]: phase for phase in phases}
     else:
-        phase_order = list(phases.keys())
+        # Original dictionary format
+        if "order" in phases:
+            phase_order = phases["order"]
+        else:
+            phase_order = [k for k in phases.keys() if k != "order"]
+        phases_dict = phases
+
+    logger.debug(f"[PHASE LOAD] phases: {phases}")
+    logger.debug(f"[PHASE LOAD] phase_order: {phase_order}")
 
     logger.debug("Loading %d phases in order: %s" % (len(phase_order), phase_order))
 
-    # TODO: add some logging if "order" was specified with fewer phases than are defined
-    # TODO: add some validation logic to ensure that
-    #         1) all phase names have a definition in the config
-    #         2) all names are unique (no repeats)
-    #         3) all names are strings
-    #         4) all names are non-empty
-    #         5) all types are recognized and valid
-
     for phase_name in phase_order:
-        phase = phases[phase_name]
-        if not "type" in phase or not phase['type']:
-            raise Exception("Phase %s does not have a type" % phase_name)
-        if not "file" in phase or not phase['file']:
-            raise Exception("Phase %s is specified but does not have a file" % phase_name)
-
-        # Get the phase labeling schemes, being robust to relative or absolute paths
-        phase_scheme_fname = get_abs_or_rel_path(phase['file'], config)
-        phase_labeling_schemes = get_phase_annotation_schemes(phase_scheme_fname)
-
-        # Use the default templates unless specified in the phase config
-        html_template_filename = config["base_html_template"]
-        if 'template' in phase:
-            html_template_filename = phase['template']
-        html_header_filename = config["header_file"]
-        if 'header' in phase:
-            html_header_filename = phase['header']
-        html_layout_filename = config["html_layout"]
-        if 'layout' in phase:
-            html_layout_filename = phase['layout']
-
         try:
-            phase_html_fname = generate_html_from_schematic(html_template_filename,
-                                            html_header_filename,
-                                            html_layout_filename,
-                                            phase_labeling_schemes,
-                                            False, False,
-                                            phase_name, config)
-        except KeyError as e:
-            raise Exception("Error generating HTML for phase %s (file: %s): %s" \
-                            % (phase_name, phase['file'], str(e)))
+            phase = phases_dict[phase_name]
 
-        phase_type = UserPhase.fromstr(phase['type'])
+            # Handle new format with annotation_schemes directly in phase
+            if "annotation_schemes" in phase:
+                phase_labeling_schemes = phase["annotation_schemes"]
+                # Determine phase type from the first annotation scheme
+                if phase_labeling_schemes:
+                    first_scheme = phase_labeling_schemes[0]
+                    if first_scheme.get("annotation_type") == "pure_display":
+                        phase_type = UserPhase.INSTRUCTIONS
+                    else:
+                        phase_type = UserPhase.ANNOTATION
+                else:
+                    phase_type = UserPhase.ANNOTATION
+            else:
+                # Legacy format with file and type
+                if not "type" in phase or not phase['type']:
+                    logger.error(f"Phase {phase_name} does not have a type")
+                    raise Exception("Phase %s does not have a type" % phase_name)
+                if not "file" in phase or not phase['file']:
+                    logger.error(f"Phase {phase_name} is specified but does not have a file")
+                    raise Exception("Phase %s is specified but does not have a file" % phase_name)
 
-        # Register the HTML so it's easy to find later
-        # config['phase'][phase['type']]['pages'].append(phase_html_fname)
-        # Add the phase to the user state manager
-        user_state_manager = get_user_state_manager()
-        user_state_manager.add_phase(phase_type, phase_name, phase_html_fname)
+                # Get the phase labeling schemes, being robust to relative or absolute paths
+                phase_scheme_fname = get_abs_or_rel_path(phase['file'], config)
+                logger.debug(f"Resolved phase file for {phase_name}: {phase_scheme_fname}")
+                phase_labeling_schemes = get_phase_annotation_schemes(phase_scheme_fname)
+                phase_type = UserPhase.fromstr(phase['type'])
 
-        match phase['type']:
-            case "consent":
-                consent_fname = None
-            case "instructions":
-                instructions_fname = phase_html_fname
-            case "prestudy":
-                prestudy_fname = phase_html_fname
-            case "training":
-                training_fname = phase_html_fname
-            case "poststudy":
-                poststudy_fname = phase_html_fname
-            case _:
-                raise Exception("Unknown phase type %s specified for %s" \
-                                 % (phase_name, phase['type']))
+            # Use the default templates unless specified in the phase config
+            # Note: Template paths are now hardcoded in front_end.py
+            # Only handle custom task_layout if specified
+            task_layout_file = None
+            if 'task_layout' in phase:
+                task_layout_file = phase['task_layout']
+
+            try:
+                phase_html_fname = generate_html_from_schematic(
+                                                phase_labeling_schemes,
+                                                False, False,
+                                                phase_name, config,
+                                                task_layout_file)
+            except KeyError as e:
+                logger.error(f"Error generating HTML for phase {phase_name}: {e}")
+                raise Exception("Error generating HTML for phase %s: %s" \
+                                % (phase_name, str(e)))
+
+            # Register the HTML so it's easy to find later
+            user_state_manager = get_user_state_manager()
+            user_state_manager.add_phase(phase_type, phase_name, phase_html_fname)
+            logger.debug(f"Registered phase {phase_name} as {phase_type} with HTML {phase_html_fname}")
+
+        except Exception as e:
+            logger.error(f"Failed to load phase '{phase_name}': {e}")
+            continue
+
+    user_state_manager = get_user_state_manager()
+    logger.debug(f"[PHASE LOAD] phase_type_to_name_to_page: {user_state_manager.phase_type_to_name_to_page}")
 
 
 def get_phase_annotation_schemes(filename: str) -> list[dict]:
@@ -441,30 +673,46 @@ def get_abs_or_rel_path(fname: str, config: dict) -> str:
     Returns the path to the fname if it exists as specified, or if not, attempts to find
     the file in the relative paths from the config file.
     """
-
+    import os
+    logger = globals().get('logger', None)
+    if logger:
+        logger.debug(f"get_abs_or_rel_path: input fname={fname}")
     if os.path.exists(fname):
+        if logger:
+            logger.debug(f"get_abs_or_rel_path: found file at {fname}")
         return fname
 
     # See if we can find the file in the same directory as the config file
-    dname = os.path.dirname(config["__config_file__"])
+    dname = os.path.dirname(config["__config_file__"]) if "__config_file__" in config else os.getcwd()
     rel_path = os.path.join(dname, fname)
+    if logger:
+        logger.debug(f"get_abs_or_rel_path: trying {rel_path}")
     if os.path.exists(rel_path):
+        if logger:
+            logger.debug(f"get_abs_or_rel_path: found file at {rel_path}")
         return rel_path
 
     # See if we can locate the file in the current working directory
     cwd = os.getcwd()
     rel_path = os.path.join(cwd, fname)
+    if logger:
+        logger.debug(f"get_abs_or_rel_path: trying {rel_path}")
     if os.path.exists(rel_path):
+        if logger:
+            logger.debug(f"get_abs_or_rel_path: found file at {rel_path}")
         return rel_path
 
     # See if we can figure it out from the real path directory
     real_path = os.path.abspath(dname)
     dir_path = os.path.dirname(real_path)
-    fname = os.path.join(dir_path, fname)
-
-    if not os.path.exists(fname):
-        raise FileNotFoundError("File not found: %s" % fname)
-    return fname
+    fname2 = os.path.join(dir_path, fname)
+    if logger:
+        logger.debug(f"get_abs_or_rel_path: trying {fname2}")
+    if not os.path.exists(fname2):
+        if logger:
+            logger.error(f"File not found: {fname2}")
+        raise FileNotFoundError("File not found: %s" % fname2)
+    return fname2
 
 def get_displayed_text(text):
     """Render the text to display to the user in the annotation interface."""
@@ -499,10 +747,23 @@ def is_session_valid() -> bool:
 def before_request():
     """
     Check session validity before processing any request.
+    Only enforce session validation for protected routes.
     """
+    # Skip session validation in debug mode
+    if config.get("debug", False):
+        return None
+
+    # Allow unauthenticated access to these endpoints
+    allowed_paths = [
+        '/', '/auth', '/register', '/static/', '/favicon.ico', '/robots.txt', '/health', '/api/', '/api/instance/', '/api/instances', '/api/config', '/api/status', '/api/heartbeat'
+    ]
+    path = request.path
+    if any(path == allowed or path.startswith(allowed) for allowed in allowed_paths):
+        return None
+
     if not is_session_valid():
         session.clear()  # Clear the session
-        return redirect(url_for('login'))  # Redirect to login page
+        return redirect(url_for('home'))  # Redirect to home page (login/register)
 
 def get_users():
     """
@@ -525,15 +786,27 @@ def move_to_prev_instance(user_id) -> bool:
 
 def move_to_next_instance(user_id) -> bool:
     '''Moves the user forward to the next instance and returns True if successful'''
+    logger.debug(f"=== MOVE_TO_NEXT_INSTANCE START ===")
+    logger.debug(f"User ID: {user_id}")
+
     user_state = get_user_state(user_id)
- 
+    logger.debug(f"Before navigation - current_instance_index: {user_state.get_current_instance_index()}")
+    logger.debug(f"Before navigation - instance_id_ordering: {user_state.instance_id_ordering}")
+    print(f"🔍 MOVE_NEXT: user={user_id}, before_index={user_state.get_current_instance_index()}")
+
     # If the user is at the end of the list, try to assign instances to the user
     if user_state.is_at_end_index():
         logger.debug(f"User {user_id} is at the end of the list, assigning new instances")
         num_assigned = get_item_state_manager().assign_instances_to_user(user_state)
         logger.debug(f"Assigned {num_assigned} new instances to user {user_id}")
-        
-    return user_state.go_forward()
+
+    result = user_state.go_forward()
+    logger.debug(f"After navigation - current_instance_index: {user_state.get_current_instance_index()}")
+    logger.debug(f"Navigation result: {result}")
+    print(f"🔍 MOVE_NEXT: user={user_id}, after_index={user_state.get_current_instance_index()}, result={result}")
+
+    logger.debug(f"=== MOVE_TO_NEXT_INSTANCE END ===")
+    return result
 
 def go_to_id(user_id: str, instance_index: int):
     '''Causes the user's view to change to the Item at the given index.'''
@@ -564,6 +837,15 @@ def render_page_with_annotations(username) -> str:
     user_state = get_user_state_manager().get_user_state(username)
     item = user_state.get_current_instance()
     instance_id = item.get_id()
+
+    # DEBUG: Add detailed logging
+    logger.debug(f"=== RENDER_PAGE_WITH_ANNOTATIONS START ===")
+    logger.debug(f"Username: {username}")
+    logger.debug(f"User state current_instance_index: {user_state.get_current_instance_index()}")
+    logger.debug(f"User state instance_id_ordering: {user_state.instance_id_ordering}")
+    logger.debug(f"Current instance ID: {instance_id}")
+    print(f"🔍 RENDER_PAGE: username={username}, current_instance_index={user_state.get_current_instance_index()}, instance_id={instance_id}")
+
     # print('instance_id: ', instance_id)
 
     # directly display the prepared displayed_text
@@ -656,7 +938,12 @@ def render_page_with_annotations(username) -> str:
     # ai_hints = get_ai_hints(text)
 
     # Flask will fill in the things we need into the HTML template we've created,
-    # replacing {{variable_name}} with t    he associated text for keyword arguments
+    # replacing {{variable_name}} with the associated text for keyword arguments
+
+        # Calculate progress counter values
+    # Use the total number of items that will be assigned to the user
+    total_count = get_item_state_manager().get_total_assignable_items_for_user(get_user_state(username))
+
     rendered_html = render_template(
         html_file,
         username=username,
@@ -666,11 +953,15 @@ def render_page_with_annotations(username) -> str:
         instance_id=instance_id,
         instance_index=user_state.get_current_instance_index(),
         finished=get_user_state(username).get_annotation_count(),
-        total_count=get_user_state(username).get_max_assignments(),
+        total_count=total_count,
         alert_time_each_instance=config["alert_time_each_instance"],
         statistics_nav=all_statistics,
         var_elems=var_elems_html,
         custom_js=custom_js,
+        # Pass annotation schemes to the template
+        annotation_schemes=config["annotation_schemes"],
+        annotation_task_name=config["annotation_task_name"],
+        debug=config.get("debug", False),
         # ai=ai_hints,
         **kwargs
     )
@@ -705,7 +996,7 @@ def render_page_with_annotations(username) -> str:
     if annotations is not None:
         # Reset the state
         for schema_name, label_dict in annotations.items():
-            # this needs to be fixed, there is a chance that we get incorrect type 
+            # this needs to be fixed, there is a chance that we get incorrect type
             if not isinstance(label_dict, dict):
                 print(f"Skipping {schema_name}: Expected dict but got {type(label_dict)} -> {label_dict}")
                 continue
@@ -763,7 +1054,7 @@ def render_page_with_annotations(username) -> str:
         if it['annotation_type'] == 'multirate' and it.get('option_randomization'):
             selected_schemas_for_option_randomization.append(it['description'])
 
-    if len(selected_schemas_for_option_randomization) > 0:
+
         soup = randomize_options(soup, selected_schemas_for_option_randomization,
                                  map_user_id_to_digit(username))
 
@@ -771,7 +1062,7 @@ def render_page_with_annotations(username) -> str:
     soup = add_ai_hints(soup, instance_id)
 
     rendered_html = str(soup)
-    
+
     return rendered_html
 
 def get_label_suggestions(item, config, schema_content_to_prefill) -> set[SuggestedResponse]:
@@ -813,7 +1104,7 @@ def add_ai_hints(soup: BeautifulSoup, instance_id: str) -> BeautifulSoup:
     Adds AI-generated hints to the page, if enabled. This is a hook for adding hints to the
     page based on the instance that the user is currently annotating.
     """
-    
+
     return soup
 
 
@@ -822,9 +1113,40 @@ def ai_hints(text: str) -> str:
     """
     Returns the AI hints for the given instance.
     """
-    
-    ai_endpoint = get_ai_endpoint(config)
-    return ai_endpoint.get_hint(text)
+    import requests
+    print(text)
+    description = config["annotation_schemes"][0]["description"]
+    annotation_type = config["annotation_schemes"][0]["annotation_type"]
+    print(description)
+    prompt = f'''You are assisting a user with an annotation task. Here is the annotation instruction: {description}
+    Here is the annotation task type: {annotation_type}
+    Here is the sentence (or item) to annotate: {text}
+    Based on the instruction, task type, and the given sentence, generate a short, helpful hint that guides the user on how to approach this annotation.
+    Also, give a short reason of your answer and the relevant part(keyword or text).
+    The hint should not provide the label or answer directly, but should highlight what the user might consider or look for.'''
+
+    try:
+        response = requests.post(
+            'http://localhost:11434/api/generate',
+            json={
+                # 'model': 'llama3.2',
+                'model': 'qwen3:0.6b',
+                'prompt': prompt,
+                'stream': False
+            },
+            timeout=5  # Add timeout to prevent hanging
+        )
+        print(response.json()['response'])
+        return response.json()['response']
+    except requests.exceptions.ConnectionError:
+        print("AI hints service not available (Ollama not running)")
+        return "AI hints are currently unavailable. Please proceed with manual annotation."
+    except requests.exceptions.Timeout:
+        print("AI hints service timeout")
+        return "AI hints service is slow to respond. Please proceed with manual annotation."
+    except Exception as e:
+        print(f"Error getting AI hints: {e}")
+        return "AI hints are currently unavailable. Please proceed with manual annotation."
 
 
 
@@ -967,7 +1289,7 @@ def update_annotation_state(username, form):
 
     # Span annotations are a bit funkier since we're getting raw HTML that
     # we need to post-process on the server side.
-    span_annotations = []
+    span_annotations = None  # Changed from [] to None to preserve existing spans during navigation
     if "span-annotation" in form:
         span_annotation_html = form["span-annotation"]
         span_text, span_annotations = parse_html_span_annotation(span_annotation_html)
@@ -985,18 +1307,93 @@ def get_annotations_for_user_on(username, instance_id):
     """
     Returns the label-based annotations made by this user on the instance.
     """
+    # Normalize instance_id to string for consistent key lookup
+    instance_id = str(instance_id)
+
     user_state = get_user_state(username)
     print("instance_id", instance_id)
-    annotations = user_state.get_label_annotations(instance_id)
-    return annotations
+    raw_annotations = user_state.get_label_annotations(instance_id)
+
+    # Process the raw annotations into the expected format
+    processed_annotations = {}
+    for label, value in raw_annotations.items():
+        if hasattr(label, 'schema_name') and hasattr(label, 'label_name'):
+            schema_name = label.schema_name
+            label_name = label.label_name
+        else:
+            # Fallback for string labels
+            continue
+
+        if schema_name not in processed_annotations:
+            processed_annotations[schema_name] = {}
+        processed_annotations[schema_name][label_name] = value
+
+    return processed_annotations
 
 
 def get_span_annotations_for_user_on(username, instance_id):
     """
     Returns the span annotations made by this user on the instance.
     """
+    logger.debug(f"=== GET_SPAN_ANNOTATIONS_FOR_USER_ON START ===")
+    logger.debug(f"Username: {username}")
+    logger.debug(f"Instance ID: {instance_id}")
+
+    # Normalize instance_id to string for consistent key lookup
+    instance_id = str(instance_id)
+    logger.debug(f"Normalized Instance ID: {instance_id}")
+
     user_state = get_user_state(username)
-    span_annotations = user_state.get_span_annotations(instance_id)
+    logger.debug(f"User state: {user_state}")
+
+    if not user_state:
+        logger.warning(f"User state not found for user: {username}")
+        return []
+
+    # DEBUG: Check if this instance has any span annotations at all
+    if hasattr(user_state, 'instance_id_to_span_to_value'):
+        logger.debug(f"User state instance_id_to_span_to_value keys: {list(user_state.instance_id_to_span_to_value.keys())}")
+        print(f"🔍 User state instance_id_to_span_to_value keys: {list(user_state.instance_id_to_span_to_value.keys())}")
+
+        if instance_id in user_state.instance_id_to_span_to_value:
+            instance_spans = user_state.instance_id_to_span_to_value[instance_id]
+            logger.debug(f"Spans for instance {instance_id}: {instance_spans}")
+            print(f"🔍 Spans for instance {instance_id}: {instance_spans}")
+
+            # DEBUG: Show each span in detail
+            for span, value in instance_spans.items():
+                logger.debug(f"Span: {span}, Value: {value}")
+                print(f"🔍 Span: {span}, Value: {value}")
+                if hasattr(span, 'get_schema'):
+                    logger.debug(f"  Schema: {span.get_schema()}")
+                    logger.debug(f"  Name: {span.get_name()}")
+                    logger.debug(f"  Start: {span.get_start()}")
+                    logger.debug(f"  End: {span.get_end()}")
+                    logger.debug(f"  ID: {span.get_id()}")
+                    print(f"🔍   Schema: {span.get_schema()}")
+                    print(f"🔍   Name: {span.get_name()}")
+                    print(f"🔍   Start: {span.get_start()}")
+                    print(f"🔍   End: {span.get_end()}")
+                    print(f"🔍   ID: {span.get_id()}")
+        else:
+            logger.debug(f"No spans found for instance {instance_id}")
+            print(f"🔍 No spans found for instance {instance_id}")
+
+    span_annotations_dict = user_state.get_span_annotations(instance_id)
+    logger.debug(f"Raw span annotations from user state: {span_annotations_dict}")
+    print(f"🔍 get_span_annotations_for_user_on({username}, {instance_id}): {span_annotations_dict}")
+
+    # Convert dictionary to list of SpanAnnotation objects
+    span_annotations = list(span_annotations_dict.keys()) if span_annotations_dict else []
+    logger.debug(f"Converted to list: {span_annotations}")
+    print(f"🔍 Converted to list: {span_annotations}")
+
+    # Debug: Print details of each span
+    for span in span_annotations:
+        print(f"[DEBUG SPAN] schema={span.get_schema()} label={span.get_name()} start={span.get_start()} end={span.get_end()} id={span.get_id()}")
+        logger.debug(f"[DEBUG SPAN] schema={span.get_schema()} label={span.get_name()} start={span.get_start()} end={span.get_end()} id={span.get_id()}")
+
+    logger.debug(f"=== GET_SPAN_ANNOTATIONS_FOR_USER_ON END ===")
     return span_annotations
 
 def parse_html_span_annotation(html):
@@ -1036,8 +1433,15 @@ def configure_app(flask_app):
     app = flask_app
 
     # Set application configuration
-    app.secret_key = config.get("secret_key", "potato-annotation-platform")
-    app.permanent_session_lifetime = timedelta(days=config.get("session_lifetime_minutes", 2))
+    # Use a random secret key if sessions shouldn't persist, otherwise use the configured one
+    if config.get("persist_sessions", False):
+        app.secret_key = config.get("secret_key", "potato-annotation-platform")
+    else:
+        # Generate a random secret key to ensure sessions don't persist between restarts
+        import secrets
+        app.secret_key = secrets.token_hex(32)
+
+    app.permanent_session_lifetime = timedelta(days=config.get("session_lifetime_days", 2))
 
     # Configure routes from the routes module
     from routes import configure_routes
@@ -1055,8 +1459,24 @@ def create_app():
     """
     global app
 
-    # Initialize the app
-    app = Flask(__name__)
+    # Initialize the app with explicit static folder configuration
+    static_folder = os.path.join(cur_program_dir, 'static')
+    app = Flask(__name__, static_folder=static_folder)
+
+    # Configure Jinja2 to look in both main templates and generated templates directories
+    real_templates_dir = os.path.join(cur_program_dir, 'templates')
+    generated_templates_dir = os.path.join(real_templates_dir, 'generated')
+
+    # Ensure the generated directory exists
+    if not os.path.exists(generated_templates_dir):
+        os.makedirs(generated_templates_dir, exist_ok=True)
+
+    # Add the generated directory to the template search path
+    from jinja2 import ChoiceLoader, FileSystemLoader
+    app.jinja_loader = ChoiceLoader([
+        FileSystemLoader(real_templates_dir),
+        FileSystemLoader(generated_templates_dir)
+    ])
 
     # Configure the app
     configure_app(app)
@@ -1071,12 +1491,27 @@ def run_server(args):
     # Initialize configuration
     init_config(args)
 
-
     # Apply command line flags that override config settings
     if args.require_password is not None:
         # Command line flag takes precedence over config file
         config["require_password"] = args.require_password
         logger.debug(f"Password requirement set from command line: {args.require_password}")
+
+    # Override port from command line if specified
+    if args.port is not None:
+        config["port"] = args.port
+        logger.debug(f"Port set from command line: {args.port}")
+
+    # Apply persist_sessions flag from command line
+    config["persist_sessions"] = args.persist_sessions
+    logger.debug(f"Session persistence set from command line: {args.persist_sessions}")
+
+    # --- Add support for random seed ---
+    # Admins can set 'random_seed' in config YAML to control assignment randomness (default 1234)
+    if "random_seed" not in config:
+        config["random_seed"] = 1234
+    logger.info(f"Assignment random seed set to: {config['random_seed']}")
+    # -----------------------------------
 
     # Set logging level based on verbosity flags
     if config.get("verbose"):
@@ -1111,7 +1546,7 @@ def run_server(args):
     # Run the Flask app
     host = config.get("host", "0.0.0.0")
     port = config.get("port", 8000)
-    app.run(host=host, port=port, debug=config.get("debug", False))
+    app.run(host=host, port=port, debug=config.get("debug", False), use_reloader=False)
 
 
 # Define the main entry point for the Flask server

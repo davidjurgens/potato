@@ -1,0 +1,55 @@
+port: 9011
+server_name: potato dedicated layout test
+annotation_task_name: Dedicated Layout Test
+debug: true
+task_dir: output/dedicated-layout-test
+output_annotation_dir: output/dedicated-layout-test
+output_annotation_format: json
+annotation_codebook_url: ''
+max_annotations_per_user: 10
+assignment_strategy: fixed_order
+data_files:
+- ../data/test_data.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: radio
+  name: sentiment
+  description: What kind of sentiment does the given text hold?
+  labels:
+  - positive
+  - neutral
+  - negative
+  sequential_key_binding: true
+- annotation_type: multiselect
+  name: topics
+  description: What topics are mentioned in the text? (Select all that apply)
+  labels:
+  - politics
+  - technology
+  - sports
+  - entertainment
+  - science
+  sequential_key_binding: true
+- annotation_type: likert
+  name: quality
+  description: How would you rate the quality of this text?
+  min_label: Very Poor
+  max_label: Excellent
+  size: 5
+  sequential_key_binding: true
+- annotation_type: text
+  name: comments
+  description: Any additional comments about this text?
+  multiline: true
+  rows: 3
+  cols: 50
+use_dedicated_layout: true
+site_dir: default
+customjs: null
+customjs_hostname: null

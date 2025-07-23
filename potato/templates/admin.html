@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ annotation_task_name }} - Admin Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        /* Admin Dashboard Specific Styles */
+        .admin-container {
+            min-height: 100vh;
+            background-color: var(--light-bg);
+        }
+
+        .admin-header {
+            background: white;
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .admin-header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--heading-color);
+            margin: 0;
+        }
+
+        .admin-header .header-actions {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .admin-main {
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Tab Navigation */
+        .admin-tabs {
+            display: flex;
+            background: white;
+            border-radius: var(--radius);
+            padding: 0.25rem;
+            margin-bottom: 2rem;
+            box-shadow: var(--box-shadow);
+        }
+
+        .admin-tab {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            text-align: center;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: var(--transition);
+            font-weight: 500;
+            color: var(--muted-foreground);
+        }
+
+        .admin-tab.active {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .admin-tab:hover:not(.active) {
+            background-color: var(--muted);
+            color: var(--foreground);
+        }
+
+        /* Tab Content */
+        .admin-tab-content {
+            display: none;
+        }
+
+        .admin-tab-content.active {
+            display: block;
+        }
+
+        /* Dashboard Cards */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .dashboard-card {
+            background: white;
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            box-shadow: var(--box-shadow);
+            border: 1px solid var(--border);
+        }
+
+        .dashboard-card h3 {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--muted-foreground);
+            margin: 0 0 0.5rem 0;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .dashboard-card .value {
+            font-size: 2rem;
+            font-weight: 600;
+            color: var(--heading-color);
+            margin: 0;
+        }
+
+        .dashboard-card .description {
+            font-size: 0.875rem;
+            color: var(--text-color);
+            margin: 0.5rem 0 0 0;
+        }
+
+        /* Tables */
+        .admin-table-container {
+            background: white;
+            border-radius: var(--radius);
+            box-shadow: var(--box-shadow);
+            overflow: hidden;
+        }
+
+        .admin-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .admin-table th,
+        .admin-table td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .admin-table th {
+            background-color: var(--muted);
+            font-weight: 500;
+            color: var(--muted-foreground);
+            font-size: 0.875rem;
+        }
+
+        .admin-table tbody tr:hover {
+            background-color: var(--muted);
+        }
+
+        .admin-table td {
+            font-size: 0.875rem;
+            color: var(--text-color);
+        }
+
+        /* Pagination */
+        .pagination {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background: white;
+            border-top: 1px solid var(--border);
+        }
+
+        .pagination-info {
+            font-size: 0.875rem;
+            color: var(--muted-foreground);
+        }
+
+        .pagination-controls {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .pagination-button {
+            padding: 0.5rem 0.75rem;
+            border: 1px solid var(--border);
+            background: white;
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: var(--transition);
+        }
+
+        .pagination-button:hover:not(:disabled) {
+            background-color: var(--muted);
+        }
+
+        .pagination-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .pagination-button.active {
+            background-color: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        /* Filters and Controls */
+        .table-controls {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .table-controls select,
+        .table-controls input {
+            padding: 0.5rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 0.875rem;
+        }
+
+        /* Loading States */
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Status Indicators */
+        .status-badge {
+            padding: 0.25rem 0.5rem;
+            border-radius: var(--radius);
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .status-active {
+            background-color: rgba(16, 185, 129, 0.1);
+            color: var(--success-color);
+        }
+
+        .status-completed {
+            background-color: rgba(59, 130, 246, 0.1);
+            color: #3b82f6;
+        }
+
+        .status-login {
+            background-color: rgba(156, 163, 175, 0.1);
+            color: var(--gray-color);
+        }
+
+        /* Config Form */
+        .config-form {
+            background: white;
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            box-shadow: var(--box-shadow);
+        }
+
+        .config-form h3 {
+            margin: 0 0 1rem 0;
+            color: var(--heading-color);
+        }
+
+        .config-group {
+            margin-bottom: 1rem;
+        }
+
+        .config-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: var(--text-color);
+        }
+
+        .config-group input,
+        .config-group select {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 0.875rem;
+        }
+
+        .config-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        /* Questions Tab Styles */
+        .question-card {
+            background: white;
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: var(--box-shadow);
+            border: 1px solid var(--border);
+        }
+
+        .question-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+        }
+
+        .question-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--heading-color);
+            margin: 0;
+        }
+
+        .question-type {
+            padding: 0.25rem 0.5rem;
+            border-radius: var(--radius);
+            font-size: 0.75rem;
+            font-weight: 500;
+            background-color: var(--muted);
+            color: var(--muted-foreground);
+        }
+
+        .question-description {
+            color: var(--text-color);
+            margin-bottom: 1rem;
+            font-size: 0.875rem;
+        }
+
+        .question-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .question-stat {
+            text-align: center;
+            padding: 0.75rem;
+            background: var(--muted);
+            border-radius: var(--radius);
+        }
+
+        .question-stat .value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--heading-color);
+            display: block;
+        }
+
+        .question-stat .label {
+            font-size: 0.75rem;
+            color: var(--muted-foreground);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* Visualization Styles */
+        .visualization {
+            margin-top: 1rem;
+        }
+
+        .histogram {
+            display: flex;
+            align-items: end;
+            gap: 0.25rem;
+            height: 200px;
+            margin: 1rem 0;
+        }
+
+        .histogram-bar {
+            flex: 1;
+            background: var(--primary);
+            border-radius: 2px 2px 0 0;
+            position: relative;
+            min-height: 4px;
+        }
+
+        .histogram-label {
+            position: absolute;
+            bottom: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.75rem;
+            color: var(--muted-foreground);
+            white-space: nowrap;
+        }
+
+        .histogram-value {
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--text-color);
+        }
+
+        .distribution-chart {
+            display: flex;
+            align-items: end;
+            gap: 0.25rem;
+            height: 200px;
+            margin: 1rem 0;
+        }
+
+        .distribution-bar {
+            flex: 1;
+            background: linear-gradient(to top, var(--primary), var(--success-color));
+            border-radius: 2px 2px 0 0;
+            position: relative;
+            min-height: 4px;
+        }
+
+        .text-analysis {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+
+        .text-stat {
+            background: var(--muted);
+            padding: 1rem;
+            border-radius: var(--radius);
+            text-align: center;
+        }
+
+        .text-stat .value {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--heading-color);
+            display: block;
+        }
+
+        .text-stat .label {
+            font-size: 0.75rem;
+            color: var(--muted-foreground);
+            margin-top: 0.25rem;
+        }
+
+        .common-words {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin: 1rem 0;
+        }
+
+        .word-tag {
+            padding: 0.25rem 0.5rem;
+            background: var(--primary);
+            color: white;
+            border-radius: var(--radius);
+            font-size: 0.75rem;
+        }
+
+        .word-tag .count {
+            opacity: 0.8;
+            margin-left: 0.25rem;
+        }
+
+        .span-analysis {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+
+        .span-stat {
+            background: var(--muted);
+            padding: 1rem;
+            border-radius: var(--radius);
+            text-align: center;
+        }
+
+        .span-stat .value {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--heading-color);
+            display: block;
+        }
+
+        .span-stat .label {
+            font-size: 0.75rem;
+            color: var(--muted-foreground);
+            margin-top: 0.25rem;
+        }
+
+        .error-message {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+            padding: 1rem;
+            border-radius: var(--radius);
+            margin: 1rem 0;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .admin-header {
+                padding: 1rem;
+                flex-direction: column;
+                gap: 1rem;
+                text-align: center;
+            }
+
+            .admin-main {
+                padding: 1rem;
+            }
+
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .table-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .pagination {
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .text-analysis {
+                grid-template-columns: 1fr;
+            }
+
+            .span-analysis {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="admin-container">
+        <!-- Header -->
+        <header class="admin-header">
+            <h1>📊 {{ annotation_task_name }} - Admin Dashboard</h1>
+            <div class="header-actions">
+                <span class="status-badge status-active">Admin Mode</span>
+                <button onclick="logout()" class="shadcn-button shadcn-button-outline">Logout</button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="admin-main">
+            <!-- Tab Navigation -->
+            <div class="admin-tabs">
+                <div class="admin-tab active" data-tab="overview">Overview</div>
+                <div class="admin-tab" data-tab="annotators">Annotators</div>
+                <div class="admin-tab" data-tab="instances">Instances</div>
+                <div class="admin-tab" data-tab="questions">Questions</div>
+                <div class="admin-tab" data-tab="config">Configuration</div>
+            </div>
+
+            <!-- Overview Tab -->
+            <div class="admin-tab-content active" id="overview">
+                <div class="dashboard-grid" id="overviewGrid">
+                    <!-- Overview cards will be loaded here -->
+                </div>
+
+                <div class="config-form">
+                    <h3>System Information</h3>
+                    <div id="systemInfo">
+                        <!-- System info will be loaded here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Annotators Tab -->
+            <div class="admin-tab-content" id="annotators">
+                <div class="table-controls">
+                    <button onclick="refreshAnnotators()" class="shadcn-button shadcn-button-primary">Refresh Data</button>
+                </div>
+
+                <div class="admin-table-container">
+                    <table class="admin-table" id="annotatorsTable">
+                        <thead>
+                            <tr>
+                                <th>User ID</th>
+                                <th>Phase</th>
+                                <th>Annotations</th>
+                                <th>Working Time</th>
+                                <th>Avg Time/Annotation</th>
+                                <th>Speed (per hour)</th>
+                                <th>Completion %</th>
+                                <th>Last Activity</th>
+                            </tr>
+                        </thead>
+                        <tbody id="annotatorsTableBody">
+                            <!-- Annotators data will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="pagination" id="annotatorsPagination">
+                    <!-- Pagination will be added here if needed -->
+                </div>
+            </div>
+
+            <!-- Instances Tab -->
+            <div class="admin-tab-content" id="instances">
+                <div class="table-controls">
+                    <select id="pageSize" onchange="loadInstances()">
+                        <option value="25">25 per page</option>
+                        <option value="50">50 per page</option>
+                        <option value="100">100 per page</option>
+                    </select>
+
+                    <select id="sortBy" onchange="loadInstances()">
+                        <option value="annotation_count">Sort by Annotations</option>
+                        <option value="completion_percentage">Sort by Completion</option>
+                        <option value="disagreement">Sort by Disagreement</option>
+                        <option value="id">Sort by ID</option>
+                        <option value="average_time">Sort by Avg Time</option>
+                    </select>
+
+                    <select id="sortOrder" onchange="loadInstances()">
+                        <option value="desc">Descending</option>
+                        <option value="asc">Ascending</option>
+                    </select>
+
+                    <select id="filterCompletion" onchange="loadInstances()">
+                        <option value="">All Instances</option>
+                        <option value="completed">Completed Only</option>
+                        <option value="incomplete">Incomplete Only</option>
+                    </select>
+
+                    <button onclick="refreshInstances()" class="shadcn-button shadcn-button-primary">Refresh</button>
+                </div>
+
+                <div class="admin-table-container">
+                    <table class="admin-table" id="instancesTable">
+                        <thead>
+                            <tr>
+                                <th>Instance ID</th>
+                                <th>Text Preview</th>
+                                <th>Annotations</th>
+                                <th>Completion %</th>
+                                <th>Most Frequent Label</th>
+                                <th>Disagreement</th>
+                                <th>Avg Time</th>
+                                <th>Annotators</th>
+                            </tr>
+                        </thead>
+                        <tbody id="instancesTableBody">
+                            <!-- Instances data will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="pagination" id="instancesPagination">
+                    <!-- Pagination will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Questions Tab -->
+            <div class="admin-tab-content" id="questions">
+                <div class="table-controls">
+                    <button onclick="refreshQuestions()" class="shadcn-button shadcn-button-primary">Refresh Data</button>
+                </div>
+
+                <div id="questionsContainer">
+                    <!-- Questions data will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Configuration Tab -->
+            <div class="admin-tab-content" id="config">
+                <div class="config-form">
+                    <h3>System Configuration</h3>
+                    <form id="configForm">
+                        <div class="config-group">
+                            <label for="maxAnnotationsPerUser">Max Annotations per User</label>
+                            <input type="number" id="maxAnnotationsPerUser" name="maxAnnotationsPerUser" min="-1" value="-1">
+                            <small>Use -1 for unlimited</small>
+                        </div>
+
+                        <div class="config-group">
+                            <label for="maxAnnotationsPerItem">Max Annotations per Item</label>
+                            <input type="number" id="maxAnnotationsPerItem" name="maxAnnotationsPerItem" min="-1" value="-1">
+                            <small>Use -1 for unlimited</small>
+                        </div>
+
+                        <div class="config-group">
+                            <label for="assignmentStrategy">Assignment Strategy</label>
+                            <select id="assignmentStrategy" name="assignmentStrategy">
+                                <option value="random">Random</option>
+                                <option value="fixed_order">Fixed Order</option>
+                                <option value="least_annotated">Least Annotated</option>
+                                <option value="max_diversity">Max Diversity</option>
+                                <option value="active_learning">Active Learning</option>
+                                <option value="llm_confidence">LLM Confidence</option>
+                            </select>
+                        </div>
+
+                        <div class="config-actions">
+                            <button type="submit" class="shadcn-button shadcn-button-primary">Save Changes</button>
+                            <button type="button" onclick="loadConfig()" class="shadcn-button shadcn-button-outline">Reload</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Global state
+        let currentTab = 'overview';
+        let currentPage = 1;
+        let currentPageSize = 25;
+        let currentSortBy = 'annotation_count';
+        let currentSortOrder = 'desc';
+        let currentFilter = '';
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeTabs();
+            loadOverview();
+            loadConfig();
+        });
+
+        // Tab functionality
+        function initializeTabs() {
+            const tabs = document.querySelectorAll('.admin-tab');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    const tabName = this.getAttribute('data-tab');
+                    switchTab(tabName);
+                });
+            });
+        }
+
+        function switchTab(tabName) {
+            // Update active tab
+            document.querySelectorAll('.admin-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+
+            // Update active content
+            document.querySelectorAll('.admin-tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(tabName).classList.add('active');
+
+            currentTab = tabName;
+
+            // Load data for the tab
+            switch(tabName) {
+                case 'overview':
+                    loadOverview();
+                    break;
+                case 'annotators':
+                    loadAnnotators();
+                    break;
+                case 'instances':
+                    loadInstances();
+                    break;
+                case 'questions':
+                    loadQuestions();
+                    break;
+                case 'config':
+                    loadConfig();
+                    break;
+            }
+        }
+
+        // API functions
+        async function makeApiRequest(endpoint, options = {}) {
+            const defaultOptions = {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': 'admin_api_key'
+                }
+            };
+
+            const response = await fetch(endpoint, { ...defaultOptions, ...options });
+
+            if (!response.ok) {
+                throw new Error(`API request failed: ${response.status}`);
+            }
+
+            return response.json();
+        }
+
+        // Overview functions
+        async function loadOverview() {
+            try {
+                const data = await makeApiRequest('/admin/api/overview');
+                displayOverview(data);
+            } catch (error) {
+                console.error('Error loading overview:', error);
+                showError('Failed to load overview data');
+            }
+        }
+
+        function displayOverview(data) {
+            const overviewGrid = document.getElementById('overviewGrid');
+            const systemInfo = document.getElementById('systemInfo');
+
+            // Display overview cards
+            overviewGrid.innerHTML = `
+                <div class="dashboard-card">
+                    <h3>Total Users</h3>
+                    <div class="value">${data.overview.total_users}</div>
+                    <div class="description">Registered annotators</div>
+                </div>
+                <div class="dashboard-card">
+                    <h3>Active Users</h3>
+                    <div class="value">${data.overview.active_users}</div>
+                    <div class="description">Currently annotating</div>
+                </div>
+                <div class="dashboard-card">
+                    <h3>Total Annotations</h3>
+                    <div class="value">${data.overview.total_annotations}</div>
+                    <div class="description">Completed annotations</div>
+                </div>
+                <div class="dashboard-card">
+                    <h3>Completion</h3>
+                    <div class="value">${data.overview.completion_percentage}%</div>
+                    <div class="description">Items with annotations</div>
+                </div>
+                <div class="dashboard-card">
+                    <h3>Total Items</h3>
+                    <div class="value">${data.overview.total_items}</div>
+                    <div class="description">Items in dataset</div>
+                </div>
+                <div class="dashboard-card">
+                    <h3>Working Time</h3>
+                    <div class="value">${data.overview.total_working_time}</div>
+                    <div class="description">Total time spent</div>
+                </div>
+            `;
+
+            // Display system info
+            systemInfo.innerHTML = `
+                <div class="config-group">
+                    <label>Task Name</label>
+                    <input type="text" value="${data.config.annotation_task_name}" readonly>
+                </div>
+                <div class="config-group">
+                    <label>Max Annotations per User</label>
+                    <input type="text" value="${data.config.max_annotations_per_user}" readonly>
+                </div>
+                <div class="config-group">
+                    <label>Max Annotations per Item</label>
+                    <input type="text" value="${data.config.max_annotations_per_item}" readonly>
+                </div>
+                <div class="config-group">
+                    <label>Assignment Strategy</label>
+                    <input type="text" value="${data.config.assignment_strategy}" readonly>
+                </div>
+                <div class="config-group">
+                    <label>Debug Mode</label>
+                    <input type="text" value="${data.config.debug_mode ? 'Enabled' : 'Disabled'}" readonly>
+                </div>
+            `;
+        }
+
+        // Annotators functions
+        async function loadAnnotators() {
+            try {
+                const data = await makeApiRequest('/admin/api/annotators');
+                displayAnnotators(data);
+            } catch (error) {
+                console.error('Error loading annotators:', error);
+                showError('Failed to load annotators data');
+            }
+        }
+
+        function displayAnnotators(data) {
+            const tbody = document.getElementById('annotatorsTableBody');
+
+            tbody.innerHTML = data.annotators.map(annotator => `
+                <tr>
+                    <td>${annotator.user_id}</td>
+                    <td><span class="status-badge status-${annotator.phase.toLowerCase()}">${annotator.phase}</span></td>
+                    <td>${annotator.total_annotations}</td>
+                    <td>${annotator.total_working_time || 'N/A'}</td>
+                    <td>${annotator.average_time_per_annotation || 'N/A'}</td>
+                    <td>${annotator.annotations_per_hour}/hr</td>
+                    <td>${annotator.completion_percentage.toFixed(1)}%</td>
+                    <td>${annotator.last_activity ? new Date(annotator.last_activity).toLocaleString() : 'N/A'}</td>
+                </tr>
+            `).join('');
+        }
+
+        function refreshAnnotators() {
+            loadAnnotators();
+        }
+
+        // Instances functions
+        async function loadInstances() {
+            try {
+                // Update global state from form controls
+                currentPageSize = parseInt(document.getElementById('pageSize').value);
+                currentSortBy = document.getElementById('sortBy').value;
+                currentSortOrder = document.getElementById('sortOrder').value;
+                currentFilter = document.getElementById('filterCompletion').value;
+
+                const params = new URLSearchParams({
+                    page: currentPage,
+                    page_size: currentPageSize,
+                    sort_by: currentSortBy,
+                    sort_order: currentSortOrder
+                });
+
+                if (currentFilter) {
+                    params.append('filter_completion', currentFilter);
+                }
+
+                const data = await makeApiRequest(`/admin/api/instances?${params}`);
+                displayInstances(data);
+            } catch (error) {
+                console.error('Error loading instances:', error);
+                showError('Failed to load instances data');
+            }
+        }
+
+        function displayInstances(data) {
+            const tbody = document.getElementById('instancesTableBody');
+            const pagination = document.getElementById('instancesPagination');
+
+            // Display instances
+            tbody.innerHTML = data.instances.map(instance => `
+                <tr>
+                    <td>${instance.id}</td>
+                    <td title="${instance.text}">${instance.text}</td>
+                    <td>${instance.annotation_count}</td>
+                    <td>${instance.completion_percentage}%</td>
+                    <td>${instance.most_frequent_label || 'N/A'}</td>
+                    <td>${instance.label_disagreement}</td>
+                    <td>${instance.average_time_per_annotation || 'N/A'}</td>
+                    <td>${instance.annotators.join(', ') || 'None'}</td>
+                </tr>
+            `).join('');
+
+            // Display pagination
+            displayPagination(pagination, data.pagination, 'instances');
+        }
+
+        function displayPagination(container, pagination, type) {
+            const { page, total_pages, has_next, has_prev } = pagination;
+
+            let paginationHtml = `
+                <div class="pagination-info">
+                    Showing page ${page} of ${total_pages} (${pagination.total_instances || pagination.total_annotators} total)
+                </div>
+                <div class="pagination-controls">
+            `;
+
+            // Previous button
+            paginationHtml += `
+                <button class="pagination-button" ${!has_prev ? 'disabled' : ''}
+                        onclick="changePage(${page - 1}, '${type}')">Previous</button>
+            `;
+
+            // Page numbers
+            const startPage = Math.max(1, page - 2);
+            const endPage = Math.min(total_pages, page + 2);
+
+            for (let i = startPage; i <= endPage; i++) {
+                paginationHtml += `
+                    <button class="pagination-button ${i === page ? 'active' : ''}"
+                            onclick="changePage(${i}, '${type}')">${i}</button>
+                `;
+            }
+
+            // Next button
+            paginationHtml += `
+                <button class="pagination-button" ${!has_next ? 'disabled' : ''}
+                        onclick="changePage(${page + 1}, '${type}')">Next</button>
+            `;
+
+            paginationHtml += '</div>';
+            container.innerHTML = paginationHtml;
+        }
+
+        function changePage(page, type) {
+            currentPage = page;
+            if (type === 'instances') {
+                loadInstances();
+            }
+        }
+
+        function refreshInstances() {
+            currentPage = 1;
+            loadInstances();
+        }
+
+        // Questions functions
+        async function loadQuestions() {
+            try {
+                const data = await makeApiRequest('/admin/api/questions');
+                displayQuestions(data);
+            } catch (error) {
+                console.error('Error loading questions:', error);
+                showError('Failed to load questions data');
+            }
+        }
+
+        function displayQuestions(data) {
+            const container = document.getElementById('questionsContainer');
+
+            if (!data.questions || data.questions.length === 0) {
+                container.innerHTML = `
+                    <div class="question-card">
+                        <div class="error-message">
+                            No annotation schemas found. Please check your configuration.
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = data.questions.map(question => `
+                <div class="question-card">
+                    <div class="question-header">
+                        <h3 class="question-title">${question.name}</h3>
+                        <span class="question-type">${question.type}</span>
+                    </div>
+
+                    <p class="question-description">${question.description}</p>
+
+                    <div class="question-stats">
+                        <div class="question-stat">
+                            <span class="value">${question.total_annotations}</span>
+                            <span class="label">Total Annotations</span>
+                        </div>
+                        <div class="question-stat">
+                            <span class="value">${question.items_with_annotations}</span>
+                            <span class="label">Items with Annotations</span>
+                        </div>
+                    </div>
+
+                    <div class="visualization">
+                        ${generateVisualization(question)}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function generateVisualization(question) {
+            const analysis = question.analysis;
+
+            if (analysis.error) {
+                return `<div class="error-message">${analysis.error}</div>`;
+            }
+
+            switch (analysis.visualization_type) {
+                case 'histogram':
+                    return generateHistogram(analysis);
+                case 'distribution':
+                    return generateDistribution(analysis);
+                case 'text_analysis':
+                    return generateTextAnalysis(analysis);
+                case 'span_analysis':
+                    return generateSpanAnalysis(analysis);
+                case 'multiselect_analysis':
+                    return generateMultiselectAnalysis(analysis);
+                default:
+                    return `<div class="error-message">Unsupported visualization type: ${analysis.visualization_type}</div>`;
+            }
+        }
+
+        function generateHistogram(analysis) {
+            const { labels, counts, percentages } = analysis.data;
+            const maxCount = Math.max(...counts);
+
+            let html = '<h4>Response Distribution</h4>';
+            html += '<div class="histogram">';
+
+            labels.forEach((label, index) => {
+                const count = counts[index];
+                const percentage = percentages[index];
+                const height = maxCount > 0 ? (count / maxCount) * 100 : 0;
+
+                html += `
+                    <div class="histogram-bar" style="height: ${height}%">
+                        <div class="histogram-value">${count}</div>
+                        <div class="histogram-label">${label}</div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+
+            if (analysis.most_common) {
+                html += `<p><strong>Most common:</strong> ${analysis.most_common[0]} (${analysis.most_common[1]} times)</p>`;
+            }
+
+            if (analysis.agreement_score !== undefined) {
+                html += `<p><strong>Agreement score:</strong> ${analysis.agreement_score}%</p>`;
+            }
+
+            return html;
+        }
+
+        function generateDistribution(analysis) {
+            const { statistics, bins } = analysis.data;
+
+            let html = '<h4>Value Distribution</h4>';
+            html += '<div class="distribution-chart">';
+
+            const maxCount = Math.max(...bins.counts);
+            bins.counts.forEach((count, index) => {
+                const height = maxCount > 0 ? (count / maxCount) * 100 : 0;
+                const binLabel = `${bins.bins[index]}-${bins.bins[index + 1]}`;
+
+                html += `
+                    <div class="distribution-bar" style="height: ${height}%">
+                        <div class="histogram-value">${count}</div>
+                        <div class="histogram-label">${binLabel}</div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+
+            html += `
+                <div class="text-analysis">
+                    <div class="text-stat">
+                        <span class="value">${statistics.mean}</span>
+                        <span class="label">Mean</span>
+                    </div>
+                    <div class="text-stat">
+                        <span class="value">${statistics.median}</span>
+                        <span class="label">Median</span>
+                    </div>
+                    <div class="text-stat">
+                        <span class="value">${statistics.min} - ${statistics.max}</span>
+                        <span class="label">Range</span>
+                    </div>
+                    <div class="text-stat">
+                        <span class="value">${statistics.std}</span>
+                        <span class="label">Std Dev</span>
+                    </div>
+                </div>
+            `;
+
+            return html;
+        }
+
+        function generateTextAnalysis(analysis) {
+            const { statistics, common_words } = analysis.data;
+
+            let html = '<h4>Text Analysis</h4>';
+
+            html += `
+                <div class="text-analysis">
+                    <div class="text-stat">
+                        <span class="value">${statistics.avg_length}</span>
+                        <span class="label">Avg Length (chars)</span>
+                    </div>
+                    <div class="text-stat">
+                        <span class="value">${statistics.avg_words}</span>
+                        <span class="label">Avg Words</span>
+                    </div>
+                    <div class="text-stat">
+                        <span class="value">${statistics.min_length} - ${statistics.max_length}</span>
+                        <span class="label">Length Range</span>
+                    </div>
+                    <div class="text-stat">
+                        <span class="value">${statistics.empty_responses}</span>
+                        <span class="label">Empty Responses</span>
+                    </div>
+                </div>
+            `;
+
+            if (common_words && common_words.length > 0) {
+                html += '<h5>Most Common Words</h5>';
+                html += '<div class="common-words">';
+                common_words.forEach(([word, count]) => {
+                    html += `<span class="word-tag">${word}<span class="count">(${count})</span></span>`;
+                });
+                html += '</div>';
+            }
+
+            return html;
+        }
+
+        function generateSpanAnalysis(analysis) {
+            const { statistics, total_spans } = analysis.data;
+
+            let html = '<h4>Span Analysis</h4>';
+
+            html += `
+                <div class="span-analysis">
+                    <div class="span-stat">
+                        <span class="value">${statistics.avg_spans_per_item}</span>
+                        <span class="label">Avg Spans per Item</span>
+                    </div>
+                    <div class="span-stat">
+                        <span class="value">${statistics.items_with_spans}</span>
+                        <span class="label">Items with Spans</span>
+                    </div>
+                    <div class="span-stat">
+                        <span class="value">${statistics.min_spans} - ${statistics.max_spans}</span>
+                        <span class="label">Span Range</span>
+                    </div>
+                    <div class="span-stat">
+                        <span class="value">${total_spans}</span>
+                        <span class="label">Total Spans</span>
+                    </div>
+                </div>
+            `;
+
+            return html;
+        }
+
+        function generateMultiselectAnalysis(analysis) {
+            const { labels, counts, percentages, average_labels_per_item } = analysis.data;
+            const maxCount = Math.max(...counts);
+
+            let html = '<h4>Label Frequency</h4>';
+            html += '<div class="histogram">';
+
+            labels.forEach((label, index) => {
+                const count = counts[index];
+                const percentage = percentages[index];
+                const height = maxCount > 0 ? (count / maxCount) * 100 : 0;
+
+                html += `
+                    <div class="histogram-bar" style="height: ${height}%">
+                        <div class="histogram-value">${count}</div>
+                        <div class="histogram-label">${label}</div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+
+            html += `<p><strong>Average labels per item:</strong> ${average_labels_per_item}</p>`;
+
+            if (analysis.most_common && analysis.most_common.length > 0) {
+                html += '<p><strong>Most common labels:</strong> ';
+                html += analysis.most_common.map(([label, count]) => `${label} (${count})`).join(', ');
+                html += '</p>';
+            }
+
+            return html;
+        }
+
+        function refreshQuestions() {
+            loadQuestions();
+        }
+
+        // Configuration functions
+        async function loadConfig() {
+            try {
+                const data = await makeApiRequest('/admin/api/config');
+                displayConfig(data);
+            } catch (error) {
+                console.error('Error loading config:', error);
+                showError('Failed to load configuration');
+            }
+        }
+
+        function displayConfig(data) {
+            document.getElementById('maxAnnotationsPerUser').value = data.max_annotations_per_user;
+            document.getElementById('maxAnnotationsPerItem').value = data.max_annotations_per_item;
+            document.getElementById('assignmentStrategy').value = data.assignment_strategy;
+        }
+
+        // Form submission
+        document.getElementById('configForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const formData = {
+                max_annotations_per_user: parseInt(document.getElementById('maxAnnotationsPerUser').value),
+                max_annotations_per_item: parseInt(document.getElementById('maxAnnotationsPerItem').value),
+                assignment_strategy: document.getElementById('assignmentStrategy').value
+            };
+
+            try {
+                const result = await makeApiRequest('/admin/api/config', {
+                    method: 'POST',
+                    body: JSON.stringify(formData)
+                });
+
+                showSuccess('Configuration updated successfully');
+                loadOverview(); // Refresh overview to show updated stats
+            } catch (error) {
+                console.error('Error updating config:', error);
+                showError('Failed to update configuration');
+            }
+        });
+
+        // Utility functions
+        function showError(message) {
+            // Simple error display - could be enhanced with a toast notification
+            alert('Error: ' + message);
+        }
+
+        function showSuccess(message) {
+            // Simple success display - could be enhanced with a toast notification
+            alert('Success: ' + message);
+        }
+
+        function logout() {
+            // Clear admin session and redirect to login
+            fetch('/admin', { method: 'GET' })
+                .then(() => {
+                    window.location.href = '/admin';
+                });
+        }
+    </script>
+</body>
+</html>

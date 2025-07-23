@@ -1,0 +1,22 @@
+annotation_task_name: Simple Likert Scale Test
+task_dir: output/simple-likert
+output_annotation_dir: output/simple-likert/annotations
+output_annotation_format: jsonl
+data_files:
+- ../data/test_data.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 0
+annotation_schemes:
+- annotation_type: likert
+  name: sentiment
+  description: Rate the sentiment of the text on a scale from 1 to 5
+  min_label: Very Negative
+  max_label: Very Positive
+  size: 5
+  sequential_key_binding: true
+site_dir: output

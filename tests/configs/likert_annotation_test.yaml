@@ -1,0 +1,23 @@
+annotation_task_name: "Likert Annotation Test"
+data_files:
+- "../data/test_data.json"
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+annotation_schemes:
+- annotation_type: likert
+  name: agreement
+  description: "How much do you agree with the statement?"
+  min_label: "Strongly Disagree"
+  max_label: "Strongly Agree"
+  size: 5
+  sequential_key_binding: true
+task_dir: "output/likert_annotation_test"
+output_annotation_dir: "output/likert_annotation_test"
+site_dir: "default"
+customjs: null
+customjs_hostname: null
+alert_time_each_instance: 10000000

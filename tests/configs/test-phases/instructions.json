@@ -1,0 +1,7 @@
+{
+  "title": "Instructions",
+  "description": "Please read the instructions carefully before beginning the annotation task.",
+  "content": "You will be presented with text items and asked to provide annotations based on the specific criteria for each task. Take your time and provide thoughtful responses.",
+  "required": true,
+  "type": "instructions"
+}

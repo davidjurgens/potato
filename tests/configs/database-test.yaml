@@ -1,0 +1,120 @@
+port: 9015
+debug: true
+server_name: potato database test
+annotation_task_name: Database Backend Test
+task_dir: output/database-test
+output_annotation_dir: output/database-test
+output_annotation_format: json
+annotation_codebook_url: ''
+max_annotations_per_user: 10
+assignment_strategy: fixed_order
+data_files:
+- data/test_data.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+site_dir: default
+customjs: null
+customjs_hostname: null
+
+# Database configuration for testing
+database:
+  type: mysql
+  host: localhost
+  port: 3306
+  database: potato_test
+  username: test_user
+  password: test_password
+  charset: utf8mb4
+  pool_size: 5
+  max_overflow: 10
+  pool_timeout: 30
+  pool_recycle: 3600
+
+# Authentication configuration
+authentication:
+  method: in_memory
+
+# Server configuration
+server:
+  port: 9015
+  host: "0.0.0.0"
+  require_password: false
+  persist_sessions: false
+
+# Assignment configuration
+assignment:
+  strategy: "random"
+  max_annotations_per_item: 3
+  random_seed: 1234
+
+# Annotation schemes for testing
+annotation_schemes:
+  - annotation_type: radio
+    name: sentiment
+    description: "What is the sentiment of this text?"
+    labels:
+      - positive
+      - negative
+      - neutral
+    sequential_key_binding: true
+
+  - annotation_type: multiselect
+    name: topics
+    description: "What topics are mentioned? (Select all that apply)"
+    labels:
+      - politics
+      - technology
+      - sports
+      - entertainment
+      - science
+    has_free_response:
+      instruction: "Other topics:"
+    sequential_key_binding: true
+
+  - annotation_type: likert
+    name: quality
+    description: "How would you rate the quality of this text?"
+    min_label: Very Poor
+    max_label: Excellent
+    size: 5
+    sequential_key_binding: true
+
+  - annotation_type: text
+    name: summary
+    description: "Please provide a brief summary of this text:"
+    multiline: true
+    rows: 4
+    cols: 60
+
+  - annotation_type: slider
+    name: confidence
+    description: "How confident are you in your assessment?"
+    min: 0
+    max: 10
+    step: 1
+    min_label: Not Confident
+    max_label: Very Confident
+
+  - annotation_type: span
+    name: sentiment_spans
+    description: "Highlight spans that indicate sentiment"
+    labels:
+      - positive
+      - negative
+      - neutral
+    colors:
+      positive: "#4CAF50"
+      negative: "#f44336"
+      neutral: "#9E9E9E"
+
+# UI configuration
+ui:
+  show_progress: true
+  show_instructions: true
+  allow_navigation: true
+  allow_editing: true
