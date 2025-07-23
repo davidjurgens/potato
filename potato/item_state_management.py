@@ -322,3 +322,6 @@ class ItemStateManager:
             if instance_id not in self.completed_instance_ids:
                 self.completed_instance_ids.add(instance_id)
                 self.remaining_instance_ids.remove(instance_id)
+
+    def get_num_items():
+        return 

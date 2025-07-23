@@ -249,10 +249,16 @@
         const aiHelp = hintEl.closest(".ai-help");
         const tooltip = aiHelp.querySelector(".tooltip");
         const tooltipText = tooltip.querySelector(".tooltip-text");
-        const instanceTextEl = document.getElementById("instance-text");
-        const instanceText = instanceTextEl?.innerText || "";
+        const annotationId = aiHelp.closest("[data-annotation-id]")?.dataset
+          .annotationId;
+        const text = document.getElementById("instance-text").innerText;
 
-        fetch(`/get_ai_hint?instance_text=${encodeURIComponent(instanceText)}`)
+        fetch("get_ai_hint", {
+          method: "POST",    
+          credentials: "same-origin",              
+          body: JSON.stringify({ annotation_id: annotationId, text: text }),
+          headers: { "Content-Type": "application/json" },
+        })
           .then((response) => response.json())
           .then((data) => {
             tooltipText.innerHTML = `<span class="reasoning">Reasoning:</span> ${data.reasoning}`;

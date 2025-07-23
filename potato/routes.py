@@ -25,7 +25,8 @@ from flask_server import (
     get_annotations_for_user_on, get_span_annotations_for_user_on,
     render_page_with_annotations, get_current_page_html,
     validate_annotation, parse_html_span_annotation, Label, SpanAnnotation,
-    get_users, get_total_annotations, update_annotation_state, ai_hints
+    get_users, get_total_annotations, update_annotation_state, 
+    get_ai_cache_manager
 )
 
 @app.route("/", methods=["GET", "POST"])
@@ -559,6 +560,8 @@ def annotate():
     if action == "prev_instance":
         move_to_prev_instance(username)
     elif action == "next_instance":
+        ais = get_ai_cache_manager()
+        ais.start_prefetch(ais.prefetch_page_count_on_next)
         move_to_next_instance(username)
     elif action == "go_to":
         go_to_id(username, request.form.get("go_to"))
@@ -569,30 +572,26 @@ def annotate():
     # Render the page with any existing annotations
     return render_page_with_annotations(username)
 
-@app.route('/get_ai_hint', methods=['GET'])
+@app.route('/get_ai_hint', methods=['POST'])
 def get_ai_hint():
     if 'username' not in session:
         return home()
 
     username = session['username']
     user_state = get_user_state(username)
-    instance_text = request.args.get('instance_text')  
-    print(f"instance_text: {instance_text}")
+    ais = get_ai_cache_manager()
+    data = request.get_json()
+    annotation_id = int(data['annotation_id'])
+    text = data['text'] 
+    print(f"annotation_idannotation_idannotation_id: {annotation_id}")
+    print(f"textxxxxx: {text}")
     instance = user_state.get_current_instance()
     if instance is None:
         return jsonify({'reasoning': 'No instance assigned.'})
 
     instance_id = instance.get_id()
 
-    # Return cached version if it exists
-    if user_state.hint_exists(instance_id):
-        return jsonify({'reasoning': user_state.get_hint(instance_id)})
-
-    # Otherwise generate, cache, and return
-    reasoning = ai_hints(instance_text)
-    user_state.cache_hint(instance_id, reasoning)
-
-    return jsonify({'reasoning': reasoning})
+    return jsonify({'reasoning': ais.get_ai_help(instance_id, annotation_id, text, "hint")})
 
 
 
@@ -774,4 +773,4 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/poststudy", "poststudy", poststudy, methods=["GET", "POST"])
     app.add_url_rule("/done", "done", done, methods=["GET", "POST"])
     app.add_url_rule("/admin", "admin", admin, methods=["GET"])
-    app.add_url_rule("/get_ai_hint", "get_ai_hint", get_ai_hint, methods=["GET"])
+    app.add_url_rule("/get_ai_hint", "get_ai_hint", get_ai_hint, methods=["POST"])

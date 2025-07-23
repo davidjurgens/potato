@@ -206,6 +206,10 @@ def generate_annotation_html_template(config: dict) -> str:
     annotation_schemes = config["annotation_schemes"]
     logger.debug("Saw %d annotation scheme(s)" % len(annotation_schemes))
 
+    # insert annotation id to each of the schemes
+    for idx, annotation_scheme in enumerate(annotation_schemes):
+        annotation_scheme["annotation_id"] = idx
+
     # Keep track of all the keybindings we have
     all_keybindings = [("&#8592;", "Move backward"), ("&#8594;", "Move forward")]
 

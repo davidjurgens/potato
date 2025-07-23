@@ -50,7 +50,7 @@ sys.path.insert(0, cur_program_dir)
 from item_state_management import ItemStateManager, Item, Label, SpanAnnotation
 from item_state_management import get_item_state_manager, init_item_state_manager
 from user_state_management import UserStateManager, UserState, get_user_state_manager, init_user_state_manager
-from ai_state_mangement import init_ai_state, get_ai_state
+from ai.ai_endpoint import init_ai_cache_manager, get_ai_cache_manager
 from authentificaton import UserAuthenticator
 from phase import UserPhase
 
@@ -515,6 +515,8 @@ def get_user_state(username):
     Returns the user state object for the given username.
     """
     return get_user_state_manager().get_user_state(username)
+
+
 
 def move_to_prev_instance(user_id) -> bool:
     '''Moves the user back to the previous instance and returns True if successful'''
@@ -1098,7 +1100,7 @@ def run_server(args):
     init_user_state_manager(config)
     init_item_state_manager(config)
     load_all_data(config)
-    init_ai_state(config)
+    init_ai_cache_manager(config)
 
     # Log password requirement status
     logger.info(f"Password authentication required: {config.get('require_password', True)}")

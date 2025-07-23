@@ -388,18 +388,6 @@ class InMemoryUserState(UserState):
         # How many items a user can be assigned
         self.max_assignments = max_assignments
 
-        # Caches the ai hints
-        self.ai_hints = defaultdict(dict) 
-    
-    def hint_exists(self, instance_id: str) -> bool:
-        return instance_id in self.ai_hints
-
-    def get_hint(self, instance_id: str) -> str:
-        return self.ai_hints.get(instance_id)
-
-    def cache_hint(self, instance_id: str, hint: str) -> None:
-        self.ai_hints[instance_id] = hint
-
 
     def add_new_assigned_data(self, new_assigned_data):
         """

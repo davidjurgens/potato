@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 def generate_likert_layout(annotation_scheme):
     print("using likert")
+    print(annotation_scheme)
     """
     Generate HTML for a likert scale annotation interface.
 
@@ -35,6 +36,7 @@ def generate_likert_layout(annotation_scheme):
                 - required (bool): Whether response is mandatory
             - bad_text_label (dict): Optional configuration for invalid text option
                 - label_content (str): Label text for bad text option
+            - annotation_id (int): match the config schema index
 
     Returns:
         tuple: (html_string, key_bindings)
@@ -276,7 +278,7 @@ def generate_likert_layout(annotation_scheme):
 
     </style>
 
-    <form id="{annotation_scheme['name']}" class="annotation-form likert shadcn-likert-container" action="/action_page.php">
+    <form id="{annotation_scheme['name']}" class="annotation-form likert shadcn-likert-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}">
         <div class="ai-help">
     <h3 class="ai-help-word"><span class="hint">Hint</span> | <span>Keyword</span></h3>
     <div class="tooltip"> 

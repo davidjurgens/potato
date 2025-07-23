@@ -481,7 +481,7 @@
         onclick="closeNav(this.getAttribute('target_id'))"
         >&times;</a
       >
-      <table><tr><th>Key</th><th>Description</th></tr><tr><td style="text-align: center;">&#8592;</td><td>Move backward</td></tr><tr><td style="text-align: center;">&#8594;</td><td>Move forward</td></tr><tr><td style="text-align: center;">1</td><td>awesomeness: 1</td></tr><tr><td style="text-align: center;">2</td><td>awesomeness: 2</td></tr><tr><td style="text-align: center;">3</td><td>awesomeness: 3</td></tr><tr><td style="text-align: center;">4</td><td>awesomeness: 4</td></tr><tr><td style="text-align: center;">5</td><td>awesomeness: 5</td></tr></table>
+      <table><tr><th>Key</th><th>Description</th></tr><tr><td style="text-align: center;">&#8592;</td><td>Move backward</td></tr><tr><td style="text-align: center;">&#8594;</td><td>Move forward</td></tr><tr><td style="text-align: center;">1</td><td>relevance: 1</td></tr><tr><td style="text-align: center;">2</td><td>relevance: 2</td></tr><tr><td style="text-align: center;">3</td><td>relevance: 3</td></tr><tr><td style="text-align: center;">4</td><td>relevance: 4</td></tr><tr><td style="text-align: center;">5</td><td>relevance: 5</td></tr><tr><td style="text-align: center;">1</td><td>coherence: 1</td></tr><tr><td style="text-align: center;">2</td><td>coherence: 2</td></tr><tr><td style="text-align: center;">3</td><td>coherence: 3</td></tr><tr><td style="text-align: center;">4</td><td>coherence: 4</td></tr><tr><td style="text-align: center;">5</td><td>coherence: 5</td></tr></table>
     </div>
 
     <div id="Statpanel" class="sidepanel">
@@ -506,10 +506,12 @@
         const tooltipText = tooltip.querySelector(".tooltip-text");
         const annotationId = aiHelp.closest("[data-annotation-id]")?.dataset
           .annotationId;
+        const text = document.getElementById("instance-text").innerText;
 
-        fetch(`/get_ai_hint`, {
-          method: "GET",
-          body: JSON.stringify({ annotation_id: annotationId}),
+        fetch("get_ai_hint", {
+          method: "POST",    
+          credentials: "same-origin",              
+          body: JSON.stringify({ annotation_id: annotationId, text: text }),
           headers: { "Content-Type": "application/json" },
         })
           .then((response) => response.json())
@@ -1868,7 +1870,7 @@
 
     </style>
 
-    <form id="awesomeness" class="annotation-form likert shadcn-likert-container" action="/action_page.php" data-annotation-id="0">
+    <form id="relevance" class="annotation-form likert shadcn-likert-container" action="/action_page.php" data-annotation-id="0">
         <div class="ai-help">
     <h3 class="ai-help-word"><span class="hint">Hint</span> | <span>Keyword</span></h3>
     <div class="tooltip"> 
@@ -1879,90 +1881,777 @@
     </div>
 
 
-        <fieldset schema="awesomeness" style="border: none; padding: 0; margin: 0; width: auto; min-width: fit-content;">
-            <legend class="shadcn-likert-title">How awesome is this?</legend>
+        <fieldset schema="relevance" style="border: none; padding: 0; margin: 0; width: auto; min-width: fit-content;">
+            <legend class="shadcn-likert-title">Relevance</legend>
             <div class="shadcn-likert-scale" style="max-width: min(100%, calc(300px + 5 * 40px + 250px));">
-                <div class="shadcn-likert-endpoint">Not Awesome</div>
+                <div class="shadcn-likert-endpoint">Not Relevant</div>
                 <div class="shadcn-likert-options">
                     <div class="shadcn-likert-track"></div>
     
                     <div class="shadcn-likert-option">
-                        <input class="awesomeness shadcn-likert-input"
+                        <input class="relevance shadcn-likert-input"
                                type="radio"
-                               id="awesomeness:::1"
-                               name="awesomeness:::1"
+                               id="relevance:::1"
+                               name="relevance:::1"
                                value="1"
-                               schema="awesomeness"
+                               schema="relevance"
                                label_name="1"
                                selection_constraint="single"
-                               validation=""
+                               validation="required"
                                onclick="onlyOne(this);registerAnnotation(this);">
-                        <label class="shadcn-likert-button" for="awesomeness:::1"></label>
-                        
+                        <label class="shadcn-likert-button" for="relevance:::1"></label>
+                        <span class="shadcn-likert-label">1</span>
                     </div>
         
                     <div class="shadcn-likert-option">
-                        <input class="awesomeness shadcn-likert-input"
+                        <input class="relevance shadcn-likert-input"
                                type="radio"
-                               id="awesomeness:::2"
-                               name="awesomeness:::2"
+                               id="relevance:::2"
+                               name="relevance:::2"
                                value="2"
-                               schema="awesomeness"
+                               schema="relevance"
                                label_name="2"
                                selection_constraint="single"
-                               validation=""
+                               validation="required"
                                onclick="onlyOne(this);registerAnnotation(this);">
-                        <label class="shadcn-likert-button" for="awesomeness:::2"></label>
-                        
+                        <label class="shadcn-likert-button" for="relevance:::2"></label>
+                        <span class="shadcn-likert-label">2</span>
                     </div>
         
                     <div class="shadcn-likert-option">
-                        <input class="awesomeness shadcn-likert-input"
+                        <input class="relevance shadcn-likert-input"
                                type="radio"
-                               id="awesomeness:::3"
-                               name="awesomeness:::3"
+                               id="relevance:::3"
+                               name="relevance:::3"
                                value="3"
-                               schema="awesomeness"
+                               schema="relevance"
                                label_name="3"
                                selection_constraint="single"
-                               validation=""
+                               validation="required"
                                onclick="onlyOne(this);registerAnnotation(this);">
-                        <label class="shadcn-likert-button" for="awesomeness:::3"></label>
-                        
+                        <label class="shadcn-likert-button" for="relevance:::3"></label>
+                        <span class="shadcn-likert-label">3</span>
                     </div>
         
                     <div class="shadcn-likert-option">
-                        <input class="awesomeness shadcn-likert-input"
+                        <input class="relevance shadcn-likert-input"
                                type="radio"
-                               id="awesomeness:::4"
-                               name="awesomeness:::4"
+                               id="relevance:::4"
+                               name="relevance:::4"
                                value="4"
-                               schema="awesomeness"
+                               schema="relevance"
                                label_name="4"
                                selection_constraint="single"
-                               validation=""
+                               validation="required"
                                onclick="onlyOne(this);registerAnnotation(this);">
-                        <label class="shadcn-likert-button" for="awesomeness:::4"></label>
-                        
+                        <label class="shadcn-likert-button" for="relevance:::4"></label>
+                        <span class="shadcn-likert-label">4</span>
                     </div>
         
                     <div class="shadcn-likert-option">
-                        <input class="awesomeness shadcn-likert-input"
+                        <input class="relevance shadcn-likert-input"
                                type="radio"
-                               id="awesomeness:::5"
-                               name="awesomeness:::5"
+                               id="relevance:::5"
+                               name="relevance:::5"
                                value="5"
-                               schema="awesomeness"
+                               schema="relevance"
                                label_name="5"
                                selection_constraint="single"
-                               validation=""
+                               validation="required"
                                onclick="onlyOne(this);registerAnnotation(this);">
-                        <label class="shadcn-likert-button" for="awesomeness:::5"></label>
-                        
+                        <label class="shadcn-likert-button" for="relevance:::5"></label>
+                        <span class="shadcn-likert-label">5</span>
                     </div>
         
                 </div>
-                <div class="shadcn-likert-endpoint">Compeletely Awesome</div>
+                <div class="shadcn-likert-endpoint">Super Relevant</div>
+            </div>
+    
+        </fieldset></form>
+    
+
+    <style>
+
+        .shadcn-likert-container {
+            border: 1px solid #E5E5EA;
+            border-radius: 18px 0 18px 18px;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: fit-content;
+            max-width: 100%;
+            margin: 1.5rem auto;
+            font-family: ui-sans-serif, system-ui, sans-serif;
+            position: relative;
+        }
+
+        .shadcn-likert-title {
+            font-size: 1rem;
+            font-weight: 500;
+            color: black;
+            text-align: left;
+            width: 100%;
+        }
+
+        .shadcn-likert-scale {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+        }
+
+        .shadcn-likert-endpoint {
+            display: flex;
+            align-items: center;
+            height: 2.5rem;
+            flex: 0 0 auto;
+            font-size: 0.875rem;
+            color: var(--muted-foreground);
+            padding: 0 0.5rem;
+            max-width: 30%;
+            text-align: center;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            hyphens: auto;
+        }
+
+        .shadcn-likert-options {
+            display: flex;
+            flex: 1;
+            justify-content: space-between;
+            position: relative;
+            padding: 0 0.5rem;
+            gap: 0.5rem;
+        }
+
+        .shadcn-likert-track {
+            position: absolute;
+            height: 2px;
+            background-color: var(--border);
+            left: 0.5rem;
+            right: 0.5rem;
+            top: 0.625rem;
+            transform: none;
+            z-index: 0;
+        }
+
+        .shadcn-likert-option {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .shadcn-likert-input {
+            opacity: 0;
+            position: absolute;
+            width: 0;
+            height: 0;
+        }
+
+        .shadcn-likert-button {
+            width: 1.25rem;
+            height: 1.25rem;
+            border-radius: 50%;
+            background-color: var(--secondary);
+            border: 2px solid var(--border);
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .shadcn-likert-input:checked + .shadcn-likert-button {
+            background-color: var(--primary);
+            border-color: var(--primary);
+            transform: scale(1.1);
+            box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.2);
+        }
+
+        .shadcn-likert-input:focus + .shadcn-likert-button {
+            box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.2);
+        }
+
+        .shadcn-likert-input:hover + .shadcn-likert-button {
+            border-color: var(--primary);
+        }
+
+        .shadcn-likert-label {
+            font-size: 0.75rem;
+            color: var(--muted-foreground);
+            margin-top: 0.25rem;
+            text-align: center;
+        }
+
+        .shadcn-likert-input:checked ~ .shadcn-likert-label {
+            color: var(--primary);
+            font-weight: 500;
+        }
+
+        .shadcn-likert-bad-text {
+            display: flex;
+            align-items: center;
+            margin-top: 0.75rem;
+            padding: 0.5rem 0;
+        }
+
+        .shadcn-likert-bad-text-label {
+            margin-left: 0.5rem;
+            font-size: 0.875rem;
+            color: var(--text-color);
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            flex: 1;
+        }
+
+        fieldset[schema] {
+            width: fit-content;
+            max-width: 100%;
+            overflow: visible;
+        }
+
+        .ai-help {
+            width: 9.375rem;
+            height: 2.063rem;
+            border: 1px solid #E5E5EA;
+            border-radius: 18px;
+            position: absolute;
+            top: -0.75rem;
+            right: -0.05rem;
+            background-color: white;
+            display: flex; 
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .ai-help-word {
+            font-size: 1rem;
+            margin: 0;
+        }
+
+        .hint {
+            cursor: pointer;
+        }
+
+        .hint:hover {
+            color: #6E56CF;
+        }
+
+        .tooltip {
+            position: absolute;
+            top: 120%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: white;
+            padding: 1rem;
+            border-radius: .5rem;
+            white-space: nowrap;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            z-index: 1000;
+            opacity: 0;       
+            visibility: hidden; 
+            transition: opacity 0.3s, visibility 0.3s;
+            min-width: 20rem;
+            max-width: 24rem; 
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+            white-space: normal; 
+            max-height: 15rem;
+            overflow: auto;
+        }
+
+        .tooltip.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .reasoning {
+            font-weight: bold;
+        }
+
+        .tooltip-text{
+            margin: 0;
+        }
+
+    </style>
+
+    <form id="fluency" class="annotation-form likert shadcn-likert-container" action="/action_page.php" data-annotation-id="1">
+        <div class="ai-help">
+    <h3 class="ai-help-word"><span class="hint">Hint</span> | <span>Keyword</span></h3>
+    <div class="tooltip"> 
+            <p class="tooltip-text">
+                <span class="reasoning">Reasoning:</span> {ai} 
+            </p>
+        </div>
+    </div>
+
+
+        <fieldset schema="fluency" style="border: none; padding: 0; margin: 0; width: auto; min-width: fit-content;">
+            <legend class="shadcn-likert-title">Fluency</legend>
+            <div class="shadcn-likert-scale" style="max-width: min(100%, calc(300px + 10 * 40px + 250px));">
+                <div class="shadcn-likert-endpoint">Not fluent</div>
+                <div class="shadcn-likert-options">
+                    <div class="shadcn-likert-track"></div>
+    
+                    <div class="shadcn-likert-option">
+                        <input class="fluency shadcn-likert-input"
+                               type="radio"
+                               id="fluency:::1"
+                               name="fluency:::1"
+                               value="1"
+                               schema="fluency"
+                               label_name="1"
+                               selection_constraint="single"
+                               validation="required"
+                               onclick="onlyOne(this);registerAnnotation(this);">
+                        <label class="shadcn-likert-button" for="fluency:::1"></label>
+                        <span class="shadcn-likert-label">1</span>
+                    </div>
+        
+                    <div class="shadcn-likert-option">
+                        <input class="fluency shadcn-likert-input"
+                               type="radio"
+                               id="fluency:::2"
+                               name="fluency:::2"
+                               value="2"
+                               schema="fluency"
+                               label_name="2"
+                               selection_constraint="single"
+                               validation="required"
+                               onclick="onlyOne(this);registerAnnotation(this);">
+                        <label class="shadcn-likert-button" for="fluency:::2"></label>
+                        <span class="shadcn-likert-label">2</span>
+                    </div>
+        
+                    <div class="shadcn-likert-option">
+                        <input class="fluency shadcn-likert-input"
+                               type="radio"
+                               id="fluency:::3"
+                               name="fluency:::3"
+                               value="3"
+                               schema="fluency"
+                               label_name="3"
+                               selection_constraint="single"
+                               validation="required"
+                               onclick="onlyOne(this);registerAnnotation(this);">
+                        <label class="shadcn-likert-button" for="fluency:::3"></label>
+                        <span class="shadcn-likert-label">3</span>
+                    </div>
+        
+                    <div class="shadcn-likert-option">
+                        <input class="fluency shadcn-likert-input"
+                               type="radio"
+                               id="fluency:::4"
+                               name="fluency:::4"
+                               value="4"
+                               schema="fluency"
+                               label_name="4"
+                               selection_constraint="single"
+                               validation="required"
+                               onclick="onlyOne(this);registerAnnotation(this);">
+                        <label class="shadcn-likert-button" for="fluency:::4"></label>
+                        <span class="shadcn-likert-label">4</span>
+                    </div>
+        
+                    <div class="shadcn-likert-option">
+                        <input class="fluency shadcn-likert-input"
+                               type="radio"
+                               id="fluency:::5"
+                               name="fluency:::5"
+                               value="5"
+                               schema="fluency"
+                               label_name="5"
+                               selection_constraint="single"
+                               validation="required"
+                               onclick="onlyOne(this);registerAnnotation(this);">
+                        <label class="shadcn-likert-button" for="fluency:::5"></label>
+                        <span class="shadcn-likert-label">5</span>
+                    </div>
+        
+                    <div class="shadcn-likert-option">
+                        <input class="fluency shadcn-likert-input"
+                               type="radio"
+                               id="fluency:::6"
+                               name="fluency:::6"
+                               value="6"
+                               schema="fluency"
+                               label_name="6"
+                               selection_constraint="single"
+                               validation="required"
+                               onclick="onlyOne(this);registerAnnotation(this);">
+                        <label class="shadcn-likert-button" for="fluency:::6"></label>
+                        <span class="shadcn-likert-label">6</span>
+                    </div>
+        
+                    <div class="shadcn-likert-option">
+                        <input class="fluency shadcn-likert-input"
+                               type="radio"
+                               id="fluency:::7"
+                               name="fluency:::7"
+                               value="7"
+                               schema="fluency"
+                               label_name="7"
+                               selection_constraint="single"
+                               validation="required"
+                               onclick="onlyOne(this);registerAnnotation(this);">
+                        <label class="shadcn-likert-button" for="fluency:::7"></label>
+                        <span class="shadcn-likert-label">7</span>
+                    </div>
+        
+                    <div class="shadcn-likert-option">
+                        <input class="fluency shadcn-likert-input"
+                               type="radio"
+                               id="fluency:::8"
+                               name="fluency:::8"
+                               value="8"
+                               schema="fluency"
+                               label_name="8"
+                               selection_constraint="single"
+                               validation="required"
+                               onclick="onlyOne(this);registerAnnotation(this);">
+                        <label class="shadcn-likert-button" for="fluency:::8"></label>
+                        <span class="shadcn-likert-label">8</span>
+                    </div>
+        
+                    <div class="shadcn-likert-option">
+                        <input class="fluency shadcn-likert-input"
+                               type="radio"
+                               id="fluency:::9"
+                               name="fluency:::9"
+                               value="9"
+                               schema="fluency"
+                               label_name="9"
+                               selection_constraint="single"
+                               validation="required"
+                               onclick="onlyOne(this);registerAnnotation(this);">
+                        <label class="shadcn-likert-button" for="fluency:::9"></label>
+                        <span class="shadcn-likert-label">9</span>
+                    </div>
+        
+                    <div class="shadcn-likert-option">
+                        <input class="fluency shadcn-likert-input"
+                               type="radio"
+                               id="fluency:::10"
+                               name="fluency:::10"
+                               value="0"
+                               schema="fluency"
+                               label_name="0"
+                               selection_constraint="single"
+                               validation="required"
+                               onclick="onlyOne(this);registerAnnotation(this);">
+                        <label class="shadcn-likert-button" for="fluency:::10"></label>
+                        <span class="shadcn-likert-label">10</span>
+                    </div>
+        
+                </div>
+                <div class="shadcn-likert-endpoint">Super fluent</div>
+            </div>
+    
+        </fieldset></form>
+    
+
+    <style>
+
+        .shadcn-likert-container {
+            border: 1px solid #E5E5EA;
+            border-radius: 18px 0 18px 18px;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: fit-content;
+            max-width: 100%;
+            margin: 1.5rem auto;
+            font-family: ui-sans-serif, system-ui, sans-serif;
+            position: relative;
+        }
+
+        .shadcn-likert-title {
+            font-size: 1rem;
+            font-weight: 500;
+            color: black;
+            text-align: left;
+            width: 100%;
+        }
+
+        .shadcn-likert-scale {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+        }
+
+        .shadcn-likert-endpoint {
+            display: flex;
+            align-items: center;
+            height: 2.5rem;
+            flex: 0 0 auto;
+            font-size: 0.875rem;
+            color: var(--muted-foreground);
+            padding: 0 0.5rem;
+            max-width: 30%;
+            text-align: center;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            hyphens: auto;
+        }
+
+        .shadcn-likert-options {
+            display: flex;
+            flex: 1;
+            justify-content: space-between;
+            position: relative;
+            padding: 0 0.5rem;
+            gap: 0.5rem;
+        }
+
+        .shadcn-likert-track {
+            position: absolute;
+            height: 2px;
+            background-color: var(--border);
+            left: 0.5rem;
+            right: 0.5rem;
+            top: 0.625rem;
+            transform: none;
+            z-index: 0;
+        }
+
+        .shadcn-likert-option {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .shadcn-likert-input {
+            opacity: 0;
+            position: absolute;
+            width: 0;
+            height: 0;
+        }
+
+        .shadcn-likert-button {
+            width: 1.25rem;
+            height: 1.25rem;
+            border-radius: 50%;
+            background-color: var(--secondary);
+            border: 2px solid var(--border);
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .shadcn-likert-input:checked + .shadcn-likert-button {
+            background-color: var(--primary);
+            border-color: var(--primary);
+            transform: scale(1.1);
+            box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.2);
+        }
+
+        .shadcn-likert-input:focus + .shadcn-likert-button {
+            box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.2);
+        }
+
+        .shadcn-likert-input:hover + .shadcn-likert-button {
+            border-color: var(--primary);
+        }
+
+        .shadcn-likert-label {
+            font-size: 0.75rem;
+            color: var(--muted-foreground);
+            margin-top: 0.25rem;
+            text-align: center;
+        }
+
+        .shadcn-likert-input:checked ~ .shadcn-likert-label {
+            color: var(--primary);
+            font-weight: 500;
+        }
+
+        .shadcn-likert-bad-text {
+            display: flex;
+            align-items: center;
+            margin-top: 0.75rem;
+            padding: 0.5rem 0;
+        }
+
+        .shadcn-likert-bad-text-label {
+            margin-left: 0.5rem;
+            font-size: 0.875rem;
+            color: var(--text-color);
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            flex: 1;
+        }
+
+        fieldset[schema] {
+            width: fit-content;
+            max-width: 100%;
+            overflow: visible;
+        }
+
+        .ai-help {
+            width: 9.375rem;
+            height: 2.063rem;
+            border: 1px solid #E5E5EA;
+            border-radius: 18px;
+            position: absolute;
+            top: -0.75rem;
+            right: -0.05rem;
+            background-color: white;
+            display: flex; 
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .ai-help-word {
+            font-size: 1rem;
+            margin: 0;
+        }
+
+        .hint {
+            cursor: pointer;
+        }
+
+        .hint:hover {
+            color: #6E56CF;
+        }
+
+        .tooltip {
+            position: absolute;
+            top: 120%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: white;
+            padding: 1rem;
+            border-radius: .5rem;
+            white-space: nowrap;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            z-index: 1000;
+            opacity: 0;       
+            visibility: hidden; 
+            transition: opacity 0.3s, visibility 0.3s;
+            min-width: 20rem;
+            max-width: 24rem; 
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+            white-space: normal; 
+            max-height: 15rem;
+            overflow: auto;
+        }
+
+        .tooltip.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .reasoning {
+            font-weight: bold;
+        }
+
+        .tooltip-text{
+            margin: 0;
+        }
+
+    </style>
+
+    <form id="coherence" class="annotation-form likert shadcn-likert-container" action="/action_page.php" data-annotation-id="2">
+        <div class="ai-help">
+    <h3 class="ai-help-word"><span class="hint">Hint</span> | <span>Keyword</span></h3>
+    <div class="tooltip"> 
+            <p class="tooltip-text">
+                <span class="reasoning">Reasoning:</span> {ai} 
+            </p>
+        </div>
+    </div>
+
+
+        <fieldset schema="coherence" style="border: none; padding: 0; margin: 0; width: auto; min-width: fit-content;">
+            <legend class="shadcn-likert-title">Coherence</legend>
+            <div class="shadcn-likert-scale" style="max-width: min(100%, calc(300px + 5 * 40px + 250px));">
+                <div class="shadcn-likert-endpoint">Not Coherent</div>
+                <div class="shadcn-likert-options">
+                    <div class="shadcn-likert-track"></div>
+    
+                    <div class="shadcn-likert-option">
+                        <input class="coherence shadcn-likert-input"
+                               type="radio"
+                               id="coherence:::1"
+                               name="coherence:::1"
+                               value="1"
+                               schema="coherence"
+                               label_name="1"
+                               selection_constraint="single"
+                               validation="required"
+                               onclick="onlyOne(this);registerAnnotation(this);">
+                        <label class="shadcn-likert-button" for="coherence:::1"></label>
+                        <span class="shadcn-likert-label">1</span>
+                    </div>
+        
+                    <div class="shadcn-likert-option">
+                        <input class="coherence shadcn-likert-input"
+                               type="radio"
+                               id="coherence:::2"
+                               name="coherence:::2"
+                               value="2"
+                               schema="coherence"
+                               label_name="2"
+                               selection_constraint="single"
+                               validation="required"
+                               onclick="onlyOne(this);registerAnnotation(this);">
+                        <label class="shadcn-likert-button" for="coherence:::2"></label>
+                        <span class="shadcn-likert-label">2</span>
+                    </div>
+        
+                    <div class="shadcn-likert-option">
+                        <input class="coherence shadcn-likert-input"
+                               type="radio"
+                               id="coherence:::3"
+                               name="coherence:::3"
+                               value="3"
+                               schema="coherence"
+                               label_name="3"
+                               selection_constraint="single"
+                               validation="required"
+                               onclick="onlyOne(this);registerAnnotation(this);">
+                        <label class="shadcn-likert-button" for="coherence:::3"></label>
+                        <span class="shadcn-likert-label">3</span>
+                    </div>
+        
+                    <div class="shadcn-likert-option">
+                        <input class="coherence shadcn-likert-input"
+                               type="radio"
+                               id="coherence:::4"
+                               name="coherence:::4"
+                               value="4"
+                               schema="coherence"
+                               label_name="4"
+                               selection_constraint="single"
+                               validation="required"
+                               onclick="onlyOne(this);registerAnnotation(this);">
+                        <label class="shadcn-likert-button" for="coherence:::4"></label>
+                        <span class="shadcn-likert-label">4</span>
+                    </div>
+        
+                    <div class="shadcn-likert-option">
+                        <input class="coherence shadcn-likert-input"
+                               type="radio"
+                               id="coherence:::5"
+                               name="coherence:::5"
+                               value="5"
+                               schema="coherence"
+                               label_name="5"
+                               selection_constraint="single"
+                               validation="required"
+                               onclick="onlyOne(this);registerAnnotation(this);">
+                        <label class="shadcn-likert-button" for="coherence:::5"></label>
+                        <span class="shadcn-likert-label">5</span>
+                    </div>
+        
+                </div>
+                <div class="shadcn-likert-endpoint">Super Coherent</div>
             </div>
     
         </fieldset></form>
