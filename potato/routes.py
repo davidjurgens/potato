@@ -2368,6 +2368,58 @@ def get_span_colors():
     logger.debug("=== GET_SPAN_COLORS END ===")
     return jsonify(color_map)
 
+@app.route("/api/schemas")
+def get_annotation_schemas():
+    """
+    Return the annotation schema information for all span annotation types.
+    This provides the schema names and their labels to the frontend.
+    """
+    logger.debug("=== GET_ANNOTATION_SCHEMAS START ===")
+
+    schemas = {}
+    annotation_scheme = config.get('annotation_scheme') or config.get('annotation_schemes')
+
+    if annotation_scheme:
+        # If dict (new style), iterate items
+        if isinstance(annotation_scheme, dict):
+            for schema_name, schema in annotation_scheme.items():
+                if schema.get('type') == 'span' or schema.get('annotation_type') == 'span':
+                    labels = []
+                    for label in schema.get('labels', []):
+                        if isinstance(label, dict):
+                            labels.append(label.get('name', str(label)))
+                        else:
+                            labels.append(str(label))
+
+                    schemas[schema_name] = {
+                        'name': schema_name,
+                        'description': schema.get('description', ''),
+                        'labels': labels,
+                        'type': 'span'
+                    }
+        # If list (legacy style), iterate list
+        elif isinstance(annotation_scheme, list):
+            for schema in annotation_scheme:
+                if schema.get('type') == 'span' or schema.get('annotation_type') == 'span':
+                    schema_name = schema.get('name', 'span')
+                    labels = []
+                    for label in schema.get('labels', []):
+                        if isinstance(label, dict):
+                            labels.append(label.get('name', str(label)))
+                        else:
+                            labels.append(str(label))
+
+                    schemas[schema_name] = {
+                        'name': schema_name,
+                        'description': schema.get('description', ''),
+                        'labels': labels,
+                        'type': 'span'
+                    }
+
+    logger.debug(f"Found schemas: {schemas}")
+    logger.debug("=== GET_ANNOTATION_SCHEMAS END ===")
+    return jsonify(schemas)
+
 @app.route("/api/spans/<instance_id>/clear", methods=["POST"])
 def clear_span_annotations(instance_id):
     """
@@ -2484,6 +2536,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/span-api-frontend", "span_api_frontend", span_api_frontend, methods=["GET"])
     app.add_url_rule("/api/spans/<instance_id>", "get_span_data", get_span_data, methods=["GET"])
     app.add_url_rule("/api/colors", "get_span_colors", get_span_colors, methods=["GET"])
+    app.add_url_rule("/api/schemas", "get_annotation_schemas", get_annotation_schemas, methods=["GET"])
     app.add_url_rule("/test-span-colors", "test_span_colors", test_span_colors, methods=["GET"])
     app.add_url_rule("/api/spans/<instance_id>/clear", "clear_span_annotations", clear_span_annotations, methods=["POST"])
     app.add_url_rule("/api/current_instance", "get_current_instance", get_current_instance, methods=["GET"])

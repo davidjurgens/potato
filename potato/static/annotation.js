@@ -241,6 +241,43 @@ function setupSpanLabelSelector() {
             value: checkbox.value
         });
 
+        // Add MutationObserver to track checkbox state changes
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.type === 'attributes' && mutation.attributeName === 'checked') {
+                    console.log('🔍 [DEBUG] setupSpanLabelSelector() - Checkbox checked attribute changed:', {
+                        id: checkbox.id,
+                        oldValue: mutation.oldValue,
+                        newValue: checkbox.checked,
+                        stack: new Error().stack
+                    });
+                }
+            });
+        });
+
+        observer.observe(checkbox, {
+            attributes: true,
+            attributeOldValue: true,
+            attributeFilter: ['checked']
+        });
+
+        // Override the checked property to track when it's set programmatically
+        const originalChecked = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked');
+        Object.defineProperty(checkbox, 'checked', {
+            get: function() {
+                return originalChecked.get.call(this);
+            },
+            set: function(value) {
+                console.log('🔍 [DEBUG] setupSpanLabelSelector() - Checkbox checked property being set:', {
+                    id: this.id,
+                    oldValue: originalChecked.get.call(this),
+                    newValue: value,
+                    stack: new Error().stack
+                });
+                originalChecked.set.call(this, value);
+            }
+        });
+
         // Add click event listener if not already present
         if (!checkbox.hasAttribute('data-span-label-setup')) {
             checkbox.addEventListener('change', function() {
@@ -250,15 +287,21 @@ function setupSpanLabelSelector() {
                     value: this.value
                 });
 
-                // If this checkbox is checked, uncheck others in the same group
-                if (this.checked) {
-                    const groupName = this.name.split(':::')[0] + ':::' + this.name.split(':::')[1];
-                    spanLabelCheckboxes.forEach(otherCheckbox => {
-                        if (otherCheckbox !== this && otherCheckbox.name.startsWith(groupName)) {
-                            otherCheckbox.checked = false;
-                        }
-                    });
+                // Add stack trace to see what's calling this
+                console.log('🔍 [DEBUG] setupSpanLabelSelector() - Change event stack trace:', new Error().stack);
+
+                // Check if this change event was triggered by programmatic setting
+                // If the checkbox was just set to checked by onlyOne, don't interfere
+                if (this.checked && this.hasAttribute('data-just-checked')) {
+                    console.log('🔍 [DEBUG] setupSpanLabelSelector() - Ignoring change event for just-checked checkbox');
+                    this.removeAttribute('data-just-checked');
+                    return;
                 }
+
+                // Note: We don't manage checkbox state here anymore because the onclick
+                // handler (onlyOne function) already handles this correctly.
+                // This change event is just for logging and any additional functionality
+                // that might be needed in the future.
             });
 
             // Mark as set up
@@ -1211,11 +1254,43 @@ function populateInputValues() {
 
 // Span annotation functions
 function onlyOne(checkbox) {
+    console.log('🔍 [DEBUG] onlyOne() called with checkbox:', {
+        id: checkbox.id,
+        name: checkbox.name,
+        value: checkbox.value,
+        checked: checkbox.checked,
+        className: checkbox.className
+    });
+
     var x = document.getElementsByClassName(checkbox.className);
+    console.log('🔍 [DEBUG] onlyOne() - Found elements with same class:', x.length);
+
     var i;
     for (i = 0; i < x.length; i++) {
-        if (x[i].value != checkbox.value) x[i].checked = false;
+        console.log('🔍 [DEBUG] onlyOne() - Processing element:', {
+            id: x[i].id,
+            value: x[i].value,
+            checked: x[i].checked,
+            willUncheck: x[i].value != checkbox.value
+        });
+
+        if (x[i].value != checkbox.value) {
+            console.log('🔍 [DEBUG] onlyOne() - Unchecking element:', x[i].id);
+            x[i].checked = false;
+        }
     }
+    // Ensure the clicked checkbox is checked
+    console.log('🔍 [DEBUG] onlyOne() - Setting clicked checkbox to checked:', checkbox.id);
+    checkbox.setAttribute('data-just-checked', 'true'); // Flag to prevent change event interference
+    checkbox.checked = true;
+
+    // Remove the flag after a short delay in case the change event doesn't fire
+    setTimeout(() => {
+        if (checkbox.hasAttribute('data-just-checked')) {
+            console.log('🔍 [DEBUG] onlyOne() - Removing data-just-checked flag after timeout');
+            checkbox.removeAttribute('data-just-checked');
+        }
+    }, 100);
 }
 
 function extractSpanAnnotationsFromDOM() {
@@ -1417,6 +1492,16 @@ function changeSpanLabel(checkbox, schema, spanLabel, spanTitle, spanColor) {
         console.log('[DEBUG] changeSpanLabel: Span manager not available, using overlay system');
         changeSpanLabelOverlay(checkbox, schema, spanLabel, spanTitle, spanColor);
     }
+
+    // Add debugging to track checkbox state after function execution
+    setTimeout(() => {
+        console.log('[DEBUG] changeSpanLabel: Checkbox state after execution:', {
+            id: checkbox.id,
+            checked: checkbox.checked,
+            name: checkbox.name,
+            value: checkbox.value
+        });
+    }, 0);
 }
 
 function surroundSelection(schema, labelName, title, selectionColor) {
