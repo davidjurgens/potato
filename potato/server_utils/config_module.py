@@ -247,14 +247,14 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
             raise ConfigValidationError(f"{path}.size must be an integer >= 2")
 
     elif annotation_type == 'slider':
-        required_slider_fields = ['min', 'max']
+        required_slider_fields = ['min_value', 'max_value']
         missing_slider_fields = [field for field in required_slider_fields if field not in scheme]
         if missing_slider_fields:
             raise ConfigValidationError(f"{path} missing required fields for slider: {', '.join(missing_slider_fields)}")
 
-        if not isinstance(scheme['min'], (int, float)) or not isinstance(scheme['max'], (int, float)):
+        if not isinstance(scheme['min_value'], (int, float)) or not isinstance(scheme['max_value'], (int, float)):
             raise ConfigValidationError(f"{path}.min and max must be numbers")
-        if scheme['min'] >= scheme['max']:
+        if scheme['min_value'] >= scheme['max_value']:
             raise ConfigValidationError(f"{path}.min must be less than max")
 
     elif annotation_type == 'span':

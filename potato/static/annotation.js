@@ -1,3 +1,5 @@
+import { AIAssistantManager } from './ai_assistant_manager.js';
+
 // Global state
 let currentInstance = null;
 let currentAnnotations = {};
@@ -7,8 +9,7 @@ let textSaveTimer = null;
 let currentSpanAnnotations = [];
 let debugLastInstanceId = null;
 let debugOverlayCount = 0;
-
-
+let aiAssistantManger = new AIAssistantManager();
 
 // DEEP DEBUG: Enhanced tracking
 let deepDebugState = {
@@ -76,7 +77,7 @@ function getCurrentOverlayCount() {
 }
 
 // Initialize the application
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     loadCurrentInstance();
     setupEventListeners();
     // Initial validation check
@@ -167,7 +168,7 @@ function debugVerifyOverlayCleanup() {
 
 function setupEventListeners() {
     // Go to button
-    document.getElementById('go-to-btn').addEventListener('click', function() {
+    document.getElementById('go-to-btn').addEventListener('click', function () {
         const goToValue = document.getElementById('go_to').value;
         if (goToValue && goToValue > 0) {
             navigateToInstance(parseInt(goToValue));
@@ -175,19 +176,19 @@ function setupEventListeners() {
     });
 
     // Enter key on go to input
-    document.getElementById('go_to').addEventListener('keypress', function(e) {
+    document.getElementById('go_to').addEventListener('keypress', function (e) {
         if (e.key === 'Enter') {
             document.getElementById('go-to-btn').click();
         }
     });
 
     // Keyboard navigation
-    document.addEventListener('keydown', function(e) {
+    document.addEventListener('keydown', function (e) {
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
             return; // Don't handle navigation when typing
         }
 
-        switch(e.key) {
+        switch (e.key) {
             case 'ArrowLeft':
                 e.preventDefault();
                 navigateToPrevious();
@@ -243,7 +244,7 @@ function setupSpanLabelSelector() {
 
         // Add click event listener if not already present
         if (!checkbox.hasAttribute('data-span-label-setup')) {
-            checkbox.addEventListener('change', function() {
+            checkbox.addEventListener('change', function () {
                 console.log('🔍 [DEBUG] setupSpanLabelSelector() - Checkbox changed:', {
                     name: this.name,
                     checked: this.checked,
@@ -371,7 +372,7 @@ async function loadCurrentInstance() {
             throw new Error('Instance text element not found');
         }
 
-                // Get instance text from the rendered HTML (server-rendered)
+        // Get instance text from the rendered HTML (server-rendered)
         const instanceText = instanceTextElement.innerHTML;
 
         // Get instance ID from hidden input
@@ -418,6 +419,7 @@ async function loadCurrentInstance() {
         restoreSpanAnnotationsFromHTML();
         loadAnnotations();
         generateAnnotationForms();
+        aiAssistantManger.getAiAssistantName();
 
         // Load span annotations
         console.log('🔍 [DEBUG] loadCurrentInstance() - About to call loadSpanAnnotations()');
@@ -992,8 +994,8 @@ function whetherNone(checkbox) {
     var x = document.getElementsByClassName(checkbox.className);
     var i;
     for (i = 0; i < x.length; i++) {
-        if(checkbox.value == "None" && x[i].value != "None") x[i].checked = false;
-        if(checkbox.value != "None" && x[i].value == "None") x[i].checked = false;
+        if (checkbox.value == "None" && x[i].value != "None") x[i].checked = false;
+        if (checkbox.value != "None" && x[i].value == "None") x[i].checked = false;
     }
     // Also trigger the input change handler for the current checkbox
     handleInputChange(checkbox);
@@ -1011,7 +1013,7 @@ function setupInputEventListeners() {
         if (inputType === 'text' || tagName === 'textarea') {
             // Text inputs and textareas - debounced saving
             let timer;
-            input.addEventListener('input', function(event) {
+            input.addEventListener('input', function (event) {
                 clearTimeout(timer);
                 timer = setTimeout(() => {
                     handleInputChange(event.target);
@@ -1020,12 +1022,12 @@ function setupInputEventListeners() {
             console.log(`Set up event listener for ${tagName} element:`, input.id);
         } else if (inputType === 'radio' || inputType === 'checkbox') {
             // Radio/checkbox inputs - immediate saving
-            input.addEventListener('change', function(event) {
+            input.addEventListener('change', function (event) {
                 handleInputChange(event.target);
             });
         } else if (inputType === 'range') {
             // Slider inputs - immediate saving with value display
-            input.addEventListener('input', function(event) {
+            input.addEventListener('input', function (event) {
                 const valueDisplay = document.getElementById(`${input.name}-value`);
                 if (valueDisplay) {
                     valueDisplay.textContent = event.target.value;
@@ -1034,13 +1036,13 @@ function setupInputEventListeners() {
             });
         } else if (tagName === 'select') {
             // Select inputs - immediate saving
-            input.addEventListener('change', function(event) {
+            input.addEventListener('change', function (event) {
                 handleInputChange(event.target);
             });
         } else if (inputType === 'number') {
             // Number inputs - debounced saving
             let timer;
-            input.addEventListener('input', function(event) {
+            input.addEventListener('input', function (event) {
                 clearTimeout(timer);
                 timer = setTimeout(() => {
                     handleInputChange(event.target);
@@ -1330,7 +1332,7 @@ function alignSpanOverlays() {
         overlay.style.border = '1px solid rgba(255, 230, 230, 0.8)';
 
         console.log('[DEBUG] alignSpanOverlays: Positioned overlay', annotationId, 'at',
-                   minLeft, minTop, maxRight - minLeft, maxBottom - minTop);
+            minLeft, minTop, maxRight - minLeft, maxBottom - minTop);
     }
 }
 
@@ -1358,7 +1360,7 @@ function getSelectionIndicesOverlay() {
         const segEnd = parseInt(seg.getAttribute('data-end'));
         // If the segment is (partially) within the selection range
         if (range.intersectsNode(seg)) {
-            involvedSegments.push({segStart, segEnd, text: seg.textContent});
+            involvedSegments.push({ segStart, segEnd, text: seg.textContent });
             if (selStart === null || segStart < selStart) selStart = segStart;
             if (selEnd === null || segEnd > selEnd) selEnd = segEnd;
         }
@@ -1369,11 +1371,11 @@ function getSelectionIndicesOverlay() {
         var selectedText = selection.toString();
         var startIndex = fullText.indexOf(selectedText);
         var endIndex = startIndex + selectedText.length;
-        console.log('[DEBUG] getSelectionIndicesOverlay: fallback', {fullText, selectedText, startIndex, endIndex});
+        console.log('[DEBUG] getSelectionIndicesOverlay: fallback', { fullText, selectedText, startIndex, endIndex });
         return { start: startIndex, end: endIndex };
     }
     var selectedText = selection.toString();
-    console.log('[DEBUG] getSelectionIndicesOverlay: final', {selStart, selEnd, selectedText, involvedSegments});
+    console.log('[DEBUG] getSelectionIndicesOverlay: final', { selStart, selEnd, selectedText, involvedSegments });
     return { start: selStart, end: selEnd };
 }
 
@@ -1389,7 +1391,7 @@ function changeSpanLabel(checkbox, schema, spanLabel, spanTitle, spanColor) {
      *     spanTitle: The span title
      *     spanColor: The span color
      */
-    console.log('[DEBUG] changeSpanLabel called:', {schema, spanLabel, spanTitle, spanColor, checked: checkbox.checked});
+    console.log('[DEBUG] changeSpanLabel called:', { schema, spanLabel, spanTitle, spanColor, checked: checkbox.checked });
 
     // Use the new span manager if available
     if (window.spanManager && window.spanManager.isInitialized) {
@@ -1433,60 +1435,60 @@ function restoreSpanAnnotationsFromHTML() {
 // These functions are kept for backward compatibility but are no longer used
 // The new boundary-based rendering system handles everything server-side
 
-function getSelectionIndicesOverlay() {
-    /*
-     * Get selection indices for the overlay-based approach.
-     *
-     * This function works with the original text element and maps
-     * DOM selection to original text offsets.
-     *
-     * Returns:
-     *     Object with start and end indices in the original text
-     */
-    console.log('[DEBUG] getSelectionIndicesOverlay called');
+// function getSelectionIndicesOverlay() {
+//     /*
+//      * Get selection indices for the overlay-based approach.
+//      *
+//      * This function works with the original text element and maps
+//      * DOM selection to original text offsets.
+//      *
+//      * Returns:
+//      *     Object with start and end indices in the original text
+//      */
+//     console.log('[DEBUG] getSelectionIndicesOverlay called');
 
-    // Get the user selection
-    var selection = window.getSelection();
+//     // Get the user selection
+//     var selection = window.getSelection();
 
-    if (selection.rangeCount === 0) {
-        console.log('[DEBUG] getSelectionIndicesOverlay: No selection');
-        return { start: -1, end: -1 }; // No selection
-    }
+//     if (selection.rangeCount === 0) {
+//         console.log('[DEBUG] getSelectionIndicesOverlay: No selection');
+//         return { start: -1, end: -1 }; // No selection
+//     }
 
-    // Get the range object representing the selected portion
-    var range = selection.getRangeAt(0);
+//     // Get the range object representing the selected portion
+//     var range = selection.getRangeAt(0);
 
-    console.log('[DEBUG] getSelectionIndicesOverlay: Selection details:', {
-        selectionText: selection.toString(),
-        selectionLength: selection.toString().length,
-        rangeStartContainer: range.startContainer,
-        rangeStartOffset: range.startOffset,
-        rangeEndContainer: range.endContainer,
-        rangeEndOffset: range.endOffset,
-        commonAncestor: range.commonAncestorContainer
-    });
+//     console.log('[DEBUG] getSelectionIndicesOverlay: Selection details:', {
+//         selectionText: selection.toString(),
+//         selectionLength: selection.toString().length,
+//         rangeStartContainer: range.startContainer,
+//         rangeStartOffset: range.startOffset,
+//         rangeEndContainer: range.endContainer,
+//         rangeEndOffset: range.endOffset,
+//         commonAncestor: range.commonAncestorContainer
+//     });
 
-    // Find the original text element within the span annotation container
-    var originalTextElement = $(range.commonAncestorContainer).closest('.original-text')[0];
+//     // Find the original text element within the span annotation container
+//     var originalTextElement = $(range.commonAncestorContainer).closest('.original-text')[0];
 
-    if (!originalTextElement) {
-        console.log('[DEBUG] getSelectionIndicesOverlay: Not within .original-text');
-        return { start: -2, end: -2 }; // Not within the original text
-    }
+//     if (!originalTextElement) {
+//         console.log('[DEBUG] getSelectionIndicesOverlay: Not within .original-text');
+//         return { start: -2, end: -2 }; // Not within the original text
+//     }
 
-    // Get the original text from the data attribute for comparison
-    var originalTextFromData = originalTextElement.getAttribute('data-original-text');
-    console.log('[DEBUG] getSelectionIndicesOverlay: Original text from data attribute:', originalTextFromData);
-    console.log('[DEBUG] getSelectionIndicesOverlay: Original text length from data:', originalTextFromData ? originalTextFromData.length : 0);
+//     // Get the original text from the data attribute for comparison
+//     var originalTextFromData = originalTextElement.getAttribute('data-original-text');
+//     console.log('[DEBUG] getSelectionIndicesOverlay: Original text from data attribute:', originalTextFromData);
+//     console.log('[DEBUG] getSelectionIndicesOverlay: Original text length from data:', originalTextFromData ? originalTextFromData.length : 0);
 
-    // For the overlay approach, we can use a simpler offset calculation
-    // since the original text is unchanged and we can directly map DOM positions
-    var result = getOriginalTextOffsetsOverlay(originalTextElement, range);
+//     // For the overlay approach, we can use a simpler offset calculation
+//     // since the original text is unchanged and we can directly map DOM positions
+//     var result = getOriginalTextOffsetsOverlay(originalTextElement, range);
 
-    console.log('[DEBUG] getSelectionIndicesOverlay: Final result:', result);
+//     console.log('[DEBUG] getSelectionIndicesOverlay: Final result:', result);
 
-    return result;
-}
+//     return result;
+// }
 
 function getOriginalTextOffsetsOverlay(container, range) {
     /*
@@ -1522,7 +1524,7 @@ function getOriginalTextOffsetsOverlay(container, range) {
     var startIndex = originalText.indexOf(selectedText);
     var endIndex = startIndex + selectedText.length;
 
-    console.log('[DEBUG] getOriginalTextOffsetsOverlay: mapped indices:', {startIndex, endIndex});
+    console.log('[DEBUG] getOriginalTextOffsetsOverlay: mapped indices:', { startIndex, endIndex });
 
     // Verify the indices by extracting text
     if (startIndex !== -1) {
@@ -1547,7 +1549,7 @@ function surroundSelectionOverlay(schema, labelName, title, selectionColor) {
      *     title: The annotation title
      *     selectionColor: The color for the annotation
      */
-    console.log('[DEBUG] surroundSelectionOverlay called:', {schema, labelName, title, selectionColor});
+    console.log('[DEBUG] surroundSelectionOverlay called:', { schema, labelName, title, selectionColor });
 
     // Check that this wasn't a spurious click or the click for the delete button which
     // also seems to trigger this selection event
@@ -1645,7 +1647,7 @@ function changeSpanLabelOverlay(checkbox, schema, spanLabel, spanTitle, spanColo
      *     spanTitle: The span title
      *     spanColor: The span color
      */
-    console.log('[DEBUG] changeSpanLabelOverlay called:', {schema, spanLabel, spanTitle, spanColor, checked: checkbox.checked});
+    console.log('[DEBUG] changeSpanLabelOverlay called:', { schema, spanLabel, spanTitle, spanColor, checked: checkbox.checked });
 
     // Listen for when the user has highlighted some text (only when the label is checked)
     document.onmouseup = function (e) {
@@ -2094,7 +2096,7 @@ function escapeHtml(text) {
 }
 
 // Initialize robust span annotation when the page loads
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     // Wait for the initial load to complete, then initialize robust spans
     // DISABLED: Legacy robust span system conflicts with new interval-based system
     // setTimeout(() => {
@@ -2490,17 +2492,17 @@ function aggressiveFirefoxInstanceIdFix() {
                     'Content-Type': 'application/json',
                 }
             })
-            .then(response => response.json())
-            .then(data => {
-                if (data && data.instance_id) {
-                    correctInstanceId = data.instance_id;
-                    console.log(`🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: Got instance_id from API: '${correctInstanceId}'`);
-                    applyInstanceIdFix(instanceIdInput, correctInstanceId);
-                }
-            })
-            .catch(error => {
-                console.log('🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: API call failed:', error);
-            });
+                .then(response => response.json())
+                .then(data => {
+                    if (data && data.instance_id) {
+                        correctInstanceId = data.instance_id;
+                        console.log(`🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: Got instance_id from API: '${correctInstanceId}'`);
+                        applyInstanceIdFix(instanceIdInput, correctInstanceId);
+                    }
+                })
+                .catch(error => {
+                    console.log('🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: API call failed:', error);
+                });
         } else {
             // Apply the fix immediately if we found the correct instance_id
             applyInstanceIdFix(instanceIdInput, correctInstanceId);
@@ -2593,5 +2595,11 @@ function testAggressiveFirefoxFix() {
     }, 500);
 }
 
+
+
+
 // Make the function available globally for debugging
 window.testAggressiveFirefoxFix = testAggressiveFirefoxFix;
+window.navigateToNext = navigateToNext;
+window.navigateToPrevious = navigateToPrevious;
+window.loadCurrentInstance = loadCurrentInstance;

@@ -4,29 +4,15 @@ Ollama AI endpoint implementation.
 This module provides integration with Ollama for local LLM inference.
 """
 
+import json
+from typing import Type
 import ollama
+from pydantic import BaseModel
 from .ai_endpoint import BaseAIEndpoint, AIEndpointRequestError
+import re
+
 
 DEFAULT_MODEL = "llama3.2"
-DEFAULT_HINT_PROMPT = '''You are assisting a user with an annotation task.
-    The annotation instruction is : {description}
-    The annotation task type is: {annotation_type}
-    The sentence (or item) to annotate is : {text}
-    Your goal is to generate a short, helpful hint that guides the annotator in how to think about the input — **without providing the answer**.
-
-    The hint should:
-    - Highlight key aspects of the input relevant to the task
-    - Encourage thoughtful reasoning or observation
-    - Point to subtle features (tone, wording, structure, implication) that matter for the annotation
-    - Be specific and informative, not vague or generic
-    '''
-DEFAULT_KEYWORD_PROMPT = '''
-    You are assisting a user with an annotation task.
-        The annotation instruction is : {description}
-        The annotation task type is: {annotation_type}
-        The sentence (or item) to annotate is : {text}
-        Your goal is : Print out just a sequence of keywords, not sentences, in the text that most relate to the task. Do not explain your answer. Do not print out the entire text. If no part of the text relates to the task, print the empty string.
-    '''
 
 class OllamaEndpoint(BaseAIEndpoint):
     """Ollama endpoint for local LLM inference."""
@@ -45,15 +31,7 @@ class OllamaEndpoint(BaseAIEndpoint):
         """Get the default Ollama model."""
         return DEFAULT_MODEL
 
-    def _get_default_hint_prompt(self) -> str:
-        """Get the default hint prompt for Ollama."""
-        return DEFAULT_HINT_PROMPT
-
-    def _get_default_keyword_prompt(self) -> str:
-        """Get the default keyword prompt for Ollama."""
-        return DEFAULT_KEYWORD_PROMPT
-
-    def query(self, prompt: str) -> str:
+    def query(self, prompt: str, output_format: Type[BaseModel]) -> str:
         """
         Send a query to Ollama and return the response.
 
@@ -73,8 +51,13 @@ class OllamaEndpoint(BaseAIEndpoint):
                 options={
                     'temperature': self.temperature,
                     'num_predict': self.max_tokens
-                }
+                }, 
+                format=output_format.model_json_schema(),
+                think= False,
             )
-            return response['message']['content']
+            return self.parseStringToJson(response['message']['content'])
         except Exception as e:
             raise AIEndpointRequestError(f"Ollama request failed: {e}")
+        
+  
+

@@ -5,7 +5,8 @@ Span Layout
 import logging
 from collections.abc import Mapping
 from collections import defaultdict
-from potato.server_utils.config_module import config
+from ai.ai_help_wrapper import get_ai_wrapper, get_dynamic_ai_help
+from server_utils.config_module import config
 from .identifier_utils import (
     safe_generate_layout,
     generate_element_identifier,
@@ -14,7 +15,8 @@ from .identifier_utils import (
     escape_html_content
 )
 
-from potato.item_state_management import SpanAnnotation
+
+from item_state_management import SpanAnnotation
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +103,8 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
     # Initialize form wrapper
     scheme_name = annotation_scheme["name"]
     schematic = f"""
-    <form id="{escape_html_content(scheme_name)}" class="annotation-form span shadcn-span-container" action="/action_page.php">
+    <form id="{escape_html_content(scheme_name)}" class="annotation-form span shadcn-span-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" >
+            {get_ai_wrapper()}
         <fieldset schema="{escape_html_content(scheme_name)}">
             <legend class="shadcn-span-title">{escape_html_content(annotation_scheme["description"])}</legend>
             <div class="shadcn-span-options">

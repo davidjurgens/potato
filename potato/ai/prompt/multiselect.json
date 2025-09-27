@@ -1,0 +1,18 @@
+{
+  "hint": {
+    "prompt": "TASK: Generate guidance for multiple label selection.\n\nINPUT DETAILS:\n- Text to annotate: \"${text}\"\n- Annotation task: ${description}\n- Available labels: ${labels}\n\nINSTRUCTIONS:\n1. Analyze text for features that may correspond to multiple labels\n2. Guide toward identifying ALL applicable categories\n3. Focus on overlapping characteristics and comprehensive analysis\n\nHINT REQUIREMENTS:\n- Identify indicators for each potential label category\n- Point out that multiple selections may be appropriate\n- Guide systematic evaluation of all label options\n- Highlight overlapping or complementary features",
+    "output_format": "default_hint",
+    "img": "/static/ai_assistant_img/blub.svg"
+  },
+  "keyword": {
+    "prompt": "TASK: Extract words/phrases that indicate multiple applicable labels.\n\nINPUT DETAILS:\n- Text: \"${text}\"\n- Annotation task: ${description}\n- Available labels: ${labels}\n\nOBJECTIVE: Identify terms that support selection of multiple labels.\n\nSELECTION CRITERIA:\n- Words that indicate multiple categories simultaneously\n- Terms supporting different label aspects\n- Overlapping category indicators\n- Comprehensive feature markers\n- Multi-faceted descriptors",
+    "output_format": "default_keyword"
+  },
+  "random": {
+    "prompt": "Generate random things",
+    "output_format": "default_random",
+    "img": "/static/ai_assistant_img/question.svg"
+  }
+}
+
+

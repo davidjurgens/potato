@@ -40,10 +40,10 @@ from typing import Optional, Dict, Any, List, Tuple, Set
 
 import logging
 
-from potato.authentificaton import UserAuthenticator
-from potato.phase import UserPhase
-from potato.item_state_management import get_item_state_manager, Item, SpanAnnotation, Label
-from potato.annotation_history import AnnotationAction, AnnotationHistoryManager
+from authentificaton import UserAuthenticator
+from phase import UserPhase
+from item_state_management import get_item_state_manager, Item, SpanAnnotation, Label
+from annotation_history import AnnotationAction, AnnotationHistoryManager
 from dataclasses import dataclass
 
 @dataclass

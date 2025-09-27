@@ -1,0 +1,17 @@
+{
+  "hint": {
+    "prompt": "TASK: Generate guidance for numerical range selection.\n\nINPUT DETAILS:\n- Text to annotate: \"${text}\"\n- Annotation task: ${description}\n- Available labels: ${labels}\n- Range: ${min_value} to ${max_value}\n- Step size: ${step}\n\nINSTRUCTIONS:\n1. Analyze text for features that indicate position on the numerical scale\n2. Guide toward identifying the appropriate range value\n3. Focus on intensity, degree, or quantity indicators\n\nHINT REQUIREMENTS:\n- Identify intensity markers and degree indicators\n- Point out quantitative or qualitative measures\n- Guide toward scale positioning logic\n- Highlight comparative or relative indicators",
+    "output_format": "default_hint",
+    "img": "/static/ai_assistant_img/blub.svg"
+  },
+  "keyword": {
+    "prompt": "TASK: Extract words/phrases that indicate scale positioning.\n\nINPUT DETAILS:\n- Text: \"${text}\"\n- Annotation task: ${description}\n- Available labels: ${labels}\n- Range: ${min_value} to ${max_value}\n- Step size: ${step}\n\nOBJECTIVE: Identify terms that indicate where on the numerical scale the value should be positioned.\n\nSELECTION CRITERIA:\n- Intensity modifiers (extremely, moderately, slightly)\n- Quantitative indicators\n- Comparative terms (more, less, higher, lower)\n- Degree markers and qualifiers\n- Scale-relevant descriptors",
+    "output_format": "default_keyword",
+    "img": "/static/ai_assistant_img/highlight.svg"
+  },
+  "random": {
+    "prompt": "Generate random things",
+    "output_format": "default_random",
+    "img": "/static/ai_assistant_img/question.svg"
+  }
+}

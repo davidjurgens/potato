@@ -12,6 +12,8 @@ Features include:
 
 import logging
 from collections.abc import Mapping
+
+from ai.ai_help_wrapper import get_ai_wrapper, get_dynamic_ai_help
 from .identifier_utils import (
     safe_generate_layout,
     generate_element_identifier,
@@ -19,6 +21,7 @@ from .identifier_utils import (
     generate_validation_attribute,
     escape_html_content
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +69,8 @@ def _generate_radio_layout_internal(annotation_scheme, horizontal=False):
     # Initialize form wrapper
     schema_name = annotation_scheme["name"]
     schematic = f"""
-    <form id="{escape_html_content(schema_name)}" class="annotation-form radio shadcn-radio-container" action="/action_page.php">
+    <form id="{escape_html_content(schema_name)}" class="annotation-form radio shadcn-radio-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}">
+        {get_ai_wrapper()}
         <fieldset schema="{escape_html_content(schema_name)}">
             <legend class="shadcn-radio-title">{escape_html_content(annotation_scheme['description'])}</legend>
             <div class="shadcn-radio-options{' horizontal' if horizontal else ''}">

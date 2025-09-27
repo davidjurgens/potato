@@ -1,0 +1,15 @@
+{
+  "hint": {
+    "prompt": "TASK: Generate guidance for text span highlighting/selection.\n\nINPUT DETAILS:\n- Text to annotate: \"${text}\"\n- Annotation task: ${description}\n- Available labels: ${labels}\n\nINSTRUCTIONS:\n1. Guide toward identifying specific text portions that need highlighting\n2. Focus on boundary detection and span selection criteria\n3. Help distinguish between different types of spans to highlight\n\nHINT REQUIREMENTS:\n- Identify markers that indicate span boundaries (start/end points)\n- Point out different types of spans corresponding to available labels\n- Guide toward precise text selection (not too broad/narrow)\n- Highlight contextual clues for span classification",
+    "output_format": "default_hint"
+  },
+  "keyword": {
+    "prompt": "TASK: Extract boundary markers and span indicators.\n\nINPUT DETAILS:\n- Text: \"${text}\"\n- Annotation task: ${description}\n- Available labels: ${labels}\n\nOBJECTIVE: Identify words that mark span boundaries or indicate span types.\n\nSELECTION CRITERIA:\n- Boundary markers (punctuation, transitional words)\n- Type indicators for different span categories\n- Start/end signals for text segments\n- Classification markers within spans\n- Structural elements that define spans",
+    "output_format": "default_keyword"
+  },
+  "random": {
+    "prompt": "Generate random things",
+    "output_format": "default_random",
+    "img": "/static/ai_assistant_img/question.svg"
+  }
+}

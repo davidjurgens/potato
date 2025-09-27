@@ -54,6 +54,8 @@ from potato.flask_server import (
 from potato.admin import admin_dashboard
 
 # Import span color functions
+from ai.ai_help_wrapper import generate_ai_help_html
+from ai.ai_prompt import get_ai_prompt
 from potato.server_utils.schemas.span import get_span_color
 
 # Import annotation history
@@ -935,11 +937,15 @@ def annotate():
     if action == "prev_instance":
         logger.debug(f"Moving to previous instance for user: {username}")
         move_to_prev_instance(username)
+        acm = get_ai_cache_manager()
+        acm.start_prefetch(user_state.current_instance_index, acm.prefetch_page_count_on_prev)
     elif action == "next_instance":
-        ais = get_ai_cache_manager()
-        ais.start_prefetch(ais.prefetch_page_count_on_next)
+        acm = get_ai_cache_manager()
+        acm.start_prefetch(acm.prefetch_page_count_on_next, acm.prefetch_page_count_on_next)
         logger.debug(f"Moving to next instance for user: {username}")
         move_to_next_instance(username)
+        acm.start_prefetch(user_state.current_instance_index, acm.prefetch_page_count_on_next)
+
     elif action == "go_to":
         # Try to get go_to from JSON first, then form
         go_to_value = None
@@ -951,6 +957,9 @@ def annotate():
         logger.debug(f"go_to action with value: {go_to_value}")
         if go_to_value is not None:
             go_to_id(username, go_to_value)
+            acm.start_prefetch(user_state.current_instance_index, 1)
+            acm.start_prefetch(user_state.current_instance_index, -1)
+
         else:
             logger.warning('go_to action requested but no go_to value provided')
     else:
@@ -980,28 +989,22 @@ def annotate():
     # Render the page with any existing annotations
     return render_page_with_annotations(username)
 
-@app.route('/get_ai_hint', methods=['POST'])
-def get_ai_hint():
+@app.route('/get_ai_suggestion', methods=['GET'])
+def get_ai_suggestion():
     if 'username' not in session:
         return home()
 
     username = session['username']
     user_state = get_user_state(username)
     ais = get_ai_cache_manager()
-    data = request.get_json()
-    annotation_id = int(data['annotation_id'])
-    text = data['text'] 
-    print(f"annotation_idannotation_idannotation_id: {annotation_id}")
-    print(f"textxxxxx: {text}")
-    instance_text = request.args.get('instance_text')
-    print(f"instance_text: {instance_text}")
-    instance = user_state.get_current_instance()
-    if instance is None:
-        return jsonify({'reasoning': 'No instance assigned.'})
+    annotation_id = int(request.args.get('annotationId'))
+    ai_assistant = request.args.get('aiAssistant')
+    
+    instance_id = user_state.get_current_instance_index()
 
-    instance_id = instance.get_id()
-
-    return jsonify({'reasoning': ais.get_ai_help(instance_id, annotation_id, text, "hint")})
+    res = ais.get_ai_help(instance_id, annotation_id, ai_assistant)
+    print("resresresres", res)
+    return res
 
 
 # Admin routes for system inspection (read-only)
@@ -2437,6 +2440,16 @@ def clear_span_annotations(instance_id):
         logger.debug(f"=== CLEAR_SPAN_ANNOTATIONS END ===")
 
 
+@app.route("/api/ai_assistant", methods=["GET"])
+def ai_assistant():
+    annotation_id = int(request.args.get("annotationId"))
+    username = session['username']
+    user_state = get_user_state(username)
+    instance = user_state.get_current_instance_index()
+    annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
+    return generate_ai_help_html(instance, annotation_id, annotation_type)
+
+
 def configure_routes(flask_app, app_config):
     """
     Initialize the Flask routes with the given Flask app instance
@@ -2482,8 +2495,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/done", "done", done, methods=["GET", "POST"])
     app.add_url_rule("/admin", "admin", admin, methods=["GET"])
 
-    app.add_url_rule("/get_ai_hint", "get_ai_hint", get_ai_hint, methods=["POST"])
-    app.add_url_rule("/get_ai_hint", "get_ai_hint", get_ai_hint, methods=["GET"])
+    app.add_url_rule("/api/get_ai_suggestion", "get_ai_suggestion", get_ai_suggestion, methods=["GET"])
     
     app.add_url_rule("/api-frontend", "api_frontend", api_frontend, methods=["GET"])
     app.add_url_rule("/span-api-frontend", "span_api_frontend", span_api_frontend, methods=["GET"])
@@ -2492,7 +2504,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/test-span-colors", "test_span_colors", test_span_colors, methods=["GET"])
     app.add_url_rule("/api/spans/<instance_id>/clear", "clear_span_annotations", clear_span_annotations, methods=["POST"])
     app.add_url_rule("/api/current_instance", "get_current_instance", get_current_instance, methods=["GET"])
-
+    app.add_url_rule("/api/ai_assistant", "ai_assistant", ai_assistant, methods=["GET"])
     app.add_url_rule("/admin/user_state/<user_id>", "admin_user_state", admin_user_state, methods=["GET"])
     app.add_url_rule("/admin/health", "admin_health", admin_health, methods=["GET"])
     app.add_url_rule("/admin/system_state", "admin_system_state", admin_system_state, methods=["GET"])

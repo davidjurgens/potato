@@ -61,6 +61,8 @@ import shutil
 
 from dataclasses import dataclass
 
+from ai.ai_help_wrapper import init_dynamic_ai_help
+
 # Get current working directory and program directory
 cur_working_dir = os.getcwd() #get the current working dir
 cur_program_dir = os.path.dirname(os.path.abspath(__file__)) #get the current program dir (for the case of pypi, it will be the path where potato is installed)
@@ -73,22 +75,23 @@ sys.path.insert(0, cur_program_dir)
 from item_state_management import ItemStateManager, Item, Label, SpanAnnotation
 from item_state_management import get_item_state_manager, init_item_state_manager
 from user_state_management import UserStateManager, UserState, get_user_state_manager, init_user_state_manager
-from ai.ai_endpoint import init_ai_cache_manager, get_ai_cache_manager
+from ai.ai_cache import init_ai_cache_manager, get_ai_cache_manager
+from ai.ai_prompt import get_ai_prompt, init_ai_prompt
 from authentificaton import UserAuthenticator
 from phase import UserPhase
-from potato.item_state_management import ItemStateManager, Item, Label, SpanAnnotation
-from potato.item_state_management import get_item_state_manager, init_item_state_manager
-from potato.user_state_management import UserStateManager, UserState, get_user_state_manager, init_user_state_manager
-from potato.authentificaton import UserAuthenticator
-from potato.phase import UserPhase
+from item_state_management import ItemStateManager, Item, Label, SpanAnnotation
+from item_state_management import get_item_state_manager, init_item_state_manager
+from user_state_management import UserStateManager, UserState, get_user_state_manager, init_user_state_manager
+from authentificaton import UserAuthenticator
+from phase import UserPhase
 
-from potato.create_task_cli import create_task_cli, yes_or_no
-from potato.server_utils.arg_utils import arguments
-from potato.server_utils.config_module import init_config, config
-from potato.server_utils.schemas.span import render_span_annotations
-from potato.server_utils.cli_utlis import get_project_from_hub, show_project_hub
-from potato.server_utils.prolific_apis import ProlificStudy
-from potato.server_utils.json import easy_json
+from create_task_cli import create_task_cli, yes_or_no
+from server_utils.arg_utils import arguments
+from server_utils.config_module import init_config, config
+from server_utils.schemas.span import render_span_annotations
+from server_utils.cli_utlis import get_project_from_hub, show_project_hub
+from server_utils.prolific_apis import ProlificStudy
+from server_utils.json import easy_json
 
 # This allows us to create an AI endpoint for the system to interact with as needed (if configured)
 from ai.ai_endpoint import get_ai_endpoint
@@ -1532,10 +1535,12 @@ def run_server(args):
     # Initialize authenticator
     UserAuthenticator.init_from_config(config)
 
+    init_ai_prompt(config)
+    init_dynamic_ai_help()
     init_user_state_manager(config)
     init_item_state_manager(config)
     load_all_data(config)
-    init_ai_cache_manager(config)
+    init_ai_cache_manager()
 
     # Log password requirement status
     logger.info(f"Password authentication required: {config.get('require_password', True)}")

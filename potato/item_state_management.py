@@ -97,7 +97,7 @@ class Item:
     The item itself is largely immutable but can be updated with metadata.
     """
 
-    def __init__(self, item_id, item_data):
+    def __init__(self, item_id, item_data, numId):
         """
         Initialize an annotation item.
 
@@ -113,6 +113,8 @@ class Item:
         # completed so far
         self.labels = {}
 
+        self.numId = numId
+
         # This data structure keeps the span-based annotations the user has
         # completed so far
         self.span_annotations = {}
@@ -124,6 +126,10 @@ class Item:
     def get_id(self):
         """Get the item's unique identifier"""
         return self.item_id
+    
+    def get_numId(self):
+        """Get the item's unique identifier"""
+        return self.numId
 
     def get_data(self):
         """Get the item's raw data dictionary"""
@@ -364,6 +370,8 @@ class ItemStateManager:
 
         # Initialize item annotation counts for tracking
         self.item_annotation_counts = defaultdict(int)
+        
+        self.numId = 0
 
         # Load how we want to assign items to users
         if 'assignment_strategy' in config:
@@ -397,7 +405,8 @@ class ItemStateManager:
         Raises:
             ValueError: If an item with the same ID already exists
         """
-        item = Item(instance_id, instance_data)
+        item = Item(instance_id, instance_data, self.numId)
+        ++self.numId
         if instance_id in self.instance_id_to_instance:
             raise ValueError(f"Duplicate Item ID! Item with ID {instance_id} already exists in the state manager")
 

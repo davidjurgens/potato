@@ -1,0 +1,19 @@
+{
+  "hint": {
+    "prompt": "TASK: Generate annotation guidance for Likert scale task.\n\nINPUT DETAILS:\n- Text to annotate: \"${text}\"\n- Annotation task: ${description}\n- Scale: ${min_label} (1) to ${max_label} (${size})\n- Scale points: 1, 2, 3, ..., ${size}\n\nINSTRUCTIONS:\n1. Analyze the text for features relevant to the annotation task\n2. Generate a helpful hint that guides thinking WITHOUT revealing the answer\n3. Suggest a scale position based on your analysis\n\nHINT REQUIREMENTS:\n- Focus on specific textual evidence (word choice, tone, structure)\n- Point out subtle indicators the annotator should notice\n- Be concrete and actionable, not generic\n- Guide analytical thinking without bias toward any scale position",
+    "output_format": "default_hint",
+    "img": "/static/ai_assistant_img/blub.svg"
+  },
+  "keyword": {
+    "prompt": "TASK: Extract key words/phrases that guide Likert scale annotation decisions.\n\nINPUT DETAILS:\n- Text: \"${text}\"\n- Annotation task: ${description}\n- Scale: ${min_label} (1) to ${max_label} (${size})\n- Scale range: 1, 2, 3, ..., ${size}\n\nOBJECTIVE: Identify 3-5 most significant words/phrases that directly indicate scale positioning. Output as JSON array format.\n\nSELECTION CRITERIA:\n- Words that signal intensity/degree (extremely, slightly, moderately)\n- Sentiment markers (positive/negative indicators)\n- Qualifying language (hedges, certainty markers)\n- Context-specific terminology relevant to the annotation task\n- Structural indicators (but, however, although)\n\nPRIORITIZE:\n1. Words with clear scale implications\n2. Phrases that distinguish between scale levels\n3. Contextual clues that affect interpretation\n4. Intensity modifiers and qualifiers",
+    "output_format": "default_keyword",
+    "img": "/static/ai_assistant_img/highlight.svg"
+  },
+  "random": {
+    "prompt": "Generate random things",
+    "output_format": "default_random",
+    "img": "/static/ai_assistant_img/question.svg"
+  }
+}
+
+

@@ -1,0 +1,15 @@
+{
+  "hint": {
+    "prompt": "TASK: Generate guidance for open-ended text extraction/generation.\n\nINPUT DETAILS:\n- Text to annotate: \"${text}\"\n- Annotation task: ${description}\n\nINSTRUCTIONS:\n1. Analyze what type of textual response is required\n2. Guide toward identifying relevant content for extraction/summarization\n3. Focus on text selection or generation criteria\n\nHINT REQUIREMENTS:\n- Identify the type of text response needed (summary, extraction, classification reason, etc.)\n- Point out relevant sections or themes in the source text\n- Guide toward appropriate level of detail and focus\n- Highlight key content areas to address",
+    "output_format": "default_hint"
+  },
+  "keyword": {
+    "prompt": "TASK: Extract words/phrases most relevant for the text response.\n\nINPUT DETAILS:\n- Text: \"${text}\"\n- Annotation task: ${description}\n\nOBJECTIVE: Identify key terms that should inform the text response.\n\nSELECTION CRITERIA:\n- Central themes or main concepts\n- Keywords relevant to the annotation task\n- Important phrases that capture key information\n- Terms that represent core ideas or arguments\n- Context-specific vocabulary",
+    "output_format": "default_keyword"
+  },
+  "random": {
+    "prompt": "Generate random things",
+    "output_format": "default_random",
+    "img": "/static/ai_assistant_img/question.svg"
+  }
+}

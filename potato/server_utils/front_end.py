@@ -159,6 +159,8 @@ def generate_schematic(annotation_scheme):
     if not annotation_func:
         raise Exception("unsupported annotation type: %s" % annotation_type)
 
+    print("annotation_func(annotation_scheme)")
+    print(annotation_func(annotation_scheme))
     return annotation_func(annotation_scheme)
 
 
@@ -304,8 +306,8 @@ def generate_annotation_html_template(config: dict) -> str:
     else:
         # Use the dedicated annotation layout file system (auto-generated)
         try:
+            print("12312321432")
             layout_file_path = get_or_generate_annotation_layout(config, annotation_schemes)
-
             # Read the generated layout file
             with open(layout_file_path, "rt") as f:
                 task_html_layout = "".join(f.readlines())
@@ -314,7 +316,7 @@ def generate_annotation_html_template(config: dict) -> str:
             for annotation_scheme in annotation_schemes:
                 _, keybindings = generate_schematic(annotation_scheme)
                 all_keybindings.extend(keybindings)
-
+            
         except Exception as e:
             logger.warning(f"Failed to use dedicated layout file: {e}. Falling back to inline generation.")
 
@@ -435,6 +437,9 @@ def generate_core_task_html(config: dict,
         schema_layout, keybindings = generate_schematic(annotation_scheme)
         schema_layouts += schema_layout + "<br>" + "\n"
 
+        print("generate_schematic")
+        print(generate_schematic)
+
         cur_task_html_layout = task_html_layout.replace(
             "{{annotation_schematic}}", schema_layouts
         )
@@ -514,12 +519,13 @@ def generate_html_from_schematic(annotation_schemas: list[dict],
     else:
         # Use the dedicated annotation layout file system (auto-generated)
         try:
+            print("fewifjwoiejf")
             layout_file_path = get_or_generate_annotation_layout(config, annotation_schemas)
-
+            
             # Read the generated layout file
             with open(layout_file_path, "rt") as f:
                 task_html_layout = "".join(f.readlines())
-
+            
         except Exception as e:
             logger.warning(f"Failed to use dedicated layout file: {e}. Falling back to inline generation.")
 
