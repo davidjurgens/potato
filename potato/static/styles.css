@@ -1712,16 +1712,14 @@ fieldset[schema] {
   white-space: nowrap;
   pointer-events: none;
   z-index: 1000;
-  opacity: 0;
+  opacity: 1;
   transition: opacity 0.2s ease;
   bottom: 25px;
   left: 50%;
   transform: translateX(-50%);
 }
 
-.slider-tooltip.show {
-  opacity: 1;
-}
+
 
 .slider-tooltip::after {
   content: "";
@@ -1733,8 +1731,7 @@ fieldset[schema] {
   border-top-color: rgba(0, 0, 0, 0.8);
 }
 
-.custom-slider-container:hover .slider-tooltip,
-.custom-slider-container.focus .slider-tooltip,
+
 .custom-slider-thumb.dragging .slider-tooltip {
   opacity: 1;
 }
