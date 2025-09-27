@@ -354,21 +354,21 @@ class TestAllAnnotationTypes:
             # This assumes the UI renders a highlighted span with a specific class or data attribute
             # and that the label is visible in the UI.
             # Check for all 11 unique test cases if needed
-            highlight_elements = driver.find_elements(By.CSS_SELECTOR, ".highlighted-span, .shadcn-span-highlight, span[data-annotation-label]")
-            print(f"[verify_annotations_stored] Found {len(highlight_elements)} highlighted span elements after navigation.")
-            assert len(highlight_elements) >= 1, "No highlighted span found after navigation. Annotation not persisted."
+            span_elements = driver.find_elements(By.CSS_SELECTOR, ".span-highlight, span[data-annotation-label]")
+            print(f"[verify_annotations_stored] Found {len(span_elements)} span elements after navigation.")
+            assert len(span_elements) >= 1, "No span found after navigation. Annotation not persisted."
             found_label = False
-            for elem in highlight_elements:
+            for elem in span_elements:
                 label = elem.get_attribute("data-annotation-label") or elem.text
-                print(f"[verify_annotations_stored] Highlighted span label/text: '{label}' (expected: '{expected_value}')")
+                print(f"[verify_annotations_stored] Span label/text: '{label}' (expected: '{expected_value}')")
                 if expected_value in label:
                     found_label = True
-            assert found_label, f"Expected span label '{expected_value}' not found in highlighted spans."
+            assert found_label, f"Expected span label '{expected_value}' not found in spans."
             # Optionally, check for multiple test cases if a list is provided
             if isinstance(expected_value, list):
                 for val in expected_value:
-                    found = any(val in (elem.get_attribute("data-annotation-label") or elem.text) for elem in highlight_elements)
-                    assert found, f"Expected span label '{val}' not found in highlighted spans."
+                    found = any(val in (elem.get_attribute("data-annotation-label") or elem.text) for elem in span_elements)
+                    assert found, f"Expected span label '{val}' not found in spans."
         # ... other annotation types ...
         return True
 

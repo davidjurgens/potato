@@ -39,7 +39,7 @@ class TestRobustSpanAnnotationSelenium:
             "item_properties": {"text_key": "text", "id_key": "id"},
             "annotation_schemes": [
                 {
-                    "annotation_type": "highlight",
+                    "annotation_type": "span",
                     "name": "emotion",
                     "description": "Highlight which phrases express different emotions in the text",
                     "labels": ["happy", "sad", "angry", "surprised", "neutral"],

@@ -159,20 +159,24 @@ class SpanManager {
                 return false;
             }
 
-            // Step 2: Load colors
+            // Step 2: Load schemas from server API
+            await this.loadSchemas();
+
+            // Step 3: Load colors
             await this.loadColors();
 
-            // Step 3: Setup event listeners
+            // Step 4: Setup event listeners
             this.setupEventListeners();
 
-            // Step 4: Load annotations for the verified instance ID
+            // Step 5: Load annotations for the verified instance ID
             await this.loadAnnotations(serverInstanceId);
 
             this.isInitialized = true;
 
             this.logDebugState('initialize_completed', {
                 serverInstanceId: serverInstanceId,
-                isInitialized: this.isInitialized
+                isInitialized: this.isInitialized,
+                currentSchema: this.currentSchema
             });
 
             console.log('[DEEPDEBUG] SpanManager initialization completed successfully');
@@ -205,6 +209,51 @@ class SpanManager {
                 'span': '#ffeaa7'
             };
         }
+    }
+
+    /**
+     * Load schema information from server API
+     */
+    async loadSchemas() {
+        try {
+            const response = await fetch('/api/schemas');
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            this.schemas = await response.json();
+            console.log('SpanManager: Schemas loaded from server:', this.schemas);
+
+            // Set the first schema as default if no schema is currently set
+            if (!this.currentSchema && Object.keys(this.schemas).length > 0) {
+                this.currentSchema = Object.keys(this.schemas)[0];
+                console.log('SpanManager: Set default schema:', this.currentSchema);
+            }
+
+            return this.schemas;
+        } catch (error) {
+            console.error('SpanManager: Error loading schemas:', error);
+            // Fallback to extracting from HTML forms
+            return this.extractSchemaFromForms();
+        }
+    }
+
+    /**
+     * Extract schema from HTML forms (fallback method)
+     */
+    extractSchemaFromForms() {
+        // Look for span annotation forms and extract schema information
+        const spanForms = document.querySelectorAll('.annotation-form.span');
+        if (spanForms.length > 0) {
+            // Get the schema from the first span form's fieldset
+            const firstSpanForm = spanForms[0];
+            const fieldset = firstSpanForm.querySelector('fieldset');
+            if (fieldset && fieldset.getAttribute('schema')) {
+                const schema = fieldset.getAttribute('schema');
+                console.log('SpanManager: Extracted schema from forms:', schema);
+                return schema;
+            }
+        }
+        return null;
     }
 
     /**
@@ -242,16 +291,11 @@ class SpanManager {
      * Select a label for annotation
      */
     selectLabel(label, schema = null) {
-        // Update UI - uncheck all span checkboxes first
-        document.querySelectorAll('.annotation-form.span input[type="checkbox"]').forEach(checkbox => {
-            checkbox.checked = false;
-        });
+        console.log('🔍 [DEBUG] SpanManager.selectLabel() called with:', { label, schema });
 
-        // Find and check the checkbox for this label
-        const checkbox = document.querySelector(`.annotation-form.span input[type="checkbox"][value="${label}"]`);
-        if (checkbox) {
-            checkbox.checked = true;
-        }
+        // Don't interfere with checkbox state management - let the onlyOne function handle it
+        // The onlyOne function already manages the checkbox state correctly
+        console.log('🔍 [DEBUG] SpanManager.selectLabel() - Skipping checkbox state management, letting onlyOne handle it');
 
         this.selectedLabel = label;
         if (schema) {
@@ -267,6 +311,17 @@ class SpanManager {
         // Check if any span checkbox is checked
         const checkedCheckbox = document.querySelector('.annotation-form.span input[type="checkbox"]:checked');
         if (checkedCheckbox) {
+            // Extract the actual label text from the checkbox ID
+            // Checkbox ID format: "emotion_happy", "emotion_sad", etc.
+            const checkboxId = checkedCheckbox.id;
+            const parts = checkboxId.split('_');
+            if (parts.length >= 2) {
+                const labelText = parts[1]; // Get the label part after the underscore
+                console.log('SpanManager: Extracted label text from checkbox ID:', { checkboxId, labelText });
+                return labelText;
+            }
+            // Fallback to value if ID parsing fails
+            console.warn('SpanManager: Could not parse label from checkbox ID, using value:', checkboxId);
             return checkedCheckbox.value;
         }
         return this.selectedLabel;
@@ -276,14 +331,13 @@ class SpanManager {
      * Load annotations for current instance
      */
     async loadAnnotations(instanceId) {
-        console.log('[DEEP DEBUG] loadAnnotations called with instanceId:', instanceId);
-        this.debugState.loadAnnotationsCalls++;
+        console.log('SpanManager: Loading annotations for instance:', instanceId);
 
         try {
-            // Step 1Verify instance ID with server
+            // Step 1: Verify instance ID with server
             const serverInstanceId = await this.fetchCurrentInstanceIdFromServer();
             if (serverInstanceId !== instanceId) {
-                console.warn('[DEEP DEBUG] Instance ID mismatch in loadAnnotations!', {
+                console.warn('SpanManager: Instance ID mismatch in loadAnnotations!', {
                     requestedInstanceId: instanceId,
                     serverInstanceId: serverInstanceId
                 });
@@ -292,12 +346,7 @@ class SpanManager {
                 instanceId = serverInstanceId;
             }
 
-            this.logDebugState('loadAnnotations_start', {
-                requestedInstanceId: instanceId,
-                serverInstanceId: serverInstanceId
-            });
-
-            // Step2ear existing state
+            // Step 2: Clear existing state
             this.clearAllStateAndOverlays();
 
             // Step 3: Fetch annotations from server
@@ -306,9 +355,8 @@ class SpanManager {
                 if (response.status === 404) {
                     // No annotations yet
                     this.annotations = {spans: []};
-                    console.log('🔍 [DEBUG] SpanManager.loadAnnotations() - No annotations found (404), set to:', this.annotations);
+                    console.log('SpanManager: No annotations found (404), set to empty array');
                     this.renderSpans();
-                    console.log('🔍 [DEBUG] SpanManager.loadAnnotations() - EXIT POINT (404)');
                     return Promise.resolve();
                 }
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -316,10 +364,9 @@ class SpanManager {
 
             // Store the full API response, not just the spans array
             this.annotations = await response.json();
-            console.log('[DEEP DEBUG] Annotations loaded from server:', {
+            console.log('SpanManager: Annotations loaded from server:', {
                 instanceId: instanceId,
-                annotationsCount: this.annotations?.spans?.length || 0,
-                annotations: this.annotations
+                annotationsCount: this.annotations?.spans?.length || 0
             });
 
             // Auto-set the schema from the first span if available
@@ -331,21 +378,8 @@ class SpanManager {
                 }
             }
 
-            console.log('🔍 [DEBUG] SpanManager.loadAnnotations() - Loaded annotations:', this.annotations);
-            console.log('🔍 [DEBUG] SpanManager.loadAnnotations() - this.annotations.spans:', this.annotations.spans);
-            console.log('🔍 [DEBUG] SpanManager.loadAnnotations() - getSpans() would return:', this.getSpans());
-            console.log('🔍 [DEBUG] SpanManager.loadAnnotations() - Current schema:', this.currentSchema);
-
             // Render spans
-            console.log('🔍 [DEBUG] SpanManager.loadAnnotations() - About to call renderSpans()');
             this.renderSpans();
-            console.log('🔍 [DEBUG] SpanManager.loadAnnotations() - renderSpans() call completed');
-
-            this.logDebugState('loadAnnotations_completed', {
-                instanceId: instanceId,
-                annotationsCount: this.annotations?.spans?.length || 0,
-                overlayCount: this.getCurrentOverlayCount()
-            });
 
             return Promise.resolve(this.annotations);
         } catch (error) {
@@ -361,14 +395,7 @@ class SpanManager {
      * This method properly handles partial overlaps by using position-based rendering
      */
     renderSpans() {
-        console.log('[DEEP DEBUG] renderSpans called');
-        this.debugState.renderSpansCalls++;
-
-        this.logDebugState('renderSpans_start', {
-            annotationsCount: this.annotations?.spans?.length || 0,
-            currentInstanceId: this.currentInstanceId,
-            overlayCount: this.getCurrentOverlayCount()
-        });
+        console.log('SpanManager: Rendering spans');
 
         // Wait for DOM elements to be available
         const waitForElements = () => {
@@ -376,18 +403,12 @@ class SpanManager {
             const textContent = document.getElementById('text-content');
             const spanOverlays = document.getElementById('span-overlays');
 
-            if (!textContent) {
-                console.log('SpanManager: Waiting for #text-content element to be available...');
+            if (textContainer && textContent && spanOverlays) {
+                this._renderSpansInternal(textContainer, textContent, spanOverlays);
+            } else {
+                // Retry after a short delay
                 setTimeout(waitForElements, 100);
-                return;
             }
-            if (!textContainer || !spanOverlays) {
-                console.warn('SpanManager: Required containers not found');
-                return;
-            }
-
-            // Elements are available, proceed with rendering
-            this._renderSpansInternal(textContainer, textContent, spanOverlays);
         };
 
         waitForElements();
@@ -1035,7 +1056,8 @@ class SpanManager {
      * Create a new span annotation
      */
     async createAnnotation(spanText, start, end, label) {
-        console.log('SpanManager: createAnnotation called with:', {spanText, start, end, label});
+        console.log('SpanManager: Creating annotation:', { spanText, start, end, label });
+
         if (!this.currentInstanceId) {
             this.showStatus('No instance loaded', 'error');
             return Promise.reject(new Error('No instance loaded'));
@@ -1086,10 +1108,30 @@ class SpanManager {
             if (response.ok) {
                 const result = await response.json();
                 console.log('SpanManager: POST successful, result:', result);
-                // Reload all annotations to ensure consistency
-                console.log('SpanManager: About to call loadAnnotations');
-                await this.loadAnnotations(this.currentInstanceId);
-                console.log('SpanManager: loadAnnotations completed');
+
+                // OPTIMISTIC UPDATE: Add the new span to local state immediately
+                // This ensures the visual overlay appears right away
+                if (!this.annotations) {
+                    this.annotations = { spans: [] };
+                }
+
+                // Create a span object that matches the expected format
+                const optimisticSpan = {
+                    id: `temp_${Date.now()}`, // Temporary ID until server assigns one
+                    label: label, // This should be the actual label text (e.g., "happy", "sad", "angry")
+                    start: start,
+                    end: end,
+                    text: spanText,
+                    schema: this.currentSchema
+                };
+
+                this.annotations.spans.push(optimisticSpan);
+                console.log('SpanManager: Added optimistic span to local state:', optimisticSpan);
+
+                // Render spans immediately with the optimistic update
+                this.renderSpans();
+                console.log('SpanManager: Rendered spans with optimistic update');
+
                 this.showStatus(`Created ${label} annotation: "${spanText}"`, 'success');
                 console.log('SpanManager: Annotation created:', result);
                 return result; // Return the result
@@ -1568,7 +1610,8 @@ class SpanManager {
 
         // Reset internal state
         this.annotations = {spans: []};
-        this.currentSchema = null;
+        // Don't clear currentSchema - it should persist across state clearing
+        // this.currentSchema = null;
         this.selectedLabel = null;
         this.isInitialized = false;
 

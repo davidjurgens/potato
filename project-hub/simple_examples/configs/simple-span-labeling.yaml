@@ -16,7 +16,7 @@ user_config:
   users: []
 alert_time_each_instance: 10000000
 annotation_schemes:
-- annotation_type: highlight
+- annotation_type: span
   name: certainty
   description: Highlight which phrases make the sentence more or less certain
   labels:
