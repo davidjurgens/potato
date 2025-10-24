@@ -212,7 +212,7 @@ class SpanAnnotation:
 
     Spans are represented by a start and end index, as well as a label.
     """
-    def __init__(self, schema: str, name: str, title: str, start: int, end: int, id: str = None, annotation_id: str = None):
+    def __init__(self, schema: str, name: str, title: str, start: int, end: int, span_id: str, annotation_id: str = None):
         """
         Initialize a span annotation.
 
@@ -230,13 +230,7 @@ class SpanAnnotation:
         self.title = title
         self.end = end
         self.name = name
-        # Accept both id and annotation_id for compatibility
-        _id = id if id is not None else annotation_id
-        if _id is not None:
-            self._id = _id
-        else:
-            # Generate a unique ID if none provided
-            self._id = f"span_{uuid.uuid4().hex}"
+        self.id = span_id 
 
     def get_schema(self):
         """Get the schema this span belongs to"""
@@ -260,10 +254,10 @@ class SpanAnnotation:
 
     def get_id(self):
         """Get the span's unique identifier"""
-        return self._id
+        return self.id
 
     def __str__(self):
-        return f"SpanAnnotation(schema:{self.schema}, name:{self.name}, start:{self.start}, end:{self.end}, id:{self._id})"
+        return f"SpanAnnotation(schema:{self.schema}, name:{self.name}, start:{self.start}, end:{self.end}, id:{self.id})"
 
     def __eq__(self, other):
         """Check if two span annotations are equal"""

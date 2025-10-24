@@ -938,13 +938,13 @@ def annotate():
         logger.debug(f"Moving to previous instance for user: {username}")
         move_to_prev_instance(username)
         acm = get_ai_cache_manager()
-        acm.start_prefetch(user_state.current_instance_index, acm.prefetch_page_count_on_prev)
+        acm.start_prefetch(user_state.current_instance_index, 
+                           getattr(acm, "prefetch_page_count_on_prev", 0) )
     elif action == "next_instance":
-        acm = get_ai_cache_manager()
-        acm.start_prefetch(acm.prefetch_page_count_on_next, acm.prefetch_page_count_on_next)
         logger.debug(f"Moving to next instance for user: {username}")
         move_to_next_instance(username)
-        acm.start_prefetch(user_state.current_instance_index, acm.prefetch_page_count_on_next)
+        acm = get_ai_cache_manager()
+        acm.start_prefetch(user_state.current_instance_index, getattr(acm,"prefetch_page_count_on_next", 0))
 
     elif action == "go_to":
         # Try to get go_to from JSON first, then form
@@ -1728,12 +1728,12 @@ def get_span_data(instance_id):
 
     # Convert to frontend-friendly format
     span_data = []
-    for span in spans:
-        # Get color for this span
-        color = get_span_color(span.get_schema(), span.get_name())
+    print("spansspansspans", spans)
+    for span_id, span_info in spans.items():
+        
+        color = get_span_color(span_info["schema"], span_info["name"])
         hex_color = None
         if color:
-            # Convert RGB format to hex
             if isinstance(color, str) and color.startswith("(") and color.endswith(")"):
                 try:
                     rgb_parts = color.strip("()").split(", ")
@@ -1744,28 +1744,27 @@ def get_span_data(instance_id):
                     hex_color = "#f0f0f0"
             else:
                 hex_color = color
-
-        span_info = {
-            'id': span.get_id(),
-            'schema': span.get_schema(),
-            'label': span.get_name(),
-            'title': span.get_title(),
-            'start': span.get_start(),
-            'end': span.get_end(),
-            'text': original_text[span.get_start():span.get_end()],
+        
+        span_data.append({
+            'id': span_id,
+            'schema': span_info["schema"],
+            'label': span_info["name"],
+            'title': span_info["title"],
+            'start': span_info["start"],
+            'end': span_info["end"],
+            'text': original_text[span_info["start"]:span_info["end"]],
             'color': hex_color
-        }
-        span_data.append(span_info)
-        logger.debug(f"Span data: {span_info}")
-
+        })
+    
     response_data = {
         'instance_id': instance_id,
         'text': original_text,
         'spans': span_data
     }
 
-    logger.debug(f"=== GET_SPAN_DATA END ===")
+    logger.debug(f"=== GET_SPAN_DATA END ===", response_data)
     return jsonify(response_data)
+
 
 @app.route("/updateinstance", methods=["POST"])
 def update_instance():
@@ -1921,6 +1920,7 @@ def update_instance():
             annotation_type = request.json.get("type")
 
             if annotation_type == "span":
+                print("schema_stateschema_state", schema_state)
                 for sv in schema_state:
                     # Validate and correct negative offsets
                     start_offset = int(sv["start"])
@@ -1939,8 +1939,9 @@ def update_instance():
                         end_offset = start_offset
                         logger.warning(f"Corrected end offset {sv['end']} to match start offset {start_offset}")
 
-                    span = SpanAnnotation(schema_name, sv["name"], sv.get("title", sv["name"]), start_offset, end_offset)
-                    value = sv["value"]
+                    span = SpanAnnotation(schema_name, sv["name"], sv.get("title", sv["name"]), start_offset, end_offset, sv["span_id"])
+                    
+                    value = sv.get("value")
 
                     # Get old value for comparison
                     old_value = None
@@ -1982,15 +1983,11 @@ def update_instance():
                     # If value is None, also handle span removal logic
                     if value is None:
                         if instance_id in user_state.instance_id_to_span_to_value:
-                            spans_to_remove = []
-                            for existing_span in user_state.instance_id_to_span_to_value[instance_id]:
-                                if (existing_span.get_schema() == span.get_schema() and
-                                    existing_span.get_name() == span.get_name() and
-                                    existing_span.get_start() == span.get_start() and
-                                    existing_span.get_end() == span.get_end()):
-                                    spans_to_remove.append(existing_span)
-                            for span_to_remove in spans_to_remove:
-                                del user_state.instance_id_to_span_to_value[instance_id][span_to_remove]
+                            span_id = span.get_id()
+                            if span_id in user_state.instance_id_to_span_to_value[instance_id]:
+                                    del user_state.instance_id_to_span_to_value[instance_id][span_id]
+ 
+                    print("user_state.instance_id_to_span_to_value", user_state.instance_id_to_span_to_value)
             elif annotation_type == "label":
                 for sv in schema_state:
                     label = Label(schema_name, sv["name"])
@@ -2003,7 +2000,8 @@ def update_instance():
 
                     # Determine action type
                     action_type = "add_label" if old_value is None else "update_label"
-
+                
+                   
                     # Create annotation action
                     action = AnnotationHistoryManager.create_action(
                         user_id=username,

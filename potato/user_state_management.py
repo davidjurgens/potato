@@ -1277,7 +1277,15 @@ class InMemoryUserState(UserState):
             if instance_id not in self.instance_id_to_span_to_value:
                 self.instance_id_to_span_to_value[instance_id] = {}
 
-            self.instance_id_to_span_to_value[instance_id][label] = value
+            self.instance_id_to_span_to_value[instance_id][label.get_id()] = {
+                
+                "schema": label.get_schema(),
+                "name": label.get_name(),
+                "start": label.get_start(),
+                "end": label.get_end(),
+                "title": label.get_title(),
+                "value": value
+            }
         else:
             # Handle non-annotation phase storage
             phase = self.current_phase_and_page[0]
@@ -1288,7 +1296,14 @@ class InMemoryUserState(UserState):
             if page not in self.phase_to_page_to_span_to_value[phase]:
                 self.phase_to_page_to_span_to_value[phase][page] = {}
 
-            self.phase_to_page_to_span_to_value[phase][page][label] = value
+            self.instance_id_to_span_to_value[instance_id][label.get_id()] = {
+                "schema": label.get_schema(),
+                "name": label.get_name(),
+                "start": label.get_start(),
+                "end": label.get_end(),
+                "title": label.get_title(),
+                "value": value
+            }
 
     def get_current_instance_index(self):
         '''Returns the index of the item the user is annotating within the list of items
@@ -1597,8 +1612,10 @@ class InMemoryUserState(UserState):
             return [(label_to_dict(k), v) for k, v in d.items()]
 
         def convert_span_dict(d: dict[SpanAnnotation, any]) -> list[tuple[dict[str], str]]:
-            return [(span_to_dict(k), v) for k, v in d.items()]
+            return d
 
+            
+        
         # Do the easy cases first
         d = {
             'user_id': self.user_id,
@@ -1650,7 +1667,7 @@ class InMemoryUserState(UserState):
             return Label(d['schema'], d['name'])
 
         def to_span(d: dict[str,str]) -> SpanAnnotation:
-            return SpanAnnotation(d['schema'], d['name'], d['title'], int(d['start']), int(d['end']))
+            return SpanAnnotation(d['schema'], d['name'], d['title'], int(d['start']), int(d['end']),d['id'])
 
         def to_phase_and_page(t: tuple[str,str]) -> tuple[UserPhase,str]:
             return (UserPhase.fromstr(t[0]), t[1])

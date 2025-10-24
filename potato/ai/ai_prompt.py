@@ -44,7 +44,6 @@ class ModelManager:
         """
         Return a Pydantic model class based on the provided name.
         """
-        print("namnamenamee", name)
         models_module = self.load_models_module()  
         return models_module.CLASS_REGISTRY.get(name)
 
@@ -92,5 +91,4 @@ def init_ai_prompt(config):
 
 def get_ai_prompt():
     global ANNOTATIONS
-    print("ANNOTATIONANNOTATIONSANNOTATIONSANNOTATIONSS", ANNOTATIONS)
     return ANNOTATIONS

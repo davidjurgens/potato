@@ -139,7 +139,6 @@ class BaseAIEndpoint(ABC):
         """
         
         try:
-            print("12312412341231")
             # Check if annotation type exists
             if data.annotation_type not in Annotation_Type:
                 logger.warning(f"Annotation type '{data.annotation_type}' not found")
@@ -152,7 +151,6 @@ class BaseAIEndpoint(ABC):
                 return "Unable to generate suggestion - prompt not configured"
             
             template_str = self.prompts.get(data.annotation_type).get(data.ai_assistant).get("prompt")
-            print("template_str", template_str)
             template = Template(template_str)
             prompt = template.substitute(
                 text=data.text,

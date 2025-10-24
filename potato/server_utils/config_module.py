@@ -906,9 +906,9 @@ def validate_ai_support_config(config_data: Dict[str, Any]) -> None:
     if not isinstance(endpoint_type, str):
         raise ConfigValidationError("ai_support.endpoint_type must be a string")
 
-    valid_endpoint_types = ["openai", "anthropic", "huggingface", "ollama", "gemini", "vllm"]
-    if endpoint_type not in valid_endpoint_types:
-        raise ConfigValidationError(f"ai_support.endpoint_type must be one of: {', '.join(valid_endpoint_types)}")
+    # valid_endpoint_types = ["openai", "anthropic", "huggingface", "ollama", "gemini", "vllm"]
+    # if endpoint_type not in valid_endpoint_types:
+    #     raise ConfigValidationError(f"ai_support.endpoint_type must be one of: {', '.join(valid_endpoint_types)}")
 
     # Validate ai_config section
     if "ai_config" in ai_config:

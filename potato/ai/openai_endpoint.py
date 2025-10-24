@@ -16,7 +16,7 @@ class OpenAIEndpoint(BaseAIEndpoint):
         """Initialize the OpenAI client."""
         api_key = self.ai_config.get("api_key", "")
         if not api_key:
-            raise AIEndpointRequestError("OpenAI API key is required")
+            raise AIEndpointRequestError("OpenRouter API key is required")
 
         self.client = OpenAI(api_key=api_key)
 

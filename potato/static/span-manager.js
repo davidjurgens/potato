@@ -20,12 +20,24 @@
  * Handles span annotation rendering, interaction, and API communication
  */
 
+
+function uuid4Hex() {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+    return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+
 class SpanManager {
     constructor() {
         console.log('[DEEPDEBUG] SpanManager constructor called');
 
         // Core state
-        this.annotations = {spans: []};
+        this.annotations = { spans: [] };
         this.colors = {};
         this.selectedLabel = null;
         this.currentSchema = null; // Track the current schema
@@ -285,11 +297,17 @@ class SpanManager {
                 this.deleteSpan(annotationId);
             }
         });
+
+        // Recalculate all overlay positions
+        window.addEventListener('resize', () => {
+            this.renderSpans();
+        });
+
     }
 
-        /**
-     * Select a label for annotation
-     */
+    /**
+ * Select a label for annotation
+ */
     selectLabel(label, schema = null) {
         console.log('🔍 [DEBUG] SpanManager.selectLabel() called with:', { label, schema });
 
@@ -354,7 +372,7 @@ class SpanManager {
             if (!response.ok) {
                 if (response.status === 404) {
                     // No annotations yet
-                    this.annotations = {spans: []};
+                    this.annotations = { spans: [] };
                     console.log('SpanManager: No annotations found (404), set to empty array');
                     this.renderSpans();
                     return Promise.resolve();
@@ -362,14 +380,34 @@ class SpanManager {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
 
-            // Store the full API response, not just the spans array
-            this.annotations = await response.json();
+            const data = await response.json();
+            console.log("Raw data from server:", data);
+
+            // Convert dictionary format to array format
+            if (data.spans && typeof data.spans === 'object' && !Array.isArray(data.spans)) {
+                // Spans is a dictionary, convert to array
+                const spansArray = [];
+                for (const [spanId, spanInfo] of Object.entries(data.spans)) {
+                    spansArray.push({
+                        id: spanId,
+                        label: spanInfo.name,  // or spanInfo.label, depending on your backend
+                        start: spanInfo.start,
+                        end: spanInfo.end,
+                        text: spanInfo.value,
+                        schema: spanInfo.schema
+                    });
+                }
+                this.annotations = { spans: spansArray };
+            } else {
+                this.annotations = data;
+            }
+
             console.log('SpanManager: Annotations loaded from server:', {
                 instanceId: instanceId,
                 annotationsCount: this.annotations?.spans?.length || 0
             });
 
-            // Auto-set the schema from the first span if available
+
             if (this.annotations.spans && this.annotations.spans.length > 0) {
                 const firstSpan = this.annotations.spans[0];
                 if (firstSpan.schema && !this.currentSchema) {
@@ -377,14 +415,13 @@ class SpanManager {
                     console.log('SpanManager: Auto-set schema from loaded spans:', this.currentSchema);
                 }
             }
-
             // Render spans
             this.renderSpans();
 
             return Promise.resolve(this.annotations);
         } catch (error) {
             console.error('SpanManager: Error loading annotations:', error);
-            this.annotations = {spans: []};
+            this.annotations = { spans: [] };
             this.renderSpans();
             return Promise.reject(error);
         }
@@ -713,49 +750,56 @@ class SpanManager {
                     overlay.style.top = `${newTop}px`;
                 }
 
-                // Add label
-                const label = document.createElement('span');
-                label.className = 'span-label';
-                label.textContent = span.label;
-                label.style.position = 'absolute';
-                label.style.top = '-25px';
-                label.style.left = '0';
-                label.style.fontSize = '11px';
-                label.style.fontWeight = 'bold';
-                label.style.backgroundColor = 'rgba(0,0,0,0.9)';
-                label.style.color = 'white';
-                label.style.padding = '3px 6px';
-                label.style.borderRadius = '4px';
-                label.style.pointerEvents = 'auto'; // <-- Allow interaction with label
-                label.style.zIndex = '1000';
-                label.style.whiteSpace = 'nowrap';
-                overlay.appendChild(label);
+                if (rectIndex === 0) {
+                    // Add label container
+                    const label = document.createElement('span');
+                    label.className = 'span-label';
+                    label.textContent = span.label;
+                    label.style.position = 'absolute';
+                    label.style.top = '-25px';
+                    label.style.left = '0';
+                    label.style.fontSize = '11px';
+                    label.style.fontWeight = 'bold';
+                    label.style.backgroundColor = 'rgba(0,0,0,0.9)';
+                    label.style.color = 'white';
+                    label.style.padding = '3px 6px';
+                    label.style.borderRadius = '4px';
+                    label.style.whiteSpace = 'nowrap';
+                    label.style.pointerEvents = 'auto';
+                    label.style.zIndex = '1000';
+                    label.style.display = 'inline-flex';
+                    label.style.alignItems = 'center';
+                    label.style.gap = '6px';
 
-                // Add delete button
-                const deleteBtn = document.createElement('button');
-                deleteBtn.className = 'span-delete-btn';
-                deleteBtn.innerHTML = '×';
-                deleteBtn.title = 'Delete span';
-                deleteBtn.style.position = 'absolute';
-                deleteBtn.style.top = '-25px';
-                deleteBtn.style.right = '0';
-                deleteBtn.style.backgroundColor = 'rgba(255,0,0,0.9)';
-                deleteBtn.style.color = 'white';
-                deleteBtn.style.border = 'none';
-                deleteBtn.style.borderRadius = '50%';
-                deleteBtn.style.width = '18px';
-                deleteBtn.style.height = '18px';
-                deleteBtn.style.fontSize = '14px';
-                deleteBtn.style.fontWeight = 'bold';
-                deleteBtn.style.cursor = 'pointer';
-                deleteBtn.style.pointerEvents = 'auto'; // <-- Allow interaction with delete button
-                deleteBtn.style.zIndex = '1001';
-                deleteBtn.style.lineHeight = '1';
-                deleteBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    this.deleteSpan(span.id);
-                };
-                overlay.appendChild(deleteBtn);
+                    // Add delete button inside the label
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.className = 'span-delete-btn';
+                    deleteBtn.innerHTML = '×';
+                    deleteBtn.title = 'Delete span';
+                    deleteBtn.style.backgroundColor = 'rgba(255,0,0,0.9)';
+                    deleteBtn.style.color = 'white';
+                    deleteBtn.style.border = 'none';
+                    deleteBtn.style.borderRadius = '50%';
+                    deleteBtn.style.width = '16px';
+                    deleteBtn.style.height = '16px';
+                    deleteBtn.style.fontSize = '12px';
+                    deleteBtn.style.fontWeight = 'bold';
+                    deleteBtn.style.cursor = 'pointer';
+                    deleteBtn.style.lineHeight = '1';
+                    deleteBtn.style.padding = '0';
+                    deleteBtn.style.display = 'flex';
+                    deleteBtn.style.alignItems = 'center';
+                    deleteBtn.style.justifyContent = 'center';
+                    deleteBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        this.deleteSpan(span.id);
+                    };
+                    label.appendChild(deleteBtn);
+
+                    // Append the label to the overlay
+                    overlay.appendChild(label);
+                }
+
 
                 console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - About to append overlay to container');
                 spanOverlays.appendChild(overlay);
@@ -888,12 +932,14 @@ class SpanManager {
         this.createAnnotation(selectedText, start, end, selectedLabel)
             .then(result => {
                 console.log('🔍 [DEBUG] SpanManager: Annotation creation successful:', result);
+                console.log("fwewf21", this.annotations.spans);
             })
             .catch(error => {
                 console.error('🔍 [DEBUG] SpanManager: Annotation creation failed:', error);
             });
 
         // Clear selection
+
         selection.removeAllRanges();
     }
 
@@ -1079,7 +1125,8 @@ class SpanManager {
                 start: start,
                 end: end,
                 title: label,
-                value: spanText
+                value: spanText,
+                span_id: uuid4Hex()
             };
 
             // Combine existing spans with the new span
@@ -1088,7 +1135,8 @@ class SpanManager {
                 start: span.start,
                 end: span.end,
                 title: span.label,
-                value: span.text || span.value
+                value: span.text || span.value,
+                span_id: span.id
             })), newSpan];
 
             console.log('SpanManager: Sending POST to /updateinstance with all spans:', allSpans);
@@ -1117,7 +1165,7 @@ class SpanManager {
 
                 // Create a span object that matches the expected format
                 const optimisticSpan = {
-                    id: `temp_${Date.now()}`, // Temporary ID until server assigns one
+                    id: newSpan.span_id,
                     label: label, // This should be the actual label text (e.g., "happy", "sad", "angry")
                     start: start,
                     end: end,
@@ -1172,13 +1220,19 @@ class SpanManager {
 
             // Find the span to delete from current annotations
             const spanToDelete = this.annotations.spans.find(span => span.id === annotationId);
+            console.log("ffw", annotationId, spanToDelete);
+
             if (!spanToDelete) {
                 this.showStatus('Span not found', 'error');
                 return;
             }
 
             console.log('SpanManager: Deleting span:', spanToDelete);
+            console.log("this.getSpans()this.getSpans()", this.getSpans());
+            const existingSpans = this.getSpans();
+            this.annotations.spans = this.annotations.spans.filter(span => span.id !== spanToDelete.id);
 
+            console.log("existingSpansexistingSpans", existingSpans);
             // Send deletion request with value: null to indicate deletion
             const response = await fetch('/updateinstance', {
                 method: 'POST',
@@ -1194,6 +1248,7 @@ class SpanManager {
                             start: spanToDelete.start,
                             end: spanToDelete.end,
                             title: spanToDelete.label,
+                            span_id: spanToDelete.id,
                             value: null  // This signals deletion
                         }
                     ],
@@ -1201,8 +1256,11 @@ class SpanManager {
                 })
             });
 
+
             if (response.ok) {
+
                 console.log('🔍 [DEBUG] SpanManager.deleteSpan() - Backend deletion successful, reloading annotations');
+                console.log("after deletion after deletion", this.getSpans());
                 // Reload all annotations to ensure consistency
                 await this.loadAnnotations(this.currentInstanceId);
                 this.showStatus('Annotation deleted', 'success');
@@ -1280,7 +1338,7 @@ class SpanManager {
      * Clear all annotations (for testing)
      */
     clearAnnotations() {
-        this.annotations = {spans: []};
+        this.annotations = { spans: [] };
         this.renderSpans();
     }
 
@@ -1609,7 +1667,7 @@ class SpanManager {
         }
 
         // Reset internal state
-        this.annotations = {spans: []};
+        this.annotations = { spans: [] };
         // Don't clear currentSchema - it should persist across state clearing
         // this.currentSchema = null;
         this.selectedLabel = null;
@@ -1676,7 +1734,7 @@ class SpanManager {
                 spanOverlays.removeChild(spanOverlays.firstChild);
             }
         }
-        this.annotations = {spans: []};
+        this.annotations = { spans: [] };
         console.log('[DEFENSIVE] Cleared all span overlays and reset annotations');
     }
 }

@@ -13,6 +13,7 @@ from server_utils.config_module import config
 from item_state_management import get_item_state_manager
 from ai.ai_endpoint import AIEndpointFactory, Annotation_Type, AnnotationInput
 from ai.ollama_endpoint import OllamaEndpoint
+from ai.openrouter_endpoint import OpenRouterEndpoint
 from ai.ai_prompt import ModelManager, get_ai_prompt 
 
 
@@ -38,22 +39,22 @@ class AiCacheManager:
             return
         cache_config = ai_support["cache_config"]
         ai_config = ai_support["ai_config"]
-        include = ai_config["include"]
-        special_include = ai_config["include"]["special_include"]
+        include = ai_config.get("include")
+        special_include = include.get("special_include", None)
         self.include_all = include["all"]
         self.special_includes = {}
 
         self.model_manager = ModelManager()
         self.model_manager.load_models_module()
-
-        for page_key, page_value in special_include.items():
-            # Convert string keys to integers for easier lookup
-            page_index = int(page_key)
-            self.special_includes[page_index] = {}
-            for annotation_id, annotation_types in page_value.items():
-                annotation_id_int = int(annotation_id)
-                self.special_includes[page_index][annotation_id_int] = annotation_types
-        print("self.special_includesself.special_includesself.special_includes", self.special_includes)
+        
+        if special_include:
+            for page_key, page_value in special_include.items():
+                # Convert string keys to integers for easier lookup
+                page_index = int(page_key)
+                self.special_includes[page_index] = {}
+                for annotation_id, annotation_types in page_value.items():
+                    annotation_id_int = int(annotation_id)
+                    self.special_includes[page_index][annotation_id_int] = annotation_types
 
         # Disk cache configuration
         self.disk_cache_enabled = cache_config["disk_cache"]["enabled"]
@@ -74,6 +75,8 @@ class AiCacheManager:
         self.executor = ThreadPoolExecutor(max_workers=20)
         
         AIEndpointFactory.register_endpoint("ollama", OllamaEndpoint)
+        AIEndpointFactory.register_endpoint("open_router", OpenRouterEndpoint)
+
         self.ai_endpoint = AIEndpointFactory.create_endpoint(config)
 
         annotation_scheme = config.get("annotation_schemes")
@@ -181,7 +184,6 @@ class AiCacheManager:
             return None
     
     def generate_likert(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
-        print("generate_likert", annotation_id)
         annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
         description = config["annotation_schemes"][annotation_id]["description"]
         text = get_item_state_manager().items()[instance_id].get_data()["text"]
@@ -204,7 +206,6 @@ class AiCacheManager:
         return res
     
     def generate_multiselect(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
-        print("generate_multiselect", annotation_id)
         annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
         description = config["annotation_schemes"][annotation_id]["description"]
         labels = config["annotation_schemes"][annotation_id]["labels"]
@@ -223,7 +224,6 @@ class AiCacheManager:
         return res
     
     def generate_radio(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
-        print("generate_radio", annotation_id)
         annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
         description = config["annotation_schemes"][annotation_id]["description"]
         text = get_item_state_manager().items()[instance_id].get_text()
@@ -242,7 +242,6 @@ class AiCacheManager:
         return res
     
     def generate_number(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
-        print("generate_number", annotation_id)
         annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
         description = config["annotation_schemes"][annotation_id]["description"]
         text = get_item_state_manager().items()[instance_id].get_data()["text"]
@@ -259,7 +258,6 @@ class AiCacheManager:
         return res
     
     def generate_select(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
-        print("generate_select", annotation_id)
         annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
         description = config["annotation_schemes"][annotation_id]["description"]
         labels = config["annotation_schemes"][annotation_id]["labels"]
@@ -279,7 +277,6 @@ class AiCacheManager:
         return res
     
     def generate_slider(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
-        print("generate_slider", annotation_id)
         annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
         description = config["annotation_schemes"][annotation_id]["description"]
         min_value = config["annotation_schemes"][annotation_id]["min_value"]
@@ -303,7 +300,6 @@ class AiCacheManager:
         return res
     
     def generate_span(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
-        print("generate_span", annotation_id)
         annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
         description = config["annotation_schemes"][annotation_id]["description"]
         labels = config["annotation_schemes"][annotation_id]["labels"]
@@ -351,7 +347,7 @@ class AiCacheManager:
 
     def start_prefetch(self, page_id, prefetch_amount):
         """Prefetches a fixed number of upcoming items to warm the cache."""
-        if not self.disk_cache_enabled:
+        if not config["ai_support"]["enabled"] or not self.disk_cache_enabled:
             return
         
         ism = get_item_state_manager()
@@ -543,3 +539,6 @@ class AiCacheManager:
                 except Exception as e:
                     print(f"Error removing disk cache file: {e}")
             print("Cache cleared")
+
+
+

@@ -1383,21 +1383,17 @@ def get_span_annotations_for_user_on(username, instance_id):
             print(f"🔍 No spans found for instance {instance_id}")
 
     span_annotations_dict = user_state.get_span_annotations(instance_id)
-    logger.debug(f"Raw span annotations from user state: {span_annotations_dict}")
-    print(f"🔍 get_span_annotations_for_user_on({username}, {instance_id}): {span_annotations_dict}")
-
-    # Convert dictionary to list of SpanAnnotation objects
-    span_annotations = list(span_annotations_dict.keys()) if span_annotations_dict else []
-    logger.debug(f"Converted to list: {span_annotations}")
-    print(f"🔍 Converted to list: {span_annotations}")
-
     # Debug: Print details of each span
-    for span in span_annotations:
-        print(f"[DEBUG SPAN] schema={span.get_schema()} label={span.get_name()} start={span.get_start()} end={span.get_end()} id={span.get_id()}")
-        logger.debug(f"[DEBUG SPAN] schema={span.get_schema()} label={span.get_name()} start={span.get_start()} end={span.get_end()} id={span.get_id()}")
-
-    logger.debug(f"=== GET_SPAN_ANNOTATIONS_FOR_USER_ON END ===")
-    return span_annotations
+    print("spanspanspanspanspan", span_annotations_dict)
+    for span_id, span_data in span_annotations_dict.items():
+    # Extract span metadata (handle both nested and flat structures)
+        if isinstance(span_data, dict):
+                span_metadata = span_data
+                value = span_data.get("value")   
+        print(f"[DEBUG SPAN] span_id={span_id} schema={span_metadata.get('schema')} label={span_metadata.get('name')} start={span_metadata.get('start')} end={span_metadata.get('end')} value={value}")
+        logger.debug(f"[DEBUG SPAN] span_id={span_id} schema={span_metadata.get('schema')} label={span_metadata.get('name')} start={span_metadata.get('start')} end={span_metadata.get('end')} value={value}")
+    print("span_annotations_dictspan_annotations_dictspan_annotations_dict", span_annotations_dict)
+    return span_annotations_dict
 
 def parse_html_span_annotation(html):
     """

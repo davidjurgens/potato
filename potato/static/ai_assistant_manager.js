@@ -95,7 +95,24 @@ class AIAssistantManager {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
 
-            return await response.json();
+            const contentType = response.headers.get("content-type");
+            let data = {}
+            if (contentType && contentType.includes("application/json")) {
+                data.res = await response.json();
+                data.type = "json";
+            } else {
+                data.res = await response.json();
+                data.type = "text";
+                // const raw = await response.text();
+                // try {
+                //     data.res = JSON.parse(raw);
+                //     data.type = "json";
+                // } catch (error) {
+                //     data.res = raw;
+                //     data.type = "text";
+                // }
+            }
+            return data;
         } catch (error) {
             console.error('Fetch error:', error);
             throw error;
@@ -146,19 +163,22 @@ class AIAssistantManager {
 
     renderAssistant(tooltip, assistantType, data) {
         let content = '';
-        switch (assistantType) {
-            case 'hint':
-                content = this.renderHint(data);
-                break;
-            case 'keyword':
-                content = this.renderKeyword(data);
-                break;
-            case 'random':
-                content = this.renderRandom(data);
-                break;
-            default:
-                content = '<div>Unknown assistant type</div>';
+
+        if (data.type === "json") {
+            switch (assistantType) {
+                case 'hint':
+                    content = this.renderHint(data.res);
+                    break;
+                case 'keyword':
+                    content = this.renderKeyword(data.res);
+                    break;
+                default:
+                    content = '<div>Unknown assistant type</div>';
+            }
+        } else {
+            content = data.res;
         }
+
 
         tooltip.innerHTML = `
             <div class="assistant-content">
