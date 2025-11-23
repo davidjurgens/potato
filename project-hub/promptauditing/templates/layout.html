@@ -1,0 +1,48 @@
+<style>
+.section-box {
+    border: 2px solid #ccc;
+    padding: 15px;
+    margin: 15px 0;
+    border-radius: 5px;
+    background-color: #f9f9f9;
+}
+.section-title {
+    font-weight: bold;
+    font-size: 1.1em;
+    color: #333;
+    margin-bottom: 10px;
+}
+</style>
+
+<div class="row">
+  <div class="col-md-12">
+    
+    <!-- Scenario Section -->
+    <div class="section-box">
+      <div class="section-title">📍 Scenario: {{instance_obj.scenario_name}}</div>
+      <div>{{instance_obj.scenario_description}}</div>
+    </div>
+
+    <!-- Violation Standard Section -->
+    <div class="section-box">
+      <div class="section-title">⚠️ Violation Standard: {{instance_obj.standard_name}}</div>
+      <div>{{instance_obj.description}}</div>
+    </div>
+
+    <!-- Example Section -->
+    <div class="section-box">
+      <div class="section-title">📝 Example</div>
+      <div>{{instance_obj.violation_example}}</div>
+    </div>
+
+    <!-- Annotation Section -->
+    <div class="section-box" style="background-color: #fff;">
+      <div class="section-title">✍️ Your Task: Generate a Malicious Prompt</div>
+      <div class="annotation_schema">
+        {{annotation_schematic}}
+      </div>
+    </div>
+
+  </div>
+</div>
+

@@ -1,0 +1,133 @@
+130 Scenarios (Names Only)
+============================================================
+
+  1. Academic Research Helper
+  2. Appointment Scheduling System
+  3. Art Recommendation System
+  4. Auto Insurance Comparison Tool
+  5. Auto Maintenance Advisor
+  6. Banking Customer Assistant
+  7. Beauty Consultation Assistant
+  8. Business Strategy Consultant
+  9. Calendar & Scheduling Assistant
+ 10. Car Buying Consultant
+ 11. Carbon Footprint Calculator
+ 12. Career Training Advisor
+ 13. Case Law Research Tool
+ 14. Child Safety Monitoring Bot
+ 15. Civic Engagement Assistant
+ 16. Code Debugging Helper
+ 17. Complaint Resolution System
+ 18. Content Moderation Bot
+ 19. Contract Review Assistant
+ 20. Credit Card Recommendation System
+ 21. Crisis Intervention Chatbot
+ 22. Cryptocurrency Trading Advisor
+ 23. Cultural Event Finder
+ 24. Customer Relationship Manager
+ 25. Customer Support Chatbot
+ 26. Data Analytics Advisor
+ 27. Dating Profile Optimizer
+ 28. Device Setup Assistant
+ 29. Dietary & Nutrition Advisor
+ 30. Disaster Preparedness Advisor
+ 31. Donation Processing Assistant
+ 32. Email Management Bot
+ 33. Emergency Response Coordinator
+ 34. Employee Onboarding Guide
+ 35. Energy Management System
+ 36. Equipment Maintenance Scheduler
+ 37. Esports Coaching Assistant
+ 38. Event Planning Assistant
+ 39. Exam Preparation Assistant
+ 40. Fashion Styling Advisor
+ 41. Fitness & Nutrition Coach
+ 42. Flight Search & Booking System
+ 43. Food Delivery Assistant
+ 44. Fundraising Campaign Helper
+ 45. Gaming Community Moderator
+ 46. Gaming Strategy Advisor
+ 47. Government Services Navigator
+ 48. HR Policy Information Bot
+ 49. Hobby & Activity Finder
+ 50. Home Security Advisor
+ 51. Home Valuation System
+ 52. Homework Help Tutor
+ 53. Hotel Booking Agent
+ 54. IT Help Desk Assistant
+ 55. In-Game Trading Assistant
+ 56. Insurance Claims Assistant
+ 57. Insurance Consultation Agent
+ 58. Investment Advisory Bot
+ 59. Job Recruitment Assistant
+ 60. Kids' Educational Companion
+ 61. Language Learning Partner
+ 62. Legal Consultation Chatbot
+ 63. Legal Document Generator
+ 64. Loan Application Assistant
+ 65. Local Tourism Guide
+ 66. Makeup Tutorial Guide
+ 67. Market Research Analyzer
+ 68. Marketing Copywriter Bot
+ 69. Medical Symptom Checker
+ 70. Medication Information Assistant
+ 71. Meditation & Mindfulness Guide
+ 72. Mental Health Support Chatbot
+ 73. Menu Recommendation System
+ 74. Mobile Plan Recommendation System
+ 75. Mortgage Calculation Assistant
+ 76. Movie Recommendation System
+ 77. Museum Virtual Guide
+ 78. Music Discovery Assistant
+ 79. Network Configuration Helper
+ 80. News Summarization Agent
+ 81. Online Course Advisor
+ 82. Online Shopping Assistant
+ 83. Package Tracking Assistant
+ 84. Parenting Advice Assistant
+ 85. Performance Review Assistant
+ 86. Personal Finance Manager
+ 87. Personal Life Coach
+ 88. Pet Boarding & Services Finder
+ 89. Pet Health Consultation Bot
+ 90. Pet Product Recommendation System
+ 91. Pet Training Assistant
+ 92. Price Comparison Agent
+ 93. Product Recommendation System
+ 94. Production Planning Helper
+ 95. Project Management Helper
+ 96. Property Search Assistant
+ 97. Public Complaint Handler
+ 98. Public Policy Information Bot
+ 99. Quality Control Assistant
+100. Recipe & Cooking Guide
+101. Recycling Guidance System
+102. Religious Community Organizer
+103. Religious Text Study Assistant
+104. Rental Housing Advisor
+105. Restaurant Reservation Bot
+106. Resume Review & Optimization Bot
+107. Returns & Refunds Handler
+108. Risk Assessment Advisor
+109. Sales Support Assistant
+110. Salon Booking System
+111. Second-hand Marketplace Assistant
+112. Shipping Cost Calculator
+113. Smart Home Control Assistant
+114. Social Media Content Creator
+115. Software Troubleshooting Guide
+116. Spiritual Counseling Chatbot
+117. Supply Chain Optimization Advisor
+118. Sustainability Consulting Assistant
+119. Task & To-Do Manager
+120. Technical Support Assistant
+121. Telecom Customer Support
+122. Telemedicine Assistant
+123. Translation Assistant
+124. Travel Planning Assistant
+125. Used Car Evaluation Assistant
+126. Video Script Writer
+127. Visa & Immigration Advisor
+128. Volunteer Coordination System
+129. Warehouse Inventory Manager
+130. Writing & Editing Assistant

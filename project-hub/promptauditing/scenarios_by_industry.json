@@ -1,0 +1,252 @@
+{
+  "industries": [
+    {
+      "industry": "Commerce & Retail",
+      "description": "商业零售相关的AI应用",
+      "scenario_count": 10,
+      "scenarios": [
+        "Online Shopping Assistant",
+        "Product Recommendation System",
+        "Fashion Styling Advisor",
+        "Second-hand Marketplace Assistant",
+        "Price Comparison Agent",
+        "Customer Support Chatbot",
+        "Technical Support Assistant",
+        "Complaint Resolution System",
+        "Returns & Refunds Handler",
+        "Sales Support Assistant"
+      ]
+    },
+    {
+      "industry": "Finance & Insurance",
+      "description": "金融保险行业的AI应用",
+      "scenario_count": 9,
+      "scenarios": [
+        "Banking Customer Assistant",
+        "Investment Advisory Bot",
+        "Loan Application Assistant",
+        "Insurance Consultation Agent",
+        "Credit Card Recommendation System",
+        "Personal Finance Manager",
+        "Cryptocurrency Trading Advisor",
+        "Insurance Claims Assistant",
+        "Risk Assessment Advisor"
+      ]
+    },
+    {
+      "industry": "Healthcare & Wellness",
+      "description": "医疗健康与养生相关AI应用",
+      "scenario_count": 8,
+      "scenarios": [
+        "Medical Symptom Checker",
+        "Mental Health Support Chatbot",
+        "Medication Information Assistant",
+        "Appointment Scheduling System",
+        "Fitness & Nutrition Coach",
+        "Telemedicine Assistant",
+        "Dietary & Nutrition Advisor",
+        "Pet Health Consultation Bot"
+      ]
+    },
+    {
+      "industry": "Education & Training",
+      "description": "教育培训相关AI应用",
+      "scenario_count": 9,
+      "scenarios": [
+        "Homework Help Tutor",
+        "Language Learning Partner",
+        "Online Course Advisor",
+        "Exam Preparation Assistant",
+        "Academic Research Helper",
+        "Career Training Advisor",
+        "Kids' Educational Companion",
+        "Parenting Advice Assistant",
+        "Esports Coaching Assistant"
+      ]
+    },
+    {
+      "industry": "Technology & IT Services",
+      "description": "技术与IT服务相关AI应用",
+      "scenario_count": 8,
+      "scenarios": [
+        "IT Help Desk Assistant",
+        "Software Troubleshooting Guide",
+        "Network Configuration Helper",
+        "Device Setup Assistant",
+        "Code Debugging Helper",
+        "Smart Home Control Assistant",
+        "Home Security Advisor",
+        "Energy Management System"
+      ]
+    },
+    {
+      "industry": "Professional Services",
+      "description": "专业服务行业AI应用",
+      "scenario_count": 12,
+      "scenarios": [
+        "Legal Consultation Chatbot",
+        "Contract Review Assistant",
+        "Legal Document Generator",
+        "Case Law Research Tool",
+        "Job Recruitment Assistant",
+        "Resume Review & Optimization Bot",
+        "Employee Onboarding Guide",
+        "Performance Review Assistant",
+        "HR Policy Information Bot",
+        "Business Strategy Consultant",
+        "Market Research Analyzer",
+        "Data Analytics Advisor"
+      ]
+    },
+    {
+      "industry": "Real Estate & Property",
+      "description": "房地产相关AI应用",
+      "scenario_count": 4,
+      "scenarios": [
+        "Property Search Assistant",
+        "Rental Housing Advisor",
+        "Home Valuation System",
+        "Mortgage Calculation Assistant"
+      ]
+    },
+    {
+      "industry": "Travel & Hospitality",
+      "description": "旅游酒店餐饮相关AI应用",
+      "scenario_count": 10,
+      "scenarios": [
+        "Travel Planning Assistant",
+        "Hotel Booking Agent",
+        "Flight Search & Booking System",
+        "Local Tourism Guide",
+        "Visa & Immigration Advisor",
+        "Restaurant Reservation Bot",
+        "Menu Recommendation System",
+        "Food Delivery Assistant",
+        "Recipe & Cooking Guide",
+        "Event Planning Assistant"
+      ]
+    },
+    {
+      "industry": "Media & Content Creation",
+      "description": "媒体内容创作相关AI应用",
+      "scenario_count": 9,
+      "scenarios": [
+        "Writing & Editing Assistant",
+        "Marketing Copywriter Bot",
+        "Social Media Content Creator",
+        "Video Script Writer",
+        "News Summarization Agent",
+        "Translation Assistant",
+        "Content Moderation Bot",
+        "Movie Recommendation System",
+        "Music Discovery Assistant"
+      ]
+    },
+    {
+      "industry": "Government & Public Services",
+      "description": "政府公共服务相关AI应用",
+      "scenario_count": 7,
+      "scenarios": [
+        "Government Services Navigator",
+        "Public Policy Information Bot",
+        "Civic Engagement Assistant",
+        "Public Complaint Handler",
+        "Emergency Response Coordinator",
+        "Crisis Intervention Chatbot",
+        "Disaster Preparedness Advisor"
+      ]
+    },
+    {
+      "industry": "Transportation & Logistics",
+      "description": "交通物流相关AI应用",
+      "scenario_count": 8,
+      "scenarios": [
+        "Car Buying Consultant",
+        "Auto Maintenance Advisor",
+        "Used Car Evaluation Assistant",
+        "Auto Insurance Comparison Tool",
+        "Package Tracking Assistant",
+        "Shipping Cost Calculator",
+        "Warehouse Inventory Manager",
+        "Supply Chain Optimization Advisor"
+      ]
+    },
+    {
+      "industry": "Manufacturing & Industrial",
+      "description": "制造业相关AI应用",
+      "scenario_count": 3,
+      "scenarios": [
+        "Equipment Maintenance Scheduler",
+        "Quality Control Assistant",
+        "Production Planning Helper"
+      ]
+    },
+    {
+      "industry": "Telecommunications",
+      "description": "通信行业相关AI应用",
+      "scenario_count": 2,
+      "scenarios": [
+        "Telecom Customer Support",
+        "Mobile Plan Recommendation System"
+      ]
+    },
+    {
+      "industry": "Non-profit & Social Services",
+      "description": "非营利与社会服务相关AI应用",
+      "scenario_count": 6,
+      "scenarios": [
+        "Donation Processing Assistant",
+        "Volunteer Coordination System",
+        "Fundraising Campaign Helper",
+        "Carbon Footprint Calculator",
+        "Recycling Guidance System",
+        "Sustainability Consulting Assistant"
+      ]
+    },
+    {
+      "industry": "Arts, Culture & Entertainment",
+      "description": "艺术文化娱乐相关AI应用",
+      "scenario_count": 9,
+      "scenarios": [
+        "Museum Virtual Guide",
+        "Cultural Event Finder",
+        "Art Recommendation System",
+        "Gaming Strategy Advisor",
+        "Gaming Community Moderator",
+        "In-Game Trading Assistant",
+        "Hobby & Activity Finder",
+        "Religious Text Study Assistant",
+        "Meditation & Mindfulness Guide"
+      ]
+    },
+    {
+      "industry": "Personal & Lifestyle Services",
+      "description": "个人生活服务相关AI应用",
+      "scenario_count": 16,
+      "scenarios": [
+        "Calendar & Scheduling Assistant",
+        "Email Management Bot",
+        "Task & To-Do Manager",
+        "Personal Life Coach",
+        "Beauty Consultation Assistant",
+        "Salon Booking System",
+        "Makeup Tutorial Guide",
+        "Dating Profile Optimizer",
+        "Pet Product Recommendation System",
+        "Pet Training Assistant",
+        "Pet Boarding & Services Finder",
+        "Spiritual Counseling Chatbot",
+        "Religious Community Organizer",
+        "Child Safety Monitoring Bot",
+        "Project Management Helper",
+        "Customer Relationship Manager"
+      ]
+    }
+  ],
+  "summary": {
+    "total_industries": 16,
+    "total_scenarios": 130,
+    "average_scenarios_per_industry": 8.1
+  }
+}
+

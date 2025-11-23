@@ -1,0 +1,384 @@
+{
+  "major_categories": [
+    {
+      "category": "Business & Commerce",
+      "category_cn": "商业服务",
+      "description": "电商、零售、金融、保险、房地产等商业相关",
+      "scenario_count": 33,
+      "subcategories": [
+        {
+          "name": "E-commerce & Retail",
+          "scenarios": [
+            "Online Shopping Assistant",
+            "Product Recommendation System",
+            "Fashion Styling Advisor",
+            "Second-hand Marketplace Assistant",
+            "Price Comparison Agent"
+          ]
+        },
+        {
+          "name": "Customer Service",
+          "scenarios": [
+            "Customer Support Chatbot",
+            "Technical Support Assistant",
+            "Complaint Resolution System",
+            "Returns & Refunds Handler"
+          ]
+        },
+        {
+          "name": "Finance & Insurance",
+          "scenarios": [
+            "Banking Customer Assistant",
+            "Investment Advisory Bot",
+            "Loan Application Assistant",
+            "Insurance Consultation Agent",
+            "Credit Card Recommendation System",
+            "Personal Finance Manager",
+            "Cryptocurrency Trading Advisor",
+            "Insurance Claims Assistant",
+            "Risk Assessment Advisor"
+          ]
+        },
+        {
+          "name": "Real Estate",
+          "scenarios": [
+            "Property Search Assistant",
+            "Rental Housing Advisor",
+            "Home Valuation System",
+            "Mortgage Calculation Assistant"
+          ]
+        },
+        {
+          "name": "Business Services",
+          "scenarios": [
+            "Business Strategy Consultant",
+            "Sales Support Assistant",
+            "Market Research Analyzer",
+            "Data Analytics Advisor",
+            "Customer Relationship Manager",
+            "Project Management Helper"
+          ]
+        },
+        {
+          "name": "Manufacturing & Logistics",
+          "scenarios": [
+            "Equipment Maintenance Scheduler",
+            "Quality Control Assistant",
+            "Production Planning Helper",
+            "Warehouse Inventory Manager",
+            "Supply Chain Optimization Advisor"
+          ]
+        }
+      ]
+    },
+    {
+      "category": "Professional Services",
+      "category_cn": "专业服务",
+      "description": "法律、医疗、教育、人力资源等专业服务",
+      "scenario_count": 29,
+      "subcategories": [
+        {
+          "name": "Healthcare & Wellness",
+          "scenarios": [
+            "Medical Symptom Checker",
+            "Mental Health Support Chatbot",
+            "Medication Information Assistant",
+            "Appointment Scheduling System",
+            "Fitness & Nutrition Coach",
+            "Telemedicine Assistant"
+          ]
+        },
+        {
+          "name": "Education & Training",
+          "scenarios": [
+            "Homework Help Tutor",
+            "Language Learning Partner",
+            "Online Course Advisor",
+            "Exam Preparation Assistant",
+            "Academic Research Helper",
+            "Career Training Advisor"
+          ]
+        },
+        {
+          "name": "Legal Services",
+          "scenarios": [
+            "Legal Consultation Chatbot",
+            "Contract Review Assistant",
+            "Legal Document Generator",
+            "Case Law Research Tool"
+          ]
+        },
+        {
+          "name": "Human Resources",
+          "scenarios": [
+            "Job Recruitment Assistant",
+            "Resume Review & Optimization Bot",
+            "Employee Onboarding Guide",
+            "Performance Review Assistant",
+            "HR Policy Information Bot"
+          ]
+        },
+        {
+          "name": "Children & Parenting",
+          "scenarios": [
+            "Kids' Educational Companion",
+            "Parenting Advice Assistant",
+            "Child Safety Monitoring Bot"
+          ]
+        },
+        {
+          "name": "Emergency & Safety",
+          "scenarios": [
+            "Emergency Response Coordinator",
+            "Crisis Intervention Chatbot",
+            "Disaster Preparedness Advisor",
+            "Home Security Advisor"
+          ]
+        },
+        {
+          "name": "Dietary & Nutrition",
+          "scenarios": [
+            "Dietary & Nutrition Advisor"
+          ]
+        }
+      ]
+    },
+    {
+      "category": "Technology Services",
+      "category_cn": "技术服务",
+      "description": "IT支持、软件、网络、智能家居等技术服务",
+      "scenario_count": 11,
+      "subcategories": [
+        {
+          "name": "IT Support",
+          "scenarios": [
+            "IT Help Desk Assistant",
+            "Software Troubleshooting Guide",
+            "Network Configuration Helper",
+            "Device Setup Assistant",
+            "Code Debugging Helper"
+          ]
+        },
+        {
+          "name": "Smart Home & IoT",
+          "scenarios": [
+            "Smart Home Control Assistant",
+            "Energy Management System"
+          ]
+        },
+        {
+          "name": "Telecommunications",
+          "scenarios": [
+            "Telecom Customer Support",
+            "Mobile Plan Recommendation System"
+          ]
+        },
+        {
+          "name": "Package Tracking",
+          "scenarios": [
+            "Package Tracking Assistant",
+            "Shipping Cost Calculator"
+          ]
+        }
+      ]
+    },
+    {
+      "category": "Consumer Services",
+      "category_cn": "消费服务",
+      "description": "旅游、餐饮、美容、宠物等日常消费服务",
+      "scenario_count": 27,
+      "subcategories": [
+        {
+          "name": "Travel & Hospitality",
+          "scenarios": [
+            "Travel Planning Assistant",
+            "Hotel Booking Agent",
+            "Flight Search & Booking System",
+            "Local Tourism Guide",
+            "Visa & Immigration Advisor"
+          ]
+        },
+        {
+          "name": "Food & Restaurants",
+          "scenarios": [
+            "Restaurant Reservation Bot",
+            "Menu Recommendation System",
+            "Food Delivery Assistant",
+            "Recipe & Cooking Guide"
+          ]
+        },
+        {
+          "name": "Beauty & Personal Care",
+          "scenarios": [
+            "Beauty Consultation Assistant",
+            "Salon Booking System",
+            "Makeup Tutorial Guide"
+          ]
+        },
+        {
+          "name": "Pet Care",
+          "scenarios": [
+            "Pet Health Consultation Bot",
+            "Pet Product Recommendation System",
+            "Pet Training Assistant",
+            "Pet Boarding & Services Finder"
+          ]
+        },
+        {
+          "name": "Automotive",
+          "scenarios": [
+            "Car Buying Consultant",
+            "Auto Maintenance Advisor",
+            "Used Car Evaluation Assistant",
+            "Auto Insurance Comparison Tool"
+          ]
+        },
+        {
+          "name": "Event Planning",
+          "scenarios": [
+            "Event Planning Assistant"
+          ]
+        },
+        {
+          "name": "Dating",
+          "scenarios": [
+            "Dating Profile Optimizer"
+          ]
+        },
+        {
+          "name": "Personal Productivity",
+          "scenarios": [
+            "Calendar & Scheduling Assistant",
+            "Email Management Bot",
+            "Task & To-Do Manager",
+            "Personal Life Coach"
+          ]
+        }
+      ]
+    },
+    {
+      "category": "Content & Media",
+      "category_cn": "内容与媒体",
+      "description": "创作、翻译、新闻、娱乐推荐等媒体相关",
+      "scenario_count": 9,
+      "subcategories": [
+        {
+          "name": "Content Creation",
+          "scenarios": [
+            "Writing & Editing Assistant",
+            "Marketing Copywriter Bot",
+            "Social Media Content Creator",
+            "Video Script Writer"
+          ]
+        },
+        {
+          "name": "News & Translation",
+          "scenarios": [
+            "News Summarization Agent",
+            "Translation Assistant"
+          ]
+        },
+        {
+          "name": "Content Moderation",
+          "scenarios": [
+            "Content Moderation Bot"
+          ]
+        },
+        {
+          "name": "Entertainment Recommendations",
+          "scenarios": [
+            "Movie Recommendation System",
+            "Music Discovery Assistant"
+          ]
+        }
+      ]
+    },
+    {
+      "category": "Public Services",
+      "category_cn": "公共服务",
+      "description": "政府、应急、非营利、环保等公共服务",
+      "scenario_count": 10,
+      "subcategories": [
+        {
+          "name": "Government Services",
+          "scenarios": [
+            "Government Services Navigator",
+            "Public Policy Information Bot",
+            "Civic Engagement Assistant",
+            "Public Complaint Handler"
+          ]
+        },
+        {
+          "name": "Non-profit & Charity",
+          "scenarios": [
+            "Donation Processing Assistant",
+            "Volunteer Coordination System",
+            "Fundraising Campaign Helper"
+          ]
+        },
+        {
+          "name": "Environmental & Sustainability",
+          "scenarios": [
+            "Carbon Footprint Calculator",
+            "Recycling Guidance System",
+            "Sustainability Consulting Assistant"
+          ]
+        }
+      ]
+    },
+    {
+      "category": "Lifestyle & Entertainment",
+      "category_cn": "生活方式",
+      "description": "娱乐、游戏、宗教、文化艺术等生活方式",
+      "scenario_count": 11,
+      "subcategories": [
+        {
+          "name": "Gaming & Esports",
+          "scenarios": [
+            "Gaming Strategy Advisor",
+            "Gaming Community Moderator",
+            "In-Game Trading Assistant",
+            "Esports Coaching Assistant"
+          ]
+        },
+        {
+          "name": "Arts & Culture",
+          "scenarios": [
+            "Museum Virtual Guide",
+            "Cultural Event Finder",
+            "Art Recommendation System"
+          ]
+        },
+        {
+          "name": "Religious & Spiritual",
+          "scenarios": [
+            "Religious Text Study Assistant",
+            "Meditation & Mindfulness Guide",
+            "Spiritual Counseling Chatbot",
+            "Religious Community Organizer"
+          ]
+        },
+        {
+          "name": "Hobbies",
+          "scenarios": [
+            "Hobby & Activity Finder"
+          ]
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_major_categories": 7,
+    "total_scenarios": 130,
+    "distribution": {
+      "Business & Commerce": 33,
+      "Professional Services": 29,
+      "Consumer Services": 27,
+      "Technology Services": 11,
+      "Public Services": 10,
+      "Content & Media": 9,
+      "Lifestyle & Entertainment": 11
+    }
+  }
+}
+

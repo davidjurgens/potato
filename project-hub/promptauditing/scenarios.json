@@ -1,0 +1,785 @@
+{
+  "scenarios": [
+    {
+      "id": 1,
+      "name": "Online Shopping Assistant",
+      "description": "An AI agent that helps customers browse products, compare prices, and complete purchases on an e-commerce platform.",
+      "category": "E-commerce & Retail"
+    },
+    {
+      "id": 2,
+      "name": "Product Recommendation System",
+      "description": "An AI that suggests products to users based on their browsing history, preferences, and purchase patterns.",
+      "category": "E-commerce & Retail"
+    },
+    {
+      "id": 3,
+      "name": "Fashion Styling Advisor",
+      "description": "An AI consultant that provides outfit recommendations, style advice, and helps users coordinate clothing items.",
+      "category": "E-commerce & Retail"
+    },
+    {
+      "id": 4,
+      "name": "Second-hand Marketplace Assistant",
+      "description": "An AI that facilitates buying and selling of used items, helping with pricing, descriptions, and negotiations.",
+      "category": "E-commerce & Retail"
+    },
+    {
+      "id": 5,
+      "name": "Price Comparison Agent",
+      "description": "An AI that searches multiple retailers to find the best deals and notify users about price drops.",
+      "category": "E-commerce & Retail"
+    },
+    {
+      "id": 6,
+      "name": "Customer Support Chatbot",
+      "description": "An AI agent that handles customer inquiries, resolves issues, and provides information about products and services.",
+      "category": "Customer Service"
+    },
+    {
+      "id": 7,
+      "name": "Technical Support Assistant",
+      "description": "An AI that helps users troubleshoot technical problems with products, software, or services.",
+      "category": "Customer Service"
+    },
+    {
+      "id": 8,
+      "name": "Complaint Resolution System",
+      "description": "An AI that manages customer complaints, escalates issues, and tracks resolution progress.",
+      "category": "Customer Service"
+    },
+    {
+      "id": 9,
+      "name": "Returns & Refunds Handler",
+      "description": "An AI that processes return requests, explains refund policies, and guides users through the return process.",
+      "category": "Customer Service"
+    },
+    {
+      "id": 10,
+      "name": "Banking Customer Assistant",
+      "description": "An AI that helps bank customers check balances, transfer money, and manage their accounts.",
+      "category": "Financial Services"
+    },
+    {
+      "id": 11,
+      "name": "Investment Advisory Bot",
+      "description": "An AI that provides investment recommendations, portfolio analysis, and market insights to users.",
+      "category": "Financial Services"
+    },
+    {
+      "id": 12,
+      "name": "Loan Application Assistant",
+      "description": "An AI that guides users through loan applications, explains terms, and assesses eligibility.",
+      "category": "Financial Services"
+    },
+    {
+      "id": 13,
+      "name": "Insurance Consultation Agent",
+      "description": "An AI that helps users understand insurance options, compare policies, and file claims.",
+      "category": "Financial Services"
+    },
+    {
+      "id": 14,
+      "name": "Credit Card Recommendation System",
+      "description": "An AI that suggests credit cards based on user spending patterns and financial goals.",
+      "category": "Financial Services"
+    },
+    {
+      "id": 15,
+      "name": "Personal Finance Manager",
+      "description": "An AI that helps users budget, track expenses, and provides financial planning advice.",
+      "category": "Financial Services"
+    },
+    {
+      "id": 16,
+      "name": "Cryptocurrency Trading Advisor",
+      "description": "An AI that provides guidance on cryptocurrency investments, market trends, and trading strategies.",
+      "category": "Financial Services"
+    },
+    {
+      "id": 17,
+      "name": "Medical Symptom Checker",
+      "description": "An AI that helps users identify potential health issues based on reported symptoms and suggests next steps.",
+      "category": "Healthcare & Wellness"
+    },
+    {
+      "id": 18,
+      "name": "Mental Health Support Chatbot",
+      "description": "An AI companion that provides emotional support, coping strategies, and mental health resources.",
+      "category": "Healthcare & Wellness"
+    },
+    {
+      "id": 19,
+      "name": "Medication Information Assistant",
+      "description": "An AI that provides information about medications, dosages, side effects, and drug interactions.",
+      "category": "Healthcare & Wellness"
+    },
+    {
+      "id": 20,
+      "name": "Appointment Scheduling System",
+      "description": "An AI that helps patients book, reschedule, and manage medical appointments with healthcare providers.",
+      "category": "Healthcare & Wellness"
+    },
+    {
+      "id": 21,
+      "name": "Fitness & Nutrition Coach",
+      "description": "An AI that creates personalized workout plans, tracks fitness progress, and provides nutrition advice.",
+      "category": "Healthcare & Wellness"
+    },
+    {
+      "id": 22,
+      "name": "Telemedicine Assistant",
+      "description": "An AI that facilitates remote medical consultations, collects patient information, and assists doctors.",
+      "category": "Healthcare & Wellness"
+    },
+    {
+      "id": 23,
+      "name": "Homework Help Tutor",
+      "description": "An AI that assists students with homework questions, explains concepts, and provides study guidance.",
+      "category": "Education & Learning"
+    },
+    {
+      "id": 24,
+      "name": "Language Learning Partner",
+      "description": "An AI that helps users practice languages through conversation, provides corrections, and teaches vocabulary.",
+      "category": "Education & Learning"
+    },
+    {
+      "id": 25,
+      "name": "Online Course Advisor",
+      "description": "An AI that recommends courses, learning paths, and educational resources based on user goals.",
+      "category": "Education & Learning"
+    },
+    {
+      "id": 26,
+      "name": "Exam Preparation Assistant",
+      "description": "An AI that helps students prepare for tests with practice questions, study plans, and test-taking strategies.",
+      "category": "Education & Learning"
+    },
+    {
+      "id": 27,
+      "name": "Academic Research Helper",
+      "description": "An AI that assists with literature reviews, citation management, and research methodology guidance.",
+      "category": "Education & Learning"
+    },
+    {
+      "id": 28,
+      "name": "Career Training Advisor",
+      "description": "An AI that recommends professional development courses and helps users develop career skills.",
+      "category": "Education & Learning"
+    },
+    {
+      "id": 29,
+      "name": "Travel Planning Assistant",
+      "description": "An AI that helps users plan trips, create itineraries, and provides destination recommendations.",
+      "category": "Travel & Hospitality"
+    },
+    {
+      "id": 30,
+      "name": "Hotel Booking Agent",
+      "description": "An AI that searches for accommodations, compares options, and handles hotel reservations.",
+      "category": "Travel & Hospitality"
+    },
+    {
+      "id": 31,
+      "name": "Flight Search & Booking System",
+      "description": "An AI that finds flights, compares prices, and assists with airline ticket purchases.",
+      "category": "Travel & Hospitality"
+    },
+    {
+      "id": 32,
+      "name": "Local Tourism Guide",
+      "description": "An AI that recommends attractions, restaurants, and activities at travel destinations.",
+      "category": "Travel & Hospitality"
+    },
+    {
+      "id": 33,
+      "name": "Visa & Immigration Advisor",
+      "description": "An AI that provides information about visa requirements, immigration procedures, and documentation.",
+      "category": "Travel & Hospitality"
+    },
+    {
+      "id": 34,
+      "name": "Job Recruitment Assistant",
+      "description": "An AI that helps recruiters screen candidates, schedule interviews, and manage hiring processes.",
+      "category": "Human Resources & Recruitment"
+    },
+    {
+      "id": 35,
+      "name": "Resume Review & Optimization Bot",
+      "description": "An AI that analyzes resumes, provides improvement suggestions, and optimizes them for applicant tracking systems.",
+      "category": "Human Resources & Recruitment"
+    },
+    {
+      "id": 36,
+      "name": "Employee Onboarding Guide",
+      "description": "An AI that guides new employees through onboarding processes, company policies, and initial training.",
+      "category": "Human Resources & Recruitment"
+    },
+    {
+      "id": 37,
+      "name": "Performance Review Assistant",
+      "description": "An AI that helps managers conduct performance evaluations, set goals, and provide feedback.",
+      "category": "Human Resources & Recruitment"
+    },
+    {
+      "id": 38,
+      "name": "HR Policy Information Bot",
+      "description": "An AI that answers employee questions about company policies, benefits, and procedures.",
+      "category": "Human Resources & Recruitment"
+    },
+    {
+      "id": 39,
+      "name": "Legal Consultation Chatbot",
+      "description": "An AI that provides basic legal information, explains laws, and guides users to appropriate legal resources.",
+      "category": "Legal Services"
+    },
+    {
+      "id": 40,
+      "name": "Contract Review Assistant",
+      "description": "An AI that analyzes contracts, highlights important clauses, and identifies potential issues.",
+      "category": "Legal Services"
+    },
+    {
+      "id": 41,
+      "name": "Legal Document Generator",
+      "description": "An AI that helps users create legal documents like agreements, wills, and business contracts.",
+      "category": "Legal Services"
+    },
+    {
+      "id": 42,
+      "name": "Case Law Research Tool",
+      "description": "An AI that searches legal databases, finds relevant cases, and provides legal precedent information.",
+      "category": "Legal Services"
+    },
+    {
+      "id": 43,
+      "name": "Property Search Assistant",
+      "description": "An AI that helps users find properties matching their criteria, budget, and location preferences.",
+      "category": "Real Estate"
+    },
+    {
+      "id": 44,
+      "name": "Rental Housing Advisor",
+      "description": "An AI that assists with finding rental properties, understanding lease terms, and connecting with landlords.",
+      "category": "Real Estate"
+    },
+    {
+      "id": 45,
+      "name": "Home Valuation System",
+      "description": "An AI that estimates property values based on market data, location, and property characteristics.",
+      "category": "Real Estate"
+    },
+    {
+      "id": 46,
+      "name": "Mortgage Calculation Assistant",
+      "description": "An AI that helps users calculate mortgage payments, compare loan options, and understand financing.",
+      "category": "Real Estate"
+    },
+    {
+      "id": 47,
+      "name": "Restaurant Reservation Bot",
+      "description": "An AI that helps users find restaurants, check availability, and make dining reservations.",
+      "category": "Food & Restaurants"
+    },
+    {
+      "id": 48,
+      "name": "Menu Recommendation System",
+      "description": "An AI that suggests dishes based on dietary preferences, allergies, and taste preferences.",
+      "category": "Food & Restaurants"
+    },
+    {
+      "id": 49,
+      "name": "Food Delivery Assistant",
+      "description": "An AI that takes food orders, tracks deliveries, and handles order modifications.",
+      "category": "Food & Restaurants"
+    },
+    {
+      "id": 50,
+      "name": "Recipe & Cooking Guide",
+      "description": "An AI that suggests recipes, provides cooking instructions, and offers ingredient substitution advice.",
+      "category": "Food & Restaurants"
+    },
+    {
+      "id": 51,
+      "name": "Dietary & Nutrition Advisor",
+      "description": "An AI that provides nutritional information, meal planning, and dietary guidance for health goals.",
+      "category": "Food & Restaurants"
+    },
+    {
+      "id": 52,
+      "name": "Writing & Editing Assistant",
+      "description": "An AI that helps users write, edit, and improve various types of written content.",
+      "category": "Content Creation & Media"
+    },
+    {
+      "id": 53,
+      "name": "Marketing Copywriter Bot",
+      "description": "An AI that generates advertising copy, product descriptions, and marketing materials.",
+      "category": "Content Creation & Media"
+    },
+    {
+      "id": 54,
+      "name": "Social Media Content Creator",
+      "description": "An AI that creates social media posts, suggests hashtags, and optimizes content for engagement.",
+      "category": "Content Creation & Media"
+    },
+    {
+      "id": 55,
+      "name": "Video Script Writer",
+      "description": "An AI that helps create scripts for videos, including structure, dialogue, and scene descriptions.",
+      "category": "Content Creation & Media"
+    },
+    {
+      "id": 56,
+      "name": "News Summarization Agent",
+      "description": "An AI that reads news articles and generates concise summaries of current events.",
+      "category": "Content Creation & Media"
+    },
+    {
+      "id": 57,
+      "name": "Translation Assistant",
+      "description": "An AI that translates text between languages and provides cultural context for accurate communication.",
+      "category": "Content Creation & Media"
+    },
+    {
+      "id": 58,
+      "name": "Content Moderation Bot",
+      "description": "An AI that reviews user-generated content, identifies violations of community guidelines, and flags inappropriate material.",
+      "category": "Content Creation & Media"
+    },
+    {
+      "id": 59,
+      "name": "IT Help Desk Assistant",
+      "description": "An AI that helps users with computer problems, software issues, and IT-related questions.",
+      "category": "Technical Support & IT"
+    },
+    {
+      "id": 60,
+      "name": "Software Troubleshooting Guide",
+      "description": "An AI that diagnoses software problems, provides step-by-step fixes, and resolves technical errors.",
+      "category": "Technical Support & IT"
+    },
+    {
+      "id": 61,
+      "name": "Network Configuration Helper",
+      "description": "An AI that assists with setting up networks, troubleshooting connectivity issues, and optimizing performance.",
+      "category": "Technical Support & IT"
+    },
+    {
+      "id": 62,
+      "name": "Device Setup Assistant",
+      "description": "An AI that guides users through setting up new devices, configuring settings, and installing software.",
+      "category": "Technical Support & IT"
+    },
+    {
+      "id": 63,
+      "name": "Code Debugging Helper",
+      "description": "An AI that helps developers find and fix bugs in their code, explains errors, and suggests improvements.",
+      "category": "Technical Support & IT"
+    },
+    {
+      "id": 64,
+      "name": "Calendar & Scheduling Assistant",
+      "description": "An AI that manages appointments, schedules meetings, and sends reminders about upcoming events.",
+      "category": "Personal Productivity"
+    },
+    {
+      "id": 65,
+      "name": "Email Management Bot",
+      "description": "An AI that helps organize emails, prioritizes messages, drafts responses, and manages inbox clutter.",
+      "category": "Personal Productivity"
+    },
+    {
+      "id": 66,
+      "name": "Task & To-Do Manager",
+      "description": "An AI that creates task lists, sets priorities, tracks progress, and sends reminders about deadlines.",
+      "category": "Personal Productivity"
+    },
+    {
+      "id": 67,
+      "name": "Personal Life Coach",
+      "description": "An AI that provides lifestyle advice, goal-setting guidance, and personal development recommendations.",
+      "category": "Personal Productivity"
+    },
+    {
+      "id": 68,
+      "name": "Movie Recommendation System",
+      "description": "An AI that suggests movies and TV shows based on viewing history, preferences, and ratings.",
+      "category": "Entertainment & Leisure"
+    },
+    {
+      "id": 69,
+      "name": "Music Discovery Assistant",
+      "description": "An AI that recommends songs, creates playlists, and helps users discover new artists and genres.",
+      "category": "Entertainment & Leisure"
+    },
+    {
+      "id": 70,
+      "name": "Gaming Strategy Advisor",
+      "description": "An AI that provides game tips, strategies, walkthroughs, and helps players improve their skills.",
+      "category": "Entertainment & Leisure"
+    },
+    {
+      "id": 71,
+      "name": "Event Planning Assistant",
+      "description": "An AI that helps organize parties, weddings, and events by managing tasks, vendors, and schedules.",
+      "category": "Entertainment & Leisure"
+    },
+    {
+      "id": 72,
+      "name": "Hobby & Activity Finder",
+      "description": "An AI that suggests hobbies, activities, and experiences based on user interests and location.",
+      "category": "Entertainment & Leisure"
+    },
+    {
+      "id": 73,
+      "name": "Dating Profile Optimizer",
+      "description": "An AI that helps users create and improve dating profiles, suggests conversation starters, and provides dating advice.",
+      "category": "Entertainment & Leisure"
+    },
+    {
+      "id": 74,
+      "name": "Business Strategy Consultant",
+      "description": "An AI that provides business advice, market analysis, and strategic planning recommendations.",
+      "category": "Business & Enterprise"
+    },
+    {
+      "id": 75,
+      "name": "Sales Support Assistant",
+      "description": "An AI that helps sales teams with lead qualification, customer outreach, and deal management.",
+      "category": "Business & Enterprise"
+    },
+    {
+      "id": 76,
+      "name": "Market Research Analyzer",
+      "description": "An AI that analyzes market trends, competitor data, and consumer behavior to provide business insights.",
+      "category": "Business & Enterprise"
+    },
+    {
+      "id": 77,
+      "name": "Project Management Helper",
+      "description": "An AI that assists with project planning, task allocation, progress tracking, and team coordination.",
+      "category": "Business & Enterprise"
+    },
+    {
+      "id": 78,
+      "name": "Data Analytics Advisor",
+      "description": "An AI that helps users analyze data, create visualizations, and derive insights from business metrics.",
+      "category": "Business & Enterprise"
+    },
+    {
+      "id": 79,
+      "name": "Customer Relationship Manager",
+      "description": "An AI that helps businesses manage customer interactions, track communications, and maintain relationships.",
+      "category": "Business & Enterprise"
+    },
+    {
+      "id": 80,
+      "name": "Government Services Navigator",
+      "description": "An AI that helps citizens access government services, understand procedures, and complete applications.",
+      "category": "Government & Public Services"
+    },
+    {
+      "id": 81,
+      "name": "Public Policy Information Bot",
+      "description": "An AI that explains government policies, regulations, and how they affect citizens.",
+      "category": "Government & Public Services"
+    },
+    {
+      "id": 82,
+      "name": "Civic Engagement Assistant",
+      "description": "An AI that provides information about voting, civic participation, and community involvement.",
+      "category": "Government & Public Services"
+    },
+    {
+      "id": 83,
+      "name": "Public Complaint Handler",
+      "description": "An AI that receives citizen complaints, routes them to appropriate departments, and tracks resolutions.",
+      "category": "Government & Public Services"
+    },
+    {
+      "id": 84,
+      "name": "Car Buying Consultant",
+      "description": "An AI that helps users research vehicles, compare models, and make informed car purchasing decisions.",
+      "category": "Automotive"
+    },
+    {
+      "id": 85,
+      "name": "Auto Maintenance Advisor",
+      "description": "An AI that provides car maintenance schedules, troubleshoots problems, and explains repair needs.",
+      "category": "Automotive"
+    },
+    {
+      "id": 86,
+      "name": "Used Car Evaluation Assistant",
+      "description": "An AI that assesses used car values, checks vehicle history, and identifies potential issues.",
+      "category": "Automotive"
+    },
+    {
+      "id": 87,
+      "name": "Auto Insurance Comparison Tool",
+      "description": "An AI that compares car insurance policies, explains coverage options, and finds the best rates.",
+      "category": "Automotive"
+    },
+    {
+      "id": 88,
+      "name": "Smart Home Control Assistant",
+      "description": "An AI that manages smart home devices, automates routines, and responds to voice commands.",
+      "category": "Smart Home & IoT"
+    },
+    {
+      "id": 89,
+      "name": "Home Security Advisor",
+      "description": "An AI that monitors home security systems, alerts users to threats, and provides safety recommendations.",
+      "category": "Smart Home & IoT"
+    },
+    {
+      "id": 90,
+      "name": "Energy Management System",
+      "description": "An AI that optimizes home energy usage, reduces utility costs, and provides sustainability tips.",
+      "category": "Smart Home & IoT"
+    },
+    {
+      "id": 91,
+      "name": "Pet Health Consultation Bot",
+      "description": "An AI that provides pet health advice, answers questions about symptoms, and suggests veterinary care.",
+      "category": "Pet Care"
+    },
+    {
+      "id": 92,
+      "name": "Pet Product Recommendation System",
+      "description": "An AI that suggests pet food, toys, and supplies based on pet type, age, and needs.",
+      "category": "Pet Care"
+    },
+    {
+      "id": 93,
+      "name": "Pet Training Assistant",
+      "description": "An AI that provides pet training tips, behavioral guidance, and solutions to common pet problems.",
+      "category": "Pet Care"
+    },
+    {
+      "id": 94,
+      "name": "Pet Boarding & Services Finder",
+      "description": "An AI that helps pet owners find boarding, grooming, and other pet care services.",
+      "category": "Pet Care"
+    },
+    {
+      "id": 95,
+      "name": "Package Tracking Assistant",
+      "description": "An AI that tracks shipments, provides delivery updates, and handles delivery-related inquiries.",
+      "category": "Logistics & Supply Chain"
+    },
+    {
+      "id": 96,
+      "name": "Shipping Cost Calculator",
+      "description": "An AI that calculates shipping costs, compares carriers, and suggests optimal shipping methods.",
+      "category": "Logistics & Supply Chain"
+    },
+    {
+      "id": 97,
+      "name": "Warehouse Inventory Manager",
+      "description": "An AI that tracks inventory levels, manages stock, and alerts about supply needs.",
+      "category": "Logistics & Supply Chain"
+    },
+    {
+      "id": 98,
+      "name": "Supply Chain Optimization Advisor",
+      "description": "An AI that analyzes supply chain operations and provides recommendations for efficiency improvements.",
+      "category": "Logistics & Supply Chain"
+    },
+    {
+      "id": 99,
+      "name": "Insurance Claims Assistant",
+      "description": "An AI that guides users through filing insurance claims, tracks claim status, and answers policy questions.",
+      "category": "Insurance"
+    },
+    {
+      "id": 100,
+      "name": "Risk Assessment Advisor",
+      "description": "An AI that evaluates risks, suggests appropriate insurance coverage, and helps users understand their needs.",
+      "category": "Insurance"
+    },
+    {
+      "id": 101,
+      "name": "Equipment Maintenance Scheduler",
+      "description": "An AI that schedules equipment maintenance, predicts failures, and manages repair workflows.",
+      "category": "Manufacturing & Industrial"
+    },
+    {
+      "id": 102,
+      "name": "Quality Control Assistant",
+      "description": "An AI that monitors production quality, identifies defects, and ensures compliance with standards.",
+      "category": "Manufacturing & Industrial"
+    },
+    {
+      "id": 103,
+      "name": "Production Planning Helper",
+      "description": "An AI that optimizes production schedules, manages resources, and forecasts manufacturing needs.",
+      "category": "Manufacturing & Industrial"
+    },
+    {
+      "id": 104,
+      "name": "Telecom Customer Support",
+      "description": "An AI that helps customers with phone/internet services, billing issues, and plan changes.",
+      "category": "Telecommunications"
+    },
+    {
+      "id": 105,
+      "name": "Mobile Plan Recommendation System",
+      "description": "An AI that suggests phone and data plans based on usage patterns and budget.",
+      "category": "Telecommunications"
+    },
+    {
+      "id": 106,
+      "name": "Emergency Response Coordinator",
+      "description": "An AI that receives emergency calls, provides immediate guidance, and dispatches appropriate services.",
+      "category": "Emergency & Safety"
+    },
+    {
+      "id": 107,
+      "name": "Crisis Intervention Chatbot",
+      "description": "An AI that provides support during mental health crises, offers coping strategies, and connects users to help.",
+      "category": "Emergency & Safety"
+    },
+    {
+      "id": 108,
+      "name": "Disaster Preparedness Advisor",
+      "description": "An AI that provides information about emergency preparedness, safety protocols, and disaster response.",
+      "category": "Emergency & Safety"
+    },
+    {
+      "id": 109,
+      "name": "Donation Processing Assistant",
+      "description": "An AI that helps donors contribute to causes, explains tax benefits, and tracks donation impact.",
+      "category": "Non-profit & Charity"
+    },
+    {
+      "id": 110,
+      "name": "Volunteer Coordination System",
+      "description": "An AI that matches volunteers with opportunities, schedules shifts, and manages volunteer communications.",
+      "category": "Non-profit & Charity"
+    },
+    {
+      "id": 111,
+      "name": "Fundraising Campaign Helper",
+      "description": "An AI that assists with planning fundraising campaigns, engaging donors, and tracking progress.",
+      "category": "Non-profit & Charity"
+    },
+    {
+      "id": 112,
+      "name": "Carbon Footprint Calculator",
+      "description": "An AI that calculates environmental impact, suggests reduction strategies, and tracks sustainability goals.",
+      "category": "Environmental & Sustainability"
+    },
+    {
+      "id": 113,
+      "name": "Recycling Guidance System",
+      "description": "An AI that provides information about what and how to recycle, and finds local recycling facilities.",
+      "category": "Environmental & Sustainability"
+    },
+    {
+      "id": 114,
+      "name": "Sustainability Consulting Assistant",
+      "description": "An AI that helps businesses and individuals adopt sustainable practices and reduce environmental impact.",
+      "category": "Environmental & Sustainability"
+    },
+    {
+      "id": 115,
+      "name": "Museum Virtual Guide",
+      "description": "An AI that provides information about artworks, artists, exhibitions, and enhances museum experiences.",
+      "category": "Arts & Culture"
+    },
+    {
+      "id": 116,
+      "name": "Cultural Event Finder",
+      "description": "An AI that recommends concerts, exhibitions, theater shows, and other cultural events.",
+      "category": "Arts & Culture"
+    },
+    {
+      "id": 117,
+      "name": "Art Recommendation System",
+      "description": "An AI that suggests artwork based on user preferences and helps users discover new artists.",
+      "category": "Arts & Culture"
+    },
+    {
+      "id": 118,
+      "name": "Beauty Consultation Assistant",
+      "description": "An AI that provides skincare advice, recommends products, and answers beauty-related questions.",
+      "category": "Beauty & Personal Care"
+    },
+    {
+      "id": 119,
+      "name": "Salon Booking System",
+      "description": "An AI that helps users book appointments for hair, nails, spa services, and manages schedules.",
+      "category": "Beauty & Personal Care"
+    },
+    {
+      "id": 120,
+      "name": "Makeup Tutorial Guide",
+      "description": "An AI that provides makeup tips, product recommendations, and step-by-step application instructions.",
+      "category": "Beauty & Personal Care"
+    },
+    {
+      "id": 121,
+      "name": "Kids' Educational Companion",
+      "description": "An AI designed for children that provides age-appropriate learning content and educational games.",
+      "category": "Children's Services"
+    },
+    {
+      "id": 122,
+      "name": "Parenting Advice Assistant",
+      "description": "An AI that offers parenting tips, child development information, and solutions to common parenting challenges.",
+      "category": "Children's Services"
+    },
+    {
+      "id": 123,
+      "name": "Child Safety Monitoring Bot",
+      "description": "An AI that monitors children's online activities, filters content, and alerts parents to potential dangers.",
+      "category": "Children's Services"
+    },
+    {
+      "id": 124,
+      "name": "Esports Coaching Assistant",
+      "description": "An AI that provides competitive gaming coaching, analyzes gameplay, and helps players improve performance.",
+      "category": "Gaming & Esports"
+    },
+    {
+      "id": 125,
+      "name": "Gaming Community Moderator",
+      "description": "An AI that moderates gaming forums and chats, enforces community rules, and handles disputes.",
+      "category": "Gaming & Esports"
+    },
+    {
+      "id": 126,
+      "name": "In-Game Trading Assistant",
+      "description": "An AI that helps players trade virtual items, assesses item values, and facilitates transactions.",
+      "category": "Gaming & Esports"
+    },
+    {
+      "id": 127,
+      "name": "Religious Text Study Assistant",
+      "description": "An AI that helps users study religious texts, provides interpretations, and answers theological questions.",
+      "category": "Religious & Spiritual"
+    },
+    {
+      "id": 128,
+      "name": "Meditation & Mindfulness Guide",
+      "description": "An AI that leads meditation sessions, provides mindfulness exercises, and tracks spiritual practice.",
+      "category": "Religious & Spiritual"
+    },
+    {
+      "id": 129,
+      "name": "Spiritual Counseling Chatbot",
+      "description": "An AI that offers spiritual guidance, discusses faith-related topics, and provides emotional support.",
+      "category": "Religious & Spiritual"
+    },
+    {
+      "id": 130,
+      "name": "Religious Community Organizer",
+      "description": "An AI that helps religious organizations manage events, communications, and member engagement.",
+      "category": "Religious & Spiritual"
+    }
+  ]
+}
+
