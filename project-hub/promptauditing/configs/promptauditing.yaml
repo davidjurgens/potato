@@ -81,7 +81,7 @@
         "name": "malicious_prompt",
         "description": "",
         "required": True,
-        "min_length": 20,
+        "min_length": 50,
         "textarea": {
             "on": True,
             "rows": 6,
