@@ -169,7 +169,7 @@ body {
     });
 })();
 
-// Validation: minimum 50 characters
+// Validation: minimum 200 characters
 (function() {
     const originalValidate = window.validate_answers;
     
@@ -181,8 +181,8 @@ body {
         const textarea = document.querySelector('textarea[name*="malicious_prompt"]');
         if (textarea) {
             const content = textarea.value.trim();
-            if (content.length < 50) {
-                alert('Please write at least 50 characters. Current: ' + content.length);
+            if (content.length < 200) {
+                alert('Please write at least 200 characters. Current: ' + content.length);
                 return false;
             }
         }

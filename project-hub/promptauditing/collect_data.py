@@ -4,6 +4,7 @@
 """
 import json
 import csv
+import shutil
 from pathlib import Path
 from datetime import datetime
 
@@ -14,6 +15,47 @@ DATA_FILE = Path("data_files/malicious_prompts.csv")
 OUTPUT_DIR = Path("user_data")
 OUTPUT_CSV = OUTPUT_DIR / f"collected_malicious_prompts_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
 OUTPUT_JSON = OUTPUT_DIR / f"collected_malicious_prompts_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+
+def clean_incomplete_sessions():
+    """清理未完成的用户会话（静默模式）"""
+    
+    # 读取已完成标注的用户ID
+    completed_user_ids = set()
+    
+    if INPUT_FILE.exists():
+        with open(INPUT_FILE, 'r', encoding='utf-8') as f:
+            for line in f:
+                if line.strip():
+                    try:
+                        data = json.loads(line)
+                        completed_user_ids.add(data.get('user_id'))
+                    except json.JSONDecodeError:
+                        pass
+    
+    # 扫描所有用户文件夹
+    incomplete_folders = []
+    for item in ANNOTATION_DIR.iterdir():
+        if item.is_dir():
+            folder_name = item.name
+            # 跳过归档文件夹和特殊文件夹
+            if folder_name not in ['archived_previous_data', '__pycache__']:
+                if folder_name not in completed_user_ids:
+                    incomplete_folders.append(folder_name)
+    
+    # 删除未完成的文件夹
+    deleted_count = 0
+    if incomplete_folders:
+        print(f"🧹 清理未完成的会话: 发现 {len(incomplete_folders)} 个...")
+        for folder_name in incomplete_folders:
+            folder_path = ANNOTATION_DIR / folder_name
+            try:
+                shutil.rmtree(folder_path)
+                deleted_count += 1
+            except Exception:
+                pass
+        print(f"✅ 已删除 {deleted_count} 个未完成的会话")
+    
+    return deleted_count
 
 def load_reference_data():
     """加载malicious_prompts.csv作为参考数据，获取scenario和standard信息"""
@@ -45,6 +87,9 @@ def collect_data():
     # 创建输出目录
     OUTPUT_DIR.mkdir(exist_ok=True)
     print(f"📁 输出目录: {OUTPUT_DIR}")
+    
+    # 清理未完成的会话
+    clean_incomplete_sessions()
     
     if not INPUT_FILE.exists():
         print(f"❌ 文件不存在: {INPUT_FILE}")
