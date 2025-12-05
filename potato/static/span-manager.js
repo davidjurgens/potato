@@ -37,7 +37,7 @@ class SpanManager {
         console.log('[DEEPDEBUG] SpanManager constructor called');
 
         // Core state
-        this.annotations = { spans: [] };
+        this.annotations = { spans: [], aispans: {} };
         this.colors = {};
         this.selectedLabel = null;
         this.currentSchema = null; // Track the current schema
@@ -302,7 +302,6 @@ class SpanManager {
         window.addEventListener('resize', () => {
             this.renderSpans();
         });
-
     }
 
     /**
@@ -372,7 +371,8 @@ class SpanManager {
             if (!response.ok) {
                 if (response.status === 404) {
                     // No annotations yet
-                    this.annotations = { spans: [] };
+                    this.annotations.spans = [];
+
                     console.log('SpanManager: No annotations found (404), set to empty array');
                     this.renderSpans();
                     return Promise.resolve();
@@ -390,16 +390,22 @@ class SpanManager {
                 for (const [spanId, spanInfo] of Object.entries(data.spans)) {
                     spansArray.push({
                         id: spanId,
-                        label: spanInfo.name,  // or spanInfo.label, depending on your backend
+                        label: spanInfo.name,
                         start: spanInfo.start,
                         end: spanInfo.end,
                         text: spanInfo.value,
                         schema: spanInfo.schema
                     });
+
                 }
-                this.annotations = { spans: spansArray };
+                this.annotations = {
+                    spans: spansArray,
+                    aispans: existingAiSpans,
+                };
             } else {
+                const aispans = this.annotations.aispans;
                 this.annotations = data;
+                this.annotations.aispans = aispans;
             }
 
             console.log('SpanManager: Annotations loaded from server:', {
@@ -421,10 +427,25 @@ class SpanManager {
             return Promise.resolve(this.annotations);
         } catch (error) {
             console.error('SpanManager: Error loading annotations:', error);
-            this.annotations = { spans: [] };
+            this.annotations.spans = [];
+
             this.renderSpans();
             return Promise.reject(error);
         }
+    }
+
+    insertAiSpans(spans, annotationId) {
+        if (!("aispans" in this.annotations)) {
+            console.log(21093213)
+            this.annotations.aispans = {};
+        }
+        this.annotations.aispans[annotationId] = spans;
+
+        console.log("foiwej3912re9132r9fj139j319e2")
+        console.log("spans:", spans);
+        console.log("annotationId:", annotationId);
+        this.annotations.aispans;
+        this.renderSpans();
     }
 
     /**
@@ -472,6 +493,8 @@ class SpanManager {
 
         // Get spans from the correct property
         const spans = this.getSpans();
+        const aiSpans = this.getAiSpans();
+        console.log("r23r23rkpo23tr23t23rt23r23", aiSpans);
         console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - getSpans() returned:', spans);
         console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - spans length:', spans?.length || 0);
         console.log('SpanManager: Starting interval-based renderSpans with', spans?.length || 0, 'spans');
@@ -506,6 +529,7 @@ class SpanManager {
             // Method 2: Force a reflow to ensure DOM is updated
             spanOverlays.offsetHeight;
 
+
             // Method 3: Double-check that all overlays are gone
             const remainingOverlays = spanOverlays.querySelectorAll('.span-overlay');
             if (remainingOverlays.length > 0) {
@@ -526,7 +550,8 @@ class SpanManager {
         const overlaysAfterClear = spanOverlays.children.length;
         console.log(`🔍 [DEBUG] SpanManager._renderSpansInternal() - After clearing overlays: ${overlaysAfterClear} overlays`);
 
-        if (!spans || spans.length === 0) {
+        console.log("0000000")
+        if ((!spans || spans.length === 0) && (!aiSpans || Object.keys(aiSpans).length === 0)) {
             // Just display the original text in text content layer
             const originalText = window.currentInstance?.text || '';
             textContent.textContent = originalText;
@@ -534,6 +559,8 @@ class SpanManager {
             console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - EXIT POINT (no spans)');
             return;
         }
+        console.log("1110000000")
+
 
         // Get the original text
         const text = window.currentInstance?.text || '';
@@ -563,6 +590,22 @@ class SpanManager {
                 heightMultiplier: data.heightMultiplier
             });
         });
+
+        console.log("f3e2f2f23f3r23r23r3411141", aiSpans);
+        if (aiSpans && Object.keys(aiSpans).length > 0) {
+            console.log("223432424233434343434");
+            for (const annotationId in aiSpans) {
+                const spans = aiSpans[annotationId];
+                if (Array.isArray(spans) && spans.length > 0) {
+                    const sortedAISpans = [...spans].sort((a, b) => a.start - b.start);
+                    sortedAISpans.forEach((span, index) => {
+                        this.renderAISpanOverlay(span, index, textContent, spanOverlays, textContainer);
+                    });
+                }
+            }
+        }
+        console.log(423143215);
+
 
         // Render each span as an overlay
         console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - About to render', sortedSpans.length, 'spans');
@@ -648,10 +691,137 @@ class SpanManager {
         return spanElement;
     }
 
+    renderAISpanOverlay(span, layerIndex, textContent, spanOverlays, textContainer) {
+        console.log('🔍 [DEBUG] Rendering AI span overlay:', span);
+
+        const textNode = textContent.firstChild;
+        if (!textNode || textNode.nodeType !== Node.TEXT_NODE) {
+            console.error('SpanManager: No text node found for AI span');
+            return;
+        }
+
+        const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
+        if (isFirefox) {
+            textContent.offsetHeight;
+        }
+
+        const rects = getCharRangeBoundingRect(textContent, span.start + 21, span.end + 21);
+        if (!rects || rects.length === 0) {
+            console.warn('SpanManager: Could not get bounding rect for AI span', span);
+            return;
+        }
+
+        const containerRect = textContainer.getBoundingClientRect();
+
+        // Create shared tooltip if reasoning exists
+        let sharedTooltip = null;
+        if (span.reasoning) {
+            sharedTooltip = document.createElement('div');
+            sharedTooltip.className = 'span-hover-tip';
+            sharedTooltip.textContent = span.reasoning;
+            sharedTooltip.style.position = 'fixed';
+            sharedTooltip.style.display = 'none';
+            sharedTooltip.style.maxWidth = '320px';
+            sharedTooltip.style.background = 'rgba(0, 0, 0, 0.92)';
+            sharedTooltip.style.color = '#fff';
+            sharedTooltip.style.padding = '6px 8px';
+            sharedTooltip.style.borderRadius = '4px';
+            sharedTooltip.style.fontSize = '12px';
+            sharedTooltip.style.lineHeight = '1.35';
+            sharedTooltip.style.zIndex = '2000';
+            sharedTooltip.style.pointerEvents = 'none';
+            sharedTooltip.style.whiteSpace = 'normal';
+            sharedTooltip.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.25)';
+            document.body.appendChild(sharedTooltip);
+        }
+
+        const createOverlay = () => {
+            rects.forEach((rect, rectIndex) => {
+                const overlay = document.createElement('div');
+                overlay.className = 'span-overlay ai-span-highlight';
+                overlay.dataset.spanId = span.id;
+                overlay.dataset.start = span.start;
+                overlay.dataset.end = span.end;
+                overlay.dataset.label = span.label;
+                overlay.dataset.spanType = 'ai';
+                overlay.style.position = 'absolute';
+                overlay.style.pointerEvents = 'none';
+                overlay.style.cursor = sharedTooltip ? 'pointer' : 'default';
+
+                const left = rect.left - containerRect.left;
+                const top = rect.top - containerRect.top;
+                const width = Math.max(1, rect.right - rect.left);
+                const height = Math.max(1, rect.bottom - rect.top);
+
+                overlay.style.left = `${left}px`;
+                overlay.style.top = `${top}px`;
+                overlay.style.width = `${width}px`;
+                overlay.style.height = `${height}px`;
+                overlay.style.zIndex = '5'; // Lower z-index than user spans
+
+                // Apply border style instead of background
+                const baseColor = this.colors[span.schema]?.[span.label] || '#ffff03';
+                overlay.style.border = `2px solid ${baseColor}`;
+                overlay.style.backgroundColor = 'transparent';
+                overlay.style.boxSizing = 'border-box';
+
+                // Add label on first rect
+                if (rectIndex === 0) {
+                    const label = document.createElement('span');
+                    label.className = 'span-label ai-span-label';
+                    label.textContent = `AI: ${span.label}`;
+                    label.style.position = 'absolute';
+                    label.style.top = '-25px';
+                    label.style.left = '0';
+                    label.style.fontSize = '11px';
+                    label.style.fontWeight = 'bold';
+                    label.style.backgroundColor = 'rgba(100,100,255,0.9)'; // Blue tint for AI
+                    label.style.color = 'white';
+                    label.style.padding = '3px 6px';
+                    label.style.borderRadius = '4px';
+                    label.style.whiteSpace = 'nowrap';
+                    label.style.pointerEvents = 'auto';
+                    label.style.zIndex = '1000';
+                    overlay.appendChild(label);
+                }
+
+                // Add tooltip interaction if reasoning exists
+                if (sharedTooltip) {
+                    overlay.addEventListener('mouseenter', (e) => {
+                        sharedTooltip.style.display = 'block';
+                        sharedTooltip.style.left = (e.clientX + 15) + 'px';
+                        sharedTooltip.style.top = (e.clientY + 15) + 'px';
+                    });
+
+                    overlay.addEventListener('mousemove', (e) => {
+                        sharedTooltip.style.left = (e.clientX + 15) + 'px';
+                        sharedTooltip.style.top = (e.clientY + 15) + 'px';
+                    });
+
+                    overlay.addEventListener('mouseleave', () => {
+                        sharedTooltip.style.display = 'none';
+                    });
+                }
+
+                spanOverlays.appendChild(overlay);
+            });
+        };
+
+        if (isFirefox) {
+            setTimeout(createOverlay, 0);
+        } else {
+            createOverlay();
+        }
+    }
+
+
     /**
      * Render a span as an overlay using interval-based positioning
      */
     renderSpanOverlay(span, layerIndex, textContent, spanOverlays, overlapData) {
+        console.log('[DEBUG][DEBUG][DEBUG][DEBUG][DEBUG]', span, layerIndex, textContent, spanOverlays, overlapData);
+
+
         console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - ENTRY POINT');
         console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - span:', span);
         console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - layerIndex:', layerIndex);
@@ -1160,7 +1330,8 @@ class SpanManager {
                 // OPTIMISTIC UPDATE: Add the new span to local state immediately
                 // This ensures the visual overlay appears right away
                 if (!this.annotations) {
-                    this.annotations = { spans: [] };
+                    this.annotations.spans = [];
+
                 }
 
                 // Create a span object that matches the expected format
@@ -1271,10 +1442,10 @@ class SpanManager {
                 console.log(`🔍 [DEBUG] SpanManager.deleteSpan() - After deletion and reload: ${overlaysAfterDelete} overlays`);
 
                 // --- FIX: If no spans remain, force overlays to be cleared ---
-                if (this.getSpans().length === 0 && spanOverlays) {
-                    spanOverlays.innerHTML = '';
-                    console.log('🔍 [FIX] No spans remain after deletion, overlays forcibly cleared.');
-                }
+                // if (this.getSpans().length === 0 && spanOverlays) {
+                //     spanOverlays.innerHTML = '';
+                //     console.log('🔍 [FIX] No spans remain after deletion, overlays forcibly cleared.');
+                // }
             } else {
                 const error = await response.json();
                 this.showStatus(`Error: ${error.error || 'Failed to delete annotation'}`, 'error');
@@ -1334,11 +1505,48 @@ class SpanManager {
         return this.annotations.spans;
     }
 
+    inAiSpans(annotationId) {
+        if (!this.annotations || !this.annotations.aispans) {
+            return false;
+        }
+        return annotationId in this.annotations.aispans;
+    }
+
+    deleteOneAiSpan(annotationId) {
+        if (!this.annotations || !this.annotations.aispans) {
+            return;
+        }
+        console.log("1231221312412519021i401ig2io", this.annotations.aispans);
+
+        delete this.annotations.aispans[annotationId];
+        console.log("fiojewiofj23pf23", this.annotations.aispans);
+        this.renderSpans()
+    }
+
+    clearAiSpans() {
+        if (!this.annotations || !this.annotations.aispans) {
+            return;
+        }
+        this.annotations.aispans = {};
+        this.renderSpans();
+    }
+
+    /**
+    * Get spans in a format suitable for testing and API consistency
+    */
+    getAiSpans() {
+        if (!this.annotations || !this.annotations.aispans) {
+            return {};
+        }
+        return this.annotations.aispans;
+    }
+
     /**
      * Clear all annotations (for testing)
      */
     clearAnnotations() {
-        this.annotations = { spans: [] };
+        this.annotations.spans = [];
+
         this.renderSpans();
     }
 
@@ -1667,7 +1875,8 @@ class SpanManager {
         }
 
         // Reset internal state
-        this.annotations = { spans: [] };
+        this.annotations.spans = [];
+
         // Don't clear currentSchema - it should persist across state clearing
         // this.currentSchema = null;
         this.selectedLabel = null;
@@ -1734,7 +1943,8 @@ class SpanManager {
                 spanOverlays.removeChild(spanOverlays.firstChild);
             }
         }
-        this.annotations = { spans: [] };
+        this.annotations.spans = [];
+
         console.log('[DEFENSIVE] Cleared all span overlays and reset annotations');
     }
 }

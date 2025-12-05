@@ -146,7 +146,7 @@ body {
 
 .ai-assistant-containter:hover {
   color: var(--primary);
-   cursor: pointer;
+  cursor: pointer;
 }
 
 .tooltip {
@@ -1719,8 +1719,6 @@ fieldset[schema] {
   transform: translateX(-50%);
 }
 
-
-
 .slider-tooltip::after {
   content: "";
   position: absolute;
@@ -1730,7 +1728,6 @@ fieldset[schema] {
   border: 4px solid transparent;
   border-top-color: rgba(0, 0, 0, 0.8);
 }
-
 
 .custom-slider-thumb.dragging .slider-tooltip {
   opacity: 1;

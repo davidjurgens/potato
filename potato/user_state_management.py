@@ -1116,6 +1116,8 @@ class UserState:
     def reset_training_state(self) -> None:
         """Reset the training state."""
         self.training_state = TrainingState()
+    
+
 
 
 class MysqlUserState(UserState):
@@ -1199,6 +1201,41 @@ class InMemoryUserState(UserState):
 
         # New: Training state tracking
         self.training_state = TrainingState()
+
+        self.used_ai = False
+        self.ai_assistant_used = {}
+        self.total_ai = 0
+    
+    def set_used_ai(self, used_ai: bool):
+        self.used_ai = used_ai
+    
+    def add_ai_assistant(self, ai_assistant: str, page_num: int, annotation_num: int):
+        self.ai_assistant_used.setdefault(page_num, {
+            "annotations": {},
+            "total_ai": 0  
+        })
+        
+        self.ai_assistant_used[page_num]["annotations"].setdefault(annotation_num, {
+            "ai_assistant": {}
+        })
+        
+        self.ai_assistant_used[page_num]["annotations"][annotation_num]["ai_assistant"].setdefault(ai_assistant, 0)
+        
+        self.ai_assistant_used[page_num]["annotations"][annotation_num]["ai_assistant"][ai_assistant] += 1
+        self.ai_assistant_used[page_num]["total_ai"] += 1 
+        self.total_ai += 1
+
+    def get_used_ai(self) -> bool:
+        return self.used_ai
+    def get_ai_assistant(self, page_num: int, annotation_num: int):
+        return self.ai_assistant_used.get(page_num, {}).get(annotation_num, {}).get("ai_assistant", {})
+    def get_page_anno_num_total_ai(self, page_num: int, annotation_num: int, ai_assistant):
+         return self.ai_assistant_used.get(page_num, {}).get("annotations", {}).get(annotation_num, {}).get("ai_assistant", {}).get(ai_assistant, 0)
+    def get_page_total_ai(self, page_num_str: str):
+        page_num = int(page_num_str)
+        return self.ai_assistant_used.get(page_num - 1, {}).get("total_ai", 0)
+    def get_total_ai(self):
+        return self.total_ai
 
     def hint_exists(self, instance_id: str) -> bool:
         return instance_id in self.ai_hints

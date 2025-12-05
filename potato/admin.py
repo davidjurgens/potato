@@ -111,6 +111,7 @@ class InstanceData:
     most_frequent_label: Optional[str]
     label_disagreement: float
     annotators: List[str]
+    num_ai_instance: int
     average_time_per_annotation: Optional[float]
 
 class AdminDashboard:
@@ -244,6 +245,7 @@ class AdminDashboard:
             users = get_users()
             annotators_data = []
 
+
             for username in users:
                 user_state = usm.get_user_state(username)
                 if user_state:
@@ -252,6 +254,7 @@ class AdminDashboard:
                         annotators_data.append({
                             "user_id": timing_data.user_id,
                             "total_annotations": timing_data.total_annotations,
+                            "completion_percentage": self._calculate_completion_percentage(timing_data.user_id),
                             "total_seconds": timing_data.total_seconds,
                             "average_seconds_per_annotation": timing_data.average_seconds_per_annotation,
                             "annotations_per_hour": timing_data.annotations_per_hour,
@@ -264,7 +267,7 @@ class AdminDashboard:
                             # NEW: Annotation history metrics
                             "total_actions": timing_data.total_actions,
                             "average_action_time_ms": timing_data.average_action_time_ms,
-                            "fastest_action_time_ms": timing_data.fastest_action_time_ms,
+                            "fastest_action_time_ms": timing_data.fastest_action_time_ms if timing_data.fastest_action_time_ms != float('inf') else None,
                             "slowest_action_time_ms": timing_data.slowest_action_time_ms,
                             "actions_per_minute": timing_data.actions_per_minute,
                             "suspicious_score": timing_data.suspicious_score,
@@ -452,9 +455,12 @@ class AdminDashboard:
                     most_frequent_label=most_frequent_label,
                     label_disagreement=disagreement,
                     annotators=list(annotators) if annotators else [],
-                    average_time_per_annotation=avg_time
+                    average_time_per_annotation=avg_time,
+                    num_ai_instance=self._calculate_total_instance_ai(item_id)
                 )
                 instances_data.append(instance_data)
+
+                print("fiwejfoijweoijfew ", instance_data)
 
             # Apply filters
             if filter_completion == "completed":
@@ -493,6 +499,7 @@ class AdminDashboard:
                     "most_frequent_label": instance.most_frequent_label,
                     "label_disagreement": round(instance.label_disagreement, 2),
                     "annotators": instance.annotators,
+                    "num_ai_instance": instance.num_ai_instance,
                     "average_time_per_annotation": self._format_seconds(instance.average_time_per_annotation) if instance.average_time_per_annotation else None
                 })
 
@@ -952,6 +959,32 @@ class AdminDashboard:
         except Exception as e:
             self.logger.error(f"Error getting timing data for user {user_id}: {e}")
             return None
+    
+    def _calculate_total_instance_ai(self, instance_id: str) -> Tuple[Optional[str], float]:
+        """
+        Calculate most frequent label and disagreement for an instance.
+
+        Args:
+            instance_id: The instance ID to analyze
+
+        Returns:
+            Tuple of (most_frequent_label, disagreement_score)
+        """
+        try:
+            usm = get_user_state_manager()
+            users = get_users()
+
+            total_ai = 0
+            for username in users:
+                user_state = usm.get_user_state(username)
+                if user_state:
+                    total_ai += user_state.get_page_total_ai(instance_id.replace("item_", ""))
+
+            return total_ai
+
+        except Exception as e:
+            self.logger.error(f"Error calculating label statistics for instance {instance_id}: {e}")
+            return None, 0.0
 
     def _calculate_label_statistics(self, instance_id: str) -> Tuple[Optional[str], float]:
         """

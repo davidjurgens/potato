@@ -20,3 +20,6 @@ threadpoolctl>=3.0.0
 tqdm>=4.62.3
 ujson>=5.4.0
 Werkzeug>=2.0.2
+pydantic>=2.11.9
+ollama>=0.6.0
+openai>=0.26.5

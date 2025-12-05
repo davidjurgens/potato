@@ -313,6 +313,7 @@ class AiCacheManager:
             labels=labels
         )
         ai_prompt = get_ai_prompt();
+        print("generate_spangenerate_spangenerate_span", labels)
         output_format = self.model_manager.get_model_class_by_name(ai_prompt[annotation_type].get(ai_assistant).get("output_format"))
         res = self.ai_endpoint.get_ai(data, output_format)
         return res

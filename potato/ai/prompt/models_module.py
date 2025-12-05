@@ -2,7 +2,10 @@ from typing import Optional, Type, Union
 from pydantic import BaseModel
 
 class GeneralKeywordList(BaseModel):
-    word_phrase: str
+    label: str
+    start: int
+    end: int
+    text: str
     reasoning: str
 
 class GeneralHintFormat(BaseModel):
