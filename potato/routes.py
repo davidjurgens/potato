@@ -406,9 +406,6 @@ def submit_annotation():
     logger.debug(f"Request headers: {dict(request.headers)}")
     logger.debug(f"Debug mode: {config.get('debug', False)}")
 
-    print(f"[DEBUG] /submit_annotation: id(get_user_state_manager())={id(get_user_state_manager())}")
-    print(f"[DEBUG] /submit_annotation: user IDs in manager: {get_user_state_manager().get_user_ids()}")
-    print(f"[DEBUG] /submit_annotation: session username = {session.get('username', 'NOT_SET')}")
 
     if 'username' not in session:
         logger.warning("Annotation submission without active session")
@@ -425,7 +422,6 @@ def submit_annotation():
         instance_id = data.get("instance_id")
         annotations = data.get("annotations", {})
         logger.debug(f"Received JSON data: {data}")
-        print(f"🔍 submit_annotation - JSON data: {data}")
     else:
         instance_id = request.form.get("instance_id")
         annotation_data = request.form.get("annotation_data")
@@ -436,7 +432,6 @@ def submit_annotation():
         else:
             annotations = {}
             logger.debug("No annotation_data found in form")
-        print(f"🔍 submit_annotation - Form data: {dict(request.form)}")
 
     logger.debug(f"Instance ID: {instance_id}")
     logger.debug(f"Annotations: {annotations}")
@@ -451,7 +446,6 @@ def submit_annotation():
         logger.debug(f"Retrieved user state: {user_state}")
         logger.debug(f"User state phase: {user_state.get_phase() if user_state else 'No user state'}")
 
-        print(f"🔍 submit_annotation - Processing annotations: {annotations}")
 
         # Process the annotations
         annotations_processed = 0
@@ -465,7 +459,6 @@ def submit_annotation():
                     logger.debug(f"Adding annotation: {schema_name}:{label_name} = {value}")
                     user_state.add_label_annotation(instance_id, label, value)
                     annotations_processed += 1
-                    print(f"🔍 Added annotation: {schema_name}:{label_name} = {value}")
             elif isinstance(label_data, str):
                 # Direct string value for text annotations: {'schema': 'value'}
                 # For text annotations, we need to create a label with a default name
@@ -473,7 +466,6 @@ def submit_annotation():
                 logger.debug(f"Adding text annotation: {schema_name}:text_box = {label_data}")
                 user_state.add_label_annotation(instance_id, label, label_data)
                 annotations_processed += 1
-                print(f"🔍 Added text annotation: {schema_name}:text_box = {label_data}")
             else:
                 logger.warning(f"Unexpected label_data type: {type(label_data)} for schema {schema_name}")
 
@@ -493,8 +485,6 @@ def submit_annotation():
         logger.debug(f"All annotations after save: {all_annotations}")
         logger.debug(f"Annotations for instance {instance_id}: {all_annotations.get(instance_id, 'Not found')}")
 
-        print(f"🔍 submit_annotation - Successfully processed {annotations_processed} annotations")
-        print(f"🔍 submit_annotation - User state after save: {dict(user_state.instance_id_to_label_to_value)}")
 
         logger.info(f"Successfully saved annotation for {instance_id} from {user_id}")
         logger.debug("=== SUBMIT ANNOTATION ROUTE END ===")
@@ -503,7 +493,6 @@ def submit_annotation():
     except Exception as e:
         logger.error(f"Error saving annotation: {str(e)}")
         logger.debug(f"Exception details: {type(e).__name__}: {str(e)}")
-        print(f"🔍 submit_annotation - Error: {str(e)}")
         import traceback
         logger.debug(f"Traceback: {traceback.format_exc()}")
         traceback.print_exc()
@@ -592,8 +581,8 @@ def consent():
 
     username = session['username']
     user_state = get_user_state(username)
-    print('CONSENT: user_state: ', user_state)
-    print('CONSENT: user_state.get_phase(): ', user_state.get_phase())
+    logger.debug(f'CONSENT: user_state: {user_state}')
+    logger.debug(f'CONSENT: user_state.get_phase(): {user_state.get_phase()}')
 
     # Check that the user is still in the consent phase
     if user_state.get_phase() != UserPhase.CONSENT:
@@ -603,7 +592,7 @@ def consent():
     # If the user is returning information from the page
     if request.method == 'POST':
         # The form should require that the user consent to the study
-        print('POST -> CONSENT: ', request.form)
+        logger.debug(f'POST -> CONSENT: {request.form}')
 
         # Now that the user has consented, advance the state
         # and have the home page redirect to the appropriate next phase
@@ -615,7 +604,7 @@ def consent():
         return home()
     # Show the current consent form
     else:
-        print("GET <- CONSENT")
+        logger.debug("GET <- CONSENT")
         return get_current_page_html(config, username)
 
 @app.route("/instructions", methods=["GET", "POST"])
@@ -639,7 +628,7 @@ def instructions():
 
     # If the user is returning information from the page
     if request.method == 'POST':
-        print('POST -> INSTRUCTIONS: ', request.form)
+        logger.debug(f'POST -> INSTRUCTIONS: {request.form}')
 
         # Now that the user has read the instructions, advance the state
         # and have the home page redirect to the appropriate next phase
@@ -652,7 +641,7 @@ def instructions():
     else:
         # Get the page the user is currently on
         phase, page = user_state.get_current_phase_and_page()
-        print('GET <-- INSTRUCTIONS: phase, page: ', phase, page)
+        logger.debug(f'GET <-- INSTRUCTIONS: phase, page: {phase}, {page}')
 
         usm = get_user_state_manager()
         # Look up the html template for the current instructions
@@ -829,12 +818,12 @@ def prestudy():
 
     # Check that the user is in the prestudy phase
     if user_state.get_phase() != UserPhase.PRESTUDY:
-        print('NOT IN PRESTUDY PHASE')
+        logger.debug('NOT IN PRESTUDY PHASE')
         return home()
 
     # If the user is returning information from the page
     if request.method == 'POST':
-        print('POST -> PRESTUDY: ', request.form)
+        logger.debug(f'POST -> PRESTUDY: {request.form}')
 
         # Advance the state and redirect to the appropriate next phase
         usm = get_user_state_manager()
@@ -846,7 +835,7 @@ def prestudy():
     else:
         # Get the page the user is currently on
         phase, page = user_state.get_current_phase_and_page()
-        print('GET <-- PRESTUDY: phase, page: ', phase, page)
+        logger.debug(f'GET <-- PRESTUDY: phase, page: {phase}, {page}')
 
         # Look up the html template for the current page
         usm = get_user_state_manager()
@@ -984,7 +973,7 @@ def get_ai_hint():
     username = session['username']
     user_state = get_user_state(username)
     instance_text = request.args.get('instance_text')
-    print(f"instance_text: {instance_text}")
+    logger.debug(f"instance_text: {instance_text}")
     instance = user_state.get_current_instance()
     if instance is None:
         return jsonify({'reasoning': 'No instance assigned.'})
@@ -1217,7 +1206,6 @@ def admin_user_state(user_id):
             from potato.server_utils.schemas.span import render_span_annotations
             displayed_text = render_span_annotations(base_text, span_annotations)
 
-            print(f"[DEBUG] /admin/user_state: instance_id={current_instance.get_id()} displayed_text=\n{displayed_text}\n---END---")
 
             current_instance_data = {
                 "id": current_instance.get_id(),
@@ -1236,39 +1224,29 @@ def admin_user_state(user_id):
 
         # Get all annotations
         all_annotations = user_state.get_all_annotations()
-        print(f"🔍 test_user_state - all_annotations raw: {all_annotations}")
-        print(f"🔍 test_user_state - instance_id_to_label_to_value: {dict(user_state.instance_id_to_label_to_value)}")
-        print(f"🔍 test_user_state - instance_id_to_span_to_value: {dict(user_state.instance_id_to_span_to_value)}")
 
         # Convert all keys to strings for JSON serialization
         serializable_annotations = {}
         for instance_id, annotations in all_annotations.items():
             instance_id_str = str(instance_id)
             serializable_annotations[instance_id_str] = {}
-            print(f"🔍 Processing instance {instance_id_str}: {annotations}")
 
             # Process labels
             if "labels" in annotations:
-                print(f"🔍 Processing labels for instance {instance_id_str}: {annotations['labels']}")
                 for label, value in annotations["labels"].items():
-                    print(f"🔍 Processing label: {label} (type: {type(label)}) = {value}")
                     if hasattr(label, 'schema_name') and hasattr(label, 'label_name'):
                         label_str = f"{label.schema_name}:{label.label_name}"
-                        print(f"🔍 Converted label to string: {label_str}")
                     else:
                         label_str = str(label)
-                        print(f"🔍 Using string representation: {label_str}")
                     serializable_annotations[instance_id_str][label_str] = value
 
             # Process spans
             if "spans" in annotations:
-                print(f"🔍 Processing spans for instance {instance_id_str}: {annotations['spans']}")
                 for span, value in annotations["spans"].items():
                     span_str = str(span)
                     serializable_annotations[instance_id_str][span_str] = value
 
         serializable_annotations = stringify_keys(serializable_annotations)
-        print(f"🔍 test_user_state - serializable_annotations: {serializable_annotations}")
 
         # Get assignments
         assignments = []
@@ -1601,7 +1579,7 @@ def go_to():
         return home()
 
     if request.method == 'POST':
-        print('POST -> GO_TO: ', request.form)
+        logger.debug(f'POST -> GO_TO: {request.form}')
         go_to_id(username, request.form.get("go_to"))
 
     return render_page_with_annotations(username)
@@ -1695,6 +1673,13 @@ def get_span_data(instance_id):
     logger.debug(f"=== GET_SPAN_DATA START ===")
     logger.debug(f"Instance ID: {instance_id}")
 
+    # Add debugging for URL decoding
+    import urllib.parse
+    decoded_instance_id = urllib.parse.unquote(instance_id)
+    logger.debug(f"Decoded Instance ID: {decoded_instance_id}")
+    logger.debug(f"Instance ID length: {len(instance_id)}")
+    logger.debug(f"Decoded Instance ID length: {len(decoded_instance_id)}")
+
     if 'username' not in session:
         logger.warning("Get span data without active session")
         return jsonify({"error": "No active session"}), 401
@@ -1706,10 +1691,25 @@ def get_span_data(instance_id):
     try:
         # Get the text from the item state manager
         item_state_manager = get_item_state_manager()
+
+        # Try with original instance_id first
         instance = item_state_manager.get_item(instance_id)
         if not instance:
-            logger.error(f"Instance not found: {instance_id}")
-            return jsonify({"error": "Instance not found"}), 404
+            logger.debug(f"Instance not found with original ID, trying decoded ID")
+            # Try with decoded instance_id
+            instance = item_state_manager.get_item(decoded_instance_id)
+            if instance:
+                logger.debug(f"Instance found with decoded ID")
+                instance_id = decoded_instance_id  # Use decoded ID for rest of function
+            else:
+                logger.error(f"Instance not found with either original or decoded ID")
+                # Debug: list all available instance IDs
+                all_instance_ids = list(item_state_manager.instance_id_to_instance.keys())
+                logger.debug(f"Available instance IDs: {all_instance_ids[:5]}...")  # Show first 5
+                logger.debug(f"Total available instances: {len(all_instance_ids)}")
+                return jsonify({"error": "Instance not found"}), 404
+        else:
+            logger.debug(f"Instance found with original ID")
 
         original_text = instance.get_text()
         logger.debug(f"Original text: {original_text[:100]}...")
@@ -2066,7 +2066,7 @@ def poststudy():
 
     # If the user is returning information from the page
     if request.method == 'POST':
-        print('POSTSTUDY: POST: ', request.form)
+        logger.debug(f'POSTSTUDY: POST: {request.form}')
 
         # Advance the state and move to the appropriate next phase
         usm = get_user_state_manager()
@@ -2078,7 +2078,7 @@ def poststudy():
     else:
         # Get the page the user is currently on
         phase, page = user_state.get_current_phase_and_page()
-        print('POSTSTUDY GET: phase, page: ', phase, page)
+        logger.debug(f'POSTSTUDY GET: phase, page: {phase}, {page}')
 
         usm = get_user_state_manager()
         # Look up the html template for the current page
@@ -2450,12 +2450,10 @@ def clear_span_annotations(instance_id):
             if instance_id in user_state.instance_id_to_span_to_value:
                 spans_before = len(user_state.instance_id_to_span_to_value[instance_id])
                 logger.debug(f"Found {spans_before} spans for instance {instance_id}")
-                print(f"🔍 Found {spans_before} spans for instance {instance_id}")
 
                 # Clear the spans
                 del user_state.instance_id_to_span_to_value[instance_id]
                 logger.debug(f"Cleared {spans_before} spans for instance {instance_id}")
-                print(f"🔍 Cleared {spans_before} spans for instance {instance_id}")
 
                 return jsonify({
                     "status": "success",
@@ -2464,7 +2462,6 @@ def clear_span_annotations(instance_id):
                 })
             else:
                 logger.debug(f"No spans found for instance {instance_id}")
-                print(f"🔍 No spans found for instance {instance_id}")
                 return jsonify({
                     "status": "success",
                     "message": f"No span annotations found for instance {instance_id}",
@@ -2472,7 +2469,6 @@ def clear_span_annotations(instance_id):
                 })
         else:
             logger.debug("User state has no span annotations")
-            print(f"🔍 User state has no span annotations")
             return jsonify({
                 "status": "success",
                 "message": "User state has no span annotations",
@@ -2564,7 +2560,7 @@ def shutdown():
     func = request.environ.get('werkzeug.server.shutdown')
     if func is None:
         return jsonify({'error': 'Not running with the Werkzeug Server'}), 500
-    print('[DEBUG] Shutting down server via /shutdown')
+    logger.info('Shutting down server via /shutdown')
     func()
     return jsonify({'status': 'Server shutting down...'})
 

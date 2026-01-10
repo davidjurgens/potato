@@ -8,6 +8,14 @@ let currentSpanAnnotations = [];
 let debugLastInstanceId = null;
 let debugOverlayCount = 0;
 
+// Stored event handler references for proper cleanup (prevents memory leaks)
+const boundEventHandlers = {
+    spanManagerMouseUp: null,
+    spanManagerKeyUp: null,
+    robustTextSelectionMouseUp: null,
+    robustTextSelectionKeyUp: null
+};
+
 
 
 // DEEP DEBUG: Enhanced tracking
@@ -729,16 +737,8 @@ async function navigateToPrevious() {
         if (response.ok) {
             console.log('[DEEP DEBUG NAV] navigateToPrevious - Navigation successful, reloading page');
 
-            // DEFENSIVE: Notify span manager about instance change before reload
             if (window.spanManager && typeof window.spanManager.onInstanceChange === 'function') {
-                console.log('[DEEP DEBUG NAV] navigateToPrevious - Notifying span manager of instance change');
-                deepDebugState.spanManagerCalls.push({
-                    timestamp: new Date().toISOString(),
-                    action: 'onInstanceChange',
-                    from: 'navigateToPrevious',
-                    currentInstanceId: currentInstance?.id
-                });
-                window.spanManager.onInstanceChange();
+                window.spanManager.onInstanceChange(currentInstance?.id);
             }
 
             logDeepDebug('navigateToPrevious_success', {
@@ -746,7 +746,10 @@ async function navigateToPrevious() {
                 overlayCount: getCurrentOverlayCount()
             });
 
-            window.location.reload();
+            // Add a small delay to ensure span manager operations complete before reload
+            setTimeout(() => {
+                window.location.reload();
+            }, 100);
         } else {
             console.error('[DEEP DEBUG NAV] navigateToPrevious - Navigation failed:', response.status);
             setLoading(false);
@@ -834,16 +837,8 @@ async function navigateToNext() {
         if (response.ok) {
             console.log('[DEEP DEBUG NAV] navigateToNext - Navigation successful, reloading page');
 
-            // DEFENSIVE: Notify span manager about instance change before reload
             if (window.spanManager && typeof window.spanManager.onInstanceChange === 'function') {
-                console.log('[DEEP DEBUG NAV] navigateToNext - Notifying span manager of instance change');
-                deepDebugState.spanManagerCalls.push({
-                    timestamp: new Date().toISOString(),
-                    action: 'onInstanceChange',
-                    from: 'navigateToNext',
-                    currentInstanceId: currentInstance?.id
-                });
-                window.spanManager.onInstanceChange();
+                window.spanManager.onInstanceChange(currentInstance?.id);
             }
 
             logDeepDebug('navigateToNext_success', {
@@ -851,7 +846,10 @@ async function navigateToNext() {
                 overlayCount: getCurrentOverlayCount()
             });
 
-            window.location.reload();
+            // Add a small delay to ensure span manager operations complete before reload
+            setTimeout(() => {
+                window.location.reload();
+            }, 100);
         } else {
             console.error('[DEEP DEBUG NAV] navigateToNext - Navigation failed:', response.status);
             setLoading(false);
@@ -1411,45 +1409,41 @@ function alignSpanOverlays() {
 
 // Robust selection mapping for overlay system
 function getSelectionIndicesOverlay() {
-    // Get the user selection
+    /*
+     * Get the start and end indices of the current text selection using the overlay approach.
+     *
+     * This function uses the unified text positioning approach to ensure
+     * consistent offsets between frontend and backend.
+     *
+     * Returns:
+     *     Object with start and end indices in the original text
+     */
+    console.log('[DEBUG] getSelectionIndicesOverlay called');
+
     var selection = window.getSelection();
-    if (selection.rangeCount === 0) {
-        console.log('[DEBUG] getSelectionIndicesOverlay: No selection');
-        return { start: -1, end: -1 };
+    if (!selection.rangeCount) {
+        console.log('[DEBUG] getSelectionIndicesOverlay: No selection range');
+        return { start: 0, end: 0 };
     }
+
     var range = selection.getRangeAt(0);
-    var originalText = $(range.commonAncestorContainer).closest('.original-text')[0];
-    if (!originalText) {
-        console.log('[DEBUG] getSelectionIndicesOverlay: Not within .original-text');
-        return { start: -2, end: -2 };
+    var container = document.getElementById('text-content');
+
+    if (!container) {
+        console.log('[DEBUG] getSelectionIndicesOverlay: No text-content container found');
+        return { start: 0, end: 0 };
     }
-    // Find all .text-segment spans in the selection
-    const segments = Array.from(originalText.querySelectorAll('.text-segment'));
-    let selStart = null, selEnd = null;
-    let involvedSegments = [];
-    segments.forEach(seg => {
-        const segRect = seg.getBoundingClientRect();
-        const segStart = parseInt(seg.getAttribute('data-start'));
-        const segEnd = parseInt(seg.getAttribute('data-end'));
-        // If the segment is (partially) within the selection range
-        if (range.intersectsNode(seg)) {
-            involvedSegments.push({segStart, segEnd, text: seg.textContent});
-            if (selStart === null || segStart < selStart) selStart = segStart;
-            if (selEnd === null || segEnd > selEnd) selEnd = segEnd;
-        }
-    });
-    if (selStart === null || selEnd === null) {
-        // Fallback: use textContent index
-        var fullText = originalText.textContent || originalText.innerText;
-        var selectedText = selection.toString();
-        var startIndex = fullText.indexOf(selectedText);
-        var endIndex = startIndex + selectedText.length;
-        console.log('[DEBUG] getSelectionIndicesOverlay: fallback', {fullText, selectedText, startIndex, endIndex});
-        return { start: startIndex, end: endIndex };
+
+    // Use the unified text positioning approach
+    if (typeof calculateTextOffsetsFromSelection === 'function') {
+        const offsets = calculateTextOffsetsFromSelection(container, range);
+        console.log('[DEBUG] getSelectionIndicesOverlay: Using unified approach, offsets:', offsets);
+        return offsets;
     }
-    var selectedText = selection.toString();
-    console.log('[DEBUG] getSelectionIndicesOverlay: final', {selStart, selEnd, selectedText, involvedSegments});
-    return { start: selStart, end: selEnd };
+
+    // Fallback to the original approach if unified function is not available
+    console.log('[DEBUG] getSelectionIndicesOverlay: Using fallback approach');
+    return getOriginalTextOffsetsOverlay(container, range);
 }
 
 // Use overlay system for all span operations
@@ -1476,21 +1470,39 @@ function changeSpanLabel(checkbox, schema, spanLabel, spanTitle, spanColor) {
         // Set up text selection handler
         const textContainer = document.getElementById('instance-text');
         if (textContainer) {
-            // Remove existing handlers to avoid conflicts
-            textContainer.removeEventListener('mouseup', window.spanManager.handleTextSelection.bind(window.spanManager));
-            textContainer.removeEventListener('keyup', window.spanManager.handleTextSelection.bind(window.spanManager));
+            // Create bound handlers once and store them for proper cleanup
+            if (!boundEventHandlers.spanManagerMouseUp) {
+                boundEventHandlers.spanManagerMouseUp = window.spanManager.handleTextSelection.bind(window.spanManager);
+                boundEventHandlers.spanManagerKeyUp = window.spanManager.handleTextSelection.bind(window.spanManager);
+            }
+
+            // Remove existing handlers using stored references
+            textContainer.removeEventListener('mouseup', boundEventHandlers.spanManagerMouseUp);
+            textContainer.removeEventListener('keyup', boundEventHandlers.spanManagerKeyUp);
 
             // Add new handlers only when checkbox is checked
             if (checkbox.checked) {
-                textContainer.addEventListener('mouseup', window.spanManager.handleTextSelection.bind(window.spanManager));
-                textContainer.addEventListener('keyup', window.spanManager.handleTextSelection.bind(window.spanManager));
+                textContainer.addEventListener('mouseup', boundEventHandlers.spanManagerMouseUp);
+                textContainer.addEventListener('keyup', boundEventHandlers.spanManagerKeyUp);
                 console.log('[DEBUG] changeSpanLabel: Text selection handlers added for span manager');
             }
         }
     } else {
-        // Fallback to old overlay system if span manager not available
-        console.log('[DEBUG] changeSpanLabel: Span manager not available, using overlay system');
-        changeSpanLabelOverlay(checkbox, schema, spanLabel, spanTitle, spanColor);
+        // Defer to new manager once ready; avoid legacy overlay system to prevent conflicts
+        console.log('[DEBUG] changeSpanLabel: Span manager not ready; deferring selection to manager');
+        const waitAndSelect = () => {
+            if (window.spanManager && window.spanManager.isInitialized) {
+                window.spanManager.selectLabel(spanLabel, schema);
+                return true;
+            }
+            return false;
+        };
+        if (!waitAndSelect()) {
+            let retries = 0;
+            const timer = setInterval(() => {
+                if (waitAndSelect() || ++retries > 20) clearInterval(timer);
+            }, 100);
+        }
     }
 
     // Add debugging to track checkbox state after function execution
@@ -1577,8 +1589,8 @@ function getOriginalTextOffsetsOverlay(container, range) {
     /*
      * Get original text offsets for the overlay approach.
      *
-     * Since the original text is unchanged in the DOM, we can directly
-     * map DOM positions to original text positions.
+     * This function uses the unified text positioning approach to ensure
+     * consistent offsets between frontend and backend.
      *
      * Args:
      *     container: The original text container element
@@ -1588,6 +1600,16 @@ function getOriginalTextOffsetsOverlay(container, range) {
      *     Object with start and end offsets in the original text
      */
     console.log('[DEBUG] getOriginalTextOffsetsOverlay called');
+
+    // Use the unified text positioning approach
+    if (typeof calculateTextOffsetsFromSelection === 'function') {
+        const offsets = calculateTextOffsetsFromSelection(container, range);
+        console.log('[DEBUG] getOriginalTextOffsetsOverlay: Using unified approach, offsets:', offsets);
+        return offsets;
+    }
+
+    // Fallback to the original approach if unified function is not available
+    console.log('[DEBUG] getOriginalTextOffsetsOverlay: Using fallback approach');
 
     // Get the original text from the data attribute (this is the clean text without HTML markup)
     var originalText = container.getAttribute('data-original-text');
@@ -1692,21 +1714,28 @@ function surroundSelectionOverlay(schema, labelName, title, selectionColor) {
 
             console.log('[DEBUG] surroundSelectionOverlay: Sending span annotation request:', post_req);
 
-            // Send the post request
-            fetch("/updateinstance", {
-                method: "POST",
-                body: JSON.stringify(post_req),
-                credentials: "same-origin",
+            // Send the request
+            fetch('/updateinstance', {
+                method: 'POST',
                 headers: {
-                    "Content-type": "application/json; charset=UTF-8",
+                    'Content-Type': 'application/json',
                 },
-            }).then(response => {
+                body: JSON.stringify(post_req)
+            })
+            .then(response => {
                 if (response.ok) {
-                    // Reload the page to show the new span
+                    console.log('[DEBUG] surroundSelectionOverlay: Span annotation created successfully');
+                    // Reload the page to show the new annotation
                     location.reload();
                 } else {
-                    console.error('Failed to save span annotation');
+                    console.error('[DEBUG] surroundSelectionOverlay: Failed to create span annotation:', response.status);
+                    return response.json().then(error => {
+                        console.error('[DEBUG] surroundSelectionOverlay: Error details:', error);
+                    });
                 }
+            })
+            .catch(error => {
+                console.error('[DEBUG] surroundSelectionOverlay: Network error:', error);
             });
 
             // Clear the current selection

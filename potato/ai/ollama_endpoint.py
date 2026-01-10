@@ -33,11 +33,16 @@ class OllamaEndpoint(BaseAIEndpoint):
 
     def _initialize_client(self) -> None:
         """Initialize the Ollama client."""
-        # Ollama client is initialized automatically when needed
+        # Default timeout of 60 seconds for local inference (can be slower)
+        timeout = self.ai_config.get("timeout", 60)
+        host = self.ai_config.get("base_url", "http://localhost:11434")
+
+        # Create client with timeout
+        self.client = ollama.Client(host=host, timeout=timeout)
+
         # Check if Ollama is available
         try:
-            # Test connection
-            ollama.list()
+            self.client.list()
         except Exception as e:
             raise AIEndpointRequestError(f"Failed to connect to Ollama: {e}")
 
@@ -67,7 +72,7 @@ class OllamaEndpoint(BaseAIEndpoint):
             AIEndpointRequestError: If the request fails
         """
         try:
-            response = ollama.chat(
+            response = self.client.chat(
                 model=self.model,
                 messages=[{'role': 'user', 'content': prompt}],
                 options={

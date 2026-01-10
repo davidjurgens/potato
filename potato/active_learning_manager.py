@@ -240,6 +240,7 @@ class SchemaCycler:
         self.database_manager = database_manager
         self.current_index = 0
         self.logger = logging.getLogger(__name__)
+        self._lock = threading.Lock()
 
         # Load state from database if available
         if self.database_manager:
@@ -261,8 +262,9 @@ class SchemaCycler:
         """Load cycling state from database."""
         try:
             current_schema, schema_order = self.database_manager.get_schema_cycling_state()
-            if current_schema in self.schema_names:
-                self.current_index = self.schema_names.index(current_schema)
+            with self._lock:
+                if current_schema in self.schema_names:
+                    self.current_index = self.schema_names.index(current_schema)
         except Exception as e:
             self.logger.warning(f"Failed to load schema cycling state: {e}")
 
@@ -270,20 +272,23 @@ class SchemaCycler:
         """Get the current schema for training."""
         if not self.schema_names:
             return None
-        return self.schema_names[self.current_index]
+        with self._lock:
+            return self.schema_names[self.current_index]
 
     def advance_schema(self):
         """Advance to the next schema in the cycle."""
         if not self.schema_names:
             return
 
-        self.current_index = (self.current_index + 1) % len(self.schema_names)
+        with self._lock:
+            self.current_index = (self.current_index + 1) % len(self.schema_names)
+            current_schema = self.schema_names[self.current_index]
 
         # Save state to database if available
         if self.database_manager:
             try:
                 self.database_manager.save_schema_cycling_state(
-                    self.get_current_schema(),
+                    current_schema,
                     self.schema_names
                 )
             except Exception as e:

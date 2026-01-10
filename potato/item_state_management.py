@@ -28,9 +28,11 @@ from collections import OrderedDict, deque, Counter, defaultdict
 import random
 import uuid
 import logging
+import threading
 
-# Singleton instance of the ItemStateManager
+# Singleton instance of the ItemStateManager with thread-safe lock
 ITEM_STATE_MANAGER = None
+_ITEM_STATE_MANAGER_LOCK = threading.Lock()
 
 def init_item_state_manager(config: dict) -> ItemStateManager:
     """
@@ -38,6 +40,7 @@ def init_item_state_manager(config: dict) -> ItemStateManager:
 
     This function creates the global ItemStateManager that will be shared
     across all users. It's designed to be called once during application startup.
+    Thread-safe initialization using double-checked locking pattern.
 
     Args:
         config: Configuration dictionary containing item management settings
@@ -52,8 +55,12 @@ def init_item_state_manager(config: dict) -> ItemStateManager:
     """
     global ITEM_STATE_MANAGER
 
+    # Double-checked locking for thread safety
     if ITEM_STATE_MANAGER is None:
-        ITEM_STATE_MANAGER = ItemStateManager(config)
+        with _ITEM_STATE_MANAGER_LOCK:
+            # Check again inside the lock
+            if ITEM_STATE_MANAGER is None:
+                ITEM_STATE_MANAGER = ItemStateManager(config)
 
     return ITEM_STATE_MANAGER
 
@@ -62,10 +69,11 @@ def clear_item_state_manager():
     Clear the singleton item state manager instance (for testing).
 
     This function is primarily used for testing purposes to reset the
-    global state between test runs.
+    global state between test runs. Thread-safe.
     """
     global ITEM_STATE_MANAGER
-    ITEM_STATE_MANAGER = None
+    with _ITEM_STATE_MANAGER_LOCK:
+        ITEM_STATE_MANAGER = None
 
 def get_item_state_manager() -> ItemStateManager:
     """

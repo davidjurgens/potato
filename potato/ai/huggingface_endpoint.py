@@ -38,9 +38,12 @@ class HuggingfaceEndpoint(BaseAIEndpoint):
         if not api_key:
             raise AIEndpointRequestError("Hugging Face API key is required")
 
+        # Default timeout of 30 seconds, configurable via ai_config
+        timeout = self.ai_config.get("timeout", 30)
         self.client = InferenceClient(
             model=self.model,
-            token=api_key
+            token=api_key,
+            timeout=timeout
         )
 
     def _get_default_model(self) -> str:

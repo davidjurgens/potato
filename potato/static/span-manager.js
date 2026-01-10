@@ -1,1764 +1,2555 @@
-// =====================================================================================
-// Potato Annotation Platform - Span Manager
-// -------------------------------------------------------------------------------------
-// This file manages all frontend span annotation logic, including:
-//   - Rendering and clearing span overlays
-//   - Handling navigation between annotation instances
-//   - Synchronizing frontend state with backend API
-//   - Defensive logic for browser quirks (esp. Firefox)
-//   - Debugging and diagnostics hooks
-//
-// Key Features:
-//   - Robust overlay management with Firefox-specific fixes
-//   - Instance ID synchronization with server
-//   - Comprehensive debug logging for troubleshooting
-//   - Defensive state clearing on navigation
-// =====================================================================================
+// Global state
+let currentInstance = null;
+let currentAnnotations = {};
+let userState = null;
+let isLoading = false;
+let textSaveTimer = null;
+let currentSpanAnnotations = [];
+
+// Stored event handler references for proper cleanup (prevents memory leaks)
+const boundEventHandlers = {
+    spanManagerMouseUp: null,
+    spanManagerKeyUp: null,
+    robustTextSelectionMouseUp: null,
+    robustTextSelectionKeyUp: null
+};
+
+
+
+// DEEP DEBUG: Enhanced tracking
+let deepDebugState = {
+    navigationCalls: 0,
+    instanceIdChanges: [],
+    overlayStates: [],
+    spanManagerCalls: [],
+    lastAction: null,
+    timestamp: new Date().toISOString()
+};
 
 /**
- * Frontend Span Manager for Potato Annotation Platform
- * Handles span annotation rendering, interaction, and API communication
+ * Deep debug logging for navigation events
  */
+function logDeepDebug(action, extraData = {}) {
+    const state = {
+        timestamp: new Date().toISOString(),
+        action: action,
+        currentInstanceId: currentInstance?.id,
+        debugLastInstanceId: debugLastInstanceId,
+        isLoading: isLoading,
+        overlayCount: getCurrentOverlayCount(),
+        spanManagerExists: !!window.spanManager,
+        spanManagerInitialized: window.spanManager?.isInitialized,
+        ...extraData
+    };
 
-class SpanManager {
-    constructor() {
-        console.log('[DEEPDEBUG] SpanManager constructor called');
+    console.log(`[DEEP DEBUG NAV] ${action}:`, state);
+    deepDebugState.lastAction = action;
+    deepDebugState.timestamp = new Date().toISOString();
 
-        // Core state
-        this.annotations = {spans: []};
-        this.colors = {};
-        this.selectedLabel = null;
-        this.currentSchema = null; // Track the current schema
-        this.isInitialized = false;
-        this.currentInstanceId = null;
-        this.lastKnownInstanceId = null;
-
-        // Debug tracking
-        this.debugState = {
-            constructorCalls: 0,
-            initializeCalls: 0,
-            loadAnnotationsCalls: 0,
-            onInstanceChangeCalls: 0,
-            clearAllStateCalls: 0,
-            renderSpansCalls: 0,
-            lastInstanceIdFromServer: null,
-            lastInstanceIdFromDOM: null,
-            lastOverlayCount: 0,
-            stateTransitions: []
-        };
-
-        this.debugState.constructorCalls++;
-        this.debugState.stateTransitions.push({
+    // Track instance ID changes
+    if (extraData.newInstanceId || extraData.currentInstanceId) {
+        deepDebugState.instanceIdChanges.push({
             timestamp: new Date().toISOString(),
-            action: 'constructor',
-            currentInstanceId: this.currentInstanceId,
-            lastKnownInstanceId: this.lastKnownInstanceId
-        });
-
-        // Retry logic for robustness
-        this.retryCount = 0;
-        this.maxRetries = 3;
-
-        // Aggressive state clearing on construction
-        this.clearAllStateAndOverlays();
-
-        console.log('[DEEPDEBUG] SpanManager constructor completed', {
-            debugState: this.debugState,
-            currentInstanceId: this.currentInstanceId,
-            isInitialized: this.isInitialized
+            from: debugLastInstanceId,
+            to: extraData.newInstanceId || extraData.currentInstanceId,
+            action: action
         });
     }
 
-    /**
-     * Deep debug logging utility
-     */
-    logDebugState(action, extraData = {}) {
-        const state = {
-            timestamp: new Date().toISOString(),
-            action: action,
-            currentInstanceId: this.currentInstanceId,
-            lastKnownInstanceId: this.lastKnownInstanceId,
-            isInitialized: this.isInitialized,
-            annotationsCount: this.annotations?.spans?.length || 0,
-            debugState: { ...this.debugState },
-            ...extraData
-        };
+    // Track overlay states
+    deepDebugState.overlayStates.push({
+        timestamp: new Date().toISOString(),
+        action: action,
+        overlayCount: getCurrentOverlayCount(),
+        instanceId: currentInstance?.id
+    });
 
-        console.log(`[DEEP DEBUG] ${action}:`, state);
-        this.debugState.stateTransitions.push(state);
-
-        // Keep only last 50 transitions to avoid memory bloat
-        if (this.debugState.stateTransitions.length > 50) {
-            this.debugState.stateTransitions = this.debugState.stateTransitions.slice(-50);
-        }
+    // Keep only last 20es to avoid memory bloat
+    if (deepDebugState.instanceIdChanges.length > 20) {
+        deepDebugState.instanceIdChanges = deepDebugState.instanceIdChanges.slice(-20);
     }
-
-    /**
-     * Alternative workflow: Fetch current instance ID from server before any operations
-     * This ensures we always have the correct instance ID, even if DOM is stale
-     */
-    async fetchCurrentInstanceIdFromServer() {
-        try {
-            console.log('[DEEP DEBUG] fetchCurrentInstanceIdFromServer called');
-
-            const response = await fetch('/api/current_instance');
-            if (!response.ok) {
-                throw new Error(`Failed to fetch current instance: ${response.status}`);
-            }
-
-            const data = await response.json();
-            const serverInstanceId = data.instance_id;
-
-            console.log('[DEEP DEBUG] Server returned instance ID:', serverInstanceId);
-
-            // Update debug state
-            this.debugState.lastInstanceIdFromServer = serverInstanceId;
-
-            // Check if this is different from what we have
-            if (this.currentInstanceId !== serverInstanceId) {
-                console.log('[DEEP DEBUG] Instance ID mismatch detected!', {
-                    currentInstanceId: this.currentInstanceId,
-                    serverInstanceId: serverInstanceId,
-                    lastKnownInstanceId: this.lastKnownInstanceId
-                });
-
-                // Force state reset if instance ID changed
-                if (this.currentInstanceId !== null) {
-                    console.log('[DEEP DEBUG] Instance ID changed, forcing state reset');
-                    this.clearAllStateAndOverlays();
-                }
-            }
-
-            this.currentInstanceId = serverInstanceId;
-            this.lastKnownInstanceId = serverInstanceId;
-
-            this.logDebugState('fetchCurrentInstanceIdFromServer', {
-                serverInstanceId: serverInstanceId,
-                previousInstanceId: this.currentInstanceId
-            });
-
-            return serverInstanceId;
-        } catch (error) {
-            console.error('[DEEP DEBUG] Error fetching current instance ID:', error);
-            return null;
-        }
-    }
-
-    /**
-     * Initialize the span manager
-     */
-    async initialize() {
-        console.log('[DEEP DEBUG] initialize called');
-        this.debugState.initializeCalls++;
-
-        try {
-            // Step 1: Fetch current instance ID from server first
-            const serverInstanceId = await this.fetchCurrentInstanceIdFromServer();
-            if (!serverInstanceId) {
-                console.error('[DEEP DEBUG] Failed to get server instance ID during initialization');
-                return false;
-            }
-
-            // Step 2: Load schemas from server API
-            await this.loadSchemas();
-
-            // Step 3: Load colors
-            await this.loadColors();
-
-            // Step 4: Setup event listeners
-            this.setupEventListeners();
-
-            // Step 5: Load annotations for the verified instance ID
-            await this.loadAnnotations(serverInstanceId);
-
-            this.isInitialized = true;
-
-            this.logDebugState('initialize_completed', {
-                serverInstanceId: serverInstanceId,
-                isInitialized: this.isInitialized,
-                currentSchema: this.currentSchema
-            });
-
-            console.log('[DEEPDEBUG] SpanManager initialization completed successfully');
-            return true;
-        } catch (error) {
-            console.error('[DEEP DEBUG] SpanManager initialization failed:', error);
-            this.isInitialized = false;
-            return false;
-        }
-    }
-
-    /**
-     * Load color scheme from API
-     */
-    async loadColors() {
-        try {
-            const response = await fetch('/api/colors');
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            this.colors = await response.json();
-            console.log('SpanManager: Colors loaded:', this.colors);
-        } catch (error) {
-            console.error('SpanManager: Error loading colors:', error);
-            // Fallback colors
-            this.colors = {
-                'positive': '#d4edda',
-                'negative': '#f8d7da',
-                'neutral': '#d1ecf1',
-                'span': '#ffeaa7'
-            };
-        }
-    }
-
-    /**
-     * Load schema information from server API
-     */
-    async loadSchemas() {
-        try {
-            const response = await fetch('/api/schemas');
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            this.schemas = await response.json();
-            console.log('SpanManager: Schemas loaded from server:', this.schemas);
-
-            // Set the first schema as default if no schema is currently set
-            if (!this.currentSchema && Object.keys(this.schemas).length > 0) {
-                this.currentSchema = Object.keys(this.schemas)[0];
-                console.log('SpanManager: Set default schema:', this.currentSchema);
-            }
-
-            return this.schemas;
-        } catch (error) {
-            console.error('SpanManager: Error loading schemas:', error);
-            // Fallback to extracting from HTML forms
-            return this.extractSchemaFromForms();
-        }
-    }
-
-    /**
-     * Extract schema from HTML forms (fallback method)
-     */
-    extractSchemaFromForms() {
-        // Look for span annotation forms and extract schema information
-        const spanForms = document.querySelectorAll('.annotation-form.span');
-        if (spanForms.length > 0) {
-            // Get the schema from the first span form's fieldset
-            const firstSpanForm = spanForms[0];
-            const fieldset = firstSpanForm.querySelector('fieldset');
-            if (fieldset && fieldset.getAttribute('schema')) {
-                const schema = fieldset.getAttribute('schema');
-                console.log('SpanManager: Extracted schema from forms:', schema);
-                return schema;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Setup event listeners for span interaction
-     */
-    setupEventListeners() {
-        // Text selection handling
-        const textContainer = document.getElementById('instance-text');
-        const textContent = document.getElementById('text-content');
-        if (textContainer) {
-            textContainer.addEventListener('mouseup', () => this.handleTextSelection());
-            textContainer.addEventListener('keyup', () => this.handleTextSelection());
-        }
-        if (textContent) {
-            textContent.addEventListener('mouseup', () => this.handleTextSelection());
-            textContent.addEventListener('keyup', () => this.handleTextSelection());
-        }
-
-        // DEBUG: Global mouseup event listener
-        document.addEventListener('mouseup', (e) => {
-            console.log('DEBUG: Global mouseup event fired on', e.target ? e.target.id : '(no id)', 'class:', e.target ? e.target.className : '(no class)');
-        });
-
-        // Span deletion
-        document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('span-delete')) {
-                e.stopPropagation();
-                const annotationId = e.target.closest('.span-highlight').dataset.annotationId;
-                this.deleteSpan(annotationId);
-            }
-        });
-    }
-
-        /**
-     * Select a label for annotation
-     */
-    selectLabel(label, schema = null) {
-        console.log('🔍 [DEBUG] SpanManager.selectLabel() called with:', { label, schema });
-
-        // Don't interfere with checkbox state management - let the onlyOne function handle it
-        // The onlyOne function already manages the checkbox state correctly
-        console.log('🔍 [DEBUG] SpanManager.selectLabel() - Skipping checkbox state management, letting onlyOne handle it');
-
-        this.selectedLabel = label;
-        if (schema) {
-            this.currentSchema = schema;
-        }
-        console.log('SpanManager: Selected label:', label, 'schema:', this.currentSchema);
-    }
-
-    /**
-     * Get the currently selected label from checkbox inputs
-     */
-    getSelectedLabel() {
-        // Check if any span checkbox is checked
-        const checkedCheckbox = document.querySelector('.annotation-form.span input[type="checkbox"]:checked');
-        if (checkedCheckbox) {
-            // Extract the actual label text from the checkbox ID
-            // Checkbox ID format: "emotion_happy", "emotion_sad", etc.
-            const checkboxId = checkedCheckbox.id;
-            const parts = checkboxId.split('_');
-            if (parts.length >= 2) {
-                const labelText = parts[1]; // Get the label part after the underscore
-                console.log('SpanManager: Extracted label text from checkbox ID:', { checkboxId, labelText });
-                return labelText;
-            }
-            // Fallback to value if ID parsing fails
-            console.warn('SpanManager: Could not parse label from checkbox ID, using value:', checkboxId);
-            return checkedCheckbox.value;
-        }
-        return this.selectedLabel;
-    }
-
-    /**
-     * Load annotations for current instance
-     */
-    async loadAnnotations(instanceId) {
-        console.log('SpanManager: Loading annotations for instance:', instanceId);
-
-        try {
-            // Step 1: Verify instance ID with server
-            const serverInstanceId = await this.fetchCurrentInstanceIdFromServer();
-            if (serverInstanceId !== instanceId) {
-                console.warn('SpanManager: Instance ID mismatch in loadAnnotations!', {
-                    requestedInstanceId: instanceId,
-                    serverInstanceId: serverInstanceId
-                });
-
-                // Use server instance ID instead
-                instanceId = serverInstanceId;
-            }
-
-            // Step 2: Clear existing state
-            this.clearAllStateAndOverlays();
-
-            // Step 3: Fetch annotations from server
-            const response = await fetch(`/api/spans/${instanceId}`);
-            if (!response.ok) {
-                if (response.status === 404) {
-                    // No annotations yet
-                    this.annotations = {spans: []};
-                    console.log('SpanManager: No annotations found (404), set to empty array');
-                    this.renderSpans();
-                    return Promise.resolve();
-                }
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            // Store the full API response, not just the spans array
-            this.annotations = await response.json();
-            console.log('SpanManager: Annotations loaded from server:', {
-                instanceId: instanceId,
-                annotationsCount: this.annotations?.spans?.length || 0
-            });
-
-            // Auto-set the schema from the first span if available
-            if (this.annotations.spans && this.annotations.spans.length > 0) {
-                const firstSpan = this.annotations.spans[0];
-                if (firstSpan.schema && !this.currentSchema) {
-                    this.currentSchema = firstSpan.schema;
-                    console.log('SpanManager: Auto-set schema from loaded spans:', this.currentSchema);
-                }
-            }
-
-            // Render spans
-            this.renderSpans();
-
-            return Promise.resolve(this.annotations);
-        } catch (error) {
-            console.error('SpanManager: Error loading annotations:', error);
-            this.annotations = {spans: []};
-            this.renderSpans();
-            return Promise.reject(error);
-        }
-    }
-
-    /**
-     * Render all spans in the text container using interval-based approach
-     * This method properly handles partial overlaps by using position-based rendering
-     */
-    renderSpans() {
-        console.log('SpanManager: Rendering spans');
-
-        // Wait for DOM elements to be available
-        const waitForElements = () => {
-            const textContainer = document.getElementById('instance-text');
-            const textContent = document.getElementById('text-content');
-            const spanOverlays = document.getElementById('span-overlays');
-
-            if (textContainer && textContent && spanOverlays) {
-                this._renderSpansInternal(textContainer, textContent, spanOverlays);
-            } else {
-                // Retry after a short delay
-                setTimeout(waitForElements, 100);
-            }
-        };
-
-        waitForElements();
-    }
-
-    /**
-     * Internal method to render spans once DOM elements are confirmed available
-     */
-    _renderSpansInternal(textContainer, textContent, spanOverlays) {
-        console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - ENTRY POINT');
-        console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - textContent exists:', !!textContent);
-        console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - textContainer exists:', !!textContainer);
-        console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - spanOverlays exists:', !!spanOverlays);
-
-        if (!textContent) {
-            console.error('SpanManager: #text-content element not found! The annotation text will not be selectable.');
-            this.showStatus('Error: Annotation text not found. Please contact support.', 'error');
-            return;
-        }
-        if (!textContainer || !spanOverlays) {
-            console.warn('SpanManager: Required containers not found');
-            return;
-        }
-
-        // Get spans from the correct property
-        const spans = this.getSpans();
-        console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - getSpans() returned:', spans);
-        console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - spans length:', spans?.length || 0);
-        console.log('SpanManager: Starting interval-based renderSpans with', spans?.length || 0, 'spans');
-
-        // DEBUG: Track overlays before clearing
-        const overlaysBeforeClear = spanOverlays.children.length;
-        console.log(`🔍 [DEBUG] SpanManager._renderSpansInternal() - Before clearing overlays: ${overlaysBeforeClear} overlays`);
-
-        // Log details of existing overlays before clearing
-        if (overlaysBeforeClear > 0) {
-            console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - Existing overlays before clear:');
-            Array.from(spanOverlays.children).forEach((overlay, index) => {
-                console.log(`  Overlay ${index}:`, {
-                    className: overlay.className,
-                    dataset: overlay.dataset,
-                    innerHTML: overlay.innerHTML.substring(0, 100) + '...'
-                });
-            });
-        }
-
-        // FIREFOX FIX: Force complete DOM cleanup
-        // Firefox sometimes doesn't immediately remove elements when innerHTML is cleared
-        const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
-        if (isFirefox) {
-            console.log('🔍 [DEBUG] Firefox detected - using enhanced overlay cleanup');
-
-            // Method 1: Remove each child individually
-            while (spanOverlays.firstChild) {
-                spanOverlays.removeChild(spanOverlays.firstChild);
-            }
-
-            // Method 2: Force a reflow to ensure DOM is updated
-            spanOverlays.offsetHeight;
-
-            // Method 3: Double-check that all overlays are gone
-            const remainingOverlays = spanOverlays.querySelectorAll('.span-overlay');
-            if (remainingOverlays.length > 0) {
-                console.warn('🔍 [DEBUG] Firefox: Some overlays still present after removal, forcing cleanup');
-                remainingOverlays.forEach(overlay => {
-                    if (overlay.parentNode) {
-                        overlay.parentNode.removeChild(overlay);
-                    }
-                });
-            }
-        } else {
-            // Standard cleanup for other browsers
-            console.log('🔍 [DEBUG] Standard overlay cleanup for non-Firefox browser');
-            spanOverlays.innerHTML = '';
-        }
-
-        // DEBUG: Track overlays after clearing
-        const overlaysAfterClear = spanOverlays.children.length;
-        console.log(`🔍 [DEBUG] SpanManager._renderSpansInternal() - After clearing overlays: ${overlaysAfterClear} overlays`);
-
-        if (!spans || spans.length === 0) {
-            // Just display the original text in text content layer
-            const originalText = window.currentInstance?.text || '';
-            textContent.textContent = originalText;
-            console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - No spans to render, displaying original text:', originalText);
-            console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - EXIT POINT (no spans)');
-            return;
-        }
-
-        // Get the original text
-        const text = window.currentInstance?.text || '';
-        console.log('SpanManager: Original text length:', text.length);
-
-        // Display text in text content layer
-        textContent.textContent = text;
-
-        // FIREFOX FIX: Force a reflow before calculating positions
-        if (isFirefox) {
-            textContent.offsetHeight;
-        }
-
-        // Sort spans by start position for consistent rendering
-        const sortedSpans = [...spans].sort((a, b) => a.start - b.start);
-
-        // Calculate overlap layers for visual styling
-        const overlapDataArray = this.calculateOverlapDepths(sortedSpans);
-        console.log('SpanManager: Overlap data:', overlapDataArray);
-
-        // Convert overlap data array to a Map for efficient lookup
-        const overlapDataMap = new Map();
-        overlapDataArray.forEach(data => {
-            const spanKey = `${data.span.start}-${data.span.end}`;
-            overlapDataMap.set(spanKey, {
-                depth: data.depth,
-                heightMultiplier: data.heightMultiplier
-            });
-        });
-
-        // Render each span as an overlay
-        console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - About to render', sortedSpans.length, 'spans');
-        sortedSpans.forEach((span, index) => {
-            console.log(`🔍 [DEBUG] SpanManager._renderSpansInternal() - Rendering span ${index}:`, span);
-            this.renderSpanOverlay(span, index, textContent, spanOverlays, overlapDataMap);
-        });
-
-        // Apply overlap styling
-        const spanElements = spanOverlays.querySelectorAll('.span-highlight');
-        this.applyOverlapStyling(spanElements, overlapDataArray);
-
-        // FIREFOX FIX: Add delay before checking overlay count to account for asynchronous creation
-        const checkOverlays = () => {
-            // DEBUG: Track overlays after rendering
-            const overlaysAfterRender = spanOverlays.children.length;
-            console.log(`🔍 [DEBUG] SpanManager._renderSpansInternal() - After rendering: ${overlaysAfterRender} overlays created`);
-            console.log(`🔍 [DEBUG] SpanManager._renderSpansInternal() - Is Firefox: ${isFirefox}`);
-
-            // Log details of created overlays
-            if (overlaysAfterRender > 0) {
-                console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - Created overlays:');
-                Array.from(spanOverlays.children).forEach((overlay, index) => {
-                    console.log(`  Created Overlay ${index}:`, {
-                        className: overlay.className,
-                        dataset: overlay.dataset,
-                        innerHTML: overlay.innerHTML.substring(0, 100) + '...'
-                    });
-                });
-            } else {
-                console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - WARNING: No overlays created!');
-                console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - spanOverlays container:', spanOverlays);
-                console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - spanOverlays.innerHTML:', spanOverlays.innerHTML.substring(0, 200) + '...');
-            }
-
-            console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - EXIT POINT (with spans)');
-            console.log('SpanManager: Interval-based rendering completed');
-        };
-
-        if (isFirefox) {
-            console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - Firefox detected, delaying overlay count check');
-            setTimeout(checkOverlays, 10); // Small delay to allow async overlay creation
-        } else {
-            console.log('🔍 [DEBUG] SpanManager._renderSpansInternal() - Not Firefox, checking overlay count immediately');
-            checkOverlays();
-        }
-    }
-
-    /**
-     * Create a span element with proper styling and event handlers
-     */
-    createSpanElement(span) {
-        const spanElement = document.createElement('span');
-        spanElement.className = 'annotation-span';
-        spanElement.dataset.spanId = span.id;
-        spanElement.dataset.start = span.start;
-        spanElement.dataset.end = span.end;
-        spanElement.dataset.label = span.label;
-
-        // Apply the correct color for this label
-        const backgroundColor = this.getSpanColor(span.label);
-        if (backgroundColor) {
-            spanElement.style.backgroundColor = backgroundColor;
-        }
-
-        // Add delete button
-        const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'span-delete-btn';
-        deleteBtn.innerHTML = '×';
-        deleteBtn.title = 'Delete span';
-        deleteBtn.onclick = (e) => {
-            e.stopPropagation();
-            this.deleteSpan(span.id);
-        };
-        spanElement.appendChild(deleteBtn);
-
-        // Add label display
-        const labelSpan = document.createElement('span');
-        labelSpan.className = 'span-label';
-        labelSpan.textContent = span.label;
-        spanElement.appendChild(labelSpan);
-
-        return spanElement;
-    }
-
-    /**
-     * Render a span as an overlay using interval-based positioning
-     */
-    renderSpanOverlay(span, layerIndex, textContent, spanOverlays, overlapData) {
-        console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - ENTRY POINT');
-        console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - span:', span);
-        console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - layerIndex:', layerIndex);
-        console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - spanOverlays container exists:', !!spanOverlays);
-        console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - spanOverlays children before:', spanOverlays?.children?.length || 0);
-
-        // Defensive check: ensure text node exists
-        const textNode = textContent.firstChild;
-        if (!textNode || textNode.nodeType !== Node.TEXT_NODE) {
-            console.error('SpanManager: No text node found in #text-content when rendering span overlay', {
-                span: span,
-                textContentChildNodes: textContent.childNodes.length,
-                firstChildType: textNode ? textNode.nodeType : 'null'
-            });
-            console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - EXIT POINT (no text node)');
-            return; // Skip rendering this span
-        }
-
-        // FIREFOX FIX: Ensure text content is properly rendered before getting bounding rects
-        const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
-        console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - Is Firefox:', isFirefox);
-
-        if (isFirefox) {
-            // Force a reflow to ensure text is properly laid out
-            textContent.offsetHeight;
-            console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - Forced reflow for Firefox');
-        }
-
-        // Get bounding rects for the span's character range
-        const rects = getCharRangeBoundingRect(textContent, span.start, span.end);
-        console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - bounding rects:', rects);
-        if (!rects || rects.length === 0) {
-            console.warn('SpanManager: Could not get bounding rect for span', span);
-            console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - EXIT POINT (no bounding rect)');
-            return;
-        }
-
-        // Get the instance-text container's bounding rect for relative positioning
-        const instanceTextContainer = document.getElementById('instance-text');
-        const containerRect = instanceTextContainer.getBoundingClientRect();
-        console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - containerRect:', containerRect);
-
-        // FIREFOX FIX: Add small delay to ensure positioning is accurate
-        const createOverlay = () => {
-            console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - createOverlay() called');
-            console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - rects.length:', rects.length);
-
-            // Create overlay for each rect (handles line wrapping)
-            rects.forEach((rect, rectIndex) => {
-                console.log(`🔍 [DEBUG] SpanManager.renderSpanOverlay() - Creating overlay for rect ${rectIndex}:`, rect);
-                const overlay = document.createElement('div');
-                overlay.className = 'span-overlay annotation-span';
-                overlay.dataset.annotationId = span.id;
-                overlay.dataset.start = span.start;
-                overlay.dataset.end = span.end;
-                overlay.dataset.label = span.label;
-                overlay.style.position = 'absolute';
-                overlay.style.pointerEvents = 'none'; // <-- Always allow selection through overlay
-
-                // Position the overlay relative to the instance-text container
-                const left = rect.left - containerRect.left;
-                const top = rect.top - containerRect.top;
-                const width = rect.right - rect.left;
-                const height = rect.bottom - rect.top;
-
-                // FIREFOX FIX: Ensure positive dimensions and add safety checks
-                const safeWidth = Math.max(1, width);
-                const safeHeight = Math.max(1, height);
-
-                overlay.style.left = `${left}px`;
-                overlay.style.top = `${top}px`;
-                overlay.style.width = `${safeWidth}px`;
-                overlay.style.height = `${safeHeight}px`;
-                // overlay.style.pointerEvents = 'auto'; // Enable pointer events for this overlay
-
-                // Apply the correct color for this label
-                const backgroundColor = this.getSpanColor(span.label);
-                if (backgroundColor) {
-                    overlay.style.backgroundColor = backgroundColor;
-                }
-
-                // Set z-index and height based on overlap data
-                const spanKey = `${span.start}-${span.end}`;
-                const overlapInfo = overlapData.get(spanKey) || { depth: 0, heightMultiplier: 1.0 };
-                overlay.style.zIndex = 10 + overlapInfo.depth;
-
-                // Apply height multiplier for visual distinction
-                if (overlapInfo.heightMultiplier > 1.0) {
-                    const originalHeight = rect.bottom - rect.top;
-                    const adjustedHeight = originalHeight * overlapInfo.heightMultiplier;
-                    overlay.style.height = `${Math.max(1, adjustedHeight)}px`;
-
-                    // Center the overlay vertically around the original text position
-                    const heightDifference = adjustedHeight - originalHeight;
-                    const newTop = top - (heightDifference / 2);
-                    overlay.style.top = `${newTop}px`;
-                }
-
-                // Add label
-                const label = document.createElement('span');
-                label.className = 'span-label';
-                label.textContent = span.label;
-                label.style.position = 'absolute';
-                label.style.top = '-25px';
-                label.style.left = '0';
-                label.style.fontSize = '11px';
-                label.style.fontWeight = 'bold';
-                label.style.backgroundColor = 'rgba(0,0,0,0.9)';
-                label.style.color = 'white';
-                label.style.padding = '3px 6px';
-                label.style.borderRadius = '4px';
-                label.style.pointerEvents = 'auto'; // <-- Allow interaction with label
-                label.style.zIndex = '1000';
-                label.style.whiteSpace = 'nowrap';
-                overlay.appendChild(label);
-
-                // Add delete button
-                const deleteBtn = document.createElement('button');
-                deleteBtn.className = 'span-delete-btn';
-                deleteBtn.innerHTML = '×';
-                deleteBtn.title = 'Delete span';
-                deleteBtn.style.position = 'absolute';
-                deleteBtn.style.top = '-25px';
-                deleteBtn.style.right = '0';
-                deleteBtn.style.backgroundColor = 'rgba(255,0,0,0.9)';
-                deleteBtn.style.color = 'white';
-                deleteBtn.style.border = 'none';
-                deleteBtn.style.borderRadius = '50%';
-                deleteBtn.style.width = '18px';
-                deleteBtn.style.height = '18px';
-                deleteBtn.style.fontSize = '14px';
-                deleteBtn.style.fontWeight = 'bold';
-                deleteBtn.style.cursor = 'pointer';
-                deleteBtn.style.pointerEvents = 'auto'; // <-- Allow interaction with delete button
-                deleteBtn.style.zIndex = '1001';
-                deleteBtn.style.lineHeight = '1';
-                deleteBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    this.deleteSpan(span.id);
-                };
-                overlay.appendChild(deleteBtn);
-
-                console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - About to append overlay to container');
-                spanOverlays.appendChild(overlay);
-                console.log(`🔍 [DEBUG] SpanManager.renderSpanOverlay() - Overlay appended. Container now has ${spanOverlays.children.length} children`);
-
-                // Track overlay creation for debugging
-                if (typeof trackOverlayCreation === 'function') {
-                    trackOverlayCreation(overlay, 'SpanManager.renderSpanOverlay');
-                }
-            });
-
-            console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - createOverlay() completed');
-        };
-
-        // FIREFOX FIX: Use setTimeout for Firefox to ensure DOM is ready
-        if (isFirefox) {
-            console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - Scheduling createOverlay with setTimeout for Firefox');
-            setTimeout(() => {
-                console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - setTimeout callback executing');
-                createOverlay();
-                console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - setTimeout callback completed');
-            }, 0);
-        } else {
-            console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - Calling createOverlay immediately (not Firefox)');
-            createOverlay();
-        }
-
-        console.log('🔍 [DEBUG] SpanManager.renderSpanOverlay() - EXIT POINT (function returning, overlay may be created asynchronously)');
-    }
-
-    /**
-     * Create an overlay span for overlapping annotations (legacy method - kept for compatibility)
-     */
-    createOverlaySpan(span, layerIndex) {
-        const overlaySpan = document.createElement('span');
-        overlaySpan.className = 'annotation-span overlay-span';
-        overlaySpan.dataset.spanId = span.id;
-        overlaySpan.dataset.start = span.start;
-        overlaySpan.dataset.end = span.end;
-        overlaySpan.dataset.label = span.label;
-
-        // Apply the correct color for this label
-        const backgroundColor = this.getSpanColor(span.label);
-        if (backgroundColor) {
-            overlaySpan.style.backgroundColor = backgroundColor;
-        }
-
-        // Position the overlay span
-        overlaySpan.style.position = 'absolute';
-        overlaySpan.style.top = '0';
-        overlaySpan.style.left = '0';
-        overlaySpan.style.right = '0';
-        overlaySpan.style.bottom = '0';
-        overlaySpan.style.zIndex = layerIndex + 1;
-        // CSS will handle pointer events for overlay spans
-
-        // Add delete button (positioned absolutely)
-        const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'span-delete-btn overlay-delete-btn';
-        deleteBtn.innerHTML = '×';
-        deleteBtn.title = 'Delete span';
-        deleteBtn.style.position = 'absolute';
-        deleteBtn.style.top = '-20px';
-        deleteBtn.style.right = '0';
-        deleteBtn.style.zIndex = layerIndex + 2;
-        deleteBtn.style.pointerEvents = 'auto'; // Allow clicks on delete button
-        deleteBtn.onclick = (e) => {
-            e.stopPropagation();
-            this.deleteSpan(span.id);
-        };
-        overlaySpan.appendChild(deleteBtn);
-
-        // Add label display (always visible for overlay spans)
-        const labelSpan = document.createElement('span');
-        labelSpan.className = 'span-label overlay-label';
-        labelSpan.textContent = span.label;
-        // Make label always visible for overlay spans
-        labelSpan.style.position = 'absolute';
-        labelSpan.style.top = '-25px';
-        labelSpan.style.left = '0';
-        labelSpan.style.zIndex = layerIndex + 2;
-        labelSpan.style.display = 'block'; // Always show for overlay spans
-        labelSpan.style.pointerEvents = 'auto';
-        overlaySpan.appendChild(labelSpan);
-
-        return overlaySpan;
-    }
-
-    /**
-     * Handle text selection and create annotation
-     */
-    handleTextSelection() {
-        const selection = window.getSelection();
-        console.log('🔍 [DEBUG] handleTextSelection entered, selection:', selection ? selection.toString() : '(none)', 'rangeCount:', selection ? selection.rangeCount : '(none)', 'isCollapsed:', selection ? selection.isCollapsed : '(none)');
-        if (!selection.rangeCount || selection.isCollapsed) return;
-
-        const selectedLabel = this.getSelectedLabel();
-        if (!selectedLabel) {
-            this.showStatus('Please select a label first', 'error');
-            return;
-        }
-
-        const range = selection.getRangeAt(0);
-        const textContent = document.getElementById('text-content');
-        const selectedText = selection.toString().trim();
-
-        if (!selectedText) return;
-
-        // With interval-based rendering, text selection is much simpler
-        // The text content layer only contains the original text, no spans
-        const start = this.getTextPosition(textContent, range.startContainer, range.startOffset);
-        const end = this.getTextPosition(textContent, range.endContainer, range.endOffset);
-
-        console.log('🔍 [DEBUG] SpanManager: Creating annotation:', {
-            text: selectedText,
-            start: start,
-            end: end,
-            label: selectedLabel
-        });
-
-        // Validate the selection
-        if (start >= end) {
-            console.warn('SpanManager: Invalid selection range (start >= end)');
-            this.showStatus('Invalid selection range', 'error');
-            selection.removeAllRanges();
-            return;
-        }
-
-        // Create annotation
-        this.createAnnotation(selectedText, start, end, selectedLabel)
-            .then(result => {
-                console.log('🔍 [DEBUG] SpanManager: Annotation creation successful:', result);
-            })
-            .catch(error => {
-                console.error('🔍 [DEBUG] SpanManager: Annotation creation failed:', error);
-            });
-
-        // Clear selection
-        selection.removeAllRanges();
-    }
-
-    /**
-     * Get the character position within a text node
-     * This is used for converting DOM positions to character offsets
-     */
-    getTextPosition(container, node, offset) {
-        if (!container || !node) {
-            console.error('SpanManager: getTextPosition called with null container or node');
-            return null;
-        }
-
-        // Ensure we're working with the correct container
-        if (node.parentElement !== container) {
-            console.error('SpanManager: Node parent does not match container', {
-                nodeParent: node.parentElement?.id || 'null',
-                containerId: container.id || 'null'
-            });
-            return null;
-        }
-
-        // Ensure we have a text node
-        if (node.nodeType !== Node.TEXT_NODE) {
-            console.error('SpanManager: Node is not a text node', {
-                nodeType: node.nodeType,
-                nodeName: node.nodeName
-            });
-            return null;
-        }
-
-        // Validate offset
-        if (offset < 0 || offset > node.textContent.length) {
-            console.error('SpanManager: Invalid offset', {
-                offset: offset,
-                textLength: node.textContent.length
-            });
-            return null;
-        }
-
-        return offset;
-    }
-
-    /**
-     * Calculate position in original text from DOM position (legacy method - kept for compatibility)
-     * This is a more robust implementation that works with rendered spans
-     */
-    getOriginalTextPosition(container, node, offset) {
-        // Get the original text from the global variable
-        let originalText;
-        if (window.currentInstance && window.currentInstance.text) {
-            originalText = window.currentInstance.text;
-        } else {
-            // Fallback to container text content
-            originalText = container.textContent || container.innerText;
-        }
-
-        if (!originalText) {
-            console.warn('SpanManager: No original text available');
-            return 0;
-        }
-
-        // Create a tree walker to traverse text nodes
-        const walker = document.createTreeWalker(
-            container,
-            NodeFilter.SHOW_TEXT,
-            null,
-            false
-        );
-
-        let currentNode;
-        let textSoFar = '';
-        let foundNode = false;
-
-        // Walk through text nodes to find our target node
-        while (currentNode = walker.nextNode()) {
-            // Skip text nodes that belong to UI elements (delete buttons and labels)
-            const parent = currentNode.parentElement;
-            if (parent && (
-                parent.classList.contains('span-delete-btn') ||
-                parent.classList.contains('span-label') ||
-                parent.closest('.span-delete-btn') ||
-                parent.closest('.span-label')
-            )) {
-                continue; // Skip this text node
-            }
-
-            if (currentNode === node) {
-                // Found our target node, add the text up to the offset
-                textSoFar += currentNode.textContent.substring(0, offset);
-                foundNode = true;
-                break;
-            }
-            // Add the full text of this node
-            textSoFar += currentNode.textContent;
-        }
-
-        if (!foundNode) {
-            console.warn('SpanManager: Target node not found in DOM walk, attempting fallback');
-
-            // Fallback: try to find the node by traversing the DOM tree
-            const allTextNodes = [];
-            const fallbackWalker = document.createTreeWalker(
-                container,
-                NodeFilter.SHOW_TEXT,
-                null,
-                false
-            );
-
-            let fallbackNode;
-            while (fallbackNode = fallbackWalker.nextNode()) {
-                const parent = fallbackNode.parentElement;
-                if (parent && (
-                    parent.classList.contains('span-delete-btn') ||
-                    parent.classList.contains('span-label') ||
-                    parent.closest('.span-delete-btn') ||
-                    parent.closest('.span-label')
-                )) {
-                    continue;
-                }
-                allTextNodes.push(fallbackNode);
-            }
-
-            // Try to find the node in our collected text nodes
-            const nodeIndex = allTextNodes.indexOf(node);
-            if (nodeIndex !== -1) {
-                // Calculate position based on previous text nodes
-                for (let i = 0; i < nodeIndex; i++) {
-                    textSoFar += allTextNodes[i].textContent;
-                }
-                textSoFar += node.textContent.substring(0, offset);
-                foundNode = true;
-            }
-        }
-
-        if (!foundNode) {
-            console.warn('SpanManager: Target node not found in DOM walk, using fallback position');
-            return 0;
-        }
-
-        // The length of textSoFar gives us the offset in the original text
-        const calculatedOffset = textSoFar.length;
-
-        // Validate the offset
-        if (calculatedOffset < 0) {
-            console.warn('SpanManager: Calculated negative offset, using 0');
-            return 0;
-        }
-
-        if (calculatedOffset > originalText.length) {
-            console.warn('SpanManager: Calculated offset beyond text length, using text length');
-            return originalText.length;
-        }
-
-        console.log('SpanManager: Calculated offset:', calculatedOffset, 'for text length:', originalText.length);
-        return calculatedOffset;
-    }
-
-    /**
-     * Create a new span annotation
-     */
-    async createAnnotation(spanText, start, end, label) {
-        console.log('SpanManager: Creating annotation:', { spanText, start, end, label });
-
-        if (!this.currentInstanceId) {
-            this.showStatus('No instance loaded', 'error');
-            return Promise.reject(new Error('No instance loaded'));
-        }
-
-        if (!this.currentSchema) {
-            this.showStatus('No schema selected', 'error');
-            return Promise.reject(new Error('No schema selected'));
-        }
-
-        try {
-            // Get existing spans to include in the request
-            const existingSpans = this.getSpans();
-            console.log('SpanManager: Existing spans before creating new one:', existingSpans);
-
-            // Create the new span
-            const newSpan = {
-                name: label,
-                start: start,
-                end: end,
-                title: label,
-                value: spanText
-            };
-
-            // Combine existing spans with the new span
-            const allSpans = [...existingSpans.map(span => ({
-                name: span.label,
-                start: span.start,
-                end: span.end,
-                title: span.label,
-                value: span.text || span.value
-            })), newSpan];
-
-            console.log('SpanManager: Sending POST to /updateinstance with all spans:', allSpans);
-            const response = await fetch('/updateinstance', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    type: 'span',
-                    schema: this.currentSchema, // Use tracked schema
-                    state: allSpans,
-                    instance_id: this.currentInstanceId
-                })
-            });
-
-            if (response.ok) {
-                const result = await response.json();
-                console.log('SpanManager: POST successful, result:', result);
-
-                // OPTIMISTIC UPDATE: Add the new span to local state immediately
-                // This ensures the visual overlay appears right away
-                if (!this.annotations) {
-                    this.annotations = { spans: [] };
-                }
-
-                // Create a span object that matches the expected format
-                const optimisticSpan = {
-                    id: `temp_${Date.now()}`, // Temporary ID until server assigns one
-                    label: label, // This should be the actual label text (e.g., "happy", "sad", "angry")
-                    start: start,
-                    end: end,
-                    text: spanText,
-                    schema: this.currentSchema
-                };
-
-                this.annotations.spans.push(optimisticSpan);
-                console.log('SpanManager: Added optimistic span to local state:', optimisticSpan);
-
-                // Render spans immediately with the optimistic update
-                this.renderSpans();
-                console.log('SpanManager: Rendered spans with optimistic update');
-
-                this.showStatus(`Created ${label} annotation: "${spanText}"`, 'success');
-                console.log('SpanManager: Annotation created:', result);
-                return result; // Return the result
-            } else {
-                const error = await response.json();
-                const errorMessage = `Error: ${error.error || 'Failed to create annotation'}`;
-                this.showStatus(errorMessage, 'error');
-                return Promise.reject(new Error(errorMessage));
-            }
-        } catch (error) {
-            console.error('SpanManager: Error creating annotation:', error);
-            this.showStatus('Error creating annotation', 'error');
-            return Promise.reject(error);
-        }
-    }
-
-    /**
-     * Delete a span annotation
-     */
-    async deleteSpan(annotationId) {
-        console.log(`🔍 [DEBUG] SpanManager.deleteSpan() called for annotationId: ${annotationId}`);
-
-        if (!this.currentInstanceId) {
-            this.showStatus('No instance loaded', 'error');
-            return;
-        }
-
-        if (!this.currentSchema) {
-            this.showStatus('No schema selected', 'error');
-            return;
-        }
-
-        try {
-            // DEBUG: Track overlays before deletion
-            const spanOverlays = document.getElementById('span-overlays');
-            const overlaysBeforeDelete = spanOverlays ? spanOverlays.children.length : 0;
-            console.log(`🔍 [DEBUG] SpanManager.deleteSpan() - Before deletion: ${overlaysBeforeDelete} overlays`);
-
-            // Find the span to delete from current annotations
-            const spanToDelete = this.annotations.spans.find(span => span.id === annotationId);
-            if (!spanToDelete) {
-                this.showStatus('Span not found', 'error');
-                return;
-            }
-
-            console.log('SpanManager: Deleting span:', spanToDelete);
-
-            // Send deletion request with value: null to indicate deletion
-            const response = await fetch('/updateinstance', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    type: 'span',
-                    schema: this.currentSchema,
-                    state: [
-                        {
-                            name: spanToDelete.label,
-                            start: spanToDelete.start,
-                            end: spanToDelete.end,
-                            title: spanToDelete.label,
-                            value: null  // This signals deletion
-                        }
-                    ],
-                    instance_id: this.currentInstanceId
-                })
-            });
-
-            if (response.ok) {
-                console.log('🔍 [DEBUG] SpanManager.deleteSpan() - Backend deletion successful, reloading annotations');
-                // Reload all annotations to ensure consistency
-                await this.loadAnnotations(this.currentInstanceId);
-                this.showStatus('Annotation deleted', 'success');
-                console.log('SpanManager: Annotation deleted:', annotationId);
-
-                // DEBUG: Track overlays after deletion and reload
-                const overlaysAfterDelete = spanOverlays ? spanOverlays.children.length : 0;
-                console.log(`🔍 [DEBUG] SpanManager.deleteSpan() - After deletion and reload: ${overlaysAfterDelete} overlays`);
-
-                // --- FIX: If no spans remain, force overlays to be cleared ---
-                if (this.getSpans().length === 0 && spanOverlays) {
-                    spanOverlays.innerHTML = '';
-                    console.log('🔍 [FIX] No spans remain after deletion, overlays forcibly cleared.');
-                }
-            } else {
-                const error = await response.json();
-                this.showStatus(`Error: ${error.error || 'Failed to delete annotation'}`, 'error');
-            }
-        } catch (error) {
-            console.error('SpanManager: Error deleting annotation:', error);
-            this.showStatus('Error deleting annotation', 'error');
-        }
-    }
-
-    /**
-     * Show status message
-     * DISABLED: Status messages are suppressed but code is preserved for future diagnostics
-     */
-    showStatus(message, type) {
-        // Status messages are disabled - uncomment the code below to re-enable
-        /*
-        const statusDiv = document.getElementById('status');
-        if (statusDiv) {
-            statusDiv.textContent = message;
-            statusDiv.className = `status ${type}`;
-            statusDiv.style.display = 'block';
-
-            setTimeout(() => {
-                statusDiv.style.display = 'none';
-            }, 3000);
-        }
-        */
-
-        // Keep console logging for debugging (can be disabled if needed)
-        console.log(`SpanManager: ${type.toUpperCase()} - ${message}`);
-    }
-
-    /**
-     * Escape HTML to prevent XSS
-     */
-    escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
-    /**
-     * Get current annotations
-     */
-    getAnnotations() {
-        return this.annotations;
-    }
-
-    /**
-     * Get spans in a format suitable for testing and API consistency
-     */
-    getSpans() {
-        if (!this.annotations || !this.annotations.spans) {
-            return [];
-        }
-        return this.annotations.spans;
-    }
-
-    /**
-     * Clear all annotations (for testing)
-     */
-    clearAnnotations() {
-        this.annotations = {spans: []};
-        this.renderSpans();
-    }
-
-    /**
-     * Get the background color for a given label
-     */
-    getSpanColor(label) {
-        // The colors structure is nested: {schema: {label: color}}
-        // We need to search through all schemas to find the label
-        if (this.colors) {
-            for (const schema in this.colors) {
-                if (this.colors[schema] && this.colors[schema][label]) {
-                    const color = this.colors[schema][label];
-                    // Add 40% opacity (66 in hex) to match backend rendering
-                    return color + '66';
-                }
-            }
-        }
-        // Fallback color if label not found in colors
-        return '#f0f0f066'; // A neutral gray with 40% opacity
-    }
-
-    /**
-     * Calculate overlap depths and adjust span positioning for better visibility
-     */
-    calculateOverlapDepths(spans) {
-        if (!spans || spans.length === 0) return [];
-
-        // Sort spans by start position
-        const sortedSpans = [...spans].sort((a, b) => a.start - b.start);
-        const overlapMap = new Map();
-
-        // Calculate overlaps and containment relationships
-        for (let i = 0; i < sortedSpans.length; i++) {
-            const currentSpan = sortedSpans[i];
-            const currentKey = `${currentSpan.start}-${currentSpan.end}`;
-
-            if (!overlapMap.has(currentKey)) {
-                overlapMap.set(currentKey, {
-                    span: currentSpan,
-                    overlaps: [],
-                    containedBy: [],
-                    contains: [],
-                    depth: 0,
-                    heightMultiplier: 1.0
-                });
-            }
-
-            // Check for overlaps with other spans
-            for (let j = i + 1; j < sortedSpans.length; j++) {
-                const otherSpan = sortedSpans[j];
-
-                // Check if spans overlap
-                if (this.spansOverlap(currentSpan, otherSpan)) {
-                    const otherKey = `${otherSpan.start}-${otherSpan.end}`;
-
-                    // Add to current span's overlaps
-                    overlapMap.get(currentKey).overlaps.push(otherSpan);
-
-                    // Add to other span's overlaps
-                    if (!overlapMap.has(otherKey)) {
-                        overlapMap.set(otherKey, {
-                            span: otherSpan,
-                            overlaps: [],
-                            containedBy: [],
-                            contains: [],
-                            depth: 0,
-                            heightMultiplier: 1.0
-                        });
-                    }
-                    overlapMap.get(otherKey).overlaps.push(currentSpan);
-
-                    // Check for containment relationships
-                    if (this.spansContain(currentSpan, otherSpan)) {
-                        // currentSpan completely contains otherSpan
-                        overlapMap.get(currentKey).contains.push(otherSpan);
-                        overlapMap.get(otherKey).containedBy.push(currentSpan);
-                    } else if (this.spansContain(otherSpan, currentSpan)) {
-                        // otherSpan completely contains currentSpan
-                        overlapMap.get(otherKey).contains.push(currentSpan);
-                        overlapMap.get(currentKey).containedBy.push(currentSpan);
-                    }
-                }
-            }
-        }
-
-        // Calculate depths using a simpler approach to avoid recursion issues
-        let changed = true;
-        let maxIterations = 100; // Prevent infinite loops
-        let iteration = 0;
-
-        while (changed && iteration < maxIterations) {
-            changed = false;
-            iteration++;
-
-            for (const [spanKey, spanData] of overlapMap) {
-                let maxOverlapDepth = 0;
-
-                // Find the maximum depth of overlapping spans
-                for (const overlappingSpan of spanData.overlaps) {
-                    const overlappingKey = `${overlappingSpan.start}-${overlappingSpan.end}`;
-                    const overlappingData = overlapMap.get(overlappingKey);
-                    if (overlappingData) {
-                        maxOverlapDepth = Math.max(maxOverlapDepth, overlappingData.depth);
-                    }
-                }
-
-                // Set this span's depth to one more than the maximum overlap depth
-                const newDepth = maxOverlapDepth + 1;
-                if (newDepth !== spanData.depth) {
-                    spanData.depth = newDepth;
-                    changed = true;
-                }
-            }
-        }
-
-        if (iteration >= maxIterations) {
-            console.warn('SpanManager: Max iterations reached in overlap depth calculation');
-        }
-
-        // Calculate height multipliers for visual distinction
-        this.calculateHeightMultipliers(overlapMap);
-
-        const result = Array.from(overlapMap.values());
-        return result;
-    }
-
-    /**
-     * Check if two spans overlap
-     */
-    spansOverlap(span1, span2) {
-        return span1.start < span2.end && span2.start < span1.end;
-    }
-
-    /**
-     * Check if span1 completely contains span2
-     */
-    spansContain(span1, span2) {
-        return span1.start <= span2.start && span1.end >= span2.end;
-    }
-
-    /**
-     * Calculate height multipliers for overlays based on overlap relationships
-     */
-    calculateHeightMultipliers(overlapMap) {
-        // Base height for all overlays
-        const baseHeight = 1.0;
-        const heightIncrement = 0.3; // Additional height per level
-        const maxHeightMultiplier = 3.0; // Cap the maximum height
-
-        // First pass: calculate height for containing spans
-        for (const [spanKey, spanData] of overlapMap) {
-            if (spanData.contains.length > 0) {
-                // This span contains other spans - make it taller
-                const containmentLevel = this.getContainmentLevel(spanData, overlapMap);
-                spanData.heightMultiplier = Math.min(
-                    baseHeight + (containmentLevel * heightIncrement),
-                    maxHeightMultiplier
-                );
-            }
-        }
-
-        // Second pass: adjust heights for partially overlapping spans
-        for (const [spanKey, spanData] of overlapMap) {
-            if (spanData.overlaps.length > 0 && spanData.contains.length === 0) {
-                // This span overlaps but doesn't contain others - make it slightly taller
-                const overlapLevel = this.getOverlapLevel(spanData, overlapMap);
-                const currentHeight = spanData.heightMultiplier;
-                const newHeight = Math.min(
-                    currentHeight + (overlapLevel * heightIncrement * 0.5),
-                    maxHeightMultiplier
-                );
-                spanData.heightMultiplier = newHeight;
-            }
-        }
-    }
-
-    /**
-     * Get the containment level (how many levels of containment this span has)
-     */
-    getContainmentLevel(spanData, overlapMap) {
-        let maxLevel = 0;
-        const visited = new Set();
-
-        const traverseContainment = (span, level) => {
-            if (visited.has(`${span.start}-${span.end}`)) return;
-            visited.add(`${span.start}-${span.end}`);
-
-            maxLevel = Math.max(maxLevel, level);
-
-            for (const containedSpan of spanData.contains) {
-                const containedKey = `${containedSpan.start}-${containedSpan.end}`;
-                const containedData = overlapMap.get(containedKey);
-                if (containedData && containedData.contains.length > 0) {
-                    traverseContainment(containedSpan, level + 1);
-                }
-            }
-        };
-
-        traverseContainment(spanData.span, 1);
-        return maxLevel;
-    }
-
-    /**
-     * Get the overlap level (how many spans this overlaps with)
-     */
-    getOverlapLevel(spanData, overlapMap) {
-        return spanData.overlaps.length;
-    }
-
-    /**
-     * Apply overlap-based styling to span elements
-     */
-    applyOverlapStyling(spanElements, overlapData) {
-        // Only apply overlap styling if there are actual overlaps
-        const spansWithOverlaps = overlapData.filter(d => d.overlaps.length > 0);
-
-        if (spansWithOverlaps.length === 0) {
-            // Remove all overlap styling from all spans
-            spanElements.forEach(spanElement => {
-                spanElement.classList.remove('span-overlap');
-                spanElement.classList.forEach(className => {
-                    if (className.startsWith('overlap-depth-')) {
-                        spanElement.classList.remove(className);
-                    }
-                });
-                spanElement.style.removeProperty('--overlap-height');
-                spanElement.style.removeProperty('--overlap-offset');
-                spanElement.style.removeProperty('--overlap-depth');
-                spanElement.style.removeProperty('--max-depth');
-                spanElement.style.removeProperty('z-index');
-            });
-            return;
-        }
-
-        const maxDepth = Math.max(...overlapData.map(d => d.depth), 0);
-
-        spanElements.forEach(spanElement => {
-            const start = parseInt(spanElement.dataset.start);
-            const end = parseInt(spanElement.dataset.end);
-            const spanKey = `${start}-${end}`;
-
-            const data = overlapData.find(d =>
-                d.span.start === start && d.span.end === end
-            );
-
-            // Only apply overlap styling if the span actually has overlaps
-            if (data && data.overlaps.length > 0) {
-                // Invert the depth so outermost is at base, innermost is on top
-                const layer = maxDepth - data.depth + 1;
-                const baseHeight = 1.2; // Base line height
-                const heightIncrement = 0.3; // Additional height per layer
-                const offsetIncrement = 0.2; // Vertical offset per layer
-
-                const height = baseHeight + (layer * heightIncrement);
-                const offset = (layer - 1) * offsetIncrement;
-
-                // Apply CSS custom properties for dynamic styling
-                spanElement.style.setProperty('--overlap-height', `${height}em`);
-                spanElement.style.setProperty('--overlap-offset', `${offset}em`);
-                spanElement.style.setProperty('--overlap-depth', layer);
-                spanElement.style.setProperty('--max-depth', maxDepth);
-
-                // Add overlap class for CSS targeting
-                spanElement.classList.add('span-overlap');
-                spanElement.classList.add(`overlap-depth-${layer}`);
-
-                // Add z-index to ensure proper layering (innermost on top)
-                spanElement.style.zIndex = layer;
-            } else {
-                // Remove any existing overlap styling for non-overlapping spans
-                spanElement.classList.remove('span-overlap');
-                spanElement.classList.forEach(className => {
-                    if (className.startsWith('overlap-depth-')) {
-                        spanElement.classList.remove(className);
-                    }
-                });
-                spanElement.style.removeProperty('--overlap-height');
-                spanElement.style.removeProperty('--overlap-offset');
-                spanElement.style.removeProperty('--overlap-depth');
-                spanElement.style.removeProperty('--max-depth');
-                spanElement.style.removeProperty('z-index');
-            }
-        });
-    }
-
-    /**
-     * Aggressively clear all overlays and internal state with deep logging
-     */
-    clearAllStateAndOverlays() {
-        console.log('[DEEP DEBUG] clearAllStateAndOverlays called');
-        this.debugState.clearAllStateCalls++;
-
-        // Log state before clearing
-        this.logDebugState('clearAllStateAndOverlays_before', {
-            overlayCount: this.getCurrentOverlayCount(),
-            annotationsCount: this.annotations?.spans?.length || 0
-        });
-
-        // Clear overlays
-        const spanOverlays = document.getElementById('span-overlays');
-        if (spanOverlays) {
-            const beforeCount = spanOverlays.children.length;
-            console.log('[DEEP DEBUG] Clearing overlays, count before:', beforeCount);
-
-            while (spanOverlays.firstChild) {
-                spanOverlays.removeChild(spanOverlays.firstChild);
-            }
-
-            // Force reflow
-            spanOverlays.offsetHeight;
-
-            // Double-check
-            const remaining = spanOverlays.querySelectorAll('.span-overlay');
-            if (remaining.length > 0) {
-                console.warn('[DEEP DEBUG] Overlays still present after clear, forcing removal');
-                remaining.forEach(node => {
-                    if (node.parentNode) {
-                        node.parentNode.removeChild(node);
-                    }
-                });
-            }
-
-            const afterCount = spanOverlays.children.length;
-            console.log('[DEEP DEBUG] Overlays cleared, count after:', afterCount);
-        }
-
-        // Reset internal state
-        this.annotations = {spans: []};
-        // Don't clear currentSchema - it should persist across state clearing
-        // this.currentSchema = null;
-        this.selectedLabel = null;
-        this.isInitialized = false;
-
-        this.logDebugState('clearAllStateAndOverlays_after', {
-            overlayCount: this.getCurrentOverlayCount(),
-            annotationsCount: this.annotations?.spans?.length || 0
-        });
-
-        console.log('[DEEP DEBUG] Internal state reset complete');
-    }
-
-    /**
-     * Get current overlay count for debugging
-     */
-    getCurrentOverlayCount() {
-        const spanOverlays = document.getElementById('span-overlays');
-        return spanOverlays ? spanOverlays.children.length : 0;
-    }
-
-    /**
-     * Enhanced onInstanceChange with deep logging
-     */
-    onInstanceChange(newInstanceId) {
-        console.log('[DEEP DEBUG] onInstanceChange called with newInstanceId:', newInstanceId);
-        this.debugState.onInstanceChangeCalls++;
-
-        this.logDebugState('onInstanceChange_start', {
-            newInstanceId: newInstanceId,
-            currentInstanceId: this.currentInstanceId,
-            overlayCount: this.getCurrentOverlayCount()
-        });
-
-        // Clear all state first
-        this.clearAllStateAndOverlays();
-
-        // If newInstanceId is provided, use it; otherwise fetch from server
-        if (typeof newInstanceId !== 'undefined') {
-            console.log('[DEEP DEBUG] Using provided newInstanceId:', newInstanceId);
-            this.loadAnnotations(newInstanceId);
-        } else {
-            console.log('[DEEP DEBUG] No newInstanceId provided, fetching from server');
-            this.fetchCurrentInstanceIdFromServer().then(serverInstanceId => {
-                if (serverInstanceId) {
-                    this.loadAnnotations(serverInstanceId);
-                }
-            });
-        }
-
-        this.logDebugState('onInstanceChange_completed', {
-            newInstanceId: newInstanceId,
-            currentInstanceId: this.currentInstanceId
-        });
-    }
-
-    /**
-     * Remove all span overlays from the DOM and reset internal state
-     */
-    clearAllSpanOverlays() {
-        const spanOverlays = document.getElementById('span-overlays');
-        if (spanOverlays) {
-            while (spanOverlays.firstChild) {
-                spanOverlays.removeChild(spanOverlays.firstChild);
-            }
-        }
-        this.annotations = {spans: []};
-        console.log('[DEFENSIVE] Cleared all span overlays and reset annotations');
+    if (deepDebugState.overlayStates.length > 20) {
+        deepDebugState.overlayStates = deepDebugState.overlayStates.slice(-20);
     }
 }
 
 /**
- * Utility: Get bounding rect(s) for character range in a container
- * Returns an array of DOMRects (one per line if the range wraps)
+ * Get current overlay count for debugging
  */
-function getCharRangeBoundingRect(container, start, end) {
-    const textNode = container.firstChild;
-    if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return null;
-
-    const range = document.createRange();
-    range.setStart(textNode, start);
-    range.setEnd(textNode, end);
-
-    // FIREFOX FIX: Handle Firefox's different behavior with getClientRects
-    const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
-
-    let rects;
-    if (isFirefox) {
-        // Firefox sometimes returns empty rects if the text hasn't been fully rendered
-        // Force a reflow and try multiple times
-        let attempts = 0;
-        const maxAttempts = 3;
-
-        while (attempts < maxAttempts) {
-            // Force a reflow
-            container.offsetHeight;
-
-            rects = range.getClientRects();
-            if (rects.length > 0) {
-                break;
-            }
-
-            attempts++;
-            if (attempts < maxAttempts) {
-                // Small delay before retry
-                const startTime = Date.now();
-                while (Date.now() - startTime < 10) {
-                    // Busy wait for 10ms
-                }
-            }
-        }
-
-        // If still no rects, try alternative method for Firefox
-        if (rects.length === 0) {
-            console.warn('Firefox: getClientRects returned empty, trying alternative method');
-
-            // Alternative: use getBoundingClientRect on the range
-            const boundingRect = range.getBoundingClientRect();
-            if (boundingRect.width > 0 && boundingRect.height > 0) {
-                rects = [boundingRect];
-            }
-        }
-    } else {
-        rects = range.getClientRects();
-    }
-
-    if (rects.length === 0) return null;
-
-    // If the range wraps lines, return all rects
-    return Array.from(rects);
+function getCurrentOverlayCount() {
+    const spanOverlays = document.getElementById('span-overlays');
+    return spanOverlays ? spanOverlays.children.length : 0;
 }
 
-// CommonJS export for Jest
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports.getCharRangeBoundingRect = getCharRangeBoundingRect;
-}
-
-// Initialize global span manager
-window.spanManager = new SpanManager();
-document.addEventListener('DOMContentLoaded', () => {
-    window.spanManager.initialize();
+// Initialize the application
+document.addEventListener('DOMContentLoaded', function() {
+    loadCurrentInstance();
+    setupEventListeners();
+    // Initial validation check
+    validateRequiredFields();
+    // Initialize span manager integration
+    initializeSpanManagerIntegration();
 });
 
 /**
- * ===================== DEBUGGING & MAINTENANCE NOTES =====================
- * - All major state changes are logged with [DEBUG] or [DEFENSIVE] tags.
- * - If overlays persist across navigation, check onInstanceChange and clearAllSpanOverlays.
- * - If overlays are missing, check loadAnnotations and renderSpans logic.
- * - For browser-specific issues (esp. Firefox), see FIREFOX FIX comments.
- * - Selenium tests in tests/selenium/ can be used to automate bug reproduction.
- * ========================================================================
+ * Global overlay tracking for debugging
  */
+function trackOverlayCreation(overlay, context = 'unknown') {
+    const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
+    if (isFirefox) {
+        console.log(`🔍 [DEBUG] OVERLAY CREATED in ${context}:`, {
+            className: overlay.className,
+            id: overlay.id,
+            parentId: overlay.parentElement?.id,
+            timestamp: new Date().toISOString()
+        });
+
+        // Track total overlays
+        const totalOverlays = document.querySelectorAll('.span-overlay').length;
+        console.log(`🔍 [DEBUG] TOTAL OVERLAYS after creation: ${totalOverlays}`);
+    }
+}
+
+function trackOverlayRemoval(overlay, context = 'unknown') {
+    const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
+    if (isFirefox) {
+        console.log(`🔍 [DEBUG] OVERLAY REMOVED in ${context}:`, {
+            className: overlay.className,
+            id: overlay.id,
+            timestamp: new Date().toISOString()
+        });
+
+        // Track total overlays
+        const totalOverlays = document.querySelectorAll('.span-overlay').length;
+        console.log(`🔍 [DEBUG] TOTAL OVERLAYS after removal: ${totalOverlays}`);
+    }
+}
+
+function debugTrackOverlays(action, instanceId = null) {
+    const spanOverlays = document.getElementById('span-overlays');
+    const overlayCount = spanOverlays ? spanOverlays.children.length : 0;
+    const instanceText = document.getElementById('instance-text');
+    const textContent = document.getElementById('text-content');
+
+    console.log(`🔍 [DEBUG OVERLAY TRACKING] ${action}:`, {
+        instanceId: instanceId || currentInstance?.id,
+        lastInstanceId: debugLastInstanceId,
+        overlayCount: overlayCount,
+        spanOverlaysExists: !!spanOverlays,
+        instanceTextExists: !!instanceText,
+        textContentExists: !!textContent,
+        spanOverlaysHTML: spanOverlays ? spanOverlays.innerHTML.substring(0, 200) + '...' : 'null',
+        timestamp: new Date().toISOString()
+    });
+
+    debugOverlayCount = overlayCount;
+    if (instanceId) debugLastInstanceId = instanceId;
+}
+
+// DEBUG: Add overlay cleanup verification
+function debugVerifyOverlayCleanup() {
+    const spanOverlays = document.getElementById('span-overlays');
+    if (!spanOverlays) {
+        console.warn('🔍 [DEBUG] span-overlays container not found during cleanup verification');
+        return;
+    }
+
+    const overlayCount = spanOverlays.children.length;
+    console.log(`🔍 [DEBUG] Overlay cleanup verification:`, {
+        overlayCount: overlayCount,
+        containerEmpty: overlayCount === 0,
+        containerInnerHTML: spanOverlays.innerHTML,
+        containerChildren: Array.from(spanOverlays.children).map(child => ({
+            tagName: child.tagName,
+            className: child.className,
+            dataset: child.dataset
+        }))
+    });
+
+    if (overlayCount > 0) {
+        console.warn('🔍 [DEBUG] WARNING: Overlays still present after expected cleanup!');
+    }
+}
+
+function setupEventListeners() {
+    // Go to button
+    document.getElementById('go-to-btn').addEventListener('click', function() {
+        const goToValue = document.getElementById('go_to').value;
+        if (goToValue && goToValue > 0) {
+            navigateToInstance(parseInt(goToValue));
+        }
+    });
+
+    // Enter key on go to input
+    document.getElementById('go_to').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            document.getElementById('go-to-btn').click();
+        }
+    });
+
+    // Keyboard navigation
+    document.addEventListener('keydown', function(e) {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+            return; // Don't handle navigation when typing
+        }
+
+        switch(e.key) {
+            case 'ArrowLeft':
+                e.preventDefault();
+                navigateToPrevious();
+                break;
+            case 'ArrowRight':
+                e.preventDefault();
+                navigateToNext();
+                break;
+        }
+    });
+}
+
+/**
+ * Initialize integration with the frontend span manager
+ */
+function initializeSpanManagerIntegration() {
+    // Wait for span manager to be available
+    const checkSpanManager = () => {
+        if (window.spanManager && window.spanManager.isInitialized) {
+            console.log('Annotation.js: Span manager integration initialized');
+            setupSpanLabelSelector();
+        } else {
+            setTimeout(checkSpanManager, 100);
+        }
+    };
+    checkSpanManager();
+}
+
+/**
+ * Setup span label selector interface
+ * This function sets up the span label selection checkboxes and their event handlers
+ */
+function setupSpanLabelSelector() {
+    console.log('🔍 [DEBUG] setupSpanLabelSelector() - ENTRY POINT');
+
+    // Find all span label checkboxes
+    const spanLabelCheckboxes = document.querySelectorAll('input[name*="span_label"]');
+    console.log('🔍 [DEBUG] setupSpanLabelSelector() - Found span label checkboxes:', spanLabelCheckboxes.length);
+
+    if (spanLabelCheckboxes.length === 0) {
+        console.log('🔍 [DEBUG] setupSpanLabelSelector() - No span label checkboxes found');
+        console.log('🔍 [DEBUG] setupSpanLabelSelector() - EXIT POINT (no checkboxes)');
+        return;
+    }
+
+    // Set up event listeners for each checkbox
+    spanLabelCheckboxes.forEach((checkbox, index) => {
+        console.log(`🔍 [DEBUG] setupSpanLabelSelector() - Setting up checkbox ${index}:`, {
+            name: checkbox.name,
+            id: checkbox.id,
+            value: checkbox.value
+        });
+
+        // Add click event listener if not already present
+        if (!checkbox.hasAttribute('data-span-label-setup')) {
+            checkbox.addEventListener('change', function() {
+                console.log('🔍 [DEBUG] setupSpanLabelSelector() - Checkbox changed:', {
+                    name: this.name,
+                    checked: this.checked,
+                    value: this.value
+                });
+
+                // If this checkbox is checked, uncheck others in the same group
+                if (this.checked) {
+                    const groupName = this.name.split(':::')[0] + ':::' + this.name.split(':::')[1];
+                    spanLabelCheckboxes.forEach(otherCheckbox => {
+                        if (otherCheckbox !== this && otherCheckbox.name.startsWith(groupName)) {
+                            otherCheckbox.checked = false;
+                        }
+                    });
+                }
+            });
+
+            // Mark as set up
+            checkbox.setAttribute('data-span-label-setup', 'true');
+        }
+    });
+
+    console.log('🔍 [DEBUG] setupSpanLabelSelector() - EXIT POINT (setup complete)');
+}
+
+
+
+/**
+ * Check if current instance has span annotations
+ */
+function checkForSpanAnnotations() {
+    if (!currentInstance || !currentInstance.annotation_scheme) {
+        return false;
+    }
+
+    // Check if any annotation type is 'span'
+    for (const schema of Object.values(currentInstance.annotation_scheme)) {
+        if (schema.type === 'span') {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Get span labels from annotation scheme
+ */
+function getSpanLabelsFromScheme() {
+    const labels = [];
+
+    if (!currentInstance || !currentInstance.annotation_scheme) {
+        return labels;
+    }
+
+    for (const [schemaName, schema] of Object.entries(currentInstance.annotation_scheme)) {
+        if (schema.type === 'span' && schema.labels) {
+            labels.push(...schema.labels);
+        }
+    }
+
+    return labels;
+}
+
+/**
+ * Load span annotations for current instance
+ */
+async function loadSpanAnnotations() {
+    console.log('🔍 [DEBUG] loadSpanAnnotations() - ENTRY POINT');
+    console.log('🔍 [DEBUG] loadSpanAnnotations() - currentInstance:', currentInstance);
+    console.log('🔍 [DEBUG] loadSpanAnnotations() - currentInstance.id:', currentInstance?.id);
+
+    if (!currentInstance || !currentInstance.id) {
+        console.log('🔍 [DEBUG] loadSpanAnnotations() - EXIT POINT (no currentInstance or id)');
+        return;
+    }
+
+    try {
+        // Initialize span manager if not already done
+        if (!window.spanManager) {
+            console.log('🔍 [DEBUG] loadSpanAnnotations() - Initializing span manager');
+            initializeSpanManagerIntegration();
+        }
+
+        // Wait for span manager to be ready
+        await new Promise(resolve => {
+            const checkSpanManager = () => {
+                if (window.spanManager) {
+                    console.log('🔍 [DEBUG] loadSpanAnnotations() - Span manager ready');
+                    resolve();
+                } else {
+                    console.log('🔍 [DEBUG] loadSpanAnnotations() - Span manager not ready, retrying...');
+                    setTimeout(checkSpanManager, 100);
+                }
+            };
+            checkSpanManager();
+        });
+
+        console.log('🔍 [DEBUG] loadSpanAnnotations() - About to call spanManager.loadAnnotations()');
+        console.log('🔍 [DEBUG] loadSpanAnnotations() - Instance ID for API call:', currentInstance.id);
+
+        // Load annotations for the current instance
+        await window.spanManager.loadAnnotations(currentInstance.id);
+
+        console.log('🔍 [DEBUG] loadSpanAnnotations() - spanManager.loadAnnotations() completed');
+        console.log('🔍 [DEBUG] loadSpanAnnotations() - EXIT POINT (success)');
+    } catch (error) {
+        console.error('🔍 [DEBUG] loadSpanAnnotations() - Error loading span annotations:', error);
+        console.log('🔍 [DEBUG] loadSpanAnnotations() - EXIT POINT (error)');
+    }
+}
+
+async function loadCurrentInstance() {
+    try {
+        setLoading(true);
+        showError(false);
+
+        // DEBUG: Track overlays at start of instance loading
+        debugTrackOverlays('START_LOAD_CURRENT_INSTANCE');
+
+        // Get current instance from server-rendered HTML
+        const instanceTextElement = document.getElementById('instance-text');
+        const instanceIdElement = document.getElementById('instance_id');
+
+        if (!instanceTextElement) {
+            throw new Error('Instance text element not found');
+        }
+
+                // Get instance text from the rendered HTML (server-rendered)
+        const instanceText = instanceTextElement.innerHTML;
+
+        // Get instance ID from hidden input
+        const instanceId = instanceIdElement ? instanceIdElement.value : null;
+        console.log(`🔍 [DEBUG] loadCurrentInstance: Read instance_id from DOM: '${instanceId}'`);
+
+        if (!instanceText || instanceText.trim() === '') {
+            showError(true, 'No instance text available');
+            return;
+        }
+
+        // Create current instance object from server-rendered data
+        currentInstance = {
+            id: instanceId,
+            text: instanceTextElement.textContent || instanceTextElement.innerText,
+            displayed_text: instanceText
+        };
+
+        // Set global variable for span manager
+        window.currentInstance = currentInstance;
+
+        // Get progress from the progress counter element
+        const progressCounter = document.getElementById('progress-counter');
+        if (progressCounter) {
+            const progressText = progressCounter.textContent;
+            const match = progressText.match(/(\d+)\/(\d+)/);
+            if (match) {
+                const annotated = parseInt(match[1]);
+                const total = parseInt(match[2]);
+                userState = {
+                    assignments: {
+                        annotated: annotated,
+                        total: total
+                    },
+                    annotations: {
+                        by_instance: {}
+                    }
+                };
+            }
+        }
+
+        updateProgressDisplay();
+        updateInstanceDisplay();
+        restoreSpanAnnotationsFromHTML();
+        loadAnnotations();
+        generateAnnotationForms();
+
+        // Load span annotations
+        console.log('🔍 [DEBUG] loadCurrentInstance() - About to call loadSpanAnnotations()');
+        console.log('🔍 [DEBUG] loadCurrentInstance() - currentInstance.id:', currentInstance?.id);
+        await loadSpanAnnotations();
+        console.log('🔍 [DEBUG] loadCurrentInstance() - loadSpanAnnotations() completed');
+
+        // Populate input values with existing annotations AFTER forms are generated
+        setTimeout(() => {
+            populateInputValues();
+        }, 0);
+
+    } catch (error) {
+        console.error('Error loading current instance:', error);
+        showError(true, error.message);
+    } finally {
+        setLoading(false);
+    }
+}
+
+function updateProgressDisplay() {
+    // Progress is already displayed in the HTML template
+    // No need to update it since it's server-rendered
+    console.log('Progress display updated from server-rendered HTML');
+}
+
+function updateInstanceDisplay() {
+    // Instance text is already displayed in the HTML template
+    // Just ensure the instance_id is set correctly
+    const instanceIdInput = document.getElementById('instance_id');
+    if (instanceIdInput && currentInstance && currentInstance.id) {
+        const oldValue = instanceIdInput.value;
+        instanceIdInput.value = currentInstance.id;
+        console.log(`🔍 [DEBUG] updateInstanceDisplay: Updated instance_id from '${oldValue}' to '${currentInstance.id}'`);
+
+        // FIREFOX FIX: Force the input element to be updated in Firefox
+        const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
+        if (isFirefox) {
+            console.log('🔍 [DEBUG] updateInstanceDisplay: Firefox detected - forcing input update');
+
+            // Method 1: Force a DOM update by temporarily changing and restoring the value
+            const tempValue = instanceIdInput.value;
+            instanceIdInput.value = '';
+            instanceIdInput.value = tempValue;
+
+            // Method 2: Trigger input events to ensure Firefox recognizes the change
+            instanceIdInput.dispatchEvent(new Event('input', { bubbles: true }));
+            instanceIdInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+            // Method 3: Force a reflow
+            instanceIdInput.offsetHeight;
+
+            console.log(`🔍 [DEBUG] updateInstanceDisplay: Firefox input update completed`);
+        }
+    } else {
+        console.log(`🔍 [DEBUG] updateInstanceDisplay: Could not update instance_id - input: ${!!instanceIdInput}, currentInstance: ${!!currentInstance}, currentInstance.id: ${currentInstance?.id}`);
+    }
+    console.log('[DEBUG] updateInstanceDisplay: Instance display updated from server');
+}
+
+async function loadAnnotations() {
+    try {
+        console.log('🔍 Loading annotations for instance:', currentInstance.id);
+
+        // Since we're not using the admin API, we'll get annotations from the DOM
+        // The server should have pre-populated the form fields with existing annotations
+        currentAnnotations = {};
+
+        // We'll populate annotations from the DOM in populateInputValues()
+        console.log('🔍 Annotations will be loaded from DOM in populateInputValues()');
+    } catch (error) {
+        console.error('❌ Error loading annotations:', error);
+        currentAnnotations = {};
+    }
+}
+
+function generateAnnotationForms() {
+    const formsContainer = document.getElementById('annotation-forms');
+
+    // The server generates the forms, so we just need to set up event listeners
+    // The forms are already in the HTML from server-side generation
+    setupInputEventListeners();
+    validateRequiredFields();
+}
+
+async function saveAnnotations() {
+    if (!currentInstance) return;
+
+    try {
+        const headers = {
+            'Content-Type': 'application/json',
+        };
+
+        // Add API key if available
+        if (window.config.api_key) {
+            headers['X-API-Key'] = window.config.api_key;
+        }
+
+        // Save both label and span annotations via /updateinstance
+        const spanAnnotations = extractSpanAnnotationsFromDOM();
+        console.log('[DEBUG] saveAnnotations: spanAnnotations to send:', spanAnnotations);
+
+        // Transform currentAnnotations to the format expected by /updateinstance
+        const labelAnnotations = {};
+        for (const [schema, labels] of Object.entries(currentAnnotations)) {
+            for (const [label, value] of Object.entries(labels)) {
+                const key = `${schema}:${label}`;
+                labelAnnotations[key] = value;
+            }
+        }
+
+        const response = await fetch('/updateinstance', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({
+                instance_id: currentInstance.id,
+                annotations: labelAnnotations,
+                span_annotations: spanAnnotations
+            })
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            console.log('[DEBUG] saveAnnotations: annotations saved:', result);
+        } else {
+            console.warn('[DEBUG] saveAnnotations: failed to save annotations:', await response.text());
+        }
+
+        return true;
+
+    } catch (error) {
+        console.error('Error saving annotations:', error);
+        showError(true, 'Failed to save annotations: ' + error.message);
+        return false;
+    }
+}
+
+async function navigateToPrevious() {
+    console.log('[DEEP DEBUG NAV] navigateToPrevious - ENTRY POINT');
+    deepDebugState.navigationCalls++;
+
+    logDeepDebug('navigateToPrevious_start', {
+        currentInstanceId: currentInstance?.id,
+        overlayCount: getCurrentOverlayCount()
+    });
+
+    if (isLoading) {
+        console.log('[DEEP DEBUG NAV] navigateToPrevious - Navigation blocked, still loading');
+        return;
+    }
+
+    setLoading(true);
+    console.log('[DEEP DEBUG NAV] navigateToPrevious - Loading set to true');
+
+    try {
+        // FIREFOX FIX: Force overlay cleanup before navigation
+        const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
+        console.log('[DEEP DEBUG NAV] navigateToPrevious - Is Firefox:', isFirefox);
+
+        if (isFirefox) {
+            console.log('[DEEP DEBUG NAV] Firefox detected - forcing overlay cleanup before navigation');
+            const spanOverlays = document.getElementById('span-overlays');
+            if (spanOverlays) {
+                const beforeCount = spanOverlays.children.length;
+                console.log('[DEEP DEBUG NAV] navigateToPrevious - Before Firefox cleanup:', beforeCount, 'overlays');
+
+                // Remove all overlays individually
+                while (spanOverlays.firstChild) {
+                    const child = spanOverlays.firstChild;
+                    console.log('[DEEP DEBUG NAV] navigateToPrevious - Removing overlay child:', child.className, child.id);
+
+                    // Track overlay removal for debugging
+                    if (typeof trackOverlayRemoval === 'function') {
+                        trackOverlayRemoval(child, 'navigateToPrevious Firefox cleanup');
+                    }
+
+                    spanOverlays.removeChild(child);
+                }
+
+                // Force reflow
+                spanOverlays.offsetHeight;
+                const afterCount = spanOverlays.children.length;
+                console.log('[DEEP DEBUG NAV] navigateToPrevious - After Firefox cleanup:', afterCount, 'overlays');
+
+                // Double-check cleanup
+                const remainingOverlays = document.querySelectorAll('.span-overlay');
+                console.log('[DEEP DEBUG NAV] navigateToPrevious - Remaining overlays via querySelectorAll:', remainingOverlays.length);
+
+                if (remainingOverlays.length > 0) {
+                    console.log('[DEEP DEBUG NAV] navigateToPrevious - WARNING: Overlays still exist after cleanup!');
+                    remainingOverlays.forEach((overlay, index) => {
+                        console.log(`[DEEP DEBUG NAV] navigateToPrevious - Remaining overlay ${index}:`, overlay.className, overlay.id);
+                    });
+                }
+            } else {
+                console.log('[DEEP DEBUG NAV] navigateToPrevious - No span-overlays container found');
+            }
+        }
+
+        // Use the correct endpoint and payload for navigation
+        const response = await fetch('/annotate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                action: 'prev_instance',
+                instance_id: currentInstance?.id
+            })
+        });
+
+        if (response.ok) {
+            console.log('[DEEP DEBUG NAV] navigateToPrevious - Navigation successful, reloading page');
+
+            // DEFENSIVE: Notify span manager about instance change before reload
+            if (window.spanManager && typeof window.spanManager.onInstanceChange === 'function') {
+                console.log('[DEEP DEBUG NAV] navigateToPrevious - Notifying span manager of instance change');
+                deepDebugState.spanManagerCalls.push({
+                    timestamp: new Date().toISOString(),
+                    action: 'onInstanceChange',
+                    from: 'navigateToPrevious',
+                    currentInstanceId: currentInstance?.id
+                });
+                window.spanManager.onInstanceChange();
+            }
+
+            logDeepDebug('navigateToPrevious_success', {
+                currentInstanceId: currentInstance?.id,
+                overlayCount: getCurrentOverlayCount()
+            });
+
+            window.location.reload();
+        } else {
+            console.error('[DEEP DEBUG NAV] navigateToPrevious - Navigation failed:', response.status);
+            setLoading(false);
+        }
+    } catch (error) {
+        console.error('[DEEP DEBUG NAV] navigateToPrevious - Navigation error:', error);
+        setLoading(false);
+    }
+}
+
+async function navigateToNext() {
+    console.log('[DEEP DEBUG NAV] navigateToNext - ENTRY POINT');
+    deepDebugState.navigationCalls++;
+
+    logDeepDebug('navigateToNext_start', {
+        currentInstanceId: currentInstance?.id,
+        overlayCount: getCurrentOverlayCount()
+    });
+
+    if (isLoading) {
+        console.log('[DEEP DEBUG NAV] navigateToNext - Navigation blocked, still loading');
+        return;
+    }
+
+    setLoading(true);
+    console.log('[DEEP DEBUG NAV] navigateToNext - Loading set to true');
+
+    try {
+        // FIREFOX FIX: Force overlay cleanup before navigation
+        const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
+        console.log('[DEEP DEBUG NAV] navigateToNext - Is Firefox:', isFirefox);
+
+        if (isFirefox) {
+            console.log('[DEEP DEBUG NAV] Firefox detected - forcing overlay cleanup before navigation');
+            const spanOverlays = document.getElementById('span-overlays');
+            if (spanOverlays) {
+                const beforeCount = spanOverlays.children.length;
+                console.log('[DEEP DEBUG NAV] navigateToNext - Before Firefox cleanup:', beforeCount, 'overlays');
+
+                // Remove all overlays individually
+                while (spanOverlays.firstChild) {
+                    const child = spanOverlays.firstChild;
+                    console.log('[DEEP DEBUG NAV] navigateToNext - Removing overlay child:', child.className, child.id);
+
+                    // Track overlay removal for debugging
+                    if (typeof trackOverlayRemoval === 'function') {
+                        trackOverlayRemoval(child, 'navigateToNext Firefox cleanup');
+                    }
+
+                    spanOverlays.removeChild(child);
+                }
+
+                // Force reflow
+                spanOverlays.offsetHeight;
+                const afterCount = spanOverlays.children.length;
+                console.log('[DEEP DEBUG NAV] navigateToNext - After Firefox cleanup:', afterCount, 'overlays');
+
+                // Double-check cleanup
+                const remainingOverlays = document.querySelectorAll('.span-overlay');
+                console.log('[DEEP DEBUG NAV] navigateToNext - Remaining overlays via querySelectorAll:', remainingOverlays.length);
+
+                if (remainingOverlays.length > 0) {
+                    console.log('[DEEP DEBUG NAV] navigateToNext - WARNING: Overlays still exist after cleanup!');
+                    remainingOverlays.forEach((overlay, index) => {
+                        console.log(`[DEEP DEBUG NAV] navigateToNext - Remaining overlay ${index}:`, overlay.className, overlay.id);
+                    });
+                }
+            } else {
+                console.log('[DEEP DEBUG NAV] navigateToNext - No span-overlays container found');
+            }
+        }
+
+        // Use the correct endpoint and payload for navigation
+        const response = await fetch('/annotate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                action: 'next_instance',
+                instance_id: currentInstance?.id
+            })
+        });
+
+        if (response.ok) {
+            console.log('[DEEP DEBUG NAV] navigateToNext - Navigation successful, reloading page');
+
+            // DEFENSIVE: Notify span manager about instance change before reload
+            if (window.spanManager && typeof window.spanManager.onInstanceChange === 'function') {
+                console.log('[DEEP DEBUG NAV] navigateToNext - Notifying span manager of instance change');
+                deepDebugState.spanManagerCalls.push({
+                    timestamp: new Date().toISOString(),
+                    action: 'onInstanceChange',
+                    from: 'navigateToNext',
+                    currentInstanceId: currentInstance?.id
+                });
+                window.spanManager.onInstanceChange();
+            }
+
+            logDeepDebug('navigateToNext_success', {
+                currentInstanceId: currentInstance?.id,
+                overlayCount: getCurrentOverlayCount()
+            });
+
+            window.location.reload();
+        } else {
+            console.error('[DEEP DEBUG NAV] navigateToNext - Navigation failed:', response.status);
+            setLoading(false);
+        }
+    } catch (error) {
+        console.error('[DEEP DEBUG NAV] navigateToNext - Navigation error:', error);
+        setLoading(false);
+    }
+}
+
+async function navigateToInstance(instanceIndex) {
+    if (isLoading) return;
+
+    try {
+        setLoading(true);
+
+        // DEBUG: Track overlays before navigation
+        debugTrackOverlays('BEFORE_GO_TO_NAVIGATION', currentInstance?.id);
+
+        // FIREFOX FIX: Force overlay cleanup before navigation
+        const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
+        console.log('🔍 [DEBUG] navigateToInstance() - Is Firefox:', isFirefox);
+
+        if (isFirefox) {
+            console.log('🔍 [DEBUG] Firefox detected - forcing overlay cleanup before navigation');
+            const spanOverlays = document.getElementById('span-overlays');
+            if (spanOverlays) {
+                console.log('🔍 [DEBUG] navigateToInstance() - Before Firefox cleanup:', spanOverlays.children.length, 'overlays');
+
+                // Remove all overlays individually
+                while (spanOverlays.firstChild) {
+                    const child = spanOverlays.firstChild;
+                    console.log('🔍 [DEBUG] navigateToInstance() - Removing overlay child:', child.className, child.id);
+
+                    // Track overlay removal for debugging
+                    if (typeof trackOverlayRemoval === 'function') {
+                        trackOverlayRemoval(child, 'navigateToInstance Firefox cleanup');
+                    }
+
+                    spanOverlays.removeChild(child);
+                }
+
+                // Force reflow
+                spanOverlays.offsetHeight;
+                console.log('🔍 [DEBUG] navigateToInstance() - After Firefox cleanup:', spanOverlays.children.length, 'overlays');
+            } else {
+                console.log('🔍 [DEBUG] navigateToInstance() - No span-overlays container found');
+            }
+        }
+
+        const headers = {
+            'Content-Type': 'application/json',
+        };
+        if (window.config.api_key) {
+            headers['X-API-Key'] = window.config.api_key;
+        }
+        const response = await fetch('/annotate', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({
+                action: 'go_to',
+                go_to: instanceIndex
+            })
+        });
+
+        if (response.ok) {
+            console.log('🔍 [DEBUG] navigateToInstance() - Navigation successful, about to reload page');
+            // DEBUG: Clear overlays before reload
+            const spanOverlays = document.getElementById('span-overlays');
+            if (spanOverlays) {
+                console.log('🔍 [DEBUG] navigateToInstance() - Before clearing overlays:', spanOverlays.children.length, 'overlays');
+                console.log('🔍 [DEBUG] navigateToInstance() - Clearing span overlays before page reload');
+                spanOverlays.innerHTML = '';
+                console.log('🔍 [DEBUG] navigateToInstance() - After clearing overlays:', spanOverlays.children.length, 'overlays');
+                debugVerifyOverlayCleanup();
+            } else {
+                console.log('🔍 [DEBUG] navigateToInstance() - No span-overlays container found');
+            }
+            // Reload the page to get the new instance data from the server
+            window.location.reload();
+        } else {
+            throw new Error('Failed to navigate to instance');
+        }
+    } catch (error) {
+        console.error('Error navigating to instance:', error);
+        showError(true, error.message);
+    } finally {
+        setLoading(false);
+    }
+}
+
+function validateRequiredFields() {
+    // Check all inputs with validation="required"
+    const requiredInputs = document.querySelectorAll('input[validation="required"]');
+    let allRequiredFilled = true;
+
+    // Group inputs by their name (for radio buttons) or individual inputs
+    const inputGroups = {};
+    requiredInputs.forEach(input => {
+        if (input.type === 'radio') {
+            // For radio buttons, check if any in the group is selected
+            const name = input.name;
+            if (!inputGroups[name]) {
+                inputGroups[name] = [];
+            }
+            inputGroups[name].push(input);
+        } else {
+            // For other inputs, check individually
+            if (!input.value || input.value.trim() === '') {
+                allRequiredFilled = false;
+            }
+        }
+    });
+
+    // Check radio button groups
+    for (const [name, inputs] of Object.entries(inputGroups)) {
+        const anySelected = inputs.some(input => input.checked);
+        if (!anySelected) {
+            allRequiredFilled = false;
+            break;
+        }
+    }
+
+    // Update Next button state
+    const nextBtn = document.getElementById('next-btn');
+    if (nextBtn) {
+        nextBtn.disabled = !allRequiredFilled;
+    }
+
+    return allRequiredFilled;
+}
+
+function setLoading(loading) {
+    isLoading = loading;
+    const loadingState = document.getElementById('loading-state');
+    const mainContent = document.getElementById('main-content');
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
+
+    if (loading) {
+        loadingState.style.display = 'block';
+        mainContent.style.display = 'none';
+        prevBtn.disabled = true;
+        nextBtn.disabled = true;
+    } else {
+        loadingState.style.display = 'none';
+        mainContent.style.display = 'block';
+        prevBtn.disabled = false;
+        // Don't enable next button here - let validateRequiredFields handle it
+        validateRequiredFields();
+    }
+}
+
+function showError(show, message = '') {
+    const errorState = document.getElementById('error-state');
+    const errorMessage = document.getElementById('error-message-text');
+    const mainContent = document.getElementById('main-content');
+
+    if (show) {
+        errorState.style.display = 'block';
+        mainContent.style.display = 'none';
+        errorMessage.textContent = message;
+    } else {
+        errorState.style.display = 'none';
+        mainContent.style.display = 'block';
+    }
+}
+
+// Utility functions for annotation handling
+function updateAnnotation(schema, label, value) {
+    if (!currentAnnotations[schema]) {
+        currentAnnotations[schema] = {};
+    }
+    currentAnnotations[schema][label] = value;
+}
+
+// Function to handle "None" option in multiselect annotations
+function whetherNone(checkbox) {
+    // This function is used to uncheck all the other labels when "None" is checked
+    // and vice versa
+    var x = document.getElementsByClassName(checkbox.className);
+    var i;
+    for (i = 0; i < x.length; i++) {
+        if(checkbox.value == "None" && x[i].value != "None") x[i].checked = false;
+        if(checkbox.value != "None" && x[i].value == "None") x[i].checked = false;
+    }
+    // Also trigger the input change handler for the current checkbox
+    handleInputChange(checkbox);
+}
+
+// Input event handling functions
+function setupInputEventListeners() {
+    // Set up event listeners for all annotation inputs
+    const inputs = document.querySelectorAll('.annotation-input');
+
+    inputs.forEach(input => {
+        const inputType = input.type;
+        const tagName = input.tagName.toLowerCase();
+
+        if (inputType === 'text' || tagName === 'textarea') {
+            // Text inputs and textareas - debounced saving
+            let timer;
+            input.addEventListener('input', function(event) {
+                clearTimeout(timer);
+                timer = setTimeout(() => {
+                    handleInputChange(event.target);
+                }, 1000);
+            });
+            console.log(`Set up event listener for ${tagName} element:`, input.id);
+        } else if (inputType === 'radio' || inputType === 'checkbox') {
+            // Radio/checkbox inputs - immediate saving
+            input.addEventListener('change', function(event) {
+                handleInputChange(event.target);
+            });
+        } else if (inputType === 'range') {
+            // Slider inputs - immediate saving with value display
+            input.addEventListener('input', function(event) {
+                const valueDisplay = document.getElementById(`${input.name}-value`);
+                if (valueDisplay) {
+                    valueDisplay.textContent = event.target.value;
+                }
+                handleInputChange(event.target);
+            });
+        } else if (tagName === 'select') {
+            // Select inputs - immediate saving
+            input.addEventListener('change', function(event) {
+                handleInputChange(event.target);
+            });
+        } else if (inputType === 'number') {
+            // Number inputs - debounced saving
+            let timer;
+            input.addEventListener('input', function(event) {
+                clearTimeout(timer);
+                timer = setTimeout(() => {
+                    handleInputChange(event.target);
+                }, 1000);
+            });
+        }
+    });
+}
+
+function handleInputChange(element) {
+    const schema = element.getAttribute('schema');
+    const labelName = element.getAttribute('label_name');
+    const inputType = element.type;
+    const tagName = element.tagName.toLowerCase();
+
+    console.log(`handleInputChange called for ${tagName} element:`, element.id, 'schema:', schema, 'label:', labelName);
+
+    if (!schema || !labelName) {
+        console.warn('Missing schema or label_name for input:', element);
+        return;
+    }
+
+    // Validate required fields after input change
+    validateRequiredFields();
+
+    let value;
+
+    if (inputType === 'radio') {
+        // For radio buttons, only save if checked
+        if (element.checked) {
+            value = element.value;
+        } else {
+            return; // Don't save unchecked radio buttons
+        }
+    } else if (inputType === 'checkbox') {
+        // For checkboxes, save the checked state
+        if (element.checked) {
+            value = element.value;
+        } else {
+            // For unchecked checkboxes, remove the annotation or set to false
+            if (currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
+                delete currentAnnotations[schema][labelName];
+                // If the schema is empty, remove it too
+                if (Object.keys(currentAnnotations[schema]).length === 0) {
+                    delete currentAnnotations[schema];
+                }
+            }
+            console.log(`Removed annotation: ${schema}.${labelName}`);
+
+            // Auto-save the removal
+            clearTimeout(textSaveTimer);
+            textSaveTimer = setTimeout(() => {
+                saveAnnotations();
+            }, 500);
+            return;
+        }
+    } else {
+        // For text inputs, save the value
+        value = element.value;
+    }
+
+    // Update the current annotations
+    updateAnnotation(schema, labelName, value);
+    console.log(`Updated annotation: ${schema}.${labelName} = ${value}`);
+
+    // Auto-save
+    clearTimeout(textSaveTimer);
+    textSaveTimer = setTimeout(() => {
+        saveAnnotations();
+    }, 500);
+}
+
+function populateInputValues() {
+    if (!currentAnnotations || !userState) return;
+
+    console.log('🔍 Populating input values with annotations:', currentAnnotations);
+
+    // Populate text inputs and textareas
+    const textInputs = document.querySelectorAll('input[type="text"], textarea.annotation-input');
+    console.log('🔍 Found text inputs and textareas:', textInputs.length);
+
+    textInputs.forEach(input => {
+        const schema = input.getAttribute('schema');
+        const labelName = input.getAttribute('label_name');
+        console.log('🔍 Checking input:', input.id, 'schema:', schema, 'label:', labelName);
+
+        if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
+            input.value = currentAnnotations[schema][labelName];
+            console.log(`✅ Populated ${input.tagName} ${input.id} with value:`, currentAnnotations[schema][labelName]);
+        } else {
+            console.log(`❌ Could not populate ${input.tagName} ${input.id}:`, {
+                hasSchema: !!schema,
+                hasLabelName: !!labelName,
+                hasSchemaInAnnotations: !!(currentAnnotations[schema]),
+                hasLabelInSchema: !!(currentAnnotations[schema] && currentAnnotations[schema][labelName])
+            });
+        }
+    });
+
+    // Populate radio buttons
+    const radioInputs = document.querySelectorAll('input[type="radio"]');
+    radioInputs.forEach(input => {
+        const schema = input.getAttribute('schema');
+        const labelName = input.getAttribute('label_name');
+
+        if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
+            input.checked = (currentAnnotations[schema][labelName] === input.value);
+            console.log(`Populated radio ${input.id}: ${input.checked ? 'checked' : 'unchecked'}`);
+        }
+    });
+
+    // Populate checkboxes
+    const checkboxInputs = document.querySelectorAll('input[type="checkbox"]');
+    checkboxInputs.forEach(input => {
+        const schema = input.getAttribute('schema');
+        const labelName = input.getAttribute('label_name');
+
+        if (schema && labelName && currentAnnotations[schema]) {
+            // For checkboxes, check if the value exists in the annotations
+            const hasAnnotation = currentAnnotations[schema][labelName] === input.value;
+            input.checked = hasAnnotation;
+            console.log(`Populated checkbox ${input.id}: ${hasAnnotation ? 'checked' : 'unchecked'}`);
+        }
+    });
+
+    // Populate sliders
+    const sliderInputs = document.querySelectorAll('input[type="range"]');
+    sliderInputs.forEach(input => {
+        const schema = input.getAttribute('schema');
+        const labelName = input.getAttribute('label_name');
+
+        if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
+            input.value = currentAnnotations[schema][labelName];
+            const valueDisplay = document.getElementById(`${input.name}-value`);
+            if (valueDisplay) {
+                valueDisplay.textContent = currentAnnotations[schema][labelName];
+            }
+            console.log(`Populated slider ${input.id} with value:`, currentAnnotations[schema][labelName]);
+        }
+    });
+
+    // Populate select dropdowns
+    const selectInputs = document.querySelectorAll('select.annotation-input');
+    selectInputs.forEach(input => {
+        const schema = input.getAttribute('schema');
+        const labelName = input.getAttribute('label_name');
+
+        if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
+            input.value = currentAnnotations[schema][labelName];
+            console.log(`Populated select ${input.id} with value:`, currentAnnotations[schema][labelName]);
+        }
+    });
+
+    // Populate number inputs
+    const numberInputs = document.querySelectorAll('input[type="number"].annotation-input');
+    numberInputs.forEach(input => {
+        const schema = input.getAttribute('schema');
+        const labelName = input.getAttribute('label_name');
+
+        if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
+            input.value = currentAnnotations[schema][labelName];
+            console.log(`Populated number ${input.id} with value:`, currentAnnotations[schema][labelName]);
+        }
+    });
+
+    validateRequiredFields();
+}
+
+// Span annotation functions
+function onlyOne(checkbox) {
+    var x = document.getElementsByClassName(checkbox.className);
+    var i;
+    for (i = 0; i < x.length; i++) {
+        if (x[i].value != checkbox.value) x[i].checked = false;
+    }
+}
+
+function extractSpanAnnotationsFromDOM() {
+    /*
+     * Extract span annotations from the DOM using the overlay system.
+     *
+     * Returns:
+     *     Array of span annotation objects with schema, name, start, end, title, value
+     */
+    console.log('[DEBUG] extractSpanAnnotationsFromDOM called');
+
+    const overlays = document.querySelectorAll('.span-overlay');
+    const spanAnnotations = [];
+
+    for (const overlay of overlays) {
+        const schema = overlay.getAttribute('data-schema');
+        const label = overlay.getAttribute('data-label');
+        const start = parseInt(overlay.getAttribute('data-start'));
+        const end = parseInt(overlay.getAttribute('data-end'));
+        const title = overlay.querySelector('.span-label')?.textContent?.trim() || label;
+
+        // Get the text value by finding the covered segments
+        const segments = document.querySelectorAll('.text-segment');
+        let coveredText = '';
+        for (const segment of segments) {
+            const segStart = parseInt(segment.getAttribute('data-start'));
+            const segEnd = parseInt(segment.getAttribute('data-end'));
+            const spanIds = segment.getAttribute('data-span-ids')?.split(',') || [];
+
+            // Check if this segment is covered by this overlay
+            if (overlay.getAttribute('data-annotation-id') &&
+                spanIds.includes(overlay.getAttribute('data-annotation-id'))) {
+                coveredText += segment.textContent;
+            }
+        }
+
+        spanAnnotations.push({
+            schema: schema,
+            name: label,
+            start: start,
+            end: end,
+            title: title,
+            value: coveredText
+        });
+    }
+
+    console.log('[DEBUG] extractSpanAnnotationsFromDOM: found', spanAnnotations.length, 'spans:', spanAnnotations);
+    return spanAnnotations;
+}
+
+function alignSpanOverlays() {
+    /*
+     * Align each .span-overlay to the union of its covered .text-segment spans.
+     * This function positions overlays to match the actual text segments in the DOM.
+     */
+    console.log('[DEBUG] alignSpanOverlays called');
+
+    const overlays = document.querySelectorAll('.span-overlay');
+    const segments = Array.from(document.querySelectorAll('.text-segment'));
+    const container = document.querySelector('.span-annotation-container');
+
+    if (!container) {
+        console.warn('[DEBUG] alignSpanOverlays: No .span-annotation-container found');
+        return;
+    }
+
+    for (const overlay of overlays) {
+        const annotationId = overlay.getAttribute('data-annotation-id');
+        if (!annotationId) {
+            console.warn('[DEBUG] alignSpanOverlays: Overlay missing data-annotation-id');
+            continue;
+        }
+
+        // Find all segments covered by this overlay
+        const coveredSegments = segments.filter(segment => {
+            const spanIds = segment.getAttribute('data-span-ids')?.split(',') || [];
+            return spanIds.includes(annotationId);
+        });
+
+        if (coveredSegments.length === 0) {
+            console.warn('[DEBUG] alignSpanOverlays: No segments found for overlay', annotationId);
+            continue;
+        }
+
+        // Calculate the bounding rectangle of all covered segments
+        let minLeft = Infinity;
+        let maxRight = -Infinity;
+        let minTop = Infinity;
+        let maxBottom = -Infinity;
+
+        for (const segment of coveredSegments) {
+            const rect = segment.getBoundingClientRect();
+            const containerRect = container.getBoundingClientRect();
+
+            const relativeLeft = rect.left - containerRect.left;
+            const relativeRight = rect.right - containerRect.left;
+            const relativeTop = rect.top - containerRect.top;
+            const relativeBottom = rect.bottom - containerRect.top;
+
+            minLeft = Math.min(minLeft, relativeLeft);
+            maxRight = Math.max(maxRight, relativeRight);
+            minTop = Math.min(minTop, relativeTop);
+            maxBottom = Math.max(maxBottom, relativeBottom);
+        }
+
+        // Position the overlay to cover all segments
+        overlay.style.left = minLeft + 'px';
+        overlay.style.top = minTop + 'px';
+        overlay.style.width = (maxRight - minLeft) + 'px';
+        overlay.style.height = (maxBottom - minTop) + 'px';
+        overlay.style.backgroundColor = 'rgba(255, 230, 230, 0.3)';
+        overlay.style.border = '1px solid rgba(255, 230, 230, 0.8)';
+
+        console.log('[DEBUG] alignSpanOverlays: Positioned overlay', annotationId, 'at',
+                   minLeft, minTop, maxRight - minLeft, maxBottom - minTop);
+    }
+}
+
+// Robust selection mapping for overlay system
+function getSelectionIndicesOverlay() {
+    // Get the user selection
+    var selection = window.getSelection();
+    if (selection.rangeCount === 0) {
+        console.log('[DEBUG] getSelectionIndicesOverlay: No selection');
+        return { start: -1, end: -1 };
+    }
+    var range = selection.getRangeAt(0);
+    var originalText = $(range.commonAncestorContainer).closest('.original-text')[0];
+    if (!originalText) {
+        console.log('[DEBUG] getSelectionIndicesOverlay: Not within .original-text');
+        return { start: -2, end: -2 };
+    }
+    // Find all .text-segment spans in the selection
+    const segments = Array.from(originalText.querySelectorAll('.text-segment'));
+    let selStart = null, selEnd = null;
+    let involvedSegments = [];
+    segments.forEach(seg => {
+        const segRect = seg.getBoundingClientRect();
+        const segStart = parseInt(seg.getAttribute('data-start'));
+        const segEnd = parseInt(seg.getAttribute('data-end'));
+        // If the segment is (partially) within the selection range
+        if (range.intersectsNode(seg)) {
+            involvedSegments.push({segStart, segEnd, text: seg.textContent});
+            if (selStart === null || segStart < selStart) selStart = segStart;
+            if (selEnd === null || segEnd > selEnd) selEnd = segEnd;
+        }
+    });
+    if (selStart === null || selEnd === null) {
+        // Fallback: use textContent index
+        var fullText = originalText.textContent || originalText.innerText;
+        var selectedText = selection.toString();
+        var startIndex = fullText.indexOf(selectedText);
+        var endIndex = startIndex + selectedText.length;
+        console.log('[DEBUG] getSelectionIndicesOverlay: fallback', {fullText, selectedText, startIndex, endIndex});
+        return { start: startIndex, end: endIndex };
+    }
+    var selectedText = selection.toString();
+    console.log('[DEBUG] getSelectionIndicesOverlay: final', {selStart, selEnd, selectedText, involvedSegments});
+    return { start: selStart, end: selEnd };
+}
+
+// Use overlay system for all span operations
+function changeSpanLabel(checkbox, schema, spanLabel, spanTitle, spanColor) {
+    /*
+     * Set up span annotation mode using the new span manager.
+     *
+     * Args:
+     *     checkbox: The checkbox element that was clicked
+     *     schema: The annotation schema
+     *     spanLabel: The span label
+     *     spanTitle: The span title
+     *     spanColor: The span color
+     */
+    console.log('[DEBUG] changeSpanLabel called:', {schema, spanLabel, spanTitle, spanColor, checked: checkbox.checked});
+
+    // Use the new span manager if available
+    if (window.spanManager && window.spanManager.isInitialized) {
+        console.log('[DEBUG] changeSpanLabel: Using new span manager');
+
+        // Select the label and schema in the span manager
+        window.spanManager.selectLabel(spanLabel, schema);
+
+        // Set up text selection handler
+        const textContainer = document.getElementById('instance-text');
+        if (textContainer) {
+            // Create bound handlers once and store them for proper cleanup
+            if (!boundEventHandlers.spanManagerMouseUp) {
+                boundEventHandlers.spanManagerMouseUp = window.spanManager.handleTextSelection.bind(window.spanManager);
+                boundEventHandlers.spanManagerKeyUp = window.spanManager.handleTextSelection.bind(window.spanManager);
+            }
+
+            // Remove existing handlers using stored references
+            textContainer.removeEventListener('mouseup', boundEventHandlers.spanManagerMouseUp);
+            textContainer.removeEventListener('keyup', boundEventHandlers.spanManagerKeyUp);
+
+            // Add new handlers only when checkbox is checked
+            if (checkbox.checked) {
+                textContainer.addEventListener('mouseup', boundEventHandlers.spanManagerMouseUp);
+                textContainer.addEventListener('keyup', boundEventHandlers.spanManagerKeyUp);
+                console.log('[DEBUG] changeSpanLabel: Text selection handlers added for span manager');
+            }
+        }
+    } else {
+        // Fallback to old overlay system if span manager not available
+        console.log('[DEBUG] changeSpanLabel: Span manager not available, using overlay system');
+        changeSpanLabelOverlay(checkbox, schema, spanLabel, spanTitle, spanColor);
+    }
+}
+
+function surroundSelection(schema, labelName, title, selectionColor) {
+    // Only use overlay system
+    surroundSelectionOverlay(schema, labelName, title, selectionColor);
+}
+
+function restoreSpanAnnotationsFromHTML() {
+    // Only use overlay system
+    restoreSpanAnnotationsFromHTMLOverlay();
+}
+
+// LEGACY OVERLAY FUNCTIONS - DEPRECATED
+// These functions are kept for backward compatibility but are no longer used
+// The new boundary-based rendering system handles everything server-side
+
+function getSelectionIndicesOverlay() {
+    /*
+     * Get selection indices for the overlay-based approach.
+     *
+     * This function works with the original text element and maps
+     * DOM selection to original text offsets.
+     *
+     * Returns:
+     *     Object with start and end indices in the original text
+     */
+    console.log('[DEBUG] getSelectionIndicesOverlay called');
+
+    // Get the user selection
+    var selection = window.getSelection();
+
+    if (selection.rangeCount === 0) {
+        console.log('[DEBUG] getSelectionIndicesOverlay: No selection');
+        return { start: -1, end: -1 }; // No selection
+    }
+
+    // Get the range object representing the selected portion
+    var range = selection.getRangeAt(0);
+
+    console.log('[DEBUG] getSelectionIndicesOverlay: Selection details:', {
+        selectionText: selection.toString(),
+        selectionLength: selection.toString().length,
+        rangeStartContainer: range.startContainer,
+        rangeStartOffset: range.startOffset,
+        rangeEndContainer: range.endContainer,
+        rangeEndOffset: range.endOffset,
+        commonAncestor: range.commonAncestorContainer
+    });
+
+    // Find the original text element within the span annotation container
+    var originalTextElement = $(range.commonAncestorContainer).closest('.original-text')[0];
+
+    if (!originalTextElement) {
+        console.log('[DEBUG] getSelectionIndicesOverlay: Not within .original-text');
+        return { start: -2, end: -2 }; // Not within the original text
+    }
+
+    // Get the original text from the data attribute for comparison
+    var originalTextFromData = originalTextElement.getAttribute('data-original-text');
+    console.log('[DEBUG] getSelectionIndicesOverlay: Original text from data attribute:', originalTextFromData);
+    console.log('[DEBUG] getSelectionIndicesOverlay: Original text length from data:', originalTextFromData ? originalTextFromData.length : 0);
+
+    // For the overlay approach, we can use a simpler offset calculation
+    // since the original text is unchanged and we can directly map DOM positions
+    var result = getOriginalTextOffsetsOverlay(originalTextElement, range);
+
+    console.log('[DEBUG] getSelectionIndicesOverlay: Final result:', result);
+
+    return result;
+}
+
+function getOriginalTextOffsetsOverlay(container, range) {
+    /*
+     * Get original text offsets for the overlay approach.
+     *
+     * Since the original text is unchanged in the DOM, we can directly
+     * map DOM positions to original text positions.
+     *
+     * Args:
+     *     container: The original text container element
+     *     range: The DOM range object
+     *
+     * Returns:
+     *     Object with start and end offsets in the original text
+     */
+    console.log('[DEBUG] getOriginalTextOffsetsOverlay called');
+
+    // Get the original text from the data attribute (this is the clean text without HTML markup)
+    var originalText = container.getAttribute('data-original-text');
+    if (!originalText) {
+        console.log('[DEBUG] getOriginalTextOffsetsOverlay: WARNING - no data-original-text attribute found, falling back to DOM text');
+        originalText = container.textContent || container.innerText;
+    }
+    console.log('[DEBUG] getOriginalTextOffsetsOverlay: originalText from data attribute:', originalText);
+    console.log('[DEBUG] getOriginalTextOffsetsOverlay: originalText length:', originalText.length);
+
+    // Get the selected text
+    var selectedText = window.getSelection().toString();
+    console.log('[DEBUG] getOriginalTextOffsetsOverlay: selectedText:', selectedText);
+    console.log('[DEBUG] getOriginalTextOffsetsOverlay: selectedText length:', selectedText.length);
+
+    // Find the selection in the original text
+    var startIndex = originalText.indexOf(selectedText);
+    var endIndex = startIndex + selectedText.length;
+
+    console.log('[DEBUG] getOriginalTextOffsetsOverlay: mapped indices:', {startIndex, endIndex});
+
+    // Verify the indices by extracting text
+    if (startIndex !== -1) {
+        var extractedText = originalText.substring(startIndex, endIndex);
+        console.log('[DEBUG] getOriginalTextOffsetsOverlay: extracted text using indices:', extractedText);
+        console.log('[DEBUG] getOriginalTextOffsetsOverlay: extracted text matches selected text:', extractedText === selectedText);
+    } else {
+        console.log('[DEBUG] getOriginalTextOffsetsOverlay: WARNING - selected text not found in original text!');
+    }
+
+    return { start: startIndex, end: endIndex };
+}
+
+// Update the existing surroundSelection function to work with overlays
+function surroundSelectionOverlay(schema, labelName, title, selectionColor) {
+    /*
+     * Create a span annotation using the overlay approach.
+     *
+     * Args:
+     *     schema: The annotation schema
+     *     labelName: The label name
+     *     title: The annotation title
+     *     selectionColor: The color for the annotation
+     */
+    console.log('[DEBUG] surroundSelectionOverlay called:', {schema, labelName, title, selectionColor});
+
+    // Check that this wasn't a spurious click or the click for the delete button which
+    // also seems to trigger this selection event
+    if (window.getSelection().rangeCount == 0) {
+        console.log('[DEBUG] surroundSelectionOverlay: No selection range found');
+        return;
+    }
+    var range = window.getSelection().getRangeAt(0);
+
+    if (range.startOffset == range.endOffset) {
+        console.log('[DEBUG] surroundSelectionOverlay: Selection start and end offsets are the same');
+        return;
+    }
+
+    // Get the instance id
+    var instance_id = document.getElementById("instance_id").value;
+    console.log('[DEBUG] surroundSelectionOverlay: Instance ID:', instance_id);
+
+    if (window.getSelection) {
+        var sel = window.getSelection();
+
+        // Check that we're labeling something in the original text that
+        // we want to annotate
+        if (!sel.anchorNode.parentElement) {
+            console.log('[DEBUG] surroundSelectionOverlay: No anchor node parent element');
+            return;
+        }
+
+        // Otherwise, we're going to be adding a new span annotation, if
+        // the user has selected some non-empty part of the text
+        if (sel.rangeCount && sel.toString().trim().length > 0) {
+            console.log('[DEBUG] surroundSelectionOverlay: Valid selection found, creating span');
+
+            // Get the selection text as a string
+            var selText = window.getSelection().toString().trim();
+            console.log('[DEBUG] surroundSelectionOverlay: Selected text:', selText);
+
+            // Get the offsets for the server using the overlay approach
+            var startEnd = getSelectionIndicesOverlay();
+            console.log('[DEBUG] surroundSelectionOverlay: Selection indices:', startEnd);
+
+            // Package this all up in a post request to the server's updateinstance endpoint
+            var post_req = {
+                type: "span",
+                schema: schema,
+                state: [
+                    {
+                        name: labelName,
+                        start: startEnd["start"],
+                        end: startEnd["end"],
+                        title: title,
+                        value: selText
+                    }
+                ],
+                instance_id: instance_id
+            };
+
+            console.log('[DEBUG] surroundSelectionOverlay: Sending span annotation request:', post_req);
+
+            // Send the post request
+            fetch("/updateinstance", {
+                method: "POST",
+                body: JSON.stringify(post_req),
+                credentials: "same-origin",
+                headers: {
+                    "Content-type": "application/json; charset=UTF-8",
+                },
+            }).then(response => {
+                if (response.ok) {
+                    // Reload the page to show the new span
+                    location.reload();
+                } else {
+                    console.error('Failed to save span annotation');
+                }
+            });
+
+            // Clear the current selection
+            sel.empty();
+            console.log('[DEBUG] surroundSelectionOverlay: Span creation request sent, page will reload');
+        } else {
+            console.log('[DEBUG] surroundSelectionOverlay: No valid selection found');
+        }
+    }
+}
+
+// Update the existing changeSpanLabel function to use the overlay approach
+function changeSpanLabelOverlay(checkbox, schema, spanLabel, spanTitle, spanColor) {
+    /*
+     * Set up span annotation mode using the overlay approach.
+     *
+     * Args:
+     *     checkbox: The checkbox element that was clicked
+     *     schema: The annotation schema
+     *     spanLabel: The span label
+     *     spanTitle: The span title
+     *     spanColor: The span color
+     */
+    console.log('[DEBUG] changeSpanLabelOverlay called:', {schema, spanLabel, spanTitle, spanColor, checked: checkbox.checked});
+
+    // Listen for when the user has highlighted some text (only when the label is checked)
+    document.onmouseup = function (e) {
+        var senderElement = e.target;
+        // Avoid the case where the user clicks the delete button
+        if (senderElement.getAttribute("class") == "span-close") {
+            e.stopPropagation();
+            return true;
+        }
+        if (checkbox.checked) {
+            console.log('[DEBUG] changeSpanLabelOverlay: Mouse up event - checkbox is checked, calling surroundSelectionOverlay');
+            surroundSelectionOverlay(schema, spanLabel, spanTitle, spanColor);
+        } else {
+            console.log('[DEBUG] changeSpanLabelOverlay: Mouse up event - checkbox is not checked');
+        }
+    };
+}
+
+// Update the restoreSpanAnnotationsFromHTML function to work with overlays
+function restoreSpanAnnotationsFromHTMLOverlay() {
+    /*
+     * Extract span annotations from the overlay-based HTML structure.
+     *
+     * This function parses the overlay elements to reconstruct the span annotations.
+     */
+    const container = document.querySelector('.span-annotation-container');
+    if (!container) return;
+
+    const overlayElements = container.querySelectorAll('.span-overlay');
+    const found = [];
+
+    overlayElements.forEach(overlay => {
+        const schema = overlay.getAttribute('data-schema');
+        const name = overlay.getAttribute('data-label');
+        const start = parseInt(overlay.getAttribute('data-start'));
+        const end = parseInt(overlay.getAttribute('data-end'));
+        const annotationId = overlay.getAttribute('data-annotation-id');
+
+        found.push({
+            schema,
+            name,
+            title: name, // Use name as title for now
+            start,
+            end,
+            id: annotationId,
+            value: '' // Value is not stored in overlay, would need to extract from original text
+        });
+    });
+
+    currentSpanAnnotations = found;
+    console.log('[DEBUG] restoreSpanAnnotationsFromHTMLOverlay: found', found.length, 'spans:', found);
+}
+
+// ============================================================================
+// ROBUST SPAN ANNOTATION FUNCTIONS (Based on potato-span-fix approach)
+// ============================================================================
+
+// Global variables for robust span annotation
+let spanColors = {};
+let originalText = '';
+let spanAnnotations = [];
+
+/**
+ * Initialize robust span annotation system
+ */
+function initializeRobustSpanAnnotation() {
+    console.log('[ROBUST SPAN] Initializing robust span annotation system');
+
+    // Load span colors from config
+    loadSpanColors();
+
+    // Set up text selection handlers
+    setupRobustSpanSelection();
+
+    // Render existing spans
+    renderSpansRobust();
+}
+
+/**
+ * Load span colors from the UI configuration
+ */
+async function loadSpanColors() {
+    try {
+        // Get colors from the current user state or config
+        if (userState && userState.config && userState.config.ui && userState.config.ui.spans) {
+            const configColors = userState.config.ui.spans.span_colors;
+            // Flatten the color structure
+            spanColors = {};
+            for (const schema in configColors) {
+                for (const label in configColors[schema]) {
+                    spanColors[label] = configColors[schema][label];
+                }
+            }
+        } else {
+            // Fallback colors
+            spanColors = {
+                'happy': '(255, 230, 230)',
+                'sad': '(230, 243, 255)',
+                'angry': '(255, 230, 204)',
+                'surprised': '(230, 255, 230)',
+                'neutral': '(240, 240, 240)'
+            };
+        }
+        console.log('[ROBUST SPAN] Loaded colors:', spanColors);
+    } catch (error) {
+        console.error('[ROBUST SPAN] Error loading colors:', error);
+    }
+}
+
+/**
+ * Set up text selection handlers for robust span annotation
+ */
+function setupRobustSpanSelection() {
+    const textContainer = document.getElementById('instance-text');
+    if (!textContainer) {
+        console.warn('[ROBUST SPAN] No text container found');
+        return;
+    }
+
+    // Remove existing handlers to avoid conflicts
+    textContainer.removeEventListener('mouseup', handleRobustTextSelection);
+    textContainer.removeEventListener('keyup', handleRobustTextSelection);
+
+    // Add new handlers
+    textContainer.addEventListener('mouseup', handleRobustTextSelection);
+    textContainer.addEventListener('keyup', handleRobustTextSelection);
+
+    console.log('[ROBUST SPAN] Text selection handlers set up');
+}
+
+/**
+ * Handle text selection for robust span annotation
+ */
+function handleRobustTextSelection() {
+    const selection = window.getSelection();
+    if (!selection.rangeCount || selection.isCollapsed) return;
+
+    // Check if any span label is selected
+    const activeSpanLabel = getActiveSpanLabel();
+    if (!activeSpanLabel) {
+        console.log('[ROBUST SPAN] No active span label selected');
+        return;
+    }
+
+    const range = selection.getRangeAt(0);
+    const selectedText = selection.toString().trim();
+    if (!selectedText) return;
+
+    // Calculate positions using original text
+    const start = getRobustTextPosition(selectedText, range);
+    const end = start + selectedText.length;
+
+    console.log('[ROBUST SPAN] Creating span:', {
+        text: selectedText,
+        start: start,
+        end: end,
+        label: activeSpanLabel
+    });
+
+    // Create the span annotation
+    createRobustSpanAnnotation(selectedText, start, end, activeSpanLabel);
+
+    // Clear selection
+    selection.removeAllRanges();
+}
+
+/**
+ * Get the currently active span label from checkboxes
+ */
+function getActiveSpanLabel() {
+    const spanCheckboxes = document.querySelectorAll('input[type="checkbox"][name*="span_label"]:checked');
+    if (spanCheckboxes.length === 0) return null;
+
+    // Get the label from the first checked span checkbox
+    const checkbox = spanCheckboxes[0];
+    const labelMatch = checkbox.name.match(/span_label:::(.+):::(.+)/);
+    if (labelMatch) {
+        return labelMatch[2]; // Return the label name
+    }
+    return null;
+}
+
+/**
+ * Calculate text position robustly using original text
+ */
+function getRobustTextPosition(selectedText, range) {
+    // Get the original text from the instance
+    if (!currentInstance || !currentInstance.text) {
+        console.warn('[ROBUST SPAN] No original text available');
+        return 0;
+    }
+
+    const originalText = currentInstance.text;
+
+    // Find all occurrences of the selected text in the original text
+    let indices = [];
+    let idx = originalText.indexOf(selectedText);
+    while (idx !== -1) {
+        indices.push(idx);
+        idx = originalText.indexOf(selectedText, idx + 1);
+    }
+
+    if (indices.length === 0) {
+        console.warn('[ROBUST SPAN] Selected text not found in original text');
+        return 0;
+    }
+
+    if (indices.length === 1) {
+        return indices[0];
+    }
+
+    // If multiple occurrences, use the first one for now
+    // In a more sophisticated implementation, we could use DOM position to disambiguate
+    console.log('[ROBUST SPAN] Multiple occurrences found, using first:', indices[0]);
+    return indices[0];
+}
+
+/**
+ * Create a new span annotation using the robust approach
+ */
+async function createRobustSpanAnnotation(spanText, start, end, label) {
+    try {
+        console.log('[ROBUST SPAN] Creating annotation:', { spanText, start, end, label });
+
+        // Use the existing /updateinstance endpoint
+        const postData = {
+            type: "span",
+            schema: "emotion", // This should come from the config
+            state: [
+                {
+                    name: label,
+                    start: start,
+                    end: end,
+                    title: label,
+                    value: spanText
+                }
+            ],
+            instance_id: currentInstance.id
+        };
+
+        const response = await fetch('/updateinstance', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(postData)
+        });
+
+        if (response.ok) {
+            console.log('[ROBUST SPAN] Span annotation created successfully');
+            // Reload the instance to show the new annotation
+            await loadCurrentInstance();
+        } else {
+            console.error('[ROBUST SPAN] Failed to create span annotation:', await response.text());
+        }
+    } catch (error) {
+        console.error('[ROBUST SPAN] Error creating span annotation:', error);
+    }
+}
+
+/**
+ * Render spans using the robust boundary-based algorithm
+ */
+function renderSpansRobust() {
+    const textContainer = document.getElementById('instance-text');
+    if (!textContainer || !currentInstance) {
+        console.warn('[ROBUST SPAN] Cannot render spans - missing container or instance');
+        return;
+    }
+
+    // Get the original text
+    originalText = currentInstance.text || '';
+    if (!originalText) {
+        console.warn('[ROBUST SPAN] No original text available');
+        return;
+    }
+
+    // Get span annotations from user state
+    spanAnnotations = [];
+    if (userState && userState.annotations && userState.annotations.by_instance) {
+        const instanceAnnotations = userState.annotations.by_instance[currentInstance.id];
+        if (instanceAnnotations) {
+            // Extract span annotations from the server format
+            for (const [key, value] of Object.entries(instanceAnnotations)) {
+                // Look for span annotations (this is a simplified approach)
+                // In practice, we'd need to parse the actual span data structure
+                if (typeof value === 'object' && value.start !== undefined && value.end !== undefined) {
+                    spanAnnotations.push({
+                        id: key,
+                        span: value.value || '',
+                        label: value.name || key,
+                        start: value.start,
+                        end: value.end
+                    });
+                }
+            }
+        }
+    }
+
+    console.log('[ROBUST SPAN] Rendering spans:', spanAnnotations);
+
+    if (spanAnnotations.length === 0) {
+        // No spans - just show the original text
+        textContainer.innerHTML = escapeHtml(originalText);
+        return;
+    }
+
+    // Use the boundary-based algorithm from potato-span-fix
+    const html = renderTextWithSpans(originalText, spanAnnotations);
+    textContainer.innerHTML = html;
+}
+
+/**
+ * Render text with spans using boundary-based algorithm
+ */
+function renderTextWithSpans(text, annotations) {
+    // Create a list of all annotation boundaries (start and end points)
+    const boundaries = [];
+    annotations.forEach(annotation => {
+        boundaries.push({ position: annotation.start, type: 'start', annotation });
+        boundaries.push({ position: annotation.end, type: 'end', annotation });
+    });
+
+    // Sort boundaries by position
+    boundaries.sort((a, b) => a.position - b.position);
+
+    // Build HTML by walking through the text and opening/closing spans
+    let html = '';
+    let currentPos = 0;
+    let openSpans = [];
+
+    boundaries.forEach(boundary => {
+        // Add text before this boundary
+        if (boundary.position > currentPos) {
+            html += escapeHtml(text.substring(currentPos, boundary.position));
+        }
+
+        if (boundary.type === 'start') {
+            // Open a new span
+            const backgroundColor = getSpanColor(boundary.annotation.label);
+            const span = `<span class="span-highlight" data-annotation-id="${boundary.annotation.id}" data-label="${boundary.annotation.label}" style="background-color: ${backgroundColor}"><span class="span-delete" onclick="deleteRobustSpan('${boundary.annotation.id}')">×</span><span class="span-label">${boundary.annotation.label}</span>`;
+            html += span;
+            openSpans.push(boundary.annotation);
+        } else {
+            // Close a span
+            html += '</span>';
+            // Remove the closed span from openSpans
+            const index = openSpans.findIndex(span => span.id === boundary.annotation.id);
+            if (index !== -1) {
+                openSpans.splice(index, 1);
+            }
+        }
+
+        currentPos = boundary.position;
+    });
+
+    // Add remaining text
+    if (currentPos < text.length) {
+        html += escapeHtml(text.substring(currentPos));
+    }
+
+    // Close any remaining open spans
+    openSpans.forEach(() => {
+        html += '</span>';
+    });
+
+    return html;
+}
+
+/**
+ * Get span color for a label
+ */
+function getSpanColor(label) {
+    const color = spanColors[label];
+    if (!color) return '#f0f0f0'; // Default gray
+
+    // Convert RGB format to hex
+    const rgb = color.match(/\((\d+),\s*(\d+),\s*(\d+)\)/);
+    if (rgb) {
+        const r = parseInt(rgb[1]);
+        const g = parseInt(rgb[2]);
+        const b = parseInt(rgb[3]);
+        return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+    }
+
+    return '#f0f0f0';
+}
+
+/**
+ * Delete a span annotation
+ */
+async function deleteRobustSpan(annotationId) {
+    try {
+        console.log('[ROBUST SPAN] Deleting span:', annotationId);
+
+        // Find the annotation to delete
+        const annotation = spanAnnotations.find(a => a.id === annotationId);
+        if (!annotation) {
+            console.warn('[ROBUST SPAN] Annotation not found:', annotationId);
+            return;
+        }
+
+        // Use the existing /updateinstance endpoint with value: null to delete
+        const postData = {
+            type: "span",
+            schema: "emotion", // This should come from the config
+            state: [
+                {
+                    name: annotation.label,
+                    start: annotation.start,
+                    end: annotation.end,
+                    title: annotation.label,
+                    value: null // This signals deletion
+                }
+            ],
+            instance_id: currentInstance.id
+        };
+
+        const response = await fetch('/updateinstance', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(postData)
+        });
+
+        if (response.ok) {
+            console.log('[ROBUST SPAN] Span annotation deleted successfully');
+            // Reload the instance to show the updated state
+            await loadCurrentInstance();
+        } else {
+            console.error('[ROBUST SPAN] Failed to delete span annotation:', await response.text());
+        }
+    } catch (error) {
+        console.error('[ROBUST SPAN] Error deleting span annotation:', error);
+    }
+}
+
+/**
+ * Escape HTML content
+ */
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Initialize robust span annotation when the page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Wait for the initial load to complete, then initialize robust spans
+    // DISABLED: Legacy robust span system conflicts with new interval-based system
+    // setTimeout(() => {
+    //     initializeRobustSpanAnnotation();
+    // }, 500);
+});
+
+/**
+ * Delete a span annotation - called from the HTML onclick
+ */
+async function deleteSpanAnnotation(annotationId, label, start, end) {
+    try {
+        console.log('[SPAN DELETE] Deleting span:', { annotationId, label, start, end });
+
+        // Use the existing /updateinstance endpoint with value: null to delete
+        const postData = {
+            type: "span",
+            schema: "emotion", // This should come from the config
+            state: [
+                {
+                    name: label,
+                    start: start,
+                    end: end,
+                    title: label,
+                    value: null // This signals deletion
+                }
+            ],
+            instance_id: currentInstance.id
+        };
+
+        const response = await fetch('/updateinstance', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(postData)
+        });
+
+        if (response.ok) {
+            console.log('[SPAN DELETE] Span annotation deleted successfully');
+            // Reload the instance to show the updated state
+            await loadCurrentInstance();
+        } else {
+            console.error('[SPAN DELETE] Failed to delete span annotation:', await response.text());
+        }
+    } catch (error) {
+        console.error('[SPAN DELETE] Error deleting span annotation:', error);
+    }
+}
+
+// Add this function to help debug and clear erroneous span annotations
+async function debugAndClearSpans() {
+    console.log('🔍 [DEBUG] debugAndClearSpans() - ENTRY POINT');
+
+    if (!currentInstance || !currentInstance.id) {
+        console.log('🔍 [DEBUG] debugAndClearSpans() - No current instance');
+        return;
+    }
+
+    console.log(`🔍 [DEBUG] debugAndClearSpans() - Current instance ID: ${currentInstance.id}`);
+
+    try {
+        // First, check what spans exist for this instance
+        const response = await fetch(`/api/spans/${currentInstance.id}`);
+        if (response.ok) {
+            const data = await response.json();
+            console.log(`🔍 [DEBUG] debugAndClearSpans() - Current spans for instance ${currentInstance.id}:`, data.spans);
+
+            if (data.spans && data.spans.length > 0) {
+                console.log(`🔍 [DEBUG] debugAndClearSpans() - Found ${data.spans.length} spans, clearing them...`);
+
+                // Clear the spans
+                const clearResponse = await fetch(`/api/spans/${currentInstance.id}/clear`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+
+                if (clearResponse.ok) {
+                    const clearData = await clearResponse.json();
+                    console.log(`🔍 [DEBUG] debugAndClearSpans() - Cleared ${clearData.spans_cleared} spans`);
+
+                    // Reload the page to see the effect
+                    console.log('🔍 [DEBUG] debugAndClearSpans() - Reloading page...');
+                    window.location.reload();
+                } else {
+                    console.error('🔍 [DEBUG] debugAndClearSpans() - Failed to clear spans:', await clearResponse.text());
+                }
+            } else {
+                console.log(`🔍 [DEBUG] debugAndClearSpans() - No spans found for instance ${currentInstance.id}`);
+            }
+        } else {
+            console.error('🔍 [DEBUG] debugAndClearSpans() - Failed to get spans:', await response.text());
+        }
+    } catch (error) {
+        console.error('🔍 [DEBUG] debugAndClearSpans() - Error:', error);
+    }
+}
+
+// Make the function available globally for debugging
+window.debugAndClearSpans = debugAndClearSpans;
+
+// Add this function to help debug instance_id values
+function debugInstanceId() {
+    console.log('🔍 [DEBUG] debugInstanceId() - ENTRY POINT');
+
+    // Check DOM instance_id
+    const domInstanceId = document.getElementById('instance_id');
+    const domValue = domInstanceId ? domInstanceId.value : 'not found';
+    console.log(`🔍 [DEBUG] debugInstanceId() - DOM instance_id value: '${domValue}'`);
+
+    // Check currentInstance
+    const currentInstanceId = currentInstance ? currentInstance.id : 'not set';
+    console.log(`🔍 [DEBUG] debugInstanceId() - currentInstance.id: '${currentInstanceId}'`);
+
+    // Check if they match
+    if (domValue === currentInstanceId) {
+        console.log('🔍 [DEBUG] debugInstanceId() - ✅ DOM and currentInstance match');
+    } else {
+        console.log('🔍 [DEBUG] debugInstanceId() - ❌ DOM and currentInstance do NOT match');
+    }
+
+    // Check what the API would return
+    if (currentInstance && currentInstance.id) {
+        console.log(`🔍 [DEBUG] debugInstanceId() - API would be called with: /api/spans/${currentInstance.id}`);
+    }
+}
+
+// Make the function available globally for debugging
+window.debugInstanceId = debugInstanceId;
+
+// Add this function to help debug and fix the instance_id issue in production
+function debugAndFixInstanceId() {
+    console.log('🔍 [DEBUG] debugAndFixInstanceId() - ENTRY POINT');
+
+    // Check current state
+    const domInstanceId = document.getElementById('instance_id');
+    const domValue = domInstanceId ? domInstanceId.value : 'not found';
+    console.log(`🔍 [DEBUG] debugAndFixInstanceId() - Current DOM instance_id: '${domValue}'`);
+
+    // Check if we can force a hard refresh
+    console.log('🔍 [DEBUG] debugAndFixInstanceId() - Attempting to force hard refresh...');
+
+    // Clear any cached data
+    if (window.caches) {
+        caches.keys().then(names => {
+            names.forEach(name => {
+                console.log(`🔍 [DEBUG] debugAndFixInstanceId() - Clearing cache: ${name}`);
+                caches.delete(name);
+            });
+        });
+    }
+
+    // Force a hard refresh by adding a timestamp
+    const currentUrl = window.location.href;
+    const separator = currentUrl.includes('?') ? '&' : '?';
+    const newUrl = currentUrl + separator + '_t=' + Date.now();
+    console.log(`🔍 [DEBUG] debugAndFixInstanceId() - Redirecting to: ${newUrl}`);
+
+    // Redirect to force a fresh page load
+    window.location.href = newUrl;
+}
+
+// Add this function to check if the page is cached
+function checkPageCache() {
+    console.log('🔍 [DEBUG] checkPageCache() - ENTRY POINT');
+
+    // Check if the page was loaded from cache
+    if (window.performance && window.performance.navigation) {
+        const navigationType = window.performance.navigation.type;
+        console.log(`🔍 [DEBUG] checkPageCache() - Navigation type: ${navigationType}`);
+
+        if (navigationType === 1) {
+            console.log('🔍 [DEBUG] checkPageCache() - Page was reloaded');
+        } else if (navigationType === 2) {
+            console.log('🔍 [DEBUG] checkPageCache() - Page was loaded from back/forward cache');
+        } else {
+            console.log('🔍 [DEBUG] checkPageCache() - Page was loaded normally');
+        }
+    }
+
+    // Check if the page was loaded from cache using the newer API
+    if (window.performance && window.performance.getEntriesByType) {
+        const navigationEntries = window.performance.getEntriesByType('navigation');
+        if (navigationEntries.length > 0) {
+            const entry = navigationEntries[0];
+            console.log(`🔍 [DEBUG] checkPageCache() - Transfer size: ${entry.transferSize}`);
+            console.log(`🔍 [DEBUG] checkPageCache() - Encoded body size: ${entry.encodedBodySize}`);
+
+            if (entry.transferSize === 0 && entry.encodedBodySize > 0) {
+                console.log('🔍 [DEBUG] checkPageCache() - Page was loaded from cache!');
+            } else {
+                console.log('🔍 [DEBUG] checkPageCache() - Page was loaded from network');
+            }
+        }
+    }
+}
+
+// Make the function available globally for debugging
+window.debugAndFixInstanceId = debugAndFixInstanceId;
+window.checkPageCache = checkPageCache;
+
+// Add this function to help clear erroneous span annotations and fix overlay persistence
+async function clearErroneousSpans() {
+    console.log('🔍 [DEBUG] clearErroneousSpans() - ENTRY POINT');
+
+    if (!currentInstance || !currentInstance.id) {
+        console.log('🔍 [DEBUG] clearErroneousSpans() - No current instance');
+        return;
+    }
+
+    console.log(`🔍 [DEBUG] clearErroneousSpans() - Current instance ID: ${currentInstance.id}`);
+
+    try {
+        // Clear spans for the current instance
+        const response = await fetch(`/api/spans/${currentInstance.id}/clear`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            console.log(`🔍 [DEBUG] clearErroneousSpans() - Clear result:`, result);
+
+            // Force reload the page to get fresh data
+            console.log('🔍 [DEBUG] clearErroneousSpans() - Reloading page to get fresh data');
+            window.location.reload();
+        } else {
+            console.error(`🔍 [DEBUG] clearErroneousSpans() - Clear failed:`, response.status);
+        }
+    } catch (error) {
+        console.error(`🔍 [DEBUG] clearErroneousSpans() - Error:`, error);
+    }
+}
+
+// Make the function available globally for debugging
+window.clearErroneousSpans = clearErroneousSpans;
+
+// Add Firefox-specific instance_id fix that runs after page load
+function firefoxInstanceIdFix() {
+    const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
+    if (!isFirefox) {
+        return; // Only apply to Firefox
+    }
+
+    console.log('🔍 [DEBUG] firefoxInstanceIdFix: Starting Firefox-specific instance_id fix');
+
+    // Wait a bit for the page to fully load
+    setTimeout(() => {
+        const instanceIdInput = document.getElementById('instance_id');
+        if (!instanceIdInput) {
+            console.log('🔍 [DEBUG] firefoxInstanceIdFix: No instance_id input found');
+            return;
+        }
+
+        // Get the current instance from the server-rendered data
+        const currentInstanceId = currentInstance?.id;
+        const domInstanceId = instanceIdInput.value;
+
+        console.log(`🔍 [DEBUG] firefoxInstanceIdFix: DOM instance_id: '${domInstanceId}', currentInstance.id: '${currentInstanceId}'`);
+
+        if (currentInstanceId && domInstanceId !== currentInstanceId) {
+            console.log('🔍 [DEBUG] firefoxInstanceIdFix: Mismatch detected - fixing instance_id');
+
+            // Force update the input value
+            instanceIdInput.value = currentInstanceId;
+
+            // Force DOM update
+            instanceIdInput.dispatchEvent(new Event('input', { bubbles: true }));
+            instanceIdInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+            // Force reflow
+            instanceIdInput.offsetHeight;
+
+            console.log(`🔍 [DEBUG] firefoxInstanceIdFix: Fixed instance_id to '${currentInstanceId}'`);
+        } else {
+            console.log('🔍 [DEBUG] firefoxInstanceIdFix: No mismatch detected');
+        }
+    }, 100); // Small delay to ensure page is loaded
+}
+
+// Call the Firefox fix after page load
+document.addEventListener('DOMContentLoaded', firefoxInstanceIdFix);
+window.addEventListener('load', firefoxInstanceIdFix);
+
+// Add function to test the Firefox instance_id fix
+function testFirefoxInstanceIdFix() {
+    console.log('🔍 [DEBUG] testFirefoxInstanceIdFix: Testing Firefox instance_id fix');
+
+    const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
+    console.log(`🔍 [DEBUG] testFirefoxInstanceIdFix: Is Firefox: ${isFirefox}`);
+
+    const instanceIdInput = document.getElementById('instance_id');
+    if (!instanceIdInput) {
+        console.log('🔍 [DEBUG] testFirefoxInstanceIdFix: No instance_id input found');
+        return;
+    }
+
+    const domInstanceId = instanceIdInput.value;
+    const currentInstanceId = currentInstance?.id;
+
+    console.log(`🔍 [DEBUG] testFirefoxInstanceIdFix: DOM instance_id: '${domInstanceId}'`);
+    console.log(`🔍 [DEBUG] testFirefoxInstanceIdFix: currentInstance.id: '${currentInstanceId}'`);
+
+    if (domInstanceId === currentInstanceId) {
+        console.log('🔍 [DEBUG] testFirefoxInstanceIdFix: ✅ Instance IDs match');
+    } else {
+        console.log('🔍 [DEBUG] testFirefoxInstanceIdFix: ❌ Instance IDs do not match');
+
+        // Try to fix it
+        console.log('🔍 [DEBUG] testFirefoxInstanceIdFix: Attempting to fix...');
+        firefoxInstanceIdFix();
+
+        // Check again after a short delay
+        setTimeout(() => {
+            const newDomInstanceId = instanceIdInput.value;
+            console.log(`🔍 [DEBUG] testFirefoxInstanceIdFix: After fix - DOM instance_id: '${newDomInstanceId}'`);
+
+            if (newDomInstanceId === currentInstanceId) {
+                console.log('🔍 [DEBUG] testFirefoxInstanceIdFix: ✅ Fix successful');
+            } else {
+                console.log('🔍 [DEBUG] testFirefoxInstanceIdFix: ❌ Fix failed');
+            }
+        }, 200);
+    }
+}
+
+// Make the function available globally for debugging
+window.testFirefoxInstanceIdFix = testFirefoxInstanceIdFix;
+
+// Add aggressive Firefox-specific instance_id fix
+function aggressiveFirefoxInstanceIdFix() {
+    const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
+    if (!isFirefox) {
+        return; // Only apply to Firefox
+    }
+
+    console.log('🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: Starting aggressive Firefox fix');
+
+    // Wait for the page to fully load
+    setTimeout(() => {
+        // Method 1: Force reload the instance_id input element
+        const instanceIdInput = document.getElementById('instance_id');
+        if (!instanceIdInput) {
+            console.log('🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: No instance_id input found');
+            return;
+        }
+
+        // Get the current value from the DOM
+        const currentDomValue = instanceIdInput.value;
+        console.log(`🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: Current DOM value: '${currentDomValue}'`);
+
+        // Method 2: Try to get the correct value from the server-rendered data
+        // Look for any script tags or data attributes that might contain the correct instance_id
+        let correctInstanceId = null;
+
+        // Check if there's a script tag with instance data
+        const scriptTags = document.querySelectorAll('script');
+        for (const script of scriptTags) {
+            const content = script.textContent || script.innerHTML;
+            if (content.includes('instance_id') || content.includes('currentInstance')) {
+                console.log('🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: Found script with instance data');
+                // Try to extract instance_id from script content
+                const match = content.match(/instance_id['"]?\s*[:=]\s*['"]([^'"]+)['"]/);
+                if (match) {
+                    correctInstanceId = match[1];
+                    console.log(`🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: Found instance_id in script: '${correctInstanceId}'`);
+                    break;
+                }
+            }
+        }
+
+        // Method 3: If we can't find it in scripts, try to infer from the URL or other page elements
+        if (!correctInstanceId) {
+            // Check if the URL contains an instance_id parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlInstanceId = urlParams.get('instance_id');
+            if (urlInstanceId) {
+                correctInstanceId = urlInstanceId;
+                console.log(`🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: Found instance_id in URL: '${correctInstanceId}'`);
+            }
+        }
+
+        // Method 4: If we still don't have it, try to get it from the server via API
+        if (!correctInstanceId) {
+            console.log('🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: No instance_id found, trying API call');
+
+            // Make an API call to get the current instance info
+            fetch('/api/current_instance', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data && data.instance_id) {
+                    correctInstanceId = data.instance_id;
+                    console.log(`🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: Got instance_id from API: '${correctInstanceId}'`);
+                    applyInstanceIdFix(instanceIdInput, correctInstanceId);
+                }
+            })
+            .catch(error => {
+                console.log('🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: API call failed:', error);
+            });
+        } else {
+            // Apply the fix immediately if we found the correct instance_id
+            applyInstanceIdFix(instanceIdInput, correctInstanceId);
+        }
+    }, 200); // Longer delay to ensure page is fully loaded
+}
+
+// Helper function to apply the instance_id fix
+function applyInstanceIdFix(instanceIdInput, correctInstanceId) {
+    const currentValue = instanceIdInput.value;
+
+    if (currentValue !== correctInstanceId) {
+        console.log(`🔍 [DEBUG] applyInstanceIdFix: Fixing instance_id from '${currentValue}' to '${correctInstanceId}'`);
+
+        // Force update the input value
+        instanceIdInput.value = correctInstanceId;
+
+        // Force DOM update with multiple methods
+        instanceIdInput.dispatchEvent(new Event('input', { bubbles: true }));
+        instanceIdInput.dispatchEvent(new Event('change', { bubbles: true }));
+        instanceIdInput.dispatchEvent(new Event('blur', { bubbles: true }));
+
+        // Force reflow
+        instanceIdInput.offsetHeight;
+
+        // Update currentInstance if it exists
+        if (window.currentInstance) {
+            window.currentInstance.id = correctInstanceId;
+            console.log(`🔍 [DEBUG] applyInstanceIdFix: Updated window.currentInstance.id to '${correctInstanceId}'`);
+        }
+
+        // Update currentInstance global variable if it exists
+        if (typeof currentInstance !== 'undefined' && currentInstance) {
+            currentInstance.id = correctInstanceId;
+            console.log(`🔍 [DEBUG] applyInstanceIdFix: Updated currentInstance.id to '${correctInstanceId}'`);
+        }
+
+        console.log(`🔍 [DEBUG] applyInstanceIdFix: Fix applied successfully`);
+    } else {
+        console.log(`🔍 [DEBUG] applyInstanceIdFix: No fix needed, instance_id is already correct: '${currentValue}'`);
+    }
+}
+
+// Call the aggressive fix after page load
+document.addEventListener('DOMContentLoaded', aggressiveFirefoxInstanceIdFix);
+window.addEventListener('load', aggressiveFirefoxInstanceIdFix);
+
+// Also call it when the page becomes visible (in case of tab switching)
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+        setTimeout(aggressiveFirefoxInstanceIdFix, 100);
+    }
+});
+
+// Add function to test the aggressive Firefox fix
+function testAggressiveFirefoxFix() {
+    console.log('🔍 [DEBUG] testAggressiveFirefoxFix: Testing aggressive Firefox fix');
+
+    const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
+    console.log(`🔍 [DEBUG] testAggressiveFirefoxFix: Is Firefox: ${isFirefox}`);
+
+    if (!isFirefox) {
+        console.log('🔍 [DEBUG] testAggressiveFirefoxFix: Not Firefox, skipping test');
+        return;
+    }
+
+    // Call the aggressive fix
+    console.log('🔍 [DEBUG] testAggressiveFirefoxFix: Calling aggressiveFirefoxInstanceIdFix');
+    aggressiveFirefoxInstanceIdFix();
+
+    // Check the result after a delay
+    setTimeout(() => {
+        const instanceIdInput = document.getElementById('instance_id');
+        if (!instanceIdInput) {
+            console.log('🔍 [DEBUG] testAggressiveFirefoxFix: No instance_id input found');
+            return;
+        }
+
+        const finalInstanceId = instanceIdInput.value;
+        const currentInstanceId = currentInstance?.id;
+
+        console.log(`🔍 [DEBUG] testAggressiveFirefoxFix: Final DOM instance_id: '${finalInstanceId}'`);
+        console.log(`🔍 [DEBUG] testAggressiveFirefoxFix: currentInstance.id: '${currentInstanceId}'`);
+
+        if (finalInstanceId === currentInstanceId) {
+            console.log('🔍 [DEBUG] testAggressiveFirefoxFix: ✅ Fix successful - instance IDs match');
+        } else {
+            console.log('🔍 [DEBUG] testAggressiveFirefoxFix: ❌ Fix failed - instance IDs do not match');
+        }
+    }, 500);
+}
+
+// Make the function available globally for debugging
+window.testAggressiveFirefoxFix = testAggressiveFirefoxFix; 

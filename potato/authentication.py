@@ -24,13 +24,15 @@ import logging
 import hashlib
 import secrets
 import requests
+import threading
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any, List, Union
 
 logger = logging.getLogger(__name__)
 
-# Global singleton instance of the user authenticator
+# Global singleton instance of the user authenticator with thread-safe lock
 USER_AUTHENTICATOR_SINGLETON = None
+_USER_AUTHENTICATOR_LOCK = threading.Lock()
 
 class AuthBackend(ABC):
     """
@@ -451,6 +453,7 @@ class UserAuthenticator:
         This method creates a singleton instance of the UserAuthenticator
         based on the provided configuration. It determines the authentication
         method and sets up the appropriate backend.
+        Thread-safe initialization using double-checked locking pattern.
 
         Args:
             config: Configuration dictionary containing authentication settings
@@ -464,35 +467,40 @@ class UserAuthenticator:
             - Loads user configuration if specified
         """
         global USER_AUTHENTICATOR_SINGLETON
+
+        # Double-checked locking for thread safety
         if USER_AUTHENTICATOR_SINGLETON is None:
-            # Determine authentication method from config
-            auth_method = config.get("authentication", {}).get("method", "in_memory")
+            with _USER_AUTHENTICATOR_LOCK:
+                # Check again inside the lock
+                if USER_AUTHENTICATOR_SINGLETON is None:
+                    # Determine authentication method from config
+                    auth_method = config.get("authentication", {}).get("method", "in_memory")
 
-            # Get config path if specified
-            user_config_path = config.get("authentication", {}).get("user_config_path", None)
+                    # Get config path if specified
+                    user_config_path = config.get("authentication", {}).get("user_config_path", None)
 
-            # Check if password is required
-            require_password = config.get("require_password", True)
+                    # Check if password is required
+                    require_password = config.get("require_password", True)
 
-            # See if the user_config_path has been set
-            if user_config_path is None:
-                # If not, set it to the default path where the annotators are
-                # stored
-                config_dir = os.path.dirname(config['output_annotation_dir'])
-                user_config_path = os.path.join(config_dir, "user_config.json")
-            else:
-                # If it has been set, make sure it's a valid path
-                if not os.path.isfile(user_config_path):
-                    logger.error(f"Invalid user_config_path: {user_config_path}")
-                    raise ValueError(f"Invalid user_config_path: {user_config_path}")
+                    # See if the user_config_path has been set
+                    if user_config_path is None:
+                        # If not, set it to the default path where the annotators are
+                        # stored
+                        config_dir = os.path.dirname(config['output_annotation_dir'])
+                        user_config_path = os.path.join(config_dir, "user_config.json")
+                    else:
+                        # If it has been set, make sure it's a valid path
+                        if not os.path.isfile(user_config_path):
+                            logger.error(f"Invalid user_config_path: {user_config_path}")
+                            raise ValueError(f"Invalid user_config_path: {user_config_path}")
 
-            print(f"User config path: {user_config_path}")
+                    logger.debug(f"User config path: {user_config_path}")
 
-            # Initialize the authenticator
-            USER_AUTHENTICATOR_SINGLETON = UserAuthenticator(user_config_path, auth_method)
-            USER_AUTHENTICATOR_SINGLETON.require_password = require_password
+                    # Initialize the authenticator
+                    USER_AUTHENTICATOR_SINGLETON = UserAuthenticator(user_config_path, auth_method)
+                    USER_AUTHENTICATOR_SINGLETON.require_password = require_password
 
-            logger.info(f"Initialized UserAuthenticator with method: {auth_method}, require_password: {require_password}")
+                    logger.info(f"Initialized UserAuthenticator with method: {auth_method}, require_password: {require_password}")
 
         return USER_AUTHENTICATOR_SINGLETON
 
@@ -529,9 +537,14 @@ class UserAuthenticator:
         """
         authenticator = UserAuthenticator.get_instance()
 
-        # If passwords are not required, bypass password check
+        # First, verify the user exists in the system
+        if not authenticator.auth_backend.is_valid_username(username):
+            logger.warning(f"Authentication failed: user '{username}' does not exist")
+            return False
+
+        # If passwords are not required, allow passwordless authentication
         if not authenticator.require_password:
-            # Force password to None for passwordless authentication
+            logger.debug(f"Passwordless authentication for user: {username}")
             return authenticator.auth_backend.authenticate(username, None)
 
         # Regular password authentication

@@ -73,7 +73,7 @@ sys.path.insert(0, cur_program_dir)
 from potato.item_state_management import ItemStateManager, Item, Label, SpanAnnotation
 from potato.item_state_management import get_item_state_manager, init_item_state_manager
 from potato.user_state_management import UserStateManager, UserState, get_user_state_manager, init_user_state_manager
-from potato.authentificaton import UserAuthenticator
+from potato.authentication import UserAuthenticator
 from potato.phase import UserPhase
 
 from potato.create_task_cli import create_task_cli, yes_or_no
@@ -246,17 +246,6 @@ def load_instance_data(config: dict):
             raise Exception("Unsupported input file format %s for %s" % (fmt, data_fname))
 
         logger.debug("Reading data from " + data_fname)
-        print(f"[DEBUG] Loading data from file: {data_fname}")
-        print(f"[DEBUG] Current working directory: {os.getcwd()}")
-        print(f"[DEBUG] File exists: {os.path.exists(data_fname)}")
-
-        # Read and print first few lines of the file for debugging
-        try:
-            with open(data_fname, "rt") as f:
-                first_lines = [f.readline().strip() for _ in range(3)]
-                print(f"[DEBUG] First 3 lines of file: {first_lines}")
-        except Exception as e:
-            print(f"[DEBUG] Error reading file: {e}")
 
         if fmt in ["json", "jsonl"]:
             # Handle JSON and JSONL formats
@@ -513,7 +502,7 @@ def load_all_data(config: dict):
     load_highlights_data(config)
     load_training_data(config)
 
-    print("STATES: ", get_user_state_manager().phase_type_to_name_to_page)
+    logger.debug(f"STATES: {get_user_state_manager().phase_type_to_name_to_page}")
 
 def load_annotation_schematic_data(config: dict) -> None:
     # Lazy import - only when this function is called
@@ -710,6 +699,13 @@ def get_abs_or_rel_path(fname: str, config: dict) -> str:
 
 def get_displayed_text(text):
     """Render the text to display to the user in the annotation interface."""
+    # Normalize text for consistent positioning (matches client-side normalization)
+    import re
+    # Remove non-printable characters and normalize whitespace
+    text = re.sub(r'[^\x20-\x7E]', '', text)
+    text = re.sub(r'\s+', ' ', text)
+    text = text.strip()
+
     if config.get("highlight_linebreaks", False):
         text = text.replace("\n", "<br/>")
 
@@ -784,7 +780,6 @@ def move_to_next_instance(user_id) -> bool:
     user_state = get_user_state(user_id)
     logger.debug(f"Before navigation - current_instance_index: {user_state.get_current_instance_index()}")
     logger.debug(f"Before navigation - instance_id_ordering: {user_state.instance_id_ordering}")
-    print(f"🔍 MOVE_NEXT: user={user_id}, before_index={user_state.get_current_instance_index()}")
 
     # If the user is at the end of the list, try to assign instances to the user
     if user_state.is_at_end_index():
@@ -795,7 +790,6 @@ def move_to_next_instance(user_id) -> bool:
     result = user_state.go_forward()
     logger.debug(f"After navigation - current_instance_index: {user_state.get_current_instance_index()}")
     logger.debug(f"Navigation result: {result}")
-    print(f"🔍 MOVE_NEXT: user={user_id}, after_index={user_state.get_current_instance_index()}, result={result}")
 
     logger.debug(f"=== MOVE_TO_NEXT_INSTANCE END ===")
     return result
@@ -836,7 +830,6 @@ def render_page_with_annotations(username) -> str:
     logger.debug(f"User state current_instance_index: {user_state.get_current_instance_index()}")
     logger.debug(f"User state instance_id_ordering: {user_state.instance_id_ordering}")
     logger.debug(f"Current instance ID: {instance_id}")
-    print(f"🔍 RENDER_PAGE: username={username}, current_instance_index={user_state.get_current_instance_index()}, instance_id={instance_id}")
 
     # print('instance_id: ', instance_id)
 
@@ -936,6 +929,9 @@ def render_page_with_annotations(username) -> str:
     # Use the total number of items that will be assigned to the user
     total_count = get_item_state_manager().get_total_assignable_items_for_user(get_user_state(username))
 
+    # Get UI configuration from config
+    ui_config = config.get("ui", {})
+
     rendered_html = render_template(
         html_file,
         username=username,
@@ -954,6 +950,7 @@ def render_page_with_annotations(username) -> str:
         annotation_schemes=config["annotation_schemes"],
         annotation_task_name=config["annotation_task_name"],
         debug=config.get("debug", False),
+        ui_config=ui_config,
         # ai=ai_hints,
         **kwargs
     )
@@ -981,16 +978,14 @@ def render_page_with_annotations(username) -> str:
                 if "labels" not in scheme_dict[s['name']]:
                     annotations[s['name']]['text_box'] = s['label']
             else:
-                print('WARNING: label suggestions not supported for annotation_type %s, please submit a github issue to get support'%scheme_dict[s['name']]['annotation_type'])
-    #print(schema_content_to_prefill, annotations)
-    print("annotations")
-    print(annotations)
+                logger.warning('Label suggestions not supported for annotation_type %s, please submit a github issue to get support' % scheme_dict[s['name']]['annotation_type'])
+    logger.debug(f"annotations: {annotations}")
     if annotations is not None:
         # Reset the state
         for schema_name, label_dict in annotations.items():
             # this needs to be fixed, there is a chance that we get incorrect type
             if not isinstance(label_dict, dict):
-                print(f"Skipping {schema_name}: Expected dict but got {type(label_dict)} -> {label_dict}")
+                logger.warning(f"Skipping {schema_name}: Expected dict but got {type(label_dict)} -> {label_dict}")
                 continue
 
             for label_name, value in label_dict.items():
@@ -1005,7 +1000,7 @@ def render_page_with_annotations(username) -> str:
                 for input_field in input_fields:
 
                     if input_field is None:
-                        print("No input for ", name)
+                        logger.debug(f"No input for {name}")
                         continue
 
                     # If it's a slider, set the value for the slider
@@ -1071,11 +1066,11 @@ def get_label_suggestions(item, config, schema_content_to_prefill) -> set[Sugges
             elif type(suggested_labels) == list:
                 suggested_labels = suggested_labels
             else:
-                print("WARNING: Unsupported suggested label type %s, please check your input data" % type(s))
+                logger.warning("Unsupported suggested label type %s, please check your input data" % type(suggested_labels))
                 continue
 
             if not schema.get('label_suggestions') in ['highlight', 'prefill']:
-                print('WARNING: the style of suggested labels is not defined, please check your configuration file.')
+                logger.warning('The style of suggested labels is not defined, please check your configuration file.')
                 continue
 
             label_suggestion = schema['label_suggestions']
@@ -1105,10 +1100,10 @@ def ai_hints(text: str) -> str:
     Returns the AI hints for the given instance.
     """
     import requests
-    print(text)
+    logger.debug(f"AI hints text: {text}")
     description = config["annotation_schemes"][0]["description"]
     annotation_type = config["annotation_schemes"][0]["annotation_type"]
-    print(description)
+    logger.debug(f"AI hints description: {description}")
     prompt = f'''You are assisting a user with an annotation task. Here is the annotation instruction: {description}
     Here is the annotation task type: {annotation_type}
     Here is the sentence (or item) to annotate: {text}
@@ -1127,16 +1122,17 @@ def ai_hints(text: str) -> str:
             },
             timeout=5  # Add timeout to prevent hanging
         )
-        print(response.json()['response'])
-        return response.json()['response']
+        result = response.json()['response']
+        logger.debug(f"AI hints response: {result}")
+        return result
     except requests.exceptions.ConnectionError:
-        print("AI hints service not available (Ollama not running)")
+        logger.warning("AI hints service not available (Ollama not running)")
         return "AI hints are currently unavailable. Please proceed with manual annotation."
     except requests.exceptions.Timeout:
-        print("AI hints service timeout")
+        logger.warning("AI hints service timeout")
         return "AI hints service is slow to respond. Please proceed with manual annotation."
     except Exception as e:
-        print(f"Error getting AI hints: {e}")
+        logger.error(f"Error getting AI hints: {e}")
         return "AI hints are currently unavailable. Please proceed with manual annotation."
 
 
@@ -1163,6 +1159,9 @@ def render_page_with_annotations_WEIRD(username):
     # Get user progress information
     progress = user_state.get_progress()
 
+    # Get UI configuration from config
+    ui_config = config.get("ui", {})
+
     return render_template(
         html_fname,
         instance_id=instance_id,
@@ -1170,7 +1169,8 @@ def render_page_with_annotations_WEIRD(username):
         annotations=annotations,
         span_annotations=span_annotations,
         progress=progress,
-        username=username
+        username=username,
+        ui_config=ui_config
     )
 
 def randomize_options(soup, legend_names, seed):
@@ -1179,7 +1179,7 @@ def randomize_options(soup, legend_names, seed):
     # Find all fieldsets in the soup
     fieldsets = soup.find_all('fieldset')
     if not fieldsets:
-        print("No fieldsets found.")
+        logger.debug("No fieldsets found.")
         return soup
 
     # Initialize a variable to track whether the legend is found
@@ -1196,7 +1196,7 @@ def randomize_options(soup, legend_names, seed):
             # Find the table within the fieldset
             table = fieldset.find('table')
             if not table:
-                print("Table not found within the fieldset.")
+                logger.debug("Table not found within the fieldset.")
                 continue
 
             # Get the list of tr elements excluding the first one (title)
@@ -1211,7 +1211,7 @@ def randomize_options(soup, legend_names, seed):
 
     # Check if any legend was found
     if not legend_found:
-        print(f"No matching legends found within any fieldset.")
+        logger.debug("No matching legends found within any fieldset.")
 
     return soup
 
@@ -1302,7 +1302,7 @@ def get_annotations_for_user_on(username, instance_id):
     instance_id = str(instance_id)
 
     user_state = get_user_state(username)
-    print("instance_id", instance_id)
+    logger.debug(f"instance_id: {instance_id}")
     raw_annotations = user_state.get_label_annotations(instance_id)
 
     # Process the raw annotations into the expected format
@@ -1344,44 +1344,32 @@ def get_span_annotations_for_user_on(username, instance_id):
     # DEBUG: Check if this instance has any span annotations at all
     if hasattr(user_state, 'instance_id_to_span_to_value'):
         logger.debug(f"User state instance_id_to_span_to_value keys: {list(user_state.instance_id_to_span_to_value.keys())}")
-        print(f"🔍 User state instance_id_to_span_to_value keys: {list(user_state.instance_id_to_span_to_value.keys())}")
 
         if instance_id in user_state.instance_id_to_span_to_value:
             instance_spans = user_state.instance_id_to_span_to_value[instance_id]
             logger.debug(f"Spans for instance {instance_id}: {instance_spans}")
-            print(f"🔍 Spans for instance {instance_id}: {instance_spans}")
 
             # DEBUG: Show each span in detail
             for span, value in instance_spans.items():
                 logger.debug(f"Span: {span}, Value: {value}")
-                print(f"🔍 Span: {span}, Value: {value}")
                 if hasattr(span, 'get_schema'):
                     logger.debug(f"  Schema: {span.get_schema()}")
                     logger.debug(f"  Name: {span.get_name()}")
                     logger.debug(f"  Start: {span.get_start()}")
                     logger.debug(f"  End: {span.get_end()}")
                     logger.debug(f"  ID: {span.get_id()}")
-                    print(f"🔍   Schema: {span.get_schema()}")
-                    print(f"🔍   Name: {span.get_name()}")
-                    print(f"🔍   Start: {span.get_start()}")
-                    print(f"🔍   End: {span.get_end()}")
-                    print(f"🔍   ID: {span.get_id()}")
         else:
             logger.debug(f"No spans found for instance {instance_id}")
-            print(f"🔍 No spans found for instance {instance_id}")
 
     span_annotations_dict = user_state.get_span_annotations(instance_id)
     logger.debug(f"Raw span annotations from user state: {span_annotations_dict}")
-    print(f"🔍 get_span_annotations_for_user_on({username}, {instance_id}): {span_annotations_dict}")
 
     # Convert dictionary to list of SpanAnnotation objects
     span_annotations = list(span_annotations_dict.keys()) if span_annotations_dict else []
     logger.debug(f"Converted to list: {span_annotations}")
-    print(f"🔍 Converted to list: {span_annotations}")
 
-    # Debug: Print details of each span
+    # Log details of each span
     for span in span_annotations:
-        print(f"[DEBUG SPAN] schema={span.get_schema()} label={span.get_name()} start={span.get_start()} end={span.get_end()} id={span.get_id()}")
         logger.debug(f"[DEBUG SPAN] schema={span.get_schema()} label={span.get_name()} start={span.get_start()} end={span.get_end()} id={span.get_id()}")
 
     logger.debug(f"=== GET_SPAN_ANNOTATIONS_FOR_USER_ON END ===")

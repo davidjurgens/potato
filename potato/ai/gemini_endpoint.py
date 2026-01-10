@@ -39,7 +39,12 @@ class GeminiEndpoint(BaseAIEndpoint):
         if not api_key:
             raise AIEndpointRequestError("Gemini API key is required")
 
-        self.client = genai.Client(api_key=api_key)
+        # Default timeout of 30 seconds, configurable via ai_config
+        timeout = self.ai_config.get("timeout", 30)
+        self.client = genai.Client(
+            api_key=api_key,
+            http_options={'timeout': timeout}
+        )
 
     def _get_default_model(self) -> str:
         """Get the default Gemini model."""

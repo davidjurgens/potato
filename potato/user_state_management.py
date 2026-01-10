@@ -36,11 +36,10 @@ import datetime
 from collections import defaultdict, OrderedDict
 import logging
 import os
+import threading
 from typing import Optional, Dict, Any, List, Tuple, Set
 
-import logging
-
-from potato.authentificaton import UserAuthenticator
+from potato.authentication import UserAuthenticator
 from potato.phase import UserPhase
 from potato.item_state_management import get_item_state_manager, Item, SpanAnnotation, Label
 from potato.annotation_history import AnnotationAction, AnnotationHistoryManager
@@ -194,16 +193,17 @@ logging.basicConfig()
 
 
 
-# Singleton instance of the user state manager
+# Singleton instance of the user state manager with thread-safe lock
 USER_STATE_MANAGER = None
+_USER_STATE_MANAGER_LOCK = threading.Lock()
 
-@staticmethod
 def init_user_state_manager(config: dict) -> UserStateManager:
     """
     Initialize the singleton UserStateManager instance.
 
     This function creates the global UserStateManager that will be shared
     across all users. It's designed to be called once during application startup.
+    Thread-safe initialization using double-checked locking pattern.
 
     Args:
         config: Configuration dictionary containing user management settings
@@ -213,20 +213,24 @@ def init_user_state_manager(config: dict) -> UserStateManager:
     """
     global USER_STATE_MANAGER
 
+    # Double-checked locking for thread safety
     if USER_STATE_MANAGER is None:
-        USER_STATE_MANAGER = UserStateManager(config)
+        with _USER_STATE_MANAGER_LOCK:
+            # Check again inside the lock
+            if USER_STATE_MANAGER is None:
+                USER_STATE_MANAGER = UserStateManager(config)
     return USER_STATE_MANAGER
 
-@staticmethod
 def clear_user_state_manager():
     """
     Clear the singleton user state manager instance (for testing).
 
     This function is primarily used for testing purposes to reset the
-    global state between test runs.
+    global state between test runs. Thread-safe.
     """
     global USER_STATE_MANAGER
-    USER_STATE_MANAGER = None
+    with _USER_STATE_MANAGER_LOCK:
+        USER_STATE_MANAGER = None
 
 def get_user_state_manager() -> UserStateManager:
     """
@@ -1118,12 +1122,6 @@ class UserState:
         self.training_state = TrainingState()
 
 
-class MysqlUserState(UserState):
-
-    def __init__(self, user_id: str, db_conn):
-        raise NotImplementedError('MysqlUserState is not implemented yet')
-
-
 class InMemoryUserState(UserState):
 
     def __init__(self, user_id: str, max_assignments: int = -1):
@@ -1316,14 +1314,11 @@ class InMemoryUserState(UserState):
         #print('GO FORWARD instance_id_ordering ->', self.instance_id_ordering)
 
         # DEBUG: Add detailed logging
-        print(f"🔍 GO_FORWARD: before_index={self.current_instance_index}, total_instances={len(self.instance_id_ordering)}")
 
         if self.current_instance_index < len(self.instance_id_ordering) - 1:
             self.current_instance_index += 1
-            print(f"🔍 GO_FORWARD: after_index={self.current_instance_index}, new_instance_id={self.instance_id_ordering[self.current_instance_index]}")
             return True
         else:
-            print(f"🔍 GO_FORWARD: at end, cannot move forward")
             return False
 
     def get_current_phase_and_page(self) -> tuple[UserPhase, str]:
