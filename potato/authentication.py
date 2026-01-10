@@ -138,8 +138,10 @@ class InMemoryAuthBackend(AuthBackend):
         if password is None:  # Passwordless login
             return True
 
+        # Use constant-time comparison to prevent timing attacks
+        import hmac
         hashed = self._hash_password(password)
-        return self.users[username] == hashed
+        return hmac.compare_digest(self.users[username], hashed)
 
     def add_user(self, username: str, password: Optional[str], **kwargs) -> str:
         """
@@ -206,7 +208,30 @@ class DatabaseAuthBackend(AuthBackend):
         # For simplicity, we'll use a dict as our "database" for this example
         self.users = {}
 
+        # Generate a random salt for password hashing
+        # In production with a real DB, the salt should be stored per-user
+        self.salt = secrets.token_hex(16)
+
         logger.info(f"Database auth backend initialized with connection: {db_connection_string}")
+
+    def _hash_password(self, password: str) -> str:
+        """
+        Hash a password with the salt using PBKDF2.
+
+        Args:
+            password: The plain text password to hash
+
+        Returns:
+            str: The hashed password as a hex string
+        """
+        if not password:
+            return ""
+        return hashlib.pbkdf2_hmac(
+            'sha256',
+            password.encode('utf-8'),
+            self.salt.encode('utf-8'),
+            100000  # Number of iterations for security
+        ).hex()
 
     def authenticate(self, username: str, password: Optional[str]) -> bool:
         """
@@ -234,9 +259,10 @@ class DatabaseAuthBackend(AuthBackend):
         if password is None:  # Passwordless login
             return True
 
-        # This is insecure - only for demonstration
-        # In production, use a proper password hashing library
-        return self.users[username] == password
+        # Hash the provided password and compare with stored hash
+        import hmac
+        hashed = self._hash_password(password)
+        return hmac.compare_digest(self.users[username], hashed)
 
     def add_user(self, username: str, password: Optional[str], **kwargs) -> str:
         """
@@ -264,7 +290,8 @@ class DatabaseAuthBackend(AuthBackend):
         if username in self.users:
             return "Duplicate user"
 
-        self.users[username] = password
+        # Store password hash (empty string for passwordless users)
+        self.users[username] = self._hash_password(password) if password else ""
         return "Success"
 
     def is_valid_username(self, username: str) -> bool:

@@ -6,6 +6,7 @@ storing all user state data in MySQL tables for persistence and scalability.
 """
 
 import logging
+import threading
 from typing import Dict, List, Set, Any, Optional, Tuple
 from collections import defaultdict
 
@@ -38,10 +39,13 @@ class MysqlUserState(UserState):
         self.db_manager = db_manager
         self.max_assignments = max_assignments
 
+        # Thread-safe cache lock
+        self._cache_lock = threading.Lock()
+
         # Ensure user exists in database
         self._ensure_user_exists()
 
-        # Cache for performance
+        # Cache for performance (protected by _cache_lock)
         self._instance_ordering_cache = None
         self._current_phase_cache = None
         self._current_page_cache = None
@@ -59,11 +63,12 @@ class MysqlUserState(UserState):
             conn.commit()
 
     def _invalidate_cache(self):
-        """Invalidate cached data."""
-        self._instance_ordering_cache = None
-        self._current_phase_cache = None
-        self._current_page_cache = None
-        self._current_instance_index_cache = None
+        """Invalidate cached data (thread-safe)."""
+        with self._cache_lock:
+            self._instance_ordering_cache = None
+            self._current_phase_cache = None
+            self._current_page_cache = None
+            self._current_instance_index_cache = None
 
     def advance_to_phase(self, phase: UserPhase, page: str) -> None:
         """Advance the user to a new phase and page."""
@@ -90,7 +95,8 @@ class MysqlUserState(UserState):
                 WHERE user_id = %s AND instance_id = %s
             """, (self.user_id, instance_id))
 
-            if cursor.fetchone()[0] > 0:
+            result = cursor.fetchone()
+            if result is not None and result[0] > 0:
                 return  # Already assigned
 
             # Get next assignment order
@@ -99,7 +105,8 @@ class MysqlUserState(UserState):
                 FROM user_instance_assignments
                 WHERE user_id = %s
             """, (self.user_id,))
-            next_order = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            next_order = result[0] if result is not None else 0
 
             # Insert assignment
             cursor.execute("""
@@ -111,7 +118,8 @@ class MysqlUserState(UserState):
             cursor.execute("""
                 SELECT current_instance_index FROM user_states WHERE user_id = %s
             """, (self.user_id,))
-            current_index = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            current_index = result[0] if result is not None else -1
 
             if current_index == -1:
                 cursor.execute("""
@@ -322,7 +330,8 @@ class MysqlUserState(UserState):
             cursor.execute("""
                 SELECT COUNT(*) FROM user_instance_assignments WHERE user_id = %s
             """, (self.user_id,))
-            return cursor.fetchone()[0]
+            result = cursor.fetchone()
+            return result[0] if result is not None else 0
 
     def get_assigned_instance_ids(self) -> Set[str]:
         """Get the set of assigned instance IDs."""
@@ -467,7 +476,8 @@ class MysqlUserState(UserState):
             cursor.execute("""
                 SELECT COUNT(*) FROM ai_hints WHERE user_id = %s AND instance_id = %s
             """, (self.user_id, instance_id))
-            return cursor.fetchone()[0] > 0
+            result = cursor.fetchone()
+            return result is not None and result[0] > 0
 
     def get_hint(self, instance_id: str) -> Optional[str]:
         """Get the hint for an instance."""

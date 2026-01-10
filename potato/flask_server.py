@@ -251,7 +251,15 @@ def load_instance_data(config: dict):
             # Handle JSON and JSONL formats
             with open(data_fname, "rt") as f:
                 for line_no, line in enumerate(f):
-                    item = json.loads(line)
+                    line = line.strip()
+                    if not line:  # Skip empty lines
+                        continue
+                    try:
+                        item = json.loads(line)
+                    except json.JSONDecodeError as e:
+                        raise ValueError(
+                            f"Invalid JSON at line {line_no+1} in {data_fname}: {e}"
+                        ) from e
 
                     # Validate that the ID key exists in the item
                     if id_key not in item:
@@ -642,8 +650,16 @@ def get_phase_annotation_schemes(filename: str) -> list[dict]:
             schemes = [schemes]
     elif filename.endswith(".jsonl"):
         with open(filename, 'rt') as f:
-            for line in f:
-                schemes.append(json.loads(line))
+            for line_no, line in enumerate(f):
+                line = line.strip()
+                if not line:  # Skip empty lines
+                    continue
+                try:
+                    schemes.append(json.loads(line))
+                except json.JSONDecodeError as e:
+                    raise ValueError(
+                        f"Invalid JSON at line {line_no+1} in {filename}: {e}"
+                    ) from e
     elif filename.endswith(".yaml") or filename.endswith(".yml"):
         with open(filename, 'rt') as f:
             schemes = yaml.safe_load(f)
@@ -1414,7 +1430,13 @@ def configure_app(flask_app):
     # Set application configuration
     # Use a random secret key if sessions shouldn't persist, otherwise use the configured one
     if config.get("persist_sessions", False):
-        app.secret_key = config.get("secret_key", "potato-annotation-platform")
+        secret_key = config.get("secret_key") or os.environ.get("POTATO_SECRET_KEY")
+        if not secret_key:
+            raise ValueError(
+                "persist_sessions is enabled but no secret_key is configured. "
+                "Set 'secret_key' in your config file or POTATO_SECRET_KEY environment variable."
+            )
+        app.secret_key = secret_key
     else:
         # Generate a random secret key to ensure sessions don't persist between restarts
         import secrets

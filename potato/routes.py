@@ -57,6 +57,40 @@ from potato.server_utils.schemas.span import get_span_color
 # Import annotation history
 from potato.annotation_history import AnnotationHistoryManager
 
+import os
+
+def get_admin_api_key():
+    """Get the admin API key from config or environment variable.
+
+    Returns:
+        str or None: The configured admin API key, or None if not configured.
+    """
+    return config.get("admin_api_key") or os.environ.get("POTATO_ADMIN_API_KEY")
+
+def validate_admin_api_key(provided_key: str) -> bool:
+    """Validate an admin API key against the configured key.
+
+    In debug mode, admin endpoints are accessible without a key.
+    In production, a valid API key must be configured and provided.
+
+    Args:
+        provided_key: The API key provided in the request.
+
+    Returns:
+        bool: True if the key is valid or debug mode is enabled.
+    """
+    if config.get("debug", False):
+        return True
+
+    expected_key = get_admin_api_key()
+    if not expected_key:
+        logger.warning("Admin API key not configured - admin endpoints disabled in production")
+        return False
+
+    # Use constant-time comparison to prevent timing attacks
+    import hmac
+    return hmac.compare_digest(str(provided_key or ""), expected_key)
+
 @app.route("/", methods=["GET", "POST"])
 def home():
     """
@@ -1002,7 +1036,7 @@ def admin_health():
     """
     # Check API key
     api_key = request.headers.get('X-API-Key')
-    if not config.get("debug", False) and api_key != "admin_api_key":
+    if not validate_admin_api_key(api_key):
         return jsonify({
             "error": "Health check only available in debug mode or with valid API key"
         }), 403
@@ -1043,7 +1077,7 @@ def admin_system_state():
     """
     # Check API key
     api_key = request.headers.get('X-API-Key')
-    if not config.get("debug", False) and api_key != "admin_api_key":
+    if not validate_admin_api_key(api_key):
         return jsonify({
             "error": "System state only available in debug mode or with valid API key"
         }), 403
@@ -1119,7 +1153,7 @@ def admin_all_instances():
     """
     # Check API key
     api_key = request.headers.get('X-API-Key')
-    if not config.get("debug", False) and api_key != "admin_api_key":
+    if not validate_admin_api_key(api_key):
         return jsonify({
             "error": "All instances only available in debug mode or with valid API key"
         }), 403
@@ -1168,11 +1202,8 @@ def admin_user_state(user_id):
 
     # Check API key
     api_key = request.headers.get('X-API-Key')
-    logger.debug(f"API key provided: {api_key}")
-    logger.debug(f"Expected API key: admin_api_key")
-
-    if not config.get("debug", False) and api_key != "admin_api_key":
-        logger.warning(f"Access denied - debug mode: {config.get('debug', False)}, api_key: {api_key}")
+    if not validate_admin_api_key(api_key):
+        logger.warning("Access denied to admin endpoint - invalid API key")
         return jsonify({
             "error": "User state only available in debug mode or with valid API key"
         }), 403
@@ -1297,7 +1328,7 @@ def admin_item_state():
     """
     # Check API key
     api_key = request.headers.get('X-API-Key')
-    if not config.get("debug", False) and api_key != "admin_api_key":
+    if not validate_admin_api_key(api_key):
         return jsonify({
             "error": "Item state only available in debug mode or with valid API key"
         }), 403
@@ -1351,7 +1382,7 @@ def admin_item_state_detail(item_id):
     """
     # Check API key
     api_key = request.headers.get('X-API-Key')
-    if not config.get("debug", False) and api_key != "admin_api_key":
+    if not validate_admin_api_key(api_key):
         return jsonify({
             "error": "Item state detail only available in debug mode or with valid API key"
         }), 403
@@ -2124,7 +2155,7 @@ def admin():
     # Check if admin API key is provided in session or headers
     api_key = request.headers.get('X-API-Key') or session.get('admin_api_key')
 
-    if not config.get("debug", False) and api_key != "admin_api_key":
+    if not validate_admin_api_key(api_key):
         # Show API key entry form
         return render_template("admin_login.html",
                              title=config.get("annotation_task_name", "Admin Dashboard"))
@@ -2501,7 +2532,13 @@ def configure_routes(flask_app, app_config):
     # Set up session configuration
     # Use a random secret key if sessions shouldn't persist, otherwise use the configured one
     if config.get("persist_sessions", False):
-        app.secret_key = config.get("secret_key", "potato-annotation-platform")
+        secret_key = config.get("secret_key") or os.environ.get("POTATO_SECRET_KEY")
+        if not secret_key:
+            raise ValueError(
+                "persist_sessions is enabled but no secret_key is configured. "
+                "Set 'secret_key' in your config file or POTATO_SECRET_KEY environment variable."
+            )
+        app.secret_key = secret_key
     else:
         # Generate a random secret key to ensure sessions don't persist between restarts
         import secrets

@@ -271,6 +271,9 @@ class UserStateManager:
         self.prolific_study = None
         self.phase_type_to_name_to_page = defaultdict(OrderedDict)
 
+        # Thread-safe lock for shared state access
+        self._state_lock = threading.RLock()
+
         # TODO: load this from the config
         self.max_annotations_per_user = -1
 
@@ -309,7 +312,7 @@ class UserStateManager:
 
     def add_user(self, user_id: str) -> UserState:
         """
-        Add a new user to the user state manager.
+        Add a new user to the user state manager (thread-safe).
 
         Args:
             user_id: Unique identifier for the new user
@@ -320,29 +323,30 @@ class UserStateManager:
         Raises:
             ValueError: If a user with the same ID already exists
         """
-        logger.debug(f"=== ADD USER START ===")
-        logger.debug(f"Adding user: {user_id}")
-        logger.debug(f"Current users: {list(self.user_to_annotation_state.keys())}")
-        logger.debug(f"User already exists: {user_id in self.user_to_annotation_state}")
+        with self._state_lock:
+            logger.debug(f"=== ADD USER START ===")
+            logger.debug(f"Adding user: {user_id}")
+            logger.debug(f"Current users: {list(self.user_to_annotation_state.keys())}")
+            logger.debug(f"User already exists: {user_id in self.user_to_annotation_state}")
 
-        if user_id in self.user_to_annotation_state:
-            logger.warning(f'User "{user_id}" already exists in the user state manager')
-            raise ValueError(f'User "{user_id}" already exists in the user state manager')
+            if user_id in self.user_to_annotation_state:
+                logger.warning(f'User "{user_id}" already exists in the user state manager')
+                raise ValueError(f'User "{user_id}" already exists in the user state manager')
 
-        # Create appropriate user state based on configuration
-        if self.use_database and self.db_manager:
-            logger.debug(f"Creating MysqlUserState for user: {user_id}")
-            user_state = MysqlUserState(user_id, self.db_manager, self.max_annotations_per_user)
-        else:
-            logger.debug(f"Creating InMemoryUserState for user: {user_id}")
-            user_state = InMemoryUserState(user_id, self.max_annotations_per_user)
+            # Create appropriate user state based on configuration
+            if self.use_database and self.db_manager:
+                logger.debug(f"Creating MysqlUserState for user: {user_id}")
+                user_state = MysqlUserState(user_id, self.db_manager, self.max_annotations_per_user)
+            else:
+                logger.debug(f"Creating InMemoryUserState for user: {user_id}")
+                user_state = InMemoryUserState(user_id, self.max_annotations_per_user)
 
-        self.user_to_annotation_state[user_id] = user_state
-        logger.debug(f"User state created and stored: {user_state}")
-        logger.debug(f"Users after adding: {list(self.user_to_annotation_state.keys())}")
-        logger.debug(f"=== ADD USER END ===")
+            self.user_to_annotation_state[user_id] = user_state
+            logger.debug(f"User state created and stored: {user_state}")
+            logger.debug(f"Users after adding: {list(self.user_to_annotation_state.keys())}")
+            logger.debug(f"=== ADD USER END ===")
 
-        return user_state
+            return user_state
 
     def get_or_create_user(self, user_id: str) -> UserState:
         """
@@ -412,33 +416,35 @@ class UserStateManager:
 
     def get_user_state(self, user_id: str) -> UserState:
         '''
-        Gets a user from the user state manager or None if the user does not exist'''
-        if user_id not in self.user_to_annotation_state:
-            if self.use_database and self.db_manager:
-                # Try to load from database
-                try:
-                    user_state = MysqlUserState(user_id, self.db_manager, self.max_annotations_per_user)
-                    self.user_to_annotation_state[user_id] = user_state
-                    return user_state
-                except Exception as e:
-                    logger.warning(f"Failed to load user state from database for {user_id}: {e}")
-            else:
-                # Try to load the user state from disk if it exists
-                try:
-                    output_annotation_dir = self.config["output_annotation_dir"]
-                    user_dir = os.path.join(output_annotation_dir, user_id)
-                    if os.path.exists(user_dir):
-                        user_state = InMemoryUserState.load(user_dir)
+        Gets a user from the user state manager or None if the user does not exist (thread-safe).'''
+        with self._state_lock:
+            if user_id not in self.user_to_annotation_state:
+                if self.use_database and self.db_manager:
+                    # Try to load from database
+                    try:
+                        user_state = MysqlUserState(user_id, self.db_manager, self.max_annotations_per_user)
                         self.user_to_annotation_state[user_id] = user_state
                         return user_state
-                except Exception as e:
-                    logger.warning(f"Failed to load user state for {user_id}: {e}")
+                    except Exception as e:
+                        logger.warning(f"Failed to load user state from database for {user_id}: {e}")
+                else:
+                    # Try to load the user state from disk if it exists
+                    try:
+                        output_annotation_dir = self.config["output_annotation_dir"]
+                        user_dir = os.path.join(output_annotation_dir, user_id)
+                        if os.path.exists(user_dir):
+                            user_state = InMemoryUserState.load(user_dir)
+                            self.user_to_annotation_state[user_id] = user_state
+                            return user_state
+                    except Exception as e:
+                        logger.warning(f"Failed to load user state for {user_id}: {e}")
 
-        return self.user_to_annotation_state.get(user_id)
+            return self.user_to_annotation_state.get(user_id)
 
     def get_all_users(self) -> list[UserState]:
-        '''Gets all users from the user state manager'''
-        return list(self.user_to_annotation_state.values())
+        '''Gets all users from the user state manager (thread-safe).'''
+        with self._state_lock:
+            return list(self.user_to_annotation_state.values())
 
     def get_phase_html_fname(self, phase: UserPhase, page: str) -> str:
         '''Returns the filename of the page for the given phase and page name'''
@@ -903,21 +909,38 @@ class UserState:
         d['phase_to_page_to_label_to_value'] = {str(k): {k2: convert_label_dict(v2) for k2, v2 in v.items()} for k, v in self.phase_to_page_to_label_to_value.items()}
         d['phase_to_page_to_span_to_value'] = {str(k): {k2: convert_span_dict(v2) for k2, v2 in v.items()} for k, v in self.phase_to_page_to_span_to_value.items()}
 
+        # Save training state
+        d['training_state'] = self.training_state.to_dict()
+
         return d
 
     def save(self, user_dir: str) -> None:
-        '''Saves the user's state to disk'''
+        '''Saves the user's state to disk using atomic write (temp file + rename).'''
+        import tempfile
+
         # Convert the state to something JSON serializable
         user_state = self.to_json()
 
-        # Ensure directory exists
-        if not os.path.exists(user_dir):
-            os.makedirs(user_dir)
+        # Ensure directory exists (use exist_ok to avoid race conditions)
+        os.makedirs(user_dir, exist_ok=True)
 
-        # Write the user's state to disk
+        # Write atomically: write to temp file, then rename
         state_file = os.path.join(user_dir, 'user_state.json')
-        with open(state_file, 'wt') as outf:
-            json.dump(user_state, outf, indent=2)
+
+        # Create temp file in same directory to ensure atomic rename works
+        fd, temp_path = tempfile.mkstemp(dir=user_dir, suffix='.tmp')
+        try:
+            with os.fdopen(fd, 'wt') as outf:
+                json.dump(user_state, outf, indent=2)
+                outf.flush()
+                os.fsync(outf.fileno())  # Ensure data is written to disk
+            # Atomic rename (works on POSIX, best-effort on Windows)
+            os.replace(temp_path, state_file)
+        except Exception:
+            # Clean up temp file if something went wrong
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+            raise
 
     @staticmethod
     def load(user_dir: str) -> UserState:
@@ -975,6 +998,10 @@ class UserState:
         user_state.completed_phase_and_pages = [
             to_phase_and_page(pp) for pp in j['completed_phase_and_pages']
         ]
+
+        # Restore training state if present
+        if 'training_state' in j:
+            user_state.training_state = TrainingState.from_dict(j['training_state'])
 
         return user_state
 
@@ -1618,18 +1645,32 @@ class InMemoryUserState(UserState):
         return d
 
     def save(self, user_dir: str) -> None:
-        '''Saves the user's state to disk'''
+        '''Saves the user's state to disk using atomic write (temp file + rename).'''
+        import tempfile
+
         # Convert the state to something JSON serializable
         user_state = self.to_json()
 
-        # Ensure directory exists
-        if not os.path.exists(user_dir):
-            os.makedirs(user_dir)
+        # Ensure directory exists (use exist_ok to avoid race conditions)
+        os.makedirs(user_dir, exist_ok=True)
 
-        # Write the user's state to disk
+        # Write atomically: write to temp file, then rename
         state_file = os.path.join(user_dir, 'user_state.json')
-        with open(state_file, 'wt') as outf:
-            json.dump(user_state, outf, indent=2)
+
+        # Create temp file in same directory to ensure atomic rename works
+        fd, temp_path = tempfile.mkstemp(dir=user_dir, suffix='.tmp')
+        try:
+            with os.fdopen(fd, 'wt') as outf:
+                json.dump(user_state, outf, indent=2)
+                outf.flush()
+                os.fsync(outf.fileno())  # Ensure data is written to disk
+            # Atomic rename (works on POSIX, best-effort on Windows)
+            os.replace(temp_path, state_file)
+        except Exception:
+            # Clean up temp file if something went wrong
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+            raise
 
     @staticmethod
     def load(user_dir: str) -> UserState:
@@ -1687,6 +1728,10 @@ class InMemoryUserState(UserState):
         user_state.completed_phase_and_pages = [
             to_phase_and_page(pp) for pp in j['completed_phase_and_pages']
         ]
+
+        # Restore training state if present
+        if 'training_state' in j:
+            user_state.training_state = TrainingState.from_dict(j['training_state'])
 
         return user_state
 
