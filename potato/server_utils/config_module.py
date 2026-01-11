@@ -125,12 +125,19 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     if missing_item_props:
         raise ConfigValidationError(f"Missing required item_properties: {', '.join(missing_item_props)}")
 
-    # Validate data_files
+    # Validate data_files (required unless data_directory is provided)
     data_files = config_data.get('data_files', [])
+    data_directory = config_data.get('data_directory')
+
     if not isinstance(data_files, list):
         raise ConfigValidationError("data_files must be a list")
-    if not data_files:
-        raise ConfigValidationError("data_files cannot be empty")
+
+    # data_files can be empty if data_directory is configured
+    if not data_files and not data_directory:
+        raise ConfigValidationError("Either data_files or data_directory must be configured")
+
+    # Validate data_directory config if present
+    validate_data_directory_config(config_data)
 
     # Validate annotation schemes
     validate_annotation_schemes(config_data)
@@ -282,6 +289,50 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
             raise ConfigValidationError(f"{path}.labels cannot be empty")
 
 
+def validate_data_directory_config(config_data: Dict[str, Any]) -> None:
+    """
+    Validate data_directory configuration.
+
+    This function validates the directory watching configuration options:
+    - data_directory: Path to the directory containing data files
+    - watch_data_directory: Whether to watch for changes (default: False)
+    - watch_poll_interval: Seconds between scans (default: 5.0)
+
+    Args:
+        config_data: The configuration data
+
+    Raises:
+        ConfigValidationError: If the configuration is invalid
+    """
+    if "data_directory" not in config_data:
+        return  # data_directory is optional
+
+    data_directory = config_data["data_directory"]
+
+    # Validate data_directory is a string
+    if not isinstance(data_directory, str):
+        raise ConfigValidationError("data_directory must be a string path")
+
+    if not data_directory.strip():
+        raise ConfigValidationError("data_directory cannot be empty")
+
+    # Validate watch_data_directory if present
+    if "watch_data_directory" in config_data:
+        watch_enabled = config_data["watch_data_directory"]
+        if not isinstance(watch_enabled, bool):
+            raise ConfigValidationError("watch_data_directory must be a boolean (true/false)")
+
+    # Validate watch_poll_interval if present
+    if "watch_poll_interval" in config_data:
+        interval = config_data["watch_poll_interval"]
+        if not isinstance(interval, (int, float)):
+            raise ConfigValidationError("watch_poll_interval must be a number")
+        if interval < 1.0:
+            raise ConfigValidationError("watch_poll_interval must be at least 1.0 seconds")
+        if interval > 3600:
+            raise ConfigValidationError("watch_poll_interval cannot exceed 3600 seconds (1 hour)")
+
+
 def validate_database_config(db_config: Dict[str, Any]) -> None:
     """
     Validate database configuration.
@@ -361,6 +412,20 @@ def validate_file_paths(config_data: Dict[str, Any], project_dir: str, config_fi
                 raise ConfigValidationError(f"Data file not found: {data_file} (resolved to: {validated_path})")
         except ConfigSecurityError as e:
             raise ConfigSecurityError(f"Data file {i}: {str(e)}")
+
+    # Validate data_directory if configured
+    if 'data_directory' in config_data:
+        data_directory = config_data['data_directory']
+        # Skip validation for special values
+        if data_directory not in [None, "null", "default"]:
+            try:
+                validated_dir = validate_path_security(data_directory, base_dir, project_dir)
+                if not os.path.exists(validated_dir):
+                    raise ConfigValidationError(f"data_directory not found: {data_directory} (resolved to: {validated_dir})")
+                if not os.path.isdir(validated_dir):
+                    raise ConfigValidationError(f"data_directory is not a directory: {data_directory} (resolved to: {validated_dir})")
+            except ConfigSecurityError as e:
+                raise ConfigSecurityError(f"data_directory: {str(e)}")
 
     # Validate output_annotation_dir
     if 'output_annotation_dir' in config_data:

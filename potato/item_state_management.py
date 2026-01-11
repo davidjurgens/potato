@@ -351,6 +351,9 @@ class ItemStateManager:
         self.config = config
         self.logger = logging.getLogger(__name__)
 
+        # Thread-safe lock for concurrent access to item data
+        self._lock = threading.RLock()
+
         # This data structure keeps the ordering of the items that are being annotated
         # and a mapping from item ID to the Item object
         self.instance_id_to_instance = OrderedDict()
@@ -396,22 +399,46 @@ class ItemStateManager:
 
     def add_item(self, instance_id: str, instance_data: dict):
         """
-        Adds a new instance to be annotated to the state manager.
+        Adds a new instance to be annotated to the state manager (thread-safe).
 
         Args:
             instance_id: Unique identifier for the item
-            item_data: Dictionary containing the item's data
+            instance_data: Dictionary containing the item's data
 
         Raises:
             ValueError: If an item with the same ID already exists
         """
-        item = Item(instance_id, instance_data)
-        if instance_id in self.instance_id_to_instance:
-            raise ValueError(f"Duplicate Item ID! Item with ID {instance_id} already exists in the state manager")
+        with self._lock:
+            item = Item(instance_id, instance_data)
+            if instance_id in self.instance_id_to_instance:
+                raise ValueError(f"Duplicate Item ID! Item with ID {instance_id} already exists in the state manager")
 
-        self.instance_id_to_instance[instance_id] = item
-        self.instance_id_ordering.append(instance_id)
-        self.remaining_instance_ids.append(instance_id)
+            self.instance_id_to_instance[instance_id] = item
+            self.instance_id_ordering.append(instance_id)
+            self.remaining_instance_ids.append(instance_id)
+
+    def update_item(self, instance_id: str, instance_data: dict) -> bool:
+        """
+        Update an existing instance's data (thread-safe).
+
+        This method updates the item_data for an existing instance while preserving
+        all existing annotations (labels, span_annotations) and metadata. This is
+        useful for dynamic data loading scenarios where file contents change.
+
+        Args:
+            instance_id: Unique identifier for the item to update
+            instance_data: New data dictionary for the item
+
+        Returns:
+            bool: True if the item was updated, False if the item doesn't exist
+        """
+        with self._lock:
+            if instance_id not in self.instance_id_to_instance:
+                return False
+            item = self.instance_id_to_instance[instance_id]
+            # Update item_data while preserving labels, span_annotations, and metadata
+            item.item_data = instance_data
+            return True
 
     def add_items(self, instances: dict[str, dict]):
         """

@@ -1537,6 +1537,29 @@ def run_server(args):
     init_item_state_manager(config)
     load_all_data(config)
 
+    # Initialize directory watcher if configured
+    if "data_directory" in config:
+        from potato.directory_watcher import init_directory_watcher, get_directory_watcher
+        dw = init_directory_watcher(config)
+        if dw:
+            # Load all files from the directory
+            count = dw.load_directory()
+            logger.info(f"Loaded {count} instances from data_directory: {config['data_directory']}")
+
+            # Start watching if enabled
+            if config.get("watch_data_directory", False):
+                dw.start_watching()
+                logger.info(f"Directory watching enabled (poll interval: {config.get('watch_poll_interval', 5.0)}s)")
+
+            # Register cleanup handler
+            import atexit
+            def cleanup_directory_watcher():
+                watcher = get_directory_watcher()
+                if watcher:
+                    watcher.stop()
+                    logger.info("Directory watcher stopped")
+            atexit.register(cleanup_directory_watcher)
+
     # Log password requirement status
     logger.info(f"Password authentication required: {config.get('require_password', True)}")
 
