@@ -2015,18 +2015,26 @@ def update_instance():
                     # Add to history
                     user_state.add_annotation_action(action)
 
-                    # Always add the span annotation, regardless of whether value is None
-                    user_state.add_span_annotation(instance_id, span, value)
-                    logger.debug(f"Added span annotation: {span} with value: {value}")
-
-                    # If value is None, also handle span removal logic
+                    # Handle span deletion vs creation/update
                     if value is None:
+                        # Delete the span - find and remove the matching span
                         if instance_id in user_state.instance_id_to_span_to_value:
-                            span_id = span.get_id()
-                            if span_id in user_state.instance_id_to_span_to_value[instance_id]:
-                                    del user_state.instance_id_to_span_to_value[instance_id][span_id]
- 
-                    print("user_state.instance_id_to_span_to_value", user_state.instance_id_to_span_to_value)
+                            # Find the span to delete by matching properties
+                            spans_to_delete = []
+                            for existing_span in user_state.instance_id_to_span_to_value[instance_id].keys():
+                                if (existing_span.get_schema() == span.get_schema() and
+                                    existing_span.get_name() == span.get_name() and
+                                    existing_span.get_start() == span.get_start() and
+                                    existing_span.get_end() == span.get_end()):
+                                    spans_to_delete.append(existing_span)
+
+                            for span_to_delete in spans_to_delete:
+                                del user_state.instance_id_to_span_to_value[instance_id][span_to_delete]
+                                logger.debug(f"Deleted span annotation: {span_to_delete}")
+                    else:
+                        # Add or update the span annotation
+                        user_state.add_span_annotation(instance_id, span, value)
+                        logger.debug(f"Added span annotation: {span} with value: {value}")
             elif annotation_type == "label":
                 for sv in schema_state:
                     label = Label(schema_name, sv["name"])
