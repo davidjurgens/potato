@@ -258,7 +258,7 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
 
     # Validate annotation_type
     # Note: Keep in sync with potato.server_utils.schemas.registry
-    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'select', 'number', 'multirate', 'pure_display', 'video']
+    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'select', 'number', 'multirate', 'pure_display', 'video', 'image_annotation']
     if scheme['annotation_type'] not in valid_types:
         raise ConfigValidationError(f"{path}.annotation_type must be one of: {', '.join(valid_types)}")
 
@@ -319,6 +319,37 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
             raise ConfigValidationError(f"{path}.labels must be a list")
         if not scheme['labels']:
             raise ConfigValidationError(f"{path}.labels cannot be empty")
+
+    elif annotation_type == 'image_annotation':
+        # Image annotation requires tools and labels
+        if 'tools' not in scheme:
+            raise ConfigValidationError(f"{path} missing 'tools' field for image_annotation type")
+        if not isinstance(scheme['tools'], list):
+            raise ConfigValidationError(f"{path}.tools must be a list")
+        if not scheme['tools']:
+            raise ConfigValidationError(f"{path}.tools cannot be empty")
+
+        # Validate tools
+        valid_tools = ['bbox', 'polygon', 'freeform', 'landmark']
+        invalid_tools = [t for t in scheme['tools'] if t not in valid_tools]
+        if invalid_tools:
+            raise ConfigValidationError(f"{path}.tools contains invalid values: {invalid_tools}. Valid tools are: {valid_tools}")
+
+        if 'labels' not in scheme:
+            raise ConfigValidationError(f"{path} missing 'labels' field for image_annotation type")
+        if not isinstance(scheme['labels'], list):
+            raise ConfigValidationError(f"{path}.labels must be a list")
+        if not scheme['labels']:
+            raise ConfigValidationError(f"{path}.labels cannot be empty")
+
+        # Validate optional numeric fields
+        if 'min_annotations' in scheme:
+            if not isinstance(scheme['min_annotations'], int) or scheme['min_annotations'] < 0:
+                raise ConfigValidationError(f"{path}.min_annotations must be a non-negative integer")
+
+        if 'max_annotations' in scheme and scheme['max_annotations'] is not None:
+            if not isinstance(scheme['max_annotations'], int) or scheme['max_annotations'] < 1:
+                raise ConfigValidationError(f"{path}.max_annotations must be a positive integer or null")
 
 
 def validate_data_directory_config(config_data: Dict[str, Any]) -> None:

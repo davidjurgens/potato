@@ -1,0 +1,66 @@
+# Test configuration for image annotation
+# This config tests the image_annotation schema type
+
+task_dir: ".."
+port: 8000
+server_name: Image Annotation Test
+annotation_task_name: Image Annotation Test Task
+output_annotation_dir: annotation_output/
+output_annotation_format: json
+
+data_files:
+  - data/test_images.jsonl
+
+item_properties:
+  id_key: id
+  text_key: image_url
+
+user_config:
+  allow_all_users: true
+  users: []
+
+alert_time_each_instance: 300000
+
+annotation_schemes:
+  # Image annotation with bounding boxes and polygons
+  - annotation_type: image_annotation
+    name: object_detection
+    description: "Draw boxes around objects in the image"
+    tools:
+      - bbox
+      - polygon
+    labels:
+      - name: person
+        color: "#FF6B6B"
+        key_value: "1"
+      - name: vehicle
+        color: "#4ECDC4"
+        key_value: "2"
+      - name: animal
+        color: "#45B7D1"
+        key_value: "3"
+      - name: other
+        color: "#96CEB4"
+        key_value: "4"
+    min_annotations: 1
+    zoom_enabled: true
+    pan_enabled: true
+
+  # Additional question about the image
+  - annotation_type: radio
+    name: image_quality
+    description: "Rate the overall image quality"
+    labels:
+      - name: "Clear"
+        key_value: "c"
+      - name: "Slightly blurry"
+        key_value: "s"
+      - name: "Very blurry"
+        key_value: "v"
+      - name: "Unusable"
+        key_value: "u"
+
+  # Optional comments
+  - annotation_type: text
+    name: comments
+    description: "Any additional notes about the image (optional)"
