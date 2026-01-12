@@ -1,162 +1,236 @@
 :root {
-    --background: #ffffff;
-    --foreground: #09090b;
-    --card: #ffffff;
-    --card-foreground: #09090b;
-    --popover: #ffffff;
-    --popover-foreground: #09090b;
-    --primary: #6e56cf;
-    --primary-foreground: #ffffff;
-    --secondary: #f4f4f5;
-    --secondary-foreground: #18181b;
-    --muted: #f4f4f5;
-    --muted-foreground: #71717a;
-    --accent: #f4f4f5;
-    --accent-foreground: #18181b;
-    --destructive: #ef4444;
-    --destructive-foreground: #fafafa;
-    --border: #e4e4e7;
-    --input: #e4e4e7;
-    --ring: #6e56cf;
-    --radius: 0.5rem;
-    --primary-color: #6e56cf;
-    --secondary-color: #7c66ce;
-    --accent-color: #a18fff;
-    --dark-color: #09090b;
-    --light-color: #fafafa;
-    --gray-color: #71717a;
-    --light-gray: #f4f4f5;
-    --light-bg: #f5f7fb;
-    --heading-color: #09090b;
-    --text-color: #374151;
-    --success-color: #10b981;
-    --border-radius: 0.5rem;
-    --box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-    --transition: all 0.2s ease;
-    --section-padding-top: 100px;
+  --background: #ffffff;
+  --foreground: #09090b;
+  --card: #ffffff;
+  --card-foreground: #09090b;
+  --popover: #ffffff;
+  --popover-foreground: #09090b;
+  --primary: #6e56cf;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #18181b;
+  --muted: #f4f4f5;
+  --muted-foreground: #71717a;
+  --accent: #f4f4f5;
+  --accent-foreground: #18181b;
+  --destructive: #ef4444;
+  --destructive-foreground: #fafafa;
+  --border: #e4e4e7;
+  --input: #e4e4e7;
+  --ring: #6e56cf;
+  --radius: 0.5rem;
+  --primary-color: #6e56cf;
+  --secondary-color: #7c66ce;
+  --accent-color: #a18fff;
+  --dark-color: #09090b;
+  --light-color: #fafafa;
+  --gray-color: #71717a;
+  --light-gray: #f4f4f5;
+  --light-bg: #f5f7fb;
+  --heading-color: #09090b;
+  --text-color: #374151;
+  --success-color: #10b981;
+  --border-radius: 0.5rem;
+  --box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --transition: all 0.2s ease;
+  --section-padding-top: 100px;
 }
 
 body {
-    background-color: var(--background);
-    color: var(--foreground);
-    font-family: ui-sans-serif, system-ui, sans-serif;
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: ui-sans-serif, system-ui, sans-serif;
 }
 
 /* Shadcn-style button */
 .shadcn-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius);
-    font-weight: 500;
-    font-size: 0.875rem;
-    height: 2.5rem;
-    padding-left: 1rem;
-    padding-right: 1rem;
-    transition: var(--transition);
-    cursor: pointer;
-    text-decoration: none;
-    border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  font-weight: 500;
+  font-size: 0.875rem;
+  height: 2.5rem;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  transition: var(--transition);
+  cursor: pointer;
+  text-decoration: none;
+  border: none;
 }
 
 .shadcn-button-primary {
-    background-color: var(--primary);
-    color: var(--primary-foreground);
-    border: 1px solid var(--primary);
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  border: 1px solid var(--primary);
 }
 
 .shadcn-button-primary:hover {
-    background-color: var(--secondary-color);
-    color: var(--primary-foreground);
+  background-color: var(--secondary-color);
+  color: var(--primary-foreground);
 }
 
 .shadcn-button-outline {
-    background-color: transparent;
-    color: var(--primary);
-    border: 1px solid var(--border);
+  background-color: transparent;
+  color: var(--primary);
+  border: 1px solid var(--border);
 }
 
 .shadcn-button-outline:hover {
-    background-color: var(--secondary);
-    color: var(--primary);
+  background-color: var(--secondary);
+  color: var(--primary);
 }
 
 /* Card styling */
 .shadcn-card {
-    height: 65vh;
-    background-color: var(--card);
-    border-radius: var(--radius);
-    border: 1px solid var(--border);
-    box-shadow: var(--box-shadow);
-    overflow: hidden;
+  height: 65vh;
+  background-color: var(--card);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: var(--box-shadow);
+  overflow: hidden;
 }
 
 .shadcn-card-header {
-    padding: 1.5rem;
-    border-bottom: 1px solid var(--border);
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--border);
 }
 
 .shadcn-card-content {
-    padding: 1.5rem;
-    overflow-y: auto;
-    height: calc(100% - 4rem);
+  padding: 1.5rem;
+  overflow-y: auto;
+  height: calc(100% - 4rem);
 }
 
 /* Annotation form styling */
 .annotation-form {
-    margin-bottom: 1.5rem;
+  min-width: 20rem;
 }
 
 .annotation-form fieldset {
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
-    background-color: var(--background);
-    box-shadow: var(--box-shadow);
+  padding: 1rem;
 }
 
 .annotation-form legend {
-    font-weight: 600;
-    color: var(--heading-color);
-    padding: 0 0.75rem;
-    margin-bottom: 0.5rem;
-    font-size: 0.875rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+  font-weight: 600;
+  color: var(--heading-color);
+  padding: 0 0.75rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ai help */
+.ai-help {
+  width: fit-content;
+  height: 2.063rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--box-shadow);
+  position: absolute;
+  top: -0.75rem;
+  right: -0.05rem;
+  background-color: white;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+}
+
+.ai-help-word {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.ai-assistant-containter:hover {
+  color: var(--primary);
+  cursor: pointer;
+}
+
+.tooltip {
+  position: absolute;
+  top: 120%;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: white;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  white-space: nowrap;
+  box-shadow: var(--box-shadow);
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s, visibility 0.3s;
+  min-width: 20rem;
+  max-width: 24rem;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  white-space: normal;
+  max-height: 15rem;
+  overflow: auto;
+}
+
+.tooltip.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.ai-assistant-containter {
+  display: flex;
+}
+
+.ai-assistant-img {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.ai-assistant-img img {
+  width: 1rem;
+  height: 1rem;
+}
+
+.bold {
+  font-weight: bold;
 }
 
 /* Fieldset content styling */
 .annotation-form fieldset label {
-    color: var(--text-color);
-    font-weight: 500;
-    margin-bottom: 0.5rem;
-    display: block;
+  color: var(--text-color);
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  display: block;
 }
 
 .annotation-form fieldset p,
 .annotation-form fieldset div {
-    color: var(--text-color);
-    margin-bottom: 0.75rem;
+  color: var(--text-color);
+  margin-bottom: 0.75rem;
 }
 
 /* Text content within fieldsets */
 .annotation-form fieldset .text-content {
-    color: var(--text-color);
-    line-height: 1.6;
-    margin-bottom: 1rem;
+  color: var(--text-color);
+  line-height: 1.6;
+  margin-bottom: 1rem;
 }
 
 /* Instructions and descriptions */
 .annotation-form fieldset .instructions,
 .annotation-form fieldset .description {
-    color: var(--muted-foreground);
-    font-size: 0.875rem;
-    margin-bottom: 1rem;
-    padding: 0.75rem;
-    background-color: var(--muted);
-    border-radius: var(--radius);
-    border-left: 3px solid var(--primary);
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background-color: var(--muted);
+  border-radius: var(--radius);
+  border-left: 3px solid var(--primary);
+}
+
+.none {
+  display: none;
 }
 
 /* Override any schema-specific title classes to ensure readability */
@@ -170,17 +244,17 @@ body {
 .annotation-form fieldset .shadcn-multirate-title,
 .annotation-form fieldset .shadcn-select-title,
 .annotation-form fieldset .shadcn-number-title {
-    color: var(--heading-color) !important;
-    font-weight: 600;
-    font-size: 0.875rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 0.5rem;
+  color: var(--heading-color) !important;
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
 }
 
 /* Ensure all text within fieldsets is readable */
 .annotation-form fieldset * {
-    color: inherit;
+  color: inherit;
 }
 
 .annotation-form fieldset span,
@@ -188,7 +262,7 @@ body {
 .annotation-form fieldset b,
 .annotation-form fieldset em,
 .annotation-form fieldset i {
-    color: var(--text-color) !important;
+  color: var(--text-color) !important;
 }
 
 /* Form elements */
@@ -196,1202 +270,1479 @@ input[type="text"],
 input[type="number"],
 textarea,
 select {
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 0.5rem;
-    background-color: var(--background);
-    color: var(--foreground);
-    transition: var(--transition);
-    font-size: 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem;
+  background-color: var(--background);
+  color: var(--foreground);
+  transition: var(--transition);
+  font-size: 0.875rem;
 }
 
 input[type="text"]:focus,
 input[type="number"]:focus,
 textarea:focus,
 select:focus {
-    outline: none;
-    border-color: var(--ring);
-    box-shadow: 0 0 0 2px rgba(110, 86, 207, 0.25);
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 2px rgba(110, 86, 207, 0.25);
 }
 
 /* Radio and checkbox styling */
 input[type="radio"],
 input[type="checkbox"] {
-    margin-right: 0.5rem;
+  margin-right: 0.5rem;
 }
 
 input[type="radio"] + label,
 input[type="checkbox"] + label {
-    color: var(--text-color);
-    font-weight: 400;
-    cursor: pointer;
-    margin-bottom: 0.25rem;
+  color: var(--text-color);
+  font-weight: 400;
+  cursor: pointer;
+  margin-bottom: 0.25rem;
 }
 
 /* Slider styling */
 input[type="range"] {
-    width: 100%;
-    height: 6px;
-    border-radius: 3px;
-    background: var(--light-gray);
-    outline: none;
-    -webkit-appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--light-gray);
+  outline: none;
+  -webkit-appearance: none;
 }
 
 input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: var(--primary);
-    cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--primary);
+  cursor: pointer;
 }
 
 input[type="range"]::-moz-range-thumb {
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: var(--primary);
-    cursor: pointer;
-    border: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--primary);
+  cursor: pointer;
+  border: none;
 }
 
 /* Span annotation styling */
 .span_container {
-    position: relative;
-    display: inline-block;
-    border-radius: var(--radius);
+  position: relative;
+  display: inline-block;
+  border-radius: var(--radius);
 }
 
 .span-highlight {
-    position: relative;
-    display: inline-block;
-    border-radius: var(--radius);
-    padding: 1px 2px;
-    margin: 0 1px;
+  position: relative;
+  display: inline-block;
+  border-radius: var(--radius);
+  padding: 1px 2px;
+  margin: 0 1px;
 }
 
 .span_label {
-    position: absolute;
-    top: -18px;
-    left: 0;
-    font-size: 10px;
-    border-radius: 3px;
-    padding: 2px 4px;
-    color: #6e56cf;
-    background-color: white;
-    border: 1px solid #e4e4e7;
-    z-index: 10;
-    white-space: nowrap;
-    font-weight: 500;
+  position: absolute;
+  top: -18px;
+  left: 0;
+  font-size: 10px;
+  border-radius: 3px;
+  padding: 2px 4px;
+  color: #6e56cf;
+  background-color: white;
+  border: 1px solid #e4e4e7;
+  z-index: 10;
+  white-space: nowrap;
+  font-weight: 500;
 }
 
 .span_close {
-    position: absolute;
-    top: -18px;
-    right: 0;
-    font-size: 12px;
-    border-radius: 3px;
-    padding: 2px 4px;
-    cursor: pointer;
-    color: var(--destructive);
-    background-color: white;
-    border: 1px solid var(--destructive);
-    z-index: 10;
-    font-weight: bold;
-    line-height: 1;
-    min-width: 16px;
-    text-align: center;
+  position: absolute;
+  top: -18px;
+  right: 0;
+  font-size: 12px;
+  border-radius: 3px;
+  padding: 2px 4px;
+  cursor: pointer;
+  color: var(--destructive);
+  background-color: white;
+  border: 1px solid var(--destructive);
+  z-index: 10;
+  font-weight: bold;
+  line-height: 1;
+  min-width: 16px;
+  text-align: center;
 }
 
 .span_close:hover {
-    background-color: var(--destructive);
-    color: white;
+  background-color: var(--destructive);
+  color: white;
 }
 
 /* Loading states */
 .loading {
-    opacity: 0.6;
-    pointer-events: none;
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 .loading-spinner {
-    display: inline-block;
-    width: 20px;
-    height: 20px;
-    border: 3px solid rgba(255,255,255,.3);
-    border-radius: 50%;
-    border-top-color: #fff;
-    animation: spin 1s ease-in-out infinite;
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: #fff;
+  animation: spin 1s ease-in-out infinite;
 }
 
 @keyframes spin {
-    to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Error states */
 .error-message {
-    color: var(--destructive);
-    background-color: rgba(239, 68, 68, 0.1);
-    border: 1px solid var(--destructive);
-    border-radius: var(--radius);
-    padding: 0.75rem;
-    margin: 1rem 0;
+  color: var(--destructive);
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 1px solid var(--destructive);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  margin: 1rem 0;
 }
 
 /* Success states */
 .success-message {
-    color: var(--success-color);
-    background-color: rgba(16, 185, 129, 0.1);
-    border: 1px solid var(--success-color);
-    border-radius: var(--radius);
-    padding: 0.75rem;
-    margin: 1rem 0;
+  color: var(--success-color);
+  background-color: rgba(16, 185, 129, 0.1);
+  border: 1px solid var(--success-color);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  margin: 1rem 0;
 }
 
 /* ===== SCHEMA-SPECIFIC STYLES ===== */
 
 /* Likert Scale Styles */
 .shadcn-likert-container {
-    border: 1px solid #E5E5EA;
-    border-radius: 18px 0 18px 18px;
-    padding: 1rem;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    width: fit-content;
-    max-width: 100%;
-    margin: 1.5rem auto;
-    font-family: ui-sans-serif, system-ui, sans-serif;
-    position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--box-shadow);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  position: relative;
 }
 
 .shadcn-likert-title {
-    font-size: 1rem;
-    font-weight: 500;
-    color: black;
-    text-align: left;
-    width: 100%;
+  font-size: 1rem;
+  font-weight: 500;
+  color: black;
+  text-align: left;
+  width: 100%;
 }
 
 .shadcn-likert-scale {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
 }
 
 .shadcn-likert-endpoint {
-    display: flex;
-    align-items: center;
-    height: 2.5rem;
-    flex: 0 0 auto;
-    font-size: 0.875rem;
-    color: var(--muted-foreground);
-    padding: 0 0.5rem;
-    max-width: 30%;
-    text-align: center;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-    hyphens: auto;
+  display: flex;
+  align-items: center;
+  height: 2.5rem;
+  flex: 0 0 auto;
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+  padding: 0 0.5rem;
+  max-width: 30%;
+  text-align: center;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
 }
 
 .shadcn-likert-options {
-    display: flex;
-    flex: 1;
-    justify-content: space-between;
-    position: relative;
-    padding: 0 0.5rem;
-    gap: 0.5rem;
+  display: flex;
+  flex: 1;
+  justify-content: space-between;
+  position: relative;
+  padding: 0 0.5rem;
+  gap: 0.5rem;
 }
 
 .shadcn-likert-track {
-    position: absolute;
-    height: 2px;
-    background-color: var(--border);
-    left: 0.5rem;
-    right: 0.5rem;
-    top: 0.625rem;
-    transform: none;
-    z-index: 0;
+  position: absolute;
+  height: 2px;
+  background-color: var(--border);
+  left: 0.5rem;
+  right: 0.5rem;
+  top: 0.625rem;
+  transform: none;
+  z-index: 0;
 }
 
 .shadcn-likert-option {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    position: relative;
-    z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 1;
 }
 
 .shadcn-likert-input {
-    opacity: 0;
-    position: absolute;
-    width: 0;
-    height: 0;
+  opacity: 0;
+  position: absolute;
+  width: 0;
+  height: 0;
 }
 
 .shadcn-likert-button {
-    width: 1.25rem;
-    height: 1.25rem;
-    border-radius: 50%;
-    background-color: var(--secondary);
-    border: 2px solid var(--border);
-    margin-bottom: 0.5rem;
-    cursor: pointer;
-    transition: var(--transition);
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  background-color: var(--secondary);
+  border: 2px solid var(--border);
+  margin-bottom: 0.5rem;
+  cursor: pointer;
+  transition: var(--transition);
 }
 
 .shadcn-likert-input:checked + .shadcn-likert-button {
-    background-color: var(--primary);
-    border-color: var(--primary);
-    transform: scale(1.1);
-    box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.2);
+  background-color: var(--primary);
+  border-color: var(--primary);
+  transform: scale(1.1);
+  box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.2);
 }
 
 .shadcn-likert-input:focus + .shadcn-likert-button {
-    box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.2);
+  box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.2);
 }
 
 .shadcn-likert-input:hover + .shadcn-likert-button {
-    border-color: var(--primary);
+  border-color: var(--primary);
 }
 
 .shadcn-likert-label {
-    font-size: 0.75rem;
-    color: var(--muted-foreground);
-    margin-top: 0.25rem;
-    text-align: center;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  margin-top: 0.25rem;
+  text-align: center;
 }
 
 .shadcn-likert-input:checked ~ .shadcn-likert-label {
-    color: var(--primary);
-    font-weight: 500;
+  color: var(--primary);
+  font-weight: 500;
 }
 
 .shadcn-likert-bad-text {
-    display: flex;
-    align-items: center;
-    margin-top: 0.75rem;
-    padding: 0.5rem 0;
+  display: flex;
+  align-items: center;
+  margin-top: 0.75rem;
+  padding: 0.5rem 0;
 }
 
 .shadcn-likert-bad-text-label {
-    margin-left: 0.5rem;
-    font-size: 0.875rem;
-    color: var(--text-color);
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-    flex: 1;
+  margin-left: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--text-color);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  flex: 1;
 }
 
 /* Multiselect Styles */
 .shadcn-multiselect-container {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    max-width: 100%;
-    margin: 1rem auto;
-    font-family: ui-sans-serif, system-ui, sans-serif;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--box-shadow);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  position: relative;
 }
 
 .shadcn-multiselect-title {
-    font-size: 1rem;
-    font-weight: 500;
-    color: var(--heading-color);
-    margin-bottom: 1rem;
-    text-align: left;
-    width: 100%;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--heading-color);
+  margin-bottom: 1rem;
+  text-align: left;
+  width: 100%;
 }
 
 .shadcn-multiselect-grid {
-    display: grid;
-    gap: 1rem;
+  display: grid;
+  gap: 1rem;
 }
 
 .shadcn-multiselect-item {
-    display: flex;
-    align-items: center;
+  display: flex;
+  align-items: center;
 }
 
 .shadcn-multiselect-checkbox {
-    appearance: none;
-    width: 1rem;
-    height: 1rem;
-    border-radius: 0.25rem;
-    border: 1px solid var(--border);
-    background-color: var(--background);
-    cursor: pointer;
-    margin-right: 0.75rem;
-    transition: var(--transition);
-    position: relative;
+  appearance: none;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 0.25rem;
+  border: 1px solid var(--border);
+  background-color: var(--background);
+  cursor: pointer;
+  margin-right: 0.75rem;
+  transition: var(--transition);
+  position: relative;
 }
 
 .shadcn-multiselect-checkbox:checked {
-    background-color: var(--primary);
-    border-color: var(--primary);
+  background-color: var(--primary);
+  border-color: var(--primary);
 }
 
 .shadcn-multiselect-checkbox:checked::after {
-    content: '';
-    position: absolute;
-    width: 0.3rem;
-    height: 0.5rem;
-    border: solid white;
-    border-width: 0 2px 2px 0;
-    top: 45%;
-    left: 50%;
-    transform: translate(-50%, -50%) rotate(45deg);
+  content: "";
+  position: absolute;
+  width: 0.3rem;
+  height: 0.5rem;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  top: 45%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(45deg);
 }
 
 .shadcn-multiselect-checkbox:focus {
-    outline: none;
-    border-color: var(--ring);
-    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
 }
 
 .shadcn-multiselect-checkbox:hover:not(:checked) {
-    border-color: var(--primary);
+  border-color: var(--primary);
 }
 
 .shadcn-multiselect-label {
-    font-size: 0.875rem;
-    color: var(--foreground);
+  font-size: 0.875rem;
+  color: var(--foreground);
 }
 
 .shadcn-multiselect-key {
-    margin-left: 0.25rem;
-    padding: 0.1rem 0.3rem;
-    font-size: 0.7rem;
-    background-color: var(--muted);
-    border-radius: 0.25rem;
-    color: var(--muted-foreground);
+  margin-left: 0.25rem;
+  padding: 0.1rem 0.3rem;
+  font-size: 0.7rem;
+  background-color: var(--muted);
+  border-radius: 0.25rem;
+  color: var(--muted-foreground);
 }
 
 .shadcn-multiselect-free-response {
-    margin-top: 1rem;
-    padding-top: 1rem;
-    border-top: 1px solid var(--border);
-    display: flex;
-    align-items: center;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
 }
 
 .shadcn-multiselect-free-input {
-    flex: 1;
-    height: 2.5rem;
-    border-radius: var(--radius);
-    border: 1px solid var(--input);
-    padding: 0 0.75rem;
-    font-size: 0.875rem;
-    margin-left: 0.5rem;
-    transition: var(--transition);
+  flex: 1;
+  height: 2.5rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--input);
+  padding: 0 0.75rem;
+  font-size: 0.875rem;
+  margin-left: 0.5rem;
+  transition: var(--transition);
 }
 
 .shadcn-multiselect-free-input:focus {
-    outline: none;
-    border-color: var(--ring);
-    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
 }
 
 /* Radio Styles */
 .shadcn-radio-container {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    max-width: 100%;
-    margin: 1rem auto;
-    font-family: ui-sans-serif, system-ui, sans-serif;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--box-shadow);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  position: relative;
 }
 
 .shadcn-radio-title {
-    font-size: 1rem;
-    font-weight: 500;
-    color: var(--heading-color);
-    margin-bottom: 1rem;
-    text-align: left;
-    width: 100%;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--heading-color);
+  margin-bottom: 1rem;
+  text-align: left;
+  width: 100%;
 }
 
 .shadcn-radio-options {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 0.5rem;
-    width: 100%;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.5rem;
+  width: 100%;
 }
 
 .shadcn-radio-options.horizontal {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
 }
 
 .shadcn-radio-option {
-    display: flex;
-    align-items: center;
+  display: flex;
+  align-items: center;
 }
 
 .shadcn-radio-option.horizontal {
-    margin-right: 1.5rem;
+  margin-right: 1.5rem;
 }
 
 .shadcn-radio-input {
-    appearance: none;
-    width: 1rem;
-    height: 1rem;
-    border-radius: 50%;
-    border: 1px solid var(--border);
-    background-color: var(--background);
-    cursor: pointer;
-    margin-right: 0.5rem;
-    transition: var(--transition);
-    position: relative;
+  appearance: none;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background-color: var(--background);
+  cursor: pointer;
+  margin-right: 0.5rem;
+  transition: var(--transition);
+  position: relative;
 }
 
 .shadcn-radio-input:checked {
-    border-color: var(--primary);
+  border-color: var(--primary);
 }
 
 .shadcn-radio-input:checked::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 0.5rem;
-    height: 0.5rem;
-    border-radius: 50%;
-    background-color: var(--primary);
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background-color: var(--primary);
 }
 
 .shadcn-radio-input:focus {
-    outline: none;
-    border-color: var(--ring);
-    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
 }
 
 .shadcn-radio-input:hover {
-    border-color: var(--primary);
+  border-color: var(--primary);
 }
 
 .shadcn-radio-label {
-    font-size: 0.875rem;
-    color: var(--foreground);
-    cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--foreground);
+  cursor: pointer;
 }
 
 .shadcn-radio-free-response {
-    display: flex;
-    align-items: center;
-    margin-top: 1rem;
-    width: 100%;
+  display: flex;
+  align-items: center;
+  margin-top: 1rem;
+  width: 100%;
 }
 
 .shadcn-radio-free-input {
-    width: 100%;
-    max-width: 300px;
-    margin-left: 0.5rem;
-    padding: 0.5rem;
-    border-radius: var(--radius);
-    border: 1px solid var(--input);
-    background-color: var(--background);
-    font-size: 0.875rem;
-    color: var(--foreground);
-    transition: var(--transition);
+  width: 100%;
+  max-width: 300px;
+  margin-left: 0.5rem;
+  padding: 0.5rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--input);
+  background-color: var(--background);
+  font-size: 0.875rem;
+  color: var(--foreground);
+  transition: var(--transition);
 }
 
 .shadcn-radio-free-input:focus {
-    outline: none;
-    border-color: var(--ring);
-    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
 }
 
 .shadcn-radio-free-input:hover {
-    border-color: var(--primary);
+  border-color: var(--primary);
 }
 
 /* Slider Styles */
 .shadcn-slider-container {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    max-width: 100%;
-    margin: 1.5rem auto;
-    font-family: ui-sans-serif, system-ui, sans-serif;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 100%;
+  font-family: ui-sans-serif, system-ui, sans-serif;
 }
 
 .shadcn-slider-title {
-    font-size: 1rem;
-    font-weight: 500;
-    color: var(--heading-color);
-    margin-bottom: 1rem;
-    text-align: left;
-    width: 100%;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--heading-color);
+  margin-bottom: 1rem;
+  text-align: left;
+  width: 100%;
 }
 
 .shadcn-slider-wrapper {
-    display: flex;
-    align-items: center;
-    width: 100%;
-    gap: 1rem;
-    padding: 0.5rem 0;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 1rem;
+  padding: 0.5rem 0;
 }
 
 .shadcn-slider-label {
-    flex: 0 0 auto;
-    width: 2.5rem;
-    text-align: center;
-    font-size: 0.875rem;
-    color: var(--muted-foreground);
+  flex: 0 0 auto;
+  width: 2.5rem;
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
 }
 
 .shadcn-slider-track {
-    flex: 1;
-    position: relative;
-    height: 1.5rem;
+  flex: 1;
+  position: relative;
+  height: 1.5rem;
 }
 
 .shadcn-slider-input {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 100%;
-    height: 0.25rem;
-    background: var(--border);
-    border-radius: 1rem;
-    outline: none;
-    cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 0.25rem;
+  background: var(--border);
+  border-radius: 1rem;
+  outline: none;
+  cursor: pointer;
 }
 
 .shadcn-slider-input::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 1.25rem;
-    height: 1.25rem;
-    background-color: var(--primary);
-    border-radius: 50%;
-    border: 2px solid var(--background);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    cursor: pointer;
-    transition: var(--transition);
+  -webkit-appearance: none;
+  appearance: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  background-color: var(--primary);
+  border-radius: 50%;
+  border: 2px solid var(--background);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: var(--transition);
 }
 
 .shadcn-slider-input::-moz-range-thumb {
-    width: 1.25rem;
-    height: 1.25rem;
-    background-color: var(--primary);
-    border-radius: 50%;
-    border: 2px solid var(--background);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    cursor: pointer;
-    transition: var(--transition);
+  width: 1.25rem;
+  height: 1.25rem;
+  background-color: var(--primary);
+  border-radius: 50%;
+  border: 2px solid var(--background);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: var(--transition);
 }
 
 .shadcn-slider-input:focus {
-    outline: none;
+  outline: none;
 }
 
 .shadcn-slider-input:focus::-webkit-slider-thumb {
-    box-shadow: 0 0 0 4px rgba(110, 86, 207, 0.25);
+  box-shadow: 0 0 0 4px rgba(110, 86, 207, 0.25);
 }
 
 .shadcn-slider-input:focus::-moz-range-thumb {
-    box-shadow: 0 0 0 4px rgba(110, 86, 207, 0.25);
+  box-shadow: 0 0 0 4px rgba(110, 86, 207, 0.25);
 }
 
 /* Span Styles */
 .shadcn-span-container {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    max-width: 100%;
-    margin: 1rem auto;
-    font-family: ui-sans-serif, system-ui, sans-serif;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--box-shadow);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  position: relative;
 }
 
 .shadcn-span-title {
-    font-size: 1rem;
-    font-weight: 500;
-    color: var(--heading-color);
-    margin-bottom: 1rem;
-    text-align: left;
-    width: 100%;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--heading-color);
+  margin-bottom: 1rem;
+  text-align: left;
+  width: 100%;
 }
 
 .shadcn-span-options {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 0.75rem;
-    width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.75rem;
+  width: 100%;
 }
 
 .shadcn-span-option {
-    display: flex;
-    align-items: center;
+  display: flex;
+  align-items: center;
 }
 
 .shadcn-span-checkbox {
-    appearance: none;
-    width: 1rem;
-    height: 1rem;
-    border-radius: 0.25rem;
-    border: 1px solid var(--border);
-    background-color: var(--background);
-    cursor: pointer;
-    margin-right: 0.5rem;
-    transition: var(--transition);
-    position: relative;
+  appearance: none;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 0.25rem;
+  border: 1px solid var(--border);
+  background-color: var(--background);
+  cursor: pointer;
+  margin-right: 0.5rem;
+  transition: var(--transition);
+  position: relative;
 }
 
 .shadcn-span-checkbox:checked {
-    background-color: var(--primary);
-    border-color: var(--primary);
+  background-color: var(--primary);
+  border-color: var(--primary);
 }
 
 .shadcn-span-checkbox:checked::after {
-    content: '';
-    position: absolute;
-    width: 0.3rem;
-    height: 0.5rem;
-    border: solid white;
-    border-width: 0 2px 2px 0;
-    top: 45%;
-    left: 50%;
-    transform: translate(-50%, -50%) rotate(45deg);
+  content: "";
+  position: absolute;
+  width: 0.3rem;
+  height: 0.5rem;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  top: 45%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(45deg);
 }
 
 .shadcn-span-checkbox:focus {
-    outline: none;
-    border-color: var(--ring);
-    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
 }
 
 .shadcn-span-checkbox:hover {
-    border-color: var(--primary);
+  border-color: var(--primary);
 }
 
 .shadcn-span-label {
-    font-size: 0.875rem;
-    color: var(--foreground);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
+  font-size: 0.875rem;
+  color: var(--foreground);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
 }
 
 .shadcn-span-label span {
-    padding: 0.25rem 0.5rem;
-    border-radius: var(--radius);
-    display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius);
+  display: inline-block;
 }
 
 .shadcn-span-bad-text {
-    margin-top: 1rem;
+  margin-top: 1rem;
 }
 
 /* Text Styles */
 .shadcn-text-container {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    max-width: 100%;
-    margin: 1rem auto;
-    font-family: ui-sans-serif, system-ui, sans-serif;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--box-shadow);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  position: relative;
 }
 
 .shadcn-text-title {
-    font-size: 1rem;
-    font-weight: 500;
-    color: var(--heading-color);
-    margin-bottom: 1rem;
-    text-align: left;
-    width: 100%;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--heading-color);
+  margin-bottom: 1rem;
+  text-align: left;
+  width: 100%;
 }
 
 .shadcn-text-input {
-    width: 100%;
-    border-radius: var(--radius);
-    border: 1px solid var(--input);
-    background-color: var(--background);
-    padding: 0.75rem;
-    font-size: 0.875rem;
-    color: var(--foreground);
-    transition: var(--transition);
+  width: 100%;
+  border-radius: var(--radius);
+  border: 1px solid var(--input);
+  background-color: var(--background);
+  padding: 0.75rem;
+  font-size: 0.875rem;
+  color: var(--foreground);
+  transition: var(--transition);
 }
 
 .shadcn-text-input:focus {
-    outline: none;
-    border-color: var(--ring);
-    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
 }
 
 .shadcn-text-input:hover {
-    border-color: var(--primary);
+  border-color: var(--primary);
 }
 
 .shadcn-text-textarea {
-    min-height: 100px;
-    resize: vertical;
+  min-height: 100px;
+  resize: vertical;
 }
 
 /* Textbox Styles */
 .shadcn-textbox-container {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    max-width: 100%;
-    margin: 1rem auto;
-    font-family: ui-sans-serif, system-ui, sans-serif;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--box-shadow);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  position: relative;
 }
 
 .shadcn-textbox-title {
-    font-size: 1rem;
-    font-weight: 500;
-    color: var(--heading-color);
-    margin-bottom: 1rem;
-    text-align: left;
-    width: 100%;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--heading-color);
+  margin-bottom: 1rem;
+  text-align: left;
+  width: 100%;
 }
 
 .shadcn-textbox-item {
-    display: flex;
-    flex-direction: column;
-    margin-bottom: 1rem;
-    width: 100%;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 1rem;
+  width: 100%;
 }
 
 .shadcn-textbox-label {
-    font-size: 0.875rem;
-    color: var(--foreground);
-    margin-bottom: 0.5rem;
-    display: inline-block;
+  font-size: 0.875rem;
+  color: var(--foreground);
+  margin-bottom: 0.5rem;
+  display: inline-block;
 }
 
 .shadcn-textbox-input {
-    width: 100%;
-    border-radius: var(--radius);
-    border: 1px solid var(--input);
-    background-color: var(--background);
-    padding: 0.75rem;
-    font-size: 0.875rem;
-    color: var(--foreground);
-    transition: var(--transition);
-    height: 2.5rem;
+  width: 100%;
+  border-radius: var(--radius);
+  border: 1px solid var(--input);
+  background-color: var(--background);
+  padding: 0.75rem;
+  font-size: 0.875rem;
+  color: var(--foreground);
+  transition: var(--transition);
+  height: 2.5rem;
 }
 
 .shadcn-textbox-textarea {
-    min-height: 6rem;
-    resize: vertical;
+  min-height: 6rem;
+  resize: vertical;
 }
 
 .shadcn-textbox-input:focus {
-    outline: none;
-    border-color: var(--ring);
-    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
 }
 
 .shadcn-textbox-input:hover {
-    border-color: var(--primary);
+  border-color: var(--primary);
 }
 
 /* Number Styles */
 .shadcn-number-container {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    width: 100%;
-    max-width: 100%;
-    margin: 1rem auto;
-    font-family: ui-sans-serif, system-ui, sans-serif;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--box-shadow);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  position: relative;
 }
 
 .shadcn-number-title {
-    font-size: 1rem;
-    font-weight: 500;
-    color: var(--heading-color);
-    margin-bottom: 1rem;
-    text-align: left;
-    width: 100%;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--heading-color);
+  margin-bottom: 1rem;
+  text-align: left;
+  width: 100%;
 }
 
 .shadcn-number-input {
-    display: flex;
-    align-items: center;
-    width: 100%;
+  display: flex;
+  align-items: center;
+  width: 100%;
 }
 
 .shadcn-number-field {
-    height: 2.5rem;
-    width: 60px;
-    border-radius: var(--radius);
-    border: 1px solid var(--input);
-    background-color: var(--background);
-    padding: 0 0.75rem;
-    font-size: 0.875rem;
-    color: var(--foreground);
-    transition: var(--transition);
+  height: 2.5rem;
+  width: 100%;
+  border-radius: var(--radius);
+  border: 1px solid var(--input);
+  background-color: var(--background);
+  padding: 0 0.75rem;
+  font-size: 0.875rem;
+  color: var(--foreground);
+  transition: var(--transition);
 }
 
 .shadcn-number-field:focus {
-    outline: none;
-    border-color: var(--ring);
-    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
 }
 
 .shadcn-number-field:hover {
-    border-color: var(--primary);
+  border-color: var(--primary);
 }
 
 /* Multirate Styles */
 .shadcn-multirate-container {
-    font-family: ui-sans-serif, system-ui, sans-serif;
-    margin: 1rem auto;
-    max-width: 100%;
-    overflow-x: auto;
-    color: #374151;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  margin: 1rem auto;
+  max-width: 100%;
+  overflow-x: auto;
+  color: #374151;
 }
 
 .shadcn-multirate-title {
-    font-size: 1rem;
-    font-weight: 500;
-    margin-bottom: 0.5rem;
-    color: #f3f4f6;
+  font-size: 1rem;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  color: #f3f4f6;
 }
 
 .shadcn-multirate-table {
-    border-collapse: collapse;
-    width: 100%;
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
+  border-collapse: collapse;
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
 }
 
 .shadcn-multirate-table th,
 .shadcn-multirate-table td {
-    padding: 0.75rem 1rem;
-    text-align: center;
-    border-bottom: 1px solid #e5e7eb;
-    font-size: 0.875rem;
+  padding: 0.75rem 1rem;
+  text-align: center;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 0.875rem;
 }
 
 .shadcn-multirate-table th {
-    background-color: #f9fafb;
-    font-weight: 500;
-    color: #6b7280;
+  background-color: #f9fafb;
+  font-weight: 500;
+  color: #6b7280;
 }
 
 .shadcn-multirate-table thead th:first-child,
 .shadcn-multirate-table tbody td:first-child {
-    text-align: left;
-    font-weight: 500;
-    min-width: 180px;
-    max-width: 300px;
+  text-align: left;
+  font-weight: 500;
+  min-width: 180px;
+  max-width: 300px;
 }
 
 .shadcn-multirate-table tbody tr:hover {
-    background-color: #f9fafb;
+  background-color: #f9fafb;
 }
 
 .shadcn-multirate-radio {
-    appearance: none;
-    -webkit-appearance: none;
-    width: 1.25rem;
-    height: 1.25rem;
-    border-radius: 50%;
-    border: 2px solid #d1d5db;
-    background-color: #fff;
-    cursor: pointer;
-    margin: 0 auto;
-    vertical-align: middle;
-    position: relative;
-    transition: all 0.2s ease;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  border: 2px solid #d1d5db;
+  background-color: #fff;
+  cursor: pointer;
+  margin: 0 auto;
+  vertical-align: middle;
+  position: relative;
+  transition: all 0.2s ease;
 }
 
 .shadcn-multirate-radio:checked {
-    border-color: #3b82f6;
-    background-color: #3b82f6;
+  border-color: #3b82f6;
+  background-color: #3b82f6;
 }
 
 .shadcn-multirate-radio:checked::after {
-    content: '';
-    position: absolute;
-    width: 0.5rem;
-    height: 0.5rem;
-    border-radius: 50%;
-    background-color: white;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
+  content: "";
+  position: absolute;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background-color: white;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .shadcn-multirate-radio:hover:not(:checked) {
-    border-color: #3b82f6;
+  border-color: #3b82f6;
 }
 
 .shadcn-multirate-radio:focus {
-    outline: none;
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
 }
 
 .shadcn-radio-cell {
-    text-align: center;
+  text-align: center;
 }
 
 /* Common Tooltip Styles */
 [data-toggle="tooltip"] {
-    position: relative;
-    cursor: help;
-}
-
-/* AI Help Styles */
-.ai-help {
-    width: 9.375rem;
-    height: 2.063rem;
-    border: 1px solid #E5E5EA;
-    border-radius: 18px;
-    position: absolute;
-    top: -0.75rem;
-    right: -0.05rem;
-    background-color: white;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-.ai-help-word {
-    font-size: 1rem;
-    margin: 0;
-}
-
-.hint {
-    cursor: pointer;
-}
-
-.hint:hover {
-    color: #6E56CF;
-}
-
-.tooltip {
-    position: absolute;
-    top: 120%;
-    left: 50%;
-    transform: translateX(-50%);
-    background-color: white;
-    padding: 1rem;
-    border-radius: .5rem;
-    white-space: nowrap;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-    z-index: 1000;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.3s, visibility 0.3s;
-    min-width: 20rem;
-    max-width: 24rem;
-    overflow-wrap: break-word;
-    word-wrap: break-word;
-    white-space: normal;
-    max-height: 15rem;
-    overflow: auto;
-}
-
-.tooltip.active {
-    opacity: 1;
-    visibility: visible;
-}
-
-.reasoning {
-    font-weight: bold;
-}
-
-.tooltip-text {
-    margin: 0;
+  position: relative;
+  cursor: help;
 }
 
 /* Fieldset schema width override */
 fieldset[schema] {
-    width: fit-content;
-    max-width: 100%;
-    overflow: visible;
+  width: fit-content;
+  max-width: 100%;
+  overflow: visible;
 }
 
 /* Responsive design */
 @media (max-width: 768px) {
-    .shadcn-card {
-        height: 50vh;
-    }
+  .shadcn-card {
+    height: 50vh;
+  }
 
-    .navbar-brand {
-        font-size: 1rem !important;
-    }
+  .navbar-brand {
+    font-size: 1rem !important;
+  }
 
-    .shadcn-multirate-table th,
-    .shadcn-multirate-table td {
-        padding: 0.5rem;
-        font-size: 0.75rem;
-    }
+  .shadcn-multirate-table th,
+  .shadcn-multirate-table td {
+    padding: 0.5rem;
+    font-size: 0.75rem;
+  }
 
-    .shadcn-multirate-table thead th:first-child,
-    .shadcn-multirate-table tbody td:first-child {
-        min-width: 120px;
-    }
+  .shadcn-multirate-table thead th:first-child,
+  .shadcn-multirate-table tbody td:first-child {
+    min-width: 120px;
+  }
 }
 
 /* Print styling */
 @media print {
-    .shadcn-multirate-container {
-        margin: 0;
-        width: 100%;
-    }
+  .shadcn-multirate-container {
+    margin: 0;
+    width: 100%;
+  }
 
-    .shadcn-multirate-table {
-        border: 1px solid #000;
-    }
+  .shadcn-multirate-table {
+    border: 1px solid #000;
+  }
 
-    .shadcn-multirate-table th,
-    .shadcn-multirate-table td {
-        border-bottom: 1px solid #000;
-    }
+  .shadcn-multirate-table th,
+  .shadcn-multirate-table td {
+    border-bottom: 1px solid #000;
+  }
 
-    .shadcn-multirate-radio {
-        border: 2px solid #000;
-    }
+  .shadcn-multirate-radio {
+    border: 2px solid #000;
+  }
 
-    .shadcn-multirate-radio:checked {
-        background-color: #000;
-    }
+  .shadcn-multirate-radio:checked {
+    background-color: #000;
+  }
 }
 
 .annotation-span {
-    position: relative;
-    display: inline;
-    border-radius: 4px;
-    padding: 2px 4px;
-    margin: 0 1px;
-    cursor: pointer;
-    transition: all 0.2s;
-    background-color: #ffeaa7;
-    line-height: 1.2em;
-    vertical-align: baseline;
+  position: relative;
+  display: inline;
+  border-radius: 4px;
+  padding: 2px 4px;
+  margin: 0 1px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background-color: #ffeaa7;
+  line-height: 1.2em;
+  vertical-align: baseline;
 }
 
 /* Overlap styling for spans that overlap with others */
 .annotation-span.span-overlap {
-    position: relative;
-    display: inline-block;
-    line-height: var(--overlap-height, 1.2em);
-    /* Use padding instead of margin to maintain text baseline */
-    padding-top: calc(var(--overlap-offset, 0em) * 0.5);
-    padding-bottom: calc(var(--overlap-offset, 0em) * 0.5);
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    /* Ensure text stays at baseline */
-    vertical-align: baseline;
+  position: relative;
+  display: inline-block;
+  line-height: var(--overlap-height, 1.2em);
+  /* Use padding instead of margin to maintain text baseline */
+  padding-top: calc(var(--overlap-offset, 0em) * 0.5);
+  padding-bottom: calc(var(--overlap-offset, 0em) * 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  /* Ensure text stays at baseline */
+  vertical-align: baseline;
 }
 
 /* Specific depth-based styling */
 .annotation-span.overlap-depth-1 {
-    background-color: rgba(255, 234, 167, 0.8);
-    border-color: rgba(255, 193, 7, 0.3);
+  background-color: rgba(255, 234, 167, 0.8);
+  border-color: rgba(255, 193, 7, 0.3);
 }
 
 .annotation-span.overlap-depth-2 {
-    background-color: rgba(255, 234, 167, 0.9);
-    border-color: rgba(255, 193, 7, 0.5);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  background-color: rgba(255, 234, 167, 0.9);
+  border-color: rgba(255, 193, 7, 0.5);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
 .annotation-span.overlap-depth-3 {
-    background-color: rgba(255, 234, 167, 1);
-    border-color: rgba(255, 193, 7, 0.7);
-    box-shadow: 0 3px 9px rgba(0, 0, 0, 0.2);
+  background-color: rgba(255, 234, 167, 1);
+  border-color: rgba(255, 193, 7, 0.7);
+  box-shadow: 0 3px 9px rgba(0, 0, 0, 0.2);
 }
 
 .annotation-span.overlap-depth-4 {
-    background-color: rgba(255, 234, 167, 1);
-    border-color: rgba(255, 193, 7, 0.9);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  background-color: rgba(255, 234, 167, 1);
+  border-color: rgba(255, 193, 7, 0.9);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
 /* Ensure text container can handle overlapping elements */
 #instance-text {
-    position: relative;
-    line-height: 1.4em;
-    min-height: 2em;
+  position: relative;
+  line-height: 1.4em;
+  min-height: 2em;
 }
 
 /* Adjust label positioning for overlapping spans - use absolute positioning */
 .annotation-span.span-overlap .span-label {
-    position: absolute;
-    top: -25px;
-    left: 0;
-    z-index: calc(10 + var(--overlap-depth, 0));
+  position: absolute;
+  top: -25px;
+  left: 0;
+  z-index: calc(10 + var(--overlap-depth, 0));
 }
 
 /* Adjust delete button positioning for overlapping spans - use absolute positioning */
 .annotation-span.span-overlap .span-delete-btn {
-    position: absolute;
-    top: -8px;
-    right: -8px;
-    z-index: calc(15 + var(--overlap-depth, 0));
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  z-index: calc(15 + var(--overlap-depth, 0));
 }
 .span-delete-btn {
-    position: absolute;
-    top: -8px;
-    right: -8px;
-    background: #dc3545;
-    color: white;
-    border: none;
-    border-radius: 50%;
-    width: 20px;
-    height: 20px;
-    font-size: 12px;
-    cursor: pointer;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    font-weight: bold;
-    z-index: 15;
-    transition: all 0.2s;
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  z-index: 15;
+  transition: all 0.2s;
 }
 .span-delete-btn:hover {
-    background: #c82333;
-    transform: scale(1.1);
+  background: #c82333;
+  transform: scale(1.1);
 }
 .annotation-span:hover .span-delete-btn {
-    display: flex;
+  display: flex;
 }
 .span-label {
-    position: absolute;
-    top: -25px;
-    left: 0;
-    background: #333;
-    color: white;
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-size: 12px;
-    white-space: nowrap;
-    display: none;
-    z-index: 10;
-    pointer-events: none;
+  position: absolute;
+  top: -25px;
+  left: 0;
+  background: #333;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 12px;
+  white-space: nowrap;
+  display: none;
+  z-index: 10;
+  pointer-events: none;
 }
 .annotation-span:hover .span-label {
-    display: block;
+  display: block;
 }
 
 /* Overlay spans should allow text selection to pass through */
 .annotation-span.overlay-span {
-    pointer-events: none;
+  pointer-events: none;
 }
 
 /* But allow pointer events on the span itself for hovering */
 .annotation-span.overlay-span:hover {
-    pointer-events: auto;
+  pointer-events: auto;
 }
 
 /* Overlay span labels should always be visible */
 .annotation-span.overlay-span .span-label {
-    display: block !important;
-    pointer-events: auto;
+  display: block !important;
+  pointer-events: auto;
 }
 
 /* Overlay span delete buttons should always be clickable */
 .annotation-span.overlay-span .span-delete-btn {
-    pointer-events: auto;
+  pointer-events: auto;
+}
+
+.shadcn-likert-container {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--box-shadow);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  position: relative;
+}
+
+.shadcn-likert-title {
+  font-size: 1rem;
+  font-weight: 500;
+  color: black;
+  text-align: left;
+  width: 100%;
+}
+
+.shadcn-likert-scale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.shadcn-likert-endpoint {
+  display: flex;
+  align-items: center;
+  height: 2.5rem;
+  flex: 0 0 auto;
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+  padding: 0 0.5rem;
+  max-width: 30%;
+  text-align: center;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+.shadcn-likert-options {
+  display: flex;
+  flex: 1;
+  justify-content: space-between;
+  position: relative;
+  padding: 0 0.5rem;
+  gap: 0.5rem;
+}
+
+.shadcn-likert-track {
+  position: absolute;
+  height: 2px;
+  background-color: var(--border);
+  left: 0.5rem;
+  right: 0.5rem;
+  top: 0.625rem;
+  transform: none;
+  z-index: 0;
+}
+
+.shadcn-likert-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+}
+
+.shadcn-likert-input {
+  opacity: 0;
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+.shadcn-likert-button {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  background-color: var(--secondary);
+  border: 2px solid var(--border);
+  margin-bottom: 0.5rem;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.shadcn-likert-input:checked + .shadcn-likert-button {
+  background-color: var(--primary);
+  border-color: var(--primary);
+  transform: scale(1.1);
+  box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.2);
+}
+
+.shadcn-likert-input:focus + .shadcn-likert-button {
+  box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.2);
+}
+
+.shadcn-likert-input:hover + .shadcn-likert-button {
+  border-color: var(--primary);
+}
+
+.shadcn-likert-label {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  margin-top: 0.25rem;
+  text-align: center;
+}
+
+.shadcn-likert-input:checked ~ .shadcn-likert-label {
+  color: var(--primary);
+  font-weight: 500;
+}
+
+.shadcn-likert-bad-text {
+  display: flex;
+  align-items: center;
+  margin-top: 0.75rem;
+  padding: 0.5rem 0;
+}
+
+.shadcn-likert-bad-text-label {
+  margin-left: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--text-color);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  flex: 1;
+}
+
+fieldset[schema] {
+  width: fit-content;
+  max-width: 100%;
+  overflow: visible;
+}
+
+.slider {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--box-shadow);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  position: relative;
+}
+
+/* Container styles */
+.custom-slider-container {
+  position: relative;
+  width: 100%;
+  padding: 20px 20px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  margin-top: 3.5rem;
+}
+
+/* Hide the actual input but keep it in the DOM for form submission */
+.custom-slider-input {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  margin: 0;
+  cursor: pointer;
+  z-index: 3; /* Keep above other elements for interaction */
+}
+
+/* Custom track */
+.custom-slider-track {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  background-color: #e5e7eb;
+  border-radius: 2px;
+}
+
+/* Active portion of track */
+.custom-slider-track-active {
+  position: absolute;
+  height: 100%;
+  background-color: var(--primary);
+  border-radius: 2px;
+  left: 0;
+}
+
+/* Custom thumb */
+.custom-slider-thumb {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  background-color: var(--primary);
+  border-radius: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  z-index: 2;
+  cursor: grab;
+  transition: transform 0.1s, box-shadow 0.1s;
+  color: white;
+}
+
+.custom-slider-thumb.dragging {
+  transform: translate(-50%, -50%) scale(1.1);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2);
+  cursor: grabbing;
+}
+
+/* Tick container */
+.custom-slider-ticks {
+  position: relative;
+  width: 100%;
+  height: 30px;
+  margin-top: 12px;
+}
+
+/* Tick mark styles */
+.custom-slider-tick {
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+.custom-slider-tick-mark {
+  width: 1px;
+  height: 8px;
+  background-color: #ccc;
+}
+
+.custom-slider-tick-mark.major {
+  height: 12px;
+  background-color: #999;
+  width: 2px;
+}
+
+.custom-slider-tick-label {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
+}
+
+/* Slider title/legend */
+.custom-slider-title {
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+
+.custom-slider-container.focus {
+  outline: 2px solid #7c3aed;
+  border-radius: 4px;
+}
+
+.custom-slider-thumb {
+  position: relative;
+}
+
+.annotation-form fieldset .slider-tooltip {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 1000;
+  opacity: 1;
+  transition: opacity 0.2s ease;
+  bottom: 25px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.slider-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -4px;
+  border: 4px solid transparent;
+  border-top-color: rgba(0, 0, 0, 0.8);
+}
+
+.custom-slider-thumb.dragging .slider-tooltip {
+  opacity: 1;
+}
+
+.select {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--box-shadow);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  position: relative;
 }

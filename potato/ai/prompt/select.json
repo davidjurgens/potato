@@ -1,0 +1,15 @@
+{
+  "hint": {
+    "prompt": "TASK: Generate guidance for single selection from dropdown options.\n\nINPUT DETAILS:\n- Text to annotate: \"${text}\"\n- Annotation task: ${description}\n- Available labels: ${labels}\n\nINSTRUCTIONS:\n1. Analyze text features that distinguish between dropdown options\n2. Generate guidance for selecting the most appropriate single option\n3. Focus on decision criteria between available choices\n\nHINT REQUIREMENTS:\n- Identify key distinguishing features between label options\n- Point out decision-making criteria for selection\n- Guide toward systematic evaluation of options\n- Highlight most relevant textual evidence",
+    "output_format": "default_hint"
+  },
+  "keyword": {
+    "prompt": "TASK: Extract words/phrases that indicate the correct dropdown selection.\n\nINPUT DETAILS:\n- Text: \"${text}\"\n- Annotation task: ${description}\n- Available labels: ${labels}\n\nOBJECTIVE: Identify terms that point toward the most appropriate label selection.\n\nSELECTION CRITERIA:\n- Strong indicators for specific label options\n- Discriminating features between choices\n- Context clues that favor one option over others\n- Classification markers\n- Decision-supporting evidence",
+    "output_format": "default_keyword"
+  },
+  "random": {
+    "prompt": "Generate random things",
+    "output_format": "default_random",
+    "img": "/static/ai_assistant_img/question.svg"
+  }
+}

@@ -3,12 +3,15 @@ Textbox Layout
 """
 
 import logging
+
+from ai.ai_help_wrapper import get_ai_wrapper, get_dynamic_ai_help
 from .identifier_utils import (
     safe_generate_layout,
     generate_element_identifier,
     generate_validation_attribute,
     escape_html_content
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +48,8 @@ def _generate_textbox_layout_internal(annotation_scheme):
 
     # Initialize form wrapper
     schematic = f"""
-    <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form textbox shadcn-textbox-container" action="/action_page.php">
+    <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form textbox shadcn-textbox-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}">
+            {get_ai_wrapper()}
         <fieldset schema_name="{escape_html_content(annotation_scheme['name'])}">
             <legend class="shadcn-textbox-title">{escape_html_content(annotation_scheme["description"])}</legend>
     """
@@ -131,5 +135,6 @@ def _generate_textbox_layout_internal(annotation_scheme):
 
     schematic += "</fieldset></form>"
 
+    print("schematicschematicschematicschematic", schematic)
     logger.info(f"Successfully generated textbox layout for {annotation_scheme['name']} with {len(labels)} fields")
     return schematic, []

@@ -1,3 +1,4 @@
+
 """
 Unified AI endpoint interface for various LLM providers.
 
@@ -5,13 +6,44 @@ This module provides a common interface for interacting with different LLM provi
 including OpenAI, Anthropic, Hugging Face, Ollama, and VLLM endpoints.
 """
 
+from dataclasses import dataclass
+from enum import Enum
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List
-import requests
+import os
+from typing import Dict, Any, Optional, List, Type
+import json
+from string import Template
+
+from pydantic import BaseModel
+
+from .ai_prompt import get_ai_prompt
 
 logger = logging.getLogger(__name__)
 
+class Annotation_Type(Enum):
+    RADIO = "radio"
+    LIKERT = "likert"
+    NUMBER = "number"
+    TEXTBOX = "text"
+    MULTISELECT = "multiselect"
+    SPAN = "span"
+    SELECT = "select"
+    SLIDER = "slider"
+
+@dataclass
+class AnnotationInput:
+    ai_assistant: str
+    annotation_type: Annotation_Type
+    text: str
+    description: str
+    min_label: Optional[str] = ""
+    max_label: Optional[str] = ""
+    size: Optional[int] = -1
+    labels: Optional[List[str]] = None
+    min_value: Optional[int] = -1
+    max_value: Optional[int] = -1
+    step: Optional[int] = -1
 
 class AIEndpointError(Exception):
     """Base exception for AI endpoint errors."""
@@ -48,14 +80,13 @@ class BaseAIEndpoint(ABC):
         self.annotation_type = config.get("annotation_type", "")
         self.ai_config = config.get("ai_config", {})
 
-        # Default prompts
-        self.hint_prompt = self.ai_config.get("hint_prompt", self._get_default_hint_prompt())
-        self.keyword_prompt = self.ai_config.get("keyword_prompt", self._get_default_keyword_prompt())
-
         # Model configuration
         self.model = self.ai_config.get("model", self._get_default_model())
         self.max_tokens = self.ai_config.get("max_tokens", 100)
-        self.temperature = self.ai_config.get("temperature", 0.7)
+        self.temperature = self.ai_config.get("temperature", 0.1)
+
+        # prompt
+        self.prompts = get_ai_prompt()
 
         # Initialize the client
         self._initialize_client()
@@ -71,17 +102,7 @@ class BaseAIEndpoint(ABC):
         pass
 
     @abstractmethod
-    def _get_default_hint_prompt(self) -> str:
-        """Get the default hint prompt template."""
-        pass
-
-    @abstractmethod
-    def _get_default_keyword_prompt(self) -> str:
-        """Get the default keyword prompt template."""
-        pass
-
-    @abstractmethod
-    def query(self, prompt: str) -> str:
+    def query(self, prompt: str, output_format: Type[BaseModel]):
         """
         Send a query to the AI model and return the response.
 
@@ -96,7 +117,17 @@ class BaseAIEndpoint(ABC):
         """
         pass
 
-    def get_hint(self, text: str) -> str:
+    def parseStringToJson(self, response_content: str) -> str:
+        """
+        Parse the response content and extract JSON, handling markdown code blocks.
+        """
+        try:
+            parsed = json.loads(response_content)
+            return parsed
+        except json.JSONDecodeError:
+            raise ValueError(f"Failed to parse JSON from ollama response: {response_content}")
+
+    def get_ai(self, data: AnnotationInput, output_format) -> str:
         """
         Get a hint for annotating the given text.
 
@@ -106,37 +137,37 @@ class BaseAIEndpoint(ABC):
         Returns:
             A helpful hint for annotation
         """
+        
         try:
-            prompt = self.hint_prompt.format(
-                text=text,
-                description=self.description,
-                annotation_type=self.annotation_type
+            # Check if annotation type exists
+            if data.annotation_type not in Annotation_Type:
+                logger.warning(f"Annotation type '{data.annotation_type}' not found")
+                return "Unable to generate suggestion - annotation type not configured"
+                    
+            # Check if ai_assistant exists
+            ai_prompt = get_ai_prompt()
+            if data.ai_assistant not in ai_prompt[data.annotation_type]:
+                logger.warning(f"'ai_assistant' not found for {data.annotation_type}")
+                return "Unable to generate suggestion - prompt not configured"
+            
+            template_str = self.prompts.get(data.annotation_type).get(data.ai_assistant).get("prompt")
+            template = Template(template_str)
+            prompt = template.substitute(
+                text=data.text,
+                description=data.description,
+                min_label=data.min_label,
+                max_label=data.max_label,
+                size=data.size,
+                labels=data.labels,
+                min_value=data.min_value,
+                max_value=data.max_value,  
+                step=data.step             
             )
-            return self.query(prompt)
+            return self.query(prompt, output_format)
         except Exception as e:
-            logger.error(f"Error getting hint: {e}")
+            logger.error(data)
+            logger.error(f"Error getting hint: {data.annotation_type, data.ai_assistant, e}")
             return "Unable to generate hint at this time."
-
-    def get_highlights(self, text: str) -> str:
-        """
-        Get keyword highlights for the given text.
-
-        Args:
-            text: The text to get highlights for
-
-        Returns:
-            Keywords that are most relevant to the annotation task
-        """
-        try:
-            prompt = self.keyword_prompt.format(
-                text=text,
-                description=self.description,
-                annotation_type=self.annotation_type
-            )
-            return self.query(prompt)
-        except Exception as e:
-            logger.error(f"Error getting highlights: {e}")
-            return "Unable to generate highlights at this time."
 
     def health_check(self) -> bool:
         """
@@ -159,7 +190,7 @@ class AIEndpointFactory:
     Factory class for creating AI endpoint instances.
     """
 
-    _endpoints = {}
+    _endpoints = { }
 
     @classmethod
     def register_endpoint(cls, endpoint_type: str, endpoint_class: type):
@@ -194,8 +225,6 @@ class AIEndpointFactory:
 
         # Prepare endpoint configuration
         endpoint_config = {
-            "description": config.get("annotation_schemes", [{}])[0].get("description", ""),
-            "annotation_type": config.get("annotation_schemes", [{}])[0].get("annotation_type", ""),
             "ai_config": ai_support.get("ai_config", {})
         }
 
@@ -253,5 +282,4 @@ try:
     AIEndpointFactory.register_endpoint("vllm", VLLMEndpoint)
 except ImportError:
     logger.debug("VLLM endpoint not available")
-
 

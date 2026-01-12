@@ -44,6 +44,8 @@ from potato.flask_server import (
     get_annotations_for_user_on, get_span_annotations_for_user_on,
     render_page_with_annotations, get_current_page_html,
     validate_annotation, parse_html_span_annotation, Label, SpanAnnotation,
+    get_users, get_total_annotations, update_annotation_state, 
+    get_ai_cache_manager,
     get_users, get_total_annotations, update_annotation_state, ai_hints,
     get_training_instances, get_training_correct_answers, get_training_explanation
 )
@@ -52,6 +54,8 @@ from potato.flask_server import (
 from potato.admin import admin_dashboard
 
 # Import span color functions
+from ai.ai_help_wrapper import generate_ai_help_html
+from ai.ai_prompt import get_ai_prompt
 from potato.server_utils.schemas.span import get_span_color
 
 # Import annotation history
@@ -956,9 +960,15 @@ def annotate():
     if action == "prev_instance":
         logger.debug(f"Moving to previous instance for user: {username}")
         move_to_prev_instance(username)
+        acm = get_ai_cache_manager()
+        acm.start_prefetch(user_state.current_instance_index, 
+                           getattr(acm, "prefetch_page_count_on_prev", 0) )
     elif action == "next_instance":
         logger.debug(f"Moving to next instance for user: {username}")
         move_to_next_instance(username)
+        acm = get_ai_cache_manager()
+        acm.start_prefetch(user_state.current_instance_index, getattr(acm,"prefetch_page_count_on_next", 0))
+
     elif action == "go_to":
         # Try to get go_to from JSON first, then form
         go_to_value = None
@@ -970,6 +980,9 @@ def annotate():
         logger.debug(f"go_to action with value: {go_to_value}")
         if go_to_value is not None:
             go_to_id(username, go_to_value)
+            acm.start_prefetch(user_state.current_instance_index, 1)
+            acm.start_prefetch(user_state.current_instance_index, -1)
+
         else:
             logger.warning('go_to action requested but no go_to value provided')
     else:
@@ -999,30 +1012,22 @@ def annotate():
     # Render the page with any existing annotations
     return render_page_with_annotations(username)
 
-@app.route('/get_ai_hint', methods=['GET'])
-def get_ai_hint():
+@app.route('/get_ai_suggestion', methods=['GET'])
+def get_ai_suggestion():
     if 'username' not in session:
         return home()
 
     username = session['username']
     user_state = get_user_state(username)
-    instance_text = request.args.get('instance_text')
-    logger.debug(f"instance_text: {instance_text}")
-    instance = user_state.get_current_instance()
-    if instance is None:
-        return jsonify({'reasoning': 'No instance assigned.'})
+    ais = get_ai_cache_manager()
+    annotation_id = int(request.args.get('annotationId'))
+    ai_assistant = request.args.get('aiAssistant')
 
-    instance_id = instance.get_id()
+    instance_id = user_state.get_current_instance_index()
 
-    # Return cached version if it exists
-    if user_state.hint_exists(instance_id):
-        return jsonify({'reasoning': user_state.get_hint(instance_id)})
-
-    # Otherwise generate, cache, and return
-    reasoning = ai_hints(instance_text)
-    user_state.cache_hint(instance_id, reasoning)
-
-    return jsonify({'reasoning': reasoning})
+    res = ais.get_ai_help(instance_id, annotation_id, ai_assistant)
+    logger.debug(f"AI suggestion result: {res}")
+    return res
 
 
 # Admin routes for system inspection (read-only)
@@ -1754,12 +1759,12 @@ def get_span_data(instance_id):
 
     # Convert to frontend-friendly format
     span_data = []
-    for span in spans:
-        # Get color for this span
-        color = get_span_color(span.get_schema(), span.get_name())
+    print("spansspansspans", spans)
+    for span_id, span_info in spans.items():
+        
+        color = get_span_color(span_info["schema"], span_info["name"])
         hex_color = None
         if color:
-            # Convert RGB format to hex
             if isinstance(color, str) and color.startswith("(") and color.endswith(")"):
                 try:
                     rgb_parts = color.strip("()").split(", ")
@@ -1770,28 +1775,27 @@ def get_span_data(instance_id):
                     hex_color = "#f0f0f0"
             else:
                 hex_color = color
-
-        span_info = {
-            'id': span.get_id(),
-            'schema': span.get_schema(),
-            'label': span.get_name(),
-            'title': span.get_title(),
-            'start': span.get_start(),
-            'end': span.get_end(),
-            'text': original_text[span.get_start():span.get_end()],
+        
+        span_data.append({
+            'id': span_id,
+            'schema': span_info["schema"],
+            'label': span_info["name"],
+            'title': span_info["title"],
+            'start': span_info["start"],
+            'end': span_info["end"],
+            'text': original_text[span_info["start"]:span_info["end"]],
             'color': hex_color
-        }
-        span_data.append(span_info)
-        logger.debug(f"Span data: {span_info}")
-
+        })
+    
     response_data = {
         'instance_id': instance_id,
         'text': original_text,
         'spans': span_data
     }
 
-    logger.debug(f"=== GET_SPAN_DATA END ===")
+    logger.debug(f"=== GET_SPAN_DATA END ===", response_data)
     return jsonify(response_data)
+
 
 @app.route("/updateinstance", methods=["POST"])
 def update_instance():
@@ -1947,6 +1951,7 @@ def update_instance():
             annotation_type = request.json.get("type")
 
             if annotation_type == "span":
+                print("schema_stateschema_state", schema_state)
                 for sv in schema_state:
                     # Validate and correct negative offsets
                     start_offset = int(sv["start"])
@@ -1965,8 +1970,9 @@ def update_instance():
                         end_offset = start_offset
                         logger.warning(f"Corrected end offset {sv['end']} to match start offset {start_offset}")
 
-                    span = SpanAnnotation(schema_name, sv["name"], sv.get("title", sv["name"]), start_offset, end_offset)
-                    value = sv["value"]
+                    span = SpanAnnotation(schema_name, sv["name"], sv.get("title", sv["name"]), start_offset, end_offset, sv["span_id"])
+                    
+                    value = sv.get("value")
 
                     # Get old value for comparison
                     old_value = None
@@ -2008,15 +2014,11 @@ def update_instance():
                     # If value is None, also handle span removal logic
                     if value is None:
                         if instance_id in user_state.instance_id_to_span_to_value:
-                            spans_to_remove = []
-                            for existing_span in user_state.instance_id_to_span_to_value[instance_id]:
-                                if (existing_span.get_schema() == span.get_schema() and
-                                    existing_span.get_name() == span.get_name() and
-                                    existing_span.get_start() == span.get_start() and
-                                    existing_span.get_end() == span.get_end()):
-                                    spans_to_remove.append(existing_span)
-                            for span_to_remove in spans_to_remove:
-                                del user_state.instance_id_to_span_to_value[instance_id][span_to_remove]
+                            span_id = span.get_id()
+                            if span_id in user_state.instance_id_to_span_to_value[instance_id]:
+                                    del user_state.instance_id_to_span_to_value[instance_id][span_id]
+ 
+                    print("user_state.instance_id_to_span_to_value", user_state.instance_id_to_span_to_value)
             elif annotation_type == "label":
                 for sv in schema_state:
                     label = Label(schema_name, sv["name"])
@@ -2029,7 +2031,8 @@ def update_instance():
 
                     # Determine action type
                     action_type = "add_label" if old_value is None else "update_label"
-
+                
+                   
                     # Create annotation action
                     action = AnnotationHistoryManager.create_action(
                         user_id=username,
@@ -2633,6 +2636,16 @@ def generate_waveform():
         logger.debug(f"=== GENERATE_WAVEFORM END ===")
 
 
+@app.route("/api/ai_assistant", methods=["GET"])
+def ai_assistant():
+    annotation_id = int(request.args.get("annotationId"))
+    username = session['username']
+    user_state = get_user_state(username)
+    instance = user_state.get_current_instance_index()
+    annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
+    return generate_ai_help_html(instance, annotation_id, annotation_type)
+
+
 def configure_routes(flask_app, app_config):
     """
     Initialize the Flask routes with the given Flask app instance
@@ -2683,7 +2696,9 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/poststudy", "poststudy", poststudy, methods=["GET", "POST"])
     app.add_url_rule("/done", "done", done, methods=["GET", "POST"])
     app.add_url_rule("/admin", "admin", admin, methods=["GET"])
-    app.add_url_rule("/get_ai_hint", "get_ai_hint", get_ai_hint, methods=["GET"])
+
+    app.add_url_rule("/api/get_ai_suggestion", "get_ai_suggestion", get_ai_suggestion, methods=["GET"])
+    
     app.add_url_rule("/api-frontend", "api_frontend", api_frontend, methods=["GET"])
     app.add_url_rule("/span-api-frontend", "span_api_frontend", span_api_frontend, methods=["GET"])
     app.add_url_rule("/api/spans/<instance_id>", "get_span_data", get_span_data, methods=["GET"])
@@ -2692,7 +2707,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/test-span-colors", "test_span_colors", test_span_colors, methods=["GET"])
     app.add_url_rule("/api/spans/<instance_id>/clear", "clear_span_annotations", clear_span_annotations, methods=["POST"])
     app.add_url_rule("/api/current_instance", "get_current_instance", get_current_instance, methods=["GET"])
-
+    app.add_url_rule("/api/ai_assistant", "ai_assistant", ai_assistant, methods=["GET"])
     app.add_url_rule("/admin/user_state/<user_id>", "admin_user_state", admin_user_state, methods=["GET"])
     app.add_url_rule("/admin/health", "admin_health", admin_health, methods=["GET"])
     app.add_url_rule("/admin/system_state", "admin_system_state", admin_system_state, methods=["GET"])

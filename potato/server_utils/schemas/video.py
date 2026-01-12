@@ -13,6 +13,8 @@ Generates a form interface for displaying video content. Features include:
 
 import logging
 import os.path
+
+from ai.ai_help_wrapper import get_ai_wrapper, get_dynamic_ai_help
 from .identifier_utils import (
     safe_generate_layout,
     escape_html_content
@@ -84,7 +86,8 @@ def _generate_video_layout_internal(annotation_scheme):
 
     # Initialize form wrapper
     schematic = f"""
-        <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form video" action="/action_page.php">
+        <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form video" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}>
+                 {get_ai_wrapper()}
             <fieldset schema="{escape_html_content(annotation_scheme['name'])}">
                 <legend>{escape_html_content(annotation_scheme['description'])}</legend>
     """

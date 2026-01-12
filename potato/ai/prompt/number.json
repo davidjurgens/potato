@@ -1,0 +1,15 @@
+{
+  "hint": {
+    "prompt": "TASK: Generate guidance for numerical value extraction/estimation.\n\nINPUT DETAILS:\n- Text to annotate: \"${text}\"\n- Annotation task: ${description}\n\nINSTRUCTIONS:\n1. Analyze the text for numerical clues or quantifiable elements\n2. Guide the annotator toward identifying the correct numerical value\n3. Focus on mathematical, statistical, or countable aspects\n\nHINT REQUIREMENTS:\n- Identify numerical indicators, quantities, or measurable elements\n- Point out calculation methods or counting strategies\n- Highlight context that affects numerical interpretation\n- Guide toward systematic analysis approach",
+    "output_format": "default_hint"
+  },
+  "keyword": {
+    "prompt": "TASK: Extract words/phrases that contain or indicate numerical information.\n\nINPUT DETAILS:\n- Text: \"${text}\"\n- Annotation task: ${description}\n\nOBJECTIVE: Identify words/phrases that directly relate to the numerical answer.\n\nSELECTION CRITERIA:\n- Explicit numbers, quantities, or measurements\n- Words indicating amount, frequency, or degree\n- Mathematical or statistical terminology\n- Comparative language (more, less, double, half)\n- Time references, percentages, ratios",
+    "output_format": "default_keyword"
+  },
+  "random": {
+    "prompt": "Generate random things",
+    "output_format": "default_random",
+    "img": "/static/ai_assistant_img/question.svg"
+  }
+}

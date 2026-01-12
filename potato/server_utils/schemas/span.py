@@ -5,7 +5,8 @@ Span Layout
 import logging
 from collections.abc import Mapping
 from collections import defaultdict
-from potato.server_utils.config_module import config
+from ai.ai_help_wrapper import get_ai_wrapper, get_dynamic_ai_help
+from server_utils.config_module import config
 from .identifier_utils import (
     safe_generate_layout,
     generate_element_identifier,
@@ -14,7 +15,8 @@ from .identifier_utils import (
     escape_html_content
 )
 
-from potato.item_state_management import SpanAnnotation
+
+from item_state_management import SpanAnnotation
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +103,8 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
     # Initialize form wrapper
     scheme_name = annotation_scheme["name"]
     schematic = f"""
-    <form id="{escape_html_content(scheme_name)}" class="annotation-form span shadcn-span-container" action="/action_page.php">
+    <form id="{escape_html_content(scheme_name)}" class="annotation-form span shadcn-span-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" >
+            {get_ai_wrapper()}
         <fieldset schema="{escape_html_content(scheme_name)}">
             <legend class="shadcn-span-title">{escape_html_content(annotation_scheme["description"])}</legend>
             <div class="shadcn-span-options">
@@ -263,64 +266,62 @@ def generate_span_layout(annotation_scheme, horizontal=False):
 def render_span_annotations(text, span_annotations):
     """
     Render span annotations into HTML with boundary-based algorithm.
-
     Args:
         text (str): The original text to annotate
-        span_annotations (list): List of SpanAnnotation objects
-
+        span_annotations (dict): Dictionary of span_id -> span data
     Returns:
         str: HTML with span annotations rendered
     """
     if not span_annotations:
         return text
-
-    # Sort annotations by start position
-    sorted_spans = sorted(span_annotations, key=lambda x: x.get_start())
-
+    
+    # Convert dictionary to list of tuples (span_id, span_data) and sort by start position
+    sorted_spans = sorted(
+        span_annotations.items(), 
+        key=lambda x: x[1].get('start', 0)
+    )
+    
     # Create boundary points
     boundaries = []
-    for span in sorted_spans:
-        boundaries.append((span.get_start(), 'start', span))
-        boundaries.append((span.get_end(), 'end', span))
-
+    for span_id, span_data in sorted_spans:
+        boundaries.append((span_data['start'], 'start', span_id, span_data))
+        boundaries.append((span_data['end'], 'end', span_id, span_data))
+    
     # Sort boundaries by position
     boundaries.sort(key=lambda x: x[0])
-
+    
     # Build the rendered text
     result = ""
     current_pos = 0
     active_spans = []
-
-    for pos, boundary_type, span in boundaries:
+    
+    for pos, boundary_type, span_id, span_data in boundaries:
         # Add text before this boundary
         if pos > current_pos:
             result += text[current_pos:pos]
-
+        
         if boundary_type == 'start':
             # Start a new span
-            active_spans.append(span)
+            active_spans.append(span_id)
             # Get color for this span
-            color = get_span_color(span.get_schema(), span.get_name())
+            color = get_span_color(span_data['schema'], span_data['name'])
             if not color:
                 color = "(128, 128, 128)"  # Default gray
-
             # Convert RGB to hex with alpha
             color_parts = color.strip("()").split(", ")
             r, g, b = int(color_parts[0]), int(color_parts[1]), int(color_parts[2])
             hex_color = f"#{r:02x}{g:02x}{b:02x}66"  # 66 = 40% alpha to match label background
-
-            result += f'<span class="span-highlight" data-annotation-id="{span.get_id()}" data-label="{span.get_name()}" schema="{span.get_schema()}" style="background-color: {hex_color};">'
-
+            result += f'<span class="span-highlight" data-annotation-id="{span_id}" data-label="{span_data["name"]}" schema="{span_data["schema"]}" style="background-color: {hex_color};">'
         elif boundary_type == 'end':
             # End the span
             result += "</span>"
             # Remove from active spans
-            active_spans = [s for s in active_spans if s.get_id() != span.get_id()]
-
+            active_spans = [s for s in active_spans if s != span_id]
+        
         current_pos = pos
-
+    
     # Add remaining text
     if current_pos < len(text):
         result += text[current_pos:]
-
+    
     return result

@@ -4,12 +4,15 @@ Select Layout
 
 import os
 from pathlib import Path
+
+from ai.ai_help_wrapper import get_ai_wrapper, get_dynamic_ai_help
 from .identifier_utils import (
     safe_generate_layout,
     generate_element_identifier,
     generate_validation_attribute,
     escape_html_content
 )
+
 
 def generate_select_layout(annotation_scheme):
     """
@@ -40,7 +43,7 @@ def _generate_select_layout_internal(annotation_scheme):
     validation = generate_validation_attribute(annotation_scheme)
 
     schematic = (
-          f'<form id="{escape_html_content(annotation_scheme["name"])}" class="annotation-form select" action="/action_page.php">'
+          f'<form id="{escape_html_content(annotation_scheme["name"])}" class="annotation-form select" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}">     {get_ai_wrapper()}'
         + "  <fieldset>"
         + f"  <legend>{escape_html_content(annotation_scheme['description'])}</legend>"
         + (

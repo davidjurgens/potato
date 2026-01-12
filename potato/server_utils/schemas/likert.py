@@ -14,6 +14,9 @@ that can be used for collecting ordinal data responses. The scale supports:
 """
 
 import logging
+
+from ai.ai_help_wrapper import get_ai_wrapper, get_dynamic_ai_help
+
 from .identifier_utils import (
     safe_generate_layout,
     generate_element_identifier,
@@ -42,6 +45,7 @@ def generate_likert_layout(annotation_scheme):
                 - required (bool): Whether response is mandatory
             - bad_text_label (dict): Optional configuration for invalid text option
                 - label_content (str): Label text for bad text option
+            - annotation_id (int): match the config schema index
 
     Returns:
         tuple: (html_string, key_bindings)
@@ -77,21 +81,14 @@ def _generate_likert_layout_internal(annotation_scheme):
     # Setup validation and key bindings
     key_bindings = []
     validation = generate_validation_attribute(annotation_scheme)
-
+    
     # Initialize form wrapper
     schematic = f"""
+
+    <form id="{annotation_scheme['name']}" class="annotation-form likert shadcn-likert-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}">
+    {get_ai_wrapper()}
     <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form likert shadcn-likert-container" action="/action_page.php">
-        <div class="ai-help">
-    <h3 class="ai-help-word"><span class="hint">Hint</span> | <span>Keyword</span></h3>
-    <div class="tooltip">
-            <p class="tooltip-text">
-                <span class="reasoning">Reasoning:</span> {{ai}}
-            </p>
-        </div>
-    </div>
-
-
-        <fieldset schema="{escape_html_content(annotation_scheme['name'])}" style="border: none; padding: 0; margin: 0; width: auto; min-width: fit-content;">
+        <fieldset schema="{escape_html_content(annotation_scheme['name'])}">
             <legend class="shadcn-likert-title">{escape_html_content(annotation_scheme['description'])}</legend>
             <div class="shadcn-likert-scale" style="max-width: min(100%, calc(300px + {annotation_scheme['size']} * 40px + 250px));">
                 <div class="shadcn-likert-endpoint">{escape_html_content(annotation_scheme['min_label'])}</div>
