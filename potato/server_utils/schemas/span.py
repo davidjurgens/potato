@@ -268,18 +268,41 @@ def render_span_annotations(text, span_annotations):
     Render span annotations into HTML with boundary-based algorithm.
     Args:
         text (str): The original text to annotate
-        span_annotations (dict): Dictionary of span_id -> span data
+        span_annotations: Dictionary of span_id -> span data, or list of SpanAnnotation objects
     Returns:
         str: HTML with span annotations rendered
     """
     if not span_annotations:
         return text
-    
-    # Convert dictionary to list of tuples (span_id, span_data) and sort by start position
-    sorted_spans = sorted(
-        span_annotations.items(), 
-        key=lambda x: x[1].get('start', 0)
-    )
+
+    # Handle both dict and list inputs
+    if isinstance(span_annotations, dict):
+        # Convert dictionary to list of tuples (span_id, span_data)
+        sorted_spans = sorted(
+            span_annotations.items(),
+            key=lambda x: x[1].get('start', 0)
+        )
+    else:
+        # Convert list of SpanAnnotation objects to list of tuples
+        spans_as_tuples = []
+        for span in span_annotations:
+            if hasattr(span, 'get_id'):
+                # SpanAnnotation object with methods
+                span_id = span.get_id()
+                span_data = {
+                    'schema': span.get_schema() if hasattr(span, 'get_schema') else getattr(span, 'schema', ''),
+                    'name': span.get_name() if hasattr(span, 'get_name') else getattr(span, 'name', ''),
+                    'title': span.get_title() if hasattr(span, 'get_title') else getattr(span, 'title', ''),
+                    'start': span.get_start() if hasattr(span, 'get_start') else getattr(span, 'start', 0),
+                    'end': span.get_end() if hasattr(span, 'get_end') else getattr(span, 'end', 0),
+                }
+            elif isinstance(span, dict):
+                span_id = span.get('id', f"span_{span.get('start', 0)}_{span.get('end', 0)}")
+                span_data = span
+            else:
+                continue
+            spans_as_tuples.append((span_id, span_data))
+        sorted_spans = sorted(spans_as_tuples, key=lambda x: x[1].get('start', 0))
     
     # Create boundary points
     boundaries = []

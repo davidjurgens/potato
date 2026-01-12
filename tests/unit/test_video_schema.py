@@ -31,6 +31,7 @@ class TestVideoLayout:
         """Test that video layout generates correctly with a URL."""
         scheme = {
             "name": "test_video",
+            "annotation_id": 0,
             "description": "Test Video",
             "annotation_type": "video",
             "video_path": "https://example.com/video.mp4"
@@ -61,6 +62,7 @@ class TestVideoLayout:
         try:
             scheme = {
                 "name": "local_video",
+                "annotation_id": 0,
                 "description": "Local Video Test",
                 "annotation_type": "video",
                 "video_path": temp_path
@@ -150,6 +152,7 @@ class TestVideoLayout:
         """Test custom width and height."""
         scheme = {
             "name": "custom_size",
+            "annotation_id": 0,
             "description": "Custom Size Test",
             "annotation_type": "video",
             "video_path": "https://example.com/video.mp4",
@@ -168,6 +171,7 @@ class TestVideoLayout:
         """Test custom fallback text."""
         scheme = {
             "name": "fallback_test",
+            "annotation_id": 0,
             "description": "Fallback Test",
             "annotation_type": "video",
             "video_path": "https://example.com/video.mp4",
@@ -197,6 +201,7 @@ class TestVideoLayout:
         """Test that HTML in description is escaped."""
         scheme = {
             "name": "xss_test",
+            "annotation_id": 0,
             "description": "<script>alert('xss')</script>",
             "annotation_type": "video",
             "video_path": "https://example.com/video.mp4"
@@ -416,6 +421,7 @@ class TestVideoRegistryIntegration:
 
         scheme = {
             "name": "registry_test",
+            "annotation_id": 0,
             "description": "Registry Test",
             "annotation_type": "video",
             "video_path": "https://example.com/video.mp4"

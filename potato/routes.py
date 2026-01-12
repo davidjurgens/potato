@@ -54,8 +54,8 @@ from potato.flask_server import (
 from potato.admin import admin_dashboard
 
 # Import span color functions
-from ai.ai_help_wrapper import generate_ai_help_html
-from ai.ai_prompt import get_ai_prompt
+from potato.ai.ai_help_wrapper import generate_ai_help_html
+from potato.ai.ai_prompt import get_ai_prompt
 from potato.server_utils.schemas.span import get_span_color
 
 # Import annotation history
@@ -1753,16 +1753,22 @@ def get_span_data(instance_id):
         logger.error(f"Error getting instance text: {e}")
         return jsonify({"error": f"Instance not found: {instance_id}"}), 404
 
-    # Get span annotations
+    # Get span annotations (returns a list of SpanAnnotation objects)
     spans = get_span_annotations_for_user_on(username, instance_id)
     logger.debug(f"Found {len(spans)} spans")
 
     # Convert to frontend-friendly format
     span_data = []
-    print("spansspansspans", spans)
-    for span_id, span_info in spans.items():
-        
-        color = get_span_color(span_info["schema"], span_info["name"])
+    for span in spans:
+        # span is a SpanAnnotation object
+        span_schema = span.get_schema() if hasattr(span, 'get_schema') else span.schema
+        span_name = span.get_name() if hasattr(span, 'get_name') else span.name
+        span_title = span.get_title() if hasattr(span, 'get_title') else getattr(span, 'title', span_name)
+        span_start = span.get_start() if hasattr(span, 'get_start') else span.start
+        span_end = span.get_end() if hasattr(span, 'get_end') else span.end
+        span_id = span.get_id() if hasattr(span, 'get_id') else getattr(span, 'id', None)
+
+        color = get_span_color(span_schema, span_name)
         hex_color = None
         if color:
             if isinstance(color, str) and color.startswith("(") and color.endswith(")"):
@@ -1775,15 +1781,15 @@ def get_span_data(instance_id):
                     hex_color = "#f0f0f0"
             else:
                 hex_color = color
-        
+
         span_data.append({
             'id': span_id,
-            'schema': span_info["schema"],
-            'label': span_info["name"],
-            'title': span_info["title"],
-            'start': span_info["start"],
-            'end': span_info["end"],
-            'text': original_text[span_info["start"]:span_info["end"]],
+            'schema': span_schema,
+            'label': span_name,
+            'title': span_title,
+            'start': span_start,
+            'end': span_end,
+            'text': original_text[span_start:span_end] if span_start < len(original_text) and span_end <= len(original_text) else "",
             'color': hex_color
         })
     
@@ -1970,7 +1976,9 @@ def update_instance():
                         end_offset = start_offset
                         logger.warning(f"Corrected end offset {sv['end']} to match start offset {start_offset}")
 
-                    span = SpanAnnotation(schema_name, sv["name"], sv.get("title", sv["name"]), start_offset, end_offset, sv["span_id"])
+                    # Get span_id or generate one if not provided
+                    span_id = sv.get("span_id") or sv.get("id") or f"{schema_name}_{sv['name']}_{start_offset}_{end_offset}"
+                    span = SpanAnnotation(schema_name, sv["name"], sv.get("title", sv["name"]), start_offset, end_offset, span_id)
                     
                     value = sv.get("value")
 

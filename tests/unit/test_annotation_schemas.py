@@ -35,6 +35,7 @@ class TestAnnotationSchemas:
         """Test likert scale schema HTML generation"""
         schema = {
             "annotation_type": "likert",
+            "annotation_id": 0,
             "name": "awesomeness",
             "description": "How awesome is this?",
             "min_label": "Not Awesome",
@@ -62,6 +63,7 @@ class TestAnnotationSchemas:
         """Test multiselect (checkbox) schema HTML generation"""
         schema = {
             "annotation_type": "multiselect",
+            "annotation_id": 0,
             "name": "favorite_color",
             "description": "What colors are mentioned in the text?",
             "labels": ["blue", "maize", "green", "white"],
@@ -89,6 +91,7 @@ class TestAnnotationSchemas:
         """Test slider schema HTML generation"""
         schema = {
             "annotation_type": "slider",
+            "annotation_id": 0,
             "name": "awesomeness",
             "description": "How awesome is this?",
             "min_value": 0,
@@ -113,6 +116,7 @@ class TestAnnotationSchemas:
         """Test span annotation schema HTML generation"""
         schema = {
             "annotation_type": "span",
+            "annotation_id": 0,
             "name": "certainty",
             "description": "Highlight which phrases make the sentence more or less certain",
             "labels": ["certain", "uncertain"],
@@ -137,6 +141,7 @@ class TestAnnotationSchemas:
         """Test radio button schema HTML generation"""
         schema = {
             "annotation_type": "radio",
+            "annotation_id": 0,
             "name": "sentiment",
             "description": "What is the sentiment of this text?",
             "labels": ["positive", "negative", "neutral"],
@@ -163,6 +168,7 @@ class TestAnnotationSchemas:
         """Test text input schema HTML generation"""
         schema = {
             "annotation_type": "text",
+            "annotation_id": 0,
             "name": "explanation",
             "description": "Please explain your reasoning"
         }
@@ -181,6 +187,7 @@ class TestAnnotationSchemas:
         """Test multirate schema HTML generation"""
         schema = {
             "annotation_type": "multirate",
+            "annotation_id": 0,
             "name": "quality_ratings",
             "description": "Rate the quality of different aspects",
             "labels": ["grammar", "clarity", "relevance"],
@@ -203,6 +210,7 @@ class TestAnnotationSchemas:
         """Test select dropdown schema HTML generation"""
         schema = {
             "annotation_type": "select",
+            "annotation_id": 0,
             "name": "category",
             "description": "Select the category",
             "labels": ["news", "opinion", "review", "other"]
@@ -225,6 +233,7 @@ class TestAnnotationSchemas:
         """Test number input schema HTML generation"""
         schema = {
             "annotation_type": "number",
+            "annotation_id": 0,
             "name": "score",
             "description": "Rate from 1-10",
             "min_value": 1,
@@ -247,6 +256,7 @@ class TestAnnotationSchemas:
         """Test pure display schema HTML generation"""
         schema = {
             "annotation_type": "pure_display",
+            "annotation_id": 0,
             "name": "information",
             "description": "This is informational text only"
         }
@@ -276,6 +286,7 @@ class TestAnnotationSchemas:
         # Test schema missing name
         incomplete_schema = {
             "annotation_type": "likert",
+            "annotation_id": 0,
             "description": "Test description"
         }
 
@@ -293,6 +304,7 @@ class TestAnnotationSchemas:
         # Test likert with sequential key binding
         likert_schema = {
             "annotation_type": "likert",
+            "annotation_id": 0,
             "name": "test",
             "description": "Test",
             "size": 5,
@@ -309,6 +321,7 @@ class TestAnnotationSchemas:
         # Test multiselect with sequential key binding
         multiselect_schema = {
             "annotation_type": "multiselect",
+            "annotation_id": 0,
             "name": "test",
             "description": "Test",
             "labels": ["a", "b", "c"],

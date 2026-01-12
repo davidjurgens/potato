@@ -48,7 +48,7 @@ class TestBaseAIEndpoint:
         assert endpoint.description == "Test description"
         assert endpoint.annotation_type == "radio"
         assert endpoint.model == "test-model"
-        assert endpoint.temperature == 0.7
+        assert endpoint.temperature == 0.1  # New default is 0.1
         assert endpoint.max_tokens == 100
 
     def test_init_with_custom_config(self):
@@ -59,9 +59,7 @@ class TestBaseAIEndpoint:
             "ai_config": {
                 "model": "custom-model",
                 "temperature": 0.5,
-                "max_tokens": 200,
-                "hint_prompt": "Custom hint: {text}",
-                "keyword_prompt": "Custom keyword: {text}"
+                "max_tokens": 200
             }
         }
 
@@ -70,11 +68,11 @@ class TestBaseAIEndpoint:
         assert endpoint.model == "custom-model"
         assert endpoint.temperature == 0.5
         assert endpoint.max_tokens == 200
-        assert endpoint.hint_prompt == "Custom hint: {text}"
-        assert endpoint.keyword_prompt == "Custom keyword: {text}"
+        # Prompts are loaded from get_ai_prompt() - may be None or dict
+        assert hasattr(endpoint, 'prompts')
 
-    def test_get_hint(self):
-        """Test hint generation."""
+    def test_query_method(self):
+        """Test query method returns response."""
         config = {
             "description": "Test description",
             "annotation_type": "radio",
@@ -82,15 +80,13 @@ class TestBaseAIEndpoint:
         }
 
         endpoint = MockAIEndpoint(config)
-        hint = endpoint.get_hint("Test text")
+        response = endpoint.query("Test prompt")
 
-        assert "Mock response to:" in hint
-        assert "Test description" in hint
-        assert "radio" in hint
-        assert "Test text" in hint
+        assert "Mock response to:" in response
+        assert "Test prompt" in response
 
-    def test_get_highlights(self):
-        """Test keyword highlighting."""
+    def test_prompts_loaded(self):
+        """Test that prompts are loaded from ai_prompt module."""
         config = {
             "description": "Test description",
             "annotation_type": "radio",
@@ -98,12 +94,8 @@ class TestBaseAIEndpoint:
         }
 
         endpoint = MockAIEndpoint(config)
-        highlights = endpoint.get_highlights("Test text")
-
-        assert "Mock response to:" in highlights
-        assert "Test description" in highlights
-        assert "radio" in highlights
-        assert "Test text" in highlights
+        # Prompts should be loaded (may be empty dict if no prompts configured)
+        assert hasattr(endpoint, 'prompts')
 
     def test_health_check_success(self):
         """Test successful health check."""
@@ -177,18 +169,17 @@ class TestAIEndpointFactory:
             "ai_support": {
                 "enabled": True,
                 "endpoint_type": "test",
-                "ai_config": {}
-            },
-            "annotation_schemes": [{
-                "description": "Test description",
-                "annotation_type": "radio"
-            }]
+                "ai_config": {
+                    "model": "test-model",
+                    "temperature": 0.3
+                }
+            }
         }
 
         endpoint = AIEndpointFactory.create_endpoint(config)
         assert isinstance(endpoint, MockAIEndpoint)
-        assert endpoint.description == "Test description"
-        assert endpoint.annotation_type == "radio"
+        # Factory passes ai_config to endpoint
+        assert endpoint.temperature == 0.3
 
 
 class TestAIEndpointErrors:

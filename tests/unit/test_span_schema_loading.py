@@ -20,6 +20,7 @@ class TestSpanSchemaLoading:
         # Test schema similar to the user's config
         schema = {
             "annotation_type": "span",
+            "annotation_id": 0,
             "name": "emotion",
             "description": "Mark the emotion spans in the text.",
             "labels": [

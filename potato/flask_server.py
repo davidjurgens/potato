@@ -85,7 +85,10 @@ from potato.server_utils.prolific_apis import ProlificStudy
 from potato.server_utils.json import easy_json
 
 # This allows us to create an AI endpoint for the system to interact with as needed (if configured)
-from ai.ai_endpoint import get_ai_endpoint
+from potato.ai.ai_endpoint import get_ai_endpoint
+
+# AI cache manager for caching AI responses
+from potato.ai.ai_cache import init_ai_cache_manager, get_ai_cache_manager
 
 # Initialize Flask app
 app = Flask(__name__)
