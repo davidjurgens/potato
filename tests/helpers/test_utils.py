@@ -404,3 +404,98 @@ def copy_config_to_test_dir(config_path: str, test_name: str = None) -> Tuple[st
         yaml.dump(config_data, f)
 
     return new_config_path, test_dir
+
+
+def create_image_annotation_config(test_dir: str, **kwargs) -> Tuple[str, str]:
+    """
+    Create a test configuration with image annotation support.
+
+    Args:
+        test_dir: Directory to create the config in
+        **kwargs: Additional config options
+
+    Returns:
+        Tuple of (config_file_path, data_file_path)
+    """
+    # Create test data with image URLs
+    test_data = [
+        {"id": "img_001", "image_url": "https://picsum.photos/id/1011/800/600"},
+        {"id": "img_002", "image_url": "https://picsum.photos/id/1025/800/600"},
+        {"id": "img_003", "image_url": "https://picsum.photos/id/1035/800/600"}
+    ]
+
+    data_file = create_test_data_file(test_dir, test_data, filename="image_data.jsonl")
+
+    # Create image annotation scheme
+    annotation_schemes = [
+        {
+            "annotation_type": "image_annotation",
+            "name": "object_detection",
+            "description": "Draw boxes around objects in the image",
+            "tools": ["bbox", "polygon"],
+            "labels": [
+                {"name": "person", "color": "#FF0000", "key_value": "1"},
+                {"name": "animal", "color": "#00FF00", "key_value": "2"},
+                {"name": "vehicle", "color": "#0000FF", "key_value": "3"}
+            ],
+            "zoom_enabled": True,
+            "pan_enabled": True
+        }
+    ]
+
+    config_file = create_test_config(
+        test_dir,
+        annotation_schemes,
+        data_files=[data_file],
+        item_properties={"id_key": "id", "text_key": "image_url"},
+        **kwargs
+    )
+
+    return config_file, data_file
+
+
+def create_audio_annotation_config(test_dir: str, **kwargs) -> Tuple[str, str]:
+    """
+    Create a test configuration with audio annotation support.
+
+    Args:
+        test_dir: Directory to create the config in
+        **kwargs: Additional config options
+
+    Returns:
+        Tuple of (config_file_path, data_file_path)
+    """
+    # Create test data with audio URLs
+    test_data = [
+        {"id": "audio_001", "audio_url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"},
+        {"id": "audio_002", "audio_url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"}
+    ]
+
+    data_file = create_test_data_file(test_dir, test_data, filename="audio_data.jsonl")
+
+    # Create audio annotation scheme
+    annotation_schemes = [
+        {
+            "annotation_type": "audio_annotation",
+            "name": "audio_segmentation",
+            "description": "Segment the audio by content type",
+            "mode": "label",
+            "labels": [
+                {"name": "speech", "color": "#4ECDC4", "key_value": "1"},
+                {"name": "music", "color": "#FF6B6B", "key_value": "2"},
+                {"name": "silence", "color": "#95A5A6", "key_value": "3"}
+            ],
+            "zoom_enabled": True,
+            "playback_rate_control": True
+        }
+    ]
+
+    config_file = create_test_config(
+        test_dir,
+        annotation_schemes,
+        data_files=[data_file],
+        item_properties={"id_key": "id", "text_key": "audio_url"},
+        **kwargs
+    )
+
+    return config_file, data_file

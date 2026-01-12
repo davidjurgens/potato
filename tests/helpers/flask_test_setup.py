@@ -77,10 +77,8 @@ class FlaskTestServer:
                 if 'secret_key' not in config:
                     config['secret_key'] = 'test-secret-key'
 
-                # Write to temp YAML file
-                fd, temp_path = tempfile.mkstemp(suffix='.yaml', prefix='flasktest_config_')
-                with os.fdopen(fd, 'w') as f:
-                    yaml.dump(config, f)
+                # Write to temp YAML file within the project directory
+                temp_path = self._create_temp_config_file(config, 'flasktest_config_')
                 self.temp_config_file = temp_path
                 self.config = temp_path
             elif isinstance(config, str):
@@ -104,9 +102,7 @@ class FlaskTestServer:
                 if 'secret_key' not in config_data:
                     config_data['secret_key'] = 'test-secret-key'
 
-                fd, temp_path = tempfile.mkstemp(suffix='.yaml', prefix='flasktest_config_')
-                with os.fdopen(fd, 'w') as f:
-                    yaml.dump(config_data, f)
+                temp_path = self._create_temp_config_file(config_data, 'flasktest_config_')
                 self.temp_config_file = temp_path
                 self.config = temp_path
             else:
@@ -125,6 +121,35 @@ class FlaskTestServer:
         s.close()
         return port
 
+    def _create_temp_config_file(self, config_data, prefix):
+        """Create a temporary config file within the project directory."""
+        # Use the new test utilities for secure file creation
+        from tests.helpers.test_utils import create_test_directory, create_test_config
+
+        # Create a test directory within tests/output/
+        test_dir = create_test_directory(f"flasktest_{prefix}")
+
+        # Create a minimal annotation scheme if none provided
+        if 'annotation_schemes' not in config_data or not config_data['annotation_schemes']:
+            config_data['annotation_schemes'] = [
+                {
+                    "name": "test_scheme",
+                    "annotation_type": "radio",
+                    "labels": ["option_1", "option_2"],
+                    "description": "Test annotation scheme"
+                }
+            ]
+
+        # Create the config file using the test utilities
+        config_file = create_test_config(
+            test_dir,
+            config_data['annotation_schemes'],
+            data_files=config_data.get('data_files', []),
+            **{k: v for k, v in config_data.items() if k not in ['annotation_schemes', 'data_files']}
+        )
+
+        return config_file
+
     def start(self):
         """Start the Flask server in a separate thread."""
         return self._start_server()
@@ -140,7 +165,6 @@ class FlaskTestServer:
             # This is the old pattern - we need to handle config file creation
             if self.config is None:
                 # Create a temporary config file in the config_dir
-                import tempfile
                 config_file = os.path.join(config_dir, 'test_config.yaml')
                 # For now, we'll use a simple config - this can be enhanced if needed
                 simple_config = {
@@ -277,7 +301,7 @@ class FlaskTestServer:
                 from potato.user_state_management import init_user_state_manager, clear_user_state_manager
                 from potato.item_state_management import init_item_state_manager, clear_item_state_manager
                 from potato.flask_server import load_all_data
-                from potato.authentificaton import UserAuthenticator
+                from potato.authentication import UserAuthenticator
 
                 # Clear any existing managers (for testing)
                 clear_user_state_manager()
@@ -306,6 +330,10 @@ class FlaskTestServer:
                     FileSystemLoader(real_templates_dir),
                     FileSystemLoader(generated_templates_dir)
                 ])
+
+                # Register custom Jinja2 filters (including sanitize_html)
+                from potato.server_utils.html_sanitizer import register_jinja_filters
+                register_jinja_filters(app)
 
                 # Configure the app
                 if config.get("persist_sessions", False):
