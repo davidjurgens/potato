@@ -20,6 +20,9 @@
     <!-- Image Annotation Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='image-annotation.css') }}">
 
+    <!-- Audio Annotation Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='audio-annotation.css') }}">
+
     <!-- jQuery (required for span annotation) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
 </head>
@@ -187,6 +190,11 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
     <!-- Image annotation manager -->
     <script src="{{ url_for('static', filename='image-annotation.js') }}?v=1"></script>
+
+    <!-- Peaks.js for audio annotation (loaded from CDN) -->
+    <script src="https://unpkg.com/peaks.js@3/dist/peaks.js"></script>
+    <!-- Audio annotation manager -->
+    <script src="{{ url_for('static', filename='audio-annotation.js') }}?v=1"></script>
 
     <!-- Instance height limit functionality -->
     <script>

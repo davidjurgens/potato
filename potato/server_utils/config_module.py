@@ -258,7 +258,7 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
 
     # Validate annotation_type
     # Note: Keep in sync with potato.server_utils.schemas.registry
-    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'select', 'number', 'multirate', 'pure_display', 'video', 'image_annotation']
+    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'select', 'number', 'multirate', 'pure_display', 'video', 'image_annotation', 'audio_annotation']
     if scheme['annotation_type'] not in valid_types:
         raise ConfigValidationError(f"{path}.annotation_type must be one of: {', '.join(valid_types)}")
 
@@ -350,6 +350,40 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
         if 'max_annotations' in scheme and scheme['max_annotations'] is not None:
             if not isinstance(scheme['max_annotations'], int) or scheme['max_annotations'] < 1:
                 raise ConfigValidationError(f"{path}.max_annotations must be a positive integer or null")
+
+    elif annotation_type == 'audio_annotation':
+        # Validate mode
+        valid_modes = ['label', 'questions', 'both']
+        mode = scheme.get('mode', 'label')
+        if mode not in valid_modes:
+            raise ConfigValidationError(f"{path}.mode must be one of: {valid_modes}")
+
+        # Validate labels for label/both modes
+        if mode in ['label', 'both']:
+            if 'labels' not in scheme:
+                raise ConfigValidationError(f"{path} missing 'labels' field for audio_annotation mode '{mode}'")
+            if not isinstance(scheme['labels'], list):
+                raise ConfigValidationError(f"{path}.labels must be a list")
+            if not scheme['labels']:
+                raise ConfigValidationError(f"{path}.labels cannot be empty for mode '{mode}'")
+
+        # Validate segment_schemes for questions/both modes
+        if mode in ['questions', 'both']:
+            if 'segment_schemes' not in scheme:
+                raise ConfigValidationError(f"{path} missing 'segment_schemes' field for audio_annotation mode '{mode}'")
+            if not isinstance(scheme['segment_schemes'], list):
+                raise ConfigValidationError(f"{path}.segment_schemes must be a list")
+            if not scheme['segment_schemes']:
+                raise ConfigValidationError(f"{path}.segment_schemes cannot be empty for mode '{mode}'")
+
+        # Validate optional numeric fields
+        if 'min_segments' in scheme:
+            if not isinstance(scheme['min_segments'], int) or scheme['min_segments'] < 0:
+                raise ConfigValidationError(f"{path}.min_segments must be a non-negative integer")
+
+        if 'max_segments' in scheme and scheme['max_segments'] is not None:
+            if not isinstance(scheme['max_segments'], int) or scheme['max_segments'] < 1:
+                raise ConfigValidationError(f"{path}.max_segments must be a positive integer or null")
 
 
 def validate_data_directory_config(config_data: Dict[str, Any]) -> None:

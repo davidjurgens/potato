@@ -1,0 +1,460 @@
+/**
+ * Audio Annotation Styles
+ *
+ * Styles for the audio annotation interface including:
+ * - Waveform container
+ * - Toolbar and controls
+ * - Segment list
+ * - Questions panel
+ */
+
+/* ==================== Container ==================== */
+
+.audio-annotation-container {
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: var(--radius, 0.5rem);
+    background: var(--card, #ffffff);
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+/* ==================== Toolbar ==================== */
+
+.audio-annotation-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.75rem;
+    background: var(--muted, #f9fafb);
+    border-radius: var(--radius, 0.5rem);
+    margin-bottom: 1rem;
+}
+
+.audio-annotation-toolbar > div {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.tool-group-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--muted-foreground, #6b7280);
+    margin-right: 0.25rem;
+}
+
+/* Playback controls */
+.playback-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.playback-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: var(--radius, 0.375rem);
+    background: var(--background, #ffffff);
+    color: var(--foreground, #1f2937);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.playback-btn:hover {
+    background: var(--accent, #f3f4f6);
+    border-color: var(--primary, #3b82f6);
+}
+
+.playback-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.time-display {
+    font-size: 0.75rem;
+    font-family: monospace;
+    color: var(--muted-foreground, #6b7280);
+    padding: 0 0.5rem;
+}
+
+/* Playback rate control */
+.playback-rate-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.playback-rate-select {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: var(--radius, 0.375rem);
+    background: var(--background, #ffffff);
+    cursor: pointer;
+}
+
+/* Label selector */
+.label-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.label-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: var(--radius, 0.375rem);
+    background: var(--background, #ffffff);
+    color: var(--foreground, #1f2937);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.label-btn:hover {
+    background: var(--accent, #f3f4f6);
+}
+
+.label-btn.active {
+    border-color: var(--label-color, var(--primary, #3b82f6));
+    background: color-mix(in srgb, var(--label-color, var(--primary, #3b82f6)) 15%, white);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--label-color, var(--primary, #3b82f6)) 25%, transparent);
+}
+
+.label-color-dot {
+    width: 0.625rem;
+    height: 0.625rem;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* Zoom controls */
+.zoom-group {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.zoom-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2rem;
+    height: 2rem;
+    padding: 0 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: var(--radius, 0.375rem);
+    background: var(--background, #ffffff);
+    color: var(--foreground, #1f2937);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.zoom-btn:hover {
+    background: var(--accent, #f3f4f6);
+    border-color: var(--primary, #3b82f6);
+}
+
+/* Segment controls */
+.segment-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.segment-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: var(--radius, 0.375rem);
+    background: var(--background, #ffffff);
+    color: var(--foreground, #1f2937);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.segment-btn:hover:not(:disabled) {
+    background: var(--accent, #f3f4f6);
+    border-color: var(--primary, #3b82f6);
+}
+
+.segment-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.segment-btn.delete-btn:hover:not(:disabled) {
+    background: #fef2f2;
+    border-color: #ef4444;
+    color: #ef4444;
+}
+
+/* Segment count */
+.count-group {
+    margin-left: auto;
+}
+
+.segment-count {
+    font-size: 0.75rem;
+    color: var(--muted-foreground, #6b7280);
+}
+
+.count-value {
+    font-weight: 600;
+    color: var(--foreground, #1f2937);
+}
+
+/* ==================== Waveform ==================== */
+
+.waveform-wrapper {
+    margin-bottom: 1rem;
+}
+
+.waveform-container {
+    height: 200px;
+    background: var(--muted, #f9fafb);
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: var(--radius, 0.5rem);
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+}
+
+.overview-container {
+    height: 50px;
+    background: var(--muted, #f9fafb);
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: var(--radius, 0.5rem);
+    overflow: hidden;
+}
+
+/* ==================== Segment List ==================== */
+
+.segment-list-container {
+    margin-top: 1rem;
+}
+
+.segment-list-container h4 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--foreground, #1f2937);
+    margin-bottom: 0.75rem;
+}
+
+.segment-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.segment-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: var(--background, #ffffff);
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: var(--radius, 0.5rem);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.segment-item:hover {
+    background: var(--accent, #f3f4f6);
+}
+
+.segment-item.active {
+    border-color: var(--primary, #3b82f6);
+    background: color-mix(in srgb, var(--primary, #3b82f6) 5%, white);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary, #3b82f6) 15%, transparent);
+}
+
+.segment-color {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 0.25rem;
+    flex-shrink: 0;
+}
+
+.segment-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.segment-label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--foreground, #1f2937);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.segment-time {
+    display: block;
+    font-size: 0.75rem;
+    font-family: monospace;
+    color: var(--muted-foreground, #6b7280);
+}
+
+.segment-actions {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.segment-play-btn,
+.segment-delete-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--radius, 0.375rem);
+    background: transparent;
+    color: var(--muted-foreground, #6b7280);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.segment-play-btn:hover {
+    background: var(--accent, #f3f4f6);
+    color: var(--primary, #3b82f6);
+    border-color: var(--primary, #3b82f6);
+}
+
+.segment-delete-btn:hover {
+    background: #fef2f2;
+    color: #ef4444;
+    border-color: #ef4444;
+}
+
+/* ==================== Questions Panel ==================== */
+
+.segment-questions-panel {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: var(--muted, #f9fafb);
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: var(--radius, 0.5rem);
+}
+
+.segment-questions-panel h4 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--foreground, #1f2937);
+    margin-bottom: 0.75rem;
+}
+
+.segment-questions-content {
+    /* Content container */
+}
+
+.segment-questions-header {
+    font-size: 0.875rem;
+    color: var(--muted-foreground, #6b7280);
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border, #e5e7eb);
+}
+
+.segment-questions-placeholder {
+    font-size: 0.875rem;
+    color: var(--muted-foreground, #6b7280);
+    font-style: italic;
+}
+
+/* ==================== Empty State ==================== */
+
+.segment-list:empty::before {
+    content: 'No segments yet. Double-click on the waveform or use [ and ] keys to create segments.';
+    display: block;
+    text-align: center;
+    padding: 2rem;
+    font-size: 0.875rem;
+    color: var(--muted-foreground, #6b7280);
+}
+
+/* ==================== Responsive ==================== */
+
+@media (max-width: 768px) {
+    .audio-annotation-toolbar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .audio-annotation-toolbar > div {
+        width: 100%;
+    }
+
+    .label-group {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .count-group {
+        margin-left: 0;
+    }
+
+    .waveform-container {
+        height: 150px;
+    }
+
+    .overview-container {
+        height: 40px;
+    }
+}
+
+/* ==================== Peaks.js Overrides ==================== */
+
+/* Segment styling */
+.peaks-segment {
+    opacity: 0.6;
+}
+
+.peaks-segment:hover {
+    opacity: 0.8;
+}
+
+.peaks-segment.selected {
+    opacity: 0.9;
+}
+
+/* Time axis */
+.peaks-axis {
+    font-family: inherit;
+}
+
+/* Handle markers */
+.peaks-handle {
+    cursor: ew-resize;
+}
+
+/* Overview highlight */
+.peaks-overview-highlight {
+    stroke: var(--primary, #3b82f6);
+    stroke-width: 2;
+    fill: none;
+}

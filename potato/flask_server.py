@@ -580,10 +580,22 @@ def load_phase_data(config: dict) -> None:
             # Handle new format with annotation_schemes directly in phase
             if "annotation_schemes" in phase:
                 phase_labeling_schemes = phase["annotation_schemes"]
-                # Determine phase type from the first annotation scheme
+                # Determine phase type by checking all annotation schemes
                 if phase_labeling_schemes:
-                    first_scheme = phase_labeling_schemes[0]
-                    if first_scheme.get("annotation_type") == "pure_display":
+                    display_only_count = sum(
+                        1 for s in phase_labeling_schemes
+                        if s.get("annotation_type") == "pure_display"
+                    )
+                    interactive_count = len(phase_labeling_schemes) - display_only_count
+
+                    if display_only_count > 0 and interactive_count > 0:
+                        logger.warning(
+                            f"Phase '{phase_name}' has mixed scheme types: "
+                            f"{display_only_count} display-only and {interactive_count} interactive. "
+                            f"Treating as ANNOTATION phase."
+                        )
+                        phase_type = UserPhase.ANNOTATION
+                    elif display_only_count == len(phase_labeling_schemes):
                         phase_type = UserPhase.INSTRUCTIONS
                     else:
                         phase_type = UserPhase.ANNOTATION
@@ -1479,10 +1491,83 @@ def create_app():
         FileSystemLoader(generated_templates_dir)
     ])
 
+    # Register HTML sanitization filters for XSS protection
+    from potato.server_utils.html_sanitizer import register_jinja_filters
+    register_jinja_filters(app)
+
     # Configure the app
     configure_app(app)
 
     return app
+
+
+def _init_waveform_service(config: dict) -> None:
+    """
+    Initialize the WaveformService for audio annotation if the config
+    includes audio_annotation schemes.
+
+    Args:
+        config: The application configuration dictionary
+    """
+    # Check if any audio_annotation schemes are configured
+    has_audio_annotation = False
+    annotation_schemes = config.get('annotation_schemes', [])
+    for scheme in annotation_schemes:
+        if scheme.get('annotation_type') == 'audio_annotation':
+            has_audio_annotation = True
+            break
+
+    if not has_audio_annotation:
+        logger.debug("No audio_annotation schemes found, skipping WaveformService initialization")
+        return
+
+    # Get waveform configuration
+    audio_config = config.get('audio_annotation', {})
+    task_dir = config.get('task_dir', '.')
+
+    # Default cache directory
+    cache_dir = audio_config.get('waveform_cache_dir')
+    if not cache_dir:
+        cache_dir = os.path.join(task_dir, 'waveform_cache')
+
+    # Make cache_dir absolute if relative
+    if not os.path.isabs(cache_dir):
+        cache_dir = os.path.join(task_dir, cache_dir)
+
+    # Get other configuration options
+    look_ahead = audio_config.get('waveform_look_ahead', 5)
+    cache_max_size = audio_config.get('waveform_cache_max_size', 100)
+    client_fallback_max_duration = audio_config.get('client_fallback_max_duration', 1800)
+
+    try:
+        from potato.server_utils.waveform_service import init_waveform_service, get_waveform_service
+
+        waveform_service = init_waveform_service(
+            cache_dir=cache_dir,
+            look_ahead=look_ahead,
+            cache_max_size=cache_max_size,
+            client_fallback_max_duration=client_fallback_max_duration
+        )
+
+        if waveform_service.is_available:
+            logger.info(f"WaveformService initialized with audiowaveform tool (cache: {cache_dir})")
+        else:
+            logger.warning("WaveformService initialized but audiowaveform tool not available. "
+                          "Client-side waveform generation will be used as fallback.")
+
+        # Register cleanup handler
+        import atexit
+        def cleanup_waveform_service():
+            service = get_waveform_service()
+            if service:
+                service.stop_background_precompute()
+                logger.info("WaveformService background precompute stopped")
+        atexit.register(cleanup_waveform_service)
+
+    except Exception as e:
+        logger.error(f"Failed to initialize WaveformService: {e}")
+        logger.warning("Audio annotation will use client-side waveform generation only")
+
 
 def run_server(args):
     """
@@ -1559,6 +1644,9 @@ def run_server(args):
                     watcher.stop()
                     logger.info("Directory watcher stopped")
             atexit.register(cleanup_directory_watcher)
+
+    # Initialize WaveformService for audio annotation if configured
+    _init_waveform_service(config)
 
     # Log password requirement status
     logger.info(f"Password authentication required: {config.get('require_password', True)}")

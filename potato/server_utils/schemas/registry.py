@@ -188,6 +188,7 @@ def _register_builtin_schemas():
     from .pure_display import generate_pure_display_layout
     from .video import generate_video_layout
     from .image_annotation import generate_image_annotation_layout
+    from .audio_annotation import generate_audio_annotation_layout
 
     schemas = [
         SchemaDefinition(
@@ -285,6 +286,14 @@ def _register_builtin_schemas():
             optional_fields=["zoom_enabled", "pan_enabled", "min_annotations", "max_annotations", "freeform_brush_size", "freeform_simplify"],
             supports_keybindings=True,
             description="Image annotation with bounding boxes, polygons, freeform drawing, and landmarks"
+        ),
+        SchemaDefinition(
+            name="audio_annotation",
+            generator=generate_audio_annotation_layout,
+            required_fields=["name", "description"],
+            optional_fields=["mode", "labels", "segment_schemes", "min_segments", "max_segments", "zoom_enabled", "playback_rate_control"],
+            supports_keybindings=True,
+            description="Audio segmentation and annotation with waveform visualization"
         ),
     ]
 
