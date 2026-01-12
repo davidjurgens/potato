@@ -24,3 +24,8 @@ range of features throughout your entire annotation pipeline.
 - [Annotator Stats](annotator_stats.md)
 - [Active Learning Guide](active_learning_guide.md)
 - [Open Sourcing](open_sourcing.md)
+
+## Annotation Types
+
+- [Image Annotation](image_annotation.md) - Bounding boxes, polygons, and landmarks on images
+- [Audio Annotation](audio_annotation.md) - Audio segmentation with waveform visualization
