@@ -1,6 +1,8 @@
 {
     "port": 9001,
 
+
+    "task_dir": "..",
     "server_name": "potato annotator",
 
     "annotation_task_name": "Sentiment Analysis",

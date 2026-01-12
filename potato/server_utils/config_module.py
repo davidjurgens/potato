@@ -273,13 +273,15 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
             raise ConfigValidationError(f"{path}.labels cannot be empty")
 
     elif annotation_type == 'likert':
-        required_likert_fields = ['min_label', 'max_label', 'size']
-        missing_likert_fields = [field for field in required_likert_fields if field not in scheme]
-        if missing_likert_fields:
-            raise ConfigValidationError(f"{path} missing required fields for likert: {', '.join(missing_likert_fields)}")
+        # Likert can use labels (falls back to radio) or min_label/max_label/size
+        if 'labels' not in scheme:
+            required_likert_fields = ['min_label', 'max_label', 'size']
+            missing_likert_fields = [field for field in required_likert_fields if field not in scheme]
+            if missing_likert_fields:
+                raise ConfigValidationError(f"{path} missing required fields for likert: {', '.join(missing_likert_fields)}")
 
-        if not isinstance(scheme['size'], int) or scheme['size'] < 2:
-            raise ConfigValidationError(f"{path}.size must be an integer >= 2")
+            if not isinstance(scheme['size'], int) or scheme['size'] < 2:
+                raise ConfigValidationError(f"{path}.size must be an integer >= 2")
 
     elif annotation_type == 'slider':
         # Slider can use labels (falls back to radio) or min_value/max_value

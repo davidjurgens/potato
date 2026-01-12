@@ -1,3 +1,4 @@
+task_dir: ".."
 port: 9001
 server_name: potato annotator
 annotation_task_name: Match findings (Psychology)
