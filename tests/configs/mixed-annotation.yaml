@@ -52,8 +52,9 @@ annotation_schemes:
 - annotation_type: slider
   name: confidence
   description: How confident are you in your assessment?
-  min: 0
-  max: 10
+  min_value: 0
+  max_value: 10
+  starting_value: 5
   step: 1
   min_label: Not Confident
   max_label: Very Confident

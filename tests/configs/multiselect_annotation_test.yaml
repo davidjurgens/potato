@@ -11,7 +11,7 @@ annotation_schemes:
 - annotation_type: multiselect
   name: topics
   description: "Select all topics that apply to this text"
-  options:
+  labels:
   - technology
   - science
   - politics

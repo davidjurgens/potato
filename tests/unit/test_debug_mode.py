@@ -5,81 +5,76 @@ Simple test script to verify debug mode functionality
 
 import sys
 import os
-import tempfile
 import yaml
 from unittest.mock import Mock, patch
 
 # Add the potato directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'potato'))
 
+# Import test utilities
+from tests.helpers.test_utils import create_test_directory, create_test_config, create_test_data_file, cleanup_test_directory
+
+
 def test_debug_mode_config():
     """Test that debug flag is properly stored in config"""
-    from server_utils.config_module import init_config
+    from server_utils.config_module import init_config, config
 
-    # Create a mock args object
-    args = Mock()
-    args.config_file = "test_config.yaml"
-    args.verbose = False
-    args.very_verbose = False
-    args.debug = False
-    args.customjs = False
-    args.customjs_hostname = None
-    args.port = 8080
-    args.require_password = None
+    # Save original cwd
+    original_cwd = os.getcwd()
 
-    # Create a temporary config file
-    config_data = {
-        "annotation_task_name": "Test Task",
-        "port": 8000,  # This should be overridden by command line
-        "require_password": True,  # This should be overridden in debug mode
-        "task_dir": "test_task",
-        "output_annotation_dir": "test_output",
-        "data_files": ["test_data.json"],
-        "item_properties": {
-            "id_key": "id",
-            "text_key": "text"
-        },
-        "annotation_schemes": [
+    # Create test directory and config within project
+    test_dir = create_test_directory("debug_mode_test")
+
+    try:
+        # Create test data file
+        test_data = [
+            {"id": "1", "text": "Test item 1"},
+            {"id": "2", "text": "Test item 2"}
+        ]
+        create_test_data_file(test_dir, test_data)
+
+        # Create test config
+        annotation_schemes = [
             {
                 "name": "test_scheme",
                 "annotation_type": "radio",
                 "labels": ["option_a", "option_b"],
                 "description": "Test scheme for debug mode."
             }
-        ],
-        "alert_time_each_instance": 0
-    }
+        ]
+        temp_config_file = create_test_config(
+            test_dir,
+            annotation_schemes,
+            annotation_task_name="Test Task",
+            require_password=True,  # This should be overridden in debug mode
+        )
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-        yaml.dump(config_data, f)
-        temp_config_file = f.name
+        # Create a mock args object
+        args = Mock()
+        args.config_file = temp_config_file
+        args.verbose = False
+        args.very_verbose = False
+        args.debug = False
+        args.customjs = False
+        args.customjs_hostname = None
+        args.persist_sessions = False
 
-    try:
-        # Mock the file operations
-        with patch('os.path.exists', return_value=True):
-            with patch('os.path.isdir', return_value=False):
-                with patch('yaml.safe_load', return_value=config_data):
-                    with patch('os.chdir'):
-                        # Set the config file path
-                        args.config_file = temp_config_file
+        # Initialize config
+        init_config(args)
 
-                        # Initialize config
-                        init_config(args)
+        # Test that debug flag is set
+        assert config.get("debug") == False, "Debug flag should be False"
+        print("✓ Debug flag properly set in config")
 
-                        # Import config after initialization
-                        from server_utils.config_module import config
-
-                        # Test that debug flag is set
-                        assert config.get("debug") == False, "Debug flag should be False"
-                        print("✓ Debug flag properly set in config")
-
-                        # Test that port is set from config (not overridden yet)
-                        assert config.get("port") == 8000, "Port should be from config initially"
-                        print("✓ Port properly loaded from config")
+        # Test that port is set from config (not overridden yet)
+        assert config.get("port") == 8000, "Port should be from config initially"
+        print("✓ Port properly loaded from config")
 
     finally:
-        # Clean up
-        os.unlink(temp_config_file)
+        # Restore cwd and clean up
+        os.chdir(original_cwd)
+        cleanup_test_directory(test_dir)
+
 
 def test_port_override_logic():
     """Test that port override logic works correctly"""
@@ -95,11 +90,13 @@ def test_port_override_logic():
     assert config["port"] == 8080, "Port should be overridden by command line"
     print("✓ Port override logic works correctly")
 
+
 def test_debug_mode_bypass():
     """Test that debug mode bypasses authentication"""
     # This would require more complex mocking of Flask app
     # For now, just verify the logic exists in the code
     print("✓ Debug mode bypass logic implemented in routes")
+
 
 if __name__ == "__main__":
     print("Testing debug mode functionality...")

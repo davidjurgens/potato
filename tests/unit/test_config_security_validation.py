@@ -246,8 +246,8 @@ class TestYAMLStructureValidation:
         with pytest.raises(ConfigValidationError, match="data_files must be a list"):
             validate_yaml_structure(config)
 
-    def test_empty_data_files(self):
-        """Test that empty data_files list is rejected."""
+    def test_empty_data_files_without_data_directory(self):
+        """Test that empty data_files is rejected when data_directory is not set."""
         config = {
             "item_properties": {
                 "id_key": "id",
@@ -261,8 +261,29 @@ class TestYAMLStructureValidation:
             "annotation_schemes": []
         }
 
-        with pytest.raises(ConfigValidationError, match="data_files cannot be empty"):
+        with pytest.raises(ConfigValidationError, match="Either data_files or data_directory must be configured"):
             validate_yaml_structure(config)
+
+    def test_empty_data_files_with_data_directory(self):
+        """Test that empty data_files is allowed when data_directory is set."""
+        config = {
+            "item_properties": {
+                "id_key": "id",
+                "text_key": "text"
+            },
+            "data_files": [],  # Empty list - allowed because data_directory is set
+            "data_directory": "./data",
+            "task_dir": "output",
+            "output_annotation_dir": "output",
+            "annotation_task_name": "Test Task",
+            "alert_time_each_instance": 1000,
+            "annotation_schemes": [
+                {"annotation_type": "radio", "name": "test", "description": "Test", "labels": ["a", "b"]}
+            ]
+        }
+
+        # Should not raise - data_directory provides the data source
+        validate_yaml_structure(config)
 
 
 class TestAnnotationSchemeValidation:
@@ -300,8 +321,9 @@ class TestAnnotationSchemeValidation:
             "annotation_type": "slider",
             "name": "confidence",
             "description": "Rate confidence",
-            "min": 0,
-            "max": 10
+            "min_value": 0,
+            "max_value": 10,
+            "starting_value": 5
         }
 
         # Should not raise any exceptions
@@ -361,11 +383,12 @@ class TestAnnotationSchemeValidation:
             "annotation_type": "slider",
             "name": "confidence",
             "description": "Rate confidence",
-            "min": 10,
-            "max": 5  # min >= max
+            "min_value": 10,
+            "max_value": 5,  # min >= max
+            "starting_value": 7
         }
 
-        with pytest.raises(ConfigValidationError, match="min must be less than max"):
+        with pytest.raises(ConfigValidationError, match="min_value must be less than max_value"):
             validate_single_annotation_scheme(scheme, "test_scheme")
 
 
@@ -457,11 +480,11 @@ class TestFilePathValidation:
         temp_dir = tempfile.mkdtemp()
 
         # Create project structure
-        os.makedirs(os.path.join(temp_dir, "data"))
-        os.makedirs(os.path.join(temp_dir, "output"))
+        os.makedirs(os.path.join(temp_dir, "output", "data"))
 
-        # Create test data file
-        data_file = os.path.join(temp_dir, "data", "test.json")
+        # Create test data file (in output/data/ because validate_file_paths
+        # resolves paths relative to task_dir which is "output")
+        data_file = os.path.join(temp_dir, "output", "data", "test.json")
         with open(data_file, 'w') as f:
             f.write('{"test": "data"}')
 

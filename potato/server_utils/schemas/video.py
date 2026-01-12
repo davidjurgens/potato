@@ -49,6 +49,19 @@ def generate_video_layout(annotation_scheme):
     """
     return safe_generate_layout(annotation_scheme, _generate_video_layout_internal)
 
+def _is_url(path: str) -> bool:
+    """
+    Check if a path is a URL.
+
+    Args:
+        path: The path to check
+
+    Returns:
+        bool: True if path is a URL, False otherwise
+    """
+    return path.startswith(('http://', 'https://', '//', 'data:'))
+
+
 def _generate_video_layout_internal(annotation_scheme):
     """
     Internal function to generate video layout after validation.
@@ -61,10 +74,13 @@ def _generate_video_layout_internal(annotation_scheme):
         logger.error(error_msg)
         raise ValueError(error_msg)
 
-    if not os.path.exists(annotation_scheme["video_path"]):
-        error_msg = f"Video file not found: {annotation_scheme['video_path']}"
-        logger.error(error_msg)
-        raise ValueError(error_msg)
+    video_path = annotation_scheme["video_path"]
+
+    # Only check file existence for local paths, not URLs
+    if not _is_url(video_path) and not os.path.exists(video_path):
+        # Log a warning but don't fail - the file might be served from a different location
+        logger.warning(f"Video file not found locally: {video_path}. "
+                      f"Assuming it will be served from a web-accessible location.")
 
     # Initialize form wrapper
     schematic = f"""

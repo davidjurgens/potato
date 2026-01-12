@@ -11,7 +11,7 @@ annotation_schemes:
 - annotation_type: radio
   name: sentiment
   description: "What is the sentiment of this text?"
-  options:
+  labels:
   - positive
   - negative
   - neutral

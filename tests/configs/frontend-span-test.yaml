@@ -4,10 +4,10 @@
 annotation_task_name: "Frontend Span Integration Test"
 annotation_task_description: "Testing the new frontend-driven span annotation system with mixed annotation types"
 
-# Required fields for config validation
+# Required fields for config validation - use absolute paths within project directory
 task_dir: "tests/output/frontend-span-test"
 output_annotation_dir: "tests/output/frontend-span-test/annotation_output"
-data_files: ["../data/frontend_span_test_data.json"]
+data_files: ["tests/data/frontend_span_test_data.json"]
 site_dir: "default"
 item_properties:
   id_key: "id"
@@ -16,7 +16,7 @@ alert_time_each_instance: 10000000
 
 # Data configuration
 data:
-  file_path: "../data/frontend_span_test_data.json"
+  file_path: "tests/data/frontend_span_test_data.json"
   file_type: "json"
 
 # Annotation schemes with multiple types
@@ -48,9 +48,8 @@ annotation_schemes:
   # Slider annotation type
   - name: "confidence"
     annotation_type: "slider"
-    min: 0
-    max: 100
-    default: 50
+    min_value: 0
+    max_value: 100
     starting_value: 50
     description: "Confidence in your annotation"
     required: false

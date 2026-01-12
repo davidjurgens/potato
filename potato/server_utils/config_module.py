@@ -166,8 +166,35 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
     Raises:
         ConfigValidationError: If annotation schemes are invalid
     """
+    has_top_level = 'annotation_schemes' in config_data
+    has_phases = 'phases' in config_data and config_data['phases']
+
+    # Check for conflicting annotation_schemes locations
+    if has_top_level and has_phases:
+        # Check if any phase also has annotation_schemes
+        phases = config_data['phases']
+        phases_with_schemes = []
+        if isinstance(phases, list):
+            phases_with_schemes = [
+                phase.get('name', f'phase[{i}]')
+                for i, phase in enumerate(phases)
+                if 'annotation_schemes' in phase
+            ]
+        elif isinstance(phases, dict):
+            phases_with_schemes = [
+                name for name, phase in phases.items()
+                if name != 'order' and isinstance(phase, dict) and 'annotation_schemes' in phase
+            ]
+
+        if phases_with_schemes:
+            raise ConfigValidationError(
+                f"Configuration has both top-level 'annotation_schemes' and phase-level "
+                f"'annotation_schemes' in: {', '.join(phases_with_schemes)}. "
+                f"Use only one location to avoid confusion."
+            )
+
     # Check for annotation schemes in different formats
-    if 'annotation_schemes' in config_data:
+    if has_top_level:
         schemes = config_data['annotation_schemes']
         if not isinstance(schemes, list):
             raise ConfigValidationError("annotation_schemes must be a list")
@@ -230,7 +257,8 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
         raise ConfigValidationError(f"{path} missing required fields: {', '.join(missing_fields)}")
 
     # Validate annotation_type
-    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'select', 'number', 'multirate']
+    # Note: Keep in sync with potato.server_utils.schemas.registry
+    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'select', 'number', 'multirate', 'pure_display', 'video']
     if scheme['annotation_type'] not in valid_types:
         raise ConfigValidationError(f"{path}.annotation_type must be one of: {', '.join(valid_types)}")
 
@@ -254,15 +282,17 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
             raise ConfigValidationError(f"{path}.size must be an integer >= 2")
 
     elif annotation_type == 'slider':
-        required_slider_fields = ['min', 'max']
-        missing_slider_fields = [field for field in required_slider_fields if field not in scheme]
-        if missing_slider_fields:
-            raise ConfigValidationError(f"{path} missing required fields for slider: {', '.join(missing_slider_fields)}")
+        # Slider can use labels (falls back to radio) or min_value/max_value
+        if 'labels' not in scheme:
+            required_slider_fields = ['min_value', 'max_value', 'starting_value']
+            missing_slider_fields = [field for field in required_slider_fields if field not in scheme]
+            if missing_slider_fields:
+                raise ConfigValidationError(f"{path} missing required fields for slider: {', '.join(missing_slider_fields)}")
 
-        if not isinstance(scheme['min'], (int, float)) or not isinstance(scheme['max'], (int, float)):
-            raise ConfigValidationError(f"{path}.min and max must be numbers")
-        if scheme['min'] >= scheme['max']:
-            raise ConfigValidationError(f"{path}.min must be less than max")
+            if not isinstance(scheme['min_value'], (int, float)) or not isinstance(scheme['max_value'], (int, float)):
+                raise ConfigValidationError(f"{path}.min_value and max_value must be numbers")
+            if scheme['min_value'] >= scheme['max_value']:
+                raise ConfigValidationError(f"{path}.min_value must be less than max_value")
 
     elif annotation_type == 'span':
         if 'labels' not in scheme:

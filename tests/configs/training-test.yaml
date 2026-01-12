@@ -12,20 +12,21 @@ alert_time_each_instance: 300
 
 annotation_schemes:
   - name: sentiment
-    type: radio
     annotation_type: radio
+    description: "What is the sentiment of this text?"
     labels: [positive, negative, neutral]
     required: true
   - name: topic
-    type: checkbox
-    annotation_type: checkbox
+    annotation_type: multiselect
+    description: "What topics are discussed?"
     labels: [emotion, politics, technology, sports]
     required: false
   - name: confidence
-    type: likert
     annotation_type: likert
-    min: 1
-    max: 5
+    description: "How confident are you?"
+    min_label: "Not confident"
+    max_label: "Very confident"
+    size: 5
     required: true
 
 training:
