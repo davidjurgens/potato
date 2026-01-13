@@ -51,10 +51,14 @@ def create_test_config(config_dir):
         "annotation_schemes": [
             {
                 "name": "radio_choice",
-                "type": "radio",
-                "labels": ["option_1", "option_2", "option_3"]
+                "annotation_type": "radio",
+                "labels": ["option_1", "option_2", "option_3"],
+                "description": "Test radio choice annotation"
             }
-        ]
+        ],
+        "task_dir": config_dir,
+        "output_annotation_dir": config_dir,
+        "alert_time_each_instance": 10000000
     }
     config_path = os.path.join(config_dir, 'test_config.yaml')
     with open(config_path, 'w') as f:

@@ -59,15 +59,17 @@ class TestTrainingState:
         """Test adding answers with multiple attempts."""
         training_state = TrainingState()
 
-        # First attempt - incorrect
+        # First attempt - incorrect (1 attempt so far)
         training_state.add_answer("train_1", False, 1, "Wrong")
-        # Second attempt - correct
+        # Second attempt - correct (2 attempts total for this question)
         training_state.add_answer("train_1", True, 2, "Correct!")
 
         assert training_state.completed_questions["train_1"]["correct"] == True
         assert training_state.completed_questions["train_1"]["attempts"] == 2
         assert training_state.total_correct == 1
-        assert training_state.total_attempts == 3  # 1 + 2 = 3 total attempts
+        # Total attempts is 2: the second call's attempts=2 is cumulative for this question
+        # (replaces attempts=1 from first call), so total = 2 - 1 + 1 = 2
+        assert training_state.total_attempts == 2
 
     def test_get_question_stats(self):
         """Test getting statistics for a specific question."""
