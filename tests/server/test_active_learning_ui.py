@@ -7,7 +7,6 @@ This module contains Selenium-based UI tests for active learning features, inclu
 import pytest
 
 # Skip server-side active learning tests for fast CI execution
-pytestmark = pytest.mark.skip(reason="Active learning server tests skipped for fast CI - run with pytest -m slow")
 # from tests.helpers.active_learning_test_utils import ... (Selenium helpers to be added as needed)
 
 class TestActiveLearningUI:

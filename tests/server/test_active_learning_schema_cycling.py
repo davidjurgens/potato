@@ -7,7 +7,6 @@ This module contains tests for cycling through schemas, schema-specific stats, o
 import pytest
 
 # Skip server-side active learning tests for fast CI execution
-pytestmark = pytest.mark.skip(reason="Active learning server tests skipped for fast CI - run with pytest -m slow")
 from potato.active_learning_manager import SchemaCycler
 
 class TestActiveLearningSchemaCycling:
