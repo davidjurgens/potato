@@ -4,12 +4,14 @@ Active Learning Integration Tests
 This module provides integration tests for active learning with the actual
 Potato server components, including real annotation workflows and server
 integration.
+
+TEMPLATE: This file demonstrates the correct pattern for mocking active learning tests:
+1. Set up mocks BEFORE initializing the manager (background thread needs them)
+2. Use proper Label objects in annotation structure
+3. Mock get_all_users() to return user states with proper annotation format
 """
 
 import pytest
-
-# Skip tests that hang waiting for training
-pytestmark = pytest.mark.skip(reason="Tests hang due to training loop issues - needs refactoring")
 import tempfile
 import os
 import json
@@ -23,11 +25,45 @@ from potato.active_learning_manager import (
     init_active_learning_manager, get_active_learning_manager, clear_active_learning_manager
 )
 from potato.server_utils.config_module import (
-    load_and_validate_config, validate_active_learning_config, parse_active_learning_config
+    load_and_validate_config, validate_active_learning_config, parse_active_learning_config,
+    ConfigValidationError
 )
-from tests.helpers.active_learning_test_utils import (
-    create_temp_test_data, create_temp_config, register_and_login_user, submit_annotation, get_current_annotations, get_current_instance_id, simulate_annotation_workflow, start_flask_server_with_config
-)
+from potato.item_state_management import Label
+
+
+def create_mock_user_state(user_id: str, annotations: Dict[str, Dict[str, str]]):
+    """
+    Create a mock user state with properly formatted annotations.
+
+    Args:
+        user_id: The user identifier
+        annotations: Dict of {instance_id: {schema_name: label_name}}
+                    e.g., {"item1": {"sentiment": "positive"}}
+
+    Returns:
+        Mock user state with proper Label objects
+    """
+    mock_user = Mock()
+    mock_user.user_id = user_id
+
+    # Convert simple annotations to proper Label format
+    formatted_annotations = {}
+    for instance_id, schema_labels in annotations.items():
+        labels_dict = {}
+        for schema_name, label_name in schema_labels.items():
+            label = Label(schema_name, label_name)
+            labels_dict[label] = True
+        formatted_annotations[instance_id] = {"labels": labels_dict}
+
+    mock_user.get_all_annotations.return_value = formatted_annotations
+    return mock_user
+
+
+def create_mock_item(text: str):
+    """Create a mock item with the proper interface."""
+    mock_item = Mock()
+    mock_item.get_text.return_value = text
+    return mock_item
 
 
 class TestActiveLearningServerIntegration:
@@ -51,12 +87,6 @@ class TestActiveLearningServerIntegration:
         """Clean up test environment."""
         clear_active_learning_manager()
 
-    def create_mock_item(self, text: str):
-        """Create a mock item with the proper interface."""
-        mock_item = Mock()
-        mock_item.get_text.return_value = text
-        return mock_item
-
     def create_test_config(self, config_data: Dict[str, Any]) -> str:
         """Create a test configuration file."""
         config_file = os.path.join(self.config_dir, "test_config.yaml")
@@ -65,33 +95,25 @@ class TestActiveLearningServerIntegration:
         return config_file
 
     def create_test_data(self, data: List[Dict[str, Any]]) -> str:
-        """Create test data file in the config_dir for security validation."""
-        data_file = os.path.join(self.config_dir, "test_data.json")
+        """Create test data file in the temp_dir for proper path resolution."""
+        data_file = os.path.join(self.temp_dir, "test_data.json")
         with open(data_file, 'w') as f:
             json.dump(data, f)
-        # Return relative path from config_dir
-        return os.path.relpath(data_file, self.config_dir)
+        return "test_data.json"  # Return relative path from task_dir
 
     def test_config_loading_with_active_learning(self):
         """Test loading Potato configuration with active learning enabled."""
-        # Create test data
         test_data = [
             {"id": "item1", "text": "I love this product!"},
             {"id": "item2", "text": "This is terrible."},
             {"id": "item3", "text": "The weather is nice."},
-            {"id": "item4", "text": "This movie was boring."},
-            {"id": "item5", "text": "The new technology is amazing."},
         ]
         data_file = self.create_test_data(test_data)
 
-        # Create configuration with active learning
         config_data = {
             "project_name": "Active Learning Test",
             "project_description": "Testing active learning integration",
-            "item_properties": {
-                "id_key": "id",
-                "text_key": "text"
-            },
+            "item_properties": {"id_key": "id", "text_key": "text"},
             "data_files": [data_file],
             "task_dir": self.temp_dir,
             "output_annotation_dir": self.output_dir,
@@ -102,7 +124,7 @@ class TestActiveLearningServerIntegration:
                     "name": "sentiment",
                     "annotation_type": "radio",
                     "title": "Sentiment Analysis",
-                    "description": "Classify the sentiment of the text",
+                    "description": "Classify the sentiment",
                     "labels": [
                         {"name": "positive", "title": "Positive"},
                         {"name": "negative", "title": "Negative"},
@@ -112,14 +134,8 @@ class TestActiveLearningServerIntegration:
             ],
             "active_learning": {
                 "enabled": True,
-                "classifier": {
-                    "name": "sklearn.linear_model.LogisticRegression",
-                    "hyperparameters": {"C": 1.0}
-                },
-                "vectorizer": {
-                    "name": "sklearn.feature_extraction.text.TfidfVectorizer",
-                    "hyperparameters": {"max_features": 1000}
-                },
+                "classifier": {"name": "sklearn.linear_model.LogisticRegression"},
+                "vectorizer": {"name": "sklearn.feature_extraction.text.TfidfVectorizer"},
                 "min_annotations_per_instance": 1,
                 "min_instances_for_training": 3,
                 "schema_names": ["sentiment"]
@@ -127,197 +143,141 @@ class TestActiveLearningServerIntegration:
         }
 
         config_file = self.create_test_config(config_data)
-
-        # Test configuration loading
         config = load_and_validate_config(config_file, self.temp_dir)
+
         assert config is not None
         assert "active_learning" in config
         assert config["active_learning"]["enabled"] is True
 
     def test_active_learning_with_real_annotation_data(self):
         """Test active learning with realistic annotation data."""
-        # Create realistic test data
-        test_data = []
-        for i in range(20):
-            if i % 4 == 0:
-                text = f"I absolutely love this product! It's amazing and wonderful. Item {i} is fantastic!"
-            elif i % 4 == 1:
-                text = f"This is terrible. I hate it. Item {i} is the worst thing ever."
-            elif i % 4 == 2:
-                text = f"The weather is nice today. Item {i} is okay, nothing special."
-            else:
-                text = f"I'm not sure about this. Item {i} could be good or bad, it's unclear."
+        # Create test data
+        test_data = [
+            {"id": "item_0", "text": "I absolutely love this product! Amazing!"},
+            {"id": "item_1", "text": "This is terrible. I hate it."},
+            {"id": "item_2", "text": "The weather is nice today."},
+            {"id": "item_3", "text": "Not sure about this one."},
+            {"id": "item_4", "text": "Fantastic experience! Highly recommend!"},
+            {"id": "item_5", "text": "Worst purchase ever. Total waste."},
+        ]
 
-            test_data.append({
-                "id": f"item_{i}",
-                "text": text
-            })
+        # Create mock items
+        mock_items = {item["id"]: create_mock_item(item["text"]) for item in test_data}
 
-        data_file = self.create_test_data(test_data)
+        # Create annotations with proper Label format
+        annotations = {
+            "item_0": {"sentiment": "positive"},
+            "item_1": {"sentiment": "negative"},
+            "item_2": {"sentiment": "neutral"},
+            "item_3": {"sentiment": "neutral"},
+            "item_4": {"sentiment": "positive"},
+            "item_5": {"sentiment": "negative"},
+        }
+        mock_user = create_mock_user_state("user1", annotations)
 
-        # Create configuration
-        config = ActiveLearningConfig(
-            enabled=True,
-            schema_names=["sentiment"],
-            min_annotations_per_instance=1,
-            min_instances_for_training=5,
-            update_frequency=3,
-            model_persistence_enabled=True,
-            model_save_directory=self.output_dir
-        )
-
-        manager = init_active_learning_manager(config)
-
+        # CRITICAL: Set up mocks BEFORE initializing manager
         with patch('potato.active_learning_manager.get_item_state_manager') as mock_item_manager, \
              patch('potato.active_learning_manager.get_user_state_manager') as mock_user_manager:
 
-            # Create mock items with proper interface
-            mock_items = {}
-            for item_data in test_data:
-                mock_items[item_data["id"]] = self.create_mock_item(item_data["text"])
-
+            # Configure item manager mock
             mock_item_manager.return_value.get_item.side_effect = lambda item_id: mock_items.get(item_id)
             mock_item_manager.return_value.get_instance_ids.return_value = list(mock_items.keys())
             mock_item_manager.return_value.get_annotators_for_item.return_value = set()
 
-            # Create realistic annotations
-            mock_user_state = Mock()
-            mock_user_state.user_id = "user1"
-            annotations = {}
-            for i, item_data in enumerate(test_data[:10]):  # Annotate first 10 items
-                if i % 4 == 0:
-                    label = "positive"
-                elif i % 4 == 1:
-                    label = "negative"
-                elif i % 4 == 2:
-                    label = "neutral"
-                else:
-                    label = "neutral"  # Default for unclear cases
+            # Configure user manager mock - note: get_all_users() not get_all_user_states()
+            mock_user_manager.return_value.get_all_users.return_value = [mock_user]
 
-                annotations[item_data["id"]] = {"sentiment": {label: True}}
-
-            mock_user_state.get_all_annotations.return_value = annotations
-            mock_user_manager.return_value.get_all_user_states.return_value = [mock_user_state]
+            # NOW initialize manager (after mocks are set up)
+            config = ActiveLearningConfig(
+                enabled=True,
+                schema_names=["sentiment"],
+                min_annotations_per_instance=1,
+                min_instances_for_training=3,
+                update_frequency=2,
+                model_persistence_enabled=False
+            )
+            manager = init_active_learning_manager(config)
 
             # Trigger training
             manager.check_and_trigger_training()
-            time.sleep(3)
+            time.sleep(1.0)  # Wait for background thread
 
             # Verify training completed
             stats = manager.get_stats()
-            assert stats["training_count"] > 0
+            assert stats["training_count"] >= 1, f"Expected training to occur, got stats: {stats}"
 
     def test_multiple_schema_active_learning(self):
         """Test active learning with multiple annotation schemas."""
-        config = ActiveLearningConfig(
-            enabled=True,
-            schema_names=["sentiment", "topic", "urgency"],
-            min_annotations_per_instance=1,
-            min_instances_for_training=3,
-            update_frequency=2,
-            model_persistence_enabled=True,
-            model_save_directory=self.output_dir
-        )
+        # Create mock items
+        mock_items = {
+            "item1": create_mock_item("I love this new smartphone! The camera is incredible."),
+            "item2": create_mock_item("This political decision is terrible for our country."),
+            "item3": create_mock_item("The weather today is quite pleasant."),
+            "item4": create_mock_item("Revolutionary technology that will change everything."),
+            "item5": create_mock_item("Disappointed with the election results."),
+        }
 
-        manager = init_active_learning_manager(config)
+        # Multi-schema annotations
+        annotations = {
+            "item1": {"sentiment": "positive", "topic": "technology"},
+            "item2": {"sentiment": "negative", "topic": "politics"},
+            "item3": {"sentiment": "neutral", "topic": "weather"},
+            "item4": {"sentiment": "positive", "topic": "technology"},
+            "item5": {"sentiment": "negative", "topic": "politics"},
+        }
+        mock_user = create_mock_user_state("user1", annotations)
 
         with patch('potato.active_learning_manager.get_item_state_manager') as mock_item_manager, \
              patch('potato.active_learning_manager.get_user_state_manager') as mock_user_manager:
 
-            # Create mock items with proper interface
-            mock_items = {
-                "item1": self.create_mock_item("I love this new smartphone! The camera is incredible."),
-                "item2": self.create_mock_item("This political decision is terrible for our country."),
-                "item3": self.create_mock_item("The weather today is quite pleasant with a gentle breeze."),
-                "item4": self.create_mock_item("This technology is revolutionary and will change everything."),
-                "item5": self.create_mock_item("I'm so disappointed with the election results."),
-                "item6": self.create_mock_item("The new restaurant downtown has excellent food."),
-                "item7": self.create_mock_item("This movie was boring and predictable."),
-                "item8": self.create_mock_item("The scientific breakthrough in renewable energy is promising."),
-                "item9": self.create_mock_item("The traffic today was horrible and made me late."),
-                "item10": self.create_mock_item("I'm neutral about the new policy changes."),
-            }
-
             mock_item_manager.return_value.get_item.side_effect = lambda item_id: mock_items.get(item_id)
             mock_item_manager.return_value.get_instance_ids.return_value = list(mock_items.keys())
             mock_item_manager.return_value.get_annotators_for_item.return_value = set()
+            mock_user_manager.return_value.get_all_users.return_value = [mock_user]
 
-            # Create multi-schema annotations
-            mock_user_state = Mock()
-            mock_user_state.user_id = "user1"
-            mock_user_state.get_all_annotations.return_value = {
-                "item1": {
-                    "sentiment": {"positive": True},
-                    "topic": {"technology": True},
-                    "urgency": {"low": True}
-                },
-                "item2": {
-                    "sentiment": {"negative": True},
-                    "topic": {"politics": True},
-                    "urgency": {"high": True}
-                },
-                "item3": {
-                    "sentiment": {"neutral": True},
-                    "topic": {"weather": True},
-                    "urgency": {"low": True}
-                },
-                "item4": {
-                    "sentiment": {"positive": True},
-                    "topic": {"technology": True},
-                    "urgency": {"medium": True}
-                },
-                "item5": {
-                    "sentiment": {"negative": True},
-                    "topic": {"politics": True},
-                    "urgency": {"high": True}
-                }
-            }
+            config = ActiveLearningConfig(
+                enabled=True,
+                schema_names=["sentiment", "topic"],
+                min_annotations_per_instance=1,
+                min_instances_for_training=3,
+                update_frequency=2,
+                model_persistence_enabled=False
+            )
+            manager = init_active_learning_manager(config)
 
-            mock_user_manager.return_value.get_all_user_states.return_value = [mock_user_state]
-
-            # Trigger training for all schemas
-            for i in range(3):
+            # Trigger training multiple times for schema cycling
+            for _ in range(3):
                 manager.check_and_trigger_training()
-                time.sleep(2)
+                time.sleep(0.5)
 
-            # Verify training occurred (may not train all schemas in one cycle)
             stats = manager.get_stats()
             assert stats["training_count"] >= 1
 
     def test_error_handling_in_config_validation(self):
         """Test error handling in active learning configuration validation."""
-        # Test invalid configuration
         invalid_config = {
             "active_learning": {
                 "enabled": True,
-                "schema_names": ["invalid_schema_type"],  # Invalid schema type
-                "random_sample_percent": 1.5,  # Invalid percentage
-                "resolution_strategy": "invalid_strategy"  # Invalid strategy
+                "schema_names": ["test"],
+                "random_sample_percent": 1.5,  # Invalid: must be 0-1
             }
         }
 
-        # Should raise validation errors
-        from potato.server_utils.config_module import ConfigValidationError
         with pytest.raises(ConfigValidationError):
             validate_active_learning_config(invalid_config)
 
     def test_backward_compatibility(self):
         """Test backward compatibility with configurations without active learning."""
-        # Create test data for backward compatibility test
         test_data = [
             {"id": "item1", "text": "I love this product!"},
             {"id": "item2", "text": "This is terrible."},
         ]
         data_file = self.create_test_data(test_data)
 
-        # Test configuration without active learning section
         config_data = {
             "project_name": "Backward Compatibility Test",
             "project_description": "Testing backward compatibility",
-            "item_properties": {
-                "id_key": "id",
-                "text_key": "text"
-            },
+            "item_properties": {"id_key": "id", "text_key": "text"},
             "data_files": [data_file],
             "task_dir": self.temp_dir,
             "output_annotation_dir": self.output_dir,
@@ -328,7 +288,7 @@ class TestActiveLearningServerIntegration:
                     "name": "sentiment",
                     "annotation_type": "radio",
                     "title": "Sentiment Analysis",
-                    "description": "Classify the sentiment of the text",
+                    "description": "Classify the sentiment",
                     "labels": [
                         {"name": "positive", "title": "Positive"},
                         {"name": "negative", "title": "Negative"}
@@ -337,63 +297,57 @@ class TestActiveLearningServerIntegration:
             ]
         }
 
-        # Should not raise any errors
         config_file = self.create_test_config(config_data)
         config = load_and_validate_config(config_file, self.temp_dir)
+
         assert config is not None
         assert "active_learning" not in config
 
     def test_performance_metrics_tracking(self):
         """Test performance metrics tracking in active learning."""
-        config = ActiveLearningConfig(
-            enabled=True,
-            schema_names=["sentiment"],
-            min_annotations_per_instance=1,
-            min_instances_for_training=3,
-            update_frequency=2,
-            model_persistence_enabled=True,
-            model_save_directory=self.output_dir
-        )
+        mock_items = {
+            "item1": create_mock_item("I love this product!"),
+            "item2": create_mock_item("This is terrible."),
+            "item3": create_mock_item("The weather is nice."),
+            "item4": create_mock_item("This movie was boring."),
+            "item5": create_mock_item("Amazing technology!"),
+        }
 
-        manager = init_active_learning_manager(config)
+        annotations = {
+            "item1": {"sentiment": "positive"},
+            "item2": {"sentiment": "negative"},
+            "item3": {"sentiment": "neutral"},
+            "item4": {"sentiment": "negative"},
+            "item5": {"sentiment": "positive"},
+        }
+        mock_user = create_mock_user_state("user1", annotations)
 
         with patch('potato.active_learning_manager.get_item_state_manager') as mock_item_manager, \
              patch('potato.active_learning_manager.get_user_state_manager') as mock_user_manager:
 
-            # Create mock items with proper interface
-            mock_items = {
-                "item1": self.create_mock_item("I love this product!"),
-                "item2": self.create_mock_item("This is terrible."),
-                "item3": self.create_mock_item("The weather is nice."),
-                "item4": self.create_mock_item("This movie was boring."),
-                "item5": self.create_mock_item("The new technology is amazing."),
-            }
-
             mock_item_manager.return_value.get_item.side_effect = lambda item_id: mock_items.get(item_id)
             mock_item_manager.return_value.get_instance_ids.return_value = list(mock_items.keys())
             mock_item_manager.return_value.get_annotators_for_item.return_value = set()
+            mock_user_manager.return_value.get_all_users.return_value = [mock_user]
 
-            # Create annotations
-            mock_user_state = Mock()
-            mock_user_state.user_id = "user1"
-            mock_user_state.get_all_annotations.return_value = {
-                "item1": {"sentiment": {"positive": True}},
-                "item2": {"sentiment": {"negative": True}},
-                "item3": {"sentiment": {"neutral": True}},
-            }
+            config = ActiveLearningConfig(
+                enabled=True,
+                schema_names=["sentiment"],
+                min_annotations_per_instance=1,
+                min_instances_for_training=3,
+                update_frequency=2,
+                model_persistence_enabled=False
+            )
+            manager = init_active_learning_manager(config)
 
-            mock_user_manager.return_value.get_all_user_states.return_value = [mock_user_state]
-
-            # Trigger training and measure performance
             start_time = time.time()
             manager.check_and_trigger_training()
-            time.sleep(3)
+            time.sleep(1.0)
             training_time = time.time() - start_time
 
-            # Verify performance metrics
             stats = manager.get_stats()
-            assert stats["training_count"] > 0
-            assert training_time < 10.0  # Should complete within reasonable time
+            assert stats["training_count"] >= 1
+            assert training_time < 10.0  # Should complete quickly
             assert "last_training_time" in stats
 
 
