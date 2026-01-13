@@ -13,6 +13,13 @@ import json
 
 config = {}
 
+
+def clear_config():
+    """Clear the global config dictionary. Used for testing to ensure clean state."""
+    global config
+    config.clear()
+
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logging.basicConfig()

@@ -124,14 +124,38 @@ class FlaskTestServer:
     def _create_temp_config_file(self, config_data, prefix):
         """Create a temporary config file within the project directory."""
         # Use the new test utilities for secure file creation
-        from tests.helpers.test_utils import create_test_directory, create_test_config
+        from tests.helpers.test_utils import create_test_directory, create_test_config, create_test_data_file
 
         # Create a test directory within tests/output/
         test_dir = create_test_directory(f"flasktest_{prefix}")
 
+        # Handle 'data' key (legacy format) - convert inline data to data files
+        data_files = config_data.get('data_files', [])
+        if 'data' in config_data and config_data['data']:
+            # Write inline data to a file
+            data_file = create_test_data_file(test_dir, config_data['data'], "test_data.jsonl")
+            data_files = [data_file]
+            del config_data['data']
+
+        # Handle 'annotation_schemas' dict format (legacy) - convert to list format
+        annotation_schemes = config_data.get('annotation_schemes', [])
+        if isinstance(annotation_schemes, dict):
+            # Convert dict format to list format
+            annotation_schemes_list = []
+            for name, schema in annotation_schemes.items():
+                scheme = {"name": name}
+                if 'type' in schema:
+                    scheme['annotation_type'] = schema['type']
+                if 'options' in schema:
+                    scheme['labels'] = schema['options']
+                if 'description' in schema:
+                    scheme['description'] = schema['description']
+                annotation_schemes_list.append(scheme)
+            annotation_schemes = annotation_schemes_list
+
         # Create a minimal annotation scheme if none provided
-        if 'annotation_schemes' not in config_data or not config_data['annotation_schemes']:
-            config_data['annotation_schemes'] = [
+        if not annotation_schemes:
+            annotation_schemes = [
                 {
                     "name": "test_scheme",
                     "annotation_type": "radio",
@@ -143,8 +167,8 @@ class FlaskTestServer:
         # Create the config file using the test utilities
         config_file = create_test_config(
             test_dir,
-            config_data['annotation_schemes'],
-            data_files=config_data.get('data_files', []),
+            annotation_schemes,
+            data_files=data_files,
             **{k: v for k, v in config_data.items() if k not in ['annotation_schemes', 'data_files']}
         )
 
@@ -197,9 +221,9 @@ class FlaskTestServer:
             try:
                 import os
                 config_file = self.config
-                # Don't change directory - keep current working directory
-                # config_dir = os.path.dirname(config_file)
-                # os.chdir(config_dir)
+                # Change to config file's directory to ensure path validation works
+                config_dir = os.path.dirname(os.path.abspath(config_file))
+                os.chdir(config_dir)
 
                 # Create a fresh Flask app instance instead of importing the global one
                 from flask import Flask
@@ -407,7 +431,7 @@ class FlaskTestServer:
                 self.process.kill()
             self.process = None
 
-    def register_user(self, username: str, password: str) -> bool:
+    def register_user(self, username: str, password: str = "test_password") -> bool:
         """Register a new user via the registration endpoint."""
         try:
             response = self.session.post(f"{self.base_url}/register", data={
@@ -443,14 +467,27 @@ class FlaskTestServer:
             print(f"❌ Login failed: {e}")
             return False
 
-    def get_user_state(self, username: str) -> Optional[Dict[str, Any]]:
-        """Get the current user state."""
+    def get_user_state(self, username: str) -> Optional[Any]:
+        """Get the current user state.
+
+        Returns the actual UserState object when accessing directly,
+        or a dict representation when using the API.
+        """
         try:
-            if self.debug:
-                response = self.session.get(f"{self.base_url}/test/user_state/{username}", timeout=5)
-            else:
-                # In production mode, we might need to use a different endpoint
-                response = self.session.get(f"{self.base_url}/user_state", timeout=5)
+            # First try to get it directly from the manager (more reliable for tests)
+            from potato.user_state_management import get_user_state_manager
+            usm = get_user_state_manager()
+            if usm:
+                user_state = usm.get_user_state(username)
+                if user_state:
+                    return user_state
+
+            # Fall back to API endpoint
+            response = self.session.get(
+                f"{self.base_url}/admin/user_state/{username}",
+                headers={"X-API-Key": "admin_api_key"},
+                timeout=5
+            )
 
             if response.status_code == 200:
                 return response.json()
@@ -470,21 +507,23 @@ class FlaskTestServer:
 
     def stop_server(self):
         """Stop the Flask server."""
-        # Try to shutdown the Flask app via HTTP
+        # Clear the state managers and config to clean up resources
         try:
-            resp = self.session.post(f"{self.base_url}/shutdown", timeout=1)
-            print(f"[DEBUG] /shutdown response: {getattr(resp, 'status_code', None)} {getattr(resp, 'text', None)}")
+            from potato.user_state_management import clear_user_state_manager
+            from potato.item_state_management import clear_item_state_manager
+            from potato.server_utils.config_module import clear_config
+            clear_user_state_manager()
+            clear_item_state_manager()
+            clear_config()
         except Exception as e:
-            print(f"[DEBUG] Exception during /shutdown: {e}")
+            print(f"[DEBUG] Error clearing state managers: {e}")
 
-        if self.server_thread and self.server_thread.is_alive():
-            # Try to join, then forcibly kill if needed
-            self.server_thread.join(timeout=5)
-            if self.server_thread.is_alive():
-                print("[DEBUG] Server thread still alive after join. Forcibly killing.")
-                # On Unix, we can try to send SIGKILL to the process
-                import os
-                os._exit(0)
+        # The server thread is a daemon thread, so it will be killed automatically
+        # when the main thread exits. For test isolation, we just clear state.
+        if hasattr(self, 'server_thread') and self.server_thread:
+            # Don't try to join the daemon thread - it will block forever
+            # Just let it die when the test process ends
+            pass
 
     def stop(self):
         """Alias for stop_server() method for backward compatibility."""
@@ -593,11 +632,30 @@ def create_chrome_options(headless: bool = True):
 
 @pytest.fixture(autouse=True)
 def reset_state_managers():
+    """Reset all global state between tests to ensure isolation."""
+    from potato.server_utils.config_module import clear_config
+    import os
+
+    # Save original working directory
+    original_cwd = os.getcwd()
+
+    # Clear state before test
     clear_item_state_manager()
     clear_user_state_manager()
+    clear_config()
+
     yield
+
+    # Clear state after test
     clear_item_state_manager()
     clear_user_state_manager()
+    clear_config()
+
+    # Restore original working directory (init_config changes it)
+    try:
+        os.chdir(original_cwd)
+    except Exception:
+        pass  # Directory might not exist anymore
 
 
 if __name__ == "__main__":
