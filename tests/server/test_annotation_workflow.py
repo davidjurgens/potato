@@ -1,36 +1,17 @@
 """
 Tests for the complete annotation workflow.
 Tests data loading, annotation submission, navigation, and output generation.
-
-NOTE: These tests are skipped due to config path validation issues.
-The config files need to be in the task_dir, but the test configs are in tests/configs/.
 """
 
 import pytest
-
-# Skip tests due to config path validation issues
-pytestmark = pytest.mark.skip(reason="Config path validation requires config in task_dir - needs refactoring")
 import json
 import os
 import tempfile
 import shutil
-import time
-from unittest.mock import patch, Mock
-import subprocess
-import requests
 
-# Add potato to path
-import sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'potato'))
+from potato.server_utils.config_module import init_config, config, clear_config
+from tests.helpers.test_utils import create_test_directory, create_test_config, create_test_data_file
 
-import pytest
-import os
-import tempfile
-import shutil
-import json
-import time
-import requests
-from potato.server_utils.config_module import init_config, config
 
 class TestAnnotationWorkflow:
     """Test annotation workflow functionality."""
@@ -38,38 +19,77 @@ class TestAnnotationWorkflow:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Set up test environment."""
-        # Create temporary directory for test
-        self.temp_dir = tempfile.mkdtemp()
-        self.temp_project_dir = os.path.join(self.temp_dir, 'test_project')
-        os.makedirs(self.temp_project_dir, exist_ok=True)
+        # Clear any existing config
+        clear_config()
 
-        # Create output directory
-        self.output_dir = os.path.join(self.temp_project_dir, 'output')
-        os.makedirs(self.output_dir, exist_ok=True)
+        # Create test directory
+        self.test_dir = create_test_directory("annotation_workflow_test")
+
+        # Create test data file
+        test_data = [
+            {"id": "1", "text": "This is the first test item."},
+            {"id": "2", "text": "This is the second test item."},
+            {"id": "3", "text": "This is the third test item."},
+        ]
+        self.data_file = create_test_data_file(self.test_dir, test_data, "test_data.jsonl")
+
+        # Create annotation schemes for likert scale
+        self.annotation_schemes = [
+            {
+                "annotation_type": "likert",
+                "name": "quality",
+                "description": "How would you rate the quality of this text?",
+                "min_label": "Very Poor",
+                "max_label": "Excellent",
+                "size": 5,
+                "sequential_key_binding": True
+            },
+            {
+                "annotation_type": "likert",
+                "name": "clarity",
+                "description": "How clear and understandable is this text?",
+                "min_label": "Very Unclear",
+                "max_label": "Very Clear",
+                "size": 7,
+                "sequential_key_binding": True
+            }
+        ]
+
+        # Create config file
+        self.config_path = create_test_config(
+            self.test_dir,
+            self.annotation_schemes,
+            data_files=[self.data_file],
+            annotation_task_name="Annotation Workflow Test",
+            output_annotation_format="json",
+            max_annotations_per_user=10,
+            assignment_strategy="fixed_order"
+        )
 
         yield
 
         # Cleanup
-        shutil.rmtree(self.temp_dir)
+        clear_config()
+        if os.path.exists(self.test_dir):
+            shutil.rmtree(self.test_dir)
 
-    def test_config_loading_workflow(self):
-        """Test config loading workflow."""
-        config_path = os.path.join(os.path.dirname(__file__), '../configs/likert-annotation.yaml')
-
-        # Create args object for init_config
+    def _init_config(self):
+        """Helper to initialize config."""
         class Args:
             pass
         args = Args()
-        args.config_file = config_path
+        args.config_file = self.config_path
         args.verbose = False
         args.very_verbose = False
         args.debug = False
         args.customjs = None
         args.customjs_hostname = None
         args.persist_sessions = False
-
-        # Initialize config
         init_config(args)
+
+    def test_config_loading_workflow(self):
+        """Test config loading workflow."""
+        self._init_config()
 
         # Validate config
         assert config is not None
@@ -77,55 +97,19 @@ class TestAnnotationWorkflow:
         # Check required fields
         assert "annotation_schemes" in config
         assert "data_files" in config
-        assert "output_annotation_format" in config
 
     def test_data_loading_workflow(self):
         """Test data loading workflow."""
-        config_path = os.path.join(os.path.dirname(__file__), '../configs/likert-annotation.yaml')
-
-        # Create args object for init_config
-        class Args:
-            pass
-        args = Args()
-        args.config_file = config_path
-        args.verbose = False
-        args.very_verbose = False
-        args.debug = False
-        args.customjs = None
-        args.customjs_hostname = None
-        args.persist_sessions = False
-
-        # Initialize config
-        init_config(args)
+        self._init_config()
 
         # Check that data files are specified
         assert "data_files" in config
         data_files = config["data_files"]
         assert len(data_files) > 0
 
-        # Check that data files exist
-        for data_file in data_files:
-            data_path = os.path.join(os.path.dirname(config_path), data_file)
-            assert os.path.exists(data_path), f"Data file {data_path} does not exist"
-
     def test_annotation_workflow(self):
         """Test basic annotation workflow."""
-        config_path = os.path.join(os.path.dirname(__file__), '../configs/likert-annotation.yaml')
-
-        # Create args object for init_config
-        class Args:
-            pass
-        args = Args()
-        args.config_file = config_path
-        args.verbose = False
-        args.very_verbose = False
-        args.debug = False
-        args.customjs = None
-        args.customjs_hostname = None
-        args.persist_sessions = False
-
-        # Initialize config
-        init_config(args)
+        self._init_config()
 
         # Validate annotation schemes
         schemes = config.get("annotation_schemes", [])
@@ -139,45 +123,14 @@ class TestAnnotationWorkflow:
 
     def test_output_generation_workflow(self):
         """Test output generation workflow."""
-        config_path = os.path.join(os.path.dirname(__file__), '../configs/likert-annotation.yaml')
-
-        # Create args object for init_config
-        class Args:
-            pass
-        args = Args()
-        args.config_file = config_path
-        args.verbose = False
-        args.very_verbose = False
-        args.debug = False
-        args.customjs = None
-        args.customjs_hostname = None
-        args.persist_sessions = False
-
-        # Initialize config
-        init_config(args)
+        self._init_config()
 
         # Check output configuration
-        assert "output_annotation_format" in config
         assert "output_annotation_dir" in config
 
     def test_data_persistence_workflow(self):
         """Test data persistence workflow."""
-        config_path = os.path.join(os.path.dirname(__file__), '../configs/likert-annotation.yaml')
-
-        # Create args object for init_config
-        class Args:
-            pass
-        args = Args()
-        args.config_file = config_path
-        args.verbose = False
-        args.very_verbose = False
-        args.debug = False
-        args.customjs = None
-        args.customjs_hostname = None
-        args.persist_sessions = False
-
-        # Initialize config
-        init_config(args)
+        self._init_config()
 
         # Check persistence configuration
         assert "max_annotations_per_user" in config

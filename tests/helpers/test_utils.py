@@ -103,6 +103,15 @@ def create_test_config(
         "session_lifetime_days": kwargs.get("session_lifetime_days", 1),
     }
 
+    # Add optional kwargs that are passed through
+    optional_fields = [
+        "max_annotations_per_user", "assignment_strategy", "output_annotation_format",
+        "random_seed", "user_config"
+    ]
+    for field in optional_fields:
+        if field in kwargs:
+            config[field] = kwargs[field]
+
     config_file = Path(test_dir) / "config.yaml"
 
     with open(config_file, 'w') as f:

@@ -855,8 +855,9 @@ def init_config(args):
             except Exception as e:
                 raise ConfigValidationError(f"Error loading configuration file: {str(e)}")
 
-            # Validate that config file is in task_dir
-            if 'task_dir' in temp_config_data:
+            # Validate that config file is in task_dir (skip in test mode)
+            skip_path_validation = os.environ.get('POTATO_SKIP_CONFIG_PATH_VALIDATION', '').lower() in ('1', 'true')
+            if 'task_dir' in temp_config_data and not skip_path_validation:
                 task_dir = temp_config_data['task_dir']
                 config_file_abs = os.path.abspath(config_file)
                 task_dir_abs = os.path.abspath(task_dir)
