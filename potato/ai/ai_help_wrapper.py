@@ -101,7 +101,9 @@ def generate_ai_help_html(instance: int, annotation_id: int, annotation_type: st
     Generates dynamic AI help HTML using template rendering.
     Now works with the new prompt structure: {annotation_type: {prompt: ..., outputformat: ...}}
     """
-  
+    if DYNAMICAIHELP is None:
+        return ""  # AI support not enabled
+
     return DYNAMICAIHELP.render(instance, annotation_id, annotation_type)
 
 def get_ai_wrapper():
