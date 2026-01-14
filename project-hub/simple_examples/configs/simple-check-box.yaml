@@ -1,8 +1,8 @@
 port: 9001
 server_name: potato annotator
 annotation_task_name: Simple Check Box Example
-task_dir: annotation_output/simple-check-box/
-output_annotation_dir: annotation_output/simple-check-box/annotations
+task_dir: .
+output_annotation_dir: annotation_output/
 output_annotation_format: tsv
 annotation_codebook_url: ''
 data_files:
@@ -26,3 +26,26 @@ annotation_schemes:
   - white
   sequential_key_binding: true
 site_dir: default
+
+# AI Support Configuration
+# To use AI hints, set your API key via environment variable:
+#   export OPENAI_API_KEY="your-key-here"
+# Or replace ${OPENAI_API_KEY} with your actual key below
+ai_support:
+  enabled: true
+  endpoint_type: openai
+  ai_config:
+    model: gpt-4o-mini
+    api_key: ${OPENAI_API_KEY}
+    temperature: 0.7
+    max_tokens: 150
+    include:
+      all: true
+  cache_config:
+    disk_cache:
+      enabled: true
+      path: annotation_output/ai_cache.json
+    prefetch:
+      warm_up_page_count: 3
+      on_next: 2
+      on_prev: 1

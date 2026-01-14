@@ -1,8 +1,8 @@
-task_dir: ".."
+task_dir: .
 port: 9001
 server_name: potato annotator
 annotation_task_name: Simple Video as Input Example
-output_annotation_dir: annotation_output/simple-video-as-input/
+output_annotation_dir: annotation_output/
 output_annotation_format: json
 annotation_codebook_url: ''
 data_files:
