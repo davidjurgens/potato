@@ -1373,8 +1373,17 @@ def get_total_annotations():
 
 def update_annotation_state(username, form):
     """
-    Parses the state of the HTML form (what the user did to the instance) and
-    updates the state of the instance's annotations accordingly.
+    DEPRECATED: This function is no longer called during navigation.
+
+    Annotations are now saved in real-time via /updateinstance endpoint when users
+    interact with checkboxes, radio buttons, etc. This ensures proper timing tracking
+    for behavioral data analysis.
+
+    This function is kept for backward compatibility but should not be used in new code.
+    Use add_label_annotation() via /updateinstance instead.
+
+    Original purpose: Parses the state of the HTML form (what the user did to the
+    instance) and updates the state of the instance's annotations accordingly.
     """
 
     # Get what the user has already annotated, which might include this instance too
@@ -1433,6 +1442,12 @@ def update_annotation_state(username, form):
 def get_annotations_for_user_on(username, instance_id):
     """
     Returns the label-based annotations made by this user on the instance.
+
+    Handles two data formats:
+    1. Label objects as keys: {Label("schema", "label"): value}
+       - Created by add_label_annotation() via /updateinstance endpoint
+    2. Nested string dicts: {"schema": {"label": value}}
+       - Created by set_annotation() via /annotate navigation
     """
     # Normalize instance_id to string for consistent key lookup
     instance_id = str(instance_id)
@@ -1444,16 +1459,27 @@ def get_annotations_for_user_on(username, instance_id):
     # Process the raw annotations into the expected format
     processed_annotations = {}
     for label, value in raw_annotations.items():
-        if hasattr(label, 'schema_name') and hasattr(label, 'label_name'):
-            schema_name = label.schema_name
-            label_name = label.label_name
+        # Check for Label object - the Label class uses 'schema' and 'name' attributes
+        # with get_schema() and get_name() getter methods
+        if hasattr(label, 'get_schema') and hasattr(label, 'get_name'):
+            # Format 1: Label object as key (from add_label_annotation via /updateinstance)
+            schema_name = label.get_schema()
+            label_name = label.get_name()
+            if schema_name not in processed_annotations:
+                processed_annotations[schema_name] = {}
+            processed_annotations[schema_name][label_name] = value
+        elif isinstance(label, str) and isinstance(value, dict):
+            # Format 2: Nested dict format {"schema": {"label": value}}
+            # (legacy format from set_annotation, kept for backward compatibility)
+            schema_name = label
+            if schema_name not in processed_annotations:
+                processed_annotations[schema_name] = {}
+            for label_name, label_value in value.items():
+                processed_annotations[schema_name][label_name] = label_value
         else:
-            # Fallback for string labels
+            # Unknown format - log and skip
+            logger.warning(f"Skipping unknown annotation format: key={label}, value={value}")
             continue
-
-        if schema_name not in processed_annotations:
-            processed_annotations[schema_name] = {}
-        processed_annotations[schema_name][label_name] = value
 
     return processed_annotations
 

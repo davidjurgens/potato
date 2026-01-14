@@ -1212,11 +1212,10 @@ def annotate():
 
     logger.debug(f"Processing action: {action}")
 
-     # Process any annotation updates if they were submitted
-    if request.method == 'POST' and request.json and 'instance_id' in request.json:
-        if action == "prev_instance" or action == "next_instance" or action == "go_to":
-            logger.debug(f"Updating annotation state for user: {username}")
-            update_annotation_state(username, request.json)
+    # NOTE: Annotations are saved in real-time via /updateinstance endpoint when users
+    # click checkboxes, radio buttons, etc. This ensures proper timing tracking for
+    # behavioral data. We do NOT save annotations during navigation - they should
+    # already be saved by the time the user navigates.
 
     if action == "prev_instance":
         logger.debug(f"Moving to previous instance for user: {username}")

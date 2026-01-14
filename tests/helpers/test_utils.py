@@ -463,6 +463,46 @@ def create_image_annotation_config(test_dir: str, **kwargs) -> Tuple[str, str]:
     return config_file, data_file
 
 
+def create_multiselect_annotation_config(test_dir: str, num_items: int = 3, **kwargs) -> Tuple[str, str]:
+    """
+    Create a test configuration with multiselect/checkbox annotation support.
+
+    Args:
+        test_dir: Directory to create the config in
+        num_items: Number of test items to create
+        **kwargs: Additional config options
+
+    Returns:
+        Tuple of (config_file_path, data_file_path)
+    """
+    # Create test data with multiple items
+    test_data = [
+        {"id": f"item_{i+1}", "text": f"This is test item {i+1} with some content to annotate."}
+        for i in range(num_items)
+    ]
+
+    data_file = create_test_data_file(test_dir, test_data)
+
+    # Create multiselect annotation scheme (checkboxes)
+    annotation_schemes = [
+        {
+            "name": "favorite_color",
+            "annotation_type": "multiselect",
+            "labels": ["red", "blue", "green", "yellow"],
+            "description": "Select all colors that apply to this item"
+        }
+    ]
+
+    config_file = create_test_config(
+        test_dir,
+        annotation_schemes,
+        data_files=[data_file],
+        **kwargs
+    )
+
+    return config_file, data_file
+
+
 def create_audio_annotation_config(test_dir: str, **kwargs) -> Tuple[str, str]:
     """
     Create a test configuration with audio annotation support.
