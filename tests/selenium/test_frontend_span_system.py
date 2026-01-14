@@ -452,7 +452,7 @@ class TestFrontendSpanSystem(BaseSeleniumTest):
         self.assertEqual(len(initial_spans), 0, "Should start with no spans")
 
         # Select a label first (assuming there are label buttons)
-        label_buttons = self.driver.find_elements(By.CLASS_NAME, "label-button")
+        label_buttons = self.driver.find_elements(By.CSS_SELECTOR, ".shadcn-span-checkbox")
         if label_buttons:
             label_buttons[0].click()
             time.sleep(0.5)
