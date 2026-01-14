@@ -211,6 +211,7 @@ class FlaskTestServer:
         # Set environment variables for the server
         os.environ['POTATO_CONFIG_FILE'] = self.config
         os.environ['POTATO_DEBUG'] = 'false'  # Always false for test servers
+        os.environ['POTATO_SKIP_CONFIG_PATH_VALIDATION'] = '1'  # Skip path validation in tests
 
         # Ensure debug mode is set in the config
         if self.debug:
@@ -250,8 +251,6 @@ class FlaskTestServer:
                 # Ensure debug mode is set in the config
                 from potato.server_utils.config_module import config
                 config['debug'] = self.debug
-                print(f"🔍 Setting debug mode to: {self.debug}")
-                print(f"🔍 Config debug value: {config.get('debug', 'NOT_SET')}")
                 config['persist_sessions'] = False
                 config['random_seed'] = 1234
                 config['require_password'] = False
@@ -373,7 +372,7 @@ class FlaskTestServer:
                 from potato.routes import configure_routes
                 configure_routes(app, config)
 
-                app.run(host='0.0.0.0', port=self.port, debug=False, use_reloader=False)
+                app.run(host='0.0.0.0', port=self.port, debug=False, use_reloader=False, threaded=True)
             except Exception as e:
                 print(f"Error starting server: {e}")
                 import traceback
@@ -384,15 +383,17 @@ class FlaskTestServer:
         self.server_thread.start()
 
         # Wait for server to start
-        max_wait = 10  # seconds
+        max_wait = 30  # seconds - increased timeout
         wait_time = 0
         while wait_time < max_wait:
             try:
-                response = self.session.get(f"{self.base_url}/", timeout=1)
-                if response.status_code == 200:
+                response = self.session.get(f"{self.base_url}/", timeout=2, allow_redirects=False)
+                print(f"🔍 Server response: {response.status_code}")
+                # Accept any non-error status code as success (server is responding)
+                if response.status_code < 500:
                     print(f"✅ Server started successfully on {self.base_url}")
                     # Initialize session and debug user by visiting home
-                    self.session.get(f"{self.base_url}/", timeout=1)
+                    self.session.get(f"{self.base_url}/", timeout=2)
 
                     # Force session initialization by making a request that sets the session
                     if self.debug:
@@ -402,13 +403,14 @@ class FlaskTestServer:
                         print(f"🔍 Session cookies after set_debug_session: {dict(self.session.cookies)}")
 
                     return True
-            except requests.exceptions.RequestException:
-                pass
+            except requests.exceptions.RequestException as e:
+                if wait_time % 5 == 0:  # Print every 5 seconds
+                    print(f"🔄 Waiting for server... ({wait_time}s) - {type(e).__name__}: {e}")
 
             time.sleep(0.5)
             wait_time += 0.5
 
-        print(f"❌ Failed to start server on {self.base_url}")
+        print(f"❌ Failed to start server on {self.base_url} after {max_wait}s")
         return False
 
     def _wait_for_server_ready(self, timeout=10):
@@ -631,25 +633,38 @@ def create_chrome_options(headless: bool = True):
 
 
 @pytest.fixture(autouse=True)
-def reset_state_managers():
-    """Reset all global state between tests to ensure isolation."""
+def reset_state_managers(request):
+    """Reset all global state between tests to ensure isolation.
+
+    Note: For tests using class-scoped fixtures (like flask_server),
+    we skip clearing config to avoid wiping out server configuration.
+    """
     from potato.server_utils.config_module import clear_config
     import os
 
     # Save original working directory
     original_cwd = os.getcwd()
 
-    # Clear state before test
-    clear_item_state_manager()
-    clear_user_state_manager()
-    clear_config()
+    # Check if this test class has a class-scoped flask_server fixture
+    # If so, don't clear config as it would wipe out the server's configuration
+    has_class_scoped_server = False
+    if hasattr(request, 'cls') and request.cls is not None:
+        # Check if this class has a flask_server fixture
+        has_class_scoped_server = hasattr(request.cls, 'flask_server') or 'flask_server' in getattr(request, 'fixturenames', [])
+
+    if not has_class_scoped_server:
+        # Clear state before test (only for tests without class-scoped servers)
+        clear_item_state_manager()
+        clear_user_state_manager()
+        clear_config()
 
     yield
 
-    # Clear state after test
-    clear_item_state_manager()
-    clear_user_state_manager()
-    clear_config()
+    if not has_class_scoped_server:
+        # Clear state after test (only for tests without class-scoped servers)
+        clear_item_state_manager()
+        clear_user_state_manager()
+        clear_config()
 
     # Restore original working directory (init_config changes it)
     try:

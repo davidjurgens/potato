@@ -8,8 +8,8 @@ and system behavior using production endpoints and read-only admin endpoints.
 import json
 import pytest
 
-# Skip server integration tests for fast CI - run with pytest -m slow
-pytestmark = pytest.mark.skip(reason="Server integration tests skipped for fast CI execution")
+# Server integration tests
+# pytestmark = pytest.mark.skip(reason="Server integration tests require FlaskTestServer fixes")
 import time
 import tempfile
 import os
@@ -24,10 +24,14 @@ class TestBackendState:
     @pytest.fixture(scope="class", autouse=True)
     def flask_server(self, request):
         """Create a Flask test server with file-based dataset."""
+        print("🚀 Starting flask_server fixture setup...")
         # Create a temporary directory for this test
         test_dir = tempfile.mkdtemp()
+        print(f"📁 Created temp dir: {test_dir}")
+        task_dir = os.path.join(test_dir, "task")
+        os.makedirs(task_dir, exist_ok=True)
 
-        # Create test data file
+        # Create test data file in task_dir
         test_data = []
         for i in range(1, 6):
             test_data.append({
@@ -36,14 +40,14 @@ class TestBackendState:
                 "displayed_text": f"Backend Test Item {i}"
             })
 
-        data_file = os.path.join(test_dir, 'backend_test_data.jsonl')
+        data_file = os.path.join(task_dir, 'backend_test_data.jsonl')
         with open(data_file, 'w') as f:
             for item in test_data:
                 f.write(json.dumps(item) + '\n')
 
         # Create minimal config
         config = {
-            "debug": False,
+            "debug": True,  # Enable debug mode for admin endpoint access
             "max_annotations_per_user": 10,
             "max_annotations_per_item": 3,
             "assignment_strategy": "fixed_order",
@@ -78,13 +82,13 @@ class TestBackendState:
                 }
             },
             "site_file": "base_template.html",
-            "output_annotation_dir": os.path.join(test_dir, "output"),
-            "task_dir": os.path.join(test_dir, "task"),
-            "site_dir": os.path.join(test_dir, "templates"),
+            "output_annotation_dir": "output",  # Relative to task_dir
+            "task_dir": task_dir,
+            "site_dir": os.path.join(task_dir, "templates"),
             "alert_time_each_instance": 0
         }
 
-        # Create phase files
+        # Create phase files in task_dir
         consent_data = [
             {
                 "name": "consent_check",
@@ -94,7 +98,7 @@ class TestBackendState:
                 "description": "Do you agree to participate in this study?"
             }
         ]
-        with open(os.path.join(test_dir, 'consent.json'), 'w') as f:
+        with open(os.path.join(task_dir, 'consent.json'), 'w') as f:
             json.dump(consent_data, f, indent=2)
 
         instructions_data = [
@@ -106,11 +110,11 @@ class TestBackendState:
                 "description": "Do you understand the instructions?"
             }
         ]
-        with open(os.path.join(test_dir, 'instructions.json'), 'w') as f:
+        with open(os.path.join(task_dir, 'instructions.json'), 'w') as f:
             json.dump(instructions_data, f, indent=2)
 
-        # Write config file
-        config_file = os.path.join(test_dir, 'backend_test_config.yaml')
+        # Write config file in task_dir
+        config_file = os.path.join(task_dir, 'backend_test_config.yaml')
         import yaml
         with open(config_file, 'w') as f:
             yaml.dump(config, f)
@@ -118,7 +122,7 @@ class TestBackendState:
         # Create server with the config file
         server = FlaskTestServer(
             port=9006,
-            debug=False,
+            debug=True,  # Enable debug mode for admin endpoint access
             config_file=config_file,
             test_data_file=data_file
         )

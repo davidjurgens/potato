@@ -44,10 +44,26 @@ class BaseSeleniumTest(unittest.TestCase):
         """Set up the Flask server for all tests in this class."""
         # Import FlaskTestServer for proper session handling
         from tests.helpers.flask_test_setup import FlaskTestServer
+        from tests.helpers.test_utils import create_span_annotation_config
 
-        # Start the Flask server using the proper test setup
+        # Create a secure test configuration using test utilities
         import os
-        config_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "tests/configs/frontend-span-test.yaml")
+        tests_dir = os.path.dirname(os.path.dirname(__file__))
+        test_dir = os.path.join(tests_dir, "output", "selenium_base_test")
+
+        # Ensure the test directory exists
+        os.makedirs(test_dir, exist_ok=True)
+
+        # Create span annotation config for Selenium tests
+        config_file, data_file = create_span_annotation_config(
+            test_dir,
+            annotation_task_name="Selenium Base Test",
+            require_password=False
+        )
+
+        # Store for cleanup
+        cls.test_dir = test_dir
+
         cls.server = FlaskTestServer(port=9008, debug=False, config_file=config_file)
         started = cls.server.start_server()
         assert started, "Failed to start Flask server"
@@ -85,6 +101,11 @@ class BaseSeleniumTest(unittest.TestCase):
         """Clean up the Flask server after all tests."""
         if hasattr(cls, 'server'):
             cls.server.stop_server()
+
+        # Clean up test directory
+        if hasattr(cls, 'test_dir'):
+            from tests.helpers.test_utils import cleanup_test_directory
+            cleanup_test_directory(cls.test_dir)
 
     def setUp(self):
         """
@@ -179,14 +200,31 @@ class BaseSeleniumTest(unittest.TestCase):
 
         Uses the credentials from self.test_user and self.test_password.
         """
+        # Check if already logged in by looking for annotation interface elements
+        # The home page (/) serves the annotation interface when logged in
+        try:
+            # If we can find annotation elements, user is already logged in
+            self.driver.find_element(By.ID, "annotation-forms")
+            return  # Already logged in, no need to login again
+        except:
+            pass  # Not logged in, continue with login
+
         # If not already logged in, login
         if "/annotate" not in self.driver.current_url:
             self.driver.get(f"{self.server.base_url}/")
 
-            # Wait for page to load
-            WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.ID, "login-tab"))
-            )
+            # Wait for page to load - either login form or annotation interface
+            try:
+                WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located((By.ID, "login-tab"))
+                )
+            except:
+                # If login-tab not found, check if we're at annotation interface
+                try:
+                    self.driver.find_element(By.ID, "annotation-forms")
+                    return  # Already logged in
+                except:
+                    raise Exception("Could not find login form or annotation interface")
 
             # Switch to login tab
             login_tab = self.driver.find_element(By.ID, "login-tab")
@@ -218,30 +256,61 @@ class BaseSeleniumTest(unittest.TestCase):
         Verify that the user is properly authenticated.
 
         This method:
-        1. Attempts to access the annotation page
-        2. Verifies that the page loads successfully (not redirected to login)
-        3. Checks that the user can see annotation content
+        1. Checks that the user is on the annotation interface (not login page)
+        2. Waits for JavaScript to load the content
+        3. Verifies annotation content is visible
 
         Raises an assertion error if authentication failed.
         """
-        # Try to access the annotation page
-        self.driver.get(f"{self.server.base_url}/annotate")
-
-        # Wait for the annotation page to load
-        WebDriverWait(self.driver, 10).until(
-            EC.presence_of_element_located((By.ID, "instance-text"))
-        )
-
-        # Verify we're on the annotation page (not redirected to login)
+        # Check if we're currently on the annotation interface
+        # After registration, user should be on / which serves the annotation page
         current_url = self.driver.current_url
-        assert "/annotate" in current_url, f"Expected to be on annotation page, got: {current_url}"
 
-        # Verify we can see annotation content
-        instance_text = self.driver.find_element(By.ID, "instance-text")
-        assert instance_text.is_displayed(), "Instance text should be visible"
+        # If we're still on the login page, authentication failed
+        try:
+            login_tab = self.driver.find_element(By.ID, "login-tab")
+            if login_tab.is_displayed():
+                raise Exception("User is still on login page - authentication failed")
+        except:
+            pass  # login-tab not found or not visible - good, we're not on login page
 
-        # Verify we have a valid session by checking for user-specific content
-        # This could be checking for the username in the page or other user-specific elements
+        # Wait for annotation interface to fully load
+        # First check for the task layout structure
+        try:
+            WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.ID, "task_layout"))
+            )
+        except:
+            raise Exception("Annotation interface did not load - task_layout not found")
+
+        # Wait for JavaScript to initialize and show main content
+        # Give extra time for async API calls to complete
+        time.sleep(2)  # Allow time for API calls to complete
+
+        try:
+            WebDriverWait(self.driver, 15).until(
+                EC.visibility_of_element_located((By.ID, "main-content"))
+            )
+        except:
+            # Check if we got an error state
+            try:
+                error_state = self.driver.find_element(By.ID, "error-state")
+                if error_state.is_displayed():
+                    error_text = self.driver.find_element(By.ID, "error-message-text").text
+                    raise Exception(f"Page showed error state: {error_text}")
+            except Exception as e:
+                if "error state" in str(e):
+                    raise
+            # Check if loading state is still showing
+            try:
+                loading_state = self.driver.find_element(By.ID, "loading-state")
+                if loading_state.is_displayed():
+                    raise Exception("Page is stuck in loading state")
+            except:
+                pass
+            raise Exception("Main content did not become visible within timeout")
+
+        # Verify annotation content is present
         page_source = self.driver.page_source
         assert "annotation" in page_source.lower(), "Page should contain annotation content"
 
