@@ -1,5 +1,3 @@
-import { AIAssistantManager } from './ai_assistant_manager.js';
-
 // Global state
 let currentInstance = null;
 let currentAnnotations = {};

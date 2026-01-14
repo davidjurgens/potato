@@ -43,6 +43,12 @@
             border-left: 4px solid #dc3545;
         }
 
+        .feedback-warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border-left: 4px solid #ffc107;
+        }
+
         .training-instance {
             background-color: #f8f9fa;
             border: 2px solid #e9ecef;
@@ -131,11 +137,32 @@
             <p class="mb-0">Practice your annotation skills with feedback on your answers</p>
         </div>
 
+        <!-- Progress bar -->
+        <div class="training-progress mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="text-muted">
+                    <i class="fas fa-tasks me-2"></i>Question {{ current_question }} of {{ total_questions }}
+                </span>
+                <span class="text-muted">
+                    <i class="fas fa-check-circle text-success me-1"></i>{{ correct_count }} correct
+                    {% if mistake_count > 0 %}
+                    <span class="ms-2"><i class="fas fa-times-circle text-danger me-1"></i>{{ mistake_count }} mistakes</span>
+                    {% endif %}
+                </span>
+            </div>
+            <div class="progress" style="height: 8px;">
+                <div class="progress-bar bg-success" role="progressbar"
+                     style="width: {{ (current_question / total_questions * 100)|int }}%"
+                     aria-valuenow="{{ current_question }}" aria-valuemin="0" aria-valuemax="{{ total_questions }}">
+                </div>
+            </div>
+        </div>
+
         <!-- Feedback alert (shown when feedback is available) -->
         {% if show_feedback %}
-        <div class="feedback-alert {% if 'Correct' in feedback %}feedback-correct{% else %}feedback-incorrect{% endif %}">
+        <div class="feedback-alert {% if feedback_type == 'success' %}feedback-correct{% elif feedback_type == 'warning' %}feedback-warning{% else %}feedback-incorrect{% endif %}">
             <div class="d-flex align-items-start">
-                <i class="fas {% if 'Correct' in feedback %}fa-check-circle{% else %}fa-exclamation-circle{% endif %} me-3 mt-1"></i>
+                <i class="fas {% if feedback_type == 'success' %}fa-check-circle{% elif feedback_type == 'warning' %}fa-exclamation-triangle{% else %}fa-exclamation-circle{% endif %} me-3 mt-1"></i>
                 <div>
                     <h6 class="mb-2">{{ feedback }}</h6>
                     {% if allow_retry %}
@@ -152,7 +179,7 @@
 
             <!-- Instance text -->
             <div class="training-instance-text">
-                {{ instance | safe }}
+                {{ instance_text | safe }}
             </div>
 
             <!-- Annotation form -->
@@ -202,6 +229,7 @@
     </script>
 
     <!-- Load annotation JavaScript -->
+    <script src="{{ url_for('static', filename='ai_assistant_manager.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='annotation.js') }}?v=11"></script>
 
     <!-- Training-specific JavaScript -->

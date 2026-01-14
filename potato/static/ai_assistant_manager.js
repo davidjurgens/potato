@@ -2,8 +2,8 @@ class AIAssistantManager {
     constructor() {
         this.loadingStates = new Set();
         this.activeTooltips = new Set();
-        this.highlight = new Highlight();
         this.keywordHighlightStates = new Map();
+        this.highlightedLabels = new Map(); // Track highlighted labels by annotationId
 
         // Add new AI assistant types here
         this.assistantConfig = {
@@ -194,6 +194,10 @@ class AIAssistantManager {
             switch (assistantType) {
                 case 'hint':
                     content = this.renderHint(data.res);
+                    // Highlight the suggested label if present
+                    if (data.res.suggestive_choice) {
+                        this.highlightSuggestedLabel(annotationId, data.res.suggestive_choice);
+                    }
                     break;
                 case 'keyword':
                     this.renderKeyword(data.res, annotationId);
@@ -248,6 +252,119 @@ class AIAssistantManager {
         `;
     }
 
+    /**
+     * Highlight a suggested label on the annotation form
+     * @param {string} annotationId - The annotation ID
+     * @param {string|number} suggestedLabel - The suggested label value
+     */
+    highlightSuggestedLabel(annotationId, suggestedLabel) {
+        console.log('[AIAssistant] highlightSuggestedLabel:', { annotationId, suggestedLabel });
+
+        // Clear any existing highlights for this annotation
+        this.clearLabelHighlights(annotationId);
+
+        // Find the annotation form with this ID
+        const annotationForm = document.querySelector(`.annotation-form[data-annotation-id="${annotationId}"]`);
+        if (!annotationForm) {
+            console.warn('[AIAssistant] Annotation form not found for ID:', annotationId);
+            return;
+        }
+
+        // Convert suggestedLabel to string for comparison
+        const suggestedLabelStr = String(suggestedLabel).toLowerCase().trim();
+
+        // Find all label inputs (radio buttons, checkboxes) in the form
+        const labelInputs = annotationForm.querySelectorAll('input[type="radio"], input[type="checkbox"]');
+        const highlightedElements = [];
+
+        labelInputs.forEach(input => {
+            // Get the label text - check value, id, or associated label element
+            const inputValue = input.value?.toLowerCase().trim();
+            const inputId = input.id?.toLowerCase().trim();
+
+            // Also check the text of the associated label element
+            const labelElement = annotationForm.querySelector(`label[for="${input.id}"]`);
+            const labelText = labelElement?.textContent?.toLowerCase().trim();
+
+            // Check if this input matches the suggested label
+            const isMatch = inputValue === suggestedLabelStr ||
+                            inputId?.includes(suggestedLabelStr) ||
+                            labelText?.includes(suggestedLabelStr) ||
+                            suggestedLabelStr.includes(inputValue);
+
+            if (isMatch) {
+                console.log('[AIAssistant] Found matching label:', { inputValue, labelText, suggestedLabelStr });
+
+                // Add highlight class to the input
+                input.classList.add('ai-suggested');
+
+                // Add highlight class to the associated label element
+                if (labelElement) {
+                    labelElement.classList.add('ai-suggested-label');
+
+                    // Add a sparkle/star indicator
+                    if (!labelElement.querySelector('.ai-suggestion-indicator')) {
+                        const indicator = document.createElement('span');
+                        indicator.className = 'ai-suggestion-indicator';
+                        indicator.innerHTML = ' &#x2728;'; // Sparkle emoji
+                        indicator.title = 'AI Suggested';
+                        indicator.style.marginLeft = '4px';
+                        labelElement.appendChild(indicator);
+                    }
+
+                    highlightedElements.push(labelElement);
+                }
+
+                // Also highlight the parent container if it exists
+                const parentOption = input.closest('.shadcn-radio-option, .shadcn-checkbox-option, .shadcn-span-option, .option-item');
+                if (parentOption) {
+                    parentOption.classList.add('ai-suggested-option');
+                    highlightedElements.push(parentOption);
+                }
+
+                highlightedElements.push(input);
+            }
+        });
+
+        // Store the highlighted elements for later cleanup
+        if (highlightedElements.length > 0) {
+            this.highlightedLabels.set(annotationId, highlightedElements);
+            console.log(`[AIAssistant] Highlighted ${highlightedElements.length} elements for annotation ${annotationId}`);
+        }
+    }
+
+    /**
+     * Clear label highlights for a specific annotation
+     * @param {string} annotationId - The annotation ID (optional, clears all if not provided)
+     */
+    clearLabelHighlights(annotationId = null) {
+        if (annotationId) {
+            const elements = this.highlightedLabels.get(annotationId);
+            if (elements) {
+                elements.forEach(el => {
+                    el.classList.remove('ai-suggested', 'ai-suggested-label', 'ai-suggested-option');
+                    const indicator = el.querySelector('.ai-suggestion-indicator');
+                    if (indicator) {
+                        indicator.remove();
+                    }
+                });
+                this.highlightedLabels.delete(annotationId);
+            }
+        } else {
+            // Clear all highlights
+            this.highlightedLabels.forEach((elements, id) => {
+                elements.forEach(el => {
+                    el.classList.remove('ai-suggested', 'ai-suggested-label', 'ai-suggested-option');
+                    const indicator = el.querySelector('.ai-suggestion-indicator');
+                    if (indicator) {
+                        indicator.remove();
+                    }
+                });
+            });
+            this.highlightedLabels.clear();
+        }
+    }
+
     async getAiAssistantName() {
         document.querySelectorAll('.annotation-form').forEach(async (node) => {
             const aiHelp = node.querySelector(".ai-help");
@@ -293,7 +410,13 @@ class AIAssistantManager {
             this.hideTooltip(tooltip);
         });
 
-        window.spanManager.clearAiSpans()
+        // Clear AI spans if spanManager exists
+        if (window.spanManager && typeof window.spanManager.clearAiSpans === 'function') {
+            window.spanManager.clearAiSpans();
+        }
+
+        // Clear label highlights
+        this.clearLabelHighlights();
     }
 
     closeOtherTooltips(currentTooltip) {
@@ -304,196 +427,3 @@ class AIAssistantManager {
         });
     }
 }
-
-// class Highlight {
-//     constructor() {
-//         this.colors = {};
-//     }
-
-//     async loadColors() {
-//         try {
-//             const response = await fetch('/api/colors');
-//             if (!response.ok) {
-//                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-//             }
-//             this.colors = await response.json();
-//             console.log('SpanManager: Colors loaded:', this.colors);
-//         } catch (error) {
-//             console.error('SpanManager: Error loading colors:', error);
-//         }
-//     }
-
-//     highlightSpans(spans, textContainer, textContent, spanOverlays) {
-
-//         spanOverlays.innerHTML = '';
-
-//         if (!spans || spans.length === 0) {
-//             return;
-//         }
-
-//         // Get container position for relative positioning
-//         const containerRect = textContainer.getBoundingClientRect();
-
-//         const sortedSpans = [...spans].sort((a, b) => a.start - b.start);
-
-//         sortedSpans.forEach((span, index) => {
-//             this.renderSpanOverlay(span, textContent, spanOverlays, containerRect);
-//         });
-//     }
-
-//     renderSpanOverlay(span, textContent, spanOverlays, containerRect) {
-//         console.log("fpowjeaf", span)
-//         const textNode = textContent.firstChild;
-//         if (!textNode || textNode.nodeType !== Node.TEXT_NODE) {
-//             console.error('No text node found in textContent');
-//             return;
-//         }
-//         const rects = this.getCharRangeBoundingRect(textContent, span.start + 21, span.end + 21);
-//         if (!rects || rects.length === 0) {
-//             console.warn('Could not get bounding rect for span', span);
-//             return;
-//         }
-
-//         let sharedTooltip = null;
-//         if (span.reasoning) {
-//             sharedTooltip = document.createElement('div');
-//             sharedTooltip.className = 'span-hover-tip';
-//             sharedTooltip.textContent = span.reasoning;
-//             sharedTooltip.style.position = 'fixed';
-//             sharedTooltip.style.display = 'none';
-//             sharedTooltip.style.maxWidth = '320px';
-//             sharedTooltip.style.background = 'rgba(0, 0, 0, 0.92)';
-//             sharedTooltip.style.color = '#fff';
-//             sharedTooltip.style.padding = '6px 8px';
-//             sharedTooltip.style.borderRadius = '4px';
-//             sharedTooltip.style.fontSize = '12px';
-//             sharedTooltip.style.lineHeight = '1.35';
-//             sharedTooltip.style.zIndex = '2000';
-//             sharedTooltip.style.pointerEvents = 'none';
-//             sharedTooltip.style.whiteSpace = 'normal';
-//             sharedTooltip.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.25)';
-//             document.body.appendChild(sharedTooltip);
-//         }
-
-//         const createOverlays = () => {
-//             rects.forEach((rect, rectIndex) => {
-//                 const overlay = document.createElement('div');
-//                 overlay.className = 'span-overlay';
-//                 overlay.dataset.spanId = span.id;
-//                 overlay.dataset.start = span.start;
-//                 overlay.dataset.end = span.end;
-//                 overlay.dataset.label = span.label;
-//                 overlay.style.position = 'absolute';
-//                 overlay.style.pointerEvents = 'auto';
-//                 overlay.style.cursor = 'pointer';
-
-//                 const left = rect.left - containerRect.left;
-//                 const top = rect.top - containerRect.top;
-//                 const width = Math.max(1, rect.right - rect.left);
-//                 const height = Math.max(1, rect.bottom - rect.top);
-//                 overlay.style.left = `${left}px`;
-//                 overlay.style.top = `${top}px`;
-//                 overlay.style.width = `${width}px`;
-//                 overlay.style.height = `${height}px`;
-//                 overlay.style.zIndex = '10';
-//                 // Apply color
-//                 const baseColor = this.colors[span.schema]?.[span.label] || '#ffff03';
-//                 const backgroundColor = this.addTransparency(baseColor, 0.65); // 65% opacity
-//                 overlay.style.backgroundColor = backgroundColor;
-
-//                 if (rectIndex === 0) {
-//                     const label = document.createElement('span');
-
-//                     label.className = 'span-label';
-//                     label.textContent = span.label;
-//                     label.style.position = 'absolute';
-//                     label.style.top = '-25px';
-//                     label.style.left = '0';
-//                     label.style.fontSize = '11px';
-//                     label.style.fontWeight = 'bold';
-//                     label.style.backgroundColor = 'rgba(0,0,0,0.9)';
-//                     label.style.color = 'white';
-//                     label.style.padding = '3px 6px';
-//                     label.style.borderRadius = '4px';
-//                     label.style.whiteSpace = 'nowrap';
-//                     label.style.pointerEvents = 'auto';
-//                     label.style.zIndex = '1000';
-//                     label.style.display = 'inline-flex';
-//                     label.style.alignItems = 'center';
-//                     label.style.gap = '6px';
-//                     overlay.appendChild(label);
-//                 }
-
-//                 if (sharedTooltip) {
-//                     overlay.addEventListener('mouseenter', (e) => {
-//                         sharedTooltip.style.display = 'block';
-//                         // Position tooltip near cursor with offset
-//                         sharedTooltip.style.left = (e.clientX + 15) + 'px';
-//                         sharedTooltip.style.top = (e.clientY + 15) + 'px';
-//                     });
-
-//                     overlay.addEventListener('mousemove', (e) => {
-//                         sharedTooltip.style.left = (e.clientX + 15) + 'px';
-//                         sharedTooltip.style.top = (e.clientY + 15) + 'px';
-//                     });
-
-//                     overlay.addEventListener('mouseleave', (e) => {
-//                         sharedTooltip.style.display = 'none';
-//                     });
-//                 }
-
-//                 spanOverlays.appendChild(overlay);
-//             });
-//         };
-//         createOverlays();
-//     }
-
-//     addTransparency(color, alpha = 0.65) {
-//         // If color already has alpha channel, return as is
-//         if (color.startsWith('rgba')) {
-//             return color;
-//         }
-
-//         // If color is in rgb format
-//         if (color.startsWith('rgb(')) {
-//             return color.replace('rgb(', 'rgba(').replace(')', `, ${alpha})`);
-//         }
-
-//         // If color is in hex format
-//         if (color.startsWith('#')) {
-//             // Remove # and handle 3 or 6 character hex
-//             let hex = color.slice(1);
-
-//             // Convert 3-char hex to 6-char
-//             if (hex.length === 3) {
-//                 hex = hex.split('').map(char => char + char).join('');
-//             }
-
-//             // Convert hex to rgb
-//             const r = parseInt(hex.slice(0, 2), 16);
-//             const g = parseInt(hex.slice(2, 4), 16);
-//             const b = parseInt(hex.slice(4, 6), 16);
-
-//             return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-//         }
-
-//         // Fallback: return color as is
-//         return color;
-//     }
-
-//     getCharRangeBoundingRect(container, start, end) {
-//         const textNode = container.firstChild;
-//         if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return null;
-
-//         const range = document.createRange();
-//         range.setStart(textNode, start);
-//         range.setEnd(textNode, end);
-
-//         let rects = range.getClientRects();
-
-//         if (rects.length === 0) return null;
-//         return Array.from(rects);
-//     }
-// }
-
-export { AIAssistantManager };
