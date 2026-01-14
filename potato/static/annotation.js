@@ -623,18 +623,24 @@ async function loadAnnotations() {
     try {
         console.log('🔍 Loading annotations for instance:', currentInstance.id);
 
-        // DON'T clear inputs - the server renders HTML with existing annotations
-        // already set (checked attributes, values, etc.)
+        // IMPORTANT: Read from server-rendered HTML attributes, NOT browser form state.
+        // Firefox (and some other browsers) preserve form state across page navigations,
+        // which can cause checkboxes from the previous instance to appear checked
+        // even though the server didn't render them that way.
 
-        // Instead, read existing annotation state from server-rendered DOM
         currentAnnotations = {};
 
-        // Read checkbox state
+        // Read checkbox state from HTML 'checked' ATTRIBUTE (not .checked property)
+        // The server sets the 'checked' attribute on checkboxes that should be checked
         const checkboxInputs = document.querySelectorAll('input[type="checkbox"]');
         checkboxInputs.forEach(input => {
             const schema = input.getAttribute('schema');
             const labelName = input.getAttribute('label_name');
-            if (schema && labelName && input.checked) {
+            // Use hasAttribute('checked') to read server-rendered state
+            const serverChecked = input.hasAttribute('checked');
+            // Sync the browser state to match server state (fixes Firefox form restoration)
+            input.checked = serverChecked;
+            if (schema && labelName && serverChecked) {
                 if (!currentAnnotations[schema]) {
                     currentAnnotations[schema] = {};
                 }
@@ -642,12 +648,16 @@ async function loadAnnotations() {
             }
         });
 
-        // Read radio button state
+        // Read radio button state from HTML 'checked' ATTRIBUTE
         const radioInputs = document.querySelectorAll('input[type="radio"]');
         radioInputs.forEach(input => {
             const schema = input.getAttribute('schema');
             const labelName = input.getAttribute('label_name');
-            if (schema && labelName && input.checked) {
+            // Use hasAttribute('checked') to read server-rendered state
+            const serverChecked = input.hasAttribute('checked');
+            // Sync the browser state to match server state
+            input.checked = serverChecked;
+            if (schema && labelName && serverChecked) {
                 if (!currentAnnotations[schema]) {
                     currentAnnotations[schema] = {};
                 }
@@ -655,24 +665,34 @@ async function loadAnnotations() {
             }
         });
 
-        // Read text input state
+        // Read text input state from HTML 'value' ATTRIBUTE
+        // For text inputs, the server sets the value attribute
         const textInputs = document.querySelectorAll('input[type="text"], textarea.annotation-input');
         textInputs.forEach(input => {
             const schema = input.getAttribute('schema');
             const labelName = input.getAttribute('label_name');
-            if (schema && labelName && input.value) {
+            // Read from the HTML attribute, not the current input value
+            const serverValue = input.getAttribute('value') || '';
+            // Sync browser state to server state
+            input.value = serverValue;
+            if (schema && labelName && serverValue) {
                 if (!currentAnnotations[schema]) {
                     currentAnnotations[schema] = {};
                 }
-                currentAnnotations[schema][labelName] = input.value;
+                currentAnnotations[schema][labelName] = serverValue;
             }
         });
 
-        // Read slider state
+        // Read slider state from HTML 'value' ATTRIBUTE
         const sliderInputs = document.querySelectorAll('input[type="range"]');
         sliderInputs.forEach(input => {
             const schema = input.getAttribute('schema');
             const labelName = input.getAttribute('label_name');
+            // Read from HTML attribute - server sets this for saved slider values
+            const serverValue = input.getAttribute('value');
+            if (serverValue) {
+                input.value = serverValue;
+            }
             if (schema && labelName) {
                 if (!currentAnnotations[schema]) {
                     currentAnnotations[schema] = {};
