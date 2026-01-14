@@ -1133,6 +1133,15 @@ def render_page_with_annotations(username) -> str:
                 # (which was annotated) and figure out which one to fill in
                 input_fields = soup.find_all(["input", "select", "textarea"], {"name": name})
 
+                # For radio buttons, the name attribute is just the schema (not schema:::label)
+                # because all radio buttons in a group must have the same name for HTML mutual exclusivity
+                # So we also search by schema and label_name attributes
+                if not input_fields:
+                    input_fields = soup.find_all(
+                        ["input"],
+                        {"schema": schema, "label_name": label}
+                    )
+
                 for input_field in input_fields:
 
                     if input_field is None:
@@ -1140,15 +1149,15 @@ def render_page_with_annotations(username) -> str:
                         continue
 
                     # If it's a slider, set the value for the slider
-                    if input_field['type'] == 'range' and name.endswith(':::slider'):
+                    if input_field.get('type') == 'range' and name.endswith(':::slider'):
                         input_field['value'] = value
                         continue
 
-                    if input_field['type'] == 'checkbox' or input_field['type'] == 'radio':
+                    if input_field.get('type') == 'checkbox' or input_field.get('type') == 'radio':
                         if value:
                             input_field['checked'] = True
 
-                    if input_field['type'] == 'text' or input_field['type'] == 'textarea':
+                    if input_field.get('type') == 'text' or input_field.get('type') == 'textarea':
                         if isinstance(value, str):
                             input_field['value'] = value
 
