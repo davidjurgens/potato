@@ -882,7 +882,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
 
         # Check if span overlay appeared
         try:
-            span_overlay = self.wait_for_element(By.CLASS_NAME, "span-overlay", timeout=5)
+            span_overlay = self.wait_for_element(By.CSS_SELECTOR, ".span-overlay-pure", timeout=5)
             print("✅ Span overlay appeared successfully")
         except:
             # If no overlay, check if there are any span highlights (alternative rendering)
@@ -1037,7 +1037,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         time.sleep(2)
 
         # Check that a span overlay was created
-        span_overlays_after = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        span_overlays_after = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         self.assertGreater(len(span_overlays_after), 0, "No span overlays found after creation")
         print(f"✅ Found {len(span_overlays_after)} span overlay(s)")
 
@@ -1238,7 +1238,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
             print(f"🔍 Element {i}: class='{elem.get_attribute('class')}', tag='{elem.tag_name}'")
 
         # Check for span overlays specifically
-        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        span_overlays = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         print(f"🔍 Found {len(span_overlays)} span-overlay elements")
 
         # Check for span highlights
@@ -1334,7 +1334,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         print(f"🔍 Span manager state AFTER deletion: {span_manager_state_after}")
 
         # Check if span was deleted
-        span_overlays_after_delete = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        span_overlays_after_delete = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         span_labels_after_delete = self.driver.find_elements(By.CLASS_NAME, "span-label")
         delete_buttons_after_delete = self.driver.find_elements(By.CLASS_NAME, "span-delete-btn")
 
@@ -1647,7 +1647,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         time.sleep(2)
 
         # Verify all spans are created
-        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        span_overlays = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         self.assertEqual(len(span_overlays), 3, "Should have 3 spans created")
 
         print(f"✅ Created {len(span_overlays)} spans successfully")
@@ -1659,7 +1659,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         time.sleep(2)
 
         # Verify first span is deleted
-        span_overlays_after_first_delete = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        span_overlays_after_first_delete = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         self.assertEqual(len(span_overlays_after_first_delete), 2, "Should have 2 spans after deleting first")
 
         # Test 2: Delete the middle span
@@ -1669,7 +1669,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         time.sleep(2)
 
         # Verify second span is deleted
-        span_overlays_after_second_delete = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        span_overlays_after_second_delete = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         self.assertEqual(len(span_overlays_after_second_delete), 1, "Should have 1 span after deleting second")
 
         # Test 3: Delete the last span
@@ -1679,7 +1679,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         time.sleep(2)
 
         # Verify all spans are deleted
-        span_overlays_after_all_deleted = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        span_overlays_after_all_deleted = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         self.assertEqual(len(span_overlays_after_all_deleted), 0, "Should have 0 spans after deleting all")
 
         # Verify backend state is clean
@@ -1733,7 +1733,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         time.sleep(2)
 
         # Verify span is created
-        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        span_overlays = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         self.assertEqual(len(span_overlays), 1, "Should have 1 span created")
 
         # Delete the span
@@ -1742,7 +1742,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         time.sleep(2)
 
         # Verify span is deleted
-        span_overlays_after_delete = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        span_overlays_after_delete = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         self.assertEqual(len(span_overlays_after_delete), 0, "Should have 0 spans after deletion")
 
         # Navigate to next instance
@@ -1756,7 +1756,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         time.sleep(2)
 
         # Verify span is still deleted (doesn't reappear)
-        span_overlays_after_navigation = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        span_overlays_after_navigation = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         self.assertEqual(len(span_overlays_after_navigation), 0, "Span should not reappear after navigation")
 
         print("✅ Span deletion persistence test completed successfully")
@@ -1794,7 +1794,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         time.sleep(2)
 
         # Debug: Print initial overlay count and details
-        overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        overlays = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         print(f"DEBUG: Initial overlays count: {len(overlays)}")
         for i, overlay in enumerate(overlays):
             start = overlay.get_attribute("data-start")
@@ -1878,7 +1878,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         time.sleep(1)
 
         # Debug: Print overlay count and details after partial overlap
-        overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        overlays = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         print(f"DEBUG: After partial overlap selection - overlays count: {len(overlays)}")
         for i, overlay in enumerate(overlays):
             start = overlay.get_attribute("data-start")
@@ -1905,7 +1905,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         time.sleep(1)
 
         # Debug: Print overlay count and details after full containment
-        overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        overlays = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         print(f"DEBUG: After full containment selection - overlays count: {len(overlays)}")
         for i, overlay in enumerate(overlays):
             start = overlay.get_attribute("data-start")
@@ -1932,7 +1932,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         time.sleep(1)
 
         # Debug: Print overlay count and details after non-overlapping
-        overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        overlays = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         print(f"DEBUG: After non-overlapping selection - overlays count: {len(overlays)}")
         for i, overlay in enumerate(overlays):
             start = overlay.get_attribute("data-start")
