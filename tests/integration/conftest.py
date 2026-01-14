@@ -234,3 +234,6 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "slow: marks tests as slow (may take >30s)"
     )
+    config.addinivalue_line(
+        "markers", "edge_case: marks tests as edge case tests (boundary conditions)"
+    )
