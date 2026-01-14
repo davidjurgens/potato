@@ -144,10 +144,16 @@
     </div>
 
     <div class="shadcn-card p-6">
+      {% if require_password %}
       <div class="tab-container">
         <div class="tab active" id="login-tab" onclick="switchTab('login')">Sign In</div>
         <div class="tab" id="register-tab" onclick="switchTab('register')">Register</div>
       </div>
+      {% else %}
+      <p class="text-center text-sm mb-4" style="color: var(--muted-foreground);">
+        Enter your username to continue
+      </p>
+      {% endif %}
 
       {% if login_error %}
       <div class="mb-4 p-3 rounded" style="background-color: rgba(239, 68, 68, 0.1); border: 1px solid var(--destructive); color: var(--destructive);">
@@ -174,6 +180,7 @@
               >
             </div>
 
+            {% if require_password %}
             <div>
               <div class="flex items-center justify-between mb-1">
                 <label for="login-pass" class="block text-sm font-medium" style="color: var(--foreground);">Password</label>
@@ -187,15 +194,17 @@
                 required
               >
             </div>
+            {% endif %}
 
             <button type="submit" class="w-full shadcn-button shadcn-button-primary">
-              Sign In
+              {% if require_password %}Sign In{% else %}Continue{% endif %}
             </button>
           </div>
         </form>
       </div>
 
-      <!-- Register Tab Content -->
+      {% if require_password %}
+      <!-- Register Tab Content (only shown when password is required) -->
       <div class="tab-content" id="register-content">
         <form method="POST" action="/register">
           <input type="hidden" name="action" value="signup">
@@ -231,6 +240,7 @@
           </div>
         </form>
       </div>
+      {% endif %}
     </div>
   </div>
 

@@ -212,7 +212,9 @@ def home():
                                               f"Please access this page through your crowdsourcing platform.")
 
         logger.debug("No active session, rendering login page")
-        return render_template("home.html", title=config.get("annotation_task_name", "Annotation Platform"))
+        return render_template("home.html",
+                              title=config.get("annotation_task_name", "Annotation Platform"),
+                              require_password=config.get("require_password", True))
 
     user_id = session['username']
     logger.debug(f"Active session for user: {user_id}")
@@ -286,12 +288,23 @@ def auth():
 
         logger.debug(f"Login attempt for user: {user_id}")
 
+        # Get require_password setting
+        require_password = config.get("require_password", True)
+
         # Validate that user ID is provided
         if not user_id:
             logger.warning("Login attempt with empty user_id")
             return render_template("home.html",
                                   login_error="User ID is required",
-                                  title=config.get("annotation_task_name", "Annotation Platform"))
+                                  title=config.get("annotation_task_name", "Annotation Platform"),
+                                  require_password=require_password)
+
+        # In passwordless mode, auto-register new users
+        if not require_password:
+            user_authenticator = UserAuthenticator.get_instance()
+            if not user_authenticator.is_valid_username(user_id):
+                logger.info(f"Auto-registering new user in passwordless mode: {user_id}")
+                user_authenticator.add_user(user_id, None)
 
         # Authenticate the user against the configured backend
         if UserAuthenticator.authenticate(user_id, password):
@@ -310,77 +323,33 @@ def auth():
             return redirect(url_for("annotate"))
         else:
             logger.warning(f"Login failed for user: {user_id}")
+            error_msg = "Invalid user ID or password" if require_password else "Login failed"
             return render_template("home.html",
-                                  login_error="Invalid user ID or password",
+                                  login_error=error_msg,
                                   login_email=user_id,
-                                  title=config.get("annotation_task_name", "Annotation Platform"))
+                                  title=config.get("annotation_task_name", "Annotation Platform"),
+                                  require_password=require_password)
 
     # GET request - show the login form
     return render_template("home.html",
-                         title=config.get("annotation_task_name", "Annotation Platform"))
+                         title=config.get("annotation_task_name", "Annotation Platform"),
+                         require_password=config.get("require_password", True))
 
 
 @app.route("/passwordless-login", methods=["GET", "POST"])
 def passwordless_login():
     """
-    Handle passwordless login page requests.
+    Legacy route for passwordless login.
 
-    This route provides a simplified login interface for systems configured
-    to use passwordless authentication. Users only need to provide their
-    username to access the annotation platform.
+    This route now redirects to the main home page, which handles
+    both password and passwordless authentication based on the
+    require_password config setting.
 
-    Features:
-    - Passwordless authentication flow
-    - Configuration-based access control
-    - User state initialization
-    - Error handling and validation
-
-    Returns:
-        flask.Response: Rendered template or redirect
-
-    Side Effects:
-        - May create new user sessions
-        - May initialize new user states
+    Kept for backwards compatibility with existing links/bookmarks.
     """
-    logger.debug("Processing passwordless login page request")
+    logger.debug("Redirecting from legacy passwordless-login to home")
+    return redirect(url_for("home"))
 
-    # Redirect to regular login if passwords are required
-    if config.get("require_password", True):
-        logger.debug("Passwords required, redirecting to regular login")
-        return redirect(url_for("home"))
-
-    # Handle POST requests for passwordless authentication
-    if request.method == "POST":
-        username = request.form.get("email")
-
-        # Validate that username is provided
-        if not username:
-            logger.warning("Passwordless login attempt with empty username")
-            return render_template("passwordless_login.html",
-                                  login_error="Username is required",
-                                  title=config.get("annotation_task_name", "Annotation Platform"))
-
-        # Authenticate without password
-        if UserAuthenticator.authenticate(username, None):
-            session['username'] = username
-            logger.info(f"Passwordless login successful for user: {username}")
-
-            # Initialize user state if needed
-            if not get_user_state_manager().has_user(username):
-                logger.debug(f"Initializing state for new user: {username}")
-                init_user_state(username)
-
-            return redirect(url_for("annotate"))
-        else:
-            logger.warning(f"Passwordless login failed for user: {username}")
-            return render_template("passwordless_login.html",
-                                  login_error="Invalid username",
-                                  login_email=username,
-                                  title=config.get("annotation_task_name", "Annotation Platform"))
-
-    # GET request - show the passwordless login form
-    return render_template("passwordless_login.html",
-                         title=config.get("annotation_task_name", "Annotation Platform"))
 
 @app.route("/clerk-login", methods=["GET", "POST"])
 def clerk_login():
