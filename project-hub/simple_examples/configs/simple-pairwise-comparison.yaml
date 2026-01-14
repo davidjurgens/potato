@@ -1,8 +1,8 @@
 port: 9001
 server_name: potato annotator
 annotation_task_name: Simple Pairwise Comparison Example
-task_dir: annotation_output/simple-pairwise/
-output_annotation_dir: annotation_output/simple-pairwise/annotations
+task_dir: .
+output_annotation_dir: annotation_output/simple-pairwise/
 output_annotation_format: tsv
 annotation_codebook_url: ''
 data_files:

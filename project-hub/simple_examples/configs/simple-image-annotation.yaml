@@ -8,11 +8,11 @@
 #
 # Then open http://localhost:8000 in your browser.
 
-task_dir: ..
+task_dir: .
 port: 8000
 server_name: Image Annotation Example
 annotation_task_name: Object Detection Demo
-output_annotation_dir: annotation_output/
+output_annotation_dir: annotation_output/simple-image-annotation/
 output_annotation_format: json
 
 # Data file containing image URLs

@@ -189,7 +189,7 @@ function setupEventListeners() {
         }
     });
 
-    // Keyboard navigation
+    // Keyboard navigation and shortcuts
     document.addEventListener('keydown', function (e) {
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
             return; // Don't handle navigation when typing
@@ -204,6 +204,48 @@ function setupEventListeners() {
                 e.preventDefault();
                 navigateToNext();
                 break;
+        }
+    });
+
+    // Keyboard shortcuts for checkboxes and radio buttons (matches base_template.html behavior)
+    document.addEventListener('keyup', function (e) {
+        // Don't handle when in input fields
+        const activeElement = document.activeElement;
+        const activeId = activeElement.id;
+        const activeType = activeElement.getAttribute('type');
+        if (activeId === 'go_to' || activeType === 'text' ||
+            activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA') {
+            return;
+        }
+
+        const key = e.key.toLowerCase();
+
+        // Check checkboxes first
+        const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+        for (const checkbox of checkboxes) {
+            if (key === checkbox.value.toLowerCase()) {
+                checkbox.checked = !checkbox.checked;
+                // Trigger change event so annotation state gets updated
+                checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+                if (checkbox.onclick) {
+                    checkbox.onclick.apply(checkbox);
+                }
+                return;
+            }
+        }
+
+        // Check radio buttons
+        const radios = document.querySelectorAll('input[type="radio"]');
+        for (const radio of radios) {
+            if (key === radio.value.toLowerCase()) {
+                radio.checked = true;
+                // Trigger change event so annotation state gets updated
+                radio.dispatchEvent(new Event('change', { bubbles: true }));
+                if (radio.onclick) {
+                    radio.onclick.apply(radio);
+                }
+                return;
+            }
         }
     });
 }
@@ -581,19 +623,65 @@ async function loadAnnotations() {
     try {
         console.log('🔍 Loading annotations for instance:', currentInstance.id);
 
-        // CLEAR ALL INPUTS FIRST to prevent persistence
-        clearAllFormInputs();
+        // DON'T clear inputs - the server renders HTML with existing annotations
+        // already set (checked attributes, values, etc.)
 
-        // Reset currentAnnotations
+        // Instead, read existing annotation state from server-rendered DOM
         currentAnnotations = {};
 
-        // TODO: Load annotations from server instead of relying on DOM
-        // const response = await fetch(`/api/annotations/${currentInstance.id}`);
-        // if (response.ok) {
-        //     currentAnnotations = await response.json();
-        // }
+        // Read checkbox state
+        const checkboxInputs = document.querySelectorAll('input[type="checkbox"]');
+        checkboxInputs.forEach(input => {
+            const schema = input.getAttribute('schema');
+            const labelName = input.getAttribute('label_name');
+            if (schema && labelName && input.checked) {
+                if (!currentAnnotations[schema]) {
+                    currentAnnotations[schema] = {};
+                }
+                currentAnnotations[schema][labelName] = input.value;
+            }
+        });
 
-        console.log('🔍 Annotations loaded:', currentAnnotations);
+        // Read radio button state
+        const radioInputs = document.querySelectorAll('input[type="radio"]');
+        radioInputs.forEach(input => {
+            const schema = input.getAttribute('schema');
+            const labelName = input.getAttribute('label_name');
+            if (schema && labelName && input.checked) {
+                if (!currentAnnotations[schema]) {
+                    currentAnnotations[schema] = {};
+                }
+                currentAnnotations[schema][labelName] = input.value;
+            }
+        });
+
+        // Read text input state
+        const textInputs = document.querySelectorAll('input[type="text"], textarea.annotation-input');
+        textInputs.forEach(input => {
+            const schema = input.getAttribute('schema');
+            const labelName = input.getAttribute('label_name');
+            if (schema && labelName && input.value) {
+                if (!currentAnnotations[schema]) {
+                    currentAnnotations[schema] = {};
+                }
+                currentAnnotations[schema][labelName] = input.value;
+            }
+        });
+
+        // Read slider state
+        const sliderInputs = document.querySelectorAll('input[type="range"]');
+        sliderInputs.forEach(input => {
+            const schema = input.getAttribute('schema');
+            const labelName = input.getAttribute('label_name');
+            if (schema && labelName) {
+                if (!currentAnnotations[schema]) {
+                    currentAnnotations[schema] = {};
+                }
+                currentAnnotations[schema][labelName] = input.value;
+            }
+        });
+
+        console.log('🔍 Annotations loaded from DOM:', currentAnnotations);
     } catch (error) {
         console.error('❌ Error loading annotations:', error);
         currentAnnotations = {};
@@ -679,6 +767,10 @@ async function navigateToPrevious() {
     console.log('[DEEP DEBUG NAV] navigateToPrevious - Loading set to true');
 
     try {
+        // Save annotations before navigating away
+        console.log('[DEEP DEBUG NAV] navigateToPrevious - Saving annotations before navigation');
+        await saveAnnotations();
+
         // FIREFOX FIX: Force overlay cleanup before navigation
         const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
         console.log('[DEEP DEBUG NAV] navigateToPrevious - Is Firefox:', isFirefox);
@@ -779,6 +871,10 @@ async function navigateToNext() {
     console.log('[DEEP DEBUG NAV] navigateToNext - Loading set to true');
 
     try {
+        // Save annotations before navigating away
+        console.log('[DEEP DEBUG NAV] navigateToNext - Saving annotations before navigation');
+        await saveAnnotations();
+
         // FIREFOX FIX: Force overlay cleanup before navigation
         const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
         console.log('[DEEP DEBUG NAV] navigateToNext - Is Firefox:', isFirefox);

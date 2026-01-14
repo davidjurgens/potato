@@ -1,8 +1,8 @@
 port: 9001
 server_name: potato annotator
 annotation_task_name: Example for using kwargs
-output_annotation_dir: annotation_output/kwarg-example/annotations
-task_dir: annotation_output/kwarg-example/
+task_dir: .
+output_annotation_dir: annotation_output/kwargs-example/
 output_annotation_format: tsv
 annotation_codebook_url: ''
 data_files:

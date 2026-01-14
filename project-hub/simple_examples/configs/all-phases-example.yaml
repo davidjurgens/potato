@@ -1,6 +1,6 @@
 annotation_task_name: All the Phases Annotations
-task_dir: annotation_output/example-with-all-phases/
-output_annotation_dir: annotation_output/example-with-all-phases/annotations
+task_dir: .
+output_annotation_dir: annotation_output/all-phases-example/
 output_annotation_format: jsonl
 annotation_codebook_url: ''
 data_files:

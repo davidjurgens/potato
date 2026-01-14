@@ -1,6 +1,6 @@
 annotation_task_name: Empty Example
-output_annotation_dir: your-output-dir/annotations
-task_dir: your-output-dir/
+task_dir: .
+output_annotation_dir: annotation_output/your-task-name/
 output_annotation_format: csv
 annotation_codebook_url: ''
 data_files: []

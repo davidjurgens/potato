@@ -2,7 +2,7 @@ port: 9001
 server_name: potato annotator
 annotation_task_name: Simple Highlighting Example
 task_dir: .
-output_annotation_dir: annotation_output/
+output_annotation_dir: annotation_output/simple-span-labeling/
 output_annotation_format: json
 annotation_codebook_url: ''
 data_files:

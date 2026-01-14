@@ -1,8 +1,8 @@
 port: 9001
 server_name: potato annotator
 annotation_task_name: Simple Best-Worst-Scaling Example
-task_dir: annotation_output/simple-bws/
-output_annotation_dir: annotation_output/simple-bws/annotations
+task_dir: .
+output_annotation_dir: annotation_output/simple-bws/
 output_annotation_format: tsv
 annotation_codebook_url: ''
 data_files:

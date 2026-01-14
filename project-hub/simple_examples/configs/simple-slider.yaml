@@ -1,6 +1,6 @@
 annotation_task_name: Simple Slider Example
-output_annotation_dir: annotation_output/simple-slider/annotations
-task_dir: annotation_output/simple-slider/
+task_dir: .
+output_annotation_dir: annotation_output/simple-slider/
 output_annotation_format: csv
 annotation_codebook_url: ''
 data_files:

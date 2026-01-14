@@ -1,8 +1,8 @@
 port: 9001
 server_name: potato annotator
-annotation_task_name: Simple Single-Choice Example
-task_dir: annotation_output/simple-radio-selection/
-output_annotation_dir: annotation_output/simple-radio-selection/annotations
+annotation_task_name: Simple Active Learning Example
+task_dir: .
+output_annotation_dir: annotation_output/simple-active-learning/
 output_annotation_format: tsv
 annotation_codebook_url: ''
 data_files:

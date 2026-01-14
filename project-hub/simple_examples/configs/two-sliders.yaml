@@ -1,6 +1,6 @@
 annotation_task_name: Two Sliders Example
-output_annotation_dir: annotation_output/two-sliders/annotations/
-task_dir: annotation_output/two-sliders/
+task_dir: .
+output_annotation_dir: annotation_output/two-sliders/
 output_annotation_format: csv
 annotation_codebook_url: ''
 data_files:

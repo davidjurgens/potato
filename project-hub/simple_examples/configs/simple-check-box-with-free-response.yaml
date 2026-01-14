@@ -1,8 +1,8 @@
 port: 9001
 server_name: potato annotator
-annotation_task_name: Simple Check Box Example
-task_dir: annotation_output/simple-check-box-with-free-response/
-output_annotation_dir: annotation_output/simple-check-box-with-free-response/annotations
+annotation_task_name: Simple Check Box With Free Response Example
+task_dir: .
+output_annotation_dir: annotation_output/simple-checkbox-free-response/
 output_annotation_format: tsv
 annotation_codebook_url: ''
 data_files:

@@ -1,7 +1,7 @@
 port: 9001
 server_name: potato annotator
 annotation_task_name: Simple Text Box Example
-task_dir: annotation_output/simple-text-box/
+task_dir: .
 output_annotation_dir: annotation_output/simple-text-box/
 output_annotation_format: csv
 annotation_codebook_url: ''
