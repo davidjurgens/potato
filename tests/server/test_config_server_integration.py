@@ -52,6 +52,9 @@ class TestConfigServerIntegration:
         """Set up test environment."""
         clear_config()
 
+        # Save the original cwd - init_config() changes it via os.chdir()
+        self.original_cwd = os.getcwd()
+
         # Create test directory
         self.test_dir = create_test_directory("config_server_integration_test")
 
@@ -67,6 +70,8 @@ class TestConfigServerIntegration:
 
         # Cleanup
         clear_config()
+        # Restore original cwd - critical for test isolation
+        os.chdir(self.original_cwd)
         if os.path.exists(self.test_dir):
             shutil.rmtree(self.test_dir)
 
