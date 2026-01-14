@@ -44,10 +44,11 @@ from potato.flask_server import (
     get_annotations_for_user_on, get_span_annotations_for_user_on,
     render_page_with_annotations, get_current_page_html,
     validate_annotation, parse_html_span_annotation, Label, SpanAnnotation,
-    get_users, get_total_annotations, update_annotation_state, 
+    get_users, get_total_annotations, update_annotation_state,
     get_ai_cache_manager,
     get_users, get_total_annotations, update_annotation_state, ai_hints,
-    get_training_instances, get_training_correct_answers, get_training_explanation
+    get_training_instances, get_training_correct_answers, get_training_explanation,
+    get_prolific_study
 )
 
 # Import admin dashboard functionality
@@ -83,7 +84,8 @@ def validate_admin_api_key(provided_key: str) -> bool:
     Returns:
         bool: True if the key is valid or debug mode is enabled.
     """
-    if config.get("debug", False):
+    debug_val = config.get("debug", False)
+    if debug_val:
         return True
 
     expected_key = get_admin_api_key()
@@ -110,6 +112,7 @@ def home():
     - Phase-based routing to appropriate pages
     - Survey flow management
     - Progress tracking and validation
+    - URL-direct login for crowdsourcing platforms (Prolific, MTurk, etc.)
 
     Returns:
         flask.Response: Rendered template or redirect based on user state
@@ -123,6 +126,91 @@ def home():
 
     # Check if user has an active session
     if 'username' not in session:
+        # Check for URL-direct login (used by Prolific, MTurk, etc.)
+        login_config = config.get('login', {})
+        login_type = login_config.get('type', 'standard')
+
+        if login_type in ['url_direct', 'prolific']:
+            # Get the URL argument name (default to PROLIFIC_PID for backwards compatibility)
+            url_argument = login_config.get('url_argument', 'PROLIFIC_PID')
+            username = request.args.get(url_argument)
+
+            # Also capture SESSION_ID and STUDY_ID if provided (for Prolific tracking)
+            prolific_session_id = request.args.get('SESSION_ID')
+            prolific_study_id = request.args.get('STUDY_ID')
+
+            if username:
+                logger.info(f"URL-direct login: user={username}, session_id={prolific_session_id}, study_id={prolific_study_id}")
+
+                # Auto-register and login the user
+                user_authenticator = UserAuthenticator.get_instance()
+
+                # Add user if not exists (passwordless for URL-direct)
+                if not user_authenticator.is_valid_username(username):
+                    result = user_authenticator.add_user(username, None,
+                                                         prolific_session_id=prolific_session_id,
+                                                         prolific_study_id=prolific_study_id)
+                    logger.debug(f"Auto-registered URL-direct user {username}: {result}")
+
+                # Set session
+                session['username'] = username
+                session.permanent = True
+
+                # Store Prolific IDs in session for later use
+                if prolific_session_id:
+                    session['prolific_session_id'] = prolific_session_id
+                if prolific_study_id:
+                    session['prolific_study_id'] = prolific_study_id
+
+                # Initialize user state if needed
+                if not get_user_state_manager().has_user(username):
+                    logger.debug(f"Initializing user state for URL-direct user: {username}")
+                    init_user_state(username)
+
+                # Get the user state and set to first phase
+                usm = get_user_state_manager()
+                user_state = usm.get_user_state(username)
+
+                if user_state:
+                    # Determine the first phase from config
+                    phases_config = config.get('phases', {})
+                    phases_order = phases_config.get('order', ['annotation'])
+                    first_phase_name = phases_order[0] if phases_order else 'annotation'
+                    first_phase = UserPhase.fromstr(first_phase_name)
+
+                    # Set user to the first phase if they're in LOGIN
+                    if user_state.get_phase() == UserPhase.LOGIN:
+                        logger.debug(f"Advancing URL-direct user {username} to first phase: {first_phase}")
+                        user_state.advance_to_phase(first_phase, None)
+
+                    # Assign instances if user doesn't have any
+                    if not user_state.has_assignments():
+                        logger.debug(f"Assigning instances to URL-direct user {username}")
+                        get_item_state_manager().assign_instances_to_user(user_state)
+
+                    # Track with Prolific API if configured
+                    prolific_study = get_prolific_study()
+                    if prolific_study and prolific_session_id:
+                        try:
+                            prolific_study.add_new_user({
+                                'PROLIFIC_PID': username,
+                                'SESSION_ID': prolific_session_id
+                            })
+                            logger.debug(f"Tracked user {username} with Prolific API")
+                        except Exception as e:
+                            logger.warning(f"Failed to track user with Prolific API: {e}")
+
+                # Redirect to home to process the now-logged-in user
+                return redirect(url_for("home"))
+
+            else:
+                # URL-direct login configured but no username in URL
+                # Show error or redirect to a waiting page
+                logger.warning(f"URL-direct login configured but '{url_argument}' not found in URL")
+                return render_template("error.html",
+                                      message=f"Missing required URL parameter: {url_argument}. "
+                                              f"Please access this page through your crowdsourcing platform.")
+
         logger.debug("No active session, rendering login page")
         return render_template("home.html", title=config.get("annotation_task_name", "Annotation Platform"))
 
@@ -584,16 +672,23 @@ def register():
         logger.debug(f"User state initialized. User exists: {get_user_state_manager().has_user(username)}")
         logger.debug(f"All users in state manager after init: {get_user_state_manager().get_user_ids()}")
 
-    # Ensure user is in annotation phase and has assignments
+    # Ensure user is in the correct starting phase
     usm = get_user_state_manager()
     user_state = usm.get_user_state(username)
     logger.debug(f"Retrieved user state for '{username}': {user_state}")
     logger.debug(f"User state phase: {user_state.get_phase() if user_state else 'No user state'}")
 
-    # Advance user to annotation phase if not already there
-    if user_state and user_state.get_phase() != UserPhase.ANNOTATION:
-        logger.debug(f"Advancing user {username} to annotation phase")
-        user_state.advance_to_phase(UserPhase.ANNOTATION, None)
+    # Determine the first phase from config
+    phases_config = config.get('phases', {})
+    phases_order = phases_config.get('order', ['annotation'])
+    first_phase_name = phases_order[0] if phases_order else 'annotation'
+    first_phase = UserPhase.fromstr(first_phase_name)
+    logger.debug(f"First phase from config: {first_phase_name} -> {first_phase}")
+
+    # Set user to the first phase if they're in LOGIN
+    if user_state and user_state.get_phase() == UserPhase.LOGIN:
+        logger.debug(f"Advancing user {username} to first phase: {first_phase}")
+        user_state.advance_to_phase(first_phase, None)
         logger.debug(f"User state phase after advancement: {user_state.get_phase()}")
 
     # Assign instances if user doesn't have any
@@ -602,9 +697,9 @@ def register():
         get_item_state_manager().assign_instances_to_user(user_state)
         logger.debug(f"User has assignments after assignment: {user_state.has_assignments()}")
 
-    logger.debug("=== REGISTER ROUTE END - Redirecting to annotate ===")
-    # Redirect to the annotate page
-    return redirect(url_for("annotate"))
+    logger.debug("=== REGISTER ROUTE END - Redirecting to home ===")
+    # Redirect to home which will route to the appropriate phase
+    return redirect(url_for("home"))
 
 @app.route("/consent", methods=["GET", "POST"])
 def consent():
@@ -699,6 +794,15 @@ def training():
     - Tracking training progress and performance
     - Advancing users based on training performance criteria
     - Allowing retries for failed attempts
+    - Kicking out users who exceed max_mistakes threshold
+
+    Training Configuration Options:
+    - min_correct: Minimum correct answers needed to pass
+    - require_all_correct: Whether all questions must be correct
+    - max_mistakes: Maximum total mistakes before failure (kicked out)
+    - max_mistakes_per_question: Maximum mistakes per question before failure
+    - allow_retry: Whether to allow retrying incorrect answers
+    - failure_action: "move_to_done" (kick out) or "repeat_training"
 
     Returns:
         flask.Response: Rendered template or redirect
@@ -715,11 +819,44 @@ def training():
         return home()
 
     # Check if training is enabled in config
-    if not config.get('training', {}).get('enabled', False):
+    training_config = config.get('training', {})
+    if not training_config.get('enabled', False):
         logger.debug('Training not enabled, advancing to next phase')
         usm = get_user_state_manager()
         usm.advance_phase(username)
         return home()
+
+    # Get training state and initialize max_mistakes from config if not set
+    training_state = user_state.get_training_state()
+    passing_criteria = training_config.get('passing_criteria', {})
+
+    # Initialize training instances if not already done
+    if not training_state.training_instances:
+        training_instances = get_training_instances()
+        training_state.set_training_instances([item.get_id() for item in training_instances])
+
+    # Set max_mistakes from config
+    if training_state.max_mistakes == -1 and 'max_mistakes' in passing_criteria:
+        training_state.set_max_mistakes(passing_criteria.get('max_mistakes', -1))
+    if training_state.max_mistakes_per_question == -1 and 'max_mistakes_per_question' in passing_criteria:
+        training_state.set_max_mistakes_per_question(passing_criteria.get('max_mistakes_per_question', -1))
+
+    # Check if user has already failed due to too many mistakes
+    if training_state.is_failed() or training_state.should_fail_due_to_mistakes():
+        training_state.set_failed(True)
+        logger.info(f'User {username} has failed training due to too many mistakes')
+        # Move to DONE phase (kick out)
+        user_state.set_current_phase_and_page((UserPhase.DONE, None))
+        return render_template("training_failed.html",
+                             message="You have exceeded the maximum number of allowed mistakes and cannot continue.",
+                             total_mistakes=training_state.get_total_mistakes(),
+                             max_mistakes=training_state.max_mistakes,
+                             annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
+                             username=username)
+
+    # Get progress info
+    total_questions = len(training_state.training_instances)
+    current_question_num = training_state.get_current_question_index() + 1
 
     # Handle POST requests (annotation submission)
     if request.method == 'POST':
@@ -732,6 +869,7 @@ def training():
             return render_template("error.html", message="No training instance available")
 
         instance_id = current_instance.get_id()
+        instance_text = current_instance.get_data().get('displayed_text', current_instance.get_data().get('text', ''))
 
         # Process the annotation
         if request.is_json:
@@ -751,69 +889,167 @@ def training():
             user_state.update_training_answer(instance_id, annotation_data)
 
             # Check if the answer is correct
-            is_correct = user_state.check_training_pass(instance_id, correct_answers)
+            is_correct = check_training_answer(annotation_data, correct_answers)
 
             if is_correct:
                 logger.info(f'User {username} answered training question {instance_id} correctly')
-                # Clear any previous feedback
-                user_state.get_training_state().clear_feedback()
+                # Record correct answer
+                training_state.add_answer(instance_id, True, training_state.get_mistakes_for_question(instance_id) + 1)
+                training_state.clear_feedback()
+
+                # Check if user has passed based on min_correct
+                min_correct = passing_criteria.get('min_correct', len(training_state.training_instances))
+                if training_state.get_correct_answer_count() >= min_correct:
+                    # User has passed training
+                    training_state.set_passed(True)
+                    logger.info(f'User {username} passed training with {training_state.get_correct_answer_count()} correct answers')
+                    usm = get_user_state_manager()
+                    usm.advance_phase(username)
+                    return home()
 
                 # Move to next training question or complete training
                 if user_state.advance_training_question():
                     # More questions available
-                    user_state.get_training_state().set_feedback(True, "Correct! Moving to next question.", False)
+                    training_state.set_feedback(True, "Correct! Moving to next question.", False)
+                    # Get next instance for display
+                    next_instance = user_state.get_current_training_instance()
+                    next_instance_text = next_instance.get_data().get('displayed_text', next_instance.get_data().get('text', ''))
                     return render_template("training.html",
-                                         instance=current_instance,
+                                         instance_text=next_instance_text,
+                                         instance_id=next_instance.get_id(),
                                          feedback="Correct! Moving to next question.",
+                                         feedback_type="success",
                                          show_feedback=True,
                                          allow_retry=False,
+                                         current_question=current_question_num + 1,
+                                         total_questions=total_questions,
+                                         correct_count=training_state.get_correct_answer_count(),
+                                         mistake_count=training_state.get_total_mistakes(),
                                          annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
                                          username=username)
                 else:
-                    # Training completed successfully
-                    logger.info(f'User {username} completed training successfully')
-                    usm = get_user_state_manager()
-                    usm.advance_phase(username)
-                    return home()
+                    # All questions completed
+                    require_all = passing_criteria.get('require_all_correct', False)
+                    if require_all and training_state.get_correct_answer_count() < total_questions:
+                        # User didn't get all correct
+                        training_state.set_failed(True)
+                        user_state.set_current_phase_and_page((UserPhase.DONE, None))
+                        return render_template("training_failed.html",
+                                             message="You did not answer all training questions correctly.",
+                                             correct_count=training_state.get_correct_answer_count(),
+                                             total_questions=total_questions,
+                                             annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
+                                             username=username)
+                    else:
+                        # Training completed successfully
+                        training_state.set_passed(True)
+                        logger.info(f'User {username} completed training successfully')
+                        usm = get_user_state_manager()
+                        usm.advance_phase(username)
+                        return home()
             else:
                 logger.info(f'User {username} answered training question {instance_id} incorrectly')
+                # Record the mistake
+                training_state.record_mistake(instance_id)
+
+                # Check if user should fail due to too many mistakes
+                if training_state.should_fail_due_to_mistakes():
+                    training_state.set_failed(True)
+                    logger.info(f'User {username} failed training - exceeded max_mistakes ({training_state.max_mistakes})')
+                    user_state.set_current_phase_and_page((UserPhase.DONE, None))
+                    return render_template("training_failed.html",
+                                         message="You have exceeded the maximum number of allowed mistakes.",
+                                         total_mistakes=training_state.get_total_mistakes(),
+                                         max_mistakes=training_state.max_mistakes,
+                                         annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
+                                         username=username)
+
+                # Check if user should fail due to too many mistakes on this question
+                if training_state.should_fail_question_due_to_mistakes(instance_id):
+                    training_state.set_failed(True)
+                    logger.info(f'User {username} failed training - exceeded max_mistakes_per_question on {instance_id}')
+                    user_state.set_current_phase_and_page((UserPhase.DONE, None))
+                    return render_template("training_failed.html",
+                                         message="You have made too many mistakes on a single question.",
+                                         question_mistakes=training_state.get_mistakes_for_question(instance_id),
+                                         max_mistakes_per_question=training_state.max_mistakes_per_question,
+                                         annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
+                                         username=username)
+
                 # Get explanation for incorrect answer
                 explanation = get_training_explanation(instance_id)
 
                 # Check if user should be allowed to retry
-                training_config = config.get('training', {})
                 allow_retry = training_config.get('allow_retry', True)
 
                 if allow_retry:
-                    user_state.get_training_state().set_feedback(True, f"Incorrect. {explanation}", True)
+                    training_state.set_feedback(True, f"Incorrect. {explanation}", True)
                     return render_template("training.html",
-                                         instance=current_instance,
+                                         instance_text=instance_text,
+                                         instance_id=instance_id,
                                          feedback=f"Incorrect. {explanation}",
+                                         feedback_type="error",
                                          show_feedback=True,
                                          allow_retry=True,
+                                         current_question=current_question_num,
+                                         total_questions=total_questions,
+                                         correct_count=training_state.get_correct_answer_count(),
+                                         mistake_count=training_state.get_total_mistakes(),
                                          annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
                                          username=username)
                 else:
-                    # Check failure action
-                    failure_action = training_config.get('failure_action', 'retry')
-                    if failure_action == 'advance':
-                        logger.info(f'User {username} failed training but advancing due to config')
-                        usm = get_user_state_manager()
-                        usm.advance_phase(username)
-                        return home()
-                    else:
-                        # Default to retry
-                        user_state.get_training_state().set_feedback(True, f"Incorrect. {explanation}", True)
-                        return render_template("training.html",
-                                             instance=current_instance,
-                                             feedback=f"Incorrect. {explanation}",
-                                             show_feedback=True,
-                                             allow_retry=True,
+                    # No retry allowed - check failure action
+                    failure_action = training_config.get('failure_action', 'move_to_done')
+                    if failure_action == 'move_to_done':
+                        training_state.set_failed(True)
+                        logger.info(f'User {username} failed training - no retry allowed')
+                        user_state.set_current_phase_and_page((UserPhase.DONE, None))
+                        return render_template("training_failed.html",
+                                             message="You answered incorrectly and retries are not allowed.",
+                                             explanation=explanation,
                                              annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
                                              username=username)
+                    else:
+                        # Advance to next question even though wrong
+                        if user_state.advance_training_question():
+                            next_instance = user_state.get_current_training_instance()
+                            next_instance_text = next_instance.get_data().get('displayed_text', next_instance.get_data().get('text', ''))
+                            training_state.set_feedback(True, f"Incorrect. {explanation} Moving to next question.", False)
+                            return render_template("training.html",
+                                                 instance_text=next_instance_text,
+                                                 instance_id=next_instance.get_id(),
+                                                 feedback=f"Previous answer was incorrect: {explanation}",
+                                                 feedback_type="warning",
+                                                 show_feedback=True,
+                                                 allow_retry=False,
+                                                 current_question=current_question_num + 1,
+                                                 total_questions=total_questions,
+                                                 correct_count=training_state.get_correct_answer_count(),
+                                                 mistake_count=training_state.get_total_mistakes(),
+                                                 annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
+                                                 username=username)
+                        else:
+                            # No more questions - check if passed
+                            min_correct = passing_criteria.get('min_correct', total_questions)
+                            if training_state.get_correct_answer_count() >= min_correct:
+                                training_state.set_passed(True)
+                                usm = get_user_state_manager()
+                                usm.advance_phase(username)
+                                return home()
+                            else:
+                                training_state.set_failed(True)
+                                user_state.set_current_phase_and_page((UserPhase.DONE, None))
+                                return render_template("training_failed.html",
+                                                     message="You did not meet the minimum correct answers requirement.",
+                                                     correct_count=training_state.get_correct_answer_count(),
+                                                     min_correct=min_correct,
+                                                     annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
+                                                     username=username)
 
         except Exception as e:
             logger.error(f'Error processing training annotation: {e}')
+            import traceback
+            traceback.print_exc()
             return render_template("error.html", message="Error processing training annotation")
 
     # Handle GET requests (display training question)
@@ -826,19 +1062,75 @@ def training():
             logger.error(f'No training instance available for user {username}')
             return render_template("error.html", message="No training instance available")
 
+        instance_text = current_instance.get_data().get('displayed_text', current_instance.get_data().get('text', ''))
+
         # Check if we should show feedback from previous attempt
-        training_state = user_state.get_training_state()
         show_feedback = training_state.show_feedback if training_state else False
         feedback_message = training_state.feedback_message if training_state else ""
         allow_retry = training_state.allow_retry if training_state else False
 
         return render_template("training.html",
-                             instance=current_instance,
+                             instance_text=instance_text,
+                             instance_id=current_instance.get_id(),
                              feedback=feedback_message,
+                             feedback_type="error" if allow_retry else "info",
                              show_feedback=show_feedback,
                              allow_retry=allow_retry,
+                             current_question=current_question_num,
+                             total_questions=total_questions,
+                             correct_count=training_state.get_correct_answer_count(),
+                             mistake_count=training_state.get_total_mistakes(),
                              annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
                              username=username)
+
+
+def check_training_answer(user_answer: dict, correct_answers: dict) -> bool:
+    """
+    Check if the user's answer matches the correct answers.
+
+    Handles different annotation types:
+    - Radio/single select: string comparison
+    - Multiselect/checkbox: set comparison (order-independent)
+    - Likert/number: numeric comparison
+    - Text: exact or fuzzy string match
+
+    Args:
+        user_answer: Dictionary of user's answers by schema name
+        correct_answers: Dictionary of correct answers by schema name
+
+    Returns:
+        True if all answers are correct, False otherwise
+    """
+    for schema_name, correct_value in correct_answers.items():
+        if schema_name not in user_answer:
+            return False
+
+        user_value = user_answer[schema_name]
+
+        # Handle multiselect/checkbox (list comparison)
+        if isinstance(correct_value, list):
+            if isinstance(user_value, list):
+                if set(user_value) != set(correct_value):
+                    return False
+            elif isinstance(user_value, str):
+                # Single value submitted, check if it's the only correct answer
+                if len(correct_value) != 1 or user_value not in correct_value:
+                    return False
+            else:
+                return False
+        # Handle numeric values
+        elif isinstance(correct_value, (int, float)):
+            try:
+                if float(user_value) != float(correct_value):
+                    return False
+            except (ValueError, TypeError):
+                return False
+        # Handle string comparison (radio, text)
+        else:
+            if str(user_value).strip().lower() != str(correct_value).strip().lower():
+                return False
+
+    return True
 
 @app.route("/prestudy", methods=["GET", "POST"])
 def prestudy():
@@ -961,13 +1253,15 @@ def annotate():
         logger.debug(f"Moving to previous instance for user: {username}")
         move_to_prev_instance(username)
         acm = get_ai_cache_manager()
-        acm.start_prefetch(user_state.current_instance_index, 
-                           getattr(acm, "prefetch_page_count_on_prev", 0) )
+        if acm:
+            acm.start_prefetch(user_state.current_instance_index,
+                               getattr(acm, "prefetch_page_count_on_prev", 0) )
     elif action == "next_instance":
         logger.debug(f"Moving to next instance for user: {username}")
         move_to_next_instance(username)
         acm = get_ai_cache_manager()
-        acm.start_prefetch(user_state.current_instance_index, getattr(acm,"prefetch_page_count_on_next", 0))
+        if acm:
+            acm.start_prefetch(user_state.current_instance_index, getattr(acm,"prefetch_page_count_on_next", 0))
 
     elif action == "go_to":
         # Try to get go_to from JSON first, then form
@@ -980,13 +1274,22 @@ def annotate():
         logger.debug(f"go_to action with value: {go_to_value}")
         if go_to_value is not None:
             go_to_id(username, go_to_value)
-            acm.start_prefetch(user_state.current_instance_index, 1)
-            acm.start_prefetch(user_state.current_instance_index, -1)
+            acm = get_ai_cache_manager()
+            if acm:
+                acm.start_prefetch(user_state.current_instance_index, 1)
+                acm.start_prefetch(user_state.current_instance_index, -1)
 
         else:
             logger.warning('go_to action requested but no go_to value provided')
     else:
         logger.debug(f'Action "{action}" - no specific handling')
+
+    # After processing the action, check again if user has completed all assignments
+    # This handles the case where the user just finished their last item
+    if not user_state.has_remaining_assignments():
+        logger.debug(f"User {username} has completed all assignments, advancing phase")
+        get_user_state_manager().advance_phase(username)
+        return home()
 
     # Handle GET requests with instance_id query parameter
     if request.method == 'GET' and request.args.get('instance_id'):
@@ -2141,6 +2444,11 @@ def done():
     """
     Handle the done phase of the annotation process.
 
+    This route displays the completion page with:
+    - A thank you message
+    - The completion code (if configured)
+    - A redirect link to Prolific (if configured)
+
     Returns:
         flask.Response: Rendered template or redirect
     """
@@ -2155,10 +2463,30 @@ def done():
         # If not in the done phase, redirect
         return home()
 
+    # Get completion code from config
+    completion_code = config.get("completion_code", "")
+
+    # Build Prolific redirect URL if completion code is set
+    prolific_redirect_url = None
+    login_config = config.get('login', {})
+    login_type = login_config.get('type', 'standard')
+
+    if completion_code and login_type in ['url_direct', 'prolific']:
+        # Build the Prolific completion URL
+        # Format: https://app.prolific.co/submissions/complete?cc=YOUR_CODE
+        prolific_redirect_url = f"https://app.prolific.co/submissions/complete?cc={completion_code}"
+
+    # Check for auto-redirect setting
+    auto_redirect = config.get('auto_redirect_on_completion', False)
+    auto_redirect_delay = config.get('auto_redirect_delay', 5000)  # milliseconds
+
     # Show the completion page
     return render_template("done.html",
                           title=config.get("annotation_task_name", "Annotation Platform"),
-                          completion_code=config.get("completion_code", ""))
+                          completion_code=completion_code,
+                          prolific_redirect_url=prolific_redirect_url,
+                          auto_redirect=auto_redirect,
+                          auto_redirect_delay=auto_redirect_delay)
 
 @app.route("/admin", methods=["GET"])
 def admin():
@@ -2706,6 +3034,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/consent", "consent", consent, methods=["GET", "POST"])
     app.add_url_rule("/instructions", "instructions", instructions, methods=["GET", "POST"])
     app.add_url_rule("/prestudy", "prestudy", prestudy, methods=["GET", "POST"])
+    app.add_url_rule("/training", "training", training, methods=["GET", "POST"])
     app.add_url_rule("/annotate", "annotate", annotate, methods=["GET", "POST"])
     app.add_url_rule("/go_to", "go_to", go_to, methods=["GET", "POST"])
     app.add_url_rule("/updateinstance", "update_instance", update_instance, methods=["POST"])

@@ -484,6 +484,29 @@ class TestAnnotationPersistence:
         assert len(annotations) == 0  # No annotations on new instance
 ```
 
+## Path Security and Temporary Files
+
+**CRITICAL: All test files must be created within the `tests/` directory structure.**
+
+- **Config files**: Must be within `tests/output/` or subdirectories
+- **Data files**: Must be within `tests/` directory structure
+- **Task directory**: Must be set to the directory containing the config file
+- **File paths**: All paths in config must be relative to `task_dir` or within `tests/`
+- **No system temp directories**: Do NOT use `/tmp`, `/var`, or system temp directories
+
+### Using Test Utilities
+
+Always use the test utilities for creating secure test configurations:
+
+```python
+from tests.helpers.test_utils import (
+    create_test_directory,
+    create_test_data_file,
+    create_test_config,
+    TestConfigManager
+)
+```
+
 ## Creating New Server Tests
 
 ### Basic Test Structure
@@ -494,10 +517,9 @@ Test description for the new test module.
 """
 
 import pytest
-import json
-import tempfile
-import os
+import requests
 from tests.helpers.flask_test_setup import FlaskTestServer
+from tests.helpers.test_utils import TestConfigManager
 
 
 class TestNewFeature:
@@ -506,64 +528,32 @@ class TestNewFeature:
     @pytest.fixture(scope="class", autouse=True)
     def flask_server(self, request):
         """Create a Flask test server with test data."""
-        # Create temporary directory
-        test_dir = tempfile.mkdtemp()
-
-        # Create test data
-        test_data = [
-            {"id": "test_1", "text": "Test item 1"},
-            {"id": "test_2", "text": "Test item 2"}
+        # Use TestConfigManager for secure test setup
+        annotation_schemes = [
+            {
+                "name": "test_scheme",
+                "annotation_type": "radio",
+                "labels": ["option_1", "option_2"],
+                "description": "Test annotation scheme"
+            }
         ]
 
-        data_file = os.path.join(test_dir, 'test_data.jsonl')
-        with open(data_file, 'w') as f:
-            for item in test_data:
-                f.write(json.dumps(item) + '\n')
+        with TestConfigManager("test_feature", annotation_schemes) as test_config:
+            # Create and start server
+            server = FlaskTestServer(
+                port=9007,  # Use unique port
+                debug=False,
+                config_file=test_config.config_path
+            )
 
-        # Create config
-        config = {
-            "debug": False,
-            "annotation_task_name": "Test Task",
-            "require_password": False,
-            "authentication": {"method": "in_memory"},
-            "data_files": [os.path.basename(data_file)],
-            "item_properties": {"text_key": "text", "id_key": "id"},
-            "annotation_schemes": [
-                {
-                    "name": "test_scheme",
-                    "type": "radio",
-                    "labels": ["option_1", "option_2"],
-                    "description": "Test annotation scheme"
-                }
-            ],
-            "output_annotation_dir": os.path.join(test_dir, "output"),
-            "task_dir": test_dir,
-            "site_file": "base_template.html",
-            "alert_time_each_instance": 0
-        }
+            if not server.start():
+                pytest.fail("Failed to start Flask test server")
 
-        # Write config file
-        config_file = os.path.join(test_dir, 'test_config.yaml')
-        import yaml
-        with open(config_file, 'w') as f:
-            yaml.dump(config, f)
+            yield server
 
-        # Create and start server
-        server = FlaskTestServer(
-            port=9007,  # Use unique port
-            debug=False,
-            config_file=config_file
-        )
-
-        if not server.start():
-            pytest.fail("Failed to start Flask test server")
-
-        yield server
-
-        # Cleanup
-        server.stop()
-        import shutil
-        shutil.rmtree(test_dir)
+            # Cleanup
+            server.stop()
+            # TestConfigManager handles directory cleanup automatically
 
     def test_new_feature(self, flask_server):
         """Test the new feature functionality."""

@@ -124,6 +124,9 @@ DEFAULT_LABELS_PER_INSTANCE = 3
 # Hacky nonsense - schema label to color mapping
 schema_label_to_color = {}
 
+# Global Prolific study instance for API integration
+PROLIFIC_STUDY_INSTANCE = None
+
 # Keyword Highlights File Data
 @dataclass(frozen=True)
 class HighlightSchema:
@@ -504,6 +507,91 @@ def get_training_explanation(instance_id: str) -> str:
             return item.get_data().get('explanation', '')
     return ''
 
+
+# =============================================================================
+# Prolific Integration Functions
+# =============================================================================
+
+def init_prolific_study(config: dict) -> None:
+    """
+    Initialize the Prolific study instance from config.
+
+    This function reads the Prolific configuration and initializes the
+    ProlificStudy API wrapper for tracking participants and managing
+    study status.
+
+    Args:
+        config: The application configuration dictionary
+
+    Side Effects:
+        - Sets global PROLIFIC_STUDY_INSTANCE
+        - May start workload checker thread
+    """
+    global PROLIFIC_STUDY_INSTANCE
+
+    prolific_config = config.get('prolific', {})
+    if not prolific_config:
+        logger.debug("No Prolific configuration found")
+        return
+
+    # Check for config file path
+    config_file_path = prolific_config.get('config_file_path')
+    if config_file_path:
+        # Load Prolific config from file
+        import yaml
+        prolific_config_path = get_abs_or_rel_path(config_file_path, config)
+        if os.path.exists(prolific_config_path):
+            with open(prolific_config_path, 'r') as f:
+                prolific_settings = yaml.safe_load(f)
+                logger.info(f"Loaded Prolific config from {prolific_config_path}")
+        else:
+            logger.warning(f"Prolific config file not found: {prolific_config_path}")
+            return
+    else:
+        # Use inline config
+        prolific_settings = prolific_config
+
+    # Validate required fields
+    token = prolific_settings.get('token')
+    study_id = prolific_settings.get('study_id')
+
+    if not token or not study_id:
+        logger.warning("Prolific config missing 'token' or 'study_id'")
+        return
+
+    # Get optional settings
+    max_concurrent_sessions = prolific_settings.get('max_concurrent_sessions', 30)
+    workload_checker_period = prolific_settings.get('workload_checker_period', 60)
+
+    # Get saving directory for submission data
+    saving_dir = config.get('output_annotation_dir', 'annotation_output')
+
+    try:
+        PROLIFIC_STUDY_INSTANCE = ProlificStudy(
+            token=token,
+            study_id=study_id,
+            saving_dir=saving_dir,
+            max_concurrent_sessions=max_concurrent_sessions,
+            workload_checker_period=workload_checker_period
+        )
+        logger.info(f"Initialized Prolific study: {study_id}")
+        logger.info(f"Study info: {PROLIFIC_STUDY_INSTANCE.get_basic_study_info()}")
+
+    except Exception as e:
+        logger.error(f"Failed to initialize Prolific study: {e}")
+        PROLIFIC_STUDY_INSTANCE = None
+
+
+def get_prolific_study() -> 'ProlificStudy':
+    """
+    Get the global Prolific study instance.
+
+    Returns:
+        ProlificStudy instance if configured, None otherwise
+    """
+    return PROLIFIC_STUDY_INSTANCE
+
+
 def load_all_data(config: dict):
     '''Loads instance and annotation data from the files specified in the config.'''
     load_annotation_schematic_data(config)
@@ -512,6 +600,7 @@ def load_all_data(config: dict):
     load_phase_data(config)
     load_highlights_data(config)
     load_training_data(config)
+    init_prolific_study(config)
 
     logger.debug(f"STATES: {get_user_state_manager().phase_type_to_name_to_page}")
 
@@ -609,15 +698,31 @@ def load_phase_data(config: dict) -> None:
                 if not "type" in phase or not phase['type']:
                     logger.error(f"Phase {phase_name} does not have a type")
                     raise Exception("Phase %s does not have a type" % phase_name)
-                if not "file" in phase or not phase['file']:
-                    logger.error(f"Phase {phase_name} is specified but does not have a file")
-                    raise Exception("Phase %s is specified but does not have a file" % phase_name)
 
-                # Get the phase labeling schemes, being robust to relative or absolute paths
-                phase_scheme_fname = get_abs_or_rel_path(phase['file'], config)
-                logger.debug(f"Resolved phase file for {phase_name}: {phase_scheme_fname}")
-                phase_labeling_schemes = get_phase_annotation_schemes(phase_scheme_fname)
                 phase_type = UserPhase.fromstr(phase['type'])
+
+                # Training and annotation phases can work without a file
+                # They use the main annotation schemes from the config
+                if phase_type in [UserPhase.TRAINING, UserPhase.ANNOTATION]:
+                    if "file" not in phase or not phase['file']:
+                        # Use the main annotation schemes for training/annotation
+                        phase_labeling_schemes = config.get('annotation_schemes', [])
+                        logger.debug(f"Phase {phase_name} using main annotation schemes")
+                    else:
+                        # Use the file if specified
+                        phase_scheme_fname = get_abs_or_rel_path(phase['file'], config)
+                        logger.debug(f"Resolved phase file for {phase_name}: {phase_scheme_fname}")
+                        phase_labeling_schemes = get_phase_annotation_schemes(phase_scheme_fname)
+                else:
+                    # Other phases require a file
+                    if not "file" in phase or not phase['file']:
+                        logger.error(f"Phase {phase_name} is specified but does not have a file")
+                        raise Exception("Phase %s is specified but does not have a file" % phase_name)
+
+                    # Get the phase labeling schemes, being robust to relative or absolute paths
+                    phase_scheme_fname = get_abs_or_rel_path(phase['file'], config)
+                    logger.debug(f"Resolved phase file for {phase_name}: {phase_scheme_fname}")
+                    phase_labeling_schemes = get_phase_annotation_schemes(phase_scheme_fname)
 
             # Use the default templates unless specified in the phase config
             # Note: Template paths are now hardcoded in front_end.py
@@ -1585,6 +1690,18 @@ def run_server(args):
         # Command line flag takes precedence over config file
         config["require_password"] = args.require_password
         logger.debug(f"Password requirement set from command line: {args.require_password}")
+
+    # Handle require_no_password (inverse of require_password) for backwards compatibility
+    # This is commonly used in Prolific/MTurk configs
+    if config.get("require_no_password", False):
+        config["require_password"] = False
+        logger.debug("Password requirement disabled via require_no_password config")
+
+    # For URL-direct login, automatically disable password requirement
+    login_config = config.get('login', {})
+    if login_config.get('type') in ['url_direct', 'prolific']:
+        config["require_password"] = False
+        logger.debug(f"Password requirement disabled for {login_config.get('type')} login type")
 
     # Override port from command line if specified
     if args.port is not None:

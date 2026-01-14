@@ -10,28 +10,69 @@ encouraged to create a pull request and release your annotation setup.
 If you have a polished annotation project and you would like to share it in our project hub, please pack it as a .zip file and submit a pull request
 
 
+## New in v2.0
+
+Potato 2.0 introduces several major features. Example configurations are available in the project hub:
+
+### AI Support
+AI-assisted annotation with hints, keyword highlighting, and label suggestions. Supports OpenAI, Anthropic, Gemini, Ollama, VLLM, and more.
+- [Documentation](../docs/ai_support.md)
+
+### Audio Annotation
+Waveform-based audio segmentation with Peaks.js for visualizing and annotating audio content.
+- [Example config](https://github.com/davidjurgens/potato/tree/master/project-hub/simple_examples/configs/simple-audio-annotation.yaml)
+- [Documentation](../docs/audio_annotation.md)
+
+### Video Annotation
+Display and annotate video content with configurable playback controls.
+- [Example config](https://github.com/davidjurgens/potato/tree/master/project-hub/simple_examples/configs/simple-video-annotation.yaml)
+- [Documentation](../docs/schemas_and_templates.md)
+
+### Active Learning
+ML-based instance prioritization using uncertainty sampling to focus on informative examples.
+- [Example config](https://github.com/davidjurgens/potato/tree/master/project-hub/simple_examples/configs/simple-active-learning.yaml)
+- [Documentation](../docs/active_learning_guide.md)
+
+### Training Phase
+Practice annotations with feedback before the main task.
+- [Example config](https://github.com/davidjurgens/potato/tree/master/project-hub/simple_examples/configs/all-phases-example.yaml)
+- [Documentation](../docs/training_phase.md)
+
+### Multi-Phase Workflows
+Configure complex annotation workflows with consent, instructions, training, and post-study phases.
+- [Example config](https://github.com/davidjurgens/potato/tree/master/project-hub/simple_examples/configs/all-phases-example.yaml)
+
+---
+
 ## Schema examples
-Potato provides a list of example tempaltes for [all the supporting annotation schemas](https://github.com/davidjurgens/potato/tree/pypi/project-hub/simple_examples/configs)
+Potato provides a list of example templates for [all the supporting annotation schemas](https://github.com/davidjurgens/potato/tree/master/project-hub/simple_examples/configs)
 and you can easily download them from project hub using:
-``` 
+```
 [fetch] potato get simple_schema_examples
 [launch] potato start simple_schema_examples -p 8000
 
->>> multiple config files found, please select the one you want to use (number 0-13)
-[0] simple-active-learning.yaml
-[1] simple-best-worst-scaling.yaml
-[2] simple-pairwise-comparison.yaml
-[3] simple-check-box-dynamic-labels.yaml
-[4] simple-video-as-label.yaml
-[5] simple-span-labeling.yaml
-[6] simple-likert.yaml
-[7] empty-to-copy.yaml
-[8] simple-video-annotation.yaml
-[9] simple-single-choice-selection.yaml
-[10] simple-text-box.yaml
-[11] simple-check-box.yaml
-[12] kwargs_example.yaml
-[13] simple-check-box-with-free-response.yaml
+>>> multiple config files found, please select the one you want to use (number 0-20)
+[0] all-phases-example.yaml
+[1] empty-to-copy.yaml
+[2] kwargs_example.yaml
+[3] simple-active-learning.yaml
+[4] simple-audio-annotation.yaml
+[5] simple-best-worst-scaling.yaml
+[6] simple-check-box-dynamic-labels.yaml
+[7] simple-check-box-with-free-response.yaml
+[8] simple-check-box.yaml
+[9] simple-html-annotation.yaml
+[10] simple-image-annotation.yaml
+[11] simple-likert.yaml
+[12] simple-multirate.yaml
+[13] simple-pairwise-comparison.yaml
+[14] simple-single-choice-selection.yaml
+[15] simple-slider.yaml
+[16] simple-span-labeling.yaml
+[17] simple-text-box.yaml
+[18] simple-video-annotation.yaml
+[19] simple-video-as-label.yaml
+[20] two-sliders.yaml
 
 [Annotate] http://localhost:8000
 ```

@@ -30,7 +30,7 @@ def generate_pure_display_layout(annotation_scheme):
     Returns:
         tuple: (html_string, key_bindings)
             html_string: Complete HTML for the display interface
-            key_bindings: None (no interactions available)
+            key_bindings: Empty list (no interactions available)
 
     Example:
         annotation_scheme = {
@@ -60,7 +60,7 @@ def _generate_pure_display_layout_internal(annotation_scheme):
     """
 
     logger.info(f"Successfully generated pure display layout for {annotation_scheme['name']}")
-    return schematic, None
+    return schematic, []
 
 def format_display_content(labels):
     """

@@ -2,6 +2,42 @@
 
 This directory contains comprehensive tests for the Potato annotation platform, covering both backend functionality and frontend user interface testing.
 
+## Test File Security Policy
+
+**IMPORTANT: All test configuration and data files must reside within the `tests/` directory.**
+
+- **Temporary files**: Must be created in `tests/output/` or its subdirectories
+- **Config files**: Must be within `tests/` directory structure
+- **Data files**: Must be within `tests/` directory structure
+- **Path validation**: All file paths in configs must be relative to `task_dir` or within `tests/`
+- **No system temp directories**: Do NOT use `/tmp`, `/var`, or system temp directories for test files
+
+This is required for path security and to ensure tests run in all environments.
+
+## Test Utilities
+
+Use the `tests/helpers/test_utils.py` module for creating secure test configurations:
+
+```python
+from tests.helpers.test_utils import (
+    create_test_directory,
+    create_test_data_file,
+    create_test_config,
+    create_span_annotation_config,
+    create_comprehensive_annotation_config,
+    TestConfigManager
+)
+
+# Example: Create a span annotation test
+test_dir = create_test_directory("my_span_test")
+config_file, data_file = create_span_annotation_config(test_dir)
+
+# Example: Using context manager for automatic cleanup
+with TestConfigManager("my_test", annotation_schemes) as test_config:
+    # Use test_config.config_path, test_config.data_path
+    pass  # Automatic cleanup on exit
+```
+
 ## Test Structure
 
 ### Server Tests (`tests/server/`)

@@ -14,7 +14,7 @@ user_config:
   users: []
 alert_time_each_instance: 10000000
 annotation_schemes:
-  - annotation_type: "highlight"
+  - annotation_type: "span"
     name: "emotion"
     description: "Highlight which phrases express different emotions in the text"
     labels:
@@ -24,7 +24,7 @@ annotation_schemes:
       - "surprised"
       - "neutral"
     sequential_key_binding: true
-  - annotation_type: "highlight"
+  - annotation_type: "span"
     name: "intensity"
     description: "Highlight phrases that indicate the intensity of emotions"
     labels:
@@ -33,6 +33,7 @@ annotation_schemes:
       - "high"
     sequential_key_binding: true
 ui:
+  max_instance_height: 300  # Maximum height in pixels for instance text
   spans:
     span_colors:
       emotion:

@@ -53,10 +53,18 @@ class TrainingState:
     This class encapsulates training metrics for individual users,
     including completed questions, correct answers, attempts, and
     pass/fail status.
+
+    Training Strategies Supported:
+    1. min_correct: Pass after N correct answers (regardless of mistakes)
+    2. require_all_correct: Must get all questions correct
+    3. max_mistakes: Fail after N total mistakes (kicked out)
+    4. max_mistakes_per_question: Fail after N mistakes on any single question
+    5. allow_retry: Allow retrying incorrect answers
     """
     completed_questions: Dict[str, Dict[str, Any]]  # instance_id -> {correct: bool, attempts: int, explanation: str}
     total_correct: int
     total_attempts: int
+    total_mistakes: int  # Track total incorrect answers
     passed: bool
     failed: bool
     current_question_index: int
@@ -64,11 +72,21 @@ class TrainingState:
     show_feedback: bool  # Whether to show feedback on the current question
     feedback_message: str  # The feedback message to display
     allow_retry: bool  # Whether to allow retry for the current question
+    max_mistakes: int  # Maximum mistakes allowed before failure (-1 = unlimited)
+    max_mistakes_per_question: int  # Maximum mistakes per question before failure (-1 = unlimited)
 
-    def __init__(self):
+    def __init__(self, max_mistakes: int = -1, max_mistakes_per_question: int = -1):
+        """
+        Initialize TrainingState.
+
+        Args:
+            max_mistakes: Maximum total mistakes allowed before failure (-1 = unlimited)
+            max_mistakes_per_question: Maximum mistakes per question before failure (-1 = unlimited)
+        """
         self.completed_questions = {}
         self.total_correct = 0
         self.total_attempts = 0
+        self.total_mistakes = 0
         self.passed = False
         self.failed = False
         self.current_question_index = 0
@@ -76,18 +94,83 @@ class TrainingState:
         self.show_feedback = False
         self.feedback_message = ""
         self.allow_retry = False
+        self.max_mistakes = max_mistakes
+        self.max_mistakes_per_question = max_mistakes_per_question
 
     def add_answer(self, instance_id: str, is_correct: bool, attempts: int, explanation: str = "") -> None:
         """Add a training answer and update statistics."""
+        # Track previous state for this question
+        prev_attempts = 0
+        prev_correct = False
+        if instance_id in self.completed_questions:
+            prev_attempts = self.completed_questions[instance_id].get('attempts', 0)
+            prev_correct = self.completed_questions[instance_id].get('correct', False)
+
         self.completed_questions[instance_id] = {
             'correct': is_correct,
             'attempts': attempts,
             'explanation': explanation
         }
 
-        if is_correct:
+        # Update total correct (only if this is newly correct)
+        if is_correct and not prev_correct:
             self.total_correct += 1
-        self.total_attempts += attempts
+
+        # Update total attempts
+        self.total_attempts = attempts - prev_attempts + self.total_attempts
+
+        # Update total mistakes
+        if not is_correct:
+            self.total_mistakes += 1
+
+    def record_mistake(self, instance_id: str) -> None:
+        """Record a mistake for tracking purposes without adding a full answer."""
+        self.total_mistakes += 1
+        if instance_id in self.completed_questions:
+            self.completed_questions[instance_id]['attempts'] = \
+                self.completed_questions[instance_id].get('attempts', 0) + 1
+        else:
+            self.completed_questions[instance_id] = {
+                'correct': False,
+                'attempts': 1,
+                'explanation': ''
+            }
+
+    def get_mistakes_for_question(self, instance_id: str) -> int:
+        """Get the number of mistakes (incorrect attempts) for a specific question."""
+        if instance_id not in self.completed_questions:
+            return 0
+        question_data = self.completed_questions[instance_id]
+        # If correct, mistakes = attempts - 1; if not correct, mistakes = attempts
+        if question_data.get('correct', False):
+            return question_data.get('attempts', 1) - 1
+        return question_data.get('attempts', 0)
+
+    def get_total_mistakes(self) -> int:
+        """Get the total number of mistakes across all questions."""
+        return self.total_mistakes
+
+    def should_fail_due_to_mistakes(self) -> bool:
+        """Check if the user should fail due to too many mistakes."""
+        if self.max_mistakes > 0 and self.total_mistakes >= self.max_mistakes:
+            return True
+        return False
+
+    def should_fail_question_due_to_mistakes(self, instance_id: str) -> bool:
+        """Check if the user should fail due to too many mistakes on a single question."""
+        if self.max_mistakes_per_question > 0:
+            question_mistakes = self.get_mistakes_for_question(instance_id)
+            if question_mistakes >= self.max_mistakes_per_question:
+                return True
+        return False
+
+    def set_max_mistakes(self, max_mistakes: int) -> None:
+        """Set the maximum number of total mistakes allowed."""
+        self.max_mistakes = max_mistakes
+
+    def set_max_mistakes_per_question(self, max_mistakes_per_question: int) -> None:
+        """Set the maximum number of mistakes allowed per question."""
+        self.max_mistakes_per_question = max_mistakes_per_question
 
     def get_question_stats(self, instance_id: str) -> Optional[Dict[str, Any]]:
         """Get statistics for a specific training question."""
@@ -155,13 +238,16 @@ class TrainingState:
             'completed_questions': self.completed_questions,
             'total_correct': self.total_correct,
             'total_attempts': self.total_attempts,
+            'total_mistakes': self.total_mistakes,
             'passed': self.passed,
             'failed': self.failed,
             'current_question_index': self.current_question_index,
             'training_instances': self.training_instances,
             'show_feedback': self.show_feedback,
             'feedback_message': self.feedback_message,
-            'allow_retry': self.allow_retry
+            'allow_retry': self.allow_retry,
+            'max_mistakes': self.max_mistakes,
+            'max_mistakes_per_question': self.max_mistakes_per_question
         }
 
     @classmethod
@@ -171,6 +257,7 @@ class TrainingState:
         training_state.completed_questions = data.get('completed_questions', {})
         training_state.total_correct = data.get('total_correct', 0)
         training_state.total_attempts = data.get('total_attempts', 0)
+        training_state.total_mistakes = data.get('total_mistakes', 0)
         training_state.passed = data.get('passed', False)
         training_state.failed = data.get('failed', False)
         training_state.current_question_index = data.get('current_question_index', 0)
@@ -178,6 +265,8 @@ class TrainingState:
         training_state.show_feedback = data.get('show_feedback', False)
         training_state.feedback_message = data.get('feedback_message', "")
         training_state.allow_retry = data.get('allow_retry', False)
+        training_state.max_mistakes = data.get('max_mistakes', -1)
+        training_state.max_mistakes_per_question = data.get('max_mistakes_per_question', -1)
         return training_state
 
 # Database imports
@@ -475,13 +564,15 @@ class UserStateManager:
             return UserPhase.DONE, None
 
         page2file_for_cur_phase = self.phase_type_to_name_to_page[cur_phase]
-        if len(page2file_for_cur_phase) > 1:
+        if len(page2file_for_cur_phase) > 1 and cur_page is not None:
             pages_for_cur_phase = list(page2file_for_cur_phase.keys())
-            cur_page_index = pages_for_cur_phase.index(cur_page)
-            # If there are more pages in this phase, return the next one
-            if cur_page_index < len(pages_for_cur_phase) - 1:
-                next_page = pages_for_cur_phase[cur_page_index + 1]
-                return cur_phase, next_page
+            # Handle case where cur_page is not in the list
+            if cur_page in pages_for_cur_phase:
+                cur_page_index = pages_for_cur_phase.index(cur_page)
+                # If there are more pages in this phase, return the next one
+                if cur_page_index < len(pages_for_cur_phase) - 1:
+                    next_page = pages_for_cur_phase[cur_page_index + 1]
+                    return cur_phase, next_page
 
         # If there are no more pages in this phase, return the next phase.
         # Use the config's phase order instead of the enum order

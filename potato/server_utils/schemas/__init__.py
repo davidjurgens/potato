@@ -17,5 +17,9 @@ from .identifier_utils import (
     generate_element_value,
     generate_validation_attribute,
     escape_html_content,
-    safe_generate_layout
+    safe_generate_layout,
+    generate_tooltip_html
 )
+
+# Import schema registry for centralized schema management
+from .registry import schema_registry, SchemaDefinition

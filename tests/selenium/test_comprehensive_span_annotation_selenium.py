@@ -2366,7 +2366,7 @@ class TestSpanAnnotationComprehensive:
             from potato.user_state_management import init_user_state_manager, clear_user_state_manager
             from potato.item_state_management import init_item_state_manager, clear_item_state_manager
             from potato.flask_server import load_all_data
-            from potato.authentificaton import UserAuthenticator
+            from potato.authentication import UserAuthenticator
             import yaml
             import uuid
 

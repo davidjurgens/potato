@@ -210,3 +210,58 @@ def generate_validation_attribute(annotation_scheme: dict, label_name: str = Non
 
     logger.debug(f"Returning empty string - no validation requirements met")
     return ""
+
+
+def generate_tooltip_html(label_data: Dict[str, Any]) -> str:
+    """
+    Generate tooltip HTML attribute from label data.
+
+    This function provides centralized tooltip generation for all schema types.
+    It checks for tooltip text in the label configuration, either directly or
+    from an external file.
+
+    Args:
+        label_data: Label configuration dictionary that may contain:
+            - tooltip: Direct tooltip text string
+            - tooltip_file: Path to file containing tooltip text
+
+    Returns:
+        str: Tooltip HTML attribute string (e.g., 'data-toggle="tooltip" ...')
+             or empty string if no tooltip is configured
+
+    Example:
+        >>> label_data = {"name": "Option 1", "tooltip": "Select this option"}
+        >>> generate_tooltip_html(label_data)
+        'data-toggle="tooltip" data-html="true" data-placement="top" title="Select this option"'
+    """
+    if not isinstance(label_data, dict):
+        return ""
+
+    tooltip_text = ""
+
+    # Check for direct tooltip text
+    if "tooltip" in label_data:
+        tooltip_text = label_data["tooltip"]
+        logger.debug(f"Found direct tooltip text for label")
+
+    # Check for tooltip file
+    elif "tooltip_file" in label_data:
+        try:
+            with open(label_data["tooltip_file"], "rt") as f:
+                tooltip_text = "".join(f.readlines())
+            logger.debug(f"Read tooltip from file: {label_data['tooltip_file']}")
+        except FileNotFoundError:
+            logger.error(f"Tooltip file not found: {label_data['tooltip_file']}")
+            return ""
+        except PermissionError:
+            logger.error(f"Permission denied reading tooltip file: {label_data['tooltip_file']}")
+            return ""
+        except Exception as e:
+            logger.error(f"Failed to read tooltip file '{label_data['tooltip_file']}': {e}")
+            return ""
+
+    if tooltip_text:
+        escaped_tooltip = escape_html_content(tooltip_text)
+        return f'data-toggle="tooltip" data-html="true" data-placement="top" title="{escaped_tooltip}"'
+
+    return ""

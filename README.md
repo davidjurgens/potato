@@ -19,6 +19,15 @@ Please check out our [official documentation](https://potato-annotation.readthed
 
 
 ## Recent Updates
+- **2.0.0** Major release with new features:
+  - **AI Support**: Integrated LLM assistance with support for OpenAI, Anthropic, Gemini, Ollama, VLLM, and more ([Documentation](docs/ai_support.md))
+  - **Audio Annotation**: Waveform-based audio segmentation with Peaks.js ([Documentation](docs/audio_annotation.md))
+  - **Video Annotation**: Video display with configurable controls ([Documentation](docs/schemas_and_templates.md))
+  - **Active Learning**: ML-based instance prioritization using uncertainty sampling ([Documentation](docs/active_learning_guide.md))
+  - **Training Phase**: Practice annotations with feedback before main task ([Documentation](docs/training_phase.md))
+  - **Enhanced Admin Dashboard**: Real-time monitoring, suspicious activity detection ([Documentation](docs/admin_dashboard.md))
+  - **Database Backend**: MySQL support for large-scale deployments
+  - See [CHANGELOG.md](CHANGELOG.md) and [New Features Guide](docs/new_features_v2.md) for full details
 - 1.2.2.4 Fixing several bugs for multirate schema ("required" not working and keyboard conflicts).
 - 1.2.2.3 Supports randomizing the order of multirate schema options ([Documentation](https://potato-annotation.readthedocs.io/en/latest/schemas_and_templates/#multirate) | [Example project](https://github.com/davidjurgens/potato/blob/master/project-hub/simple_examples/configs/simple-multirate.yaml))
 - 1.2.2.2 small bugs fixed for label suggestions

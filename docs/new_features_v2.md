@@ -5,12 +5,13 @@ This document provides an overview of the major new features introduced in Potat
 ## Table of Contents
 
 1. [AI Support](#ai-support)
-2. [Active Learning](#active-learning)
-3. [Training Phase](#training-phase)
-4. [Database Backend](#database-backend)
-5. [Enhanced Admin Dashboard](#enhanced-admin-dashboard)
-6. [Annotation History](#annotation-history)
-7. [Multi-Phase Workflows](#multi-phase-workflows)
+2. [Audio Annotation](#audio-annotation)
+3. [Active Learning](#active-learning)
+4. [Training Phase](#training-phase)
+5. [Database Backend](#database-backend)
+6. [Enhanced Admin Dashboard](#enhanced-admin-dashboard)
+7. [Annotation History](#annotation-history)
+8. [Multi-Phase Workflows](#multi-phase-workflows)
 
 ---
 
@@ -26,13 +27,15 @@ Potato now integrates with Large Language Models to provide intelligent assistan
 | Anthropic | claude-3-5-sonnet | Cloud |
 | Google Gemini | gemini-2.0-flash-exp | Cloud |
 | Hugging Face | (configurable) | Cloud |
+| OpenRouter | (any model) | Cloud |
 | Ollama | llama3.2 | Local |
 | VLLM | Llama-3.2-3B-Instruct | Local |
 
 ### Use Cases
 
 - **Intelligent Hints**: AI generates contextual guidance without revealing answers
-- **Keyword Highlighting**: AI identifies relevant keywords in text to guide attention
+- **Keyword Highlighting**: AI identifies relevant keywords with amber box overlays
+- **Label Suggestions**: Visual highlighting of suggested labels with sparkle indicators
 
 ### Basic Configuration
 
@@ -81,7 +84,82 @@ ai_support:
       Text: {text}
 ```
 
+### Caching and Pre-generation
+
+For better performance with large annotation tasks:
+
+```yaml
+ai_support:
+  enabled: true
+  endpoint_type: openai
+  ai_config:
+    model: gpt-4o-mini
+    api_key: ${OPENAI_API_KEY}
+    include:
+      all: true
+  cache_config:
+    disk_cache:
+      enabled: true
+      path: "annotation_output/ai_cache.json"
+    prefetch:
+      warm_up_page_count: 20   # Pre-generate first 20 instances on startup
+      on_next: 10              # Prefetch 10 ahead when navigating forward
+      on_prev: 3               # Prefetch 3 behind when navigating backward
+```
+
 **See also:** [AI Support Guide](ai_support.md)
+
+---
+
+## Audio Annotation
+
+Potato supports audio annotation with waveform visualization using Peaks.js.
+
+### Features
+
+- **Waveform Display**: Visual amplitude representation of audio content
+- **Segment Creation**: Select and mark time ranges in the audio
+- **Segment Labeling**: Assign labels to audio segments
+- **Playback Controls**: Play full audio or individual segments
+- **Zoom/Scroll**: Navigate long audio files (hour-long podcasts supported)
+- **Keyboard Shortcuts**: Efficient annotation with keyboard controls
+
+### Configuration
+
+```yaml
+annotation_schemes:
+  - annotation_type: audio_annotation
+    name: audio_segmentation
+    description: "Segment the audio by content type"
+    mode: label
+    labels:
+      - name: speech
+        color: "#4ECDC4"
+        key_value: "1"
+      - name: music
+        color: "#FF6B6B"
+        key_value: "2"
+      - name: silence
+        color: "#95A5A6"
+        key_value: "3"
+    min_segments: 1
+    zoom_enabled: true
+    playback_rate_control: true
+```
+
+### Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `Space` | Play/pause |
+| `1-9` | Select label (label mode) |
+| `[` / `]` | Set segment start/end |
+| `Enter` | Create segment |
+| `Delete` | Delete selected segment |
+| `+` / `-` | Zoom in/out |
+| `←` / `→` | Seek 5 seconds |
+
+**See also:** [Audio Annotation Guide](audio_annotation.md)
 
 ---
 

@@ -1746,3 +1746,120 @@ fieldset[schema] {
   font-family: ui-sans-serif, system-ui, sans-serif;
   position: relative;
 }
+
+
+/* ==================== AI SUGGESTION STYLES ==================== */
+
+/* AI suggested label highlighting */
+.ai-suggested-option {
+  position: relative;
+  border: 2px solid #f59e0b !important;
+  background-color: rgba(245, 158, 11, 0.1) !important;
+  border-radius: var(--radius);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.3);
+  animation: ai-pulse 2s ease-in-out infinite;
+}
+
+.ai-suggested-label {
+  position: relative;
+  font-weight: 600 !important;
+  color: #92400e !important;
+}
+
+.ai-suggested {
+  outline: 2px solid #f59e0b !important;
+  outline-offset: 2px;
+}
+
+/* AI suggestion indicator (sparkle emoji) */
+.ai-suggestion-indicator {
+  font-size: 0.9em;
+  vertical-align: middle;
+  animation: ai-sparkle 1.5s ease-in-out infinite;
+}
+
+/* Pulse animation for highlighted options */
+@keyframes ai-pulse {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(245, 158, 11, 0.5);
+  }
+}
+
+/* Sparkle animation for the indicator */
+@keyframes ai-sparkle {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.2);
+  }
+}
+
+/* AI span overlay styles (for keyword highlighting) */
+.span-overlay-ai {
+  pointer-events: none;
+  z-index: 999;
+}
+
+.span-overlay-ai .span-highlight-segment {
+  pointer-events: auto;
+  cursor: help;
+}
+
+/* Tooltip styling for AI suggestions */
+.tooltip.hint-tooltip {
+  background-color: rgba(245, 158, 11, 0.95);
+  color: #1f2937;
+  border: 1px solid #f59e0b;
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  max-width: 350px;
+  font-size: 13px;
+  line-height: 1.5;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.tooltip.hint-tooltip .hint-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tooltip.hint-tooltip .content-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tooltip.hint-tooltip .content-item .label {
+  font-weight: 600;
+  color: #92400e;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.tooltip.hint-tooltip .content-item .value {
+  color: #1f2937;
+}
+
+.tooltip.hint-tooltip .content-item .value.suggestion {
+  font-weight: 600;
+  color: #78350f;
+  background-color: rgba(254, 243, 199, 0.8);
+  padding: 2px 6px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+/* Keyword tooltip styling */
+.tooltip.keyword-tooltip {
+  background-color: rgba(59, 130, 246, 0.95);
+  color: white;
+  border: 1px solid #3b82f6;
+}
+

@@ -499,6 +499,45 @@ Consider adding Jest tests for frontend JavaScript unit testing:
 
 See the section on Jest advantages below for more details.
 
+## Path Security for Selenium Tests
+
+**CRITICAL: All test files must be created within the `tests/` directory structure.**
+
+- **Config files**: Must be within `tests/output/` or subdirectories
+- **Data files**: Must be within `tests/` directory structure
+- **Task directory**: Must be set to the directory containing the config file
+- **File paths**: All paths in config must be relative to `task_dir` or within `tests/`
+- **No system temp directories**: Do NOT use `/tmp`, `/var`, or system temp directories
+
+### Using Test Utilities
+
+Always use the test utilities for creating secure test configurations:
+
+```python
+from tests.helpers.test_utils import (
+    create_test_directory,
+    create_test_data_file,
+    create_test_config,
+    create_span_annotation_config,
+    TestConfigManager
+)
+```
+
+### Example: Creating Custom Selenium Test Config
+
+```python
+# Create a custom test configuration for Selenium tests
+test_dir = create_test_directory("my_selenium_test")
+config_file, data_file = create_span_annotation_config(
+    test_dir,
+    annotation_task_name="My Selenium Test",
+    require_password=False
+)
+
+# Use with FlaskTestServer
+server = FlaskTestServer(port=9009, config_file=config_file)
+```
+
 ## Span Annotation Test Design
 
 This section documents conventions and patterns for writing Selenium tests for span annotation features. Follow these guidelines to ensure new tests work reliably and are easy to maintain.

@@ -27,9 +27,8 @@ def init_ai_cache_manager():
     return AICACHEMANAGER
 
 def get_ai_cache_manager():
+    """Get the AI cache manager instance. Returns None if not initialized (AI support disabled)."""
     global AICACHEMANAGER
-    if AICACHEMANAGER is None:
-        raise ValueError("AI state manager has not been initialized")
     return AICACHEMANAGER
 
 class AiCacheManager:

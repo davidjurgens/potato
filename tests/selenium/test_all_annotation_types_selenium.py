@@ -42,13 +42,17 @@ class TestAllAnnotationTypes:
 
     def create_unique_test_environment(self, test_data, config_path, test_name):
         """Create a unique test environment with isolated temp directory and unique IDs."""
-        # Create unique temp directory for this test
+        # Create unique temp directory for this test within the project directory
         test_id = str(uuid.uuid4())[:8]
-        temp_dir = tempfile.mkdtemp(prefix=f"potato_test_{test_name}_{test_id}_")
 
-        # Copy config file to temp directory
-        config_dir = os.path.join(temp_dir, "configs")
-        os.makedirs(config_dir, exist_ok=True)
+        # Create temp directory within tests/output to avoid path security issues
+        output_dir = os.path.join(os.path.dirname(__file__), '..', 'output')
+        os.makedirs(output_dir, exist_ok=True)
+        temp_dir = os.path.join(output_dir, f"potato_test_{test_name}_{test_id}")
+
+        # Create task directory first (this is where the config file must be)
+        task_dir = os.path.join(temp_dir, "task")
+        os.makedirs(task_dir, exist_ok=True)
 
         # Read original config
         with open(config_path, 'r') as f:
@@ -56,11 +60,11 @@ class TestAllAnnotationTypes:
 
         # Update config to use temp directory paths
         config_data['output_annotation_dir'] = os.path.join(temp_dir, "output")
-        config_data['task_dir'] = os.path.join(temp_dir, "task")
-        config_data['site_dir'] = os.path.join(temp_dir, "templates")
+        config_data['task_dir'] = task_dir  # This must match where we put the config file
+        config_data['site_dir'] = os.path.join(task_dir, "templates")  # Must be within task_dir
 
-        # Write updated config to temp directory
-        temp_config_path = os.path.join(config_dir, os.path.basename(config_path))
+        # Write updated config to task directory (config file must be in task_dir)
+        temp_config_path = os.path.join(task_dir, os.path.basename(config_path))
         with open(temp_config_path, 'w') as f:
             yaml.dump(config_data, f)
 
@@ -567,7 +571,7 @@ class TestIndividualAnnotationTypes(TestAllAnnotationTypes):
             from potato.user_state_management import init_user_state_manager, clear_user_state_manager
             from potato.item_state_management import init_item_state_manager, clear_item_state_manager
             from potato.flask_server import load_all_data
-            from potato.authentificaton import UserAuthenticator
+            from potato.authentication import UserAuthenticator
 
             # Create args object for config initialization
             class Args:

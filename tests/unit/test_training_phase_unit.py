@@ -68,13 +68,16 @@ class TestTrainingState:
 
         # First attempt - incorrect
         training_state.add_answer("train_1", False, 1, "Wrong")
-        # Second attempt - correct
+        assert training_state.total_attempts == 1
+        assert training_state.total_mistakes == 1
+
+        # Second attempt - correct (updates same question, so total attempts = 1 + (2-1) = 2)
         training_state.add_answer("train_1", True, 2, "Correct!")
 
         assert training_state.completed_questions["train_1"]["correct"] == True
         assert training_state.completed_questions["train_1"]["attempts"] == 2
         assert training_state.total_correct == 1
-        assert training_state.total_attempts == 3
+        assert training_state.total_attempts == 2  # 1 + (2-1) = 2 incremental
 
     def test_get_question_stats(self):
         """Test getting statistics for a specific question."""
@@ -567,6 +570,228 @@ class TestTrainingDataLoading:
         """Test getting explanation for non-existent training instance."""
         explanation = get_training_explanation("nonexistent")
         assert explanation == ""
+
+
+class TestTrainingMistakeTracking:
+    """Test mistake tracking functionality in TrainingState."""
+
+    def test_total_mistakes_initialization(self):
+        """Test that total_mistakes is initialized to 0."""
+        training_state = TrainingState()
+        assert training_state.total_mistakes == 0
+        assert training_state.max_mistakes == -1  # Unlimited by default
+        assert training_state.max_mistakes_per_question == -1
+
+    def test_record_mistake(self):
+        """Test recording a mistake."""
+        training_state = TrainingState()
+
+        training_state.record_mistake("train_1")
+        assert training_state.get_total_mistakes() == 1
+        assert training_state.get_mistakes_for_question("train_1") == 1
+
+        training_state.record_mistake("train_1")
+        assert training_state.get_total_mistakes() == 2
+        assert training_state.get_mistakes_for_question("train_1") == 2
+
+        training_state.record_mistake("train_2")
+        assert training_state.get_total_mistakes() == 3
+        assert training_state.get_mistakes_for_question("train_2") == 1
+
+    def test_add_answer_tracks_mistakes(self):
+        """Test that add_answer increments total_mistakes for incorrect answers."""
+        training_state = TrainingState()
+
+        training_state.add_answer("train_1", False, 1, "Wrong")
+        assert training_state.get_total_mistakes() == 1
+
+        training_state.add_answer("train_2", True, 1, "Correct")
+        assert training_state.get_total_mistakes() == 1  # No change
+
+        training_state.add_answer("train_3", False, 1, "Wrong")
+        assert training_state.get_total_mistakes() == 2
+
+    def test_set_max_mistakes(self):
+        """Test setting max_mistakes threshold."""
+        training_state = TrainingState()
+
+        training_state.set_max_mistakes(3)
+        assert training_state.max_mistakes == 3
+
+    def test_should_fail_due_to_mistakes(self):
+        """Test failure detection based on max_mistakes."""
+        training_state = TrainingState()
+        training_state.set_max_mistakes(3)
+
+        # Under the limit
+        training_state.record_mistake("train_1")
+        training_state.record_mistake("train_2")
+        assert training_state.should_fail_due_to_mistakes() == False
+
+        # At the limit
+        training_state.record_mistake("train_3")
+        assert training_state.should_fail_due_to_mistakes() == True
+
+    def test_should_fail_unlimited_mistakes(self):
+        """Test that unlimited mistakes (-1) never triggers failure."""
+        training_state = TrainingState()
+        training_state.set_max_mistakes(-1)
+
+        # Even with many mistakes, should not fail
+        for i in range(100):
+            training_state.record_mistake(f"train_{i}")
+        assert training_state.should_fail_due_to_mistakes() == False
+
+    def test_set_max_mistakes_per_question(self):
+        """Test setting max_mistakes_per_question threshold."""
+        training_state = TrainingState()
+
+        training_state.set_max_mistakes_per_question(2)
+        assert training_state.max_mistakes_per_question == 2
+
+    def test_should_fail_question_due_to_mistakes(self):
+        """Test failure detection based on mistakes per question."""
+        training_state = TrainingState()
+        training_state.set_max_mistakes_per_question(2)
+
+        # Under the limit
+        training_state.record_mistake("train_1")
+        assert training_state.should_fail_question_due_to_mistakes("train_1") == False
+
+        # At the limit
+        training_state.record_mistake("train_1")
+        assert training_state.should_fail_question_due_to_mistakes("train_1") == True
+
+        # Other question should not trigger failure
+        training_state.record_mistake("train_2")
+        assert training_state.should_fail_question_due_to_mistakes("train_2") == False
+
+    def test_get_mistakes_for_question(self):
+        """Test getting mistake count for a specific question."""
+        training_state = TrainingState()
+
+        assert training_state.get_mistakes_for_question("train_1") == 0
+
+        training_state.record_mistake("train_1")
+        training_state.record_mistake("train_1")
+        assert training_state.get_mistakes_for_question("train_1") == 2
+
+    def test_mistakes_serialization(self):
+        """Test that mistake data is properly serialized."""
+        training_state = TrainingState()
+        training_state.set_max_mistakes(5)
+        training_state.set_max_mistakes_per_question(2)
+        training_state.record_mistake("train_1")
+        training_state.record_mistake("train_1")
+
+        data = training_state.to_dict()
+        assert data["total_mistakes"] == 2
+        assert data["max_mistakes"] == 5
+        assert data["max_mistakes_per_question"] == 2
+
+    def test_mistakes_deserialization(self):
+        """Test that mistake data is properly deserialized."""
+        data = {
+            "completed_questions": {"train_1": {"correct": False, "attempts": 2, "explanation": ""}},
+            "total_correct": 0,
+            "total_attempts": 2,
+            "total_mistakes": 2,
+            "passed": False,
+            "failed": False,
+            "current_question_index": 0,
+            "training_instances": [],
+            "show_feedback": False,
+            "feedback_message": "",
+            "allow_retry": True,
+            "max_mistakes": 5,
+            "max_mistakes_per_question": 2
+        }
+
+        training_state = TrainingState.from_dict(data)
+        assert training_state.total_mistakes == 2
+        assert training_state.max_mistakes == 5
+        assert training_state.max_mistakes_per_question == 2
+
+
+class TestCheckTrainingAnswer:
+    """Test the check_training_answer function."""
+
+    def test_radio_correct(self):
+        """Test radio button correct answer."""
+        from potato.routes import check_training_answer
+
+        user_answer = {"sentiment": "positive"}
+        correct_answers = {"sentiment": "positive"}
+        assert check_training_answer(user_answer, correct_answers) == True
+
+    def test_radio_incorrect(self):
+        """Test radio button incorrect answer."""
+        from potato.routes import check_training_answer
+
+        user_answer = {"sentiment": "negative"}
+        correct_answers = {"sentiment": "positive"}
+        assert check_training_answer(user_answer, correct_answers) == False
+
+    def test_multiselect_correct(self):
+        """Test multiselect correct answer."""
+        from potato.routes import check_training_answer
+
+        user_answer = {"topics": ["product", "service"]}
+        correct_answers = {"topics": ["service", "product"]}  # Order independent
+        assert check_training_answer(user_answer, correct_answers) == True
+
+    def test_multiselect_incorrect(self):
+        """Test multiselect incorrect answer."""
+        from potato.routes import check_training_answer
+
+        user_answer = {"topics": ["product"]}
+        correct_answers = {"topics": ["product", "service"]}
+        assert check_training_answer(user_answer, correct_answers) == False
+
+    def test_numeric_correct(self):
+        """Test numeric correct answer."""
+        from potato.routes import check_training_answer
+
+        user_answer = {"rating": "4"}  # String from form
+        correct_answers = {"rating": 4}  # Integer in config
+        assert check_training_answer(user_answer, correct_answers) == True
+
+    def test_numeric_incorrect(self):
+        """Test numeric incorrect answer."""
+        from potato.routes import check_training_answer
+
+        user_answer = {"rating": "3"}
+        correct_answers = {"rating": 4}
+        assert check_training_answer(user_answer, correct_answers) == False
+
+    def test_case_insensitive(self):
+        """Test case insensitive string comparison."""
+        from potato.routes import check_training_answer
+
+        user_answer = {"sentiment": "POSITIVE"}
+        correct_answers = {"sentiment": "positive"}
+        assert check_training_answer(user_answer, correct_answers) == True
+
+    def test_missing_answer(self):
+        """Test missing answer field."""
+        from potato.routes import check_training_answer
+
+        user_answer = {}
+        correct_answers = {"sentiment": "positive"}
+        assert check_training_answer(user_answer, correct_answers) == False
+
+    def test_multiple_schemas(self):
+        """Test multiple annotation schemas."""
+        from potato.routes import check_training_answer
+
+        user_answer = {"sentiment": "positive", "topics": ["product"]}
+        correct_answers = {"sentiment": "positive", "topics": ["product"]}
+        assert check_training_answer(user_answer, correct_answers) == True
+
+        # One wrong
+        user_answer = {"sentiment": "positive", "topics": ["service"]}
+        correct_answers = {"sentiment": "positive", "topics": ["product"]}
+        assert check_training_answer(user_answer, correct_answers) == False
 
 
 class TestUserStateTrainingMethods:

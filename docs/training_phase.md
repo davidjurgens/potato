@@ -38,8 +38,51 @@ training:
 | `annotation_schemes` | list | No | All schemes | Which annotation schemes to use in training |
 | `passing_criteria.min_correct` | integer | No | 3 | Minimum correct answers required to pass |
 | `passing_criteria.require_all_correct` | boolean | No | false | Whether all questions must be correct |
+| `passing_criteria.max_mistakes` | integer | No | -1 | Maximum total mistakes before failure (-1 = unlimited) |
+| `passing_criteria.max_mistakes_per_question` | integer | No | -1 | Maximum mistakes per question before failure (-1 = unlimited) |
 | `allow_retry` | boolean | No | true | Whether to allow retrying incorrect answers |
-| `failure_action` | string | No | "retry" | Action when user fails ("retry" or "advance") |
+| `failure_action` | string | No | "move_to_done" | Action when user fails ("move_to_done" or "advance") |
+
+### Training Strategies
+
+Potato supports multiple training strategies that can be combined:
+
+1. **Minimum Correct**: User must get at least N answers correct to pass
+   ```yaml
+   passing_criteria:
+     min_correct: 3
+   ```
+
+2. **Require All Correct**: User must answer every question correctly
+   ```yaml
+   passing_criteria:
+     require_all_correct: true
+   ```
+
+3. **Maximum Mistakes**: User is kicked out after N total mistakes
+   ```yaml
+   passing_criteria:
+     max_mistakes: 5  # Fail after 5 wrong answers total
+   ```
+
+4. **Maximum Mistakes Per Question**: User is kicked out after N mistakes on any single question
+   ```yaml
+   passing_criteria:
+     max_mistakes_per_question: 2  # Fail after 2 wrong answers on same question
+   ```
+
+5. **Allow Retry**: Let users retry incorrect answers
+   ```yaml
+   allow_retry: true
+   ```
+
+These can be combined for complex qualification requirements. For example:
+```yaml
+passing_criteria:
+  min_correct: 3           # Need 3 correct
+  max_mistakes: 5          # But no more than 5 total mistakes
+  max_mistakes_per_question: 2  # And no more than 2 per question
+```
 
 ### Phase Integration
 

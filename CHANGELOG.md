@@ -18,15 +18,22 @@ This release represents a major architectural overhaul of the Potato annotation 
 ### New Features
 
 #### AI Support
-- Integrated AI hint generation with support for 6 LLM providers:
+- Integrated AI assistance with support for 7 LLM providers:
   - OpenAI (GPT-4, GPT-3.5)
   - Anthropic (Claude)
   - Google Gemini
   - Hugging Face
+  - OpenRouter (access to multiple providers)
   - Ollama (local deployment)
   - VLLM (local inference server)
-- Configurable prompts for hints and keyword highlighting
+- Three AI assistance features:
+  - **Intelligent Hints**: Contextual guidance with optional suggested labels
+  - **Keyword Highlighting**: AI-identified keywords with amber box overlays
+  - **Label Suggestions**: Visual highlighting of suggested labels with sparkle indicators
+- Configurable prompts per annotation type (JSON prompt files in `potato/ai/prompt/`)
 - Environment variable support for API keys
+- Caching system with disk persistence and prefetching for performance
+- Multi-schema support with per-annotation AI configuration
 
 #### Active Learning
 - ML-based instance prioritization using uncertainty sampling
@@ -123,8 +130,11 @@ This release represents a major architectural overhaul of the Potato annotation 
 - Shadcn design system CSS classes
 - Responsive layout support
 - Dark mode support via CSS variables
+- New `span-core.js` with SpanManager class for unified span/highlight handling
+- AI integration in SpanManager for keyword highlighting overlays
 - Enhanced `span-manager.js` (2,540 lines) for span annotation
 - Enhanced `annotation.js` (2,682 lines) for annotation handling
+- Enhanced `ai_assistant_manager.js` with label suggestion highlighting
 
 #### Configuration
 - Enhanced YAML validation with detailed error messages
@@ -137,6 +147,13 @@ This release represents a major architectural overhaul of the Potato annotation 
 - Configuration file structure documentation
 - Assignment strategies summary
 - Comprehensive testing documentation
+
+### Audio Annotation Type
+- New `audio_annotation` type for audio segmentation with waveform visualization
+- Peaks.js integration for efficient rendering of long audio files
+- Support for segment creation, labeling, and playback
+- Zoom and scroll controls for navigating long recordings
+- Pre-computed waveform data caching for performance
 
 ### Video Annotation Type
 - New `video` annotation type for displaying video content
