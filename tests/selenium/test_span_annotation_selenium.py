@@ -40,6 +40,278 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
     Authentication: Handled automatically by BaseSeleniumTest
     """
 
+    def create_text_selection(self, char_count=10):
+        """
+        Create a text selection in the text-content element, skipping leading whitespace.
+
+        Args:
+            char_count: Number of non-whitespace characters to select
+
+        Returns:
+            dict with selection info or error
+        """
+        return self.execute_script_safe(f"""
+            const textContent = document.getElementById('text-content');
+            if (!textContent) return {{ error: 'text-content not found' }};
+
+            // Find the first text node with content
+            let textNode = null;
+            for (const node of textContent.childNodes) {{
+                if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {{
+                    textNode = node;
+                    break;
+                }}
+            }}
+            if (!textNode) return {{ error: 'No text node found' }};
+
+            // Skip leading whitespace
+            const text = textNode.textContent;
+            let startPos = 0;
+            while (startPos < text.length && /\\s/.test(text[startPos])) {{
+                startPos++;
+            }}
+
+            // Select specified number of non-whitespace characters
+            let endPos = startPos;
+            let charCount = 0;
+            while (endPos < text.length && charCount < {char_count}) {{
+                if (!/\\s/.test(text[endPos])) charCount++;
+                endPos++;
+            }}
+
+            if (startPos >= text.length) return {{ error: 'Only whitespace in text node' }};
+
+            const range = document.createRange();
+            range.setStart(textNode, startPos);
+            range.setEnd(textNode, endPos);
+
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+
+            return {{
+                success: true,
+                selectedText: selection.toString(),
+                startOffset: startPos,
+                endOffset: endPos
+            }};
+        """)
+
+    def wait_for_span_manager(self, timeout=15):
+        """Wait for SpanManager to be fully initialized."""
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            status = self.execute_script_safe("""
+                return {
+                    isInitialized: window.spanManager?.isInitialized || false,
+                    positioningReady: window.spanManager?.positioningStrategy?.isInitialized || false
+                };
+            """)
+            if status.get('isInitialized') and status.get('positioningReady'):
+                return True
+            time.sleep(0.5)
+        return False
+
+    def select_label_checkbox(self, index=0):
+        """Select a label checkbox by index."""
+        checkboxes = self.driver.find_elements(By.CSS_SELECTOR, ".shadcn-span-checkbox")
+        if not checkboxes or index >= len(checkboxes):
+            return None
+        checkboxes[index].click()
+        time.sleep(0.3)
+        return checkboxes[index].get_attribute('value')
+
+    def trigger_span_creation(self):
+        """Trigger span creation by calling handleTextSelection."""
+        return self.execute_script_safe("""
+            if (window.spanManager?.handleTextSelection) {
+                window.spanManager.handleTextSelection();
+                return { success: true };
+            }
+            return { success: false, error: 'handleTextSelection not found' };
+        """)
+
+    def get_span_state(self):
+        """Get current span state from SpanManager."""
+        return self.execute_script_safe("""
+            return {
+                spanCount: window.spanManager?.getSpans()?.length || 0,
+                spans: window.spanManager?.getSpans() || [],
+                overlayCount: document.querySelectorAll('.span-overlay-pure').length
+            };
+        """)
+
+    def test_span_creation_flow_diagnostic(self):
+        """
+        Diagnostic test to trace the complete span creation flow.
+
+        This test verifies each step of the span creation process:
+        1. SpanManager initialization
+        2. Label selection (checkbox click)
+        3. Text selection
+        4. handleTextSelection() call
+        5. saveSpan() POST to /updateinstance
+        6. Overlay rendering
+        """
+        # Navigate to annotation page
+        self.driver.get(f"{self.server.base_url}/annotate")
+
+        # Wait for page and span manager
+        self.wait_for_element(By.ID, "instance-text")
+
+        # Step 1: Wait for SpanManager initialization
+        max_wait = 15
+        start_time = time.time()
+        while time.time() - start_time < max_wait:
+            status = self.execute_script_safe("""
+                return {
+                    spanManagerExists: !!window.spanManager,
+                    isInitialized: window.spanManager?.isInitialized || false,
+                    currentSchema: window.spanManager?.currentSchema || null,
+                    currentInstanceId: window.spanManager?.currentInstanceId || null,
+                    positioningReady: window.spanManager?.positioningStrategy?.isInitialized || false
+                };
+            """)
+            if status.get('isInitialized') and status.get('positioningReady'):
+                break
+            time.sleep(0.5)
+
+        print(f"Step 1 - SpanManager status: {status}")
+        self.assertTrue(status.get('isInitialized'), "SpanManager should be initialized")
+        self.assertTrue(status.get('positioningReady'), "Positioning strategy should be ready")
+
+        # Step 2: Click a label checkbox
+        label_checkboxes = self.driver.find_elements(By.CSS_SELECTOR, ".shadcn-span-checkbox")
+        self.assertGreater(len(label_checkboxes), 0, "Should have label checkboxes")
+
+        first_checkbox = label_checkboxes[0]
+        checkbox_value = first_checkbox.get_attribute('value')
+        first_checkbox.click()
+        time.sleep(0.3)
+
+        # Verify label is selected
+        label_status = self.execute_script_safe("""
+            const checkedBox = document.querySelector('.annotation-form.span input[type="checkbox"]:checked');
+            return {
+                hasChecked: !!checkedBox,
+                checkedValue: checkedBox?.value || null,
+                checkedId: checkedBox?.id || null,
+                getSelectedLabelResult: window.spanManager?.getSelectedLabel() || null
+            };
+        """)
+        print(f"Step 2 - Label status after click: {label_status}")
+        self.assertTrue(label_status.get('hasChecked'), "A checkbox should be checked")
+        self.assertEqual(label_status.get('checkedValue'), checkbox_value, "Checked value should match clicked checkbox")
+
+        # Step 3: Create a text selection (skip leading whitespace)
+        selection_result = self.execute_script_safe("""
+            const textContent = document.getElementById('text-content');
+            if (!textContent) return { error: 'text-content not found' };
+
+            // Find the first text node with content
+            let textNode = null;
+            for (const node of textContent.childNodes) {
+                if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
+                    textNode = node;
+                    break;
+                }
+            }
+            if (!textNode) return { error: 'No text node found' };
+
+            // Find start position by skipping leading whitespace
+            const text = textNode.textContent;
+            let startPos = 0;
+            while (startPos < text.length && /\\s/.test(text[startPos])) {
+                startPos++;
+            }
+
+            // Select 10 non-whitespace characters
+            let endPos = startPos;
+            let charCount = 0;
+            while (endPos < text.length && charCount < 10) {
+                if (!/\\s/.test(text[endPos])) charCount++;
+                endPos++;
+            }
+
+            if (startPos >= text.length) return { error: 'Only whitespace in text node' };
+
+            const range = document.createRange();
+            range.setStart(textNode, startPos);
+            range.setEnd(textNode, endPos);
+
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+
+            return {
+                success: true,
+                selectedText: selection.toString(),
+                startOffset: startPos,
+                endOffset: endPos,
+                textNodeLength: text.length
+            };
+        """)
+        print(f"Step 3 - Selection result: {selection_result}")
+        self.assertTrue(selection_result.get('success'), f"Selection should succeed: {selection_result}")
+        self.assertGreater(len(selection_result.get('selectedText', '')), 0, "Should have non-empty selection")
+
+        # Step 4: Call handleTextSelection and trace what happens
+        handler_result = self.execute_script_safe("""
+            // Capture the state before calling handler
+            const beforeState = {
+                spanCount: window.spanManager?.getSpans()?.length || 0,
+                selectedLabel: window.spanManager?.getSelectedLabel() || null,
+                currentSchema: window.spanManager?.currentSchema || null,
+                currentInstanceId: window.spanManager?.currentInstanceId || null,
+                selectionText: window.getSelection().toString()
+            };
+
+            // Call the handler
+            let handlerCalled = false;
+            let handlerError = null;
+            try {
+                if (window.spanManager?.handleTextSelection) {
+                    window.spanManager.handleTextSelection();
+                    handlerCalled = true;
+                }
+            } catch (e) {
+                handlerError = e.message;
+            }
+
+            return {
+                beforeState,
+                handlerCalled,
+                handlerError
+            };
+        """)
+        print(f"Step 4 - Handler result: {handler_result}")
+        self.assertTrue(handler_result.get('handlerCalled'), "Handler should be called")
+        self.assertIsNone(handler_result.get('handlerError'), f"Handler should not error: {handler_result.get('handlerError')}")
+
+        # Step 5: Wait for span to be saved and check results
+        time.sleep(2)  # Wait for async save operation
+
+        after_state = self.execute_script_safe("""
+            return {
+                spanCount: window.spanManager?.getSpans()?.length || 0,
+                spans: window.spanManager?.getSpans() || [],
+                overlayCount: document.querySelectorAll('.span-overlay-pure').length
+            };
+        """)
+        print(f"Step 5 - After state: {after_state}")
+
+        # Step 6: Assert span was created
+        self.assertGreater(after_state.get('spanCount', 0), 0, "Span should be created")
+        self.assertGreater(after_state.get('overlayCount', 0), 0, "Overlay should be rendered")
+
+        # Verify span data
+        spans = after_state.get('spans', [])
+        self.assertEqual(len(spans), 1, "Should have exactly one span")
+        span = spans[0]
+        self.assertEqual(span.get('label'), checkbox_value, "Span label should match selected checkbox")
+
+        print("✅ Span creation flow complete - span created and rendered successfully")
+
     def test_basic_span_manager_functionality(self):
         """Basic test to verify span manager functionality without complex interactions."""
         # User is already authenticated by BaseSeleniumTest.setUp()
