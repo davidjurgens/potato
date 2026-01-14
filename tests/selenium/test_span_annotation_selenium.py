@@ -402,49 +402,34 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
             raise
 
     def test_span_creation_via_text_selection(self):
-        """Test creating spans by selecting text"""
-        # User is already authenticated by BaseSeleniumTest.setUp()
+        """Test creating spans by selecting text."""
         # Navigate to annotation page
         self.driver.get(f"{self.server.base_url}/annotate")
+        self.wait_for_element(By.ID, "instance-text")
 
-        # Wait for page to load
-        text_element = self.wait_for_element(By.ID, "instance-text")
+        # Wait for span manager
+        self.assertTrue(self.wait_for_span_manager(), "Span manager should initialize")
 
-        # Wait for span manager to be ready
-        time.sleep(2)
-        span_manager_ready = self.execute_script_safe("""
-            return window.spanManager && window.spanManager.isInitialized;
-        """)
-        self.assertTrue(span_manager_ready, "Span manager should be initialized")
+        # Select a label
+        label_value = self.select_label_checkbox(0)
+        self.assertIsNotNone(label_value, "Should have label checkboxes")
 
-        # Select a label first (span annotation uses shadcn-span-checkbox)
-        label_buttons = self.driver.find_elements(By.CSS_SELECTOR, ".shadcn-span-checkbox")
-        if label_buttons:
-            label_buttons[0].click()
-            time.sleep(0.5)
+        # Create text selection (skips leading whitespace)
+        selection_result = self.create_text_selection(10)
+        self.assertTrue(selection_result.get('success'), f"Selection should succeed: {selection_result}")
+        self.assertGreater(len(selection_result.get('selectedText', '')), 0, "Should select text")
 
-        # Select text using JavaScript
-        self.execute_script_safe("""
-            var textElement = arguments[0];
-            var range = document.createRange();
-            var textNode = textElement.firstChild;
-            range.setStart(textNode, 0);
-            range.setEnd(textNode, 10);
-            var selection = window.getSelection();
-            selection.removeAllRanges();
-            selection.addRange(range);
-        """, text_element)
+        # Trigger span creation
+        result = self.trigger_span_creation()
+        self.assertTrue(result.get('success'), "Handler should be called")
 
-        # Wait for span creation
+        # Wait for async save
         time.sleep(2)
 
-        # Check if span was created
-        span_elements = self.driver.find_elements(By.CLASS_NAME, "span-highlight")
-        if len(span_elements) > 0:
-            print("✅ Span created via text selection")
-            self.assertGreater(len(span_elements), 0, "Span should be created")
-        else:
-            print("⚠️ No span created via text selection (may be expected based on UI implementation)")
+        # Verify span was created
+        state = self.get_span_state()
+        self.assertGreater(state.get('spanCount', 0), 0, "Span should be created")
+        self.assertGreater(state.get('overlayCount', 0), 0, "Overlay should be rendered")
 
     def test_span_deletion_via_ui(self):
         """Test deleting spans via UI interaction"""
