@@ -91,8 +91,6 @@ def get_initial_config():
 
     config["user_config"] = {"allow_all_users": True, "users": []}
 
-    config["alert_time_each_instance"] = 10000000
-
     # The html that changes the visualization for your task. Change this file
     # to influence the layout and description of your task. This is not a full
     # HTML page, just the piece that does lays out your task's pieces

@@ -115,7 +115,6 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
         'task_dir',
         'output_annotation_dir',
         'annotation_task_name',
-        'alert_time_each_instance'
     ]
 
     missing_fields = [field for field in required_fields if field not in config_data]

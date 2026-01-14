@@ -47,9 +47,9 @@ def get_example_configs() -> List[Path]:
 # Configs with known issues that are expected to fail
 # These should be fixed in the configs themselves, not the tests
 CONFIGS_WITH_KNOWN_ISSUES = {
-    "simple-audio-annotation": "Missing required field: alert_time_each_instance",
-    "simple-best-worst-scaling": "Missing required field: alert_time_each_instance",
-    "simple-image-annotation": "Missing required field: alert_time_each_instance",
+    "simple-audio-annotation": "Missing required field: site_dir",
+    "simple-best-worst-scaling": "Missing required field: site_dir",
+    "simple-image-annotation": "Missing required field: site_dir",
     "simple-pairwise-comparison": "TypeError in pairwise comparison annotation",
     "two-sliders": "Server startup timeout (may need investigation)",
 }
