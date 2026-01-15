@@ -1,0 +1,60 @@
+{
+  "training_instances": [
+    {
+      "id": "train_econ_1",
+      "text": "The Federal Reserve announced a 0.25% increase in interest rates to combat inflation.",
+      "category": "economics",
+      "correct_answers": {"classification": "Economics"},
+      "explanation": "This is about monetary policy and central banking - a core economics topic."
+    },
+    {
+      "id": "train_econ_2",
+      "text": "The unemployment rate fell to 3.5%, marking the lowest level in 50 years.",
+      "category": "economics",
+      "correct_answers": {"classification": "Economics"},
+      "explanation": "Unemployment statistics are a key economic indicator."
+    },
+    {
+      "id": "train_science_1",
+      "text": "Researchers discovered a new species of deep-sea fish that can produce bioluminescent light.",
+      "category": "science",
+      "correct_answers": {"classification": "Science"},
+      "explanation": "This is about biological research and discovery."
+    },
+    {
+      "id": "train_science_2",
+      "text": "The James Webb Space Telescope captured unprecedented images of distant galaxies.",
+      "category": "science",
+      "correct_answers": {"classification": "Science"},
+      "explanation": "This is about astronomy and space exploration."
+    },
+    {
+      "id": "train_sports_1",
+      "text": "The championship game went into overtime after a dramatic last-second three-pointer.",
+      "category": "sports",
+      "correct_answers": {"classification": "Sports"},
+      "explanation": "This describes a basketball game outcome."
+    },
+    {
+      "id": "train_sports_2",
+      "text": "The tennis star won her fifth Grand Slam title after a grueling three-set final.",
+      "category": "sports",
+      "correct_answers": {"classification": "Sports"},
+      "explanation": "This is about professional tennis competition."
+    },
+    {
+      "id": "train_tech_1",
+      "text": "The new AI model demonstrated unprecedented performance in language understanding tasks.",
+      "category": "technology",
+      "correct_answers": {"classification": "Technology"},
+      "explanation": "This is about artificial intelligence development."
+    },
+    {
+      "id": "train_tech_2",
+      "text": "The company unveiled a revolutionary battery technology that could double electric vehicle range.",
+      "category": "technology",
+      "correct_answers": {"classification": "Technology"},
+      "explanation": "This is about technological innovation in energy storage."
+    }
+  ]
+}

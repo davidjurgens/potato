@@ -131,6 +131,12 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     if missing_item_props:
         raise ConfigValidationError(f"Missing required item_properties: {', '.join(missing_item_props)}")
 
+    # Validate optional category_key (for category-based assignment)
+    if 'category_key' in item_properties:
+        category_key = item_properties['category_key']
+        if not isinstance(category_key, str) or not category_key.strip():
+            raise ConfigValidationError("item_properties.category_key must be a non-empty string")
+
     # Validate data_files (required unless data_directory is provided)
     data_files = config_data.get('data_files', [])
     data_directory = config_data.get('data_directory')
@@ -160,6 +166,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 
     # Validate AI support configuration if present
     validate_ai_support_config(config_data)
+
+    # Validate category assignment configuration if present
+    validate_category_assignment_config(config_data)
 
 
 def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
@@ -740,6 +749,143 @@ def validate_training_data_file(data_file_path: str, annotation_schemes: List[Di
         if 'explanation' in instance:
             if not isinstance(instance['explanation'], str):
                 raise ConfigValidationError(f"Training instance {i}.explanation must be a string")
+
+
+def validate_category_assignment_config(config_data: Dict[str, Any]) -> None:
+    """
+    Validate category assignment configuration.
+
+    This function validates the category_assignment configuration section which
+    controls how users are assigned to annotation categories based on their
+    training/prestudy performance.
+
+    Args:
+        config_data: The configuration data
+
+    Raises:
+        ConfigValidationError: If category assignment configuration is invalid
+    """
+    if 'category_assignment' not in config_data:
+        return  # Category assignment is optional
+
+    cat_config = config_data['category_assignment']
+    if not isinstance(cat_config, dict):
+        raise ConfigValidationError("category_assignment must be a dictionary")
+
+    # Validate enabled flag
+    if 'enabled' in cat_config:
+        if not isinstance(cat_config['enabled'], bool):
+            raise ConfigValidationError("category_assignment.enabled must be a boolean")
+
+    # If not enabled, skip further validation
+    if not cat_config.get('enabled', True):
+        return
+
+    # Validate category_key (optional, can also be in item_properties)
+    if 'category_key' in cat_config:
+        if not isinstance(cat_config['category_key'], str) or not cat_config['category_key'].strip():
+            raise ConfigValidationError("category_assignment.category_key must be a non-empty string")
+
+    # Validate qualification settings
+    if 'qualification' in cat_config:
+        qual = cat_config['qualification']
+        if not isinstance(qual, dict):
+            raise ConfigValidationError("category_assignment.qualification must be a dictionary")
+
+        # Validate source
+        if 'source' in qual:
+            valid_sources = ['training', 'prestudy', 'both']
+            if qual['source'] not in valid_sources:
+                raise ConfigValidationError(
+                    f"category_assignment.qualification.source must be one of: {', '.join(valid_sources)}"
+                )
+
+        # Validate threshold
+        if 'threshold' in qual:
+            threshold = qual['threshold']
+            if not isinstance(threshold, (int, float)) or threshold < 0.0 or threshold > 1.0:
+                raise ConfigValidationError(
+                    "category_assignment.qualification.threshold must be a number between 0.0 and 1.0"
+                )
+
+        # Validate min_questions
+        if 'min_questions' in qual:
+            min_q = qual['min_questions']
+            if not isinstance(min_q, int) or min_q < 1:
+                raise ConfigValidationError(
+                    "category_assignment.qualification.min_questions must be a positive integer"
+                )
+
+        # Validate combine_method (for combining prestudy and training scores)
+        if 'combine_method' in qual:
+            valid_methods = ['average', 'max', 'sum']
+            if qual['combine_method'] not in valid_methods:
+                raise ConfigValidationError(
+                    f"category_assignment.qualification.combine_method must be one of: {', '.join(valid_methods)}"
+                )
+
+    # Validate fallback behavior
+    if 'fallback' in cat_config:
+        valid_fallbacks = ['uncategorized', 'random', 'none']
+        if cat_config['fallback'] not in valid_fallbacks:
+            raise ConfigValidationError(
+                f"category_assignment.fallback must be one of: {', '.join(valid_fallbacks)}"
+            )
+
+    # Validate dynamic expertise settings
+    if 'dynamic' in cat_config:
+        dynamic = cat_config['dynamic']
+        if not isinstance(dynamic, dict):
+            raise ConfigValidationError("category_assignment.dynamic must be a dictionary")
+
+        # Validate enabled flag
+        if 'enabled' in dynamic:
+            if not isinstance(dynamic['enabled'], bool):
+                raise ConfigValidationError("category_assignment.dynamic.enabled must be a boolean")
+
+        # If dynamic is not enabled, skip further validation
+        if not dynamic.get('enabled', False):
+            return
+
+        # Validate agreement_method
+        if 'agreement_method' in dynamic:
+            valid_methods = ['majority_vote', 'super_majority', 'unanimous']
+            if dynamic['agreement_method'] not in valid_methods:
+                raise ConfigValidationError(
+                    f"category_assignment.dynamic.agreement_method must be one of: {', '.join(valid_methods)}"
+                )
+
+        # Validate min_annotations_for_consensus
+        if 'min_annotations_for_consensus' in dynamic:
+            min_ann = dynamic['min_annotations_for_consensus']
+            if not isinstance(min_ann, int) or min_ann < 2:
+                raise ConfigValidationError(
+                    "category_assignment.dynamic.min_annotations_for_consensus must be an integer >= 2"
+                )
+
+        # Validate learning_rate
+        if 'learning_rate' in dynamic:
+            lr = dynamic['learning_rate']
+            if not isinstance(lr, (int, float)) or lr <= 0.0 or lr > 1.0:
+                raise ConfigValidationError(
+                    "category_assignment.dynamic.learning_rate must be a number between 0.0 (exclusive) and 1.0"
+                )
+
+        # Validate update_interval_seconds
+        if 'update_interval_seconds' in dynamic:
+            interval = dynamic['update_interval_seconds']
+            if not isinstance(interval, (int, float)) or interval < 1:
+                raise ConfigValidationError(
+                    "category_assignment.dynamic.update_interval_seconds must be a number >= 1"
+                )
+
+        # Validate base_probability
+        if 'base_probability' in dynamic:
+            base_prob = dynamic['base_probability']
+            if not isinstance(base_prob, (int, float)) or base_prob < 0.0 or base_prob > 1.0:
+                raise ConfigValidationError(
+                    "category_assignment.dynamic.base_probability must be a number between 0.0 and 1.0"
+                )
 
 
 def load_and_validate_config(config_file: str, project_dir: str) -> Dict[str, Any]:

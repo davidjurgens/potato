@@ -1,0 +1,88 @@
+# Category-Based Assignment Example
+#
+# This example demonstrates how to use category-based assignment to match
+# annotators with instances based on their training performance.
+#
+# How it works:
+# 1. Annotators complete training questions tagged with categories
+# 2. Their performance per category is tracked
+# 3. Only instances matching their qualified categories are assigned
+# 4. Users who don't qualify for any category get uncategorized instances
+
+port: 9001
+server_name: potato annotator
+annotation_task_name: Category-Based Assignment Example
+task_dir: .
+output_annotation_dir: annotation_output/
+output_annotation_format: jsonl
+
+# Data files with instances tagged by category
+data_files:
+  - category-assignment-example/data/category-assignment-data.json
+
+# Item properties - note the category_key
+item_properties:
+  id_key: id
+  text_key: text
+  category_key: category  # Field in data containing category (string or list)
+
+# User configuration
+user_config:
+  allow_all_users: true
+  users: []
+
+# Use category-based assignment strategy
+assignment_strategy: category_based
+
+# Category assignment configuration
+category_assignment:
+  enabled: true
+  category_key: category  # Same as item_properties.category_key
+  qualification:
+    source: training  # Can be "training", "prestudy", or "both"
+    threshold: 0.7    # Minimum accuracy (70%) to qualify for a category
+    min_questions: 1  # Minimum questions per category to qualify
+  fallback: uncategorized  # What to do if user doesn't qualify for any category
+                           # Options: "uncategorized", "random", "none"
+
+# Training configuration with category-tagged questions
+training:
+  enabled: true
+  data_file: category-assignment-example/data/category-training-data.json
+  annotation_schemes:
+    - classification
+  passing_criteria:
+    min_correct: 4
+    max_mistakes: 3
+  allow_retry: true
+
+# Annotation scheme
+annotation_schemes:
+  - annotation_type: radio
+    name: classification
+    description: Classify the topic of this text
+    labels:
+      - Economics
+      - Science
+      - Sports
+      - Technology
+
+site_dir: default
+
+# Phases configuration
+phases:
+  order:
+    - consent
+    - instructions
+    - training
+    - annotation
+  consent:
+    type: consent
+    file: default
+  instructions:
+    type: instructions
+    file: default
+  training:
+    type: training
+  annotation:
+    type: annotation

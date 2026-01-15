@@ -19,7 +19,7 @@ active learning, and diversity-based assignment to optimize annotation efficienc
 from __future__ import annotations
 
 # Need to import UserState as a type hint for the ItemStateManager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Set, List, Optional
 if TYPE_CHECKING:
     from potato.user_state_management import UserState
 
@@ -293,6 +293,7 @@ class AssignmentStrategy(Enum):
     - LLM_CONFIDENCE: Uses AI model confidence for prioritization
     - MAX_DIVERSITY: Prioritizes items with high disagreement
     - LEAST_ANNOTATED: Prioritizes items with fewest annotations
+    - CATEGORY_BASED: Assigns items matching user's qualified categories
     """
     RANDOM = 'random'
     FIXED_ORDER = 'fixed_order'
@@ -300,6 +301,7 @@ class AssignmentStrategy(Enum):
     LLM_CONFIDENCE = 'llm_confidence'
     MAX_DIVERSITY = 'max_diversity'
     LEAST_ANNOTATED = 'least_annotated'
+    CATEGORY_BASED = 'category_based'
 
     def fromstr(phase: str) -> AssignmentStrategy:
         """
@@ -327,6 +329,8 @@ class AssignmentStrategy(Enum):
             return AssignmentStrategy.MAX_DIVERSITY
         elif phase == "least_annotated":
             return AssignmentStrategy.LEAST_ANNOTATED
+        elif phase == "category_based":
+            return AssignmentStrategy.CATEGORY_BASED
         else:
             raise ValueError(f"Unknown phase: {phase}")
 
@@ -393,6 +397,27 @@ class ItemStateManager:
         self.random = random.Random(self.random_seed)
         self.logger.info(f"ItemStateManager initialized with random_seed={self.random_seed}")
 
+        # Category-based assignment support
+        item_properties = config.get('item_properties', {})
+        self.category_key = item_properties.get('category_key', None)
+
+        # Maps category name to set of instance IDs in that category
+        self.category_to_instance_ids: Dict[str, Set[str]] = defaultdict(set)
+
+        # Maps instance ID to its set of categories
+        self.instance_id_to_categories: Dict[str, Set[str]] = {}
+
+        # Instances with no category
+        self.uncategorized_instance_ids: Set[str] = set()
+
+        # Category assignment fallback behavior (loaded from category_assignment config)
+        category_assignment_config = config.get('category_assignment', {})
+        self.category_fallback = category_assignment_config.get('fallback', 'uncategorized')
+
+        # Dynamic expertise mode - uses probabilistic routing based on annotator agreement
+        dynamic_config = category_assignment_config.get('dynamic', {})
+        self.dynamic_expertise_enabled = dynamic_config.get('enabled', False)
+
     def has_item(self, instance_id: str) -> bool:
         """Returns True if the item is in the state manager"""
         return instance_id in self.instance_id_to_instance
@@ -416,6 +441,9 @@ class ItemStateManager:
             self.instance_id_to_instance[instance_id] = item
             self.instance_id_ordering.append(instance_id)
             self.remaining_instance_ids.append(instance_id)
+
+            # Index categories for this item
+            self._index_item_categories(instance_id, instance_data)
 
     def update_item(self, instance_id: str, instance_data: dict) -> bool:
         """
@@ -449,6 +477,139 @@ class ItemStateManager:
         """
         for iid, instance_data in instances.items():
             self.add_item(iid, instance_data)
+
+    # =========================================================================
+    # Category Indexing Methods
+    # =========================================================================
+
+    def _index_item_categories(self, instance_id: str, instance_data: dict) -> None:
+        """
+        Extract and index categories for an item.
+
+        Categories can be specified as a string or list of strings in the data.
+        If no category_key is configured or the item has no category, it is
+        added to uncategorized_instance_ids.
+
+        Args:
+            instance_id: The ID of the item
+            instance_data: The item's data dictionary
+        """
+        if not self.category_key:
+            # No category key configured, all items are uncategorized
+            self.uncategorized_instance_ids.add(instance_id)
+            self.instance_id_to_categories[instance_id] = set()
+            return
+
+        category_value = instance_data.get(self.category_key)
+
+        if category_value is None:
+            # Item has no category
+            self.uncategorized_instance_ids.add(instance_id)
+            self.instance_id_to_categories[instance_id] = set()
+            return
+
+        # Normalize to list
+        if isinstance(category_value, str):
+            categories = [category_value]
+        elif isinstance(category_value, list):
+            categories = [c for c in category_value if isinstance(c, str) and c.strip()]
+        else:
+            self.logger.warning(
+                f"Item {instance_id} has invalid category value type: {type(category_value)}. "
+                f"Expected string or list of strings."
+            )
+            self.uncategorized_instance_ids.add(instance_id)
+            self.instance_id_to_categories[instance_id] = set()
+            return
+
+        if not categories:
+            # Empty category list
+            self.uncategorized_instance_ids.add(instance_id)
+            self.instance_id_to_categories[instance_id] = set()
+            return
+
+        # Index the categories
+        category_set = set(categories)
+        self.instance_id_to_categories[instance_id] = category_set
+
+        for category in category_set:
+            self.category_to_instance_ids[category].add(instance_id)
+
+    def get_instances_by_category(self, category: str) -> Set[str]:
+        """
+        Get all instance IDs that belong to a specific category.
+
+        Args:
+            category: The category name
+
+        Returns:
+            Set of instance IDs in that category
+        """
+        with self._lock:
+            return self.category_to_instance_ids.get(category, set()).copy()
+
+    def get_instances_by_categories(self, categories: Set[str]) -> Set[str]:
+        """
+        Get all instance IDs that belong to any of the specified categories.
+
+        Args:
+            categories: Set of category names
+
+        Returns:
+            Set of instance IDs in any of those categories
+        """
+        with self._lock:
+            result = set()
+            for category in categories:
+                result.update(self.category_to_instance_ids.get(category, set()))
+            return result
+
+    def get_categories_for_instance(self, instance_id: str) -> Set[str]:
+        """
+        Get all categories that an instance belongs to.
+
+        Args:
+            instance_id: The instance ID
+
+        Returns:
+            Set of category names (empty set if uncategorized)
+        """
+        with self._lock:
+            return self.instance_id_to_categories.get(instance_id, set()).copy()
+
+    def get_uncategorized_instances(self) -> Set[str]:
+        """
+        Get all instance IDs that have no category.
+
+        Returns:
+            Set of uncategorized instance IDs
+        """
+        with self._lock:
+            return self.uncategorized_instance_ids.copy()
+
+    def get_all_categories(self) -> Set[str]:
+        """
+        Get all unique category names in the system.
+
+        Returns:
+            Set of all category names
+        """
+        with self._lock:
+            return set(self.category_to_instance_ids.keys())
+
+    def get_category_counts(self) -> Dict[str, int]:
+        """
+        Get the count of instances per category.
+
+        Returns:
+            Dictionary mapping category names to instance counts
+        """
+        with self._lock:
+            return {cat: len(ids) for cat, ids in self.category_to_instance_ids.items()}
+
+    # =========================================================================
+    # Assignment Methods
+    # =========================================================================
 
     def assign_instances_to_user(self, user_state: UserState) -> int:
         """
@@ -606,10 +767,176 @@ class ItemStateManager:
             for item_id in to_assign:
                 user_state.assign_instance(self.instance_id_to_instance[item_id])
             return len(to_assign)
+        elif self.assignment_strategy == AssignmentStrategy.CATEGORY_BASED:
+            # Category-based assignment strategy
+            user_id = getattr(user_state, 'user_id', None)
+
+            # Check if dynamic expertise mode is enabled
+            if self.dynamic_expertise_enabled:
+                return self._assign_category_based_dynamic(user_state, instances_to_assign)
+
+            # Standard category-based assignment using qualification
+            # Assigns instances from categories the user has qualified for
+            qualified_categories = user_state.get_qualified_categories()
+
+            self.logger.debug(f"Category-based assignment for user {user_id}, qualified categories: {qualified_categories}")
+
+            # Get candidate instances from qualified categories
+            candidate_ids = set()
+            if qualified_categories:
+                for category in qualified_categories:
+                    candidate_ids.update(self.category_to_instance_ids.get(category, set()))
+
+            # If no candidates from categories, apply fallback behavior
+            if not candidate_ids:
+                self.logger.debug(f"No category matches for user {user_id}, using fallback: {self.category_fallback}")
+                if self.category_fallback == 'uncategorized':
+                    candidate_ids = self.uncategorized_instance_ids.copy()
+                elif self.category_fallback == 'random':
+                    candidate_ids = set(self.remaining_instance_ids)
+                # 'none' fallback means no assignment
+
+            # Filter candidates: not already annotated by user, not completed
+            unlabeled_items = []
+            for iid in candidate_ids:
+                # Skip if item is not in remaining (already completed)
+                if iid not in self.remaining_instance_ids:
+                    continue
+                # Skip if item has reached max annotations
+                if self.max_annotations_per_item >= 0 and len(self.instance_annotators[iid]) >= self.max_annotations_per_item:
+                    continue
+                # Skip if user already annotated this item
+                if not user_state.has_annotated(iid):
+                    unlabeled_items.append(iid)
+
+            self.logger.debug(f"Category-based: {len(unlabeled_items)} unlabeled items available for user {user_id}")
+
+            if not unlabeled_items:
+                return 0
+
+            # Randomly sample from eligible items (can be combined with other sub-strategies in future)
+            to_assign = self.random.sample(unlabeled_items, min(instances_to_assign, len(unlabeled_items)))
+            self.logger.debug(f"Category-based: assigning items {to_assign} to user {user_id}")
+
+            for item_id in to_assign:
+                user_state.assign_instance(self.instance_id_to_instance[item_id])
+
+            return len(to_assign)
         else:
             # Default fallback to fixed order
             self.logger.warning(f"Unknown assignment strategy: {self.assignment_strategy}, falling back to fixed order")
             return self.assign_instances_to_user_fixed_order(user_state, instances_to_assign)
+
+    def _assign_category_based_dynamic(self, user_state: 'UserState', instances_to_assign: int) -> int:
+        """
+        Dynamic category-based assignment using probabilistic routing.
+
+        In dynamic mode, users can receive instances from ALL categories, but are
+        more likely to get instances from categories they have demonstrated expertise
+        in (based on agreement with other annotators).
+
+        Args:
+            user_state: The user state to assign instances to
+            instances_to_assign: Number of instances to assign
+
+        Returns:
+            int: Number of instances actually assigned
+        """
+        from potato.expertise_manager import get_expertise_manager
+
+        user_id = getattr(user_state, 'user_id', None)
+        expertise_manager = get_expertise_manager()
+
+        if not expertise_manager:
+            # Fallback to random if expertise manager not available
+            self.logger.warning("ExpertiseManager not available, falling back to random assignment")
+            return self._assign_random_fallback(user_state, instances_to_assign)
+
+        assigned_count = 0
+
+        for _ in range(instances_to_assign):
+            # Find categories with available (unlabeled) instances for this user
+            available_categories = set()
+            category_to_eligible_items: Dict[str, List[str]] = {}
+
+            for category, instance_ids in self.category_to_instance_ids.items():
+                eligible_items = []
+                for iid in instance_ids:
+                    # Skip if item is not in remaining (already completed)
+                    if iid not in self.remaining_instance_ids:
+                        continue
+                    # Skip if item has reached max annotations
+                    if self.max_annotations_per_item >= 0 and len(self.instance_annotators[iid]) >= self.max_annotations_per_item:
+                        continue
+                    # Skip if user already annotated this item
+                    if not user_state.has_annotated(iid):
+                        eligible_items.append(iid)
+
+                if eligible_items:
+                    available_categories.add(category)
+                    category_to_eligible_items[category] = eligible_items
+
+            # Also check uncategorized instances
+            uncategorized_eligible = []
+            for iid in self.uncategorized_instance_ids:
+                if iid not in self.remaining_instance_ids:
+                    continue
+                if self.max_annotations_per_item >= 0 and len(self.instance_annotators[iid]) >= self.max_annotations_per_item:
+                    continue
+                if not user_state.has_annotated(iid):
+                    uncategorized_eligible.append(iid)
+
+            if not available_categories and not uncategorized_eligible:
+                # No more instances available
+                break
+
+            # Use ExpertiseManager to probabilistically select a category
+            if available_categories:
+                selected_category = expertise_manager.select_category_probabilistically(
+                    user_id,
+                    available_categories,
+                    random_instance=self.random
+                )
+            else:
+                selected_category = None
+
+            # Get an instance from the selected category (or uncategorized)
+            if selected_category and selected_category in category_to_eligible_items:
+                eligible_items = category_to_eligible_items[selected_category]
+                selected_item = self.random.choice(eligible_items)
+            elif uncategorized_eligible:
+                selected_item = self.random.choice(uncategorized_eligible)
+            else:
+                break
+
+            # Assign the selected instance
+            user_state.assign_instance(self.instance_id_to_instance[selected_item])
+            assigned_count += 1
+
+            self.logger.debug(
+                f"Dynamic category assignment: assigned {selected_item} "
+                f"(category={selected_category}) to user {user_id}"
+            )
+
+        return assigned_count
+
+    def _assign_random_fallback(self, user_state: 'UserState', instances_to_assign: int) -> int:
+        """Fallback to random assignment when expertise manager is not available."""
+        unlabeled_items = []
+        for iid in self.remaining_instance_ids:
+            if self.max_annotations_per_item >= 0 and len(self.instance_annotators[iid]) >= self.max_annotations_per_item:
+                continue
+            if not user_state.has_annotated(iid):
+                unlabeled_items.append(iid)
+
+        if not unlabeled_items:
+            return 0
+
+        to_assign = self.random.sample(unlabeled_items, min(instances_to_assign, len(unlabeled_items)))
+        for item_id in to_assign:
+            user_state.assign_instance(self.instance_id_to_instance[item_id])
+
+        return len(to_assign)
 
     def _calculate_disagreement_score(self, instance_id: str) -> float:
         """

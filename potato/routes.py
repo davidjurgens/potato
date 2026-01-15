@@ -48,7 +48,7 @@ from potato.flask_server import (
     get_ai_cache_manager,
     get_users, get_total_annotations, update_annotation_state, ai_hints,
     get_training_instances, get_training_correct_answers, get_training_explanation,
-    get_prolific_study, keyword_highlight_patterns
+    get_training_instance_categories, get_prolific_study, keyword_highlight_patterns
 )
 
 # Import admin dashboard functionality
@@ -860,6 +860,11 @@ def training():
             # Check if the answer is correct
             is_correct = check_training_answer(annotation_data, correct_answers)
 
+            # Track category performance for category-based assignment
+            instance_categories = get_training_instance_categories(instance_id)
+            if instance_categories:
+                training_state.record_category_answer(instance_categories, is_correct)
+
             if is_correct:
                 logger.info(f'User {username} answered training question {instance_id} correctly')
                 # Record correct answer
@@ -872,6 +877,17 @@ def training():
                     # User has passed training
                     training_state.set_passed(True)
                     logger.info(f'User {username} passed training with {training_state.get_correct_answer_count()} correct answers')
+
+                    # Calculate category qualifications based on training performance
+                    cat_config = config.get('category_assignment', {})
+                    if cat_config.get('enabled', False):
+                        qual_config = cat_config.get('qualification', {})
+                        threshold = qual_config.get('threshold', 0.7)
+                        min_questions = qual_config.get('min_questions', 1)
+                        qualified = user_state.calculate_and_set_qualifications(threshold, min_questions)
+                        if qualified:
+                            logger.info(f'User {username} qualified for categories: {qualified}')
+
                     usm = get_user_state_manager()
                     usm.advance_phase(username)
                     return home()
@@ -913,6 +929,17 @@ def training():
                         # Training completed successfully
                         training_state.set_passed(True)
                         logger.info(f'User {username} completed training successfully')
+
+                        # Calculate category qualifications based on training performance
+                        cat_config = config.get('category_assignment', {})
+                        if cat_config.get('enabled', False):
+                            qual_config = cat_config.get('qualification', {})
+                            threshold = qual_config.get('threshold', 0.7)
+                            min_questions = qual_config.get('min_questions', 1)
+                            qualified = user_state.calculate_and_set_qualifications(threshold, min_questions)
+                            if qualified:
+                                logger.info(f'User {username} qualified for categories: {qualified}')
+
                         usm = get_user_state_manager()
                         usm.advance_phase(username)
                         return home()

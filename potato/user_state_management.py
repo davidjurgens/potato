@@ -97,6 +97,10 @@ class TrainingState:
         self.max_mistakes = max_mistakes
         self.max_mistakes_per_question = max_mistakes_per_question
 
+        # Per-category performance tracking for category-based assignment
+        # Maps category name -> {'correct': int, 'total': int}
+        self.category_scores: Dict[str, Dict[str, int]] = {}
+
     def add_answer(self, instance_id: str, is_correct: bool, attempts: int, explanation: str = "") -> None:
         """Add a training answer and update statistics."""
         # Track previous state for this question
@@ -232,6 +236,112 @@ class TrainingState:
         self.feedback_message = ""
         self.allow_retry = False
 
+    # =========================================================================
+    # Category Performance Tracking Methods
+    # =========================================================================
+
+    def record_category_answer(self, categories: List[str], is_correct: bool) -> None:
+        """
+        Record an answer for category performance tracking.
+
+        This should be called when a training question is answered. Each category
+        that the training question belongs to will have its score updated.
+
+        Args:
+            categories: List of category names the training question belongs to
+            is_correct: Whether the answer was correct
+        """
+        for category in categories:
+            if category not in self.category_scores:
+                self.category_scores[category] = {'correct': 0, 'total': 0}
+
+            self.category_scores[category]['total'] += 1
+            if is_correct:
+                self.category_scores[category]['correct'] += 1
+
+    def get_category_score(self, category: str) -> Dict[str, Any]:
+        """
+        Get the performance score for a specific category.
+
+        Args:
+            category: The category name
+
+        Returns:
+            Dictionary with 'correct', 'total', and 'accuracy' keys
+        """
+        if category not in self.category_scores:
+            return {'correct': 0, 'total': 0, 'accuracy': 0.0}
+
+        score = self.category_scores[category]
+        total = score['total']
+        correct = score['correct']
+        accuracy = correct / total if total > 0 else 0.0
+
+        return {
+            'correct': correct,
+            'total': total,
+            'accuracy': accuracy
+        }
+
+    def get_all_category_scores(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Get performance scores for all categories.
+
+        Returns:
+            Dictionary mapping category names to their scores
+        """
+        result = {}
+        for category in self.category_scores:
+            result[category] = self.get_category_score(category)
+        return result
+
+    def get_qualified_categories(self, threshold: float = 0.7, min_questions: int = 1) -> List[str]:
+        """
+        Get list of categories the user has qualified for based on performance.
+
+        Args:
+            threshold: Minimum accuracy required to qualify (0.0 to 1.0)
+            min_questions: Minimum number of questions answered in category
+
+        Returns:
+            List of category names the user qualifies for
+        """
+        qualified = []
+        for category, score in self.category_scores.items():
+            if score['total'] >= min_questions:
+                accuracy = score['correct'] / score['total'] if score['total'] > 0 else 0.0
+                if accuracy >= threshold:
+                    qualified.append(category)
+        return qualified
+
+    def get_category_qualification_details(self, threshold: float = 0.7, min_questions: int = 1) -> Dict[str, Dict[str, Any]]:
+        """
+        Get detailed qualification status for all categories.
+
+        Args:
+            threshold: Minimum accuracy required to qualify
+            min_questions: Minimum number of questions answered in category
+
+        Returns:
+            Dictionary mapping category names to qualification details
+        """
+        result = {}
+        for category, score in self.category_scores.items():
+            total = score['total']
+            correct = score['correct']
+            accuracy = correct / total if total > 0 else 0.0
+            qualified = total >= min_questions and accuracy >= threshold
+
+            result[category] = {
+                'correct': correct,
+                'total': total,
+                'accuracy': accuracy,
+                'qualified': qualified,
+                'meets_threshold': accuracy >= threshold,
+                'meets_min_questions': total >= min_questions
+            }
+        return result
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert training state to dictionary for serialization."""
         return {
@@ -247,7 +357,8 @@ class TrainingState:
             'feedback_message': self.feedback_message,
             'allow_retry': self.allow_retry,
             'max_mistakes': self.max_mistakes,
-            'max_mistakes_per_question': self.max_mistakes_per_question
+            'max_mistakes_per_question': self.max_mistakes_per_question,
+            'category_scores': self.category_scores
         }
 
     @classmethod
@@ -267,6 +378,7 @@ class TrainingState:
         training_state.allow_retry = data.get('allow_retry', False)
         training_state.max_mistakes = data.get('max_mistakes', -1)
         training_state.max_mistakes_per_question = data.get('max_mistakes_per_question', -1)
+        training_state.category_scores = data.get('category_scores', {})
         return training_state
 
 # Database imports
@@ -1094,6 +1206,12 @@ class UserState:
         if 'training_state' in j:
             user_state.training_state = TrainingState.from_dict(j['training_state'])
 
+        # Restore category qualification data if present
+        if 'qualified_categories' in j:
+            user_state.qualified_categories = set(j['qualified_categories'])
+        if 'category_qualification_scores' in j:
+            user_state.category_qualification_scores = j['category_qualification_scores']
+
         return user_state
 
     def add_annotation(self, instance_id, annotation):
@@ -1239,6 +1357,73 @@ class UserState:
         """Reset the training state."""
         self.training_state = TrainingState()
 
+    # =========================================================================
+    # Category Qualification Methods
+    # =========================================================================
+
+    def add_qualified_category(self, category: str, score: float = 1.0) -> None:
+        """
+        Add a category that the user has qualified for.
+
+        Args:
+            category: The category name
+            score: The qualification score (accuracy) for this category
+        """
+        self.qualified_categories.add(category)
+        self.category_qualification_scores[category] = score
+
+    def remove_qualified_category(self, category: str) -> None:
+        """Remove a category from the user's qualifications."""
+        self.qualified_categories.discard(category)
+        self.category_qualification_scores.pop(category, None)
+
+    def get_qualified_categories(self) -> Set[str]:
+        """Get the set of categories the user has qualified for."""
+        return self.qualified_categories.copy()
+
+    def is_qualified_for_category(self, category: str) -> bool:
+        """Check if the user is qualified for a specific category."""
+        return category in self.qualified_categories
+
+    def get_category_qualification_score(self, category: str) -> Optional[float]:
+        """Get the qualification score for a specific category."""
+        return self.category_qualification_scores.get(category)
+
+    def get_all_category_qualification_scores(self) -> Dict[str, float]:
+        """Get all category qualification scores."""
+        return self.category_qualification_scores.copy()
+
+    def calculate_and_set_qualifications(self, threshold: float = 0.7, min_questions: int = 1) -> List[str]:
+        """
+        Calculate qualifications from training state and update qualified_categories.
+
+        This method reads the category scores from the training state, determines
+        which categories the user qualifies for based on the threshold and minimum
+        questions, and updates the qualified_categories set.
+
+        Args:
+            threshold: Minimum accuracy required to qualify (0.0 to 1.0)
+            min_questions: Minimum number of questions answered in category
+
+        Returns:
+            List of newly qualified category names
+        """
+        newly_qualified = []
+        training_state = self.get_training_state()
+
+        for category, score in training_state.category_scores.items():
+            total = score['total']
+            correct = score['correct']
+
+            if total >= min_questions:
+                accuracy = correct / total if total > 0 else 0.0
+                if accuracy >= threshold:
+                    if category not in self.qualified_categories:
+                        newly_qualified.append(category)
+                    self.add_qualified_category(category, accuracy)
+
+        return newly_qualified
+
 
 class InMemoryUserState(UserState):
 
@@ -1315,6 +1500,10 @@ class InMemoryUserState(UserState):
 
         # New: Training state tracking
         self.training_state = TrainingState()
+
+        # Category qualification tracking for category-based assignment
+        self.qualified_categories: Set[str] = set()
+        self.category_qualification_scores: Dict[str, float] = {}  # category -> accuracy score
 
     def hint_exists(self, instance_id: str) -> bool:
         return instance_id in self.ai_hints
@@ -1733,6 +1922,10 @@ class InMemoryUserState(UserState):
 
         d['training_state'] = self.training_state.to_dict()
 
+        # Category qualification data
+        d['qualified_categories'] = list(self.qualified_categories)
+        d['category_qualification_scores'] = self.category_qualification_scores
+
         return d
 
     def save(self, user_dir: str) -> None:
@@ -1823,6 +2016,12 @@ class InMemoryUserState(UserState):
         # Restore training state if present
         if 'training_state' in j:
             user_state.training_state = TrainingState.from_dict(j['training_state'])
+
+        # Restore category qualification data if present
+        if 'qualified_categories' in j:
+            user_state.qualified_categories = set(j['qualified_categories'])
+        if 'category_qualification_scores' in j:
+            user_state.category_qualification_scores = j['category_qualification_scores']
 
         return user_state
 

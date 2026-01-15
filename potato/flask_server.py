@@ -75,6 +75,7 @@ from potato.item_state_management import get_item_state_manager, init_item_state
 from potato.user_state_management import UserStateManager, UserState, get_user_state_manager, init_user_state_manager
 from potato.authentication import UserAuthenticator
 from potato.phase import UserPhase
+from potato.expertise_manager import init_expertise_manager, get_expertise_manager, clear_expertise_manager
 
 from potato.create_task_cli import create_task_cli, yes_or_no
 from potato.server_utils.arg_utils import arguments
@@ -451,13 +452,27 @@ def load_training_data(config: dict) -> None:
             if scheme_name not in scheme_names:
                 logger.warning(f"Training instance {instance['id']} contains unknown scheme: {scheme_name}")
 
+        # Normalize category field (can be string or list)
+        category_value = instance.get('category')
+        if category_value is not None:
+            if isinstance(category_value, str):
+                categories = [category_value]
+            elif isinstance(category_value, list):
+                categories = [c for c in category_value if isinstance(c, str) and c.strip()]
+            else:
+                logger.warning(f"Training instance {instance['id']} has invalid category type: {type(category_value)}")
+                categories = []
+        else:
+            categories = []
+
         # Create Item object for training instance
         item_data = {
             'id': instance['id'],
             'text': instance['text'],
             'correct_answers': instance['correct_answers'],
             'explanation': instance.get('explanation', ''),
-            'displayed_text': get_displayed_text(instance['text'])
+            'displayed_text': get_displayed_text(instance['text']),
+            'categories': categories  # Store normalized categories list
         }
 
         training_item = Item(instance['id'], item_data)
@@ -510,6 +525,23 @@ def get_training_explanation(instance_id: str) -> str:
         if item.get_id() == instance_id:
             return item.get_data().get('explanation', '')
     return ''
+
+
+def get_training_instance_categories(instance_id: str) -> List[str]:
+    """
+    Get the categories for a training instance.
+
+    Args:
+        instance_id: The ID of the training instance
+
+    Returns:
+        List of category names (empty list if no categories)
+    """
+    training_items = get_training_instances()
+    for item in training_items:
+        if item.get_id() == instance_id:
+            return item.get_data().get('categories', [])
+    return []
 
 
 # =============================================================================
@@ -1863,6 +1895,23 @@ def run_server(args):
     init_user_state_manager(config)
     init_item_state_manager(config)
     load_all_data(config)
+
+    # Initialize ExpertiseManager for dynamic category assignment
+    category_assignment = config.get('category_assignment', {})
+    dynamic_config = category_assignment.get('dynamic', {})
+    if dynamic_config.get('enabled', False):
+        expertise_manager = init_expertise_manager(config)
+        expertise_manager.start_background_worker()
+        logger.info("Dynamic category expertise enabled with background worker")
+
+        # Register cleanup handler for expertise manager
+        import atexit
+        def cleanup_expertise_manager():
+            em = get_expertise_manager()
+            if em:
+                em.stop_background_worker()
+                logger.info("Expertise manager background worker stopped")
+        atexit.register(cleanup_expertise_manager)
 
     # Initialize directory watcher if configured
     if "data_directory" in config:
