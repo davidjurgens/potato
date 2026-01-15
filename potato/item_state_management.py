@@ -510,7 +510,11 @@ class ItemStateManager:
 
         # Normalize to list
         if isinstance(category_value, str):
-            categories = [category_value]
+            # Treat empty/whitespace-only strings as uncategorized
+            if category_value.strip():
+                categories = [category_value]
+            else:
+                categories = []
         elif isinstance(category_value, list):
             categories = [c for c in category_value if isinstance(c, str) and c.strip()]
         else:
