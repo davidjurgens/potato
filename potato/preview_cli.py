@@ -209,7 +209,7 @@ def generate_preview_html(schemes: List[Dict[str, Any]]) -> str:
 <h1>Annotation Preview</h1>
 """)
 
-    for scheme in schemes:
+    for idx, scheme in enumerate(schemes):
         scheme_name = scheme.get('name', 'unknown')
         scheme_type = scheme.get('annotation_type', 'unknown')
 
@@ -221,6 +221,8 @@ def generate_preview_html(schemes: List[Dict[str, Any]]) -> str:
 """)
 
         try:
+            # Set annotation_id before generating (required by schema generators)
+            scheme["annotation_id"] = idx
             html, keybindings = schema_registry.generate(scheme)
             html_parts.append(html)
             all_keybindings.extend(keybindings)
@@ -262,7 +264,7 @@ def generate_preview_json(config: Dict[str, Any], schemes: List[Dict[str, Any]],
         "schemas": []
     }
 
-    for scheme in schemes:
+    for idx, scheme in enumerate(schemes):
         schema_info = {
             "name": scheme.get('name'),
             "type": scheme.get('annotation_type'),
@@ -282,6 +284,8 @@ def generate_preview_json(config: Dict[str, Any], schemes: List[Dict[str, Any]],
 
         # Try to generate and get keybindings
         try:
+            # Set annotation_id before generating (required by schema generators)
+            scheme["annotation_id"] = idx
             _, keybindings = schema_registry.generate(scheme)
             schema_info['keybindings'] = [{"key": k, "action": a} for k, a in keybindings]
         except Exception as e:
@@ -337,7 +341,7 @@ def generate_preview_summary(config: Dict[str, Any], schemes: List[Dict[str, Any
 
     from potato.server_utils.schemas.registry import schema_registry
 
-    for scheme in schemes:
+    for idx, scheme in enumerate(schemes):
         name = scheme.get('name', 'unknown')
         ann_type = scheme.get('annotation_type', 'unknown')
         desc = scheme.get('description', '')[:50]
@@ -353,6 +357,8 @@ def generate_preview_summary(config: Dict[str, Any], schemes: List[Dict[str, Any
 
         # Try to get keybindings
         try:
+            # Set annotation_id before generating (required by schema generators)
+            scheme["annotation_id"] = idx
             _, keybindings = schema_registry.generate(scheme)
             if keybindings:
                 lines.append(f"          Keybindings: {len(keybindings)}")
@@ -365,6 +371,39 @@ def generate_preview_summary(config: Dict[str, Any], schemes: List[Dict[str, Any
     return "\n".join(lines)
 
 
+def generate_layout_html(schemes: List[Dict[str, Any]]) -> str:
+    """
+    Generate just the task layout HTML snippet (no wrapper page).
+
+    This outputs the HTML that would go inside {{ TASK_LAYOUT }} in the
+    annotation template, allowing admins to prototype and debug their
+    task layout without running the full server.
+
+    Args:
+        schemes: List of annotation scheme dictionaries
+
+    Returns:
+        HTML string with the annotation schema div and all schema forms
+    """
+    from potato.server_utils.schemas.registry import schema_registry
+
+    html_parts = []
+    html_parts.append('<div class="annotation_schema">')
+
+    for idx, scheme in enumerate(schemes):
+        # Set annotation_id before generating (required by schema generators)
+        scheme["annotation_id"] = idx
+        try:
+            html, _ = schema_registry.generate(scheme)
+            html_parts.append(html)
+        except Exception as e:
+            schema_name = scheme.get('name', 'unknown')
+            html_parts.append(f'<!-- Error generating {schema_name}: {e} -->')
+
+    html_parts.append('</div>')
+    return "\n".join(html_parts)
+
+
 def main():
     """Main entry point for preview CLI."""
     parser = argparse.ArgumentParser(
@@ -372,12 +411,16 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  potato preview config.yaml              # Summary output
-  potato preview config.yaml --format html    # HTML output to stdout
-  potato preview config.yaml --format json    # JSON output
+  python -m potato.preview_cli config.yaml              # Summary output
+  python -m potato.preview_cli config.yaml --format html    # Full HTML page preview
+  python -m potato.preview_cli config.yaml --format json    # JSON output
+  python -m potato.preview_cli config.yaml --layout-only    # Just the task layout HTML snippet
 
   # Save HTML to file:
-  potato preview config.yaml --format html > preview.html
+  python -m potato.preview_cli config.yaml --format html > preview.html
+
+  # Get just the annotation schema div for embedding:
+  python -m potato.preview_cli config.yaml --layout-only > task_layout.html
 """
     )
 
@@ -390,6 +433,11 @@ Examples:
         choices=['summary', 'html', 'json'],
         default='summary',
         help='Output format (default: summary)'
+    )
+    parser.add_argument(
+        '--layout-only', '-l',
+        action='store_true',
+        help='Output only the task layout HTML snippet (no wrapper page). This is the HTML that goes inside {{ TASK_LAYOUT }}.'
     )
     parser.add_argument(
         '--verbose', '-v',
@@ -418,16 +466,20 @@ Examples:
         conflicts = detect_keybinding_conflicts(schemes)
 
         # Generate output
-        if args.format == 'html':
+        if args.layout_only:
+            # Output just the task layout HTML snippet
+            print(generate_layout_html(schemes))
+        elif args.format == 'html':
             print(generate_preview_html(schemes))
         elif args.format == 'json':
             print(generate_preview_json(config, schemes, issues))
         else:  # summary
             print(generate_preview_summary(config, schemes, issues, conflicts))
 
-        # Exit with error code if there are issues
-        error_count = len([i for i in issues if i.startswith('ERROR')])
-        sys.exit(1 if error_count > 0 else 0)
+        # Exit with error code if there are issues (skip for layout-only mode)
+        if not args.layout_only:
+            error_count = len([i for i in issues if i.startswith('ERROR')])
+            sys.exit(1 if error_count > 0 else 0)
 
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
