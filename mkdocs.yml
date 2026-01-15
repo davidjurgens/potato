@@ -20,6 +20,7 @@ nav:
     - Advanced Features:
         - AI Support: ai_support.md
         - Active Learning Guide: active_learning_guide.md
+        - ICL Labeling: icl_labeling.md
         - Category-Based Assignment: category_assignment.md
         - Task Assignment: task_assignment.md
         - Assignment Strategies: assignment_strategies_summary.md

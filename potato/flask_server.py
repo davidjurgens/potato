@@ -1913,6 +1913,24 @@ def run_server(args):
                 logger.info("Expertise manager background worker stopped")
         atexit.register(cleanup_expertise_manager)
 
+    # Initialize ICL labeler for AI-assisted labeling if configured
+    icl_config = config.get('icl_labeling', {})
+    if icl_config.get('enabled', False):
+        from potato.ai.icl_labeler import init_icl_labeler, get_icl_labeler
+        icl_labeler = init_icl_labeler(config)
+        icl_labeler.start_background_worker()
+        logger.info("ICL (In-Context Learning) labeler enabled with background worker")
+
+        # Register cleanup handler for ICL labeler
+        import atexit
+        def cleanup_icl_labeler():
+            labeler = get_icl_labeler()
+            if labeler:
+                labeler.stop_background_worker()
+                labeler.save_state()
+                logger.info("ICL labeler background worker stopped and state saved")
+        atexit.register(cleanup_icl_labeler)
+
     # Initialize directory watcher if configured
     if "data_directory" in config:
         from potato.directory_watcher import init_directory_watcher, get_directory_watcher

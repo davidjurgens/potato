@@ -1,0 +1,117 @@
+# ICL (In-Context Learning) Labeling Example
+#
+# This example demonstrates AI-assisted labeling using high-confidence human
+# annotations as in-context examples to guide an LLM in labeling remaining data.
+#
+# The system:
+# 1. Collects examples where annotators agree (high confidence)
+# 2. Uses those examples to prompt an LLM for labeling unlabeled instances
+# 3. Routes some LLM-labeled instances back to humans for verification
+# 4. Tracks and reports LLM accuracy based on verification results
+#
+# Prerequisites:
+# - Set OPENAI_API_KEY environment variable (or use a different endpoint)
+# - Multiple annotators providing labels to establish consensus
+
+# Basic project settings
+"port": 8000
+"debug": true
+
+# Data files
+"data_files": ["data/icl-labeling-example.json"]
+
+# Item properties
+"item_properties":
+  "id_key": "id"
+  "text_key": "text"
+
+# Output directory
+"task_dir": "icl_labeling_example_output"
+"output_annotation_dir": "icl_labeling_example_output/annotations"
+"output_annotation_format": "jsonl"
+
+# Enable multiple annotators per item (needed for consensus)
+"max_annotations_per_item": 3
+
+# Assignment strategy
+"assignment_strategy": "random"
+
+# User authentication
+"require_password": false
+"user_config":
+  "allow_new_users": true
+
+# AI Support (required for ICL labeling)
+"ai_support":
+  "enabled": true
+  "endpoint_type": "openai"  # Options: openai, anthropic, ollama, together, etc.
+  "ai_config":
+    "model": "gpt-4o-mini"
+    "api_key": "${OPENAI_API_KEY}"  # Uses environment variable
+
+# ICL Labeling Configuration
+"icl_labeling":
+  "enabled": true
+
+  # Example selection - identify high-confidence human annotations
+  "example_selection":
+    "min_agreement_threshold": 0.8      # 80% of annotators must agree
+    "min_annotators_per_instance": 2    # Minimum 2 annotations per instance
+    "max_examples_per_schema": 10       # Include up to 10 examples in prompts
+    "refresh_interval_seconds": 300     # Refresh examples every 5 minutes
+
+  # LLM labeling settings
+  "llm_labeling":
+    "batch_size": 10                    # Label 10 instances at a time
+    "trigger_threshold": 3              # Start labeling after 3 examples exist
+    "confidence_threshold": 0.7         # Only accept predictions with 70%+ confidence
+    "batch_interval_seconds": 600       # Run batches every 10 minutes
+
+    # Labeling limits - important for iterative improvement
+    "max_total_labels": 50              # Label at most 50 instances total
+    "max_unlabeled_ratio": 0.5          # Only label 50% of remaining unlabeled
+    "pause_on_low_accuracy": true       # Pause if accuracy drops too low
+    "min_accuracy_threshold": 0.7       # Pause if accuracy below 70%
+
+  # Human verification settings
+  "verification":
+    "enabled": true
+    "sample_rate": 0.3                  # Verify 30% of LLM predictions
+    "selection_strategy": "low_confidence"  # Prioritize least confident predictions
+    "mix_with_regular_assignments": true
+    "assignment_mix_rate": 0.2          # 20% chance of verification task
+
+  # Persistence
+  "persistence":
+    "predictions_file": "icl_predictions.json"
+
+# Annotation scheme - sentiment classification
+"annotation_schemes":
+  - "name": "sentiment"
+    "annotation_type": "radio"
+    "description": "What is the overall sentiment of this text?"
+    "labels":
+      - "name": "positive"
+        "description": "Expresses positive sentiment, happiness, satisfaction"
+        "key_value": "1"
+      - "name": "neutral"
+        "description": "No clear sentiment, factual, or mixed"
+        "key_value": "2"
+      - "name": "negative"
+        "description": "Expresses negative sentiment, frustration, dissatisfaction"
+        "key_value": "3"
+    "display_config":
+      "label_display": "name_and_description"
+
+# Pages configuration
+"pages":
+  - "id": "annotation"
+    "type": "annotation"
+    "content":
+      "header": "Sentiment Classification"
+      "instruction": |
+        Please read the text and classify its overall sentiment.
+
+        **Positive**: The text expresses positive emotions, satisfaction, or happiness.
+        **Neutral**: The text is factual, informational, or has no clear sentiment.
+        **Negative**: The text expresses negative emotions, frustration, or dissatisfaction.

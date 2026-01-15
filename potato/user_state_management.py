@@ -1505,6 +1505,10 @@ class InMemoryUserState(UserState):
         self.qualified_categories: Set[str] = set()
         self.category_qualification_scores: Dict[str, float] = {}  # category -> accuracy score
 
+        # ICL verification tracking - stores verification tasks assigned to this user
+        # Maps instance_id -> schema_name for instances that are LLM verification tasks
+        self.icl_verification_tasks: Dict[str, str] = {}
+
     def hint_exists(self, instance_id: str) -> bool:
         return instance_id in self.ai_hints
 
@@ -1735,6 +1739,70 @@ class InMemoryUserState(UserState):
         """Returns True if the user has any remaining instances to annotate. If the user
            does not have a maximum number of assignments, this will always return True."""
         return self.max_assignments < 0 or len(self.get_annotated_instance_ids()) < self.max_assignments
+
+    # === ICL Verification Tracking Methods ===
+
+    def mark_instance_as_verification(self, instance_id: str, schema_name: str) -> None:
+        """
+        Mark an instance as an ICL verification task.
+
+        This is called when assigning a verification task to the user. The user
+        won't see that it's a verification - it appears as a normal annotation task
+        (blind labeling). After they annotate it, we compare their label to the LLM's.
+
+        Args:
+            instance_id: The instance ID being verified
+            schema_name: The schema being verified
+        """
+        self.icl_verification_tasks[instance_id] = schema_name
+
+    def is_verification_task(self, instance_id: str) -> bool:
+        """
+        Check if an instance is a verification task.
+
+        Args:
+            instance_id: The instance ID to check
+
+        Returns:
+            True if this is a verification task
+        """
+        return instance_id in self.icl_verification_tasks
+
+    def get_verification_schema(self, instance_id: str) -> Optional[str]:
+        """
+        Get the schema name for a verification task.
+
+        Args:
+            instance_id: The instance ID
+
+        Returns:
+            Schema name if this is a verification task, None otherwise
+        """
+        return self.icl_verification_tasks.get(instance_id)
+
+    def complete_verification_task(self, instance_id: str) -> Optional[str]:
+        """
+        Complete and remove a verification task, returning the schema.
+
+        This should be called after the user annotates a verification task,
+        so we can record the verification result.
+
+        Args:
+            instance_id: The instance ID
+
+        Returns:
+            Schema name if this was a verification task, None otherwise
+        """
+        return self.icl_verification_tasks.pop(instance_id, None)
+
+    def get_pending_verification_tasks(self) -> Dict[str, str]:
+        """
+        Get all pending verification tasks for this user.
+
+        Returns:
+            Dictionary mapping instance_id -> schema_name
+        """
+        return self.icl_verification_tasks.copy()
 
     def set_max_assignments(self, max_assignments: int) -> None:
         '''Sets the maximum number of items that this user can be assigned'''

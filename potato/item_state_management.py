@@ -623,6 +623,11 @@ class ItemStateManager:
         This method implements various assignment strategies to optimize annotation
         efficiency and quality. The strategy used depends on the configuration.
 
+        If ICL verification is enabled with mix_with_regular_assignments, this method
+        may include verification tasks from the ICL labeler's queue. These appear as
+        regular annotation tasks (blind labeling) so users don't know they're verifying
+        LLM predictions.
+
         Args:
             user_state: The user state object to assign instances to
 
@@ -635,6 +640,12 @@ class ItemStateManager:
             - May modify remaining_instance_ids queue
         """
         self.logger.debug(f"Assigning instances to user {getattr(user_state, 'user_id', None)} with strategy {self.assignment_strategy} and random_seed={self.random_seed}")
+
+        # Check if we should assign a verification task from ICL labeling
+        verification_assigned = self._maybe_assign_icl_verification(user_state)
+        if verification_assigned:
+            # Return early if we assigned a verification task
+            return verification_assigned
 
         # Decline to assign new items to users that have completed the maximum
         if not user_state.has_remaining_assignments():
@@ -965,6 +976,82 @@ class ItemStateManager:
 
         # For now, return a random score as placeholder
         return self.random.random()
+
+    def _maybe_assign_icl_verification(self, user_state: 'UserState') -> int:
+        """
+        Maybe assign an ICL verification task to the user.
+
+        This implements "blind labeling" - the user receives an instance that was
+        already labeled by the LLM, but they don't know it's a verification task.
+        After they annotate it, we compare their label to the LLM's prediction.
+
+        Args:
+            user_state: The user state to potentially assign to
+
+        Returns:
+            int: Number of verification instances assigned (0 or 1)
+        """
+        # Check if ICL labeling is enabled
+        icl_config = self.config.get('icl_labeling', {})
+        if not icl_config.get('enabled', False):
+            return 0
+
+        # Check if verification is enabled with mixed assignments
+        verification_config = icl_config.get('verification', {})
+        if not verification_config.get('enabled', True):
+            return 0
+        if not verification_config.get('mix_with_regular_assignments', True):
+            return 0
+
+        # Probabilistic check - only assign verification ~20% of the time
+        # This ensures users still get regular tasks most of the time
+        verification_mix_rate = verification_config.get('assignment_mix_rate', 0.2)
+        if self.random.random() > verification_mix_rate:
+            return 0
+
+        try:
+            from potato.ai.icl_labeler import get_icl_labeler
+            icl_labeler = get_icl_labeler()
+            if icl_labeler is None:
+                return 0
+
+            # Get pending verifications that this user hasn't already annotated
+            pending = icl_labeler.get_pending_verifications(count=5)
+            user_id = getattr(user_state, 'user_id', None)
+
+            for instance_id, schema_name in pending:
+                # Skip if user already annotated this instance
+                if user_state.has_annotated(instance_id):
+                    continue
+
+                # Skip if instance is already assigned to user
+                if instance_id in user_state.get_assigned_instance_ids():
+                    continue
+
+                # Check if instance exists in our manager
+                if instance_id not in self.instance_id_to_instance:
+                    continue
+
+                # Assign the verification instance
+                item = self.instance_id_to_instance[instance_id]
+                user_state.assign_instance(item)
+
+                # Mark this as a verification task in the user's metadata
+                # This is stored privately so we can record verification after annotation
+                user_state.mark_instance_as_verification(instance_id, schema_name)
+
+                self.logger.info(
+                    f"Assigned ICL verification task {instance_id} to user {user_id}"
+                )
+                return 1
+
+        except ImportError:
+            # ICL labeler module not available
+            pass
+        except Exception as e:
+            self.logger.warning(f"Error assigning ICL verification: {e}")
+
+        return 0
 
     def generate_id_order_mapping(self):
         """Generate a mapping from instance IDs to their order"""

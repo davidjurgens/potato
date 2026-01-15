@@ -575,6 +575,9 @@ def submit_annotation():
         get_user_state_manager().save_user_state(user_state)
         logger.debug(f"User state saved successfully")
 
+        # Check if this was an ICL verification task and record the result
+        _maybe_record_icl_verification(user_state, instance_id, annotations)
+
         # Log the saved annotations
         all_annotations = user_state.get_all_annotations()
         logger.debug(f"All annotations after save: {all_annotations}")
@@ -1896,6 +1899,346 @@ def admin_api_suspicious_activity():
     return jsonify(result)
 
 
+# === ICL Verification Helper ===
+
+def _maybe_record_icl_verification(user_state, instance_id: str, annotations: dict) -> bool:
+    """
+    Check if an annotation was for an ICL verification task and record the result.
+
+    This is called after a user submits an annotation. If the instance was assigned
+    as a verification task (blind labeling), we compare their label to the LLM's
+    prediction and record the verification result.
+
+    Args:
+        user_state: The user's state object
+        instance_id: The annotated instance ID
+        annotations: The user's annotation data
+
+    Returns:
+        True if verification was recorded, False otherwise
+    """
+    # Check if this instance is a verification task
+    if not hasattr(user_state, 'is_verification_task'):
+        return False
+
+    if not user_state.is_verification_task(instance_id):
+        return False
+
+    try:
+        from potato.ai.icl_labeler import get_icl_labeler
+
+        icl_labeler = get_icl_labeler()
+        if icl_labeler is None:
+            return False
+
+        # Get the schema being verified
+        schema_name = user_state.get_verification_schema(instance_id)
+        if not schema_name:
+            return False
+
+        # Extract the human's label for this schema
+        human_label = None
+        if schema_name in annotations:
+            label_data = annotations[schema_name]
+            if isinstance(label_data, dict):
+                # For radio/multiselect, find the selected value
+                for label_name, value in label_data.items():
+                    if value == 'true' or value is True:
+                        human_label = label_name
+                        break
+                    elif isinstance(value, str) and value not in ('false', ''):
+                        human_label = value
+                        break
+            elif isinstance(label_data, str):
+                human_label = label_data
+
+        if human_label is None:
+            logger.warning(f"Could not extract human label for verification of {instance_id}")
+            return False
+
+        # Record the verification
+        user_id = user_state.get_user_id()
+        success = icl_labeler.record_verification(
+            instance_id=instance_id,
+            schema_name=schema_name,
+            human_label=human_label,
+            verified_by=user_id
+        )
+
+        if success:
+            # Remove from user's verification task tracking
+            user_state.complete_verification_task(instance_id)
+            logger.info(f"Recorded ICL verification for {instance_id} by {user_id}: {human_label}")
+
+        return success
+
+    except ImportError:
+        # ICL labeler module not available
+        return False
+    except Exception as e:
+        logger.warning(f"Error recording ICL verification: {e}")
+        return False
+
+
+# === ICL Labeling Admin API ===
+
+@app.route("/admin/api/icl/status", methods=["GET"])
+def admin_api_icl_status():
+    """
+    Get ICL labeler status and statistics.
+    Admin-only endpoint.
+
+    Returns:
+        JSON with ICL labeler status including:
+        - enabled: Whether ICL labeling is enabled
+        - total_examples: Number of high-confidence examples
+        - total_predictions: Number of LLM predictions made
+        - accuracy_metrics: Verification-based accuracy
+        - labeling_paused: Whether labeling is currently paused
+    """
+    try:
+        from potato.ai.icl_labeler import get_icl_labeler
+        icl_labeler = get_icl_labeler()
+
+        if icl_labeler is None:
+            return jsonify({
+                'enabled': False,
+                'message': 'ICL labeling not initialized'
+            })
+
+        return jsonify(icl_labeler.get_status())
+
+    except Exception as e:
+        logger.error(f"Error getting ICL status: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route("/admin/api/icl/examples", methods=["GET"])
+def admin_api_icl_examples():
+    """
+    Get current high-confidence examples.
+
+    Query params:
+        schema: Optional schema name to filter by
+
+    Returns:
+        JSON with examples grouped by schema
+    """
+    try:
+        from potato.ai.icl_labeler import get_icl_labeler
+        icl_labeler = get_icl_labeler()
+
+        if icl_labeler is None:
+            return jsonify({'error': 'ICL labeling not initialized'}), 400
+
+        schema_filter = request.args.get('schema')
+
+        examples = {}
+        for schema_name, schema_examples in icl_labeler.schema_to_examples.items():
+            if schema_filter and schema_name != schema_filter:
+                continue
+            examples[schema_name] = [ex.to_dict() for ex in schema_examples]
+
+        return jsonify({
+            'examples': examples,
+            'total_count': sum(len(ex) for ex in examples.values())
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting ICL examples: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route("/admin/api/icl/predictions", methods=["GET"])
+def admin_api_icl_predictions():
+    """
+    Get LLM predictions with filtering.
+
+    Query params:
+        schema: Optional schema name to filter by
+        status: Optional verification status filter
+        limit: Maximum number of predictions to return (default 100)
+
+    Returns:
+        JSON with predictions list
+    """
+    try:
+        from potato.ai.icl_labeler import get_icl_labeler
+        icl_labeler = get_icl_labeler()
+
+        if icl_labeler is None:
+            return jsonify({'error': 'ICL labeling not initialized'}), 400
+
+        schema_filter = request.args.get('schema')
+        status_filter = request.args.get('status')
+        limit = int(request.args.get('limit', 100))
+
+        predictions_list = []
+        for inst_id, schemas in icl_labeler.predictions.items():
+            for schema_name, prediction in schemas.items():
+                if schema_filter and schema_name != schema_filter:
+                    continue
+                if status_filter and prediction.verification_status != status_filter:
+                    continue
+
+                predictions_list.append(prediction.to_dict())
+
+                if len(predictions_list) >= limit:
+                    break
+            if len(predictions_list) >= limit:
+                break
+
+        # Sort by timestamp descending
+        predictions_list.sort(key=lambda x: x['timestamp'], reverse=True)
+
+        return jsonify({
+            'predictions': predictions_list[:limit],
+            'total_count': len(predictions_list)
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting ICL predictions: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route("/admin/api/icl/accuracy", methods=["GET"])
+def admin_api_icl_accuracy():
+    """
+    Get accuracy metrics.
+
+    Query params:
+        schema: Optional schema name to filter by
+
+    Returns:
+        JSON with accuracy metrics
+    """
+    try:
+        from potato.ai.icl_labeler import get_icl_labeler
+        icl_labeler = get_icl_labeler()
+
+        if icl_labeler is None:
+            return jsonify({'error': 'ICL labeling not initialized'}), 400
+
+        schema_filter = request.args.get('schema')
+        metrics = icl_labeler.get_accuracy_metrics(schema_filter)
+
+        return jsonify(metrics)
+
+    except Exception as e:
+        logger.error(f"Error getting ICL accuracy: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route("/admin/api/icl/trigger", methods=["POST"])
+def admin_api_icl_trigger():
+    """
+    Manually trigger ICL operations.
+
+    JSON body:
+        action: "refresh_examples" | "batch_label" | "save_state"
+        schema: Optional schema name for batch_label
+
+    Returns:
+        JSON with operation result
+    """
+    try:
+        from potato.ai.icl_labeler import get_icl_labeler
+        icl_labeler = get_icl_labeler()
+
+        if icl_labeler is None:
+            return jsonify({'error': 'ICL labeling not initialized'}), 400
+
+        data = request.get_json() or {}
+        action = data.get('action', '')
+
+        if action == 'refresh_examples':
+            examples = icl_labeler.refresh_high_confidence_examples()
+            return jsonify({
+                'action': 'refresh_examples',
+                'success': True,
+                'example_counts': {k: len(v) for k, v in examples.items()}
+            })
+
+        elif action == 'batch_label':
+            schema = data.get('schema')
+            if not schema:
+                return jsonify({'error': 'schema required for batch_label'}), 400
+
+            predictions = icl_labeler.batch_label_instances(schema)
+            icl_labeler.save_state()
+
+            return jsonify({
+                'action': 'batch_label',
+                'success': True,
+                'predictions_count': len(predictions),
+                'schema': schema
+            })
+
+        elif action == 'save_state':
+            icl_labeler.save_state()
+            return jsonify({
+                'action': 'save_state',
+                'success': True
+            })
+
+        else:
+            return jsonify({'error': f'Unknown action: {action}'}), 400
+
+    except Exception as e:
+        logger.error(f"Error triggering ICL action: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route("/api/icl/record_verification", methods=["POST"])
+def api_icl_record_verification():
+    """
+    Record human verification of an LLM prediction.
+
+    This is called when an annotator completes labeling an instance
+    that was selected for verification.
+
+    JSON body:
+        instance_id: The instance ID
+        schema_name: The schema name
+        human_label: The human's label
+
+    Returns:
+        JSON with verification result
+    """
+    try:
+        if 'username' not in session:
+            return jsonify({'error': 'Not authenticated'}), 401
+
+        from potato.ai.icl_labeler import get_icl_labeler
+        icl_labeler = get_icl_labeler()
+
+        if icl_labeler is None:
+            return jsonify({'error': 'ICL labeling not initialized'}), 400
+
+        data = request.get_json() or {}
+        instance_id = data.get('instance_id')
+        schema_name = data.get('schema_name')
+        human_label = data.get('human_label')
+
+        if not all([instance_id, schema_name, human_label]):
+            return jsonify({'error': 'Missing required fields'}), 400
+
+        username = session['username']
+        success = icl_labeler.record_verification(
+            instance_id, schema_name, human_label, username
+        )
+
+        if success:
+            icl_labeler.save_state()
+            return jsonify({'success': True, 'message': 'Verification recorded'})
+        else:
+            return jsonify({'success': False, 'message': 'No prediction found to verify'})
+
+    except Exception as e:
+        logger.error(f"Error recording verification: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route("/go_to", methods=["GET", "POST"])
 def go_to():
     """
@@ -3192,6 +3535,14 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/api/questions", "admin_api_questions", admin_api_questions, methods=["GET"])
     app.add_url_rule("/admin/api/annotation_history", "admin_api_annotation_history", admin_api_annotation_history, methods=["GET"])
     app.add_url_rule("/admin/api/suspicious_activity", "admin_api_suspicious_activity", admin_api_suspicious_activity, methods=["GET"])
+
+    # ICL labeling admin API routes
+    app.add_url_rule("/admin/api/icl/status", "admin_api_icl_status", admin_api_icl_status, methods=["GET"])
+    app.add_url_rule("/admin/api/icl/examples", "admin_api_icl_examples", admin_api_icl_examples, methods=["GET"])
+    app.add_url_rule("/admin/api/icl/predictions", "admin_api_icl_predictions", admin_api_icl_predictions, methods=["GET"])
+    app.add_url_rule("/admin/api/icl/accuracy", "admin_api_icl_accuracy", admin_api_icl_accuracy, methods=["GET"])
+    app.add_url_rule("/admin/api/icl/trigger", "admin_api_icl_trigger", admin_api_icl_trigger, methods=["POST"])
+    app.add_url_rule("/api/icl/record_verification", "api_icl_record_verification", api_icl_record_verification, methods=["POST"])
 
     app.add_url_rule("/shutdown", "shutdown", shutdown, methods=["POST"])
 
