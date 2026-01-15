@@ -146,6 +146,10 @@ class HighlightSchema:
 # Global emphasis corpus to schemas mapping
 emphasis_corpus_to_schemas = defaultdict(set)
 
+# Keyword highlight patterns loaded from TSV file
+# List of dicts: {pattern: str, regex: compiled_regex, label: str, schema: str}
+keyword_highlight_patterns = []
+
 # Response Highlight Class
 @dataclass(frozen=True)
 class SuggestedResponse:
@@ -633,7 +637,90 @@ def load_annotation_schematic_data(config: dict) -> None:
                   html_template_fname)
 
 def load_highlights_data(config: dict) -> None:
-    pass
+    """
+    Load keyword highlights from a TSV file specified in the config.
+
+    The TSV file should have columns: Word, Label, Schema
+    - Word: The keyword or phrase to highlight (supports * wildcards)
+    - Label: The annotation label associated with this keyword
+    - Schema: The annotation schema name
+
+    Wildcards are converted to regex patterns:
+    - 'word*' matches 'word', 'words', 'wording', etc.
+    - '*word' matches 'sword', 'keyword', etc.
+    - 'word' matches exactly 'word' (case-insensitive, word boundaries)
+    """
+    global keyword_highlight_patterns, emphasis_corpus_to_schemas
+
+    keyword_highlights_file = config.get("keyword_highlights_file")
+    if not keyword_highlights_file:
+        logger.debug("No keyword_highlights_file specified in config")
+        return
+
+    # Resolve the file path relative to task_dir if not absolute
+    task_dir = config.get("task_dir", "")
+    if not os.path.isabs(keyword_highlights_file):
+        keyword_highlights_file = os.path.join(task_dir, keyword_highlights_file)
+
+    if not os.path.exists(keyword_highlights_file):
+        logger.warning(f"Keyword highlights file not found: {keyword_highlights_file}")
+        return
+
+    logger.info(f"Loading keyword highlights from: {keyword_highlights_file}")
+
+    keyword_highlight_patterns = []
+
+    try:
+        with open(keyword_highlights_file, 'r', encoding='utf-8') as f:
+            import csv
+            reader = csv.DictReader(f, delimiter='\t')
+
+            for row in reader:
+                word = row.get('Word', '').strip()
+                label = row.get('Label', '').strip()
+                schema = row.get('Schema', '').strip()
+
+                if not word:
+                    continue
+
+                # Convert wildcard pattern to regex
+                # Escape special regex characters except *
+                escaped = re.escape(word).replace(r'\*', r'\w*')
+
+                # Add word boundary markers for exact matching
+                # If pattern starts with wildcard, don't require word boundary at start
+                # If pattern ends with wildcard, don't require word boundary at end
+                if word.startswith('*'):
+                    pattern = escaped
+                else:
+                    pattern = r'\b' + escaped
+
+                if word.endswith('*'):
+                    pattern = pattern
+                else:
+                    pattern = pattern + r'\b'
+
+                try:
+                    compiled_regex = re.compile(pattern, re.IGNORECASE)
+                    keyword_highlight_patterns.append({
+                        'pattern': word,
+                        'regex': compiled_regex,
+                        'label': label,
+                        'schema': schema
+                    })
+
+                    # Also populate the emphasis corpus for backward compatibility
+                    emphasis_corpus_to_schemas[word].add(HighlightSchema(label=label, schema=schema))
+
+                except re.error as e:
+                    logger.warning(f"Invalid regex pattern for keyword '{word}': {e}")
+                    continue
+
+        logger.info(f"Loaded {len(keyword_highlight_patterns)} keyword highlight patterns")
+
+    except Exception as e:
+        logger.error(f"Error loading keyword highlights file: {e}")
+        keyword_highlight_patterns = []
 
 def load_phase_data(config: dict) -> None:
     # Lazy import - only when this function is called

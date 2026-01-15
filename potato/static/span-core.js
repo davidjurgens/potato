@@ -306,6 +306,9 @@ class SpanManager {
 
         // AI span state tracking
         this.aiSpans = new Map(); // Map<annotationId, Array<overlayElement>>
+
+        // Admin keyword highlight state tracking
+        this.keywordHighlights = []; // Array of keyword highlight overlay elements
     }
 
     // ==================== AI SPAN METHODS ====================
@@ -629,6 +632,9 @@ class SpanManager {
 
             this.renderSpans();
 
+            // Load admin keyword highlights after span annotations
+            await this.loadKeywordHighlights(instanceId);
+
         } catch (error) {
             console.error('[SpanManager] Error loading annotations:', error);
             throw error;
@@ -830,8 +836,9 @@ class SpanManager {
     onInstanceChange(newInstanceId) {
         console.log('[SpanManager] onInstanceChange called:', newInstanceId);
 
-        // Clear AI spans on instance change
+        // Clear AI spans and keyword highlights on instance change
         this.clearAiSpans();
+        this.clearKeywordHighlights();
 
         if (newInstanceId && newInstanceId !== this.currentInstanceId) {
             this.clearAllStateAndOverlays();
@@ -871,6 +878,134 @@ class SpanManager {
                 element.style.setProperty('--height-multiplier', heightMultiplier);
             }
         });
+    }
+
+    // ==================== KEYWORD HIGHLIGHT METHODS ====================
+
+    /**
+     * Load admin-defined keyword highlights for the current instance.
+     * These are displayed using the same visual system as AI keyword suggestions
+     * (bounding boxes around keywords).
+     */
+    async loadKeywordHighlights(instanceId) {
+        console.log('[SpanManager] loadKeywordHighlights called for instance:', instanceId);
+
+        try {
+            const response = await fetch(`/api/keyword_highlights/${instanceId}`);
+
+            if (!response.ok) {
+                if (response.status === 404) {
+                    console.log('[SpanManager] No keyword highlights found');
+                    return;
+                }
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            const keywords = data.keywords || [];
+
+            if (keywords.length === 0) {
+                console.log('[SpanManager] No keyword highlights to display');
+                return;
+            }
+
+            console.log(`[SpanManager] Found ${keywords.length} keyword highlights`);
+
+            // Insert keyword highlights using the AI span system
+            // Use a special "admin" annotation ID to track these separately
+            this.insertKeywordHighlights(keywords);
+
+        } catch (error) {
+            console.error('[SpanManager] Error loading keyword highlights:', error);
+        }
+    }
+
+    /**
+     * Insert admin keyword highlights using the same visual system as AI spans.
+     * @param {Array} keywords - Array of keyword objects with {label, start, end, text, reasoning, schema, color}
+     */
+    insertKeywordHighlights(keywords) {
+        console.log('[SpanManager] insertKeywordHighlights called:', keywords.length, 'keywords');
+
+        if (!keywords || !Array.isArray(keywords) || keywords.length === 0) {
+            return;
+        }
+
+        // Clear any existing admin keyword highlights
+        this.clearKeywordHighlights();
+
+        const spanOverlays = document.getElementById('span-overlays');
+        if (!spanOverlays) {
+            console.error('[SpanManager] span-overlays element not found');
+            return;
+        }
+
+        const createdOverlays = [];
+
+        keywords.forEach((keyword, index) => {
+            const { label, start, end, text, reasoning, schema, color } = keyword;
+
+            console.log(`[SpanManager] Creating keyword highlight ${index}:`, { label, start, end, text, color });
+
+            // Check positioning strategy
+            if (!this.positioningStrategy || !this.positioningStrategy.isInitialized) {
+                console.warn('[SpanManager] Positioning strategy not initialized for keyword highlights');
+                return;
+            }
+
+            const positions = this.positioningStrategy.getTextPositions(start, end, text);
+            if (!positions || positions.length === 0) {
+                console.warn('[SpanManager] Could not get positions for keyword:', text);
+                return;
+            }
+
+            // Create keyword highlight with distinctive styling
+            const span = {
+                id: `keyword_${start}_${end}_${Date.now()}`,
+                start: start,
+                end: end,
+                text: text,
+                label: label || 'keyword'
+            };
+
+            // Use color from API response (based on schema/label), fallback to amber
+            const keywordColor = color || 'rgba(245, 158, 11, 0.8)';
+            const overlay = this.positioningStrategy.createOverlay(span, positions, {
+                isAiSpan: true,  // Use the same visual style as AI spans (border box)
+                color: keywordColor
+            });
+
+            if (overlay) {
+                overlay.dataset.keywordHighlight = 'true';
+                overlay.dataset.schema = schema || '';
+                overlay.dataset.label = label || '';
+                overlay.title = reasoning || `Keyword: "${text}" → ${label}`;
+                overlay.classList.add('keyword-highlight-overlay');
+                spanOverlays.appendChild(overlay);
+                createdOverlays.push(overlay);
+                console.log('[SpanManager] Keyword highlight overlay created with color:', keywordColor);
+            }
+        });
+
+        // Store keyword overlays for tracking
+        this.keywordHighlights = createdOverlays;
+        console.log(`[SpanManager] Created ${createdOverlays.length} keyword highlight overlays`);
+    }
+
+    /**
+     * Clear all admin keyword highlight overlays.
+     */
+    clearKeywordHighlights() {
+        console.log('[SpanManager] clearKeywordHighlights called');
+
+        const spanOverlays = document.getElementById('span-overlays');
+        if (spanOverlays) {
+            const keywordOverlays = spanOverlays.querySelectorAll('.keyword-highlight-overlay');
+            keywordOverlays.forEach(overlay => overlay.remove());
+            console.log(`[SpanManager] Removed ${keywordOverlays.length} keyword highlight overlays`);
+        }
+
+        this.keywordHighlights = [];
     }
 }
 

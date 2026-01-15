@@ -48,7 +48,7 @@ from potato.flask_server import (
     get_ai_cache_manager,
     get_users, get_total_annotations, update_annotation_state, ai_hints,
     get_training_instances, get_training_correct_answers, get_training_explanation,
-    get_prolific_study
+    get_prolific_study, keyword_highlight_patterns
 )
 
 # Import admin dashboard functionality
@@ -57,7 +57,7 @@ from potato.admin import admin_dashboard
 # Import span color functions
 from potato.ai.ai_help_wrapper import generate_ai_help_html
 from potato.ai.ai_prompt import get_ai_prompt
-from potato.server_utils.schemas.span import get_span_color
+from potato.server_utils.schemas.span import get_span_color, set_span_color, SPAN_COLOR_PALETTE
 
 # Import annotation history
 from potato.annotation_history import AnnotationHistoryManager
@@ -2714,6 +2714,134 @@ def get_span_colors():
     logger.debug("=== GET_SPAN_COLORS END ===")
     return jsonify(color_map)
 
+
+@app.route("/api/keyword_highlights/<instance_id>")
+def get_keyword_highlights(instance_id):
+    """
+    Get keyword highlights for a specific instance.
+
+    This endpoint finds all occurrences of admin-defined keywords in the instance text
+    and returns them in the same format as AI keyword suggestions, so they can be
+    displayed using the same visual system (bounding boxes around keywords).
+
+    Colors are assigned based on schema/label to match the span annotation color scheme.
+
+    Returns:
+        JSON with list of keyword matches:
+        {
+            "keywords": [
+                {
+                    "label": "Economic",
+                    "start": 10,
+                    "end": 20,
+                    "text": "employment",
+                    "reasoning": "Keyword match: employ*",
+                    "schema": "Issue-General",
+                    "color": "rgba(110, 86, 207, 0.8)"
+                },
+                ...
+            ],
+            "instance_id": "item_1"
+        }
+    """
+    import urllib.parse
+
+    logger.debug(f"=== GET_KEYWORD_HIGHLIGHTS START ===")
+    logger.debug(f"Instance ID: {instance_id}")
+
+    decoded_instance_id = urllib.parse.unquote(instance_id)
+
+    if 'username' not in session:
+        logger.warning("Get keyword highlights without active session")
+        return jsonify({"error": "No active session"}), 401
+
+    # Check if keyword highlights are enabled
+    if not keyword_highlight_patterns:
+        logger.debug("No keyword highlight patterns loaded")
+        return jsonify({"keywords": [], "instance_id": instance_id})
+
+    # Get the instance text
+    try:
+        item_state_manager = get_item_state_manager()
+        instance = item_state_manager.get_item(instance_id)
+        if not instance:
+            instance = item_state_manager.get_item(decoded_instance_id)
+            if instance:
+                instance_id = decoded_instance_id
+            else:
+                logger.error(f"Instance not found: {instance_id}")
+                return jsonify({"error": "Instance not found"}), 404
+
+        original_text = instance.get_text()
+        logger.debug(f"Instance text length: {len(original_text)}")
+
+    except Exception as e:
+        logger.error(f"Error getting instance text: {e}")
+        return jsonify({"error": f"Instance not found: {instance_id}"}), 404
+
+    # Find all keyword matches in the text
+    keywords = []
+    seen_spans = set()  # Track (start, end) to avoid duplicate overlapping matches
+
+    # Track color assignments for keyword labels (schema -> label -> color)
+    keyword_color_counter = 0
+
+    for pattern_info in keyword_highlight_patterns:
+        regex = pattern_info['regex']
+        label = pattern_info['label']
+        schema = pattern_info['schema']
+        pattern_str = pattern_info['pattern']
+
+        for match in regex.finditer(original_text):
+            start = match.start()
+            end = match.end()
+            matched_text = match.group()
+
+            # Skip if we already have a match at this exact position
+            span_key = (start, end)
+            if span_key in seen_spans:
+                continue
+            seen_spans.add(span_key)
+
+            # Get or assign color for this schema/label combination
+            color = get_span_color(schema, label)
+            if not color:
+                # Auto-assign a color from the palette
+                idx = keyword_color_counter % len(SPAN_COLOR_PALETTE)
+                color = SPAN_COLOR_PALETTE[idx]
+                keyword_color_counter += 1
+                # Store it for consistency
+                set_span_color(schema, label, color)
+
+            # Convert RGB tuple string to rgba format for frontend
+            # Color format is "(r, g, b)" - convert to "rgba(r, g, b, 0.8)"
+            if color.startswith("(") and color.endswith(")"):
+                rgba_color = f"rgba{color[:-1]}, 0.8)"
+            else:
+                rgba_color = color
+
+            keywords.append({
+                "label": label,
+                "start": start,
+                "end": end,
+                "text": matched_text,
+                "reasoning": f"Keyword: {pattern_str} → {label}",
+                "schema": schema,
+                "color": rgba_color
+            })
+
+    # Sort by start position
+    keywords.sort(key=lambda k: k['start'])
+
+    logger.debug(f"Found {len(keywords)} keyword matches")
+    logger.debug("=== GET_KEYWORD_HIGHLIGHTS END ===")
+
+    return jsonify({
+        "keywords": keywords,
+        "instance_id": instance_id
+    })
+
+
 @app.route("/api/schemas")
 def get_annotation_schemas():
     """
@@ -3017,6 +3145,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/api/spans/<instance_id>", "get_span_data", get_span_data, methods=["GET"])
     app.add_url_rule("/api/colors", "get_span_colors", get_span_colors, methods=["GET"])
     app.add_url_rule("/api/schemas", "get_annotation_schemas", get_annotation_schemas, methods=["GET"])
+    app.add_url_rule("/api/keyword_highlights/<instance_id>", "get_keyword_highlights", get_keyword_highlights, methods=["GET"])
     app.add_url_rule("/test-span-colors", "test_span_colors", test_span_colors, methods=["GET"])
     app.add_url_rule("/api/spans/<instance_id>/clear", "clear_span_annotations", clear_span_annotations, methods=["POST"])
     app.add_url_rule("/api/current_instance", "get_current_instance", get_current_instance, methods=["GET"])

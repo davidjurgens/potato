@@ -1811,6 +1811,19 @@ fieldset[schema] {
   cursor: help;
 }
 
+/* Admin keyword highlight overlay styles */
+.keyword-highlight-overlay {
+  pointer-events: none;
+  z-index: 998; /* Slightly below AI suggestions */
+}
+
+.keyword-highlight-overlay .span-highlight-segment {
+  pointer-events: auto;
+  cursor: help;
+  /* Keyword highlights use dashed border to distinguish from AI suggestions */
+  border-style: dashed !important;
+}
+
 /* Tooltip styling for AI suggestions */
 .tooltip.hint-tooltip {
   background-color: rgba(245, 158, 11, 0.95);
