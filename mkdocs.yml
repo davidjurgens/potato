@@ -27,7 +27,11 @@ nav:
         - Admin Dashboard: admin_dashboard.md
         - Annotator Stats: annotator_stats.md
         - User and Collaboration: user_and_collaboration.md
+        - Passwordless Login: passwordless_login.md
+        - Annotation History: annotation_history.md
         - Productivity: productivity.md
+    - Tools:
+        - Preview CLI: preview_cli.md
     - Deployment:
         - Usage: usage.md
         - Crowdsourcing: crowdsourcing.md
