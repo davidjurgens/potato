@@ -503,21 +503,27 @@ class ICLLabeler:
         Returns:
             Number of instances that can still be labeled, or -1 for unlimited
         """
-        from potato.flask_server import get_item_state_manager, get_users, get_user_state
+        from potato.item_state_management import get_item_state_manager
+        from potato.user_state_management import get_user_state_manager
 
-        ism = get_item_state_manager()
+        try:
+            ism = get_item_state_manager()
+        except ValueError:
+            # ISM not initialized yet
+            return 0
         if ism is None:
             return 0
 
         # Count unlabeled instances (not labeled by humans or LLM)
         unlabeled_count = 0
+        usm = get_user_state_manager()
         for instance_id in ism.instance_id_ordering:
             if instance_id in self.labeled_instance_ids:
                 continue
 
             has_human_annotation = False
-            for username in get_users():
-                user_state = get_user_state(username)
+            for username in usm.get_all_users():
+                user_state = usm.get_user_state(username)
                 if user_state:
                     all_annotations = user_state.get_all_annotations()
                     if instance_id in all_annotations:

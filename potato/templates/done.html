@@ -51,6 +51,16 @@
             background-color: #4959bd;
             border-color: #4959bd;
         }
+        .mturk-button {
+            background-color: #ff9900;
+            border-color: #ff9900;
+            color: #111;
+        }
+        .mturk-button:hover {
+            background-color: #e68a00;
+            border-color: #e68a00;
+            color: #111;
+        }
     </style>
 </head>
 <body>
@@ -80,7 +90,24 @@
                 </p>
             </div>
 
-            {% if prolific_redirect_url %}
+            {% if mturk_submit_url and mturk_assignment_id %}
+            <!-- MTurk Submission Form -->
+            <div class="d-grid gap-2 mb-4">
+                <form id="mturk-form" action="{{ mturk_submit_url }}" method="POST">
+                    <input type="hidden" name="assignmentId" value="{{ mturk_assignment_id }}">
+                    {% if completion_code %}
+                    <input type="hidden" name="completionCode" value="{{ completion_code }}">
+                    {% endif %}
+                    <button type="submit" class="btn btn-lg w-100 mturk-button">
+                        <i class="fas fa-external-link-alt me-2"></i>
+                        Submit HIT to MTurk
+                    </button>
+                </form>
+            </div>
+            <p class="text-muted small">
+                Click the button above to submit your completed HIT to Amazon Mechanical Turk.
+            </p>
+            {% elif prolific_redirect_url %}
             <div class="d-grid gap-2 mb-4">
                 <a href="{{ prolific_redirect_url }}" class="btn btn-primary btn-lg prolific-button">
                     <i class="fas fa-external-link-alt me-2"></i>

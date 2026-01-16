@@ -139,6 +139,19 @@ def home():
             prolific_session_id = request.args.get('SESSION_ID')
             prolific_study_id = request.args.get('STUDY_ID')
 
+            # Capture MTurk-specific parameters
+            mturk_assignment_id = request.args.get('assignmentId')
+            mturk_hit_id = request.args.get('hitId')
+            mturk_submit_to = request.args.get('turkSubmitTo')
+
+            # Handle MTurk preview mode (worker hasn't accepted the HIT yet)
+            if mturk_assignment_id == 'ASSIGNMENT_ID_NOT_AVAILABLE':
+                logger.info("MTurk preview mode detected - showing preview page")
+                return render_template("mturk_preview.html",
+                                      title=config.get("annotation_task_name", "Task Preview"),
+                                      task_description=config.get("task_description", ""),
+                                      annotation_task_name=config.get("annotation_task_name", "Annotation Task"))
+
             if username:
                 logger.info(f"URL-direct login: user={username}, session_id={prolific_session_id}, study_id={prolific_study_id}")
 
@@ -161,6 +174,14 @@ def home():
                     session['prolific_session_id'] = prolific_session_id
                 if prolific_study_id:
                     session['prolific_study_id'] = prolific_study_id
+
+                # Store MTurk IDs in session for completion flow
+                if mturk_assignment_id:
+                    session['mturk_assignment_id'] = mturk_assignment_id
+                if mturk_hit_id:
+                    session['mturk_hit_id'] = mturk_hit_id
+                if mturk_submit_to:
+                    session['mturk_submit_to'] = mturk_submit_to
 
                 # Initialize user state if needed
                 if not get_user_state_manager().has_user(username):
@@ -1899,6 +1920,25 @@ def admin_api_suspicious_activity():
     return jsonify(result)
 
 
+@app.route("/admin/api/crowdsourcing", methods=["GET"])
+def admin_api_crowdsourcing():
+    """
+    Get crowdsourcing platform statistics (MTurk, Prolific).
+    Admin-only endpoint requiring API key.
+
+    Returns:
+        flask.Response: JSON response with crowdsourcing data including:
+        - summary: Overall worker counts by platform
+        - prolific: Prolific-specific statistics and worker list
+        - mturk: MTurk-specific statistics and worker list
+        - other: Non-crowdsourcing workers
+    """
+    result = admin_dashboard.get_crowdsourcing_data()
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
 # === ICL Verification Helper ===
 
 def _maybe_record_icl_verification(user_state, instance_id: str, annotations: dict) -> bool:
@@ -2810,9 +2850,15 @@ def done():
     login_type = login_config.get('type', 'standard')
 
     if completion_code and login_type in ['url_direct', 'prolific']:
-        # Build the Prolific completion URL
-        # Format: https://app.prolific.co/submissions/complete?cc=YOUR_CODE
-        prolific_redirect_url = f"https://app.prolific.co/submissions/complete?cc={completion_code}"
+        # Build the Prolific completion URL (only if using Prolific-style URL argument)
+        url_argument = login_config.get('url_argument', 'PROLIFIC_PID')
+        if url_argument in ['PROLIFIC_PID', 'prolific_pid']:
+            # Format: https://app.prolific.co/submissions/complete?cc=YOUR_CODE
+            prolific_redirect_url = f"https://app.prolific.co/submissions/complete?cc={completion_code}"
+
+    # Get MTurk submission parameters from session
+    mturk_submit_url = session.get('mturk_submit_to')
+    mturk_assignment_id = session.get('mturk_assignment_id')
 
     # Check for auto-redirect setting
     auto_redirect = config.get('auto_redirect_on_completion', False)
@@ -2823,6 +2869,8 @@ def done():
                           title=config.get("annotation_task_name", "Annotation Platform"),
                           completion_code=completion_code,
                           prolific_redirect_url=prolific_redirect_url,
+                          mturk_submit_url=mturk_submit_url,
+                          mturk_assignment_id=mturk_assignment_id,
                           auto_redirect=auto_redirect,
                           auto_redirect_delay=auto_redirect_delay)
 
@@ -3535,6 +3583,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/api/questions", "admin_api_questions", admin_api_questions, methods=["GET"])
     app.add_url_rule("/admin/api/annotation_history", "admin_api_annotation_history", admin_api_annotation_history, methods=["GET"])
     app.add_url_rule("/admin/api/suspicious_activity", "admin_api_suspicious_activity", admin_api_suspicious_activity, methods=["GET"])
+    app.add_url_rule("/admin/api/crowdsourcing", "admin_api_crowdsourcing", admin_api_crowdsourcing, methods=["GET"])
 
     # ICL labeling admin API routes
     app.add_url_rule("/admin/api/icl/status", "admin_api_icl_status", admin_api_icl_status, methods=["GET"])

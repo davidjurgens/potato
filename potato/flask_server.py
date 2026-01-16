@@ -83,6 +83,7 @@ from potato.server_utils.config_module import init_config, config
 from potato.server_utils.schemas.span import render_span_annotations
 from potato.server_utils.cli_utlis import get_project_from_hub, show_project_hub
 from potato.server_utils.prolific_apis import ProlificStudy
+from potato.server_utils.mturk_apis import init_mturk_hit, get_mturk_hit
 from potato.server_utils.json import easy_json
 
 # This allows us to create an AI endpoint for the system to interact with as needed (if configured)
@@ -637,6 +638,7 @@ def load_all_data(config: dict):
     load_highlights_data(config)
     load_training_data(config)
     init_prolific_study(config)
+    init_mturk_hit(config)
 
     logger.debug(f"STATES: {get_user_state_manager().phase_type_to_name_to_page}")
 

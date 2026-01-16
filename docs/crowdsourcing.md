@@ -222,20 +222,208 @@ surveyflow:
 
 ## Amazon Mechanical Turk Integration
 
-Potato also supports Amazon Mechanical Turk using the same URL-direct login mechanism:
+[Amazon Mechanical Turk (MTurk)](https://www.mturk.com/) is a popular crowdsourcing marketplace for human intelligence tasks. Potato provides full integration with MTurk through:
+
+1. **URL-Direct Login**: Automatic login using MTurk's URL parameters
+2. **Preview Mode**: Proper handling of HIT preview state
+3. **Form Submission**: Built-in completion flow with form submission to MTurk
+4. **MTurk API Integration**: Optional automatic assignment management via AWS API
+
+### Quick Start: Minimal MTurk Setup
+
+For a basic MTurk integration, add these configuration options to your YAML file:
+
+```yaml
+# Enable URL-direct login (extracts workerId from URL)
+login:
+  type: url_direct
+  url_argument: workerId
+
+# Optional: completion code to record
+completion_code: "COMPLETED"
+
+# Hide navigation for crowdsourcing
+hide_navbar: true
+jumping_to_id_disabled: true
+```
+
+With this configuration:
+- Workers arriving from MTurk are automatically logged in using their `workerId`
+- Workers previewing the HIT see a preview page prompting them to accept
+- When workers complete all tasks, they see a completion page with a "Submit HIT to MTurk" button
+
+### URL Parameters
+
+When workers click your HIT on MTurk, they arrive at a URL like:
+```
+https://your-server:8080/?workerId=A1B2C3D4E5&assignmentId=xyz123&hitId=abc456&turkSubmitTo=https://www.mturk.com/mturk/externalSubmit
+```
+
+Potato automatically captures these MTurk parameters:
+
+| Parameter | Description |
+|-----------|-------------|
+| `workerId` | Worker's unique MTurk ID (used as username) |
+| `assignmentId` | Unique ID for this worker-HIT assignment |
+| `hitId` | The HIT identifier |
+| `turkSubmitTo` | URL where the form should be submitted on completion |
+
+### HIT Preview Mode
+
+When `assignmentId` equals `ASSIGNMENT_ID_NOT_AVAILABLE`, the worker is previewing the HIT (hasn't accepted it yet). Potato displays a preview page explaining that they need to accept the HIT to begin working.
+
+### Completion Flow
+
+When workers complete the task, they see a completion page with:
+- A "Submit HIT to MTurk" button that POSTs to the `turkSubmitTo` URL
+- The completion code (if configured) displayed for reference
+- The `assignmentId` is automatically included in the form submission
+
+### Setting Up Your External Question HIT
+
+To use Potato with MTurk, you need to create an External Question HIT. Use this XML format:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<ExternalQuestion xmlns="http://mechanicalturk.amazonaws.com/AWSMechanicalTurkDataSchemas/2006-07-14/ExternalQuestion.xsd">
+  <ExternalURL>https://your-server:8080/?workerId=${workerId}&amp;assignmentId=${assignmentId}&amp;hitId=${hitId}&amp;turkSubmitTo=${turkSubmitTo}</ExternalURL>
+  <FrameHeight>800</FrameHeight>
+</ExternalQuestion>
+```
+
+MTurk automatically substitutes the placeholder variables (`${workerId}`, etc.) with actual values.
+
+### Full MTurk Configuration Example
+
+Here's a complete configuration for an MTurk study:
+
+```yaml
+# Task identification
+annotation_task_name: "Text Classification Task"
+task_description: "Classify the sentiment of short texts."
+
+# MTurk login settings
+login:
+  type: url_direct
+  url_argument: workerId
+
+# Optional completion code
+completion_code: "TASK_COMPLETE"
+
+# Hide navigation to prevent workers from skipping
+hide_navbar: true
+jumping_to_id_disabled: true
+
+# Automatic task assignment for crowdsourcing
+assignment_strategy: random
+max_annotations_per_user: 10
+max_annotations_per_item: 3
+
+# Data files
+data_files:
+  - data/items.json
+
+# Output
+output_annotation_dir: annotation_output/
+```
+
+### Sandbox vs Production
+
+MTurk provides a sandbox environment for testing. The endpoints are:
+
+| Environment | Worker Site | Submit URL |
+|-------------|-------------|------------|
+| Sandbox | workersandbox.mturk.com | https://workersandbox.mturk.com/mturk/externalSubmit |
+| Production | www.mturk.com | https://www.mturk.com/mturk/externalSubmit |
+
+For testing:
+1. Create HITs on the sandbox requester site
+2. Access as a worker on the sandbox worker site
+3. The `turkSubmitTo` parameter will automatically point to the sandbox
+
+### Advanced: MTurk API Integration
+
+For larger studies, Potato can integrate with the MTurk API via boto3 to automatically manage your HIT:
+
+- List and monitor assignments
+- Auto-approve completed assignments
+- Track worker status
+
+#### Setup MTurk API
+
+1. **Install boto3**:
+```bash
+pip install boto3
+```
+
+2. **Get AWS credentials** with MTurk permissions from your AWS account
+
+3. **Create an MTurk config file** (`configs/mturk_config.yaml`):
+
+```yaml
+aws_access_key_id: "YOUR_AWS_ACCESS_KEY"
+aws_secret_access_key: "YOUR_AWS_SECRET_KEY"
+sandbox: true  # Set to false for production
+hit_id: "YOUR_HIT_ID"  # Optional: for tracking/auto-approval
+```
+
+4. **Reference it in your main config**:
 
 ```yaml
 login:
   type: url_direct
-  url_argument: workerId  # MTurk uses 'workerId' parameter
+  url_argument: workerId
 
-completion_code: "YOUR-MTURK-CODE"
+mturk:
+  enabled: true
+  config_file_path: configs/mturk_config.yaml
 ```
 
-MTurk workers arrive at URLs like:
+> **Security Note**: Never commit AWS credentials to version control. Use environment variables or AWS credential files in production.
+
+---
+
+## Step-by-Step MTurk Setup Guide
+
+### 1. Create Your HIT on MTurk
+
+Go to [MTurk Requester](https://requester.mturk.com/) (or [Sandbox](https://requestersandbox.mturk.com/) for testing).
+
+Create an External Question HIT with:
+- Your Potato server URL as the ExternalURL
+- Appropriate reward and time settings
+- Required qualifications for quality control
+
+### 2. Configure Your Potato Project
+
+Add the MTurk settings to your configuration:
+
+```yaml
+login:
+  type: url_direct
+  url_argument: workerId
+
+completion_code: "COMPLETED"
+hide_navbar: true
+jumping_to_id_disabled: true
 ```
-https://your-server:8080/?workerId=A1B2C3D4E5&assignmentId=xyz&hitId=abc
-```
+
+### 3. Test in Sandbox
+
+1. Create a HIT in the MTurk sandbox
+2. Run your Potato server
+3. Access the HIT as a sandbox worker
+4. Verify the full workflow:
+   - Preview page shows when HIT not accepted
+   - Login works when HIT is accepted
+   - Completion page has working submit button
+
+### 4. Deploy to Production
+
+Once tested:
+1. Deploy your Potato server to a production environment
+2. Create production HITs pointing to your server
+3. Monitor completions via the admin dashboard
 
 ---
 
@@ -327,6 +515,25 @@ Use Prolific's preview feature to test the full worker experience, then launch y
 - Verify your API token is correct
 - Check that `study_id` matches your actual Prolific study
 - Look for error messages in the server logs
+
+### MTurk workers stuck on preview page
+
+- Workers see the preview page when they haven't accepted the HIT yet
+- The page auto-refreshes every 3 seconds to check if HIT was accepted
+- Ensure your External Question URL includes all required parameters
+
+### MTurk submit button not working
+
+- Verify `turkSubmitTo` parameter is present in the original URL
+- Check that the form action URL is correct (sandbox vs production)
+- Look for CORS or mixed-content errors in browser console
+
+### MTurk API not connecting
+
+- Verify AWS credentials are correct
+- Check that `sandbox` setting matches your environment
+- Ensure boto3 is installed: `pip install boto3`
+- Verify your AWS account has MTurk requester permissions
 
 ---
 

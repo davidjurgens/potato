@@ -576,6 +576,7 @@
           <div class="admin-tab" data-tab="annotators">Annotators</div>
           <div class="admin-tab" data-tab="instances">Instances</div>
           <div class="admin-tab" data-tab="questions">Questions</div>
+          <div class="admin-tab" data-tab="crowdsourcing">Crowdsourcing</div>
           <div class="admin-tab" data-tab="config">Configuration</div>
         </div>
 
@@ -707,6 +708,28 @@
           </div>
         </div>
 
+        <!-- Crowdsourcing Tab -->
+        <div class="admin-tab-content" id="crowdsourcing">
+          <div class="table-controls">
+            <button
+              onclick="refreshCrowdsourcing()"
+              class="shadcn-button shadcn-button-primary"
+            >
+              Refresh Data
+            </button>
+          </div>
+
+          <!-- Summary Cards -->
+          <div class="dashboard-grid" id="crowdsourcingGrid">
+            <!-- Crowdsourcing summary cards will be loaded here -->
+          </div>
+
+          <!-- Platform Sections -->
+          <div id="crowdsourcingDetails">
+            <!-- Platform-specific data will be loaded here -->
+          </div>
+        </div>
+
         <!-- Configuration Tab -->
         <div class="admin-tab-content" id="config">
           <div class="config-form">
@@ -830,6 +853,9 @@
             break;
           case "questions":
             loadQuestions();
+            break;
+          case "crowdsourcing":
+            loadCrowdsourcing();
             break;
           case "config":
             loadConfig();
@@ -1363,6 +1389,192 @@
 
       function refreshQuestions() {
         loadQuestions();
+      }
+
+      // Crowdsourcing functions
+      async function loadCrowdsourcing() {
+        try {
+          const data = await makeApiRequest("/admin/api/crowdsourcing");
+          displayCrowdsourcing(data);
+        } catch (error) {
+          console.error("Error loading crowdsourcing data:", error);
+          showError("Failed to load crowdsourcing data");
+        }
+      }
+
+      function displayCrowdsourcing(data) {
+        const grid = document.getElementById("crowdsourcingGrid");
+        const details = document.getElementById("crowdsourcingDetails");
+
+        // Display summary cards
+        grid.innerHTML = `
+          <div class="dashboard-card">
+            <h3>Total Workers</h3>
+            <div class="value">${data.summary.total_workers}</div>
+            <div class="description">All crowdsourcing workers</div>
+          </div>
+          <div class="dashboard-card">
+            <h3>Prolific Workers</h3>
+            <div class="value">${data.summary.prolific_workers}</div>
+            <div class="description">${data.summary.prolific_studies} study/studies</div>
+          </div>
+          <div class="dashboard-card">
+            <h3>MTurk Workers</h3>
+            <div class="value">${data.summary.mturk_workers}</div>
+            <div class="description">${data.summary.mturk_hits} HIT(s)</div>
+          </div>
+          <div class="dashboard-card">
+            <h3>Other Workers</h3>
+            <div class="value">${data.summary.other_workers}</div>
+            <div class="description">Direct or non-platform</div>
+          </div>
+        `;
+
+        // Display platform details
+        let detailsHtml = "";
+
+        // Prolific section
+        if (data.prolific.workers.length > 0) {
+          detailsHtml += generatePlatformSection("Prolific", data.prolific, "prolific");
+        }
+
+        // MTurk section
+        if (data.mturk.workers.length > 0) {
+          detailsHtml += generatePlatformSection("Amazon MTurk", data.mturk, "mturk");
+        }
+
+        // Other workers section
+        if (data.other.workers.length > 0) {
+          detailsHtml += generatePlatformSection("Other", data.other, "other");
+        }
+
+        if (!detailsHtml) {
+          detailsHtml = `
+            <div class="question-card">
+              <div class="error-message">
+                No crowdsourcing workers detected. Workers will appear here when they access the task via Prolific or MTurk.
+              </div>
+            </div>
+          `;
+        }
+
+        details.innerHTML = detailsHtml;
+      }
+
+      function generatePlatformSection(platformName, platformData, platformKey) {
+        const stats = platformData.stats;
+        const workers = platformData.workers;
+
+        let html = `
+          <div class="question-card">
+            <div class="question-header">
+              <h3 class="question-title">${platformName}</h3>
+              <span class="question-type">${stats.count} workers</span>
+            </div>
+
+            <div class="question-stats">
+              <div class="question-stat">
+                <span class="value">${stats.total_annotations}</span>
+                <span class="label">Total Annotations</span>
+              </div>
+              <div class="question-stat">
+                <span class="value">${stats.avg_annotations_per_worker}</span>
+                <span class="label">Avg per Worker</span>
+              </div>
+              <div class="question-stat">
+                <span class="value">${stats.avg_time_per_worker_minutes}m</span>
+                <span class="label">Avg Time</span>
+              </div>
+              <div class="question-stat">
+                <span class="value">${stats.completed_count}</span>
+                <span class="label">Completed</span>
+              </div>
+              <div class="question-stat">
+                <span class="value">${stats.in_progress_count}</span>
+                <span class="label">In Progress</span>
+              </div>
+            </div>
+        `;
+
+        // Show study IDs or HIT IDs
+        if (platformKey === "prolific" && platformData.study_ids && platformData.study_ids.length > 0) {
+          html += `<p><strong>Study IDs:</strong> ${platformData.study_ids.join(", ")}</p>`;
+        }
+        if (platformKey === "mturk" && platformData.hit_ids && platformData.hit_ids.length > 0) {
+          html += `<p><strong>HIT IDs:</strong> ${platformData.hit_ids.join(", ")}</p>`;
+        }
+
+        // Workers table
+        html += `
+            <div class="admin-table-container" style="margin-top: 1rem;">
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>Worker ID</th>
+                    <th>Phase</th>
+                    <th>Annotations</th>
+                    <th>Time</th>
+                    <th>Speed</th>
+                    <th>Completion</th>
+                    <th>Status</th>
+        `;
+
+        if (platformKey === "prolific") {
+          html += `<th>Session ID</th>`;
+        } else if (platformKey === "mturk") {
+          html += `<th>Assignment ID</th>`;
+        }
+
+        html += `
+                  </tr>
+                </thead>
+                <tbody>
+        `;
+
+        workers.forEach(worker => {
+          const phaseClass = worker.phase.includes("DONE") ? "status-completed" :
+                            worker.phase.includes("ANNOTATION") ? "status-active" : "status-login";
+          const suspiciousClass = worker.suspicious_level === "High" || worker.suspicious_level === "Very High" ?
+                                 "color: var(--error-color);" : "";
+
+          html += `
+                  <tr>
+                    <td>${worker.worker_id}</td>
+                    <td><span class="status-badge ${phaseClass}">${worker.phase.replace("Phase.", "")}</span></td>
+                    <td>${worker.total_annotations}</td>
+                    <td>${formatTime(worker.total_seconds)}</td>
+                    <td>${worker.annotations_per_hour.toFixed(1)}/hr</td>
+                    <td>${worker.completion_percentage.toFixed(1)}%</td>
+                    <td style="${suspiciousClass}">${worker.suspicious_level}</td>
+          `;
+
+          if (platformKey === "prolific") {
+            html += `<td>${worker.session_id || "N/A"}</td>`;
+          } else if (platformKey === "mturk") {
+            html += `<td>${worker.assignment_id || "N/A"}</td>`;
+          }
+
+          html += `</tr>`;
+        });
+
+        html += `
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+
+        return html;
+      }
+
+      function formatTime(seconds) {
+        if (seconds < 60) return `${seconds}s`;
+        if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+        return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+      }
+
+      function refreshCrowdsourcing() {
+        loadCrowdsourcing();
       }
 
       // Configuration functions

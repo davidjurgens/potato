@@ -24,14 +24,15 @@ class TestBackendState:
     @pytest.fixture(scope="class", autouse=True)
     def flask_server(self, request):
         """Create a Flask test server with file-based dataset."""
-        print("🚀 Starting flask_server fixture setup...")
-        # Create a temporary directory for this test
-        test_dir = tempfile.mkdtemp()
-        print(f"📁 Created temp dir: {test_dir}")
-        task_dir = os.path.join(test_dir, "task")
-        os.makedirs(task_dir, exist_ok=True)
+        from tests.helpers.test_utils import create_test_directory, create_test_config, create_test_data_file
 
-        # Create test data file in task_dir
+        print("🚀 Starting flask_server fixture setup...")
+
+        # Create test directory using test utilities
+        test_dir = create_test_directory("backend_state_test")
+        print(f"📁 Created test dir: {test_dir}")
+
+        # Create test data
         test_data = []
         for i in range(1, 6):
             test_data.append({
@@ -40,106 +41,43 @@ class TestBackendState:
                 "displayed_text": f"Backend Test Item {i}"
             })
 
-        data_file = os.path.join(task_dir, 'backend_test_data.jsonl')
-        with open(data_file, 'w') as f:
-            for item in test_data:
-                f.write(json.dumps(item) + '\n')
+        data_file = create_test_data_file(test_dir, test_data, "backend_test_data.jsonl")
 
-        # Create minimal config
-        config = {
-            "debug": True,  # Enable debug mode for admin endpoint access
-            "max_annotations_per_user": 10,
-            "max_annotations_per_item": 3,
-            "assignment_strategy": "fixed_order",
-            "annotation_task_name": "Backend State Test Task",
-            "require_password": False,
-            "authentication": {
-                "method": "in_memory"
-            },
-            "data_files": [os.path.basename(data_file)],
-            "item_properties": {
-                "text_key": "text",
-                "id_key": "id"
-            },
-            "annotation_schemes": [
-                {
-                    "name": "test_choice",
-                    "type": "radio",
-                    "annotation_type": "radio",
-                    "labels": ["option_1", "option_2", "option_3"],
-                    "description": "Choose one option."
-                }
-            ],
-            "phases": {
-                "order": ["consent", "instructions"],
-                "consent": {
-                    "type": "consent",
-                    "file": "consent.json"
-                },
-                "instructions": {
-                    "type": "instructions",
-                    "file": "instructions.json"
-                }
-            },
-            "site_file": "base_template.html",
-            "output_annotation_dir": "output",  # Relative to task_dir
-            "task_dir": task_dir,
-            "site_dir": os.path.join(task_dir, "templates"),
-            "alert_time_each_instance": 0
-        }
-
-        # Create phase files in task_dir
-        consent_data = [
-            {
-                "name": "consent_check",
-                "type": "radio",
+        # Create config using test utilities
+        config_file = create_test_config(
+            test_dir,
+            annotation_schemes=[{
+                "name": "test_choice",
                 "annotation_type": "radio",
-                "labels": ["I agree", "I do not agree"],
-                "description": "Do you agree to participate in this study?"
-            }
-        ]
-        with open(os.path.join(task_dir, 'consent.json'), 'w') as f:
-            json.dump(consent_data, f, indent=2)
-
-        instructions_data = [
-            {
-                "name": "instructions_check",
-                "type": "radio",
-                "annotation_type": "radio",
-                "labels": ["I understand", "I need more explanation"],
-                "description": "Do you understand the instructions?"
-            }
-        ]
-        with open(os.path.join(task_dir, 'instructions.json'), 'w') as f:
-            json.dump(instructions_data, f, indent=2)
-
-        # Write config file in task_dir
-        config_file = os.path.join(task_dir, 'backend_test_config.yaml')
-        import yaml
-        with open(config_file, 'w') as f:
-            yaml.dump(config, f)
-
-        # Create server with the config file
-        server = FlaskTestServer(
-            port=9006,
-            debug=True,  # Enable debug mode for admin endpoint access
-            config_file=config_file,
-            test_data_file=data_file
+                "labels": ["option_1", "option_2", "option_3"],
+                "description": "Choose one option."
+            }],
+            data_files=[data_file],
+            annotation_task_name="Backend State Test Task",
+            max_annotations_per_user=10,
+            max_annotations_per_item=3,
+            assignment_strategy="fixed_order",
+            admin_api_key="test_admin_key",
         )
 
+        # Create server using config= parameter (matching working ICL test pattern)
+        server = FlaskTestServer(config=config_file)
+
         # Start server
-        if not server.start_server(test_dir):
+        if not server.start():
             pytest.fail("Failed to start Flask test server")
 
         yield server
 
         # Cleanup
-        server.stop_server()
+        server.stop()
 
     def test_health_check(self, flask_server):
         """Test the health check endpoint."""
         try:
-            response = requests.get(f"{flask_server.base_url}/admin/health", timeout=5)
+            response = requests.get(f"{flask_server.base_url}/admin/health",
+                                  headers={'X-API-Key': 'test_admin_key'},
+                                  timeout=5)
             assert response.status_code in [200, 404]  # Accept if endpoint doesn't exist
 
             if response.status_code == 200:
@@ -153,7 +91,7 @@ class TestBackendState:
         """Test getting initial system state using read-only admin endpoint."""
         try:
             response = requests.get(f"{flask_server.base_url}/admin/system_state",
-                                  headers={'X-API-Key': 'admin_api_key'},
+                                  headers={'X-API-Key': 'test_admin_key'},
                                   timeout=5)
             assert response.status_code in [200, 404]  # Accept if endpoint doesn't exist
 
@@ -179,7 +117,7 @@ class TestBackendState:
 
             # Check user state using read-only admin endpoint
             response = requests.get(f"{flask_server.base_url}/admin/user_state/backend_test_user_1",
-                                  headers={'X-API-Key': 'admin_api_key'},
+                                  headers={'X-API-Key': 'test_admin_key'},
                                   timeout=5)
             if response.status_code == 200:  # Only check if endpoint exists
                 user_state = response.json()
@@ -202,7 +140,7 @@ class TestBackendState:
 
             # Check initial user state using read-only admin endpoint
             response = requests.get(f"{flask_server.base_url}/admin/user_state/backend_test_user_2",
-                                  headers={'X-API-Key': 'admin_api_key'},
+                                  headers={'X-API-Key': 'test_admin_key'},
                                   timeout=5)
             if response.status_code == 200:  # Only check if endpoint exists
                 user_state = response.json()
@@ -218,7 +156,7 @@ class TestBackendState:
         """Test inspecting item state using read-only admin endpoint."""
         try:
             response = requests.get(f"{flask_server.base_url}/admin/item_state",
-                                  headers={'X-API-Key': 'admin_api_key'},
+                                  headers={'X-API-Key': 'test_admin_key'},
                                   timeout=5)
             assert response.status_code in [200, 404]  # Accept if endpoint doesn't exist
 
@@ -257,7 +195,7 @@ class TestBackendState:
 
             # Check that the annotation was recorded using read-only admin endpoint
             response = requests.get(f"{flask_server.base_url}/admin/user_state/backend_test_user_3",
-                                  headers={'X-API-Key': 'admin_api_key'},
+                                  headers={'X-API-Key': 'test_admin_key'},
                                   timeout=5)
             if response.status_code == 200:  # Only check if endpoint exists
                 user_state = response.json()
@@ -314,7 +252,7 @@ class TestBackendState:
 
             # Check system state using read-only admin endpoint
             response = requests.get(f"{flask_server.base_url}/admin/system_state",
-                                  headers={'X-API-Key': 'admin_api_key'},
+                                  headers={'X-API-Key': 'test_admin_key'},
                                   timeout=5)
             if response.status_code == 200:  # Only check if endpoint exists
                 system_state = response.json()
@@ -357,7 +295,7 @@ class TestBackendState:
 
             # Check final system state using read-only admin endpoint
             response = requests.get(f"{flask_server.base_url}/admin/system_state",
-                                  headers={'X-API-Key': 'admin_api_key'},
+                                  headers={'X-API-Key': 'test_admin_key'},
                                   timeout=5)
             if response.status_code == 200:  # Only check if endpoint exists
                 system_state = response.json()

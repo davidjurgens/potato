@@ -84,7 +84,75 @@ The Instances tab provides a paginated view of all annotation instances with det
   - Average time (asc/desc)
 - **Filtering**: Show all, completed only, or incomplete only
 
-### 4. Configuration Tab
+### 4. Questions Tab
+
+The Questions tab provides aggregate analysis for each annotation schema/question defined in your configuration.
+
+**Analysis by Annotation Type:**
+
+For **Radio/Select** questions:
+- Response distribution histogram
+- Most common label
+- Agreement score (percentage of annotators selecting the same label)
+
+For **Multiselect** questions:
+- Label frequency histogram
+- Co-occurrence analysis
+- Average labels per item
+
+For **Likert/Slider/Number** questions:
+- Value distribution histogram
+- Statistics: mean, median, min, max, standard deviation
+
+For **Text** questions:
+- Average response length and word count
+- Most common words
+- Empty response count
+
+For **Span** questions:
+- Average spans per item
+- Items with spans
+- Span range statistics
+
+### 5. Crowdsourcing Tab
+
+The Crowdsourcing tab provides dedicated monitoring for workers from crowdsourcing platforms like Prolific and Amazon Mechanical Turk (MTurk).
+
+**Summary Statistics:**
+- **Total Workers**: All workers across platforms
+- **Prolific Workers**: Workers from Prolific
+- **MTurk Workers**: Workers from Amazon MTurk
+- **Other Workers**: Direct access or non-platform workers
+- **Prolific Studies**: Unique study IDs detected
+- **MTurk HITs**: Unique HIT IDs detected
+
+**Platform Sections:**
+
+Each platform section displays:
+- Total annotations by platform workers
+- Average annotations per worker
+- Average time per worker
+- Completed vs. in-progress counts
+- Study IDs (Prolific) or HIT IDs (MTurk)
+
+**Worker Table:**
+For each worker, displays:
+- Worker ID
+- Current phase
+- Total annotations
+- Time spent
+- Annotations per hour
+- Completion percentage
+- Suspicious activity level
+- Session ID (Prolific) or Assignment ID (MTurk)
+
+This tab is particularly useful for:
+- Monitoring crowdsourcing campaign progress
+- Identifying low-quality workers
+- Tracking multiple studies/HITs
+- Ensuring workers receive completion codes
+
+### 6. Configuration Tab
 
 The Configuration tab allows administrators to modify system settings in real-time.
 
@@ -136,6 +204,78 @@ Returns paginated instances data with sorting and filtering options.
 - `sort_by`: Sort field (annotation_count, completion_percentage, disagreement, id, average_time)
 - `sort_order`: Sort order (asc, desc)
 - `filter_completion`: Filter by completion (completed, incomplete, all)
+
+### Questions Data
+```
+GET /admin/api/questions
+Headers: X-API-Key: admin_api_key
+```
+
+Returns aggregate analysis for each annotation schema including visualizations appropriate to the annotation type.
+
+### Crowdsourcing Data
+```
+GET /admin/api/crowdsourcing
+Headers: X-API-Key: admin_api_key
+```
+
+Returns crowdsourcing platform statistics including:
+- Summary counts for Prolific, MTurk, and other workers
+- Per-platform statistics (annotations, time, completion)
+- Individual worker details with platform-specific IDs
+- Study IDs (Prolific) and HIT IDs (MTurk)
+
+**Example Response:**
+```json
+{
+  "summary": {
+    "total_workers": 50,
+    "prolific_workers": 30,
+    "mturk_workers": 15,
+    "other_workers": 5,
+    "prolific_studies": 2,
+    "mturk_hits": 3
+  },
+  "prolific": {
+    "stats": {
+      "count": 30,
+      "total_annotations": 1200,
+      "avg_annotations_per_worker": 40.0,
+      "completed_count": 25,
+      "in_progress_count": 5
+    },
+    "study_ids": ["study_abc123", "study_def456"],
+    "workers": [...]
+  },
+  "mturk": {
+    "stats": {...},
+    "hit_ids": ["HIT123", "HIT456"],
+    "workers": [...]
+  }
+}
+```
+
+### Annotation History
+```
+GET /admin/api/annotation_history?user_id=<user>&instance_id=<instance>&minutes=<n>
+Headers: X-API-Key: admin_api_key
+```
+
+Returns detailed annotation action history with optional filtering:
+- `user_id`: Filter by specific user
+- `instance_id`: Filter by specific instance
+- `minutes`: Limit to actions within last N minutes
+
+### Suspicious Activity
+```
+GET /admin/api/suspicious_activity
+Headers: X-API-Key: admin_api_key
+```
+
+Returns comprehensive suspicious activity analysis including:
+- Users with suspicious activity
+- Suspicious actions details (fast actions, burst patterns)
+- Suspicious scores and levels
 
 ### Configuration Management
 ```

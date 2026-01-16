@@ -82,29 +82,31 @@ class FlaskTestServer:
                 self.temp_config_file = temp_path
                 self.config = temp_path
             elif isinstance(config, str):
-                # If config is a file path, ensure debug is false in the file
+                # If config is a file path, use it directly but update with test settings
+                # This preserves the original directory structure and data file paths
                 with open(config, 'r') as f:
                     config_data = yaml.safe_load(f)
-                if config_data.get('debug', False):
-                    config_data['debug'] = False
-                if 'persist_sessions' not in config_data:
-                    config_data['persist_sessions'] = False
+
+                # Update settings for testing
+                config_data['debug'] = False
+                config_data['persist_sessions'] = False
                 if 'random_seed' not in config_data:
                     config_data['random_seed'] = 1234
-                if 'require_password' not in config_data:
-                    config_data['require_password'] = False
-                if 'port' not in config_data:
-                    config_data['port'] = self.port
-                if 'host' not in config_data:
-                    config_data['host'] = '0.0.0.0'
+                config_data['require_password'] = False
+                config_data['port'] = self.port
+                config_data['host'] = '0.0.0.0'
                 if 'session_lifetime_days' not in config_data:
                     config_data['session_lifetime_days'] = 2
                 if 'secret_key' not in config_data:
                     config_data['secret_key'] = 'test-secret-key'
 
-                temp_path = self._create_temp_config_file(config_data, 'flasktest_config_')
-                self.temp_config_file = temp_path
-                self.config = temp_path
+                # Write updated config back to the SAME directory to preserve data file paths
+                config_dir = os.path.dirname(os.path.abspath(config))
+                temp_config_path = os.path.join(config_dir, 'test_config_modified.yaml')
+                with open(temp_config_path, 'w') as f:
+                    yaml.dump(config_data, f)
+                self.temp_config_file = temp_config_path
+                self.config = temp_config_path
             else:
                 raise ValueError('Config must be a dict or file path')
         self.process = None
@@ -329,6 +331,12 @@ class FlaskTestServer:
                 # Clear any existing managers (for testing)
                 clear_user_state_manager()
                 clear_item_state_manager()
+                # Clear ICL labeler if it exists
+                try:
+                    from potato.ai.icl_labeler import clear_icl_labeler
+                    clear_icl_labeler()
+                except ImportError:
+                    pass
 
                 # Initialize authenticator
                 UserAuthenticator.init_from_config(config)
@@ -338,7 +346,17 @@ class FlaskTestServer:
                 init_item_state_manager(config)
                 load_all_data(config)
 
-                                # Create a fresh Flask app instance with explicit static folder
+                # Initialize ICL labeler if configured (same as run_server does)
+                icl_config = config.get('icl_labeling', {})
+                if icl_config.get('enabled', False):
+                    try:
+                        from potato.ai.icl_labeler import init_icl_labeler
+                        icl_labeler = init_icl_labeler(config)
+                        icl_labeler.start_background_worker()
+                    except Exception as e:
+                        print(f"Warning: Failed to initialize ICL labeler: {e}")
+
+                # Create a fresh Flask app instance with explicit static folder
                 static_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../potato/static'))
                 app = Flask(__name__, template_folder=real_templates_dir, static_folder=static_folder)
 

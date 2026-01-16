@@ -135,9 +135,18 @@ class AdminDashboard:
             bool: True if admin access is granted, False otherwise
         """
         api_key = request.headers.get('X-API-Key')
-        if not config.get("debug", False) and api_key != "admin_api_key":
+        configured_api_key = config.get("admin_api_key")
+
+        # In debug mode, allow access without API key
+        if config.get("debug", False):
+            return True
+
+        # If no admin API key is configured, deny access
+        if not configured_api_key:
             return False
-        return True
+
+        # Check if the provided API key matches the configured one
+        return api_key == configured_api_key
 
     def get_dashboard_overview(self) -> Dict[str, Any]:
         """
@@ -459,8 +468,6 @@ class AdminDashboard:
                     num_ai_instance=self._calculate_total_instance_ai(item_id)
                 )
                 instances_data.append(instance_data)
-
-                print("fiwejfoijweoijfew ", instance_data)
 
             # Apply filters
             if filter_completion == "completed":
@@ -1198,6 +1205,152 @@ class AdminDashboard:
             hour_distribution[f"{hour:02d}:00"] += 1
 
         return dict(hour_distribution)
+
+    def get_crowdsourcing_data(self) -> Dict[str, Any]:
+        """
+        Get crowdsourcing platform statistics (MTurk, Prolific).
+
+        This method analyzes user data to provide statistics about workers
+        from crowdsourcing platforms like Amazon Mechanical Turk and Prolific.
+
+        Returns:
+            Dict containing crowdsourcing statistics with the following structure:
+            - summary: Overall counts of crowdsourcing workers
+            - prolific: Prolific-specific statistics
+            - mturk: MTurk-specific statistics
+            - workers: List of individual worker data
+        """
+        if not self.check_admin_access():
+            return {"error": "Admin access required"}, 403
+
+        try:
+            from potato.authentication import UserAuthenticator
+
+            usm = get_user_state_manager()
+            users = get_users()
+
+            # Initialize counters
+            prolific_workers = []
+            mturk_workers = []
+            other_workers = []
+
+            # Track unique study/HIT IDs
+            prolific_study_ids = set()
+            mturk_hit_ids = set()
+
+            # Get user authenticator to access stored user data
+            try:
+                user_auth = UserAuthenticator.get_instance()
+                user_data_store = getattr(user_auth.auth_backend, 'user_data', {})
+            except (ValueError, AttributeError):
+                user_data_store = {}
+
+            for username in users:
+                user_state = usm.get_user_state(username)
+                if not user_state:
+                    continue
+
+                # Get timing data for the user
+                timing_data = self._get_annotator_timing_data(username)
+
+                # Get stored user data (from authentication)
+                stored_data = user_data_store.get(username, {})
+
+                # Determine platform based on stored data
+                prolific_session_id = stored_data.get('prolific_session_id')
+                prolific_study_id = stored_data.get('prolific_study_id')
+                mturk_assignment_id = stored_data.get('mturk_assignment_id')
+                mturk_hit_id = stored_data.get('mturk_hit_id')
+
+                worker_info = {
+                    "worker_id": username,
+                    "total_annotations": timing_data.total_annotations if timing_data else 0,
+                    "phase": timing_data.phase if timing_data else "unknown",
+                    "total_seconds": timing_data.total_seconds if timing_data else 0,
+                    "annotations_per_hour": timing_data.annotations_per_hour if timing_data else 0,
+                    "completion_percentage": self._calculate_completion_percentage(username),
+                    "suspicious_level": timing_data.suspicious_level if timing_data else "Normal",
+                }
+
+                # Check for Prolific workers
+                if prolific_session_id or prolific_study_id or username.startswith('P'):
+                    worker_info["platform"] = "prolific"
+                    worker_info["session_id"] = prolific_session_id
+                    worker_info["study_id"] = prolific_study_id
+                    prolific_workers.append(worker_info)
+                    if prolific_study_id:
+                        prolific_study_ids.add(prolific_study_id)
+
+                # Check for MTurk workers
+                elif mturk_assignment_id or mturk_hit_id or username.startswith('A'):
+                    worker_info["platform"] = "mturk"
+                    worker_info["assignment_id"] = mturk_assignment_id
+                    worker_info["hit_id"] = mturk_hit_id
+                    mturk_workers.append(worker_info)
+                    if mturk_hit_id:
+                        mturk_hit_ids.add(mturk_hit_id)
+
+                else:
+                    worker_info["platform"] = "other"
+                    other_workers.append(worker_info)
+
+            # Calculate summary statistics
+            all_workers = prolific_workers + mturk_workers + other_workers
+
+            def calc_stats(workers):
+                if not workers:
+                    return {
+                        "count": 0,
+                        "total_annotations": 0,
+                        "total_time_seconds": 0,
+                        "avg_annotations_per_worker": 0,
+                        "avg_time_per_worker_minutes": 0,
+                        "completed_count": 0,
+                        "in_progress_count": 0,
+                    }
+                total_annotations = sum(w["total_annotations"] for w in workers)
+                total_time = sum(w["total_seconds"] for w in workers)
+                completed = len([w for w in workers if w["phase"] == "Phase.DONE"])
+                in_progress = len([w for w in workers if w["phase"] == "Phase.ANNOTATION"])
+                return {
+                    "count": len(workers),
+                    "total_annotations": total_annotations,
+                    "total_time_seconds": total_time,
+                    "avg_annotations_per_worker": round(total_annotations / len(workers), 1) if workers else 0,
+                    "avg_time_per_worker_minutes": round(total_time / len(workers) / 60, 1) if workers else 0,
+                    "completed_count": completed,
+                    "in_progress_count": in_progress,
+                }
+
+            return {
+                "summary": {
+                    "total_workers": len(all_workers),
+                    "prolific_workers": len(prolific_workers),
+                    "mturk_workers": len(mturk_workers),
+                    "other_workers": len(other_workers),
+                    "prolific_studies": len(prolific_study_ids),
+                    "mturk_hits": len(mturk_hit_ids),
+                },
+                "prolific": {
+                    "stats": calc_stats(prolific_workers),
+                    "study_ids": list(prolific_study_ids),
+                    "workers": prolific_workers,
+                },
+                "mturk": {
+                    "stats": calc_stats(mturk_workers),
+                    "hit_ids": list(mturk_hit_ids),
+                    "workers": mturk_workers,
+                },
+                "other": {
+                    "stats": calc_stats(other_workers),
+                    "workers": other_workers,
+                },
+            }
+
+        except Exception as e:
+            self.logger.error(f"Error getting crowdsourcing data: {e}")
+            return {"error": f"Failed to get crowdsourcing data: {str(e)}"}, 500
+
 
 # Global instance
 admin_dashboard = AdminDashboard()

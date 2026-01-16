@@ -158,8 +158,6 @@ def generate_schematic(annotation_scheme):
     if not annotation_func:
         raise Exception("unsupported annotation type: %s" % annotation_type)
 
-    print("annotation_func(annotation_scheme)")
-    print(annotation_func(annotation_scheme))
     return annotation_func(annotation_scheme)
 
 
@@ -305,7 +303,6 @@ def generate_annotation_html_template(config: dict) -> str:
     else:
         # Use the dedicated annotation layout file system (auto-generated)
         try:
-            print("12312321432")
             layout_file_path = get_or_generate_annotation_layout(config, annotation_schemes)
             # Read the generated layout file
             with open(layout_file_path, "rt") as f:

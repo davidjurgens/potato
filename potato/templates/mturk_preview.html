@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - Preview</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .preview-card {
+            max-width: 700px;
+            width: 100%;
+            margin: 20px;
+        }
+        .preview-icon {
+            font-size: 4rem;
+            color: #ffc107;
+        }
+        .accept-hint {
+            background-color: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 8px;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="card preview-card shadow">
+        <div class="card-body text-center p-5">
+            <div class="preview-icon mb-4">
+                <i class="fas fa-eye"></i>
+            </div>
+
+            <h1 class="card-title mb-3">Task Preview</h1>
+
+            <h4 class="text-muted mb-4">{{ annotation_task_name }}</h4>
+
+            {% if task_description %}
+            <div class="card bg-light mb-4">
+                <div class="card-body text-start">
+                    <h5 class="card-title">About This Task</h5>
+                    <p class="card-text">{{ task_description }}</p>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="accept-hint mb-4">
+                <h5 class="mb-3">
+                    <i class="fas fa-exclamation-triangle text-warning me-2"></i>
+                    Accept the HIT to Begin
+                </h5>
+                <p class="mb-0">
+                    You are currently viewing a preview of this task.
+                    To start working on this annotation task, please click the
+                    <strong>"Accept HIT"</strong> button on Amazon Mechanical Turk.
+                </p>
+            </div>
+
+            <div class="alert alert-info" role="alert">
+                <i class="fas fa-info-circle me-2"></i>
+                Once you accept the HIT, this page will automatically update and you can begin the task.
+            </div>
+
+            <hr class="my-4">
+
+            <p class="text-muted small mb-0">
+                <i class="fas fa-clock me-1"></i>
+                Preview mode - No work will be saved until you accept the HIT.
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // Auto-refresh every 3 seconds to check if HIT was accepted
+        setTimeout(function() {
+            location.reload();
+        }, 3000);
+    </script>
+</body>
+</html>
