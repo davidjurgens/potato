@@ -97,11 +97,9 @@ app = Flask(__name__)
 
 # Secret key will be set in configure_app() from config
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Use centralized logging configuration
+from potato.logging_config import get_logger, setup_logging
+logger = get_logger(__name__)
 
 # Set random seed for reproducible behavior
 random.seed(0)
@@ -1875,11 +1873,12 @@ def run_server(args):
     logger.info(f"Assignment random seed set to: {config['random_seed']}")
     # -----------------------------------
 
-    # Set logging level based on verbosity flags
-    if config.get("verbose"):
-        logger.setLevel(logging.DEBUG)
-    if config.get("very_verbose"):
-        logger.setLevel(logging.NOTSET)
+    # Set up centralized logging with appropriate verbosity
+    setup_logging(
+        verbose=config.get("verbose", False),
+        debug=config.get("debug", False) or config.get("very_verbose", False),
+        log_dir=config.get("output_annotation_dir"),
+    )
 
     # Ensure that the task directory exists
     task_dir = config["task_dir"]

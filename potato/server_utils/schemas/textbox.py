@@ -135,6 +135,6 @@ def _generate_textbox_layout_internal(annotation_scheme):
 
     schematic += "</fieldset></form>"
 
-    print("schematicschematicschematicschematic", schematic)
+    logger.debug(f"Generated textbox schematic for {annotation_scheme['name']}")
     logger.info(f"Successfully generated textbox layout for {annotation_scheme['name']} with {len(labels)} fields")
     return schematic, []

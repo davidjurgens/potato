@@ -20,9 +20,8 @@ def clear_config():
     config.clear()
 
 
+# Use centralized logging - avoid duplicate basicConfig
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-logging.basicConfig()
 
 
 class ConfigValidationError(Exception):

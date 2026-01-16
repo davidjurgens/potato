@@ -459,6 +459,8 @@
 slider Layout
 """
 
+import logging
+
 # Needed for the fall-back radio layout
 from ai.ai_help_wrapper import get_ai_wrapper, get_dynamic_ai_help
 from .radio import generate_radio_layout
@@ -467,6 +469,8 @@ from .identifier_utils import (
     generate_element_identifier,
     escape_html_content
 )
+
+logger = logging.getLogger(__name__)
 
 def test_and_get(key, d):
     val = d[key]
@@ -525,12 +529,9 @@ def generate_slider_layout_internal(annotation_scheme):
     
     identifiers = generate_element_identifier(annotation_scheme["name"], "slider", "range")
     
-    # Get step from annotation_scheme or default to 5
+    # Get step from annotation_scheme or default to 1
     step_value = annotation_scheme.get("step", 1)
-    print(step_value)
     max_tick = annotation_scheme.get("maxTick", 8)
-    print("max_tick")
-    print(max_tick)
     
     schematic = f"""
     <form id="{identifiers['schema']}" class="annotation-form slider" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" >

@@ -2638,7 +2638,7 @@ def update_instance():
             annotation_type = request.json.get("type")
 
             if annotation_type == "span":
-                print("schema_stateschema_state", schema_state)
+                logger.debug(f"Processing span annotation state: {schema_state}")
                 for sv in schema_state:
                     # Validate and correct negative offsets
                     start_offset = int(sv["start"])

@@ -224,8 +224,7 @@ def generate_annotation_html_template(config: dict) -> str:
     html_template_file = os.path.join(cur_program_dir, '..', 'templates', 'base_template_v2.html')
     header_file = os.path.join(cur_program_dir, '..', 'templates', 'header.html')
 
-    logger.debug("Reading html annotation template %s" % html_template_file)
-    print('html_template_file: ', html_template_file)
+    logger.debug(f"Reading html annotation template: {html_template_file}")
 
     if not os.path.exists(html_template_file):
         raise FileNotFoundError("html_template_file not found: %s" % html_template_file)
@@ -383,7 +382,7 @@ def generate_annotation_html_template(config: dict) -> str:
         logger.info(f"Created generated templates directory: {generated_dir}")
 
     output_html_fname = os.path.join(generated_dir, site_name)
-    print('output_html_fname: ', output_html_fname)
+    logger.debug(f"Output HTML filename: {output_html_fname}")
 
     # Cache this path as a shortcut to figure out which page to render
     config["site_file"] = site_name
@@ -432,9 +431,6 @@ def generate_core_task_html(config: dict,
 
         schema_layout, keybindings = generate_schematic(annotation_scheme)
         schema_layouts += schema_layout + "<br>" + "\n"
-
-        print("generate_schematic")
-        print(generate_schematic)
 
         cur_task_html_layout = task_html_layout.replace(
             "{{annotation_schematic}}", schema_layouts
@@ -515,7 +511,6 @@ def generate_html_from_schematic(annotation_schemas: list[dict],
     else:
         # Use the dedicated annotation layout file system (auto-generated)
         try:
-            print("fewifjwoiejf")
             layout_file_path = get_or_generate_annotation_layout(config, annotation_schemas)
             
             # Read the generated layout file

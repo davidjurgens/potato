@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import logging
 import os
 from typing import Any, Dict, Union
 import requests
@@ -9,6 +10,8 @@ from concurrent.futures import ThreadPoolExecutor
 import threading
 from builtins import open
 from server_utils.config_module import config
+
+logger = logging.getLogger(__name__)
 
 from item_state_management import get_item_state_manager
 from ai.ai_endpoint import AIEndpointFactory, Annotation_Type, AnnotationInput
@@ -118,7 +121,7 @@ class AiCacheManager:
             with open(file_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
-            print(f"Error loading disk cache: {e}")
+            logger.error(f"Error loading disk cache: {e}")
             return {}
 
     def load_cache_from_disk(self):
@@ -128,16 +131,16 @@ class AiCacheManager:
 
         if os.path.exists(self.disk_persistence_path):
             data = self.load_disk_cache_data(self.disk_persistence_path)
-            print(f"Disk cache initialized with {len(data)} items")
+            logger.info(f"Disk cache initialized with {len(data)} items")
         else: 
             try:
                 # Create parent directory if it doesn't exist
                 os.makedirs(os.path.dirname(self.disk_persistence_path), exist_ok=True)
                 with open(self.disk_persistence_path, 'w', encoding='utf-8') as file:
                     json.dump({}, file)
-                print(f"Initialized empty disk cache at {self.disk_persistence_path}")
+                logger.info(f"Initialized empty disk cache at {self.disk_persistence_path}")
             except Exception as e:
-                print(f"Failed to create disk cache: {e}")
+                logger.error(f"Failed to create disk cache: {e}")
 
     def save_cache_to_disk(self, key, value):
         """saves a single key-value pair to disk cache using atomic write."""
@@ -160,7 +163,7 @@ class AiCacheManager:
                 json.dump(existing_disk_data, f, indent=2, ensure_ascii=False)
             os.rename(temp_path, self.disk_persistence_path)
         except Exception as e:
-            print(f"Error saving cache to disk: {e}")
+            logger.error(f"Error saving cache to disk: {e}")
 
     def add_to_cache(self, key, value):
         """inserts a key-value into the disk cache."""
@@ -179,7 +182,7 @@ class AiCacheManager:
                     if key_str in disk_data:
                         return disk_data[key_str]
                 except Exception as e:
-                    print(f"Error reading from disk: {e}")
+                    logger.error(f"Error reading from disk: {e}")
             return None
     
     def generate_likert(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
@@ -312,13 +315,13 @@ class AiCacheManager:
             labels=labels
         )
         ai_prompt = get_ai_prompt();
-        print("generate_spangenerate_spangenerate_span", labels)
+        logger.debug(f"Generating span annotation with labels: {labels}")
         output_format = self.model_manager.get_model_class_by_name(ai_prompt[annotation_type].get(ai_assistant).get("output_format"))
         res = self.ai_endpoint.get_ai(data, output_format)
         return res
     
     def generate_textbox(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
-        print("generate_textbox", annotation_id)
+        logger.debug(f"Generating textbox for annotation_id: {annotation_id}")
         annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
         description = config["annotation_schemes"][annotation_id]["description"]
         text = get_item_state_manager().items()[instance_id].get_data()["text"]
@@ -338,7 +341,7 @@ class AiCacheManager:
         return self.include_all 
     
     def get_special_include(self, page_number_int, annotation_id_int):
-        print("get_special_include", self.special_includes, page_number_int, annotation_id_int)
+        logger.debug(f"get_special_include: page={page_number_int}, annotation_id={annotation_id_int}")
         if not self.special_includes.get(page_number_int):
             return None
         elif not self.special_includes.get(page_number_int).get(annotation_id_int):
@@ -359,8 +362,8 @@ class AiCacheManager:
             else:
                 start_idx = max(page_id - prefetch_amount, 0)
                 end_idx = page_id
-            
-            print("start_idx, end_idx",start_idx, end_idx)
+
+            logger.debug(f"Prefetch range: start_idx={start_idx}, end_idx={end_idx}")
             keys = []
             
             for i in range(start_idx, end_idx):
@@ -446,7 +449,7 @@ class AiCacheManager:
                                     result = fut.result()
                                     self.add_to_cache(cache_key, result)
                                 except Exception as e:
-                                    print(f"Prefetch failed for key {cache_key}: {e}")
+                                    logger.error(f"Prefetch failed for key {cache_key}: {e}")
                                 self.in_progress.pop(cache_key, None)
 
                     future.add_done_callback(callback)
@@ -454,8 +457,7 @@ class AiCacheManager:
     def get_ai_help(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
         """retrieves AI help either from cache, waits for in-progress, or computes on-demand."""
         key = (instance_id, annotation_id, ai_assistant)
-        
-        print("1r23iju0f93ijno3hfg091h3")
+
         # Check if caching is enabled for this help type
         if not self.disk_cache_enabled:
             return self.compute_help(instance_id, annotation_id, ai_assistant)
@@ -463,7 +465,7 @@ class AiCacheManager:
         # Try to get from cache if caching is enabled
         cached_value = self.get_from_cache(key)
         if cached_value is not None:
-            print(f"Cache hit for key: {key}")
+            logger.debug(f"Cache hit for key: {key}")
             return cached_value
 
         with self.lock:
@@ -480,7 +482,7 @@ class AiCacheManager:
                 self.in_progress.pop(key, None)
             return result
         except Exception as e:
-            print(f"Error computing help for key {key}: {e}")
+            logger.error(f"Error computing help for key {key}: {e}")
             with self.lock:
                 self.in_progress.pop(key, None)
             return f"Error: {str(e)}"
@@ -535,10 +537,10 @@ class AiCacheManager:
             if self.disk_cache_enabled and self.disk_persistence_path and os.path.exists(self.disk_persistence_path):
                 try:
                     os.remove(self.disk_persistence_path)
-                    print("Disk cache file removed")
+                    logger.info("Disk cache file removed")
                 except Exception as e:
-                    print(f"Error removing disk cache file: {e}")
-            print("Cache cleared")
+                    logger.error(f"Error removing disk cache file: {e}")
+            logger.info("Cache cleared")
 
 
 
