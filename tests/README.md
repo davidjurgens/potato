@@ -2,6 +2,27 @@
 
 This directory contains comprehensive tests for the Potato annotation platform, covering both backend functionality and frontend user interface testing.
 
+## Recent Bugs and Their Tests
+
+This section documents bugs that were discovered and the tests created to prevent regressions.
+
+| Bug | Root Cause | Test File | Key Test |
+|-----|------------|-----------|----------|
+| `require_password` config ignored | argparse `default=True` overrode config file | `test_arg_utils.py` | `test_require_password_default_is_none` |
+| `get_displayed_text` crash on lists | Function only handled strings, not pairwise lists | `test_displayed_text.py` | `test_list_with_alphabet_prefix_default` |
+| `audio_annotation` type not recognized | `front_end.py` used hardcoded dict, not registry | `test_schema_registry_integration.py` | `test_front_end_handles_audio_annotation` |
+| `image_annotation` type not recognized | Same hardcoded dict issue | `test_schema_registry_integration.py` | `test_front_end_handles_image_annotation` |
+| Firefox form restoration bug | Browser preserved checkbox state across pages | `test_comprehensive_span_annotation_firefox.py` | `test_checkbox_cleared_on_navigation` |
+| Radio button persistence issue | Different HTML name pattern vs checkbox | `test_annotation_persistence_frontend.py` | `test_radio_persists_within_instance` |
+
+### Test-Driven Bug Prevention
+
+When fixing a bug:
+1. Write a test that reproduces the bug (should fail before fix)
+2. Fix the bug
+3. Verify the test passes
+4. Document the bug/test relationship in this table
+
 ## Test File Security Policy
 
 **IMPORTANT: All test configuration and data files must reside within the `tests/` directory.**
@@ -69,16 +90,83 @@ Frontend tests using Selenium WebDriver to test the user interface and browser i
 - **`test_multirate_annotation.py`** - Multi-rate annotation UI testing
 
 ### Unit Tests (`tests/unit/`)
-Pure unit tests that test individual functions and classes without external dependencies.
+Pure unit tests that test individual functions and classes without external dependencies. These tests use mocking to isolate components.
+
+**📖 [Unit Test Documentation](unit/README.md)** - Complete guide to unit testing
 
 **Key Unit Test Files:**
-- **`test_annotation_types.py`** - Annotation type validation
-- **`test_config_validation.py`** - Configuration validation
+
+#### Configuration & CLI
+- **`test_config_validation.py`** - Configuration file validation
+- **`test_config_security_validation.py`** - Path security validation
+- **`test_arg_utils.py`** - CLI argument parsing and defaults (prevents config override bugs)
+- **`test_malicious_configs.py`** - Security tests for malicious configs
+
+#### Schema & Annotation Types
+- **`test_annotation_schemas.py`** - Schema validation and generation
+- **`test_schema_registry_integration.py`** - Registry completeness and front_end integration
+- **`test_image_annotation_schema.py`** - Image annotation schema
+- **`test_audio_annotation_schema.py`** - Audio annotation schema
+- **`test_video_annotation_schema.py`** - Video annotation schema
+- **`test_video_schema.py`** - Video display schema
+
+#### State Management
 - **`test_user_state.py`** - User state management logic
+- **`test_user_state_management.py`** - User state manager
+- **`test_database_user_state.py`** - Database-backed user state
+
+#### Data Processing
+- **`test_displayed_text.py`** - Text normalization and pairwise list formatting
+- **`test_annotation_api.py`** - Annotation API functions
+- **`test_annotation_history.py`** - Annotation history tracking
+- **`test_timestamp_tracking.py`** - Timestamp tracking for annotations
+
+#### Span Annotation
+- **`test_span_annotations.py`** - Span annotation logic
+- **`test_span_persistence.py`** - Span persistence
+- **`test_span_overlay_positioning.py`** - Span overlay positioning
+- **`test_span_offset_calculation.py`** - Span offset calculations
+
+#### AI Integration
+- **`test_ai_endpoints.py`** - AI endpoint implementations
+- **`test_ai_help_wrapper.py`** - AI help wrapper
+- **`test_icl_prompt_builder.py`** - In-context learning prompts
+- **`test_icl_labeler.py`** - ICL labeler
+
+#### Utilities
+- **`test_preview_cli.py`** - Preview CLI tool
+- **`test_migrate_cli.py`** - Migration CLI tool
+- **`test_prolific_integration.py`** - Prolific integration
+
+### Integration Tests (`tests/integration/`)
+End-to-end tests using real Flask servers and Selenium browsers. These tests verify complete user journeys from registration to annotation completion.
+
+**📖 [Integration Test Documentation](integration/README.md)** - Complete guide to integration testing
+
+**Key Integration Test Files:**
+- **`base.py`** - IntegrationTestServer and BaseIntegrationTest classes
+- **`test_smoke.py`** - Critical path tests (server startup, home page, registration)
+- **`test_workflows.py`** - Complete user journey tests
+- **`test_annotation_types_e2e.py`** - End-to-end annotation type tests
+- **`test_persistence.py`** - State preservation tests
+- **`test_edge_cases.py`** - Boundary condition tests
+
+### Jest Frontend Tests (`tests/jest/`)
+JavaScript unit tests for frontend functionality using jsdom.
+
+**📖 [Jest Test Documentation](jest/README.md)** - Complete guide to Jest testing
+
+**Key Jest Test Files:**
+- **`annotation-functions.test.js`** - Core annotation functions (updateAnnotation, validation)
+- **`span-manager-simple.test.js`** - Span manager functionality (initialization, CRUD, rendering)
+- **`interval-rendering-structure.test.js`** - DOM structure for span rendering
+- **`setup.js`** - Test setup and mocks
 
 ### Test Infrastructure
 - **`tests/helpers/flask_test_setup.py`** - FlaskTestServer class and test utilities
 - **`tests/selenium/test_base.py`** - BaseSeleniumTest class for Selenium tests
+- **`tests/integration/base.py`** - IntegrationTestServer class for E2E tests
+- **`tests/jest/setup.js`** - Jest test environment setup
 - **`tests/conftest.py`** - Pytest fixtures and shared test setup
 - **`tests/configs/`** - Test configuration files
 - **`tests/data/`** - Test data files
@@ -139,11 +227,27 @@ brew install chromedriver
 ### Running All Tests
 
 ```bash
-# Run all tests
+# Run all Python tests
 pytest
+
+# Run all tests (Python + Jest)
+npm run test:all
 
 # Run with coverage report
 pytest --cov=potato --cov-report=html
+```
+
+### Running Jest Tests
+
+```bash
+# Run all Jest tests
+npm run test:jest
+
+# Run Jest with watch mode
+npm run test:jest:watch
+
+# Run Jest with coverage
+npm run test:jest:coverage
 ```
 
 ### Running Specific Test Categories
