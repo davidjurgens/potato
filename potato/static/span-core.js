@@ -1,4 +1,8 @@
-console.log('[DEBUG] span-core.js file loaded!');
+/**
+ * Span Annotation Core - Positioning and Overlay Management
+ *
+ * This module provides unified text positioning for span annotations.
+ */
 
 /**
  * Get font metrics for positioning calculations
@@ -50,13 +54,11 @@ class UnifiedPositioningStrategy {
     }
 
     async initialize() {
-        console.log('[UNIFIED] Initializing positioning strategy');
         await this.waitForElements();
         await this.waitForFontMetrics();
         this.canonicalText = this.getCanonicalText();
         this.fontMetrics = this.getFontMetrics();
         this.isInitialized = true;
-        console.log('[UNIFIED] Positioning strategy initialized');
     }
 
     async waitForElements() {
@@ -102,13 +104,18 @@ class UnifiedPositioningStrategy {
         return getFontMetrics(this.container);
     }
 
-    createSpanFromSelection(selection) {
-        if (!this.isInitialized) return null;
+    createSpanFromSelection(selection, options = {}) {
+        if (!this.isInitialized) {
+            return null;
+        }
 
         const selectedText = selection.toString().trim();
-        if (!selectedText) return null;
+        if (!selectedText) {
+            return null;
+        }
 
         let canonicalText = this.getCanonicalText();
+
         const textElement = document.getElementById('text-content');
         if (textElement) {
             const storedText = textElement.getAttribute('data-original-text');
@@ -118,20 +125,39 @@ class UnifiedPositioningStrategy {
         }
 
         const start = canonicalText.indexOf(selectedText);
-        if (start === -1) return null;
+        if (start === -1) {
+            console.warn('[SpanCore] Selected text not found in canonical text');
+            return null;
+        }
 
         const end = start + selectedText.length;
-        return this.createSpanWithAlgorithm(start, end, selectedText);
+        return this.createSpanWithAlgorithm(start, end, selectedText, options);
     }
 
-    createSpanWithAlgorithm(start, end, text) {
-        if (!this.isInitialized) return null;
+    createSpanWithAlgorithm(start, end, text, options = {}) {
+        if (!this.isInitialized) {
+            return null;
+        }
 
         const canonicalText = this.getCanonicalText();
-        if (start < 0 || end > canonicalText.length || start >= end) return null;
+        if (start < 0 || end > canonicalText.length || start >= end) {
+            console.warn('[SpanCore] Invalid span positions:', { start, end, textLength: canonicalText.length });
+            return null;
+        }
 
         const positions = this.getTextPositions(start, end, text);
-        if (!positions || positions.length === 0) return null;
+        if (!positions || positions.length === 0) {
+            return null;
+        }
+
+        // Validate positions
+        const invalidPositions = positions.filter(p =>
+            p.x < -1000 || p.y < -1000 || p.width <= 0 || p.height <= 0 ||
+            p.x > 10000 || p.y > 10000 || p.width > 5000 || p.height > 500
+        );
+        if (invalidPositions.length > 0) {
+            console.warn('[SpanCore] Some positions look invalid:', invalidPositions);
+        }
 
         const span = {
             id: `span_${start}_${end}_${Date.now()}`,
@@ -142,49 +168,96 @@ class UnifiedPositioningStrategy {
             color: null
         };
 
-        const overlay = this.createOverlay(span, positions);
-        if (!overlay) return null;
+        // Pass options (including color) to createOverlay
+        const overlay = this.createOverlay(span, positions, options);
+        if (!overlay) {
+            return null;
+        }
 
         return { span, overlay, positions };
     }
 
     getTextPositions(start, end, text) {
         const textElement = document.getElementById('text-content');
-        if (!textElement) return null;
+        if (!textElement) {
+            return null;
+        }
 
         let actualText = textElement.getAttribute('data-original-text');
+        const domTextContent = textElement.textContent || textElement.innerText || '';
+
         if (!actualText) {
-            actualText = textElement.textContent || textElement.innerText || '';
+            actualText = domTextContent;
         }
 
         const targetStart = actualText.indexOf(text);
-        if (targetStart === -1) return null;
+        if (targetStart === -1) {
+            return null;
+        }
 
         const targetEnd = targetStart + text.length;
-
         const range = document.createRange();
-        let textNode = textElement.firstChild;
-        if (!textNode || textNode.nodeType !== Node.TEXT_NODE) {
-            textNode = Array.from(textElement.childNodes).find(
-                node => node.nodeType === Node.TEXT_NODE
-            );
-            if (!textNode) return null;
+
+        // Collect all text nodes with their cumulative offsets
+        const textNodes = [];
+        let cumulativeOffset = 0;
+
+        const collectTextNodes = (node) => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                textNodes.push({
+                    node: node,
+                    text: node.textContent,
+                    start: cumulativeOffset,
+                    end: cumulativeOffset + node.textContent.length
+                });
+                cumulativeOffset += node.textContent.length;
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+                for (const child of node.childNodes) {
+                    collectTextNodes(child);
+                }
+            }
+        };
+
+        collectTextNodes(textElement);
+
+        if (textNodes.length === 0) {
+            return null;
+        }
+
+        // Find the text nodes containing start and end positions
+        let startNode = null, startOffset = 0;
+        let endNode = null, endOffset = 0;
+
+        for (const tn of textNodes) {
+            if (startNode === null && targetStart >= tn.start && targetStart < tn.end) {
+                startNode = tn.node;
+                startOffset = targetStart - tn.start;
+            }
+            if (targetEnd > tn.start && targetEnd <= tn.end) {
+                endNode = tn.node;
+                endOffset = targetEnd - tn.start;
+            }
         }
 
         try {
-            range.setStart(textNode, targetStart);
-            range.setEnd(textNode, targetEnd);
+            range.setStart(startNode, startOffset);
+            range.setEnd(endNode, endOffset);
         } catch (error) {
-            console.error('[UNIFIED] Error setting range:', error);
+            console.error('[SpanCore] Error setting range:', error);
             return null;
         }
 
         const rects = range.getClientRects();
-        if (rects.length === 0) return null;
+        if (rects.length === 0) {
+            return null;
+        }
 
-        const containerRect = textElement.getBoundingClientRect();
+        // Use #instance-text rect for correct positioning
+        // Overlays are positioned relative to #instance-text, not #text-content
+        const instanceText = document.getElementById('instance-text');
+        const containerRect = instanceText ? instanceText.getBoundingClientRect() : textElement.getBoundingClientRect();
 
-        const positions = Array.from(rects).map(rect => ({
+        const positions = Array.from(rects).map((rect) => ({
             x: rect.left - containerRect.left,
             y: rect.top - containerRect.top,
             width: rect.width,
@@ -198,6 +271,10 @@ class UnifiedPositioningStrategy {
         if (!positions || positions.length === 0) return null;
 
         const { isAiSpan = false, color = 'rgba(255, 255, 0, 0.3)' } = options;
+
+        // Padding values for visual breathing room around text
+        const HORIZONTAL_PADDING = 3;  // px on each side
+        const VERTICAL_PADDING = 2;    // px on top and bottom
 
         const overlay = document.createElement('div');
         overlay.className = isAiSpan ? 'span-overlay-ai' : 'span-overlay-pure';
@@ -217,10 +294,11 @@ class UnifiedPositioningStrategy {
             const segment = document.createElement('div');
             segment.className = 'span-highlight-segment';
             segment.style.position = 'absolute';
-            segment.style.left = `${pos.x}px`;
-            segment.style.top = `${pos.y}px`;
-            segment.style.width = `${pos.width}px`;
-            segment.style.height = `${pos.height}px`;
+            // Add padding: position starts earlier, dimensions are larger
+            segment.style.left = `${pos.x - HORIZONTAL_PADDING}px`;
+            segment.style.top = `${pos.y - VERTICAL_PADDING}px`;
+            segment.style.width = `${pos.width + 2 * HORIZONTAL_PADDING}px`;
+            segment.style.height = `${pos.height + 2 * VERTICAL_PADDING}px`;
 
             if (isAiSpan) {
                 // AI spans use a box/border style instead of background highlight
@@ -231,7 +309,7 @@ class UnifiedPositioningStrategy {
             } else {
                 segment.style.backgroundColor = color;
                 segment.style.border = `1px solid ${color.replace('0.3', '0.8')}`;
-                segment.style.borderRadius = '2px';
+                segment.style.borderRadius = '4px';
             }
             segment.style.pointerEvents = 'none';
             overlay.appendChild(segment);
@@ -239,41 +317,82 @@ class UnifiedPositioningStrategy {
 
         if (!isAiSpan) {
             // Regular spans get labels and delete buttons
+            // Position label and delete button together above the segment start
+            const segmentLeft = positions[0].x - HORIZONTAL_PADDING;
+            const segmentTop = positions[0].y - VERTICAL_PADDING;
+
+            // Create a container for label + delete button so they stay together
+            const controlsContainer = document.createElement('div');
+            controlsContainer.className = 'span-controls';
+            controlsContainer.style.position = 'absolute';
+            controlsContainer.style.left = `${segmentLeft}px`;
+            controlsContainer.style.top = `${Math.max(0, segmentTop - 20)}px`;
+            controlsContainer.style.display = 'flex';
+            controlsContainer.style.alignItems = 'center';
+            controlsContainer.style.gap = '4px';
+            controlsContainer.style.pointerEvents = 'auto';
+            controlsContainer.style.zIndex = '10';
+
             const label = document.createElement('div');
             label.className = 'span-label';
             label.textContent = span.label;
-            label.style.position = 'absolute';
-            label.style.left = `${positions[0].x}px`;
-            label.style.top = `${positions[0].y - 20}px`;
-            label.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+            // Override CSS positioning to work in flex container
+            label.style.position = 'static';
+            label.style.top = 'auto';
+            label.style.left = 'auto';
+            label.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
             label.style.color = 'white';
             label.style.padding = '2px 6px';
             label.style.borderRadius = '3px';
-            label.style.fontSize = '12px';
-            label.style.pointerEvents = 'none';
-            overlay.appendChild(label);
+            label.style.fontSize = '11px';
+            label.style.fontWeight = '500';
+            label.style.whiteSpace = 'nowrap';
+            label.style.display = 'block';
+            controlsContainer.appendChild(label);
 
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'span-delete-btn';
             deleteBtn.textContent = '×';
-            deleteBtn.style.position = 'absolute';
-            deleteBtn.style.left = `${positions[0].x + positions[0].width}px`;
-            deleteBtn.style.top = `${positions[0].y - 20}px`;
-            deleteBtn.style.backgroundColor = 'rgba(255, 0, 0, 0.8)';
+            deleteBtn.style.backgroundColor = 'rgba(220, 53, 69, 0.9)';
             deleteBtn.style.color = 'white';
             deleteBtn.style.border = 'none';
             deleteBtn.style.borderRadius = '50%';
-            deleteBtn.style.width = '20px';
-            deleteBtn.style.height = '20px';
-            deleteBtn.style.fontSize = '14px';
+            deleteBtn.style.width = '16px';
+            deleteBtn.style.height = '16px';
+            deleteBtn.style.minWidth = '16px';
+            deleteBtn.style.minHeight = '16px';
+            deleteBtn.style.padding = '0';
+            deleteBtn.style.margin = '0';
+            deleteBtn.style.fontSize = '12px';
+            deleteBtn.style.fontFamily = 'Arial, sans-serif';
+            deleteBtn.style.fontWeight = 'bold';
+            deleteBtn.style.lineHeight = '1';
+            deleteBtn.style.textAlign = 'center';
             deleteBtn.style.cursor = 'pointer';
-            deleteBtn.style.pointerEvents = 'auto';
-            deleteBtn.onclick = () => {
+            deleteBtn.style.display = 'flex';
+            deleteBtn.style.alignItems = 'center';
+            deleteBtn.style.justifyContent = 'center';
+            deleteBtn.style.flexShrink = '0';
+            // Reset any CSS positioning that might interfere
+            deleteBtn.style.position = 'static';
+            deleteBtn.style.top = 'auto';
+            deleteBtn.style.right = 'auto';
+            deleteBtn.style.left = 'auto';
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation();
+                // Immediately remove this overlay from DOM for instant visual feedback
+                const overlayElement = e.target.closest('.span-overlay-pure');
+                if (overlayElement) {
+                    overlayElement.remove();
+                }
+                // Then process the server-side delete
                 if (window.spanManager) {
                     window.spanManager.deleteSpan(span.id);
                 }
             };
-            overlay.appendChild(deleteBtn);
+            controlsContainer.appendChild(deleteBtn);
+
+            overlay.appendChild(controlsContainer);
         }
 
         return overlay;
@@ -293,7 +412,6 @@ class UnifiedPositioningStrategy {
  */
 class SpanManager {
     constructor() {
-        console.log('[SpanManager] Constructor called');
         this.annotations = { spans: [] };
         this.colors = {};
         this.selectedLabel = null;
@@ -311,6 +429,38 @@ class SpanManager {
         this.keywordHighlights = []; // Array of keyword highlight overlay elements
     }
 
+    // ==================== SCHEMA STATE MANAGEMENT ====================
+
+    /**
+     * Set the current schema with validation and logging.
+     * This is the ONLY place currentSchema should be modified.
+     *
+     * @param {string} schema - The schema name to set
+     * @param {string} source - Where this call originated (for debugging)
+     * @returns {boolean} - Whether the schema was set successfully
+     */
+    setCurrentSchema(schema, source = 'unknown') {
+        if (!schema) {
+            console.warn(`[SpanManager] setCurrentSchema called with empty schema from ${source}`);
+            return false;
+        }
+
+        // Validate schema exists if we have schemas loaded
+        if (Object.keys(this.schemas).length > 0 && !this.schemas[schema]) {
+            console.warn(`[SpanManager] Schema '${schema}' not found in loaded schemas. Source: ${source}. Available: ${Object.keys(this.schemas).join(', ')}`);
+            // Still set it - might be valid but not yet loaded
+        }
+
+        const oldSchema = this.currentSchema;
+        this.currentSchema = schema;
+
+        if (oldSchema !== schema) {
+            console.debug(`[SpanManager] Schema changed: '${oldSchema}' -> '${schema}' (source: ${source})`);
+        }
+
+        return true;
+    }
+
     // ==================== AI SPAN METHODS ====================
 
     /**
@@ -319,42 +469,31 @@ class SpanManager {
      * @param {string} annotationId - The annotation ID these AI spans belong to
      */
     insertAiSpans(keywords, annotationId) {
-        console.log('[SpanManager] insertAiSpans called:', { keywords, annotationId });
-
         if (!keywords || !Array.isArray(keywords) || keywords.length === 0) {
-            console.warn('[SpanManager] No keywords provided for AI spans');
             return;
         }
 
-        // Clear existing AI spans for this annotation first
         this.deleteOneAiSpan(annotationId);
 
         const spanOverlays = document.getElementById('span-overlays');
         if (!spanOverlays) {
-            console.error('[SpanManager] span-overlays element not found');
             return;
         }
 
         const createdOverlays = [];
 
-        keywords.forEach((keyword, index) => {
+        keywords.forEach((keyword) => {
             const { label, start, end, text, reasoning } = keyword;
 
-            console.log(`[SpanManager] Creating AI span for keyword ${index}:`, { label, start, end, text });
-
-            // Get positions for this keyword
             if (!this.positioningStrategy || !this.positioningStrategy.isInitialized) {
-                console.warn('[SpanManager] Positioning strategy not initialized');
                 return;
             }
 
             const positions = this.positioningStrategy.getTextPositions(start, end, text);
             if (!positions || positions.length === 0) {
-                console.warn('[SpanManager] Could not get positions for AI span:', text);
                 return;
             }
 
-            // Create AI span with box styling
             const span = {
                 id: `ai_span_${annotationId}_${start}_${end}_${Date.now()}`,
                 start: start,
@@ -363,8 +502,7 @@ class SpanManager {
                 label: label || 'keyword'
             };
 
-            // Use a distinctive color for AI highlights (gold/amber box)
-            const aiColor = 'rgba(245, 158, 11, 0.8)'; // Amber color
+            const aiColor = 'rgba(245, 158, 11, 0.8)';
             const overlay = this.positioningStrategy.createOverlay(span, positions, {
                 isAiSpan: true,
                 color: aiColor
@@ -375,14 +513,11 @@ class SpanManager {
                 overlay.title = reasoning || `AI suggested: "${text}"`;
                 spanOverlays.appendChild(overlay);
                 createdOverlays.push(overlay);
-                console.log('[SpanManager] AI span overlay created successfully');
             }
         });
 
-        // Store the created overlays
         if (createdOverlays.length > 0) {
             this.aiSpans.set(annotationId, createdOverlays);
-            console.log(`[SpanManager] Stored ${createdOverlays.length} AI spans for annotation ${annotationId}`);
         }
     }
 
@@ -390,41 +525,25 @@ class SpanManager {
      * Clear all AI span highlights
      */
     clearAiSpans() {
-        console.log('[SpanManager] clearAiSpans called');
-
         const spanOverlays = document.getElementById('span-overlays');
         if (spanOverlays) {
-            // Remove all AI span overlays from DOM
             const aiOverlays = spanOverlays.querySelectorAll('.span-overlay-ai');
-            aiOverlays.forEach(overlay => {
-                overlay.remove();
-            });
-            console.log(`[SpanManager] Removed ${aiOverlays.length} AI span overlays from DOM`);
+            aiOverlays.forEach(overlay => overlay.remove());
         }
-
-        // Clear the tracking map
         this.aiSpans.clear();
-        console.log('[SpanManager] AI spans map cleared');
     }
 
     /**
      * Check if AI spans exist for a specific annotation
-     * @param {string} annotationId - The annotation ID to check
-     * @returns {boolean} True if AI spans exist for this annotation
      */
     inAiSpans(annotationId) {
-        const exists = this.aiSpans.has(annotationId) && this.aiSpans.get(annotationId).length > 0;
-        console.log(`[SpanManager] inAiSpans(${annotationId}):`, exists);
-        return exists;
+        return this.aiSpans.has(annotationId) && this.aiSpans.get(annotationId).length > 0;
     }
 
     /**
      * Delete AI spans for a specific annotation
-     * @param {string} annotationId - The annotation ID to delete AI spans for
      */
     deleteOneAiSpan(annotationId) {
-        console.log(`[SpanManager] deleteOneAiSpan called for annotation: ${annotationId}`);
-
         const overlays = this.aiSpans.get(annotationId);
         if (overlays && overlays.length > 0) {
             overlays.forEach(overlay => {
@@ -432,9 +551,7 @@ class SpanManager {
                     overlay.remove();
                 }
             });
-            console.log(`[SpanManager] Removed ${overlays.length} AI span overlays for annotation ${annotationId}`);
         }
-
         this.aiSpans.delete(annotationId);
     }
 
@@ -464,8 +581,6 @@ class SpanManager {
     }
 
     async initialize() {
-        console.log('[SpanManager] initialize called');
-
         try {
             const serverInstanceId = await this.fetchCurrentInstanceIdFromServer();
             if (!serverInstanceId) {
@@ -477,7 +592,6 @@ class SpanManager {
             if (textContent) {
                 this.positioningStrategy = new UnifiedPositioningStrategy(textContent);
                 await this.positioningStrategy.initialize();
-                console.log('[SpanManager] Positioning strategy initialized');
             }
 
             await this.loadSchemas();
@@ -486,7 +600,6 @@ class SpanManager {
             await this.loadAnnotations(serverInstanceId);
 
             this.isInitialized = true;
-            console.log('[SpanManager] Initialization completed successfully');
             return true;
         } catch (error) {
             console.error('[SpanManager] Initialization failed:', error);
@@ -502,14 +615,22 @@ class SpanManager {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             this.colors = await response.json();
-            console.log('[SpanManager] Colors loaded:', this.colors);
         } catch (error) {
-            console.error('[SpanManager] Error loading colors:', error);
+            console.warn('[SpanManager] Error loading colors, using defaults:', error.message);
+            // Fallback colors - visible purple for better visibility
+            const defaultColors = {
+                'positive': 'rgba(110, 86, 207, 0.4)',  // Purple
+                'negative': 'rgba(239, 68, 68, 0.4)',   // Red
+                'neutral': 'rgba(113, 113, 122, 0.4)',  // Gray
+                'span': 'rgba(110, 86, 207, 0.4)'       // Purple
+            };
+            // Structure as { schemaName: { labelName: color } } to match server format
             this.colors = {
-                'positive': '#d4edda',
-                'negative': '#f8d7da',
-                'neutral': '#d1ecf1',
-                'span': '#ffeaa7'
+                'sentiment': defaultColors,
+                'emotion': defaultColors,
+                'entity': defaultColors,
+                'topic': defaultColors,
+                'span': defaultColors
             };
         }
     }
@@ -521,15 +642,14 @@ class SpanManager {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             this.schemas = await response.json();
-            console.log('[SpanManager] Schemas loaded from server:', this.schemas);
 
             if (!this.currentSchema && Object.keys(this.schemas).length > 0) {
-                this.currentSchema = Object.keys(this.schemas)[0];
+                this.setCurrentSchema(Object.keys(this.schemas)[0], 'loadSchemas');
             }
 
             return this.schemas;
         } catch (error) {
-            console.error('[SpanManager] Error loading schemas:', error);
+            console.warn('[SpanManager] Error loading schemas:', error.message);
             return this.extractSchemaFromForms();
         }
     }
@@ -549,6 +669,7 @@ class SpanManager {
     setupEventListeners() {
         const textContainer = document.getElementById('instance-text');
         const textContent = document.getElementById('text-content');
+
         if (textContainer) {
             textContainer.addEventListener('mouseup', () => this.handleTextSelection());
             textContainer.addEventListener('keyup', () => this.handleTextSelection());
@@ -568,29 +689,47 @@ class SpanManager {
     }
 
     selectLabel(label, schema = null) {
-        console.log('[SpanManager] selectLabel called:', { label, schema });
         this.selectedLabel = label;
         if (schema) {
-            this.currentSchema = schema;
+            this.setCurrentSchema(schema, 'selectLabel');
         }
     }
 
     getSelectedLabel() {
+        // FIRST: Use the label set by selectLabel() if available
+        // This is set by changeSpanLabel() when a checkbox is clicked,
+        // and is more reliable than querying the DOM
+        if (this.selectedLabel && this.currentSchema) {
+            return this.selectedLabel;
+        }
+
+        // FALLBACK: Try to find checked span checkbox (for legacy code paths)
         const checkedCheckbox = document.querySelector('.annotation-form.span input[type="checkbox"]:checked');
+
         if (checkedCheckbox) {
             const checkboxId = checkedCheckbox.id;
             const parts = checkboxId.split('_');
             if (parts.length >= 2) {
-                return parts[parts.length - 1];
+                // ID format is "schemaName_labelName" - extract both
+                const label = parts[parts.length - 1];
+                // Schema name is everything before the last underscore
+                // (handles multi-word schema names like "emotion_spans")
+                const schemaName = parts.slice(0, -1).join('_');
+
+                // Update currentSchema to match the selected checkbox's schema
+                if (schemaName) {
+                    this.setCurrentSchema(schemaName, 'getSelectedLabel');
+                }
+
+                return label;
             }
             return checkedCheckbox.value;
         }
+
         return this.selectedLabel;
     }
 
     async loadAnnotations(instanceId) {
-        console.log('[SpanManager] loadAnnotations called with instanceId:', instanceId);
-
         try {
             const serverInstanceId = await this.fetchCurrentInstanceIdFromServer();
             if (serverInstanceId !== instanceId) {
@@ -626,7 +765,7 @@ class SpanManager {
             if (this.annotations.spans && this.annotations.spans.length > 0) {
                 const firstSpan = this.annotations.spans[0];
                 if (firstSpan.schema && !this.currentSchema) {
-                    this.currentSchema = firstSpan.schema;
+                    this.setCurrentSchema(firstSpan.schema, 'loadAnnotations');
                 }
             }
 
@@ -646,22 +785,36 @@ class SpanManager {
     }
 
     getSpanColor(label) {
-        if (this.colors && this.currentSchema && this.colors[this.currentSchema]) {
-            const schemaColors = this.colors[this.currentSchema];
-            if (schemaColors[label]) {
-                const color = schemaColors[label];
-                if (color.startsWith('(')) {
-                    return `rgba${color.replace(')', ', 0.4)')}`;
-                }
-                return color;
-            }
+        // Diagnostic logging for color lookup failures
+        if (!this.currentSchema) {
+            console.warn(`[SpanManager] getSpanColor: No currentSchema set for label '${label}'. Using fallback color.`);
+            return 'rgba(110, 86, 207, 0.4)';
         }
-        return 'rgba(255, 234, 167, 0.5)';
+
+        if (!this.colors || Object.keys(this.colors).length === 0) {
+            console.warn(`[SpanManager] getSpanColor: Colors not loaded for label '${label}'. Using fallback color.`);
+            return 'rgba(110, 86, 207, 0.4)';
+        }
+
+        if (!this.colors[this.currentSchema]) {
+            console.warn(`[SpanManager] getSpanColor: Schema '${this.currentSchema}' not found in colors. Available schemas: ${Object.keys(this.colors).join(', ')}. Using fallback color.`);
+            return 'rgba(110, 86, 207, 0.4)';
+        }
+
+        const schemaColors = this.colors[this.currentSchema];
+        if (!schemaColors[label]) {
+            console.warn(`[SpanManager] getSpanColor: Label '${label}' not found in schema '${this.currentSchema}'. Available labels: ${Object.keys(schemaColors).join(', ')}. Using fallback color.`);
+            return 'rgba(110, 86, 207, 0.4)';
+        }
+
+        const color = schemaColors[label];
+        if (color.startsWith('(')) {
+            return `rgba${color.replace(')', ', 0.4)')}`;
+        }
+        return color;
     }
 
     clearAllStateAndOverlays() {
-        console.log('[SpanManager] clearAllStateAndOverlays called');
-
         const spanOverlays = document.getElementById('span-overlays');
         if (spanOverlays) {
             // Clear regular overlays but preserve AI spans
@@ -674,13 +827,10 @@ class SpanManager {
     }
 
     renderSpans() {
-        console.log('[SpanManager] renderSpans called');
-
         const textContent = document.getElementById('text-content');
         const spanOverlays = document.getElementById('span-overlays');
 
         if (!textContent || !spanOverlays) {
-            console.error('[SpanManager] Required DOM elements not found');
             return;
         }
 
@@ -690,12 +840,10 @@ class SpanManager {
 
         const spans = this.getSpans();
         if (!spans || spans.length === 0) {
-            console.log('[SpanManager] No spans to render');
             return;
         }
 
         const sortedSpans = [...spans].sort((a, b) => a.start - b.start);
-
         sortedSpans.forEach((span, index) => {
             this.renderSpanOverlay(span, index, textContent, spanOverlays);
         });
@@ -703,13 +851,11 @@ class SpanManager {
 
     renderSpanOverlay(span, layerIndex, textContent, spanOverlays) {
         if (!this.positioningStrategy || !this.positioningStrategy.isInitialized) {
-            console.error('[SpanManager] Positioning strategy not available');
             return;
         }
 
         const positions = this.positioningStrategy.getTextPositions(span.start, span.end, span.text);
         if (!positions || positions.length === 0) {
-            console.warn('[SpanManager] Could not get positions for span:', span);
             return;
         }
 
@@ -726,42 +872,60 @@ class SpanManager {
 
     handleTextSelection() {
         const selection = window.getSelection();
-        if (!selection.rangeCount || selection.isCollapsed) return;
+
+        if (!selection.rangeCount || selection.isCollapsed) {
+            return;
+        }
 
         const selectedLabel = this.getSelectedLabel();
         if (!selectedLabel) {
-            console.log('[SpanManager] No label selected, ignoring text selection');
             return;
         }
 
         if (!this.positioningStrategy || !this.positioningStrategy.isInitialized) {
-            console.error('[SpanManager] Positioning strategy not initialized');
             return;
         }
 
-        const result = this.positioningStrategy.createSpanFromSelection(selection);
-        if (!result) return;
+        // Get color BEFORE creating the overlay so it's created with the correct color
+        const color = this.getSpanColor(selectedLabel);
+
+        // Pass color to createSpanFromSelection so overlay is created with correct color
+        const result = this.positioningStrategy.createSpanFromSelection(selection, {
+            color: color
+        });
+        if (!result) {
+            return;
+        }
 
         const { span, overlay } = result;
         span.label = selectedLabel;
         span.schema = this.currentSchema;
 
-        const color = this.getSpanColor(selectedLabel);
         if (overlay) {
+            // Update the label text to match the selected label
             const label = overlay.querySelector('.span-label');
             if (label) {
                 label.textContent = selectedLabel;
             }
-            overlay.style.setProperty('--span-color', color);
+
+            // Append the overlay to the DOM so it's visible immediately
+            const spanOverlays = document.getElementById('span-overlays');
+            if (spanOverlays) {
+                spanOverlays.appendChild(overlay);
+            }
         }
+
+        // Add span to local state
+        if (!this.annotations.spans) {
+            this.annotations.spans = [];
+        }
+        this.annotations.spans.push(span);
 
         this.saveSpan(span);
         selection.removeAllRanges();
     }
 
     async saveSpan(span) {
-        console.log('[SpanManager] saveSpan called:', span);
-
         try {
             const postData = {
                 type: "span",
@@ -783,7 +947,6 @@ class SpanManager {
             });
 
             if (response.ok) {
-                console.log('[SpanManager] Span saved successfully');
                 await this.loadAnnotations(this.currentInstanceId);
             } else {
                 console.error('[SpanManager] Failed to save span:', await response.text());
@@ -794,11 +957,27 @@ class SpanManager {
     }
 
     async deleteSpan(spanId) {
-        console.log('[SpanManager] deleteSpan called:', spanId);
-
         const span = this.annotations.spans?.find(s => s.id === spanId);
+
+        // Immediately remove the overlay from DOM for instant visual feedback
+        // This ensures overlay is removed even if server reload has issues
+        const spanOverlays = document.getElementById('span-overlays');
+        if (spanOverlays) {
+            const overlayToRemove = spanOverlays.querySelector(
+                `.span-overlay-pure[data-annotation-id="${spanId}"]`
+            );
+            if (overlayToRemove) {
+                overlayToRemove.remove();
+            }
+        }
+
+        // Also remove from local state immediately
+        if (this.annotations.spans) {
+            this.annotations.spans = this.annotations.spans.filter(s => s.id !== spanId);
+        }
+
         if (!span) {
-            console.warn('[SpanManager] Span not found:', spanId);
+            // Even if span not found in state, we already removed the overlay visually
             return;
         }
 
@@ -823,19 +1002,21 @@ class SpanManager {
             });
 
             if (response.ok) {
-                console.log('[SpanManager] Span deleted successfully');
+                // Reload to sync with server state
                 await this.loadAnnotations(this.currentInstanceId);
             } else {
                 console.error('[SpanManager] Failed to delete span:', await response.text());
+                // Reload anyway to get correct state from server
+                await this.loadAnnotations(this.currentInstanceId);
             }
         } catch (error) {
             console.error('[SpanManager] Error deleting span:', error);
+            // Reload to ensure UI matches server state
+            await this.loadAnnotations(this.currentInstanceId);
         }
     }
 
     onInstanceChange(newInstanceId) {
-        console.log('[SpanManager] onInstanceChange called:', newInstanceId);
-
         // Clear AI spans and keyword highlights on instance change
         this.clearAiSpans();
         this.clearKeywordHighlights();
@@ -888,14 +1069,11 @@ class SpanManager {
      * (bounding boxes around keywords).
      */
     async loadKeywordHighlights(instanceId) {
-        console.log('[SpanManager] loadKeywordHighlights called for instance:', instanceId);
-
         try {
             const response = await fetch(`/api/keyword_highlights/${instanceId}`);
 
             if (!response.ok) {
                 if (response.status === 404) {
-                    console.log('[SpanManager] No keyword highlights found');
                     return;
                 }
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -905,14 +1083,9 @@ class SpanManager {
             const keywords = data.keywords || [];
 
             if (keywords.length === 0) {
-                console.log('[SpanManager] No keyword highlights to display');
                 return;
             }
 
-            console.log(`[SpanManager] Found ${keywords.length} keyword highlights`);
-
-            // Insert keyword highlights using the AI span system
-            // Use a special "admin" annotation ID to track these separately
             this.insertKeywordHighlights(keywords);
 
         } catch (error) {
@@ -925,8 +1098,6 @@ class SpanManager {
      * @param {Array} keywords - Array of keyword objects with {label, start, end, text, reasoning, schema, color}
      */
     insertKeywordHighlights(keywords) {
-        console.log('[SpanManager] insertKeywordHighlights called:', keywords.length, 'keywords');
-
         if (!keywords || !Array.isArray(keywords) || keywords.length === 0) {
             return;
         }
@@ -936,30 +1107,23 @@ class SpanManager {
 
         const spanOverlays = document.getElementById('span-overlays');
         if (!spanOverlays) {
-            console.error('[SpanManager] span-overlays element not found');
             return;
         }
 
         const createdOverlays = [];
 
-        keywords.forEach((keyword, index) => {
+        keywords.forEach((keyword) => {
             const { label, start, end, text, reasoning, schema, color } = keyword;
 
-            console.log(`[SpanManager] Creating keyword highlight ${index}:`, { label, start, end, text, color });
-
-            // Check positioning strategy
             if (!this.positioningStrategy || !this.positioningStrategy.isInitialized) {
-                console.warn('[SpanManager] Positioning strategy not initialized for keyword highlights');
                 return;
             }
 
             const positions = this.positioningStrategy.getTextPositions(start, end, text);
             if (!positions || positions.length === 0) {
-                console.warn('[SpanManager] Could not get positions for keyword:', text);
                 return;
             }
 
-            // Create keyword highlight with distinctive styling
             const span = {
                 id: `keyword_${start}_${end}_${Date.now()}`,
                 start: start,
@@ -968,10 +1132,9 @@ class SpanManager {
                 label: label || 'keyword'
             };
 
-            // Use color from API response (based on schema/label), fallback to amber
             const keywordColor = color || 'rgba(245, 158, 11, 0.8)';
             const overlay = this.positioningStrategy.createOverlay(span, positions, {
-                isAiSpan: true,  // Use the same visual style as AI spans (border box)
+                isAiSpan: true,
                 color: keywordColor
             });
 
@@ -983,26 +1146,20 @@ class SpanManager {
                 overlay.classList.add('keyword-highlight-overlay');
                 spanOverlays.appendChild(overlay);
                 createdOverlays.push(overlay);
-                console.log('[SpanManager] Keyword highlight overlay created with color:', keywordColor);
             }
         });
 
-        // Store keyword overlays for tracking
         this.keywordHighlights = createdOverlays;
-        console.log(`[SpanManager] Created ${createdOverlays.length} keyword highlight overlays`);
     }
 
     /**
      * Clear all admin keyword highlight overlays.
      */
     clearKeywordHighlights() {
-        console.log('[SpanManager] clearKeywordHighlights called');
-
         const spanOverlays = document.getElementById('span-overlays');
         if (spanOverlays) {
             const keywordOverlays = spanOverlays.querySelectorAll('.keyword-highlight-overlay');
             keywordOverlays.forEach(overlay => overlay.remove());
-            console.log(`[SpanManager] Removed ${keywordOverlays.length} keyword highlight overlays`);
         }
 
         this.keywordHighlights = [];
@@ -1011,33 +1168,33 @@ class SpanManager {
 
 // Initialize global span manager
 window.spanManager = new SpanManager();
-console.log('[DEBUG] spanManager created');
 
-// Robust initialization function
+/**
+ * Initialize the span manager.
+ * Called once when DOM is ready, with a single retry fallback.
+ */
 function initializeSpanManager() {
-    console.log('[DEBUG] initializeSpanManager called');
     if (window.spanManager && !window.spanManager.isInitialized) {
-        window.spanManager.initialize().then(() => {
-            console.log('[DEBUG] Span manager initialization completed successfully');
-        }).catch((error) => {
-            console.error('[DEBUG] Span manager initialization failed:', error);
+        window.spanManager.initialize().catch((error) => {
+            console.error('[SpanManager] Initialization failed:', error);
         });
     }
 }
 
-// Initialize on DOM ready
+// Initialize when DOM is ready
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initializeSpanManager);
 } else {
+    // DOM already loaded, initialize immediately
     initializeSpanManager();
 }
 
-// Additional initialization on window load
-window.addEventListener('load', initializeSpanManager);
-
-// Fallback initialization with retry mechanism
+// Single retry fallback after 1 second
+// Handles edge cases where text-content isn't populated yet on initial load
+// (e.g., content loaded via AJAX after DOMContentLoaded)
 setTimeout(() => {
     if (window.spanManager && !window.spanManager.isInitialized) {
+        console.debug('[SpanManager] Retry initialization after 1s timeout');
         initializeSpanManager();
     }
 }, 1000);

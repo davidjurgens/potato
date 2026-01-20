@@ -3040,9 +3040,9 @@ def get_span_colors():
                             color_map[schema_name][label_name] = hex_color
                             logger.debug(f"Converted {rgb_color} to {hex_color}")
                         else:
-                            color_map[schema_name][label_name] = "#f0f0f0"
+                            color_map[schema_name][label_name] = "rgba(110, 86, 207, 0.4)"  # Primary purple with transparency
                     except (ValueError, IndexError):
-                        color_map[schema_name][label_name] = "#f0f0f0"
+                        color_map[schema_name][label_name] = "rgba(110, 86, 207, 0.4)"  # Primary purple with transparency
                 else:
                     color_map[schema_name][label_name] = rgb_color
     else:
@@ -3070,8 +3070,17 @@ def get_span_colors():
                             if color_scheme and label_name in color_scheme:
                                 label_colors[label_name] = color_scheme[label_name]
                             else:
-                                # Fallback color
-                                label_colors[label_name] = '#f0f0f0'
+                                # Use the color assigned during HTML generation (from SPAN_COLOR_PALETTE)
+                                assigned_color = get_span_color(schema_name, label_name)
+                                if assigned_color:
+                                    # Convert RGB tuple format "(r, g, b)" to rgba
+                                    if assigned_color.startswith("("):
+                                        label_colors[label_name] = f"rgba{assigned_color.replace(')', ', 0.4)')}"
+                                    else:
+                                        label_colors[label_name] = assigned_color
+                                else:
+                                    # Ultimate fallback - use visible purple with transparency
+                                    label_colors[label_name] = 'rgba(110, 86, 207, 0.4)'
                         color_map[schema_name] = label_colors
             # If list (legacy style), iterate list
             elif isinstance(annotation_scheme, list):
@@ -3089,7 +3098,17 @@ def get_span_colors():
                             if color_scheme and label_name in color_scheme:
                                 label_colors[label_name] = color_scheme[label_name]
                             else:
-                                label_colors[label_name] = '#f0f0f0'
+                                # Use the color assigned during HTML generation (from SPAN_COLOR_PALETTE)
+                                assigned_color = get_span_color(schema_name, label_name)
+                                if assigned_color:
+                                    # Convert RGB tuple format "(r, g, b)" to rgba
+                                    if assigned_color.startswith("("):
+                                        label_colors[label_name] = f"rgba{assigned_color.replace(')', ', 0.4)')}"
+                                    else:
+                                        label_colors[label_name] = assigned_color
+                                else:
+                                    # Ultimate fallback - use visible purple with transparency
+                                    label_colors[label_name] = 'rgba(110, 86, 207, 0.4)'
                         color_map[schema_name] = label_colors
 
     # Fallback: provide all expected keys with better colors that match the design system
@@ -3492,6 +3511,117 @@ def generate_waveform():
 
     finally:
         logger.debug(f"=== GENERATE_WAVEFORM END ===")
+
+
+@app.route("/api/video/metadata", methods=["POST"])
+def get_video_metadata():
+    """
+    Get metadata for a video file.
+
+    This endpoint returns video metadata including duration, FPS, and resolution.
+    It can be called by the frontend when a video loads to get frame-accurate
+    timing information for video annotation.
+
+    Request body:
+        video_url: URL or path of the video file
+
+    Returns:
+        JSON with video metadata:
+        - duration: Video duration in seconds
+        - fps: Frames per second (estimated if not available)
+        - width: Video width in pixels
+        - height: Video height in pixels
+        - frame_count: Total number of frames (if calculable)
+    """
+    logger.debug("=== GET_VIDEO_METADATA START ===")
+
+    try:
+        data = request.get_json()
+        if not data or 'video_url' not in data:
+            return jsonify({"error": "Missing video_url parameter"}), 400
+
+        video_url = data['video_url']
+        logger.debug(f"Video URL: {video_url}")
+
+        # For now, return a basic response that the frontend can use
+        # The actual video metadata will be determined by the browser
+        # since we don't have ffprobe installed by default
+        return jsonify({
+            "status": "ok",
+            "message": "Video metadata should be retrieved client-side",
+            "video_url": video_url,
+            "use_client_detection": True
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting video metadata: {e}")
+        return jsonify({"error": str(e)}), 500
+
+    finally:
+        logger.debug("=== GET_VIDEO_METADATA END ===")
+
+
+@app.route("/api/video/waveform/generate", methods=["POST"])
+def generate_video_waveform():
+    """
+    Generate waveform data from a video file's audio track.
+
+    This endpoint triggers waveform generation for a video's audio track.
+    It reuses the existing audio waveform generation infrastructure.
+
+    Request body:
+        video_url: URL or path of the video file
+
+    Returns:
+        JSON with waveform status and cache key (if successful)
+    """
+    logger.debug("=== GENERATE_VIDEO_WAVEFORM START ===")
+
+    try:
+        data = request.get_json()
+        if not data or 'video_url' not in data:
+            return jsonify({"error": "Missing video_url parameter"}), 400
+
+        video_url = data['video_url']
+        logger.debug(f"Video URL for waveform: {video_url}")
+
+        # Try to generate waveform using the existing WaveformService
+        try:
+            from potato.server_utils.waveform_service import WaveformService
+            waveform_service = WaveformService()
+
+            # Generate waveform from video (will extract audio track)
+            result = waveform_service.generate_waveform(video_url)
+
+            if result.get('status') == 'ready':
+                return jsonify({
+                    "status": "ready",
+                    "waveform_url": result.get('waveform_url'),
+                    "cache_key": result.get('cache_key')
+                })
+            else:
+                return jsonify({
+                    "status": result.get('status', 'pending'),
+                    "message": result.get('message', 'Waveform generation in progress')
+                })
+
+        except ImportError:
+            logger.warning("WaveformService not available for video waveform generation")
+            return jsonify({
+                "status": "unavailable",
+                "message": "Waveform service not available",
+                "use_client_fallback": True
+            })
+
+    except Exception as e:
+        logger.error(f"Error generating video waveform: {e}")
+        return jsonify({
+            "error": str(e),
+            "use_client_fallback": True
+        }), 500
+
+    finally:
+        logger.debug("=== GENERATE_VIDEO_WAVEFORM END ===")
 
 
 @app.route("/api/ai_assistant", methods=["GET"])
