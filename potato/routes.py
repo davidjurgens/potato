@@ -3624,9 +3624,91 @@ def generate_video_waveform():
         logger.debug("=== GENERATE_VIDEO_WAVEFORM END ===")
 
 
+@app.route("/api/audio/proxy")
+def audio_proxy():
+    """
+    Proxy endpoint for fetching external audio files with Range request support.
+
+    This endpoint fetches audio files from external URLs and returns them
+    with proper headers, bypassing CORS restrictions that prevent the browser
+    from directly accessing external audio files for waveform generation.
+
+    Supports HTTP Range requests to enable seeking in audio files.
+
+    Query parameters:
+        url: The external audio URL to fetch
+
+    Returns:
+        The audio file with appropriate Content-Type header
+    """
+    import requests as req
+
+    audio_url = request.args.get('url')
+    if not audio_url:
+        return jsonify({"error": "Missing url parameter"}), 400
+
+    # Validate URL (basic security check)
+    if not audio_url.startswith(('http://', 'https://')):
+        return jsonify({"error": "Invalid URL - must be http or https"}), 400
+
+    try:
+        # Forward any Range header from the client to the upstream server
+        headers = {}
+        if 'Range' in request.headers:
+            headers['Range'] = request.headers['Range']
+
+        # Fetch the audio file
+        response = req.get(audio_url, headers=headers, stream=True, timeout=30)
+        response.raise_for_status()
+
+        # Get content type from response or default to audio/mpeg
+        content_type = response.headers.get('Content-Type', 'audio/mpeg')
+        content_length = response.headers.get('Content-Length')
+
+        # Create response with the audio data
+        flask_response = make_response(response.content)
+        flask_response.headers['Content-Type'] = content_type
+        flask_response.headers['Access-Control-Allow-Origin'] = '*'
+        flask_response.headers['Cache-Control'] = 'public, max-age=3600'
+
+        # Add headers to support Range requests (seeking)
+        flask_response.headers['Accept-Ranges'] = 'bytes'
+
+        if content_length:
+            flask_response.headers['Content-Length'] = content_length
+
+        # If the upstream returned a 206 Partial Content, pass that through
+        if response.status_code == 206:
+            flask_response.status_code = 206
+            if 'Content-Range' in response.headers:
+                flask_response.headers['Content-Range'] = response.headers['Content-Range']
+
+        return flask_response
+
+    except req.exceptions.Timeout:
+        logger.error(f"Timeout fetching audio: {audio_url}")
+        return jsonify({"error": "Request timed out"}), 504
+    except req.exceptions.RequestException as e:
+        logger.error(f"Error fetching audio {audio_url}: {e}")
+        return jsonify({"error": f"Failed to fetch audio: {str(e)}"}), 502
+
+
 @app.route("/api/ai_assistant", methods=["GET"])
 def ai_assistant():
-    annotation_id = int(request.args.get("annotationId"))
+    annotation_id_str = request.args.get("annotationId")
+    # Handle null/None/invalid annotation IDs
+    if annotation_id_str is None or annotation_id_str == "null" or annotation_id_str == "":
+        return jsonify({"html": "", "error": None})
+
+    try:
+        annotation_id = int(annotation_id_str)
+    except (ValueError, TypeError):
+        return jsonify({"html": "", "error": None})
+
+    # Check if annotation_id is valid
+    if annotation_id < 0 or annotation_id >= len(config.get("annotation_schemes", [])):
+        return jsonify({"html": "", "error": None})
+
     username = session['username']
     user_state = get_user_state(username)
     instance = user_state.get_current_instance_index()
@@ -3698,6 +3780,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/api/spans/<instance_id>/clear", "clear_span_annotations", clear_span_annotations, methods=["POST"])
     app.add_url_rule("/api/current_instance", "get_current_instance", get_current_instance, methods=["GET"])
     app.add_url_rule("/api/ai_assistant", "ai_assistant", ai_assistant, methods=["GET"])
+    app.add_url_rule("/api/audio/proxy", "audio_proxy", audio_proxy, methods=["GET"])
     app.add_url_rule("/admin/user_state/<user_id>", "admin_user_state", admin_user_state, methods=["GET"])
     app.add_url_rule("/admin/health", "admin_health", admin_health, methods=["GET"])
     app.add_url_rule("/admin/system_state", "admin_system_state", admin_system_state, methods=["GET"])

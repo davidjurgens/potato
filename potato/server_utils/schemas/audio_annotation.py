@@ -187,8 +187,8 @@ def _generate_html(
     if js_config.get('playbackRateControl'):
         playback_rate_html = '''
             <div class="playback-rate-group">
-                <span class="tool-group-label">Speed:</span>
-                <select class="playback-rate-select">
+                <span class="tool-group-label" title="Adjust playback speed">Speed:</span>
+                <select class="playback-rate-select" title="Change audio playback speed (0.5x to 2x)">
                     <option value="0.5">0.5x</option>
                     <option value="0.75">0.75x</option>
                     <option value="1" selected>1x</option>
@@ -210,12 +210,12 @@ def _generate_html(
                 <div class="audio-annotation-toolbar">
                     <!-- Playback controls -->
                     <div class="playback-group">
-                        <button type="button" class="playback-btn" data-action="play" title="Play/Pause (Space)">
+                        <button type="button" class="playback-btn" data-action="play" title="Play or pause audio playback. Keyboard shortcut: Space">
                             <span class="play-icon">▶</span>
                             <span class="pause-icon" style="display:none;">⏸</span>
                         </button>
-                        <button type="button" class="playback-btn" data-action="stop" title="Stop">⏹</button>
-                        <span class="time-display">
+                        <button type="button" class="playback-btn" data-action="stop" title="Stop playback and return to the beginning">⏹</button>
+                        <span class="time-display" title="Current playback position / Total duration">
                             <span class="current-time">0:00</span> / <span class="total-time">0:00</span>
                         </span>
                     </div>
@@ -227,22 +227,68 @@ def _generate_html(
 
                     <!-- Zoom controls -->
                     <div class="zoom-group">
-                        <button type="button" class="zoom-btn" data-action="zoom-in" title="Zoom In (+)">+</button>
-                        <button type="button" class="zoom-btn" data-action="zoom-out" title="Zoom Out (-)">-</button>
-                        <button type="button" class="zoom-btn" data-action="zoom-fit" title="Fit to View (0)">Fit</button>
+                        <button type="button" class="zoom-btn" data-action="zoom-in" title="Zoom in to see more detail. Keyboard shortcut: + or =">+</button>
+                        <button type="button" class="zoom-btn" data-action="zoom-out" title="Zoom out to see more of the audio. Keyboard shortcut: -">-</button>
+                        <button type="button" class="zoom-btn" data-action="zoom-fit" title="Fit the entire audio in the view. Keyboard shortcut: 0">Fit</button>
                     </div>
 
                     <!-- Segment controls -->
                     <div class="segment-group">
-                        <button type="button" class="segment-btn" data-action="create-segment" title="Create Segment from Selection (Enter)">+ Segment</button>
-                        <button type="button" class="segment-btn delete-btn" data-action="delete-segment" title="Delete Selected (Del)" disabled>Delete</button>
+                        <button type="button" class="segment-btn" data-action="set-start" title="Mark the start of a new segment at the current playback position. Keyboard shortcut: [">[</button>
+                        <button type="button" class="segment-btn" data-action="set-end" title="Mark the end of a new segment at the current playback position. Keyboard shortcut: ]">]</button>
+                        <button type="button" class="segment-btn" data-action="create-segment" title="Create a segment from the marked start and end positions. Keyboard shortcut: Enter">+ Segment</button>
+                        <button type="button" class="segment-btn delete-btn" data-action="delete-segment" title="Delete the currently selected segment. Keyboard shortcut: Delete or Backspace" disabled>Delete</button>
                     </div>
 
                     <!-- Segment count -->
                     <div class="count-group">
-                        <span class="segment-count">Segments: <span class="count-value">0</span></span>
+                        <span class="segment-count" title="Number of segments you have created">Segments: <span class="count-value">0</span></span>
+                    </div>
+
+                    <!-- Help toggle button -->
+                    <div class="help-toggle" style="margin-left: auto;">
+                        <button type="button" class="help-toggle-btn" onclick="this.closest('.audio-annotation-container').querySelector('.help-panel').classList.toggle('collapsed')" title="Show or hide usage instructions" style="background: none; border: 1px solid #ccc; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 0.85em;">
+                            ❓ Help
+                        </button>
                     </div>
                 </div>
+
+                <!-- Help/Instructions Panel -->
+                <div class="help-panel" style="background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 4px; padding: 12px; margin-bottom: 10px; font-size: 0.9em;">
+                    <div style="display: flex; gap: 30px; flex-wrap: wrap;">
+                        <div>
+                            <strong style="color: #495057;">🖱️ Creating Segments:</strong>
+                            <ul style="margin: 5px 0 0 0; padding-left: 20px; color: #666;">
+                                <li><strong>Left-click</strong> to navigate through the audio</li>
+                                <li><strong>Right-click + drag</strong> to create a segment</li>
+                                <li>Or use <strong>[ and ]</strong> keys to mark start/end while playing</li>
+                                <li><strong>Drag segment edges</strong> to resize</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <strong style="color: #495057;">⌨️ Keyboard Shortcuts:</strong>
+                            <ul style="margin: 5px 0 0 0; padding-left: 20px; color: #666;">
+                                <li><strong>Space</strong> - Play/Pause</li>
+                                <li><strong>[ ]</strong> - Mark segment start/end</li>
+                                <li><strong>Enter</strong> - Create segment from markers</li>
+                                <li><strong>Delete</strong> - Delete selected segment</li>
+                                <li><strong>+/-/0</strong> - Zoom in/out/fit</li>
+                                <li><strong>← →</strong> - Skip 5s (Shift: 30s)</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <strong style="color: #495057;">📝 Quick Start:</strong>
+                            <ol style="margin: 5px 0 0 0; padding-left: 20px; color: #666;">
+                                <li>Select a label above</li>
+                                <li>Right-click and drag on waveform to create segment</li>
+                                <li>Adjust edges by dragging if needed</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+                <style>
+                    .help-panel.collapsed {{ display: none; }}
+                </style>
 
                 <!-- Waveform container -->
                 <div class="waveform-wrapper">
@@ -276,13 +322,44 @@ def _generate_html(
             <!-- Initialize the annotation manager -->
             <script>
                 (function() {{
+                    console.log('[AudioAnnotation] Initialization script started for schema: {escaped_name}');
+
                     function initWhenReady() {{
-                        if (typeof AudioAnnotationManager === 'undefined' || typeof Peaks === 'undefined') {{
+                        if (typeof AudioAnnotationManager === 'undefined') {{
+                            console.log('[AudioAnnotation] Waiting for AudioAnnotationManager...');
                             setTimeout(initWhenReady, 100);
                             return;
                         }}
+                        // Peaks.js exports as lowercase 'peaks', create alias for uppercase 'Peaks' if needed
+                        if (typeof Peaks === 'undefined' && typeof peaks !== 'undefined') {{
+                            window.Peaks = peaks;
+                            console.log('[AudioAnnotation] Created Peaks alias from lowercase peaks');
+                        }}
+                        if (typeof Peaks === 'undefined' && typeof peaks === 'undefined') {{
+                            console.log('[AudioAnnotation] Waiting for Peaks.js (checked both Peaks and peaks)...');
+                            setTimeout(initWhenReady, 100);
+                            return;
+                        }}
+                        console.log('[AudioAnnotation] AudioAnnotationManager and Peaks.js loaded');
+
                         var container = document.querySelector('.audio-annotation-container[data-schema="{escaped_name}"]');
-                        if (!container) return;
+                        if (!container) {{
+                            console.error('[AudioAnnotation] Container not found for schema: {escaped_name}');
+                            return;
+                        }}
+
+                        // Wait for waveform container to be visible and have dimensions
+                        // (main-content starts hidden and is shown after API data loads)
+                        var waveformContainer = document.getElementById('waveform-{escaped_name}');
+                        if (waveformContainer) {{
+                            var rect = waveformContainer.getBoundingClientRect();
+                            if (rect.width === 0 || rect.height === 0) {{
+                                console.log('[AudioAnnotation] Waveform container not visible yet, waiting...');
+                                setTimeout(initWhenReady, 100);
+                                return;
+                            }}
+                        }}
+                        console.log('[AudioAnnotation] Container found and visible:', container);
 
                         var config = {config_json};
                         var waveformId = 'waveform-{escaped_name}';
@@ -293,24 +370,32 @@ def _generate_html(
                         var questionsId = 'segment-questions-{escaped_name}';
 
                         // Get audio URL from the instance display
-                        var instanceContainer = document.getElementById('instance_text') || document.getElementById('text-content');
+                        // Try both instance-text (hyphen) and text-content
+                        var instanceContainer = document.getElementById('instance-text') || document.getElementById('text-content');
+                        console.log('[AudioAnnotation] Instance container:', instanceContainer);
                         var audioUrl = null;
 
                         // Try to find audio URL in instance text
                         if (instanceContainer) {{
                             var text = instanceContainer.textContent || instanceContainer.innerText;
+                            console.log('[AudioAnnotation] Instance text content:', JSON.stringify(text));
                             // Check if it's a URL
                             if (text && (text.trim().startsWith('http') || text.trim().endsWith('.mp3') || text.trim().endsWith('.wav'))) {{
                                 audioUrl = text.trim();
+                                console.log('[AudioAnnotation] Found audio URL in text:', audioUrl);
                             }}
                             // Check for audio element
                             var audioEl = instanceContainer.querySelector('audio');
                             if (audioEl && audioEl.src) {{
                                 audioUrl = audioEl.src;
+                                console.log('[AudioAnnotation] Found audio URL in audio element:', audioUrl);
                             }}
+                        }} else {{
+                            console.warn('[AudioAnnotation] No instance container found');
                         }}
 
                         // Initialize manager
+                        console.log('[AudioAnnotation] Creating AudioAnnotationManager with audioUrl:', audioUrl);
                         var manager = new AudioAnnotationManager({{
                             container: container,
                             waveformId: waveformId,
@@ -327,7 +412,20 @@ def _generate_html(
 
                         // Load audio if available
                         if (audioUrl) {{
-                            manager.loadAudio(audioUrl);
+                            // Use proxy for external URLs to avoid CORS issues
+                            var finalAudioUrl = audioUrl;
+                            if (audioUrl.startsWith('http://') || audioUrl.startsWith('https://')) {{
+                                // Check if it's an external URL (not same origin)
+                                var currentOrigin = window.location.origin;
+                                if (!audioUrl.startsWith(currentOrigin)) {{
+                                    finalAudioUrl = '/api/audio/proxy?url=' + encodeURIComponent(audioUrl);
+                                    console.log('[AudioAnnotation] Using proxy for external URL:', finalAudioUrl);
+                                }}
+                            }}
+                            console.log('[AudioAnnotation] Calling loadAudio with:', finalAudioUrl);
+                            manager.loadAudio(finalAudioUrl);
+                        }} else {{
+                            console.warn('[AudioAnnotation] No audio URL found, waveform will not be loaded');
                         }}
 
                         // Wire up toolbar buttons
@@ -363,7 +461,9 @@ def _generate_html(
                         container.querySelectorAll('.segment-btn').forEach(function(btn) {{
                             btn.addEventListener('click', function() {{
                                 var action = this.dataset.action;
-                                if (action === 'create-segment') manager.createSegmentFromSelection();
+                                if (action === 'set-start') manager.setSelectionStart();
+                                else if (action === 'set-end') manager.setSelectionEnd();
+                                else if (action === 'create-segment') manager.createSegmentFromSelection();
                                 else if (action === 'delete-segment') manager.deleteSelectedSegment();
                             }});
                         }});
@@ -403,17 +503,18 @@ def _generate_label_selector(labels: List[Dict[str, Any]]) -> str:
     for label in labels:
         name = escape_html_content(label["name"])
         color = label["color"]
-        key_hint = f' ({label["key_value"]})' if label.get("key_value") else ""
+        key_hint = f' Keyboard shortcut: {label["key_value"]}' if label.get("key_value") else ""
+        tooltip = f"Select '{name}' as the label for new segments.{key_hint}"
         buttons.append(
             f'<button type="button" class="label-btn" data-label="{name}" data-color="{color}" '
-            f'title="{name}{key_hint}" style="--label-color: {color};">'
+            f'title="{tooltip}" style="--label-color: {color};">'
             f'<span class="label-color-dot" style="background-color: {color};"></span>'
             f'{name}</button>'
         )
 
     return f'''
         <div class="label-group">
-            <span class="tool-group-label">Label:</span>
+            <span class="tool-group-label" title="Select a label before creating segments">Label:</span>
             {"".join(buttons)}
         </div>
     '''

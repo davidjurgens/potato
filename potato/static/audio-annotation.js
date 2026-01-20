@@ -13,6 +13,13 @@
  * - Pre-computed waveform data support for long audio files
  */
 
+// Debug logging utility - respects the debug setting from server config
+function audioDebugLog(...args) {
+    if (window.config && window.config.debug) {
+        console.log(...args);
+    }
+}
+
 class AudioAnnotationManager {
     /**
      * Create an AudioAnnotationManager instance.
@@ -66,7 +73,7 @@ class AudioAnnotationManager {
         // Set up keyboard shortcuts
         this._setupKeyboardShortcuts();
 
-        console.log('AudioAnnotationManager initialized:', this.config.schemaName);
+        audioDebugLog('AudioAnnotationManager initialized:', this.config.schemaName);
     }
 
     /**
@@ -76,7 +83,7 @@ class AudioAnnotationManager {
      * @param {string} [waveformUrl] - URL of pre-computed waveform data (optional)
      */
     async loadAudio(audioUrl, waveformUrl = null) {
-        console.log('Loading audio:', audioUrl);
+        audioDebugLog('Loading audio:', audioUrl);
 
         // Set audio source
         this.audioEl.src = audioUrl;
@@ -97,11 +104,15 @@ class AudioAnnotationManager {
             logger: console.error.bind(console),
             zoomLevels: [256, 512, 1024, 2048, 4096],
             ...waveformSource,
-            segments: {
+            // segments must be an array (empty initially, segments added later)
+            segments: [],
+            // Segment display options
+            segmentOptions: {
                 markers: true,
                 overlay: true,
                 startMarkerColor: '#4a90d9',
-                endMarkerColor: '#4a90d9'
+                endMarkerColor: '#4a90d9',
+                waveformColor: 'rgba(74, 144, 217, 0.4)'
             },
             zoomview: {
                 container: this.waveformEl,
@@ -124,7 +135,7 @@ class AudioAnnotationManager {
 
         try {
             this.peaks = await this._initPeaks(peaksOptions);
-            console.log('Peaks.js initialized successfully');
+            audioDebugLog('Peaks.js initialized successfully');
 
             // Set up event listeners
             this._setupPeaksEventListeners();
@@ -162,42 +173,204 @@ class AudioAnnotationManager {
     _setupPeaksEventListeners() {
         if (!this.peaks) return;
 
-        const player = this.peaks.player;
-        const view = this.peaks.views.getView('zoomview');
+        try {
+            // Playback events - register on peaks instance
+            this.peaks.on('player.playing', () => {
+                this.isPlaying = true;
+                this._updatePlayButton();
+            });
 
-        // Playback events
-        player.on('player.playing', () => {
+            this.peaks.on('player.pause', () => {
+                this.isPlaying = false;
+                this._updatePlayButton();
+            });
+
+            this.peaks.on('player.ended', () => {
+                this.isPlaying = false;
+                this._updatePlayButton();
+            });
+
+            this.peaks.on('player.timeupdate', (time) => {
+                this._updateTimeDisplay(time);
+            });
+
+            // Segment events
+            this.peaks.on('segments.click', this._onSegmentClick);
+            this.peaks.on('segments.dragend', this._onSegmentDragEnd);
+
+            audioDebugLog('Peaks.js event listeners set up successfully');
+        } catch (e) {
+            console.warn('Error setting up Peaks.js event listeners:', e);
+            // Fall back to audio element events
+            this._setupAudioElementEvents();
+        }
+
+        // Click and drag to select a region (using DOM events)
+        this._setupDragSelection();
+    }
+
+    /**
+     * Fallback: Set up events directly on the audio element
+     */
+    _setupAudioElementEvents() {
+        if (!this.audioEl) return;
+
+        this.audioEl.addEventListener('play', () => {
             this.isPlaying = true;
             this._updatePlayButton();
         });
 
-        player.on('player.pause', () => {
+        this.audioEl.addEventListener('pause', () => {
             this.isPlaying = false;
             this._updatePlayButton();
         });
 
-        player.on('player.ended', () => {
+        this.audioEl.addEventListener('ended', () => {
             this.isPlaying = false;
             this._updatePlayButton();
         });
 
-        player.on('player.timeupdate', (time) => {
-            this._updateTimeDisplay(time);
+        this.audioEl.addEventListener('timeupdate', () => {
+            this._updateTimeDisplay(this.audioEl.currentTime);
         });
 
-        // Segment events
-        this.peaks.on('segments.click', this._onSegmentClick);
-        this.peaks.on('segments.dragend', this._onSegmentDragEnd);
+        audioDebugLog('Audio element event listeners set up as fallback');
+    }
 
-        // Double-click to create segment at position
-        if (view) {
-            view.on('dblclick', (event) => {
-                const time = event.time;
-                // Create a 5-second segment starting at click position
-                const endTime = Math.min(time + 5, player.getDuration());
-                this.createSegment(time, endTime);
+    /**
+     * Set up click-and-drag selection on the waveform
+     */
+    _setupDragSelection() {
+        if (!this.waveformEl || !this.peaks) return;
+
+        let isDragging = false;
+        let dragStartTime = null;
+        let dragPreviewSegment = null;
+
+        const getTimeFromMouseEvent = (event) => {
+            const view = this.peaks.views.getView('zoomview');
+            if (!view) return null;
+
+            const rect = this.waveformEl.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const duration = this.peaks.player.getDuration();
+
+            // Get the visible time range from the view
+            const startTime = view.getStartTime();
+            const endTime = view.getEndTime();
+            const visibleDuration = endTime - startTime;
+
+            // Calculate time based on x position within the visible range
+            const time = startTime + (x / rect.width) * visibleDuration;
+            return Math.max(0, Math.min(time, duration));
+        };
+
+        const createPreviewSegment = (startTime, endTime) => {
+            // Remove existing preview
+            if (dragPreviewSegment) {
+                try {
+                    this.peaks.segments.removeById(dragPreviewSegment.id);
+                } catch (e) {}
+            }
+
+            // Create a preview segment with a distinct style
+            const start = Math.min(startTime, endTime);
+            const end = Math.max(startTime, endTime);
+
+            if (end - start < 0.01) return null; // Too small to show
+
+            dragPreviewSegment = this.peaks.segments.add({
+                id: 'drag-preview-' + Date.now(),
+                startTime: start,
+                endTime: end,
+                color: 'rgba(100, 100, 255, 0.3)',
+                editable: false
             });
-        }
+
+            return dragPreviewSegment;
+        };
+
+        const removePreviewSegment = () => {
+            if (dragPreviewSegment) {
+                try {
+                    this.peaks.segments.removeById(dragPreviewSegment.id);
+                } catch (e) {}
+                dragPreviewSegment = null;
+            }
+        };
+
+        // Mouse down handler for starting drag-to-annotate
+        // RIGHT-CLICK (button 2) is used for span creation
+        // LEFT-CLICK (button 0) is left for Peaks.js navigation/seeking
+        const handleMouseDown = (event) => {
+            // Only handle right-click for span creation
+            if (event.button !== 2) return;
+
+            // Get the time at the click position
+            const clickTime = getTimeFromMouseEvent(event);
+            if (clickTime === null) return;
+
+            audioDebugLog('Right-click drag start for annotation', { clickTime });
+
+            isDragging = true;
+            dragStartTime = clickTime;
+
+            // Prevent context menu and default behavior
+            event.preventDefault();
+            event.stopPropagation();
+        };
+
+        // Prevent context menu on the waveform (since we use right-click for annotation)
+        this.waveformEl.addEventListener('contextmenu', (event) => {
+            event.preventDefault();
+            return false;
+        });
+
+        // Register mousedown handler
+        this.waveformEl.addEventListener('mousedown', handleMouseDown);
+
+        // Mouse move handler - update preview (only when right-click dragging)
+        const handleMouseMove = (event) => {
+            if (!isDragging || dragStartTime === null) return;
+
+            const currentTime = getTimeFromMouseEvent(event);
+            if (currentTime === null) return;
+
+            createPreviewSegment(dragStartTime, currentTime);
+        };
+
+        this.waveformEl.addEventListener('mousemove', handleMouseMove);
+
+        // Mouse up - finish drag and create segment
+        const finishDrag = (event) => {
+            if (!isDragging || dragStartTime === null) return;
+
+            const endTime = getTimeFromMouseEvent(event);
+            removePreviewSegment();
+
+            if (endTime !== null) {
+                const start = Math.min(dragStartTime, endTime);
+                const end = Math.max(dragStartTime, endTime);
+
+                // Only create segment if it's at least 0.1 seconds
+                if (end - start >= 0.1) {
+                    audioDebugLog('Creating segment from right-click drag', { start, end });
+                    this.createSegment(start, end);
+                }
+            }
+
+            isDragging = false;
+            dragStartTime = null;
+        };
+
+        this.waveformEl.addEventListener('mouseup', finishDrag);
+
+        // Also handle mouse leaving the waveform area
+        this.waveformEl.addEventListener('mouseleave', (event) => {
+            if (isDragging) {
+                finishDrag(event);
+            }
+        });
     }
 
     /**
@@ -417,7 +590,7 @@ class AudioAnnotationManager {
     setSelectionStart() {
         if (!this.peaks) return;
         this.selectionStart = this.peaks.player.getCurrentTime();
-        console.log('Selection start:', this.selectionStart);
+        audioDebugLog('Selection start:', this.selectionStart);
         this._updateStatus(`Selection start: ${this._formatTime(this.selectionStart)}`);
     }
 
@@ -427,7 +600,7 @@ class AudioAnnotationManager {
     setSelectionEnd() {
         if (!this.peaks) return;
         this.selectionEnd = this.peaks.player.getCurrentTime();
-        console.log('Selection end:', this.selectionEnd);
+        audioDebugLog('Selection end:', this.selectionEnd);
         this._updateStatus(`Selection end: ${this._formatTime(this.selectionEnd)}`);
     }
 
@@ -442,7 +615,7 @@ class AudioAnnotationManager {
     setActiveLabel(label, color) {
         this.activeLabel = label;
         this.activeLabelColor = color;
-        console.log('Active label set:', label, color);
+        audioDebugLog('Active label set:', label, color);
     }
 
     /**
@@ -521,7 +694,7 @@ class AudioAnnotationManager {
         // Select the new segment
         this.selectSegment(segmentId);
 
-        console.log('Created segment:', segmentData);
+        audioDebugLog('Created segment:', segmentData);
         return segmentData;
     }
 
@@ -554,7 +727,7 @@ class AudioAnnotationManager {
         this._updateDeleteButton();
         this._saveData();
 
-        console.log('Deleted segment:', segmentId);
+        audioDebugLog('Deleted segment:', segmentId);
     }
 
     /**
@@ -585,7 +758,7 @@ class AudioAnnotationManager {
             this._showQuestionsPanel(segmentId);
         }
 
-        console.log('Selected segment:', segmentId);
+        audioDebugLog('Selected segment:', segmentId);
     }
 
     /**
@@ -832,7 +1005,7 @@ class AudioAnnotationManager {
                 statusEl.style.display = 'none';
             }, 3000);
         } else {
-            console.log('Status:', message);
+            audioDebugLog('Status:', message);
         }
     }
 
@@ -863,7 +1036,7 @@ class AudioAnnotationManager {
         };
 
         this.inputEl.value = JSON.stringify(data);
-        console.log('Saved audio annotation data:', data);
+        audioDebugLog('Saved audio annotation data:', data);
     }
 
     /**
@@ -890,7 +1063,7 @@ class AudioAnnotationManager {
                         segmentData.annotations = seg.annotations;
                     }
                 }
-                console.log('Loaded existing annotations:', data.segments.length, 'segments');
+                audioDebugLog('Loaded existing annotations:', data.segments.length, 'segments');
             }
         } catch (e) {
             console.warn('Failed to load existing annotations:', e);
@@ -982,7 +1155,7 @@ class AudioAnnotationManager {
             this.peaks = null;
         }
 
-        console.log('AudioAnnotationManager destroyed');
+        audioDebugLog('AudioAnnotationManager destroyed');
     }
 }
 
