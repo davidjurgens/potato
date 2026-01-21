@@ -29,3 +29,9 @@ range of features throughout your entire annotation pipeline.
 
 - [Image Annotation](image_annotation.md) - Bounding boxes, polygons, and landmarks on images
 - [Audio Annotation](audio_annotation.md) - Audio segmentation with waveform visualization
+- [Video Annotation](video_annotation.md) - Frame-by-frame video labeling with playback controls
+
+## Tools
+
+- [Migration CLI](migration_cli.md) - Upgrade configuration files to v2 format
+- [Debugging Guide](debugging_guide.md) - Debug flags and troubleshooting

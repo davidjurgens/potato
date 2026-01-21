@@ -18,6 +18,10 @@ Below are examples of the different annotation schema types available in Potato:
 |:---:|:---:|:---:|
 | ![Multirate](img/screenshots/multirate_annotation.png) | ![Pairwise](img/screenshots/pairwise_annotation.png) | ![Best-Worst](img/screenshots/best_worst_annotation.png) |
 
+| Image Annotation | Audio Annotation | Video Annotation |
+|:---:|:---:|:---:|
+| ![Image](img/screenshots/image_annotation_annotation.png) | ![Audio](img/screenshots/audio_annotation_annotation.png) | ![Video](img/screenshots/video_annotation_annotation.png) |
+
 ## Core Schema Structure
 
 All annotation schemas share these **required fields**:
@@ -255,6 +259,74 @@ annotation_schemes:
     min: 18
     max: 100
 ```
+
+### 9. Image Annotation (`image`)
+
+Allows annotators to draw bounding boxes, polygons, and place landmarks on images.
+
+**Required Fields:**
+- `labels` (list): Array of label categories for annotations
+
+**Optional Fields:**
+- `annotation_mode` (string): Drawing mode - "bbox", "polygon", or "landmark"
+- `allow_multiple` (boolean): Allow multiple annotations per image
+
+**Example:**
+```yaml
+annotation_schemes:
+  - annotation_type: "image"
+    name: "object_detection"
+    description: "Draw boxes around all vehicles"
+    labels: ["car", "truck", "motorcycle", "bicycle"]
+    annotation_mode: "bbox"
+```
+
+See [Image Annotation](image_annotation.md) for detailed documentation.
+
+### 10. Audio Annotation (`audio`)
+
+Allows annotators to segment and label audio files using waveform visualization.
+
+**Required Fields:**
+- `labels` (list): Array of label categories for audio segments
+
+**Optional Fields:**
+- `show_waveform` (boolean): Display waveform visualization (default: true)
+- `allow_overlapping` (boolean): Allow overlapping segments
+
+**Example:**
+```yaml
+annotation_schemes:
+  - annotation_type: "audio"
+    name: "speaker_diarization"
+    description: "Label who is speaking in each segment"
+    labels: ["Speaker A", "Speaker B", "Overlap", "Silence"]
+```
+
+See [Audio Annotation](audio_annotation.md) for detailed documentation.
+
+### 11. Video Annotation (`video`)
+
+Allows frame-by-frame labeling of video content with playback controls.
+
+**Required Fields:**
+- `labels` (list): Array of label categories
+
+**Optional Fields:**
+- `annotation_mode` (string): "frame" for frame-by-frame, "segment" for time segments
+- `frame_step` (number): Frame advance increment
+
+**Example:**
+```yaml
+annotation_schemes:
+  - annotation_type: "video"
+    name: "action_recognition"
+    description: "Label the action being performed"
+    labels: ["walking", "running", "sitting", "standing"]
+    annotation_mode: "frame"
+```
+
+See [Video Annotation](video_annotation.md) for detailed documentation.
 
 ## Advanced Features
 
