@@ -2,6 +2,9 @@
 
 Image annotation allows annotators to mark regions on images using bounding boxes, polygons, freeform drawing, and landmark points. This is useful for object detection, segmentation, and keypoint annotation tasks.
 
+![Image Annotation Interface](img/screenshots/image_annotation_full.png)
+*The image annotation interface with bounding box and polygon tools*
+
 ## Features
 
 - **Bounding Box (bbox)**: Draw rectangular boxes around objects

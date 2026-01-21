@@ -2,6 +2,22 @@
 
 `potato` supports multiple annotation schema types that can be configured in the `"annotation_schemes"` field of your YAML configuration file. Each schema defines how annotators interact with your data and what types of responses they can provide.
 
+## Screenshot Gallery
+
+Below are examples of the different annotation schema types available in Potato:
+
+| Radio Buttons | Checkbox / Multi-select | Likert Scale |
+|:---:|:---:|:---:|
+| ![Radio](img/screenshots/radio_annotation.png) | ![Checkbox](img/screenshots/checkbox_annotation.png) | ![Likert](img/screenshots/likert_annotation.png) |
+
+| Slider | Text Input | Span Annotation |
+|:---:|:---:|:---:|
+| ![Slider](img/screenshots/slider_annotation.png) | ![Textbox](img/screenshots/textbox_annotation.png) | ![Span](img/screenshots/span_annotation.png) |
+
+| Multi-rate Matrix | Pairwise Comparison | Best-Worst Scaling |
+|:---:|:---:|:---:|
+| ![Multirate](img/screenshots/multirate_annotation.png) | ![Pairwise](img/screenshots/pairwise_annotation.png) | ![Best-Worst](img/screenshots/best_worst_annotation.png) |
+
 ## Core Schema Structure
 
 All annotation schemas share these **required fields**:
