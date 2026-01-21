@@ -953,12 +953,40 @@ def get_abs_or_rel_path(fname: str, config: dict) -> str:
     return fname2
 
 def get_displayed_text(text):
-    """Render the text to display to the user in the annotation interface."""
-    # Normalize text for consistent positioning (matches client-side normalization)
+    """Render the text to display to the user in the annotation interface.
+
+    Handles both string and list inputs. When text is a list (for pairwise
+    comparisons), it formats the list items according to list_as_text config.
+    """
     import re
+
+    # Handle list inputs (for pairwise comparisons with list_as_text config)
+    if isinstance(text, list):
+        list_config = config.get("list_as_text", {})
+        prefix_type = list_config.get("text_list_prefix_type", "alphabet")
+
+        formatted_items = []
+        for i, item in enumerate(text):
+            # Generate prefix based on type
+            if prefix_type == "alphabet":
+                prefix = chr(ord('A') + i)
+            elif prefix_type == "number":
+                prefix = str(i + 1)
+            else:
+                prefix = chr(ord('A') + i)
+
+            # Recursively process each item
+            processed_item = get_displayed_text(item) if isinstance(item, str) else str(item)
+            formatted_items.append(f"<b>{prefix}.</b> {processed_item}")
+
+        # Join with double line breaks for separation
+        text = "<br/><br/>".join(formatted_items)
+        return text
+
+    # Normalize text for consistent positioning (matches client-side normalization)
     # Remove non-printable characters and normalize whitespace
-    text = re.sub(r'[^\x20-\x7E]', '', text)
-    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r'[^\x20-\x7E\n]', '', text)
+    text = re.sub(r'[ \t]+', ' ', text)  # Normalize horizontal whitespace only
     text = text.strip()
 
     if config.get("highlight_linebreaks", False):
@@ -1092,6 +1120,12 @@ def render_page_with_annotations(username) -> str:
     text = item.get_data()["displayed_text"]
     # print('displayed_text: ', text)
 
+    # Save the original plain text BEFORE any span rendering
+    # This is needed for the frontend to calculate correct span positions
+    # The data-original-text attribute must contain plain text (no HTML span tags)
+    # while the DOM content contains the rendered HTML with span highlights
+    original_plain_text = text
+
     var_elems = {
         "instance": { "text": text },
         "emphasis": list(emphasis_corpus_to_schemas)
@@ -1187,17 +1221,33 @@ def render_page_with_annotations(username) -> str:
     # Get UI configuration from config
     ui_config = config.get("ui", {})
 
+    # Detect if any annotation scheme is video_annotation type
+    # This is used to customize the display (show "Video to Annotate:" instead of "Text to Annotate:")
+    has_video_annotation = any(
+        scheme.get("annotation_type") == "video_annotation"
+        for scheme in config.get("annotation_schemes", [])
+    )
+
+    # Detect if any annotation scheme is audio_annotation type
+    # This is used to customize the display (show "Audio to Annotate:" instead of "Text to Annotate:")
+    has_audio_annotation = any(
+        scheme.get("annotation_type") == "audio_annotation"
+        for scheme in config.get("annotation_schemes", [])
+    )
+
     rendered_html = render_template(
         html_file,
         username=username,
-        # This is what instance the user is currently on
+        # This is what instance the user is currently on (may contain span HTML)
         instance=text,
+        # Original plain text without span HTML (for data-original-text attribute)
+        instance_plain_text=original_plain_text,
         instance_obj=item,
         instance_id=instance_id,
         instance_index=user_state.get_current_instance_index(),
         finished=get_user_state(username).get_annotation_count(),
         total_count=total_count,
-        alert_time_each_instance=config["alert_time_each_instance"],
+        alert_time_each_instance=config.get("alert_time_each_instance", 10000000),
         statistics_nav=all_statistics,
         var_elems=var_elems_html,
         custom_js=custom_js,
@@ -1206,6 +1256,8 @@ def render_page_with_annotations(username) -> str:
         annotation_task_name=config["annotation_task_name"],
         debug=config.get("debug", False),
         ui_config=ui_config,
+        has_video_annotation=has_video_annotation,
+        has_audio_annotation=has_audio_annotation,
         # ai=ai_hints,
         **kwargs
     )
@@ -1760,6 +1812,18 @@ def create_app():
     # Configure the app
     configure_app(app)
 
+    # Add context processor for debug settings
+    @app.context_processor
+    def inject_debug_settings():
+        """Inject debug settings into all templates."""
+        from potato.logging_config import is_ui_debug_enabled, is_server_debug_enabled
+        return {
+            'ui_debug': is_ui_debug_enabled(),
+            'server_debug': is_server_debug_enabled(),
+            'debug_mode': config.get('debug', False),
+            'debug_phase': config.get('debug_phase'),
+        }
+
     return app
 
 
@@ -1877,8 +1941,13 @@ def run_server(args):
     setup_logging(
         verbose=config.get("verbose", False),
         debug=config.get("debug", False) or config.get("very_verbose", False),
+        debug_log=config.get("debug_log"),
         log_dir=config.get("output_annotation_dir"),
     )
+
+    # Log debug phase setting if specified
+    if config.get("debug_phase"):
+        logger.info(f"Debug phase set to: {config['debug_phase']}")
 
     # Ensure that the task directory exists
     task_dir = config["task_dir"]
@@ -1989,6 +2058,22 @@ def main():
     elif args.mode == 'list':
         logger.info("Listing available projects")
         show_project_hub(args.config_file)
+    elif args.mode == 'migrate':
+        logger.info("Starting config migration")
+        from potato.migrate_cli import main as migrate_main
+        # Pass arguments to migrate CLI
+        migrate_args = [args.config_file]
+        if args.to_v2:
+            migrate_args.append("--to-v2")
+        if args.output_file:
+            migrate_args.extend(["--output", args.output_file])
+        if args.in_place:
+            migrate_args.append("--in-place")
+        if args.dry_run:
+            migrate_args.append("--dry-run")
+        if args.quiet:
+            migrate_args.append("--quiet")
+        sys.exit(migrate_main(migrate_args))
 
     logger.info("Annotation platform shutdown complete")
 

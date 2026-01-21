@@ -23,6 +23,9 @@
     <!-- Audio Annotation Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='audio-annotation.css') }}">
 
+    <!-- Video Annotation Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='video-annotation.css') }}">
+
     <!-- jQuery (required for span annotation) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
 </head>
@@ -95,20 +98,34 @@
 
                 <!-- Main content area -->
                 <div id="main-content" style="display: none;">
-                    <!-- Instance text -->
+                    <!-- Instance text/video -->
                     <div class="mb-4">
+                        {% if has_video_annotation | default(false) %}
+                        <h5 class="mb-3">Video to Annotate:</h5>
+                        <!-- For video annotation, keep the text-content element accessible for JS but visually hidden -->
+                        <div id="instance-text" class="instance-text-container" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0);">
+                            <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}">{{instance | sanitize_html}}</div>
+                        </div>
+                        {% elif has_audio_annotation | default(false) %}
+                        <h5 class="mb-3">Audio to Annotate:</h5>
+                        <!-- For audio annotation, keep the text-content element accessible for JS but visually hidden -->
+                        <div id="instance-text" class="instance-text-container" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0);">
+                            <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}">{{instance | sanitize_html}}</div>
+                        </div>
+                        {% else %}
                         <h5 class="mb-3">Text to Annotate:</h5>
                         <div id="instance-text" class="p-3 border rounded instance-text-container" style="background-color: var(--light-bg); min-height: 100px; position: relative;">
                             <!-- Text content layer for span annotation -->
                             <!-- Note: sanitize_html filter allows safe span annotation HTML while blocking XSS -->
-                            <div id="text-content" data-original-text="{{instance | sanitize_html}}" style="position: relative; z-index: 1; pointer-events: auto;">
-                                {{instance | sanitize_html}}
-                            </div>
+                            <!-- data-original-text uses plain text (no span HTML) for correct position calculations -->
+                            <!-- DOM content uses rendered HTML with span tags for visual display -->
+                            <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}" style="position: relative; z-index: 1; pointer-events: auto;">{{instance | sanitize_html}}</div>
                             <!-- Span overlays layer for span annotation -->
                             <div id="span-overlays" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;">
                                 <!-- Individual overlays will have pointer-events: auto -->
                             </div>
                         </div>
+                        {% endif %}
                     </div>
 
 
@@ -164,10 +181,40 @@
     <script type="text/javascript">
         window.config = {
             annotation_task_name: "{{ annotation_task_name }}",
-            debug: false,
+            debug: {{ 'true' if debug_mode else 'false' }},
+            ui_debug: {{ 'true' if ui_debug else 'false' }},
+            server_debug: {{ 'true' if server_debug else 'false' }},
+            debug_phase: {{ ('"%s"' % debug_phase) if debug_phase else 'null' }},
             api_key: "test_api_key",
             username: "{{ username }}",
             ui_config: {}
+        };
+
+        // Conditionally enable/disable console logging based on ui_debug setting
+        if (!window.config.ui_debug) {
+            // Store original console methods
+            window._originalConsole = {
+                log: console.log,
+                debug: console.debug,
+                info: console.info,
+                warn: console.warn
+            };
+            // Override with no-ops (keep error for critical issues)
+            console.log = function() {};
+            console.debug = function() {};
+            console.info = function() {};
+            // Keep warn for important warnings
+        }
+
+        // Helper function to enable UI logging at runtime (for debugging in browser console)
+        window.enableUIDebug = function() {
+            if (window._originalConsole) {
+                console.log = window._originalConsole.log;
+                console.debug = window._originalConsole.debug;
+                console.info = window._originalConsole.info;
+                console.warn = window._originalConsole.warn;
+                console.log('UI debug logging enabled');
+            }
         };
     </script>
     <script id="ui-config" type="application/json">{% if ui_config %}{{ ui_config | tojson | safe }}{% else %}{}{% endif %}</script>
@@ -192,10 +239,12 @@
     <!-- Image annotation manager -->
     <script src="{{ url_for('static', filename='image-annotation.js') }}?v=1"></script>
 
-    <!-- Peaks.js for audio annotation (loaded from CDN) -->
-    <script src="https://unpkg.com/peaks.js@3/dist/peaks.js"></script>
+    <!-- Peaks.js for audio/video annotation (stored locally for reliability) -->
+    <script src="{{ url_for('static', filename='peaks.min.js') }}"></script>
     <!-- Audio annotation manager -->
     <script src="{{ url_for('static', filename='audio-annotation.js') }}?v=1"></script>
+    <!-- Video annotation manager -->
+    <script src="{{ url_for('static', filename='video-annotation.js') }}?v=1"></script>
 
     <!-- Instance height limit functionality -->
     <script>

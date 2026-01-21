@@ -206,8 +206,19 @@ def _generate_html(
 
             <!-- Audio Annotation Container -->
             <div class="audio-annotation-container" data-schema="{escaped_name}">
-                <!-- Toolbar -->
-                <div class="audio-annotation-toolbar">
+
+                <!-- 1. Full waveform overview at top -->
+                <div class="waveform-wrapper">
+                    <div class="overview-label" style="font-size: 0.85em; color: #666; margin-bottom: 4px;">Full Audio Overview (click to navigate)</div>
+                    <div id="overview-{escaped_name}" class="overview-container" style="margin-bottom: 12px;"></div>
+
+                    <!-- 2. Zoomed waveform below -->
+                    <div class="zoomview-label" style="font-size: 0.85em; color: #666; margin-bottom: 4px;">Zoomed View (right-click drag to annotate)</div>
+                    <div id="waveform-{escaped_name}" class="waveform-container"></div>
+                </div>
+
+                <!-- 3. Toolbar with annotation buttons -->
+                <div class="audio-annotation-toolbar" style="margin-top: 12px;">
                     <!-- Playback controls -->
                     <div class="playback-group">
                         <button type="button" class="playback-btn" data-action="play" title="Play or pause audio playback. Keyboard shortcut: Space">
@@ -253,8 +264,8 @@ def _generate_html(
                     </div>
                 </div>
 
-                <!-- Help/Instructions Panel -->
-                <div class="help-panel" style="background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 4px; padding: 12px; margin-bottom: 10px; font-size: 0.9em;">
+                <!-- 4. Help/Instructions Panel -->
+                <div class="help-panel" style="background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 4px; padding: 12px; margin-top: 10px; font-size: 0.9em;">
                     <div style="display: flex; gap: 30px; flex-wrap: wrap;">
                         <div>
                             <strong style="color: #495057;">🖱️ Creating Segments:</strong>
@@ -290,14 +301,8 @@ def _generate_html(
                     .help-panel.collapsed {{ display: none; }}
                 </style>
 
-                <!-- Waveform container -->
-                <div class="waveform-wrapper">
-                    <div id="waveform-{escaped_name}" class="waveform-container"></div>
-                    <div id="overview-{escaped_name}" class="overview-container"></div>
-                </div>
-
                 <!-- Segment list -->
-                <div class="segment-list-container">
+                <div class="segment-list-container" style="margin-top: 12px;">
                     <h4>Segments</h4>
                     <div id="segment-list-{escaped_name}" class="segment-list"></div>
                 </div>

@@ -61,8 +61,83 @@ from potato.server_utils.schemas.span import get_span_color, set_span_color, SPA
 
 # Import annotation history
 from potato.annotation_history import AnnotationHistoryManager
+from potato.logging_config import is_ui_debug_enabled, get_debug_log_settings
 
 import os
+
+
+def get_debug_phase_target(debug_phase: str) -> tuple:
+    """
+    Parse the debug_phase string and find the matching phase and page.
+
+    The debug_phase can be:
+    - A phase type name like "annotation", "prestudy", "poststudy"
+    - A specific page name within a phase (e.g., "consent_page_1")
+
+    Args:
+        debug_phase: The debug phase string from config
+
+    Returns:
+        tuple: (UserPhase, page_name) or (None, None) if not found
+    """
+    if not debug_phase:
+        return None, None
+
+    usm = get_user_state_manager()
+
+    # First, try to match as a phase type (case-insensitive)
+    try:
+        phase = UserPhase.fromstr(debug_phase)
+        # Check if this phase exists in the config
+        if phase in usm.phase_type_to_name_to_page:
+            pages = list(usm.phase_type_to_name_to_page[phase].keys())
+            if pages:
+                return phase, pages[0]
+        # Special handling for ANNOTATION phase which is always available
+        if phase == UserPhase.ANNOTATION:
+            return phase, "annotation"
+        return None, None
+    except (ValueError, KeyError):
+        pass
+
+    # If not a phase type, search for it as a page name
+    for phase_type, pages_dict in usm.phase_type_to_name_to_page.items():
+        for page_name in pages_dict.keys():
+            if page_name.lower() == debug_phase.lower():
+                return phase_type, page_name
+
+    logger.warning(f"Debug phase '{debug_phase}' not found in configured phases")
+    return None, None
+
+
+def apply_debug_phase_skip(user_id: str) -> bool:
+    """
+    Apply debug phase skip if configured.
+
+    Args:
+        user_id: The user ID to apply the skip for
+
+    Returns:
+        bool: True if skip was applied, False otherwise
+    """
+    debug_phase = config.get("debug_phase")
+    if not debug_phase:
+        return False
+
+    phase, page = get_debug_phase_target(debug_phase)
+    if phase is None:
+        logger.warning(f"Could not apply debug phase skip: '{debug_phase}' not found")
+        return False
+
+    usm = get_user_state_manager()
+    user_state = usm.get_user_state(user_id)
+
+    if user_state:
+        user_state.advance_to_phase(phase, page)
+        logger.info(f"Debug: Skipped user '{user_id}' to phase '{phase.value}', page '{page}'")
+        return True
+
+    return False
 
 def get_admin_api_key():
     """Get the admin API key from config or environment variable.
@@ -123,6 +198,31 @@ def home():
         - May clear invalid sessions
     """
     logger.debug("Processing home page request")
+
+    # In debug mode with debug_phase, auto-login and skip to the specified phase
+    if config.get("debug") and config.get("debug_phase") and 'username' not in session:
+        debug_user = "debug_user"
+        logger.info(f"Debug mode: Auto-logging in as '{debug_user}' and skipping to phase '{config.get('debug_phase')}'")
+
+        # Auto-register the debug user if needed
+        user_authenticator = UserAuthenticator.get_instance()
+        if not user_authenticator.is_valid_username(debug_user):
+            user_authenticator.add_user(debug_user, None)
+
+        # Set session
+        session['username'] = debug_user
+        session.permanent = True
+
+        # Initialize user state and apply debug phase skip
+        usm = get_user_state_manager()
+        if not usm.has_user(debug_user):
+            usm.add_user(debug_user)
+
+        # Apply the debug phase skip
+        apply_debug_phase_skip(debug_user)
+
+        # Redirect to home to process the new session
+        return redirect(url_for("home"))
 
     # Check if user has an active session
     if 'username' not in session:
@@ -339,7 +439,16 @@ def auth():
                 logger.debug(f"Initializing state for new user: {user_id}")
                 usm = get_user_state_manager()
                 usm.add_user(user_id)
-                usm.advance_phase(user_id)
+
+                # Check for debug phase skip
+                if config.get("debug") and config.get("debug_phase"):
+                    if apply_debug_phase_skip(user_id):
+                        return redirect(url_for("home"))
+                    else:
+                        # Fall back to normal phase advancement
+                        usm.advance_phase(user_id)
+                else:
+                    usm.advance_phase(user_id)
                 return redirect(url_for("annotate"))
             return redirect(url_for("annotate"))
         else:

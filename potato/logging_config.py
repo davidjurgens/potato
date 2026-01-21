@@ -14,6 +14,12 @@ Usage:
     # In any module:
     logger = get_logger(__name__)
     logger.info("Something happened")
+
+Debug Log Modes:
+    --debug-log=all     Enable debug logging for both UI and server
+    --debug-log=ui      Enable debug logging for UI/frontend only
+    --debug-log=server  Enable debug logging for server/backend only
+    --debug-log=none    Disable all debug logging
 """
 
 import logging
@@ -54,10 +60,15 @@ POTATO_LOGGERS = [
 # Track if logging has been set up
 _logging_initialized = False
 
+# Track debug log settings for UI
+_ui_debug_enabled = False
+_server_debug_enabled = False
+
 
 def setup_logging(
     verbose: bool = False,
     debug: bool = False,
+    debug_log: Optional[str] = None,
     log_file: Optional[str] = None,
     log_dir: Optional[str] = None,
     max_bytes: int = 10 * 1024 * 1024,  # 10 MB
@@ -72,6 +83,12 @@ def setup_logging(
     Args:
         verbose: If True, set log level to DEBUG and use verbose format
         debug: If True, set log level to DEBUG (same as verbose)
+        debug_log: Selective debug logging mode:
+                   - 'all': Enable debug for both UI and server
+                   - 'ui': Enable debug for UI/frontend only
+                   - 'server': Enable debug for server/backend only
+                   - 'none': Disable all debug logging
+                   - None: Use verbose/debug flags as before
         log_file: Optional path to a log file. If provided, logs will be
                   written to this file in addition to console.
         log_dir: Optional directory for log files. If log_file is not provided
@@ -79,12 +96,36 @@ def setup_logging(
         max_bytes: Maximum size of each log file before rotation (default 10MB)
         backup_count: Number of backup log files to keep (default 5)
     """
-    global _logging_initialized
+    global _logging_initialized, _ui_debug_enabled, _server_debug_enabled
 
-    # Determine log level
-    if verbose or debug:
+    # Handle selective debug logging
+    if debug_log:
+        if debug_log == 'all':
+            _ui_debug_enabled = True
+            _server_debug_enabled = True
+        elif debug_log == 'ui':
+            _ui_debug_enabled = True
+            _server_debug_enabled = False
+        elif debug_log == 'server':
+            _ui_debug_enabled = False
+            _server_debug_enabled = True
+        elif debug_log == 'none':
+            _ui_debug_enabled = False
+            _server_debug_enabled = False
+    else:
+        # Default behavior based on debug/verbose flags
+        _ui_debug_enabled = debug or verbose
+        _server_debug_enabled = debug or verbose
+
+    # Determine server log level
+    if _server_debug_enabled:
         log_level = logging.DEBUG
         log_format = VERBOSE_FORMAT
+    elif verbose or debug:
+        # If debug_log explicitly disabled server but debug flag is on,
+        # still use INFO level for server
+        log_level = logging.INFO
+        log_format = DEFAULT_FORMAT
     else:
         log_level = logging.INFO
         log_format = DEFAULT_FORMAT
@@ -189,3 +230,36 @@ def get_log_level() -> int:
         The current logging level
     """
     return logging.getLogger("potato").level
+
+
+def is_ui_debug_enabled() -> bool:
+    """
+    Check if UI/frontend debug logging is enabled.
+
+    Returns:
+        True if UI debug logging is enabled
+    """
+    return _ui_debug_enabled
+
+
+def is_server_debug_enabled() -> bool:
+    """
+    Check if server/backend debug logging is enabled.
+
+    Returns:
+        True if server debug logging is enabled
+    """
+    return _server_debug_enabled
+
+
+def get_debug_log_settings() -> dict:
+    """
+    Get the current debug log settings for passing to frontend.
+
+    Returns:
+        Dict with 'ui_debug' and 'server_debug' boolean flags
+    """
+    return {
+        'ui_debug': _ui_debug_enabled,
+        'server_debug': _server_debug_enabled,
+    }

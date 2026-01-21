@@ -272,7 +272,7 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
 
     # Validate annotation_type
     # Note: Keep in sync with potato.server_utils.schemas.registry
-    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'select', 'number', 'multirate', 'pure_display', 'video', 'image_annotation', 'audio_annotation']
+    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'select', 'number', 'multirate', 'pure_display', 'video', 'image_annotation', 'audio_annotation', 'video_annotation']
     if scheme['annotation_type'] not in valid_types:
         raise ConfigValidationError(f"{path}.annotation_type must be one of: {', '.join(valid_types)}")
 
@@ -398,6 +398,39 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
         if 'max_segments' in scheme and scheme['max_segments'] is not None:
             if not isinstance(scheme['max_segments'], int) or scheme['max_segments'] < 1:
                 raise ConfigValidationError(f"{path}.max_segments must be a positive integer or null")
+
+    elif annotation_type == 'video_annotation':
+        # Validate mode
+        valid_modes = ['segment', 'frame', 'keyframe', 'tracking', 'combined']
+        mode = scheme.get('mode', 'segment')
+        if mode not in valid_modes:
+            raise ConfigValidationError(f"{path}.mode must be one of: {valid_modes}")
+
+        # Validate labels for segment/frame/keyframe/combined modes
+        if mode in ['segment', 'frame', 'keyframe', 'combined']:
+            if 'labels' not in scheme:
+                raise ConfigValidationError(f"{path} missing 'labels' field for video_annotation mode '{mode}'")
+            if not isinstance(scheme['labels'], list):
+                raise ConfigValidationError(f"{path}.labels must be a list")
+            if not scheme['labels']:
+                raise ConfigValidationError(f"{path}.labels cannot be empty for mode '{mode}'")
+
+        # Validate optional numeric fields
+        if 'min_segments' in scheme:
+            if not isinstance(scheme['min_segments'], int) or scheme['min_segments'] < 0:
+                raise ConfigValidationError(f"{path}.min_segments must be a non-negative integer")
+
+        if 'max_segments' in scheme and scheme['max_segments'] is not None:
+            if not isinstance(scheme['max_segments'], int) or scheme['max_segments'] < 1:
+                raise ConfigValidationError(f"{path}.max_segments must be a positive integer or null")
+
+        if 'timeline_height' in scheme:
+            if not isinstance(scheme['timeline_height'], int) or scheme['timeline_height'] < 30:
+                raise ConfigValidationError(f"{path}.timeline_height must be an integer >= 30")
+
+        if 'video_fps' in scheme:
+            if not isinstance(scheme['video_fps'], (int, float)) or scheme['video_fps'] <= 0:
+                raise ConfigValidationError(f"{path}.video_fps must be a positive number")
 
 
 def validate_data_directory_config(config_data: Dict[str, Any]) -> None:
@@ -1030,6 +1063,17 @@ def init_config(args):
         # or if config file doesn't have a debug setting
         if args.debug or "debug" not in config:
             config_updates["debug"] = args.debug
+
+        # Add debug logging mode if specified
+        if hasattr(args, 'debug_log') and args.debug_log:
+            config_updates["debug_log"] = args.debug_log
+
+        # Add debug phase if specified (requires --debug flag)
+        if hasattr(args, 'debug_phase') and args.debug_phase:
+            if not args.debug:
+                print("⚠️  Warning: --debug-phase requires --debug flag. Enabling debug mode.")
+                config_updates["debug"] = True
+            config_updates["debug_phase"] = args.debug_phase
 
         config.update(config_updates)
 
