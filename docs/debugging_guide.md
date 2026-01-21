@@ -1,6 +1,19 @@
 # Debugging Guide
 
-Potato provides several command-line flags to help with debugging and testing annotation projects. These flags are useful during development and troubleshooting.
+Potato provides several command-line flags and configuration options to help with debugging and testing annotation projects. These are useful during development and troubleshooting.
+
+## Server Configuration
+
+You can configure server settings directly in your YAML config file instead of using CLI flags:
+
+```yaml
+server:
+  port: 8000        # Port to run on (default: 8000)
+  host: "0.0.0.0"   # Host to bind to (default: 0.0.0.0)
+  debug: false      # Enable Flask debug mode (default: false)
+```
+
+**Note:** CLI flags take precedence over config file values. For example, `-p 9000` will override `server.port: 8000`.
 
 ## Debug Flags
 

@@ -52,6 +52,7 @@ from potato.flask_server import (
     get_users, get_total_annotations
 )
 from potato.annotation_history import AnnotationHistoryManager, AnnotationAction
+from potato.quality_control import get_quality_control_manager
 
 @dataclass
 class AnnotatorTimingData:
@@ -1350,6 +1351,213 @@ class AdminDashboard:
         except Exception as e:
             self.logger.error(f"Error getting crowdsourcing data: {e}")
             return {"error": f"Failed to get crowdsourcing data: {str(e)}"}, 500
+
+
+    def get_agreement_metrics(self) -> Dict[str, Any]:
+        """
+        Get inter-annotator agreement metrics using Krippendorff's alpha.
+
+        This leverages the existing agreement.py module for calculations.
+
+        Returns:
+            Dict containing agreement metrics by schema and overall
+        """
+        if not self.check_admin_access():
+            return {"error": "Admin access required"}, 403
+
+        try:
+            import simpledorff
+            from simpledorff.metrics import nominal_metric, interval_metric
+            import pandas as pd
+
+            agreement_config = config.get("agreement_metrics", {})
+            min_overlap = agreement_config.get("min_overlap", 2)
+
+            ism = get_item_state_manager()
+            usm = get_user_state_manager()
+            annotation_schemes = config.get("annotation_schemes", [])
+            users = get_users()
+
+            metrics = {
+                "enabled": agreement_config.get("enabled", True),
+                "overall": {},
+                "by_schema": {},
+                "warnings": []
+            }
+
+            for scheme in annotation_schemes:
+                schema_name = scheme.get("name", "Unknown")
+                annotation_type = scheme.get("annotation_type", "unknown")
+
+                # Collect annotations per item for this schema
+                annotations_by_item = {}
+
+                for item in ism.items():
+                    item_id = item.get_id()
+                    item_annotations = []
+
+                    for username in users:
+                        user_state = usm.get_user_state(username)
+                        if not user_state:
+                            continue
+
+                        # Get annotations for this item
+                        all_annotations = user_state.get_all_annotations()
+                        if item_id not in all_annotations:
+                            continue
+
+                        instance_annotations = all_annotations[item_id]
+                        labels = instance_annotations.get("labels", {})
+
+                        # Find annotation for this schema
+                        for label, value in labels.items():
+                            label_schema = None
+                            if hasattr(label, 'schema'):
+                                label_schema = label.schema
+                            elif hasattr(label, 'get_schema'):
+                                label_schema = label.get_schema()
+
+                            if label_schema == schema_name:
+                                item_annotations.append({
+                                    "user": username,
+                                    "value": value
+                                })
+
+                    if item_annotations:
+                        annotations_by_item[item_id] = item_annotations
+
+                # Filter items with minimum overlap
+                valid_items = {
+                    item_id: annots
+                    for item_id, annots in annotations_by_item.items()
+                    if len(annots) >= min_overlap
+                }
+
+                if not valid_items:
+                    metrics["by_schema"][schema_name] = {
+                        "error": f"No items with {min_overlap}+ annotators",
+                        "items_count": len(annotations_by_item)
+                    }
+                    continue
+
+                # Format for simpledorff
+                try:
+                    reliability_data = []
+                    for item_id, annots in valid_items.items():
+                        for annot in annots:
+                            reliability_data.append({
+                                "unit": item_id,
+                                "annotator": annot["user"],
+                                "annotation": self._normalize_annotation_value(annot["value"])
+                            })
+
+                    df = pd.DataFrame(reliability_data)
+
+                    # Choose metric based on annotation type
+                    if annotation_type in ["likert", "slider", "number"]:
+                        metric_fn = interval_metric
+                        metric_name = "interval"
+                    else:
+                        metric_fn = nominal_metric
+                        metric_name = "nominal"
+
+                    # Calculate alpha
+                    alpha = simpledorff.calculate_krippendorffs_alpha(
+                        df,
+                        experiment_col="unit",
+                        annotator_col="annotator",
+                        class_col="annotation",
+                        metric_fn=metric_fn
+                    )
+
+                    metrics["by_schema"][schema_name] = {
+                        "krippendorff_alpha": round(alpha, 4),
+                        "metric_type": metric_name,
+                        "items_evaluated": len(valid_items),
+                        "total_annotations": len(reliability_data),
+                        "interpretation": self._interpret_alpha(alpha)
+                    }
+
+                except Exception as e:
+                    self.logger.error(f"Error calculating alpha for {schema_name}: {e}")
+                    metrics["by_schema"][schema_name] = {
+                        "error": str(e),
+                        "items_count": len(valid_items)
+                    }
+
+            # Calculate overall metrics
+            alphas = [
+                m["krippendorff_alpha"]
+                for m in metrics["by_schema"].values()
+                if "krippendorff_alpha" in m
+            ]
+            if alphas:
+                avg_alpha = sum(alphas) / len(alphas)
+                metrics["overall"] = {
+                    "average_krippendorff_alpha": round(avg_alpha, 4),
+                    "schemas_evaluated": len(alphas),
+                    "interpretation": self._interpret_alpha(avg_alpha)
+                }
+
+            return metrics
+
+        except ImportError as e:
+            self.logger.error(f"simpledorff not installed: {e}")
+            return {
+                "enabled": False,
+                "error": "simpledorff library not installed. Run: pip install simpledorff"
+            }
+        except Exception as e:
+            self.logger.error(f"Error getting agreement metrics: {e}")
+            return {"error": f"Failed to get agreement metrics: {str(e)}"}, 500
+
+    def _interpret_alpha(self, alpha: float) -> str:
+        """Human-readable interpretation of Krippendorff's alpha."""
+        if alpha >= 0.8:
+            return "Good agreement"
+        elif alpha >= 0.67:
+            return "Tentative agreement"
+        elif alpha >= 0.33:
+            return "Low agreement"
+        else:
+            return "Poor agreement"
+
+    def _normalize_annotation_value(self, value: Any) -> Any:
+        """Normalize annotation value for comparison."""
+        if isinstance(value, list):
+            return tuple(sorted(str(v) for v in value))
+        elif isinstance(value, bool):
+            return str(value).lower()
+        return str(value)
+
+    def get_quality_control_data(self) -> Dict[str, Any]:
+        """
+        Get quality control metrics (attention checks, gold standards, pre-annotation).
+
+        Returns:
+            Dict containing quality control metrics
+        """
+        if not self.check_admin_access():
+            return {"error": "Admin access required"}, 403
+
+        try:
+            qc_manager = get_quality_control_manager()
+
+            if not qc_manager:
+                return {
+                    "enabled": False,
+                    "message": "Quality control not configured"
+                }
+
+            metrics = qc_manager.get_quality_metrics()
+            return {
+                "enabled": True,
+                **metrics
+            }
+
+        except Exception as e:
+            self.logger.error(f"Error getting quality control data: {e}")
+            return {"error": f"Failed to get quality control data: {str(e)}"}, 500
 
 
 # Global instance

@@ -679,3 +679,366 @@ class TestErrorMessages:
         error_msg = str(exc_info.value)
         assert "missing required fields" in error_msg
         assert "description" in error_msg
+
+
+class TestServerConfigValidation:
+    """Test server configuration validation."""
+
+    def test_valid_server_config(self):
+        """Test that valid server configuration is accepted."""
+        from potato.server_utils.config_module import validate_server_config
+
+        config = {
+            "server": {
+                "port": 8000,
+                "host": "0.0.0.0",
+                "debug": False
+            }
+        }
+
+        # Should not raise any exceptions
+        validate_server_config(config)
+
+    def test_valid_server_config_partial(self):
+        """Test that partial server configuration is accepted."""
+        from potato.server_utils.config_module import validate_server_config
+
+        # Only port specified
+        config = {"server": {"port": 9000}}
+        validate_server_config(config)
+
+        # Only host specified
+        config = {"server": {"host": "localhost"}}
+        validate_server_config(config)
+
+        # Only debug specified
+        config = {"server": {"debug": True}}
+        validate_server_config(config)
+
+    def test_no_server_config(self):
+        """Test that missing server config is fine (optional)."""
+        from potato.server_utils.config_module import validate_server_config
+
+        config = {"annotation_task_name": "Test Task"}
+        validate_server_config(config)
+
+    def test_invalid_server_config_not_dict(self):
+        """Test that non-dict server config is rejected."""
+        from potato.server_utils.config_module import validate_server_config, ConfigValidationError
+
+        config = {"server": "invalid"}
+
+        with pytest.raises(ConfigValidationError, match="server configuration must be a dictionary"):
+            validate_server_config(config)
+
+    def test_invalid_port_type(self):
+        """Test that non-integer port is rejected."""
+        from potato.server_utils.config_module import validate_server_config, ConfigValidationError
+
+        config = {"server": {"port": "8000"}}
+
+        with pytest.raises(ConfigValidationError, match="server.port must be an integer"):
+            validate_server_config(config)
+
+    def test_invalid_port_range_low(self):
+        """Test that port below 1 is rejected."""
+        from potato.server_utils.config_module import validate_server_config, ConfigValidationError
+
+        config = {"server": {"port": 0}}
+
+        with pytest.raises(ConfigValidationError, match="server.port must be between 1 and 65535"):
+            validate_server_config(config)
+
+    def test_invalid_port_range_high(self):
+        """Test that port above 65535 is rejected."""
+        from potato.server_utils.config_module import validate_server_config, ConfigValidationError
+
+        config = {"server": {"port": 70000}}
+
+        with pytest.raises(ConfigValidationError, match="server.port must be between 1 and 65535"):
+            validate_server_config(config)
+
+    def test_invalid_host_type(self):
+        """Test that non-string host is rejected."""
+        from potato.server_utils.config_module import validate_server_config, ConfigValidationError
+
+        config = {"server": {"host": 12345}}
+
+        with pytest.raises(ConfigValidationError, match="server.host must be a string"):
+            validate_server_config(config)
+
+    def test_empty_host(self):
+        """Test that empty host is rejected."""
+        from potato.server_utils.config_module import validate_server_config, ConfigValidationError
+
+        config = {"server": {"host": ""}}
+
+        with pytest.raises(ConfigValidationError, match="server.host cannot be empty"):
+            validate_server_config(config)
+
+        config = {"server": {"host": "   "}}
+
+        with pytest.raises(ConfigValidationError, match="server.host cannot be empty"):
+            validate_server_config(config)
+
+    def test_invalid_debug_type(self):
+        """Test that non-boolean debug is rejected."""
+        from potato.server_utils.config_module import validate_server_config, ConfigValidationError
+
+        config = {"server": {"debug": "true"}}
+
+        with pytest.raises(ConfigValidationError, match="server.debug must be a boolean"):
+            validate_server_config(config)
+
+
+class TestQualityControlConfigValidation:
+    """Tests for quality control configuration validation."""
+
+    def test_valid_attention_checks_config(self):
+        """Test that valid attention checks config is accepted."""
+        from potato.server_utils.config_module import validate_quality_control_config
+
+        config = {
+            "attention_checks": {
+                "enabled": True,
+                "items_file": "attention.json",
+                "frequency": 10,
+                "min_response_time": 3.0,
+                "failure_handling": {
+                    "warn_threshold": 2,
+                    "block_threshold": 5
+                }
+            }
+        }
+
+        # Should not raise
+        validate_quality_control_config(config)
+
+    def test_attention_checks_missing_items_file(self):
+        """Test that enabled attention checks require items_file."""
+        from potato.server_utils.config_module import validate_quality_control_config, ConfigValidationError
+
+        config = {
+            "attention_checks": {
+                "enabled": True,
+                "frequency": 10
+            }
+        }
+
+        with pytest.raises(ConfigValidationError, match="attention_checks.items_file is required"):
+            validate_quality_control_config(config)
+
+    def test_attention_checks_both_frequency_and_probability(self):
+        """Test that specifying both frequency and probability is rejected."""
+        from potato.server_utils.config_module import validate_quality_control_config, ConfigValidationError
+
+        config = {
+            "attention_checks": {
+                "enabled": True,
+                "items_file": "attention.json",
+                "frequency": 10,
+                "probability": 0.1
+            }
+        }
+
+        with pytest.raises(ConfigValidationError, match="specify either 'frequency' or 'probability', not both"):
+            validate_quality_control_config(config)
+
+    def test_attention_checks_invalid_frequency(self):
+        """Test that invalid frequency is rejected."""
+        from potato.server_utils.config_module import validate_quality_control_config, ConfigValidationError
+
+        config = {
+            "attention_checks": {
+                "enabled": True,
+                "items_file": "attention.json",
+                "frequency": -1
+            }
+        }
+
+        with pytest.raises(ConfigValidationError, match="frequency must be a positive integer"):
+            validate_quality_control_config(config)
+
+    def test_attention_checks_invalid_probability(self):
+        """Test that invalid probability is rejected."""
+        from potato.server_utils.config_module import validate_quality_control_config, ConfigValidationError
+
+        config = {
+            "attention_checks": {
+                "enabled": True,
+                "items_file": "attention.json",
+                "probability": 1.5
+            }
+        }
+
+        with pytest.raises(ConfigValidationError, match="probability must be a number between 0 and 1"):
+            validate_quality_control_config(config)
+
+    def test_attention_checks_block_must_be_greater_than_warn(self):
+        """Test that block threshold must be greater than warn threshold."""
+        from potato.server_utils.config_module import validate_quality_control_config, ConfigValidationError
+
+        config = {
+            "attention_checks": {
+                "enabled": True,
+                "items_file": "attention.json",
+                "frequency": 10,
+                "failure_handling": {
+                    "warn_threshold": 5,
+                    "block_threshold": 3  # Less than warn
+                }
+            }
+        }
+
+        with pytest.raises(ConfigValidationError, match="block_threshold must be greater than warn_threshold"):
+            validate_quality_control_config(config)
+
+    def test_valid_gold_standards_config(self):
+        """Test that valid gold standards config is accepted."""
+        from potato.server_utils.config_module import validate_quality_control_config
+
+        config = {
+            "gold_standards": {
+                "enabled": True,
+                "items_file": "gold.json",
+                "mode": "mixed",
+                "frequency": 20,
+                "accuracy": {
+                    "min_threshold": 0.8,
+                    "evaluation_count": 10
+                }
+            }
+        }
+
+        # Should not raise
+        validate_quality_control_config(config)
+
+    def test_gold_standards_missing_items_file(self):
+        """Test that enabled gold standards require items_file."""
+        from potato.server_utils.config_module import validate_quality_control_config, ConfigValidationError
+
+        config = {
+            "gold_standards": {
+                "enabled": True,
+                "mode": "mixed"
+            }
+        }
+
+        with pytest.raises(ConfigValidationError, match="gold_standards.items_file is required"):
+            validate_quality_control_config(config)
+
+    def test_gold_standards_invalid_mode(self):
+        """Test that invalid mode is rejected."""
+        from potato.server_utils.config_module import validate_quality_control_config, ConfigValidationError
+
+        config = {
+            "gold_standards": {
+                "enabled": True,
+                "items_file": "gold.json",
+                "mode": "invalid_mode"
+            }
+        }
+
+        with pytest.raises(ConfigValidationError, match="gold_standards.mode must be one of"):
+            validate_quality_control_config(config)
+
+    def test_gold_standards_invalid_threshold(self):
+        """Test that invalid accuracy threshold is rejected."""
+        from potato.server_utils.config_module import validate_quality_control_config, ConfigValidationError
+
+        config = {
+            "gold_standards": {
+                "enabled": True,
+                "items_file": "gold.json",
+                "accuracy": {
+                    "min_threshold": 1.5  # Invalid: > 1
+                }
+            }
+        }
+
+        with pytest.raises(ConfigValidationError, match="min_threshold must be between 0 and 1"):
+            validate_quality_control_config(config)
+
+    def test_valid_pre_annotation_config(self):
+        """Test that valid pre-annotation config is accepted."""
+        from potato.server_utils.config_module import validate_quality_control_config
+
+        config = {
+            "pre_annotation": {
+                "enabled": True,
+                "field": "predictions",
+                "highlight_low_confidence": 0.5
+            }
+        }
+
+        # Should not raise
+        validate_quality_control_config(config)
+
+    def test_pre_annotation_empty_field(self):
+        """Test that empty field name is rejected."""
+        from potato.server_utils.config_module import validate_quality_control_config, ConfigValidationError
+
+        config = {
+            "pre_annotation": {
+                "enabled": True,
+                "field": ""
+            }
+        }
+
+        with pytest.raises(ConfigValidationError, match="field must be a non-empty string"):
+            validate_quality_control_config(config)
+
+    def test_pre_annotation_invalid_threshold(self):
+        """Test that invalid confidence threshold is rejected."""
+        from potato.server_utils.config_module import validate_quality_control_config, ConfigValidationError
+
+        config = {
+            "pre_annotation": {
+                "enabled": True,
+                "highlight_low_confidence": -0.5
+            }
+        }
+
+        with pytest.raises(ConfigValidationError, match="highlight_low_confidence must be between 0 and 1"):
+            validate_quality_control_config(config)
+
+    def test_valid_agreement_metrics_config(self):
+        """Test that valid agreement metrics config is accepted."""
+        from potato.server_utils.config_module import validate_quality_control_config
+
+        config = {
+            "agreement_metrics": {
+                "enabled": True,
+                "min_overlap": 3,
+                "refresh_interval": 60
+            }
+        }
+
+        # Should not raise
+        validate_quality_control_config(config)
+
+    def test_agreement_metrics_invalid_min_overlap(self):
+        """Test that min_overlap < 2 is rejected."""
+        from potato.server_utils.config_module import validate_quality_control_config, ConfigValidationError
+
+        config = {
+            "agreement_metrics": {
+                "min_overlap": 1
+            }
+        }
+
+        with pytest.raises(ConfigValidationError, match="min_overlap must be an integer >= 2"):
+            validate_quality_control_config(config)
+
+    def test_agreement_metrics_invalid_refresh_interval(self):
+        """Test that refresh_interval < 10 is rejected."""
+        from potato.server_utils.config_module import validate_quality_control_config, ConfigValidationError
+
+        config = {
+            "agreement_metrics": {
+                "refresh_interval": 5
+            }
+        }
+
+        with pytest.raises(ConfigValidationError, match="refresh_interval must be an integer >= 10"):
+            validate_quality_control_config(config)

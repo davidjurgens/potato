@@ -147,6 +147,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     if not data_files and not data_directory:
         raise ConfigValidationError("Either data_files or data_directory must be configured")
 
+    # Validate server config if present
+    validate_server_config(config_data)
+
     # Validate data_directory config if present
     validate_data_directory_config(config_data)
 
@@ -168,6 +171,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 
     # Validate category assignment configuration if present
     validate_category_assignment_config(config_data)
+
+    # Validate quality control configuration if present
+    validate_quality_control_config(config_data)
 
 
 def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
@@ -431,6 +437,213 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
         if 'video_fps' in scheme:
             if not isinstance(scheme['video_fps'], (int, float)) or scheme['video_fps'] <= 0:
                 raise ConfigValidationError(f"{path}.video_fps must be a positive number")
+
+
+def validate_server_config(config_data: Dict[str, Any]) -> None:
+    """
+    Validate server configuration section.
+
+    The server section allows specifying server settings in the YAML config
+    instead of via command-line flags. CLI flags take precedence over config values.
+
+    Supported options:
+    - port: Port number to run on (1-65535)
+    - host: Host address to bind to (default: localhost)
+    - debug: Enable Flask debug mode (default: false)
+
+    Args:
+        config_data: The configuration data
+
+    Raises:
+        ConfigValidationError: If the server configuration is invalid
+    """
+    if "server" not in config_data:
+        return  # server section is optional
+
+    server_config = config_data["server"]
+
+    if not isinstance(server_config, dict):
+        raise ConfigValidationError("server configuration must be a dictionary")
+
+    # Validate port
+    if "port" in server_config:
+        port = server_config["port"]
+        if not isinstance(port, int):
+            raise ConfigValidationError("server.port must be an integer")
+        if port < 1 or port > 65535:
+            raise ConfigValidationError("server.port must be between 1 and 65535")
+
+    # Validate host
+    if "host" in server_config:
+        host = server_config["host"]
+        if not isinstance(host, str):
+            raise ConfigValidationError("server.host must be a string")
+        if not host.strip():
+            raise ConfigValidationError("server.host cannot be empty")
+
+    # Validate debug
+    if "debug" in server_config:
+        if not isinstance(server_config["debug"], bool):
+            raise ConfigValidationError("server.debug must be a boolean")
+
+
+def validate_quality_control_config(config_data: Dict[str, Any]) -> None:
+    """
+    Validate quality control configuration (attention checks, gold standards, pre-annotation).
+
+    Args:
+        config_data: The configuration data
+
+    Raises:
+        ConfigValidationError: If the configuration is invalid
+    """
+    # Validate attention checks config
+    if "attention_checks" in config_data:
+        attn_config = config_data["attention_checks"]
+        if not isinstance(attn_config, dict):
+            raise ConfigValidationError("attention_checks must be a dictionary")
+
+        if attn_config.get("enabled", False):
+            # Validate items_file is specified
+            if "items_file" not in attn_config:
+                raise ConfigValidationError("attention_checks.items_file is required when enabled")
+            if not isinstance(attn_config["items_file"], str):
+                raise ConfigValidationError("attention_checks.items_file must be a string path")
+
+            # Validate frequency or probability (one should be set)
+            has_frequency = "frequency" in attn_config
+            has_probability = "probability" in attn_config
+
+            if has_frequency and has_probability:
+                raise ConfigValidationError("attention_checks: specify either 'frequency' or 'probability', not both")
+
+            if has_frequency:
+                freq = attn_config["frequency"]
+                if not isinstance(freq, int) or freq < 1:
+                    raise ConfigValidationError("attention_checks.frequency must be a positive integer")
+
+            if has_probability:
+                prob = attn_config["probability"]
+                if not isinstance(prob, (int, float)) or prob < 0 or prob > 1:
+                    raise ConfigValidationError("attention_checks.probability must be a number between 0 and 1")
+
+            # Validate min_response_time
+            if "min_response_time" in attn_config:
+                min_time = attn_config["min_response_time"]
+                if not isinstance(min_time, (int, float)) or min_time < 0:
+                    raise ConfigValidationError("attention_checks.min_response_time must be a non-negative number")
+
+            # Validate failure_handling
+            if "failure_handling" in attn_config:
+                failure_config = attn_config["failure_handling"]
+                if not isinstance(failure_config, dict):
+                    raise ConfigValidationError("attention_checks.failure_handling must be a dictionary")
+
+                if "warn_threshold" in failure_config:
+                    warn = failure_config["warn_threshold"]
+                    if not isinstance(warn, int) or warn < 1:
+                        raise ConfigValidationError("attention_checks.failure_handling.warn_threshold must be a positive integer")
+
+                if "block_threshold" in failure_config:
+                    block = failure_config["block_threshold"]
+                    if not isinstance(block, int) or block < 1:
+                        raise ConfigValidationError("attention_checks.failure_handling.block_threshold must be a positive integer")
+
+                    # Ensure block > warn
+                    warn = failure_config.get("warn_threshold", 2)
+                    if block <= warn:
+                        raise ConfigValidationError("attention_checks.failure_handling.block_threshold must be greater than warn_threshold")
+
+    # Validate gold standards config
+    if "gold_standards" in config_data:
+        gold_config = config_data["gold_standards"]
+        if not isinstance(gold_config, dict):
+            raise ConfigValidationError("gold_standards must be a dictionary")
+
+        if gold_config.get("enabled", False):
+            # Validate items_file is specified
+            if "items_file" not in gold_config:
+                raise ConfigValidationError("gold_standards.items_file is required when enabled")
+            if not isinstance(gold_config["items_file"], str):
+                raise ConfigValidationError("gold_standards.items_file must be a string path")
+
+            # Validate mode
+            if "mode" in gold_config:
+                valid_modes = ["training", "mixed", "separate"]
+                if gold_config["mode"] not in valid_modes:
+                    raise ConfigValidationError(f"gold_standards.mode must be one of: {', '.join(valid_modes)}")
+
+            # Validate frequency
+            if "frequency" in gold_config:
+                freq = gold_config["frequency"]
+                if not isinstance(freq, int) or freq < 1:
+                    raise ConfigValidationError("gold_standards.frequency must be a positive integer")
+
+            # Validate accuracy config
+            if "accuracy" in gold_config:
+                accuracy_config = gold_config["accuracy"]
+                if not isinstance(accuracy_config, dict):
+                    raise ConfigValidationError("gold_standards.accuracy must be a dictionary")
+
+                if "min_threshold" in accuracy_config:
+                    threshold = accuracy_config["min_threshold"]
+                    if not isinstance(threshold, (int, float)) or threshold < 0 or threshold > 1:
+                        raise ConfigValidationError("gold_standards.accuracy.min_threshold must be between 0 and 1")
+
+                if "evaluation_count" in accuracy_config:
+                    count = accuracy_config["evaluation_count"]
+                    if not isinstance(count, int) or count < 1:
+                        raise ConfigValidationError("gold_standards.accuracy.evaluation_count must be a positive integer")
+
+            # Validate auto_promote config
+            if "auto_promote" in gold_config:
+                auto_promote = gold_config["auto_promote"]
+                if not isinstance(auto_promote, dict):
+                    raise ConfigValidationError("gold_standards.auto_promote must be a dictionary")
+
+                if "min_annotators" in auto_promote:
+                    min_ann = auto_promote["min_annotators"]
+                    if not isinstance(min_ann, int) or min_ann < 2:
+                        raise ConfigValidationError("gold_standards.auto_promote.min_annotators must be an integer >= 2")
+
+                if "agreement_threshold" in auto_promote:
+                    threshold = auto_promote["agreement_threshold"]
+                    if not isinstance(threshold, (int, float)) or threshold < 0.5 or threshold > 1.0:
+                        raise ConfigValidationError("gold_standards.auto_promote.agreement_threshold must be between 0.5 and 1.0")
+
+    # Validate pre-annotation config
+    if "pre_annotation" in config_data:
+        pre_config = config_data["pre_annotation"]
+        if not isinstance(pre_config, dict):
+            raise ConfigValidationError("pre_annotation must be a dictionary")
+
+        if pre_config.get("enabled", False):
+            # Validate field name
+            if "field" in pre_config:
+                if not isinstance(pre_config["field"], str) or not pre_config["field"].strip():
+                    raise ConfigValidationError("pre_annotation.field must be a non-empty string")
+
+            # Validate highlight_low_confidence threshold
+            if "highlight_low_confidence" in pre_config:
+                threshold = pre_config["highlight_low_confidence"]
+                if not isinstance(threshold, (int, float)) or threshold < 0 or threshold > 1:
+                    raise ConfigValidationError("pre_annotation.highlight_low_confidence must be between 0 and 1")
+
+    # Validate agreement metrics config
+    if "agreement_metrics" in config_data:
+        agreement_config = config_data["agreement_metrics"]
+        if not isinstance(agreement_config, dict):
+            raise ConfigValidationError("agreement_metrics must be a dictionary")
+
+        if "min_overlap" in agreement_config:
+            overlap = agreement_config["min_overlap"]
+            if not isinstance(overlap, int) or overlap < 2:
+                raise ConfigValidationError("agreement_metrics.min_overlap must be an integer >= 2")
+
+        if "refresh_interval" in agreement_config:
+            interval = agreement_config["refresh_interval"]
+            if not isinstance(interval, int) or interval < 10:
+                raise ConfigValidationError("agreement_metrics.refresh_interval must be an integer >= 10 seconds")
 
 
 def validate_data_directory_config(config_data: Dict[str, Any]) -> None:
@@ -1076,6 +1289,26 @@ def init_config(args):
             config_updates["debug_phase"] = args.debug_phase
 
         config.update(config_updates)
+
+        # Apply server config values (CLI args take precedence)
+        if "server" in config:
+            server_config = config["server"]
+
+            # Apply port from server config if not specified via CLI
+            if "port" in server_config and args.port is None:
+                config["port"] = server_config["port"]
+                logger.debug(f"Port set from config file: {server_config['port']}")
+
+            # Apply host from server config
+            if "host" in server_config:
+                # Host can only be set via config (no CLI arg currently)
+                config["host"] = server_config["host"]
+                logger.debug(f"Host set from config file: {server_config['host']}")
+
+            # Apply debug from server config if not specified via CLI
+            if "debug" in server_config and not args.debug:
+                config["debug"] = server_config["debug"]
+                logger.debug(f"Debug mode set from config file: {server_config['debug']}")
 
         # update the current working dir for the server
         os.chdir(project_dir)

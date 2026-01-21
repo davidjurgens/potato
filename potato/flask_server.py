@@ -76,6 +76,9 @@ from potato.user_state_management import UserStateManager, UserState, get_user_s
 from potato.authentication import UserAuthenticator
 from potato.phase import UserPhase
 from potato.expertise_manager import init_expertise_manager, get_expertise_manager, clear_expertise_manager
+from potato.quality_control import (
+    init_quality_control_manager, get_quality_control_manager, clear_quality_control_manager
+)
 
 from potato.create_task_cli import create_task_cli, yes_or_no
 from potato.server_utils.arg_utils import arguments
@@ -1107,6 +1110,12 @@ def render_page_with_annotations(username) -> str:
     item = user_state.get_current_instance()
     instance_id = item.get_id()
 
+    # Extract pre-annotation data if quality control is enabled
+    pre_annotation_data = None
+    qc_manager = get_quality_control_manager()
+    if qc_manager:
+        pre_annotation_data = qc_manager.extract_pre_annotations(instance_id, item.get_data())
+
     # DEBUG: Add detailed logging
     logger.debug(f"=== RENDER_PAGE_WITH_ANNOTATIONS START ===")
     logger.debug(f"Username: {username}")
@@ -1235,6 +1244,11 @@ def render_page_with_annotations(username) -> str:
         for scheme in config.get("annotation_schemes", [])
     )
 
+    # Get pre-annotation configuration
+    pre_annotation_config = {}
+    if qc_manager:
+        pre_annotation_config = qc_manager.get_pre_annotation_config()
+
     rendered_html = render_template(
         html_file,
         username=username,
@@ -1258,6 +1272,9 @@ def render_page_with_annotations(username) -> str:
         ui_config=ui_config,
         has_video_annotation=has_video_annotation,
         has_audio_annotation=has_audio_annotation,
+        # Pre-annotation data for model predictions
+        pre_annotations=pre_annotation_data,
+        pre_annotation_config=pre_annotation_config,
         # ai=ai_hints,
         **kwargs
     )
@@ -1269,6 +1286,39 @@ def render_page_with_annotations(username) -> str:
     # If the user has annotated this before, walk the DOM and fill out what they
     # did
     annotations = get_annotations_for_user_on(username, instance_id)
+
+    # If no annotations yet, check for pre-annotations (model predictions)
+    if annotations is None and pre_annotation_data:
+        logger.debug(f"Applying pre-annotations for instance {instance_id}")
+        scheme_dict = {}
+        annotations = defaultdict(dict)
+        for it in config['annotation_schemes']:
+            if it['annotation_type'] in ['radio', 'multiselect']:
+                it['label2value'] = {(l if type(l) == str else l['name']):str(i+1) for i,l in enumerate(it['labels'])}
+            scheme_dict[it['name']] = it
+
+        for schema_name, predicted_value in pre_annotation_data.items():
+            if schema_name not in scheme_dict:
+                logger.debug(f"Pre-annotation schema {schema_name} not found in annotation schemes")
+                continue
+
+            scheme = scheme_dict[schema_name]
+            if scheme['annotation_type'] in ['radio', 'multiselect']:
+                # predicted_value should be a label name
+                if isinstance(predicted_value, str) and predicted_value in scheme.get('label2value', {}):
+                    annotations[schema_name][predicted_value] = scheme['label2value'][predicted_value]
+                elif isinstance(predicted_value, list):
+                    # Multi-select: multiple values
+                    for val in predicted_value:
+                        if val in scheme.get('label2value', {}):
+                            annotations[schema_name][val] = scheme['label2value'][val]
+            elif scheme['annotation_type'] in ['text']:
+                if "labels" not in scheme:
+                    annotations[schema_name]['text_box'] = str(predicted_value)
+            elif scheme['annotation_type'] in ['likert', 'slider', 'number']:
+                annotations[schema_name]['slider'] = str(predicted_value)
+            else:
+                logger.debug(f"Pre-annotation not yet supported for {scheme['annotation_type']}")
 
     # convert the label suggestions into annotations for front-end rendering
     if annotations == None and schema_content_to_prefill:
@@ -1965,6 +2015,17 @@ def run_server(args):
     init_user_state_manager(config)
     init_item_state_manager(config)
     load_all_data(config)
+
+    # Initialize quality control manager if any QC features are enabled
+    qc_enabled = (
+        config.get('attention_checks', {}).get('enabled', False) or
+        config.get('gold_standards', {}).get('enabled', False) or
+        config.get('pre_annotation', {}).get('enabled', False)
+    )
+    if qc_enabled:
+        task_dir = config.get('task_dir', os.path.dirname(config.get('config_file', '')))
+        init_quality_control_manager(config, task_dir)
+        logger.info("Quality control manager initialized")
 
     # Initialize ExpertiseManager for dynamic category assignment
     category_assignment = config.get('category_assignment', {})
