@@ -55,6 +55,7 @@ def test_debug_mode_config():
         args.verbose = False
         args.very_verbose = False
         args.debug = False
+        args.debug_phase = None  # Explicitly set to None to avoid Mock auto-truthy
         args.customjs = False
         args.customjs_hostname = None
         args.persist_sessions = False
