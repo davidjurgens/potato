@@ -19,6 +19,7 @@ import re
 import html
 import logging
 from typing import Set, Dict, List, Tuple
+from markupsafe import Markup
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,7 @@ DANGEROUS_PATTERNS = [
 ]
 
 
-def sanitize_html(text: str) -> str:
+def sanitize_html(text: str) -> Markup:
     """
     Sanitize HTML content while preserving legitimate span annotations.
 
@@ -79,17 +80,18 @@ def sanitize_html(text: str) -> str:
         text: The HTML content to sanitize
 
     Returns:
-        str: Sanitized HTML safe for rendering
+        Markup: Sanitized HTML safe for rendering (wrapped in Markup to prevent
+                double-escaping by Jinja2's auto-escape)
 
     Example:
         >>> sanitize_html('<span class="span-highlight">text</span>')
-        '<span class="span-highlight">text</span>'
+        Markup('<span class="span-highlight">text</span>')
 
         >>> sanitize_html('<script>alert("xss")</script>')
-        '&lt;script&gt;alert("xss")&lt;/script&gt;'
+        Markup('&lt;script&gt;alert("xss")&lt;/script&gt;')
     """
     if not text:
-        return ""
+        return Markup("")
 
     # Check for dangerous patterns in the raw text
     for pattern in DANGEROUS_PATTERNS:
@@ -136,7 +138,8 @@ def sanitize_html(text: str) -> str:
     if pos < len(text):
         result.append(html.escape(text[pos:]))
 
-    return ''.join(result)
+    # Return as Markup to prevent Jinja2's auto-escape from escaping again
+    return Markup(''.join(result))
 
 
 def _sanitize_attributes(tag_name: str, attrs_str: str) -> str:

@@ -1,3 +1,10 @@
+// Debug logging utility - respects the debug setting from server config
+function aiDebugLog(...args) {
+    if (window.config && window.config.debug) {
+        console.log(...args);
+    }
+}
+
 class AIAssistantManager {
     constructor() {
         this.loadingStates = new Set();
@@ -258,7 +265,7 @@ class AIAssistantManager {
      * @param {string|number} suggestedLabel - The suggested label value
      */
     highlightSuggestedLabel(annotationId, suggestedLabel) {
-        console.log('[AIAssistant] highlightSuggestedLabel:', { annotationId, suggestedLabel });
+        aiDebugLog('[AIAssistant] highlightSuggestedLabel:', { annotationId, suggestedLabel });
 
         // Clear any existing highlights for this annotation
         this.clearLabelHighlights(annotationId);
@@ -293,7 +300,7 @@ class AIAssistantManager {
                             suggestedLabelStr.includes(inputValue);
 
             if (isMatch) {
-                console.log('[AIAssistant] Found matching label:', { inputValue, labelText, suggestedLabelStr });
+                aiDebugLog('[AIAssistant] Found matching label:', { inputValue, labelText, suggestedLabelStr });
 
                 // Add highlight class to the input
                 input.classList.add('ai-suggested');
@@ -368,6 +375,11 @@ class AIAssistantManager {
     async getAiAssistantName() {
         document.querySelectorAll('.annotation-form').forEach(async (node) => {
             const aiHelp = node.querySelector(".ai-help");
+            // Skip if no ai-help element exists (e.g., video/audio annotation forms)
+            if (!aiHelp) {
+                return;
+            }
+
             const annotationId = node.getAttribute("data-annotation-id");
             const params = new URLSearchParams({
                 annotationId: annotationId
@@ -386,8 +398,10 @@ class AIAssistantManager {
                 aiHelp.classList.remove("none");
                 aiHelp.insertAdjacentHTML('afterbegin', data);
             } catch (error) {
-                console.log(error);
-                aiHelp.innerHTML = '<span class="error">Error loading AI assistant</span>';
+                aiDebugLog('[AIAssistant] Error fetching AI assistant:', error);
+                if (aiHelp) {
+                    aiHelp.innerHTML = '<span class="error">Error loading AI assistant</span>';
+                }
             }
         });
     }

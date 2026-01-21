@@ -16,18 +16,7 @@ path_root = Path(__file__).parents[2]
 sys.path.append(str(path_root))
 
 from potato.server_utils.config_module import config
-from potato.server_utils.schemas import (
-    generate_multiselect_layout,
-    generate_multirate_layout,
-    generate_radio_layout,
-    generate_span_layout,
-    generate_likert_layout,
-    generate_textbox_layout,
-    generate_number_layout,
-    generate_pure_display_layout,
-    generate_select_layout,
-    generate_slider_layout,
-)
+from potato.server_utils.schemas.registry import schema_registry
 
 logger = logging.getLogger(__name__)
 
@@ -139,26 +128,15 @@ def generate_schematic(annotation_scheme):
     """
     Based on the task's yaml configuration, generate the full HTML site needed
     to annotate the tasks's data.
+
+    Uses the schema registry to look up the generator function for the
+    annotation type.
     """
     # Figure out which kind of tasks we're doing and build the input frame
     annotation_type = annotation_scheme["annotation_type"]
-    annotation_func = {
-        "multiselect": generate_multiselect_layout,
-        "multirate": generate_multirate_layout,
-        "radio": generate_radio_layout,
-        "span": generate_span_layout,
-        "likert": generate_likert_layout,
-        "text": generate_textbox_layout,
-        "number": generate_number_layout,
-        "pure_display": generate_pure_display_layout,
-        "select": generate_select_layout,
-        "slider": generate_slider_layout,
-    }.get(annotation_type)
 
-    if not annotation_func:
-        raise Exception("unsupported annotation type: %s" % annotation_type)
-
-    return annotation_func(annotation_scheme)
+    # Use the schema registry to get the generator
+    return schema_registry.generate(annotation_scheme)
 
 
 def generate_keybindings_sidebar(config, keybindings, horizontal=False):

@@ -9,6 +9,9 @@ from .span import generate_span_layout
 from .textbox import generate_textbox_layout
 from .slider import generate_slider_layout
 from .video import generate_video_layout
+from .image_annotation import generate_image_annotation_layout
+from .audio_annotation import generate_audio_annotation_layout
+from .video_annotation import generate_video_annotation_layout
 
 # Import identifier utilities for use by other modules
 from .identifier_utils import (

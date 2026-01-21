@@ -189,6 +189,7 @@ def _register_builtin_schemas():
     from .video import generate_video_layout
     from .image_annotation import generate_image_annotation_layout
     from .audio_annotation import generate_audio_annotation_layout
+    from .video_annotation import generate_video_annotation_layout
 
     schemas = [
         SchemaDefinition(
@@ -294,6 +295,14 @@ def _register_builtin_schemas():
             optional_fields=["mode", "labels", "segment_schemes", "min_segments", "max_segments", "zoom_enabled", "playback_rate_control"],
             supports_keybindings=True,
             description="Audio segmentation and annotation with waveform visualization"
+        ),
+        SchemaDefinition(
+            name="video_annotation",
+            generator=generate_video_annotation_layout,
+            required_fields=["name", "description"],
+            optional_fields=["mode", "labels", "segment_schemes", "min_segments", "max_segments", "timeline_height", "overview_height", "zoom_enabled", "playback_rate_control", "frame_stepping", "show_timecode", "video_fps"],
+            supports_keybindings=True,
+            description="Video annotation with temporal segments, frame classification, and keyframes"
         ),
     ]
 

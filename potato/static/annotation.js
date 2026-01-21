@@ -1,3 +1,16 @@
+// Debug logging utility - respects the debug setting from server config
+function debugLog(...args) {
+    if (window.config && window.config.debug) {
+        console.log(...args);
+    }
+}
+
+function debugWarn(...args) {
+    if (window.config && window.config.debug) {
+        console.warn(...args);
+    }
+}
+
 // Global state
 let currentInstance = null;
 let currentAnnotations = {};
@@ -29,9 +42,14 @@ let deepDebugState = {
 };
 
 /**
- * Deep debug logging for navigation events
+ * Deep debug logging for navigation events - only logs when debug mode is enabled
  */
 function logDeepDebug(action, extraData = {}) {
+    // Skip all debug logging when not in debug mode
+    if (!window.config || !window.config.debug) {
+        return;
+    }
+
     const state = {
         timestamp: new Date().toISOString(),
         action: action,
@@ -44,7 +62,7 @@ function logDeepDebug(action, extraData = {}) {
         ...extraData
     };
 
-    console.log(`[DEEP DEBUG NAV] ${action}:`, state);
+    debugLog(`[DEEP DEBUG NAV] ${action}:`, state);
     deepDebugState.lastAction = action;
     deepDebugState.timestamp = new Date().toISOString();
 
@@ -66,7 +84,7 @@ function logDeepDebug(action, extraData = {}) {
         instanceId: currentInstance?.id
     });
 
-    // Keep only last 20es to avoid memory bloat
+    // Keep only last 20 entries to avoid memory bloat
     if (deepDebugState.instanceIdChanges.length > 20) {
         deepDebugState.instanceIdChanges = deepDebugState.instanceIdChanges.slice(-20);
     }
@@ -94,46 +112,46 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 /**
- * Global overlay tracking for debugging
+ * Global overlay tracking for debugging - only logs when debug mode is enabled
  */
 function trackOverlayCreation(overlay, context = 'unknown') {
-    const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
-    if (isFirefox) {
-        console.log(`🔍 [DEBUG] OVERLAY CREATED in ${context}:`, {
-            className: overlay.className,
-            id: overlay.id,
-            parentId: overlay.parentElement?.id,
-            timestamp: new Date().toISOString()
-        });
+    if (!window.config || !window.config.debug) return;
 
-        // Track total overlays
-        const totalOverlays = document.querySelectorAll('.span-overlay').length;
-        console.log(`🔍 [DEBUG] TOTAL OVERLAYS after creation: ${totalOverlays}`);
-    }
+    debugLog(`[DEBUG] OVERLAY CREATED in ${context}:`, {
+        className: overlay.className,
+        id: overlay.id,
+        parentId: overlay.parentElement?.id,
+        timestamp: new Date().toISOString()
+    });
+
+    // Track total overlays
+    const totalOverlays = document.querySelectorAll('.span-overlay').length;
+    debugLog(`[DEBUG] TOTAL OVERLAYS after creation: ${totalOverlays}`);
 }
 
 function trackOverlayRemoval(overlay, context = 'unknown') {
-    const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
-    if (isFirefox) {
-        console.log(`🔍 [DEBUG] OVERLAY REMOVED in ${context}:`, {
-            className: overlay.className,
-            id: overlay.id,
-            timestamp: new Date().toISOString()
-        });
+    if (!window.config || !window.config.debug) return;
 
-        // Track total overlays
-        const totalOverlays = document.querySelectorAll('.span-overlay').length;
-        console.log(`🔍 [DEBUG] TOTAL OVERLAYS after removal: ${totalOverlays}`);
-    }
+    debugLog(`[DEBUG] OVERLAY REMOVED in ${context}:`, {
+        className: overlay.className,
+        id: overlay.id,
+        timestamp: new Date().toISOString()
+    });
+
+    // Track total overlays
+    const totalOverlays = document.querySelectorAll('.span-overlay').length;
+    debugLog(`[DEBUG] TOTAL OVERLAYS after removal: ${totalOverlays}`);
 }
 
 function debugTrackOverlays(action, instanceId = null) {
+    if (!window.config || !window.config.debug) return;
+
     const spanOverlays = document.getElementById('span-overlays');
     const overlayCount = spanOverlays ? spanOverlays.children.length : 0;
     const instanceText = document.getElementById('instance-text');
     const textContent = document.getElementById('text-content');
 
-    console.log(`🔍 [DEBUG OVERLAY TRACKING] ${action}:`, {
+    debugLog(`[DEBUG OVERLAY TRACKING] ${action}:`, {
         instanceId: instanceId || currentInstance?.id,
         lastInstanceId: debugLastInstanceId,
         overlayCount: overlayCount,
@@ -148,16 +166,18 @@ function debugTrackOverlays(action, instanceId = null) {
     if (instanceId) debugLastInstanceId = instanceId;
 }
 
-// DEBUG: Add overlay cleanup verification
+// DEBUG: Add overlay cleanup verification - only logs when debug mode is enabled
 function debugVerifyOverlayCleanup() {
+    if (!window.config || !window.config.debug) return;
+
     const spanOverlays = document.getElementById('span-overlays');
     if (!spanOverlays) {
-        console.warn('🔍 [DEBUG] span-overlays container not found during cleanup verification');
+        debugWarn('[DEBUG] span-overlays container not found during cleanup verification');
         return;
     }
 
     const overlayCount = spanOverlays.children.length;
-    console.log(`🔍 [DEBUG] Overlay cleanup verification:`, {
+    debugLog(`[DEBUG] Overlay cleanup verification:`, {
         overlayCount: overlayCount,
         containerEmpty: overlayCount === 0,
         containerInnerHTML: spanOverlays.innerHTML,
@@ -169,7 +189,7 @@ function debugVerifyOverlayCleanup() {
     });
 
     if (overlayCount > 0) {
-        console.warn('🔍 [DEBUG] WARNING: Overlays still present after expected cleanup!');
+        debugWarn('[DEBUG] WARNING: Overlays still present after expected cleanup!');
     }
 }
 
@@ -257,7 +277,7 @@ function initializeSpanManagerIntegration() {
     // Wait for span manager to be available
     const checkSpanManager = () => {
         if (window.spanManager && window.spanManager.isInitialized) {
-            console.log('Annotation.js: Span manager integration initialized');
+            debugLog('Annotation.js: Span manager integration initialized');
             setupSpanLabelSelector();
         } else {
             setTimeout(checkSpanManager, 100);
@@ -271,21 +291,21 @@ function initializeSpanManagerIntegration() {
  * This function sets up the span label selection checkboxes and their event handlers
  */
 function setupSpanLabelSelector() {
-    console.log('🔍 [DEBUG] setupSpanLabelSelector() - ENTRY POINT');
+    debugLog('🔍 [DEBUG] setupSpanLabelSelector() - ENTRY POINT');
 
     // Find all span label checkboxes
     const spanLabelCheckboxes = document.querySelectorAll('input[name*="span_label"]');
-    console.log('🔍 [DEBUG] setupSpanLabelSelector() - Found span label checkboxes:', spanLabelCheckboxes.length);
+    debugLog('🔍 [DEBUG] setupSpanLabelSelector() - Found span label checkboxes:', spanLabelCheckboxes.length);
 
     if (spanLabelCheckboxes.length === 0) {
-        console.log('🔍 [DEBUG] setupSpanLabelSelector() - No span label checkboxes found');
-        console.log('🔍 [DEBUG] setupSpanLabelSelector() - EXIT POINT (no checkboxes)');
+        debugLog('🔍 [DEBUG] setupSpanLabelSelector() - No span label checkboxes found');
+        debugLog('🔍 [DEBUG] setupSpanLabelSelector() - EXIT POINT (no checkboxes)');
         return;
     }
 
     // Set up event listeners for each checkbox
     spanLabelCheckboxes.forEach((checkbox, index) => {
-        console.log(`🔍 [DEBUG] setupSpanLabelSelector() - Setting up checkbox ${index}:`, {
+        debugLog(`🔍 [DEBUG] setupSpanLabelSelector() - Setting up checkbox ${index}:`, {
             name: checkbox.name,
             id: checkbox.id,
             value: checkbox.value
@@ -295,7 +315,7 @@ function setupSpanLabelSelector() {
         const observer = new MutationObserver((mutations) => {
             mutations.forEach((mutation) => {
                 if (mutation.type === 'attributes' && mutation.attributeName === 'checked') {
-                    console.log('🔍 [DEBUG] setupSpanLabelSelector() - Checkbox checked attribute changed:', {
+                    debugLog('🔍 [DEBUG] setupSpanLabelSelector() - Checkbox checked attribute changed:', {
                         id: checkbox.id,
                         oldValue: mutation.oldValue,
                         newValue: checkbox.checked,
@@ -318,7 +338,7 @@ function setupSpanLabelSelector() {
                 return originalChecked.get.call(this);
             },
             set: function(value) {
-                console.log('🔍 [DEBUG] setupSpanLabelSelector() - Checkbox checked property being set:', {
+                debugLog('🔍 [DEBUG] setupSpanLabelSelector() - Checkbox checked property being set:', {
                     id: this.id,
                     oldValue: originalChecked.get.call(this),
                     newValue: value,
@@ -331,19 +351,19 @@ function setupSpanLabelSelector() {
         // Add click event listener if not already present
         if (!checkbox.hasAttribute('data-span-label-setup')) {
             checkbox.addEventListener('change', function () {
-                console.log('🔍 [DEBUG] setupSpanLabelSelector() - Checkbox changed:', {
+                debugLog('🔍 [DEBUG] setupSpanLabelSelector() - Checkbox changed:', {
                     name: this.name,
                     checked: this.checked,
                     value: this.value
                 });
 
                 // Add stack trace to see what's calling this
-                console.log('🔍 [DEBUG] setupSpanLabelSelector() - Change event stack trace:', new Error().stack);
+                debugLog('🔍 [DEBUG] setupSpanLabelSelector() - Change event stack trace:', new Error().stack);
 
                 // Check if this change event was triggered by programmatic setting
                 // If the checkbox was just set to checked by onlyOne, don't interfere
                 if (this.checked && this.hasAttribute('data-just-checked')) {
-                    console.log('🔍 [DEBUG] setupSpanLabelSelector() - Ignoring change event for just-checked checkbox');
+                    debugLog('🔍 [DEBUG] setupSpanLabelSelector() - Ignoring change event for just-checked checkbox');
                     this.removeAttribute('data-just-checked');
                     return;
                 }
@@ -359,7 +379,7 @@ function setupSpanLabelSelector() {
         }
     });
 
-    console.log('🔍 [DEBUG] setupSpanLabelSelector() - EXIT POINT (setup complete)');
+    debugLog('🔍 [DEBUG] setupSpanLabelSelector() - EXIT POINT (setup complete)');
 }
 
 
@@ -404,19 +424,19 @@ function getSpanLabelsFromScheme() {
  * Load span annotations for current instance
  */
 async function loadSpanAnnotations() {
-    console.log('🔍 [DEBUG] loadSpanAnnotations() - ENTRY POINT');
-    console.log('🔍 [DEBUG] loadSpanAnnotations() - currentInstance:', currentInstance);
-    console.log('🔍 [DEBUG] loadSpanAnnotations() - currentInstance.id:', currentInstance?.id);
+    debugLog('🔍 [DEBUG] loadSpanAnnotations() - ENTRY POINT');
+    debugLog('🔍 [DEBUG] loadSpanAnnotations() - currentInstance:', currentInstance);
+    debugLog('🔍 [DEBUG] loadSpanAnnotations() - currentInstance.id:', currentInstance?.id);
 
     if (!currentInstance || !currentInstance.id) {
-        console.log('🔍 [DEBUG] loadSpanAnnotations() - EXIT POINT (no currentInstance or id)');
+        debugLog('🔍 [DEBUG] loadSpanAnnotations() - EXIT POINT (no currentInstance or id)');
         return;
     }
 
     try {
         // Initialize span manager if not already done
         if (!window.spanManager) {
-            console.log('🔍 [DEBUG] loadSpanAnnotations() - Initializing span manager');
+            debugLog('🔍 [DEBUG] loadSpanAnnotations() - Initializing span manager');
             initializeSpanManagerIntegration();
         }
 
@@ -424,27 +444,27 @@ async function loadSpanAnnotations() {
         await new Promise(resolve => {
             const checkSpanManager = () => {
                 if (window.spanManager) {
-                    console.log('🔍 [DEBUG] loadSpanAnnotations() - Span manager ready');
+                    debugLog('🔍 [DEBUG] loadSpanAnnotations() - Span manager ready');
                     resolve();
                 } else {
-                    console.log('🔍 [DEBUG] loadSpanAnnotations() - Span manager not ready, retrying...');
+                    debugLog('🔍 [DEBUG] loadSpanAnnotations() - Span manager not ready, retrying...');
                     setTimeout(checkSpanManager, 100);
                 }
             };
             checkSpanManager();
         });
 
-        console.log('🔍 [DEBUG] loadSpanAnnotations() - About to call spanManager.loadAnnotations()');
-        console.log('🔍 [DEBUG] loadSpanAnnotations() - Instance ID for API call:', currentInstance.id);
+        debugLog('🔍 [DEBUG] loadSpanAnnotations() - About to call spanManager.loadAnnotations()');
+        debugLog('🔍 [DEBUG] loadSpanAnnotations() - Instance ID for API call:', currentInstance.id);
 
         // Load annotations for the current instance
         await window.spanManager.loadAnnotations(currentInstance.id);
 
-        console.log('🔍 [DEBUG] loadSpanAnnotations() - spanManager.loadAnnotations() completed');
-        console.log('🔍 [DEBUG] loadSpanAnnotations() - EXIT POINT (success)');
+        debugLog('🔍 [DEBUG] loadSpanAnnotations() - spanManager.loadAnnotations() completed');
+        debugLog('🔍 [DEBUG] loadSpanAnnotations() - EXIT POINT (success)');
     } catch (error) {
         console.error('🔍 [DEBUG] loadSpanAnnotations() - Error loading span annotations:', error);
-        console.log('🔍 [DEBUG] loadSpanAnnotations() - EXIT POINT (error)');
+        debugLog('🔍 [DEBUG] loadSpanAnnotations() - EXIT POINT (error)');
     }
 }
 
@@ -469,7 +489,7 @@ async function loadCurrentInstance() {
 
         // Get instance ID from hidden input
         const instanceId = instanceIdElement ? instanceIdElement.value : null;
-        console.log(`🔍 [DEBUG] loadCurrentInstance: Read instance_id from DOM: '${instanceId}'`);
+        debugLog(`🔍 [DEBUG] loadCurrentInstance: Read instance_id from DOM: '${instanceId}'`);
 
         if (!instanceText || instanceText.trim() === '') {
             showError(true, 'No instance text available');
@@ -514,10 +534,10 @@ async function loadCurrentInstance() {
         aiAssistantManger.getAiAssistantName();
 
         // Load span annotations
-        console.log('🔍 [DEBUG] loadCurrentInstance() - About to call loadSpanAnnotations()');
-        console.log('🔍 [DEBUG] loadCurrentInstance() - currentInstance.id:', currentInstance?.id);
+        debugLog('🔍 [DEBUG] loadCurrentInstance() - About to call loadSpanAnnotations()');
+        debugLog('🔍 [DEBUG] loadCurrentInstance() - currentInstance.id:', currentInstance?.id);
         await loadSpanAnnotations();
-        console.log('🔍 [DEBUG] loadCurrentInstance() - loadSpanAnnotations() completed');
+        debugLog('🔍 [DEBUG] loadCurrentInstance() - loadSpanAnnotations() completed');
 
         // Populate input values with existing annotations AFTER forms are generated
         setTimeout(() => {
@@ -535,7 +555,7 @@ async function loadCurrentInstance() {
 function updateProgressDisplay() {
     // Progress is already displayed in the HTML template
     // No need to update it since it's server-rendered
-    console.log('Progress display updated from server-rendered HTML');
+    debugLog('Progress display updated from server-rendered HTML');
 }
 
 function updateInstanceDisplay() {
@@ -545,12 +565,12 @@ function updateInstanceDisplay() {
     if (instanceIdInput && currentInstance && currentInstance.id) {
         const oldValue = instanceIdInput.value;
         instanceIdInput.value = currentInstance.id;
-        console.log(`🔍 [DEBUG] updateInstanceDisplay: Updated instance_id from '${oldValue}' to '${currentInstance.id}'`);
+        debugLog(`🔍 [DEBUG] updateInstanceDisplay: Updated instance_id from '${oldValue}' to '${currentInstance.id}'`);
 
         // FIREFOX FIX: Force the input element to be updated in Firefox
         const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
         if (isFirefox) {
-            console.log('🔍 [DEBUG] updateInstanceDisplay: Firefox detected - forcing input update');
+            debugLog('🔍 [DEBUG] updateInstanceDisplay: Firefox detected - forcing input update');
 
             // Method 1: Force a DOM update by temporarily changing and restoring the value
             const tempValue = instanceIdInput.value;
@@ -564,17 +584,17 @@ function updateInstanceDisplay() {
             // Method 3: Force a reflow
             instanceIdInput.offsetHeight;
 
-            console.log(`🔍 [DEBUG] updateInstanceDisplay: Firefox input update completed`);
+            debugLog(`🔍 [DEBUG] updateInstanceDisplay: Firefox input update completed`);
         }
     } else {
-        console.log(`🔍 [DEBUG] updateInstanceDisplay: Could not update instance_id - input: ${!!instanceIdInput}, currentInstance: ${!!currentInstance}, currentInstance.id: ${currentInstance?.id}`);
+        debugLog(`🔍 [DEBUG] updateInstanceDisplay: Could not update instance_id - input: ${!!instanceIdInput}, currentInstance: ${!!currentInstance}, currentInstance.id: ${currentInstance?.id}`);
     }
-    console.log('[DEBUG] updateInstanceDisplay: Instance display updated from server');
+    debugLog('[DEBUG] updateInstanceDisplay: Instance display updated from server');
 }
 
 // Add this function to clear all form inputs
 function clearAllFormInputs() {
-    console.log('🔍 Clearing all form inputs');
+    debugLog('🔍 Clearing all form inputs');
 
     // Clear text inputs and textareas
     const textInputs = document.querySelectorAll('input[type="text"], textarea.annotation-input');
@@ -616,12 +636,12 @@ function clearAllFormInputs() {
         input.value = '';
     });
 
-    console.log('✅ All form inputs cleared');
+    debugLog('✅ All form inputs cleared');
 }
 
 async function loadAnnotations() {
     try {
-        console.log('🔍 Loading annotations for instance:', currentInstance.id);
+        debugLog('🔍 Loading annotations for instance:', currentInstance.id);
 
         // IMPORTANT: Read from server-rendered HTML attributes, NOT browser form state.
         // Firefox (and some other browsers) preserve form state across page navigations,
@@ -701,7 +721,7 @@ async function loadAnnotations() {
             }
         });
 
-        console.log('🔍 Annotations loaded from DOM:', currentAnnotations);
+        debugLog('🔍 Annotations loaded from DOM:', currentAnnotations);
     } catch (error) {
         console.error('❌ Error loading annotations:', error);
         currentAnnotations = {};
@@ -732,7 +752,7 @@ async function saveAnnotations() {
 
         // Save both label and span annotations via /updateinstance
         const spanAnnotations = extractSpanAnnotationsFromDOM();
-        console.log('[DEBUG] saveAnnotations: spanAnnotations to send:', spanAnnotations);
+        debugLog('[DEBUG] saveAnnotations: spanAnnotations to send:', spanAnnotations);
 
         // Transform currentAnnotations to the format expected by /updateinstance
         const labelAnnotations = {};
@@ -755,7 +775,7 @@ async function saveAnnotations() {
 
         if (response.ok) {
             const result = await response.json();
-            console.log('[DEBUG] saveAnnotations: annotations saved:', result);
+            debugLog('[DEBUG] saveAnnotations: annotations saved:', result);
         } else {
             console.warn('[DEBUG] saveAnnotations: failed to save annotations:', await response.text());
         }
@@ -770,7 +790,7 @@ async function saveAnnotations() {
 }
 
 async function navigateToPrevious() {
-    console.log('[DEEP DEBUG NAV] navigateToPrevious - ENTRY POINT');
+    debugLog('[DEEP DEBUG NAV] navigateToPrevious - ENTRY POINT');
     deepDebugState.navigationCalls++;
 
     logDeepDebug('navigateToPrevious_start', {
@@ -779,33 +799,33 @@ async function navigateToPrevious() {
     });
 
     if (isLoading) {
-        console.log('[DEEP DEBUG NAV] navigateToPrevious - Navigation blocked, still loading');
+        debugLog('[DEEP DEBUG NAV] navigateToPrevious - Navigation blocked, still loading');
         return;
     }
 
     setLoading(true);
-    console.log('[DEEP DEBUG NAV] navigateToPrevious - Loading set to true');
+    debugLog('[DEEP DEBUG NAV] navigateToPrevious - Loading set to true');
 
     try {
         // Save annotations before navigating away
-        console.log('[DEEP DEBUG NAV] navigateToPrevious - Saving annotations before navigation');
+        debugLog('[DEEP DEBUG NAV] navigateToPrevious - Saving annotations before navigation');
         await saveAnnotations();
 
         // FIREFOX FIX: Force overlay cleanup before navigation
         const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
-        console.log('[DEEP DEBUG NAV] navigateToPrevious - Is Firefox:', isFirefox);
+        debugLog('[DEEP DEBUG NAV] navigateToPrevious - Is Firefox:', isFirefox);
 
         if (isFirefox) {
-            console.log('[DEEP DEBUG NAV] Firefox detected - forcing overlay cleanup before navigation');
+            debugLog('[DEEP DEBUG NAV] Firefox detected - forcing overlay cleanup before navigation');
             const spanOverlays = document.getElementById('span-overlays');
             if (spanOverlays) {
                 const beforeCount = spanOverlays.children.length;
-                console.log('[DEEP DEBUG NAV] navigateToPrevious - Before Firefox cleanup:', beforeCount, 'overlays');
+                debugLog('[DEEP DEBUG NAV] navigateToPrevious - Before Firefox cleanup:', beforeCount, 'overlays');
 
                 // Remove all overlays individually
                 while (spanOverlays.firstChild) {
                     const child = spanOverlays.firstChild;
-                    console.log('[DEEP DEBUG NAV] navigateToPrevious - Removing overlay child:', child.className, child.id);
+                    debugLog('[DEEP DEBUG NAV] navigateToPrevious - Removing overlay child:', child.className, child.id);
 
                     // Track overlay removal for debugging
                     if (typeof trackOverlayRemoval === 'function') {
@@ -818,20 +838,20 @@ async function navigateToPrevious() {
                 // Force reflow
                 spanOverlays.offsetHeight;
                 const afterCount = spanOverlays.children.length;
-                console.log('[DEEP DEBUG NAV] navigateToPrevious - After Firefox cleanup:', afterCount, 'overlays');
+                debugLog('[DEEP DEBUG NAV] navigateToPrevious - After Firefox cleanup:', afterCount, 'overlays');
 
                 // Double-check cleanup
                 const remainingOverlays = document.querySelectorAll('.span-overlay');
-                console.log('[DEEP DEBUG NAV] navigateToPrevious - Remaining overlays via querySelectorAll:', remainingOverlays.length);
+                debugLog('[DEEP DEBUG NAV] navigateToPrevious - Remaining overlays via querySelectorAll:', remainingOverlays.length);
 
                 if (remainingOverlays.length > 0) {
-                    console.log('[DEEP DEBUG NAV] navigateToPrevious - WARNING: Overlays still exist after cleanup!');
+                    debugLog('[DEEP DEBUG NAV] navigateToPrevious - WARNING: Overlays still exist after cleanup!');
                     remainingOverlays.forEach((overlay, index) => {
-                        console.log(`[DEEP DEBUG NAV] navigateToPrevious - Remaining overlay ${index}:`, overlay.className, overlay.id);
+                        debugLog(`[DEEP DEBUG NAV] navigateToPrevious - Remaining overlay ${index}:`, overlay.className, overlay.id);
                     });
                 }
             } else {
-                console.log('[DEEP DEBUG NAV] navigateToPrevious - No span-overlays container found');
+                debugLog('[DEEP DEBUG NAV] navigateToPrevious - No span-overlays container found');
             }
         }
 
@@ -848,7 +868,7 @@ async function navigateToPrevious() {
         });
 
         if (response.ok) {
-            console.log('[DEEP DEBUG NAV] navigateToPrevious - Navigation successful, reloading page');
+            debugLog('[DEEP DEBUG NAV] navigateToPrevious - Navigation successful, reloading page');
 
             if (window.spanManager && typeof window.spanManager.onInstanceChange === 'function') {
                 window.spanManager.onInstanceChange(currentInstance?.id);
@@ -874,7 +894,7 @@ async function navigateToPrevious() {
 }
 
 async function navigateToNext() {
-    console.log('[DEEP DEBUG NAV] navigateToNext - ENTRY POINT');
+    debugLog('[DEEP DEBUG NAV] navigateToNext - ENTRY POINT');
     deepDebugState.navigationCalls++;
 
     logDeepDebug('navigateToNext_start', {
@@ -883,33 +903,33 @@ async function navigateToNext() {
     });
 
     if (isLoading) {
-        console.log('[DEEP DEBUG NAV] navigateToNext - Navigation blocked, still loading');
+        debugLog('[DEEP DEBUG NAV] navigateToNext - Navigation blocked, still loading');
         return;
     }
 
     setLoading(true);
-    console.log('[DEEP DEBUG NAV] navigateToNext - Loading set to true');
+    debugLog('[DEEP DEBUG NAV] navigateToNext - Loading set to true');
 
     try {
         // Save annotations before navigating away
-        console.log('[DEEP DEBUG NAV] navigateToNext - Saving annotations before navigation');
+        debugLog('[DEEP DEBUG NAV] navigateToNext - Saving annotations before navigation');
         await saveAnnotations();
 
         // FIREFOX FIX: Force overlay cleanup before navigation
         const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
-        console.log('[DEEP DEBUG NAV] navigateToNext - Is Firefox:', isFirefox);
+        debugLog('[DEEP DEBUG NAV] navigateToNext - Is Firefox:', isFirefox);
 
         if (isFirefox) {
-            console.log('[DEEP DEBUG NAV] Firefox detected - forcing overlay cleanup before navigation');
+            debugLog('[DEEP DEBUG NAV] Firefox detected - forcing overlay cleanup before navigation');
             const spanOverlays = document.getElementById('span-overlays');
             if (spanOverlays) {
                 const beforeCount = spanOverlays.children.length;
-                console.log('[DEEP DEBUG NAV] navigateToNext - Before Firefox cleanup:', beforeCount, 'overlays');
+                debugLog('[DEEP DEBUG NAV] navigateToNext - Before Firefox cleanup:', beforeCount, 'overlays');
 
                 // Remove all overlays individually
                 while (spanOverlays.firstChild) {
                     const child = spanOverlays.firstChild;
-                    console.log('[DEEP DEBUG NAV] navigateToNext - Removing overlay child:', child.className, child.id);
+                    debugLog('[DEEP DEBUG NAV] navigateToNext - Removing overlay child:', child.className, child.id);
 
                     // Track overlay removal for debugging
                     if (typeof trackOverlayRemoval === 'function') {
@@ -922,20 +942,20 @@ async function navigateToNext() {
                 // Force reflow
                 spanOverlays.offsetHeight;
                 const afterCount = spanOverlays.children.length;
-                console.log('[DEEP DEBUG NAV] navigateToNext - After Firefox cleanup:', afterCount, 'overlays');
+                debugLog('[DEEP DEBUG NAV] navigateToNext - After Firefox cleanup:', afterCount, 'overlays');
 
                 // Double-check cleanup
                 const remainingOverlays = document.querySelectorAll('.span-overlay');
-                console.log('[DEEP DEBUG NAV] navigateToNext - Remaining overlays via querySelectorAll:', remainingOverlays.length);
+                debugLog('[DEEP DEBUG NAV] navigateToNext - Remaining overlays via querySelectorAll:', remainingOverlays.length);
 
                 if (remainingOverlays.length > 0) {
-                    console.log('[DEEP DEBUG NAV] navigateToNext - WARNING: Overlays still exist after cleanup!');
+                    debugLog('[DEEP DEBUG NAV] navigateToNext - WARNING: Overlays still exist after cleanup!');
                     remainingOverlays.forEach((overlay, index) => {
-                        console.log(`[DEEP DEBUG NAV] navigateToNext - Remaining overlay ${index}:`, overlay.className, overlay.id);
+                        debugLog(`[DEEP DEBUG NAV] navigateToNext - Remaining overlay ${index}:`, overlay.className, overlay.id);
                     });
                 }
             } else {
-                console.log('[DEEP DEBUG NAV] navigateToNext - No span-overlays container found');
+                debugLog('[DEEP DEBUG NAV] navigateToNext - No span-overlays container found');
             }
         }
 
@@ -952,7 +972,7 @@ async function navigateToNext() {
         });
 
         if (response.ok) {
-            console.log('[DEEP DEBUG NAV] navigateToNext - Navigation successful, reloading page');
+            debugLog('[DEEP DEBUG NAV] navigateToNext - Navigation successful, reloading page');
 
             if (window.spanManager && typeof window.spanManager.onInstanceChange === 'function') {
                 window.spanManager.onInstanceChange(currentInstance?.id);
@@ -988,18 +1008,18 @@ async function navigateToInstance(instanceIndex) {
 
         // FIREFOX FIX: Force overlay cleanup before navigation
         const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
-        console.log('🔍 [DEBUG] navigateToInstance() - Is Firefox:', isFirefox);
+        debugLog('🔍 [DEBUG] navigateToInstance() - Is Firefox:', isFirefox);
 
         if (isFirefox) {
-            console.log('🔍 [DEBUG] Firefox detected - forcing overlay cleanup before navigation');
+            debugLog('🔍 [DEBUG] Firefox detected - forcing overlay cleanup before navigation');
             const spanOverlays = document.getElementById('span-overlays');
             if (spanOverlays) {
-                console.log('🔍 [DEBUG] navigateToInstance() - Before Firefox cleanup:', spanOverlays.children.length, 'overlays');
+                debugLog('🔍 [DEBUG] navigateToInstance() - Before Firefox cleanup:', spanOverlays.children.length, 'overlays');
 
                 // Remove all overlays individually
                 while (spanOverlays.firstChild) {
                     const child = spanOverlays.firstChild;
-                    console.log('🔍 [DEBUG] navigateToInstance() - Removing overlay child:', child.className, child.id);
+                    debugLog('🔍 [DEBUG] navigateToInstance() - Removing overlay child:', child.className, child.id);
 
                     // Track overlay removal for debugging
                     if (typeof trackOverlayRemoval === 'function') {
@@ -1011,9 +1031,9 @@ async function navigateToInstance(instanceIndex) {
 
                 // Force reflow
                 spanOverlays.offsetHeight;
-                console.log('🔍 [DEBUG] navigateToInstance() - After Firefox cleanup:', spanOverlays.children.length, 'overlays');
+                debugLog('🔍 [DEBUG] navigateToInstance() - After Firefox cleanup:', spanOverlays.children.length, 'overlays');
             } else {
-                console.log('🔍 [DEBUG] navigateToInstance() - No span-overlays container found');
+                debugLog('🔍 [DEBUG] navigateToInstance() - No span-overlays container found');
             }
         }
 
@@ -1033,17 +1053,17 @@ async function navigateToInstance(instanceIndex) {
         });
 
         if (response.ok) {
-            console.log('🔍 [DEBUG] navigateToInstance() - Navigation successful, about to reload page');
+            debugLog('🔍 [DEBUG] navigateToInstance() - Navigation successful, about to reload page');
             // DEBUG: Clear overlays before reload
             const spanOverlays = document.getElementById('span-overlays');
             if (spanOverlays) {
-                console.log('🔍 [DEBUG] navigateToInstance() - Before clearing overlays:', spanOverlays.children.length, 'overlays');
-                console.log('🔍 [DEBUG] navigateToInstance() - Clearing span overlays before page reload');
+                debugLog('🔍 [DEBUG] navigateToInstance() - Before clearing overlays:', spanOverlays.children.length, 'overlays');
+                debugLog('🔍 [DEBUG] navigateToInstance() - Clearing span overlays before page reload');
                 spanOverlays.innerHTML = '';
-                console.log('🔍 [DEBUG] navigateToInstance() - After clearing overlays:', spanOverlays.children.length, 'overlays');
+                debugLog('🔍 [DEBUG] navigateToInstance() - After clearing overlays:', spanOverlays.children.length, 'overlays');
                 debugVerifyOverlayCleanup();
             } else {
-                console.log('🔍 [DEBUG] navigateToInstance() - No span-overlays container found');
+                debugLog('🔍 [DEBUG] navigateToInstance() - No span-overlays container found');
             }
             // Reload the page to get the new instance data from the server
             window.location.reload();
@@ -1175,7 +1195,7 @@ function setupInputEventListeners() {
                     handleInputChange(event.target);
                 }, 1000);
             });
-            console.log(`Set up event listener for ${tagName} element:`, input.id);
+            debugLog(`Set up event listener for ${tagName} element:`, input.id);
         } else if (inputType === 'radio' || inputType === 'checkbox') {
             // Radio/checkbox inputs - immediate saving
             input.addEventListener('change', function (event) {
@@ -1214,7 +1234,7 @@ function handleInputChange(element) {
     const inputType = element.type;
     const tagName = element.tagName.toLowerCase();
 
-    console.log(`handleInputChange called for ${tagName} element:`, element.id, 'schema:', schema, 'label:', labelName);
+    debugLog(`handleInputChange called for ${tagName} element:`, element.id, 'schema:', schema, 'label:', labelName);
 
     if (!schema || !labelName) {
         console.warn('Missing schema or label_name for input:', element);
@@ -1246,7 +1266,7 @@ function handleInputChange(element) {
                     delete currentAnnotations[schema];
                 }
             }
-            console.log(`Removed annotation: ${schema}.${labelName}`);
+            debugLog(`Removed annotation: ${schema}.${labelName}`);
 
             // Auto-save the removal
             clearTimeout(textSaveTimer);
@@ -1262,7 +1282,7 @@ function handleInputChange(element) {
 
     // Update the current annotations
     updateAnnotation(schema, labelName, value);
-    console.log(`Updated annotation: ${schema}.${labelName} = ${value}`);
+    debugLog(`Updated annotation: ${schema}.${labelName} = ${value}`);
 
     // Auto-save
     clearTimeout(textSaveTimer);
@@ -1274,22 +1294,22 @@ function handleInputChange(element) {
 function populateInputValues() {
     if (!currentAnnotations || !userState) return;
 
-    console.log('🔍 Populating input values with annotations:', currentAnnotations);
+    debugLog('🔍 Populating input values with annotations:', currentAnnotations);
 
     // Populate text inputs and textareas
     const textInputs = document.querySelectorAll('input[type="text"], textarea.annotation-input');
-    console.log('🔍 Found text inputs and textareas:', textInputs.length);
+    debugLog('🔍 Found text inputs and textareas:', textInputs.length);
 
     textInputs.forEach(input => {
         const schema = input.getAttribute('schema');
         const labelName = input.getAttribute('label_name');
-        console.log('🔍 Checking input:', input.id, 'schema:', schema, 'label:', labelName);
+        debugLog('🔍 Checking input:', input.id, 'schema:', schema, 'label:', labelName);
 
         if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
             input.value = currentAnnotations[schema][labelName];
-            console.log(`✅ Populated ${input.tagName} ${input.id} with value:`, currentAnnotations[schema][labelName]);
+            debugLog(`✅ Populated ${input.tagName} ${input.id} with value:`, currentAnnotations[schema][labelName]);
         } else {
-            console.log(`❌ Could not populate ${input.tagName} ${input.id}:`, {
+            debugLog(`❌ Could not populate ${input.tagName} ${input.id}:`, {
                 hasSchema: !!schema,
                 hasLabelName: !!labelName,
                 hasSchemaInAnnotations: !!(currentAnnotations[schema]),
@@ -1306,7 +1326,7 @@ function populateInputValues() {
 
         if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
             input.checked = (currentAnnotations[schema][labelName] === input.value);
-            console.log(`Populated radio ${input.id}: ${input.checked ? 'checked' : 'unchecked'}`);
+            debugLog(`Populated radio ${input.id}: ${input.checked ? 'checked' : 'unchecked'}`);
         }
     });
 
@@ -1320,7 +1340,7 @@ function populateInputValues() {
             // For checkboxes, check if the value exists in the annotations
             const hasAnnotation = currentAnnotations[schema][labelName] === input.value;
             input.checked = hasAnnotation;
-            console.log(`Populated checkbox ${input.id}: ${hasAnnotation ? 'checked' : 'unchecked'}`);
+            debugLog(`Populated checkbox ${input.id}: ${hasAnnotation ? 'checked' : 'unchecked'}`);
         }
     });
 
@@ -1336,7 +1356,7 @@ function populateInputValues() {
             if (valueDisplay) {
                 valueDisplay.textContent = currentAnnotations[schema][labelName];
             }
-            console.log(`Populated slider ${input.id} with value:`, currentAnnotations[schema][labelName]);
+            debugLog(`Populated slider ${input.id} with value:`, currentAnnotations[schema][labelName]);
         }
     });
 
@@ -1348,7 +1368,7 @@ function populateInputValues() {
 
         if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
             input.value = currentAnnotations[schema][labelName];
-            console.log(`Populated select ${input.id} with value:`, currentAnnotations[schema][labelName]);
+            debugLog(`Populated select ${input.id} with value:`, currentAnnotations[schema][labelName]);
         }
     });
 
@@ -1360,7 +1380,7 @@ function populateInputValues() {
 
         if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
             input.value = currentAnnotations[schema][labelName];
-            console.log(`Populated number ${input.id} with value:`, currentAnnotations[schema][labelName]);
+            debugLog(`Populated number ${input.id} with value:`, currentAnnotations[schema][labelName]);
         }
     });
 
@@ -1369,7 +1389,7 @@ function populateInputValues() {
 
 // Span annotation functions
 function onlyOne(checkbox) {
-    console.log('🔍 [DEBUG] onlyOne() called with checkbox:', {
+    debugLog('🔍 [DEBUG] onlyOne() called with checkbox:', {
         id: checkbox.id,
         name: checkbox.name,
         value: checkbox.value,
@@ -1378,11 +1398,11 @@ function onlyOne(checkbox) {
     });
 
     var x = document.getElementsByClassName(checkbox.className);
-    console.log('🔍 [DEBUG] onlyOne() - Found elements with same class:', x.length);
+    debugLog('🔍 [DEBUG] onlyOne() - Found elements with same class:', x.length);
 
     var i;
     for (i = 0; i < x.length; i++) {
-        console.log('🔍 [DEBUG] onlyOne() - Processing element:', {
+        debugLog('🔍 [DEBUG] onlyOne() - Processing element:', {
             id: x[i].id,
             value: x[i].value,
             checked: x[i].checked,
@@ -1390,19 +1410,19 @@ function onlyOne(checkbox) {
         });
 
         if (x[i].value != checkbox.value) {
-            console.log('🔍 [DEBUG] onlyOne() - Unchecking element:', x[i].id);
+            debugLog('🔍 [DEBUG] onlyOne() - Unchecking element:', x[i].id);
             x[i].checked = false;
         }
     }
     // Ensure the clicked checkbox is checked
-    console.log('🔍 [DEBUG] onlyOne() - Setting clicked checkbox to checked:', checkbox.id);
+    debugLog('🔍 [DEBUG] onlyOne() - Setting clicked checkbox to checked:', checkbox.id);
     checkbox.setAttribute('data-just-checked', 'true'); // Flag to prevent change event interference
     checkbox.checked = true;
 
     // Remove the flag after a short delay in case the change event doesn't fire
     setTimeout(() => {
         if (checkbox.hasAttribute('data-just-checked')) {
-            console.log('🔍 [DEBUG] onlyOne() - Removing data-just-checked flag after timeout');
+            debugLog('🔍 [DEBUG] onlyOne() - Removing data-just-checked flag after timeout');
             checkbox.removeAttribute('data-just-checked');
         }
     }, 100);
@@ -1415,7 +1435,7 @@ function extractSpanAnnotationsFromDOM() {
      * Returns:
      *     Array of span annotation objects with schema, name, start, end, title, value
      */
-    console.log('[DEBUG] extractSpanAnnotationsFromDOM called');
+    debugLog('[DEBUG] extractSpanAnnotationsFromDOM called');
 
     const overlays = document.querySelectorAll('.span-overlay');
     const spanAnnotations = [];
@@ -1452,7 +1472,7 @@ function extractSpanAnnotationsFromDOM() {
         });
     }
 
-    console.log('[DEBUG] extractSpanAnnotationsFromDOM: found', spanAnnotations.length, 'spans:', spanAnnotations);
+    debugLog('[DEBUG] extractSpanAnnotationsFromDOM: found', spanAnnotations.length, 'spans:', spanAnnotations);
     return spanAnnotations;
 }
 
@@ -1461,7 +1481,7 @@ function alignSpanOverlays() {
      * Align each .span-overlay to the union of its covered .text-segment spans.
      * This function positions overlays to match the actual text segments in the DOM.
      */
-    console.log('[DEBUG] alignSpanOverlays called');
+    debugLog('[DEBUG] alignSpanOverlays called');
 
     const overlays = document.querySelectorAll('.span-overlay');
     const segments = Array.from(document.querySelectorAll('.text-segment'));
@@ -1519,7 +1539,7 @@ function alignSpanOverlays() {
         overlay.style.backgroundColor = 'rgba(255, 230, 230, 0.3)';
         overlay.style.border = '1px solid rgba(255, 230, 230, 0.8)';
 
-        console.log('[DEBUG] alignSpanOverlays: Positioned overlay', annotationId, 'at',
+        debugLog('[DEBUG] alignSpanOverlays: Positioned overlay', annotationId, 'at',
             minLeft, minTop, maxRight - minLeft, maxBottom - minTop);
     }
 }
@@ -1535,11 +1555,11 @@ function getSelectionIndicesOverlay() {
      * Returns:
      *     Object with start and end indices in the original text
      */
-    console.log('[DEBUG] getSelectionIndicesOverlay called');
+    debugLog('[DEBUG] getSelectionIndicesOverlay called');
 
     var selection = window.getSelection();
     if (!selection.rangeCount) {
-        console.log('[DEBUG] getSelectionIndicesOverlay: No selection range');
+        debugLog('[DEBUG] getSelectionIndicesOverlay: No selection range');
         return { start: 0, end: 0 };
     }
 
@@ -1547,19 +1567,19 @@ function getSelectionIndicesOverlay() {
     var container = document.getElementById('text-content');
 
     if (!container) {
-        console.log('[DEBUG] getSelectionIndicesOverlay: No text-content container found');
+        debugLog('[DEBUG] getSelectionIndicesOverlay: No text-content container found');
         return { start: 0, end: 0 };
     }
 
     // Use the unified text positioning approach
     if (typeof calculateTextOffsetsFromSelection === 'function') {
         const offsets = calculateTextOffsetsFromSelection(container, range);
-        console.log('[DEBUG] getSelectionIndicesOverlay: Using unified approach, offsets:', offsets);
+        debugLog('[DEBUG] getSelectionIndicesOverlay: Using unified approach, offsets:', offsets);
         return offsets;
     }
 
     // Fallback to the original approach if unified function is not available
-    console.log('[DEBUG] getSelectionIndicesOverlay: Using fallback approach');
+    debugLog('[DEBUG] getSelectionIndicesOverlay: Using fallback approach');
     return getOriginalTextOffsetsOverlay(container, range);
 }
 
@@ -1575,11 +1595,11 @@ function changeSpanLabel(checkbox, schema, spanLabel, spanTitle, spanColor) {
      *     spanTitle: The span title
      *     spanColor: The span color
      */
-    console.log('[DEBUG] changeSpanLabel called:', { schema, spanLabel, spanTitle, spanColor, checked: checkbox.checked });
+    debugLog('[DEBUG] changeSpanLabel called:', { schema, spanLabel, spanTitle, spanColor, checked: checkbox.checked });
 
     // Use the new span manager if available
     if (window.spanManager && window.spanManager.isInitialized) {
-        console.log('[DEBUG] changeSpanLabel: Using new span manager');
+        debugLog('[DEBUG] changeSpanLabel: Using new span manager');
 
         // Select the label and schema in the span manager
         window.spanManager.selectLabel(spanLabel, schema);
@@ -1601,12 +1621,12 @@ function changeSpanLabel(checkbox, schema, spanLabel, spanTitle, spanColor) {
             if (checkbox.checked) {
                 textContainer.addEventListener('mouseup', boundEventHandlers.spanManagerMouseUp);
                 textContainer.addEventListener('keyup', boundEventHandlers.spanManagerKeyUp);
-                console.log('[DEBUG] changeSpanLabel: Text selection handlers added for span manager');
+                debugLog('[DEBUG] changeSpanLabel: Text selection handlers added for span manager');
             }
         }
     } else {
         // Defer to new manager once ready; avoid legacy overlay system to prevent conflicts
-        console.log('[DEBUG] changeSpanLabel: Span manager not ready; deferring selection to manager');
+        debugLog('[DEBUG] changeSpanLabel: Span manager not ready; deferring selection to manager');
         const waitAndSelect = () => {
             if (window.spanManager && window.spanManager.isInitialized) {
                 window.spanManager.selectLabel(spanLabel, schema);
@@ -1624,7 +1644,7 @@ function changeSpanLabel(checkbox, schema, spanLabel, spanTitle, spanColor) {
 
     // Add debugging to track checkbox state after function execution
     setTimeout(() => {
-        console.log('[DEBUG] changeSpanLabel: Checkbox state after execution:', {
+        debugLog('[DEBUG] changeSpanLabel: Checkbox state after execution:', {
             id: checkbox.id,
             checked: checkbox.checked,
             name: checkbox.name,
@@ -1657,20 +1677,20 @@ function restoreSpanAnnotationsFromHTML() {
 //      * Returns:
 //      *     Object with start and end indices in the original text
 //      */
-//     console.log('[DEBUG] getSelectionIndicesOverlay called');
+//     debugLog('[DEBUG] getSelectionIndicesOverlay called');
 
 //     // Get the user selection
 //     var selection = window.getSelection();
 
 //     if (selection.rangeCount === 0) {
-//         console.log('[DEBUG] getSelectionIndicesOverlay: No selection');
+//         debugLog('[DEBUG] getSelectionIndicesOverlay: No selection');
 //         return { start: -1, end: -1 }; // No selection
 //     }
 
 //     // Get the range object representing the selected portion
 //     var range = selection.getRangeAt(0);
 
-//     console.log('[DEBUG] getSelectionIndicesOverlay: Selection details:', {
+//     debugLog('[DEBUG] getSelectionIndicesOverlay: Selection details:', {
 //         selectionText: selection.toString(),
 //         selectionLength: selection.toString().length,
 //         rangeStartContainer: range.startContainer,
@@ -1684,20 +1704,20 @@ function restoreSpanAnnotationsFromHTML() {
 //     var originalTextElement = $(range.commonAncestorContainer).closest('.original-text')[0];
 
 //     if (!originalTextElement) {
-//         console.log('[DEBUG] getSelectionIndicesOverlay: Not within .original-text');
+//         debugLog('[DEBUG] getSelectionIndicesOverlay: Not within .original-text');
 //         return { start: -2, end: -2 }; // Not within the original text
 //     }
 
 //     // Get the original text from the data attribute for comparison
 //     var originalTextFromData = originalTextElement.getAttribute('data-original-text');
-//     console.log('[DEBUG] getSelectionIndicesOverlay: Original text from data attribute:', originalTextFromData);
-//     console.log('[DEBUG] getSelectionIndicesOverlay: Original text length from data:', originalTextFromData ? originalTextFromData.length : 0);
+//     debugLog('[DEBUG] getSelectionIndicesOverlay: Original text from data attribute:', originalTextFromData);
+//     debugLog('[DEBUG] getSelectionIndicesOverlay: Original text length from data:', originalTextFromData ? originalTextFromData.length : 0);
 
 //     // For the overlay approach, we can use a simpler offset calculation
 //     // since the original text is unchanged and we can directly map DOM positions
 //     var result = getOriginalTextOffsetsOverlay(originalTextElement, range);
 
-//     console.log('[DEBUG] getSelectionIndicesOverlay: Final result:', result);
+//     debugLog('[DEBUG] getSelectionIndicesOverlay: Final result:', result);
 
 //     return result;
 // }
@@ -1716,45 +1736,45 @@ function getOriginalTextOffsetsOverlay(container, range) {
      * Returns:
      *     Object with start and end offsets in the original text
      */
-    console.log('[DEBUG] getOriginalTextOffsetsOverlay called');
+    debugLog('[DEBUG] getOriginalTextOffsetsOverlay called');
 
     // Use the unified text positioning approach
     if (typeof calculateTextOffsetsFromSelection === 'function') {
         const offsets = calculateTextOffsetsFromSelection(container, range);
-        console.log('[DEBUG] getOriginalTextOffsetsOverlay: Using unified approach, offsets:', offsets);
+        debugLog('[DEBUG] getOriginalTextOffsetsOverlay: Using unified approach, offsets:', offsets);
         return offsets;
     }
 
     // Fallback to the original approach if unified function is not available
-    console.log('[DEBUG] getOriginalTextOffsetsOverlay: Using fallback approach');
+    debugLog('[DEBUG] getOriginalTextOffsetsOverlay: Using fallback approach');
 
     // Get the original text from the data attribute (this is the clean text without HTML markup)
     var originalText = container.getAttribute('data-original-text');
     if (!originalText) {
-        console.log('[DEBUG] getOriginalTextOffsetsOverlay: WARNING - no data-original-text attribute found, falling back to DOM text');
+        debugLog('[DEBUG] getOriginalTextOffsetsOverlay: WARNING - no data-original-text attribute found, falling back to DOM text');
         originalText = container.textContent || container.innerText;
     }
-    console.log('[DEBUG] getOriginalTextOffsetsOverlay: originalText from data attribute:', originalText);
-    console.log('[DEBUG] getOriginalTextOffsetsOverlay: originalText length:', originalText.length);
+    debugLog('[DEBUG] getOriginalTextOffsetsOverlay: originalText from data attribute:', originalText);
+    debugLog('[DEBUG] getOriginalTextOffsetsOverlay: originalText length:', originalText.length);
 
     // Get the selected text
     var selectedText = window.getSelection().toString();
-    console.log('[DEBUG] getOriginalTextOffsetsOverlay: selectedText:', selectedText);
-    console.log('[DEBUG] getOriginalTextOffsetsOverlay: selectedText length:', selectedText.length);
+    debugLog('[DEBUG] getOriginalTextOffsetsOverlay: selectedText:', selectedText);
+    debugLog('[DEBUG] getOriginalTextOffsetsOverlay: selectedText length:', selectedText.length);
 
     // Find the selection in the original text
     var startIndex = originalText.indexOf(selectedText);
     var endIndex = startIndex + selectedText.length;
 
-    console.log('[DEBUG] getOriginalTextOffsetsOverlay: mapped indices:', { startIndex, endIndex });
+    debugLog('[DEBUG] getOriginalTextOffsetsOverlay: mapped indices:', { startIndex, endIndex });
 
     // Verify the indices by extracting text
     if (startIndex !== -1) {
         var extractedText = originalText.substring(startIndex, endIndex);
-        console.log('[DEBUG] getOriginalTextOffsetsOverlay: extracted text using indices:', extractedText);
-        console.log('[DEBUG] getOriginalTextOffsetsOverlay: extracted text matches selected text:', extractedText === selectedText);
+        debugLog('[DEBUG] getOriginalTextOffsetsOverlay: extracted text using indices:', extractedText);
+        debugLog('[DEBUG] getOriginalTextOffsetsOverlay: extracted text matches selected text:', extractedText === selectedText);
     } else {
-        console.log('[DEBUG] getOriginalTextOffsetsOverlay: WARNING - selected text not found in original text!');
+        debugLog('[DEBUG] getOriginalTextOffsetsOverlay: WARNING - selected text not found in original text!');
     }
 
     return { start: startIndex, end: endIndex };
@@ -1771,24 +1791,24 @@ function surroundSelectionOverlay(schema, labelName, title, selectionColor) {
      *     title: The annotation title
      *     selectionColor: The color for the annotation
      */
-    console.log('[DEBUG] surroundSelectionOverlay called:', { schema, labelName, title, selectionColor });
+    debugLog('[DEBUG] surroundSelectionOverlay called:', { schema, labelName, title, selectionColor });
 
     // Check that this wasn't a spurious click or the click for the delete button which
     // also seems to trigger this selection event
     if (window.getSelection().rangeCount == 0) {
-        console.log('[DEBUG] surroundSelectionOverlay: No selection range found');
+        debugLog('[DEBUG] surroundSelectionOverlay: No selection range found');
         return;
     }
     var range = window.getSelection().getRangeAt(0);
 
     if (range.startOffset == range.endOffset) {
-        console.log('[DEBUG] surroundSelectionOverlay: Selection start and end offsets are the same');
+        debugLog('[DEBUG] surroundSelectionOverlay: Selection start and end offsets are the same');
         return;
     }
 
     // Get the instance id
     var instance_id = document.getElementById("instance_id").value;
-    console.log('[DEBUG] surroundSelectionOverlay: Instance ID:', instance_id);
+    debugLog('[DEBUG] surroundSelectionOverlay: Instance ID:', instance_id);
 
     if (window.getSelection) {
         var sel = window.getSelection();
@@ -1796,22 +1816,22 @@ function surroundSelectionOverlay(schema, labelName, title, selectionColor) {
         // Check that we're labeling something in the original text that
         // we want to annotate
         if (!sel.anchorNode.parentElement) {
-            console.log('[DEBUG] surroundSelectionOverlay: No anchor node parent element');
+            debugLog('[DEBUG] surroundSelectionOverlay: No anchor node parent element');
             return;
         }
 
         // Otherwise, we're going to be adding a new span annotation, if
         // the user has selected some non-empty part of the text
         if (sel.rangeCount && sel.toString().trim().length > 0) {
-            console.log('[DEBUG] surroundSelectionOverlay: Valid selection found, creating span');
+            debugLog('[DEBUG] surroundSelectionOverlay: Valid selection found, creating span');
 
             // Get the selection text as a string
             var selText = window.getSelection().toString().trim();
-            console.log('[DEBUG] surroundSelectionOverlay: Selected text:', selText);
+            debugLog('[DEBUG] surroundSelectionOverlay: Selected text:', selText);
 
             // Get the offsets for the server using the overlay approach
             var startEnd = getSelectionIndicesOverlay();
-            console.log('[DEBUG] surroundSelectionOverlay: Selection indices:', startEnd);
+            debugLog('[DEBUG] surroundSelectionOverlay: Selection indices:', startEnd);
 
             // Package this all up in a post request to the server's updateinstance endpoint
             var post_req = {
@@ -1829,7 +1849,7 @@ function surroundSelectionOverlay(schema, labelName, title, selectionColor) {
                 instance_id: instance_id
             };
 
-            console.log('[DEBUG] surroundSelectionOverlay: Sending span annotation request:', post_req);
+            debugLog('[DEBUG] surroundSelectionOverlay: Sending span annotation request:', post_req);
 
             // Send the request
             fetch('/updateinstance', {
@@ -1841,7 +1861,7 @@ function surroundSelectionOverlay(schema, labelName, title, selectionColor) {
             })
             .then(response => {
                 if (response.ok) {
-                    console.log('[DEBUG] surroundSelectionOverlay: Span annotation created successfully');
+                    debugLog('[DEBUG] surroundSelectionOverlay: Span annotation created successfully');
                     // Reload the page to show the new annotation
                     location.reload();
                 } else {
@@ -1857,9 +1877,9 @@ function surroundSelectionOverlay(schema, labelName, title, selectionColor) {
 
             // Clear the current selection
             sel.empty();
-            console.log('[DEBUG] surroundSelectionOverlay: Span creation request sent, page will reload');
+            debugLog('[DEBUG] surroundSelectionOverlay: Span creation request sent, page will reload');
         } else {
-            console.log('[DEBUG] surroundSelectionOverlay: No valid selection found');
+            debugLog('[DEBUG] surroundSelectionOverlay: No valid selection found');
         }
     }
 }
@@ -1876,7 +1896,7 @@ function changeSpanLabelOverlay(checkbox, schema, spanLabel, spanTitle, spanColo
      *     spanTitle: The span title
      *     spanColor: The span color
      */
-    console.log('[DEBUG] changeSpanLabelOverlay called:', { schema, spanLabel, spanTitle, spanColor, checked: checkbox.checked });
+    debugLog('[DEBUG] changeSpanLabelOverlay called:', { schema, spanLabel, spanTitle, spanColor, checked: checkbox.checked });
 
     // Listen for when the user has highlighted some text (only when the label is checked)
     document.onmouseup = function (e) {
@@ -1887,10 +1907,10 @@ function changeSpanLabelOverlay(checkbox, schema, spanLabel, spanTitle, spanColo
             return true;
         }
         if (checkbox.checked) {
-            console.log('[DEBUG] changeSpanLabelOverlay: Mouse up event - checkbox is checked, calling surroundSelectionOverlay');
+            debugLog('[DEBUG] changeSpanLabelOverlay: Mouse up event - checkbox is checked, calling surroundSelectionOverlay');
             surroundSelectionOverlay(schema, spanLabel, spanTitle, spanColor);
         } else {
-            console.log('[DEBUG] changeSpanLabelOverlay: Mouse up event - checkbox is not checked');
+            debugLog('[DEBUG] changeSpanLabelOverlay: Mouse up event - checkbox is not checked');
         }
     };
 }
@@ -1927,7 +1947,7 @@ function restoreSpanAnnotationsFromHTMLOverlay() {
     });
 
     currentSpanAnnotations = found;
-    console.log('[DEBUG] restoreSpanAnnotationsFromHTMLOverlay: found', found.length, 'spans:', found);
+    debugLog('[DEBUG] restoreSpanAnnotationsFromHTMLOverlay: found', found.length, 'spans:', found);
 }
 
 // ============================================================================
@@ -1943,7 +1963,7 @@ let spanAnnotations = [];
  * Initialize robust span annotation system
  */
 function initializeRobustSpanAnnotation() {
-    console.log('[ROBUST SPAN] Initializing robust span annotation system');
+    debugLog('[ROBUST SPAN] Initializing robust span annotation system');
 
     // Load span colors from config
     loadSpanColors();
@@ -1980,7 +2000,7 @@ async function loadSpanColors() {
                 'neutral': '(240, 240, 240)'
             };
         }
-        console.log('[ROBUST SPAN] Loaded colors:', spanColors);
+        debugLog('[ROBUST SPAN] Loaded colors:', spanColors);
     } catch (error) {
         console.error('[ROBUST SPAN] Error loading colors:', error);
     }
@@ -2004,7 +2024,7 @@ function setupRobustSpanSelection() {
     textContainer.addEventListener('mouseup', handleRobustTextSelection);
     textContainer.addEventListener('keyup', handleRobustTextSelection);
 
-    console.log('[ROBUST SPAN] Text selection handlers set up');
+    debugLog('[ROBUST SPAN] Text selection handlers set up');
 }
 
 /**
@@ -2017,7 +2037,7 @@ function handleRobustTextSelection() {
     // Check if any span label is selected
     const activeSpanLabel = getActiveSpanLabel();
     if (!activeSpanLabel) {
-        console.log('[ROBUST SPAN] No active span label selected');
+        debugLog('[ROBUST SPAN] No active span label selected');
         return;
     }
 
@@ -2029,7 +2049,7 @@ function handleRobustTextSelection() {
     const start = getRobustTextPosition(selectedText, range);
     const end = start + selectedText.length;
 
-    console.log('[ROBUST SPAN] Creating span:', {
+    debugLog('[ROBUST SPAN] Creating span:', {
         text: selectedText,
         start: start,
         end: end,
@@ -2090,7 +2110,7 @@ function getRobustTextPosition(selectedText, range) {
 
     // If multiple occurrences, use the first one for now
     // In a more sophisticated implementation, we could use DOM position to disambiguate
-    console.log('[ROBUST SPAN] Multiple occurrences found, using first:', indices[0]);
+    debugLog('[ROBUST SPAN] Multiple occurrences found, using first:', indices[0]);
     return indices[0];
 }
 
@@ -2099,7 +2119,7 @@ function getRobustTextPosition(selectedText, range) {
  */
 async function createRobustSpanAnnotation(spanText, start, end, label) {
     try {
-        console.log('[ROBUST SPAN] Creating annotation:', { spanText, start, end, label });
+        debugLog('[ROBUST SPAN] Creating annotation:', { spanText, start, end, label });
 
         // Use the existing /updateinstance endpoint
         const postData = {
@@ -2126,7 +2146,7 @@ async function createRobustSpanAnnotation(spanText, start, end, label) {
         });
 
         if (response.ok) {
-            console.log('[ROBUST SPAN] Span annotation created successfully');
+            debugLog('[ROBUST SPAN] Span annotation created successfully');
             // Reload the instance to show the new annotation
             await loadCurrentInstance();
         } else {
@@ -2176,7 +2196,7 @@ function renderSpansRobust() {
         }
     }
 
-    console.log('[ROBUST SPAN] Rendering spans:', spanAnnotations);
+    debugLog('[ROBUST SPAN] Rendering spans:', spanAnnotations);
 
     if (spanAnnotations.length === 0) {
         // No spans - just show the original text
@@ -2270,7 +2290,7 @@ function getSpanColor(label) {
  */
 async function deleteRobustSpan(annotationId) {
     try {
-        console.log('[ROBUST SPAN] Deleting span:', annotationId);
+        debugLog('[ROBUST SPAN] Deleting span:', annotationId);
 
         // Find the annotation to delete
         const annotation = spanAnnotations.find(a => a.id === annotationId);
@@ -2304,7 +2324,7 @@ async function deleteRobustSpan(annotationId) {
         });
 
         if (response.ok) {
-            console.log('[ROBUST SPAN] Span annotation deleted successfully');
+            debugLog('[ROBUST SPAN] Span annotation deleted successfully');
             // Reload the instance to show the updated state
             await loadCurrentInstance();
         } else {
@@ -2338,7 +2358,7 @@ document.addEventListener('DOMContentLoaded', function () {
  */
 async function deleteSpanAnnotation(annotationId, label, start, end) {
     try {
-        console.log('[SPAN DELETE] Deleting span:', { annotationId, label, start, end });
+        debugLog('[SPAN DELETE] Deleting span:', { annotationId, label, start, end });
 
         // Use the existing /updateinstance endpoint with value: null to delete
         const postData = {
@@ -2365,7 +2385,7 @@ async function deleteSpanAnnotation(annotationId, label, start, end) {
         });
 
         if (response.ok) {
-            console.log('[SPAN DELETE] Span annotation deleted successfully');
+            debugLog('[SPAN DELETE] Span annotation deleted successfully');
             // Reload the instance to show the updated state
             await loadCurrentInstance();
         } else {
@@ -2378,24 +2398,24 @@ async function deleteSpanAnnotation(annotationId, label, start, end) {
 
 // Add this function to help debug and clear erroneous span annotations
 async function debugAndClearSpans() {
-    console.log('🔍 [DEBUG] debugAndClearSpans() - ENTRY POINT');
+    debugLog('🔍 [DEBUG] debugAndClearSpans() - ENTRY POINT');
 
     if (!currentInstance || !currentInstance.id) {
-        console.log('🔍 [DEBUG] debugAndClearSpans() - No current instance');
+        debugLog('🔍 [DEBUG] debugAndClearSpans() - No current instance');
         return;
     }
 
-    console.log(`🔍 [DEBUG] debugAndClearSpans() - Current instance ID: ${currentInstance.id}`);
+    debugLog(`🔍 [DEBUG] debugAndClearSpans() - Current instance ID: ${currentInstance.id}`);
 
     try {
         // First, check what spans exist for this instance
         const response = await fetch(`/api/spans/${currentInstance.id}`);
         if (response.ok) {
             const data = await response.json();
-            console.log(`🔍 [DEBUG] debugAndClearSpans() - Current spans for instance ${currentInstance.id}:`, data.spans);
+            debugLog(`🔍 [DEBUG] debugAndClearSpans() - Current spans for instance ${currentInstance.id}:`, data.spans);
 
             if (data.spans && data.spans.length > 0) {
-                console.log(`🔍 [DEBUG] debugAndClearSpans() - Found ${data.spans.length} spans, clearing them...`);
+                debugLog(`🔍 [DEBUG] debugAndClearSpans() - Found ${data.spans.length} spans, clearing them...`);
 
                 // Clear the spans
                 const clearResponse = await fetch(`/api/spans/${currentInstance.id}/clear`, {
@@ -2405,16 +2425,16 @@ async function debugAndClearSpans() {
 
                 if (clearResponse.ok) {
                     const clearData = await clearResponse.json();
-                    console.log(`🔍 [DEBUG] debugAndClearSpans() - Cleared ${clearData.spans_cleared} spans`);
+                    debugLog(`🔍 [DEBUG] debugAndClearSpans() - Cleared ${clearData.spans_cleared} spans`);
 
                     // Reload the page to see the effect
-                    console.log('🔍 [DEBUG] debugAndClearSpans() - Reloading page...');
+                    debugLog('🔍 [DEBUG] debugAndClearSpans() - Reloading page...');
                     window.location.reload();
                 } else {
                     console.error('🔍 [DEBUG] debugAndClearSpans() - Failed to clear spans:', await clearResponse.text());
                 }
             } else {
-                console.log(`🔍 [DEBUG] debugAndClearSpans() - No spans found for instance ${currentInstance.id}`);
+                debugLog(`🔍 [DEBUG] debugAndClearSpans() - No spans found for instance ${currentInstance.id}`);
             }
         } else {
             console.error('🔍 [DEBUG] debugAndClearSpans() - Failed to get spans:', await response.text());
@@ -2429,27 +2449,27 @@ window.debugAndClearSpans = debugAndClearSpans;
 
 // Add this function to help debug instance_id values
 function debugInstanceId() {
-    console.log('🔍 [DEBUG] debugInstanceId() - ENTRY POINT');
+    debugLog('🔍 [DEBUG] debugInstanceId() - ENTRY POINT');
 
     // Check DOM instance_id
     const domInstanceId = document.getElementById('instance_id');
     const domValue = domInstanceId ? domInstanceId.value : 'not found';
-    console.log(`🔍 [DEBUG] debugInstanceId() - DOM instance_id value: '${domValue}'`);
+    debugLog(`🔍 [DEBUG] debugInstanceId() - DOM instance_id value: '${domValue}'`);
 
     // Check currentInstance
     const currentInstanceId = currentInstance ? currentInstance.id : 'not set';
-    console.log(`🔍 [DEBUG] debugInstanceId() - currentInstance.id: '${currentInstanceId}'`);
+    debugLog(`🔍 [DEBUG] debugInstanceId() - currentInstance.id: '${currentInstanceId}'`);
 
     // Check if they match
     if (domValue === currentInstanceId) {
-        console.log('🔍 [DEBUG] debugInstanceId() - ✅ DOM and currentInstance match');
+        debugLog('🔍 [DEBUG] debugInstanceId() - ✅ DOM and currentInstance match');
     } else {
-        console.log('🔍 [DEBUG] debugInstanceId() - ❌ DOM and currentInstance do NOT match');
+        debugLog('🔍 [DEBUG] debugInstanceId() - ❌ DOM and currentInstance do NOT match');
     }
 
     // Check what the API would return
     if (currentInstance && currentInstance.id) {
-        console.log(`🔍 [DEBUG] debugInstanceId() - API would be called with: /api/spans/${currentInstance.id}`);
+        debugLog(`🔍 [DEBUG] debugInstanceId() - API would be called with: /api/spans/${currentInstance.id}`);
     }
 }
 
@@ -2458,21 +2478,21 @@ window.debugInstanceId = debugInstanceId;
 
 // Add this function to help debug and fix the instance_id issue in production
 function debugAndFixInstanceId() {
-    console.log('🔍 [DEBUG] debugAndFixInstanceId() - ENTRY POINT');
+    debugLog('🔍 [DEBUG] debugAndFixInstanceId() - ENTRY POINT');
 
     // Check current state
     const domInstanceId = document.getElementById('instance_id');
     const domValue = domInstanceId ? domInstanceId.value : 'not found';
-    console.log(`🔍 [DEBUG] debugAndFixInstanceId() - Current DOM instance_id: '${domValue}'`);
+    debugLog(`🔍 [DEBUG] debugAndFixInstanceId() - Current DOM instance_id: '${domValue}'`);
 
     // Check if we can force a hard refresh
-    console.log('🔍 [DEBUG] debugAndFixInstanceId() - Attempting to force hard refresh...');
+    debugLog('🔍 [DEBUG] debugAndFixInstanceId() - Attempting to force hard refresh...');
 
     // Clear any cached data
     if (window.caches) {
         caches.keys().then(names => {
             names.forEach(name => {
-                console.log(`🔍 [DEBUG] debugAndFixInstanceId() - Clearing cache: ${name}`);
+                debugLog(`🔍 [DEBUG] debugAndFixInstanceId() - Clearing cache: ${name}`);
                 caches.delete(name);
             });
         });
@@ -2482,7 +2502,7 @@ function debugAndFixInstanceId() {
     const currentUrl = window.location.href;
     const separator = currentUrl.includes('?') ? '&' : '?';
     const newUrl = currentUrl + separator + '_t=' + Date.now();
-    console.log(`🔍 [DEBUG] debugAndFixInstanceId() - Redirecting to: ${newUrl}`);
+    debugLog(`🔍 [DEBUG] debugAndFixInstanceId() - Redirecting to: ${newUrl}`);
 
     // Redirect to force a fresh page load
     window.location.href = newUrl;
@@ -2490,19 +2510,19 @@ function debugAndFixInstanceId() {
 
 // Add this function to check if the page is cached
 function checkPageCache() {
-    console.log('🔍 [DEBUG] checkPageCache() - ENTRY POINT');
+    debugLog('🔍 [DEBUG] checkPageCache() - ENTRY POINT');
 
     // Check if the page was loaded from cache
     if (window.performance && window.performance.navigation) {
         const navigationType = window.performance.navigation.type;
-        console.log(`🔍 [DEBUG] checkPageCache() - Navigation type: ${navigationType}`);
+        debugLog(`🔍 [DEBUG] checkPageCache() - Navigation type: ${navigationType}`);
 
         if (navigationType === 1) {
-            console.log('🔍 [DEBUG] checkPageCache() - Page was reloaded');
+            debugLog('🔍 [DEBUG] checkPageCache() - Page was reloaded');
         } else if (navigationType === 2) {
-            console.log('🔍 [DEBUG] checkPageCache() - Page was loaded from back/forward cache');
+            debugLog('🔍 [DEBUG] checkPageCache() - Page was loaded from back/forward cache');
         } else {
-            console.log('🔍 [DEBUG] checkPageCache() - Page was loaded normally');
+            debugLog('🔍 [DEBUG] checkPageCache() - Page was loaded normally');
         }
     }
 
@@ -2511,13 +2531,13 @@ function checkPageCache() {
         const navigationEntries = window.performance.getEntriesByType('navigation');
         if (navigationEntries.length > 0) {
             const entry = navigationEntries[0];
-            console.log(`🔍 [DEBUG] checkPageCache() - Transfer size: ${entry.transferSize}`);
-            console.log(`🔍 [DEBUG] checkPageCache() - Encoded body size: ${entry.encodedBodySize}`);
+            debugLog(`🔍 [DEBUG] checkPageCache() - Transfer size: ${entry.transferSize}`);
+            debugLog(`🔍 [DEBUG] checkPageCache() - Encoded body size: ${entry.encodedBodySize}`);
 
             if (entry.transferSize === 0 && entry.encodedBodySize > 0) {
-                console.log('🔍 [DEBUG] checkPageCache() - Page was loaded from cache!');
+                debugLog('🔍 [DEBUG] checkPageCache() - Page was loaded from cache!');
             } else {
-                console.log('🔍 [DEBUG] checkPageCache() - Page was loaded from network');
+                debugLog('🔍 [DEBUG] checkPageCache() - Page was loaded from network');
             }
         }
     }
@@ -2529,14 +2549,14 @@ window.checkPageCache = checkPageCache;
 
 // Add this function to help clear erroneous span annotations and fix overlay persistence
 async function clearErroneousSpans() {
-    console.log('🔍 [DEBUG] clearErroneousSpans() - ENTRY POINT');
+    debugLog('🔍 [DEBUG] clearErroneousSpans() - ENTRY POINT');
 
     if (!currentInstance || !currentInstance.id) {
-        console.log('🔍 [DEBUG] clearErroneousSpans() - No current instance');
+        debugLog('🔍 [DEBUG] clearErroneousSpans() - No current instance');
         return;
     }
 
-    console.log(`🔍 [DEBUG] clearErroneousSpans() - Current instance ID: ${currentInstance.id}`);
+    debugLog(`🔍 [DEBUG] clearErroneousSpans() - Current instance ID: ${currentInstance.id}`);
 
     try {
         // Clear spans for the current instance
@@ -2549,10 +2569,10 @@ async function clearErroneousSpans() {
 
         if (response.ok) {
             const result = await response.json();
-            console.log(`🔍 [DEBUG] clearErroneousSpans() - Clear result:`, result);
+            debugLog(`🔍 [DEBUG] clearErroneousSpans() - Clear result:`, result);
 
             // Force reload the page to get fresh data
-            console.log('🔍 [DEBUG] clearErroneousSpans() - Reloading page to get fresh data');
+            debugLog('🔍 [DEBUG] clearErroneousSpans() - Reloading page to get fresh data');
             window.location.reload();
         } else {
             console.error(`🔍 [DEBUG] clearErroneousSpans() - Clear failed:`, response.status);
@@ -2572,13 +2592,13 @@ function firefoxInstanceIdFix() {
         return; // Only apply to Firefox
     }
 
-    console.log('🔍 [DEBUG] firefoxInstanceIdFix: Starting Firefox-specific instance_id fix');
+    debugLog('🔍 [DEBUG] firefoxInstanceIdFix: Starting Firefox-specific instance_id fix');
 
     // Wait a bit for the page to fully load
     setTimeout(() => {
         const instanceIdInput = document.getElementById('instance_id');
         if (!instanceIdInput) {
-            console.log('🔍 [DEBUG] firefoxInstanceIdFix: No instance_id input found');
+            debugLog('🔍 [DEBUG] firefoxInstanceIdFix: No instance_id input found');
             return;
         }
 
@@ -2586,10 +2606,10 @@ function firefoxInstanceIdFix() {
         const currentInstanceId = currentInstance?.id;
         const domInstanceId = instanceIdInput.value;
 
-        console.log(`🔍 [DEBUG] firefoxInstanceIdFix: DOM instance_id: '${domInstanceId}', currentInstance.id: '${currentInstanceId}'`);
+        debugLog(`🔍 [DEBUG] firefoxInstanceIdFix: DOM instance_id: '${domInstanceId}', currentInstance.id: '${currentInstanceId}'`);
 
         if (currentInstanceId && domInstanceId !== currentInstanceId) {
-            console.log('🔍 [DEBUG] firefoxInstanceIdFix: Mismatch detected - fixing instance_id');
+            debugLog('🔍 [DEBUG] firefoxInstanceIdFix: Mismatch detected - fixing instance_id');
 
             // Force update the input value
             instanceIdInput.value = currentInstanceId;
@@ -2601,9 +2621,9 @@ function firefoxInstanceIdFix() {
             // Force reflow
             instanceIdInput.offsetHeight;
 
-            console.log(`🔍 [DEBUG] firefoxInstanceIdFix: Fixed instance_id to '${currentInstanceId}'`);
+            debugLog(`🔍 [DEBUG] firefoxInstanceIdFix: Fixed instance_id to '${currentInstanceId}'`);
         } else {
-            console.log('🔍 [DEBUG] firefoxInstanceIdFix: No mismatch detected');
+            debugLog('🔍 [DEBUG] firefoxInstanceIdFix: No mismatch detected');
         }
     }, 100); // Small delay to ensure page is loaded
 }
@@ -2614,41 +2634,41 @@ window.addEventListener('load', firefoxInstanceIdFix);
 
 // Add function to test the Firefox instance_id fix
 function testFirefoxInstanceIdFix() {
-    console.log('🔍 [DEBUG] testFirefoxInstanceIdFix: Testing Firefox instance_id fix');
+    debugLog('🔍 [DEBUG] testFirefoxInstanceIdFix: Testing Firefox instance_id fix');
 
     const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
-    console.log(`🔍 [DEBUG] testFirefoxInstanceIdFix: Is Firefox: ${isFirefox}`);
+    debugLog(`🔍 [DEBUG] testFirefoxInstanceIdFix: Is Firefox: ${isFirefox}`);
 
     const instanceIdInput = document.getElementById('instance_id');
     if (!instanceIdInput) {
-        console.log('🔍 [DEBUG] testFirefoxInstanceIdFix: No instance_id input found');
+        debugLog('🔍 [DEBUG] testFirefoxInstanceIdFix: No instance_id input found');
         return;
     }
 
     const domInstanceId = instanceIdInput.value;
     const currentInstanceId = currentInstance?.id;
 
-    console.log(`🔍 [DEBUG] testFirefoxInstanceIdFix: DOM instance_id: '${domInstanceId}'`);
-    console.log(`🔍 [DEBUG] testFirefoxInstanceIdFix: currentInstance.id: '${currentInstanceId}'`);
+    debugLog(`🔍 [DEBUG] testFirefoxInstanceIdFix: DOM instance_id: '${domInstanceId}'`);
+    debugLog(`🔍 [DEBUG] testFirefoxInstanceIdFix: currentInstance.id: '${currentInstanceId}'`);
 
     if (domInstanceId === currentInstanceId) {
-        console.log('🔍 [DEBUG] testFirefoxInstanceIdFix: ✅ Instance IDs match');
+        debugLog('🔍 [DEBUG] testFirefoxInstanceIdFix: ✅ Instance IDs match');
     } else {
-        console.log('🔍 [DEBUG] testFirefoxInstanceIdFix: ❌ Instance IDs do not match');
+        debugLog('🔍 [DEBUG] testFirefoxInstanceIdFix: ❌ Instance IDs do not match');
 
         // Try to fix it
-        console.log('🔍 [DEBUG] testFirefoxInstanceIdFix: Attempting to fix...');
+        debugLog('🔍 [DEBUG] testFirefoxInstanceIdFix: Attempting to fix...');
         firefoxInstanceIdFix();
 
         // Check again after a short delay
         setTimeout(() => {
             const newDomInstanceId = instanceIdInput.value;
-            console.log(`🔍 [DEBUG] testFirefoxInstanceIdFix: After fix - DOM instance_id: '${newDomInstanceId}'`);
+            debugLog(`🔍 [DEBUG] testFirefoxInstanceIdFix: After fix - DOM instance_id: '${newDomInstanceId}'`);
 
             if (newDomInstanceId === currentInstanceId) {
-                console.log('🔍 [DEBUG] testFirefoxInstanceIdFix: ✅ Fix successful');
+                debugLog('🔍 [DEBUG] testFirefoxInstanceIdFix: ✅ Fix successful');
             } else {
-                console.log('🔍 [DEBUG] testFirefoxInstanceIdFix: ❌ Fix failed');
+                debugLog('🔍 [DEBUG] testFirefoxInstanceIdFix: ❌ Fix failed');
             }
         }, 200);
     }
@@ -2664,20 +2684,20 @@ function aggressiveFirefoxInstanceIdFix() {
         return; // Only apply to Firefox
     }
 
-    console.log('🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: Starting aggressive Firefox fix');
+    debugLog('🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: Starting aggressive Firefox fix');
 
     // Wait for the page to fully load
     setTimeout(() => {
         // Method 1: Force reload the instance_id input element
         const instanceIdInput = document.getElementById('instance_id');
         if (!instanceIdInput) {
-            console.log('🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: No instance_id input found');
+            debugLog('🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: No instance_id input found');
             return;
         }
 
         // Get the current value from the DOM
         const currentDomValue = instanceIdInput.value;
-        console.log(`🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: Current DOM value: '${currentDomValue}'`);
+        debugLog(`🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: Current DOM value: '${currentDomValue}'`);
 
         // Method 2: Try to get the correct value from the server-rendered data
         // Look for any script tags or data attributes that might contain the correct instance_id
@@ -2688,12 +2708,12 @@ function aggressiveFirefoxInstanceIdFix() {
         for (const script of scriptTags) {
             const content = script.textContent || script.innerHTML;
             if (content.includes('instance_id') || content.includes('currentInstance')) {
-                console.log('🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: Found script with instance data');
+                debugLog('🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: Found script with instance data');
                 // Try to extract instance_id from script content
                 const match = content.match(/instance_id['"]?\s*[:=]\s*['"]([^'"]+)['"]/);
                 if (match) {
                     correctInstanceId = match[1];
-                    console.log(`🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: Found instance_id in script: '${correctInstanceId}'`);
+                    debugLog(`🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: Found instance_id in script: '${correctInstanceId}'`);
                     break;
                 }
             }
@@ -2706,13 +2726,13 @@ function aggressiveFirefoxInstanceIdFix() {
             const urlInstanceId = urlParams.get('instance_id');
             if (urlInstanceId) {
                 correctInstanceId = urlInstanceId;
-                console.log(`🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: Found instance_id in URL: '${correctInstanceId}'`);
+                debugLog(`🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: Found instance_id in URL: '${correctInstanceId}'`);
             }
         }
 
         // Method 4: If we still don't have it, try to get it from the server via API
         if (!correctInstanceId) {
-            console.log('🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: No instance_id found, trying API call');
+            debugLog('🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: No instance_id found, trying API call');
 
             // Make an API call to get the current instance info
             fetch('/api/current_instance', {
@@ -2725,12 +2745,12 @@ function aggressiveFirefoxInstanceIdFix() {
                 .then(data => {
                     if (data && data.instance_id) {
                         correctInstanceId = data.instance_id;
-                        console.log(`🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: Got instance_id from API: '${correctInstanceId}'`);
+                        debugLog(`🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: Got instance_id from API: '${correctInstanceId}'`);
                         applyInstanceIdFix(instanceIdInput, correctInstanceId);
                     }
                 })
                 .catch(error => {
-                    console.log('🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: API call failed:', error);
+                    debugLog('🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: API call failed:', error);
                 });
         } else {
             // Apply the fix immediately if we found the correct instance_id
@@ -2744,7 +2764,7 @@ function applyInstanceIdFix(instanceIdInput, correctInstanceId) {
     const currentValue = instanceIdInput.value;
 
     if (currentValue !== correctInstanceId) {
-        console.log(`🔍 [DEBUG] applyInstanceIdFix: Fixing instance_id from '${currentValue}' to '${correctInstanceId}'`);
+        debugLog(`🔍 [DEBUG] applyInstanceIdFix: Fixing instance_id from '${currentValue}' to '${correctInstanceId}'`);
 
         // Force update the input value
         instanceIdInput.value = correctInstanceId;
@@ -2760,18 +2780,18 @@ function applyInstanceIdFix(instanceIdInput, correctInstanceId) {
         // Update currentInstance if it exists
         if (window.currentInstance) {
             window.currentInstance.id = correctInstanceId;
-            console.log(`🔍 [DEBUG] applyInstanceIdFix: Updated window.currentInstance.id to '${correctInstanceId}'`);
+            debugLog(`🔍 [DEBUG] applyInstanceIdFix: Updated window.currentInstance.id to '${correctInstanceId}'`);
         }
 
         // Update currentInstance global variable if it exists
         if (typeof currentInstance !== 'undefined' && currentInstance) {
             currentInstance.id = correctInstanceId;
-            console.log(`🔍 [DEBUG] applyInstanceIdFix: Updated currentInstance.id to '${correctInstanceId}'`);
+            debugLog(`🔍 [DEBUG] applyInstanceIdFix: Updated currentInstance.id to '${correctInstanceId}'`);
         }
 
-        console.log(`🔍 [DEBUG] applyInstanceIdFix: Fix applied successfully`);
+        debugLog(`🔍 [DEBUG] applyInstanceIdFix: Fix applied successfully`);
     } else {
-        console.log(`🔍 [DEBUG] applyInstanceIdFix: No fix needed, instance_id is already correct: '${currentValue}'`);
+        debugLog(`🔍 [DEBUG] applyInstanceIdFix: No fix needed, instance_id is already correct: '${currentValue}'`);
     }
 }
 
@@ -2788,38 +2808,38 @@ document.addEventListener('visibilitychange', () => {
 
 // Add function to test the aggressive Firefox fix
 function testAggressiveFirefoxFix() {
-    console.log('🔍 [DEBUG] testAggressiveFirefoxFix: Testing aggressive Firefox fix');
+    debugLog('🔍 [DEBUG] testAggressiveFirefoxFix: Testing aggressive Firefox fix');
 
     const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
-    console.log(`🔍 [DEBUG] testAggressiveFirefoxFix: Is Firefox: ${isFirefox}`);
+    debugLog(`🔍 [DEBUG] testAggressiveFirefoxFix: Is Firefox: ${isFirefox}`);
 
     if (!isFirefox) {
-        console.log('🔍 [DEBUG] testAggressiveFirefoxFix: Not Firefox, skipping test');
+        debugLog('🔍 [DEBUG] testAggressiveFirefoxFix: Not Firefox, skipping test');
         return;
     }
 
     // Call the aggressive fix
-    console.log('🔍 [DEBUG] testAggressiveFirefoxFix: Calling aggressiveFirefoxInstanceIdFix');
+    debugLog('🔍 [DEBUG] testAggressiveFirefoxFix: Calling aggressiveFirefoxInstanceIdFix');
     aggressiveFirefoxInstanceIdFix();
 
     // Check the result after a delay
     setTimeout(() => {
         const instanceIdInput = document.getElementById('instance_id');
         if (!instanceIdInput) {
-            console.log('🔍 [DEBUG] testAggressiveFirefoxFix: No instance_id input found');
+            debugLog('🔍 [DEBUG] testAggressiveFirefoxFix: No instance_id input found');
             return;
         }
 
         const finalInstanceId = instanceIdInput.value;
         const currentInstanceId = currentInstance?.id;
 
-        console.log(`🔍 [DEBUG] testAggressiveFirefoxFix: Final DOM instance_id: '${finalInstanceId}'`);
-        console.log(`🔍 [DEBUG] testAggressiveFirefoxFix: currentInstance.id: '${currentInstanceId}'`);
+        debugLog(`🔍 [DEBUG] testAggressiveFirefoxFix: Final DOM instance_id: '${finalInstanceId}'`);
+        debugLog(`🔍 [DEBUG] testAggressiveFirefoxFix: currentInstance.id: '${currentInstanceId}'`);
 
         if (finalInstanceId === currentInstanceId) {
-            console.log('🔍 [DEBUG] testAggressiveFirefoxFix: ✅ Fix successful - instance IDs match');
+            debugLog('🔍 [DEBUG] testAggressiveFirefoxFix: ✅ Fix successful - instance IDs match');
         } else {
-            console.log('🔍 [DEBUG] testAggressiveFirefoxFix: ❌ Fix failed - instance IDs do not match');
+            debugLog('🔍 [DEBUG] testAggressiveFirefoxFix: ❌ Fix failed - instance IDs do not match');
         }
     }, 500);
 }
