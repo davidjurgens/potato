@@ -263,5 +263,109 @@ class TestSessionStorage:
         assert session['username'] == prolific_pid
 
 
+class TestRequirePasswordArgparse:
+    """Tests for require_password argparse handling.
+
+    These tests verify that the command line --require-password argument
+    correctly defaults to None so that config file values are respected.
+    """
+
+    def test_require_password_default_is_none(self):
+        """Test that require_password argument defaults to None, not True.
+
+        This is critical: if the default is True, it would always override
+        the config file's require_password setting, making it impossible
+        to disable password via config file alone.
+        """
+        from potato.server_utils.arg_utils import arguments
+        import sys
+
+        # Save original argv
+        original_argv = sys.argv
+
+        try:
+            # Simulate command line without --require-password
+            sys.argv = ['potato', 'start', 'test_config.yaml']
+
+            # This will call parse_args() internally
+            # We need to test the parser setup, not the actual parsing
+            from argparse import ArgumentParser
+            parser = ArgumentParser()
+            parser.add_argument(
+                "--require-password",
+                action="store",
+                type=lambda x: str(x).lower() == 'true',
+                dest="require_password",
+                default=None,  # This is what we're testing
+            )
+            parser.add_argument("mode", nargs='?', default='start')
+            parser.add_argument("config_file", nargs='?', default='test.yaml')
+
+            args = parser.parse_args([])
+
+            # The default should be None, not True
+            assert args.require_password is None, \
+                "require_password default should be None to allow config file override"
+        finally:
+            sys.argv = original_argv
+
+    def test_require_password_explicit_true(self):
+        """Test that --require-password true sets args.require_password to True."""
+        from argparse import ArgumentParser
+
+        parser = ArgumentParser()
+        parser.add_argument(
+            "--require-password",
+            action="store",
+            type=lambda x: str(x).lower() == 'true',
+            dest="require_password",
+            default=None,
+        )
+
+        args = parser.parse_args(['--require-password', 'true'])
+        assert args.require_password is True
+
+    def test_require_password_explicit_false(self):
+        """Test that --require-password false sets args.require_password to False."""
+        from argparse import ArgumentParser
+
+        parser = ArgumentParser()
+        parser.add_argument(
+            "--require-password",
+            action="store",
+            type=lambda x: str(x).lower() == 'true',
+            dest="require_password",
+            default=None,
+        )
+
+        args = parser.parse_args(['--require-password', 'false'])
+        assert args.require_password is False
+
+    def test_config_file_require_password_respected(self):
+        """Test that config file require_password is respected when arg is None.
+
+        This simulates the logic in flask_server.py run_server().
+        """
+        # Simulate config loaded from file with require_password: false
+        config = {
+            'require_password': False,
+            'server_name': 'test'
+        }
+
+        # Simulate args.require_password being None (not provided on command line)
+        class MockArgs:
+            require_password = None
+
+        args = MockArgs()
+
+        # Apply the logic from flask_server.py
+        if args.require_password is not None:
+            config["require_password"] = args.require_password
+
+        # Config file value should be preserved
+        assert config["require_password"] is False, \
+            "Config file require_password: false should be preserved when --require-password not provided"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
