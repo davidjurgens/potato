@@ -14,6 +14,9 @@ This section documents bugs that were discovered and the tests created to preven
 | `image_annotation` type not recognized | Same hardcoded dict issue | `test_schema_registry_integration.py` | `test_front_end_handles_image_annotation` |
 | Firefox form restoration bug | Browser preserved checkbox state across pages | `test_comprehensive_span_annotation_firefox.py` | `test_checkbox_cleared_on_navigation` |
 | Radio button persistence issue | Different HTML name pattern vs checkbox | `test_annotation_persistence_frontend.py` | `test_radio_persists_within_instance` |
+| Span annotation overlays not rendering | `sanitize_html` returned plain string, causing Jinja2 double-escape | `test_html_sanitizer.py` | `test_jinja2_does_not_double_escape` |
+| Span overlay position mismatch | `data-original-text` had HTML instead of plain text; `getTextPositions` assumed single text node | `test_span_overlay_text_positions.py` | `test_plain_text_preserved_in_attribute` |
+| Span overlay invisible (width=0) | Template whitespace in `#text-content` caused DOM textContent to differ from `data-original-text`; position offsets mapped to whitespace | `span-overlay-creation.test.js` | `CRITICAL: data-original-text must match DOM textContent exactly` |
 
 ### Test-Driven Bug Prevention
 

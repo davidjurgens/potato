@@ -1,3 +1,36 @@
+# Selenium Tests
+
+## Canonical Span Overlay Tests
+
+**IMPORTANT:** For span overlay visual correctness, these are the authoritative test files:
+
+| File | Purpose | Run When |
+|------|---------|----------|
+| `test_span_overlay_visual_verification.py` | **PRIMARY** - Tests overlay positioning, colors, labels, delete | Any change to span-core.js, span-styles.css, or templates |
+| `test_span_overlay_bugs.py` | Bug regression tests with detailed color validation | Changes to color handling or schema processing |
+
+### Why These Tests Exist
+
+Jest/jsdom tests **cannot** verify visual positioning because `getBoundingClientRect()` returns zeros in jsdom. These Selenium tests use a real browser to verify what users actually see.
+
+### What They Verify
+
+1. Overlay coordinates match text coordinates (within 10px)
+2. Labels are visible (not clipped, not transparent)
+3. Colors are schema-defined, not fallback purple
+4. Delete removes overlay completely
+5. Position persists correctly after navigation
+
+### Archived Tests
+
+Debug/diagnostic tests have been moved to `archived/` and are not run in CI:
+- `test_span_debug.py`
+- `test_span_offset_diagnostics.py`
+- `test_span_persistence_debug.py`
+- `test_debug_span_overlay_clearing.py`
+
+---
+
 # Selenium Test Authentication System
 
 ## Overview
