@@ -63,6 +63,9 @@ from potato.server_utils.schemas.span import get_span_color, set_span_color, SPA
 from potato.annotation_history import AnnotationHistoryManager
 from potato.logging_config import is_ui_debug_enabled, get_debug_log_settings
 
+# Import quality control
+from potato.quality_control import get_quality_control_manager
+
 import os
 
 
@@ -2048,6 +2051,42 @@ def admin_api_crowdsourcing():
     return jsonify(result)
 
 
+@app.route("/admin/api/agreement", methods=["GET"])
+def admin_api_agreement():
+    """
+    Get inter-annotator agreement metrics.
+    Admin-only endpoint requiring API key.
+
+    Returns:
+        flask.Response: JSON response with agreement metrics including:
+        - overall: Average Krippendorff's alpha across schemas
+        - by_schema: Per-schema agreement metrics
+        - interpretation: Human-readable interpretation
+    """
+    result = admin_dashboard.get_agreement_metrics()
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
+@app.route("/admin/api/quality_control", methods=["GET"])
+def admin_api_quality_control():
+    """
+    Get quality control metrics (attention checks, gold standards).
+    Admin-only endpoint requiring API key.
+
+    Returns:
+        flask.Response: JSON response with quality control data including:
+        - attention_checks: Statistics on attention check pass/fail rates
+        - gold_standards: Statistics on gold standard accuracy
+        - by_user: Per-user quality metrics
+    """
+    result = admin_dashboard.get_quality_control_data()
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
 # === ICL Verification Helper ===
 
 def _maybe_record_icl_verification(user_state, instance_id: str, annotations: dict) -> bool:
@@ -2862,6 +2901,71 @@ def update_instance():
             logger.warning("Unknown data format in /updateinstance")
             return jsonify({"status": "error", "message": "Unknown data format"})
 
+        # Quality control validation (attention checks and gold standards)
+        qc_manager = get_quality_control_manager()
+        qc_result = None
+
+        if qc_manager:
+            # Collect all annotations for validation
+            all_annotations = {}
+            if "annotations" in request.json:
+                for key, value in request.json.get("annotations", {}).items():
+                    # Parse schema:label format
+                    if ":" in key:
+                        schema_name, label_name = key.split(":", 1)
+                        all_annotations[schema_name] = value
+                    else:
+                        all_annotations[key] = value
+            elif "schema" in request.json:
+                schema_name = request.json.get("schema")
+                schema_state = request.json.get("state", [])
+                # Convert state list to dict for validation
+                for sv in schema_state:
+                    if "value" in sv:
+                        all_annotations[schema_name] = sv.get("value")
+
+            # Calculate response time
+            response_time = None
+            if client_timestamp:
+                response_time = (datetime.datetime.now() - client_timestamp).total_seconds()
+
+            # Check if this is an attention check
+            attention_result = qc_manager.validate_attention_response(
+                username, instance_id, all_annotations, response_time
+            )
+
+            if attention_result is not None:
+                qc_result = {"type": "attention_check", **attention_result}
+
+                # Handle blocking
+                if attention_result.get("blocked"):
+                    logger.warning(f"User {username} blocked by attention check")
+                    # Don't save state for blocked user
+                    return jsonify({
+                        "status": "blocked",
+                        "message": attention_result.get("message", "You have been blocked."),
+                        "qc_result": qc_result
+                    })
+            else:
+                # Check if this is a gold standard
+                gold_result = qc_manager.validate_gold_response(
+                    username, instance_id, all_annotations
+                )
+
+                if gold_result is not None:
+                    qc_result = {"type": "gold_standard", **gold_result}
+
+            # Record regular item for attention check frequency tracking
+            if not qc_manager.is_attention_check(instance_id) and not qc_manager.is_gold_standard(instance_id):
+                qc_manager.record_regular_item(username)
+
+                # Track for gold standard auto-promotion
+                promotion_result = qc_manager.record_item_annotation(
+                    instance_id, username, all_annotations
+                )
+                if promotion_result and promotion_result.get("promoted"):
+                    logger.info(f"Item {instance_id} auto-promoted to gold standard")
+
         # Calculate processing time
         processing_time_ms = int((time.time() - start_time) * 1000)
 
@@ -2876,11 +2980,22 @@ def update_instance():
         # Get performance metrics for response
         performance_metrics = user_state.get_performance_metrics()
 
-        return jsonify({
+        response_data = {
             "status": "success",
             "processing_time_ms": processing_time_ms,
             "performance_metrics": performance_metrics
-        })
+        }
+
+        # Include quality control result if present
+        if qc_result:
+            response_data["qc_result"] = qc_result
+
+            # Add warning message if needed
+            if qc_result.get("warning"):
+                response_data["warning"] = True
+                response_data["warning_message"] = qc_result.get("message")
+
+        return jsonify(response_data)
     else:
         logger.warning("Update instance called without JSON data")
         return jsonify({"status": "error", "message": "JSON data required"})
@@ -3391,8 +3506,9 @@ def get_keyword_highlights(instance_id):
 @app.route("/api/schemas")
 def get_annotation_schemas():
     """
-    Return the annotation schema information for all span annotation types.
-    This provides the schema names and their labels to the frontend.
+    Return the annotation schema information for all annotation types.
+    This provides the schema names, types, and their labels to the frontend
+    and API consumers (like the user simulator).
     """
     logger.debug("=== GET_ANNOTATION_SCHEMAS START ===")
 
@@ -3400,41 +3516,50 @@ def get_annotation_schemas():
     annotation_scheme = config.get('annotation_scheme') or config.get('annotation_schemes')
 
     if annotation_scheme:
+        # Helper function to extract labels from a schema
+        def extract_labels(schema):
+            labels = []
+            for label in schema.get('labels', []):
+                if isinstance(label, dict):
+                    labels.append(label.get('name', str(label)))
+                else:
+                    labels.append(str(label))
+            return labels
+
+        # Helper function to process a single schema
+        def process_schema(schema, schema_name=None):
+            name = schema_name or schema.get('name', 'unknown')
+            schema_type = schema.get('annotation_type') or schema.get('type', 'unknown')
+
+            schema_info = {
+                'name': name,
+                'description': schema.get('description', ''),
+                'labels': extract_labels(schema),
+                'type': schema_type
+            }
+
+            # Include additional type-specific info
+            if schema_type == 'likert':
+                schema_info['size'] = schema.get('size', 5)
+                schema_info['min_label'] = schema.get('min_label', '')
+                schema_info['max_label'] = schema.get('max_label', '')
+            elif schema_type == 'slider':
+                schema_info['min_value'] = schema.get('min_value', 0)
+                schema_info['max_value'] = schema.get('max_value', 100)
+            elif schema_type == 'textbox':
+                schema_info['textarea'] = schema.get('textarea', False)
+
+            return schema_info
+
         # If dict (new style), iterate items
         if isinstance(annotation_scheme, dict):
             for schema_name, schema in annotation_scheme.items():
-                if schema.get('type') == 'span' or schema.get('annotation_type') == 'span':
-                    labels = []
-                    for label in schema.get('labels', []):
-                        if isinstance(label, dict):
-                            labels.append(label.get('name', str(label)))
-                        else:
-                            labels.append(str(label))
-
-                    schemas[schema_name] = {
-                        'name': schema_name,
-                        'description': schema.get('description', ''),
-                        'labels': labels,
-                        'type': 'span'
-                    }
+                schemas[schema_name] = process_schema(schema, schema_name)
         # If list (legacy style), iterate list
         elif isinstance(annotation_scheme, list):
             for schema in annotation_scheme:
-                if schema.get('type') == 'span' or schema.get('annotation_type') == 'span':
-                    schema_name = schema.get('name', 'span')
-                    labels = []
-                    for label in schema.get('labels', []):
-                        if isinstance(label, dict):
-                            labels.append(label.get('name', str(label)))
-                        else:
-                            labels.append(str(label))
-
-                    schemas[schema_name] = {
-                        'name': schema_name,
-                        'description': schema.get('description', ''),
-                        'labels': labels,
-                        'type': 'span'
-                    }
+                schema_name = schema.get('name', 'unknown')
+                schemas[schema_name] = process_schema(schema)
 
     logger.debug(f"Found schemas: {schemas}")
     logger.debug("=== GET_ANNOTATION_SCHEMAS END ===")

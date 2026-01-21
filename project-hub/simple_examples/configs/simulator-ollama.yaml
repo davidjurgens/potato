@@ -1,0 +1,57 @@
+# Simulator Configuration: LLM Strategy with Ollama
+#
+# This configuration uses a local LLM (via Ollama) to generate annotations.
+# The LLM reads the text and selects labels based on its understanding.
+#
+# Prerequisites:
+#   1. Install Ollama: https://ollama.ai
+#   2. Pull a model: ollama pull llama3.2
+#   3. Start Ollama server: ollama serve (default port 11434)
+#
+# Usage:
+#   1. Start your annotation server:
+#      python potato/flask_server.py start project-hub/simple_examples/configs/simple-radio.yaml -p 8000
+#
+#   2. Run the simulator:
+#      python -m potato.simulator --config project-hub/simple_examples/configs/simulator-ollama.yaml --server http://localhost:8000
+
+simulator:
+  users:
+    count: 5  # Fewer users since LLM is slower
+    competence_distribution:
+      # With LLM strategy, competence affects whether we use LLM output
+      # or inject random noise
+      good: 0.6
+      average: 0.4
+
+  # LLM strategy - uses Ollama to generate annotations
+  strategy: llm
+
+  # Ollama configuration
+  llm_config:
+    endpoint_type: ollama
+    model: llama3.2           # Model to use (must be pulled in Ollama)
+    base_url: http://localhost:11434  # Ollama server URL
+    temperature: 0.1          # Lower = more deterministic
+    max_tokens: 50            # Short responses for classification
+    add_noise: true           # Occasionally add random noise
+    noise_rate: 0.05          # 5% of responses will be random
+
+  timing:
+    annotation_time:
+      min: 1.0
+      max: 10.0
+      mean: 3.0
+      std: 2.0
+      distribution: normal
+
+  execution:
+    parallel_users: 2         # Fewer concurrent to avoid overloading Ollama
+    delay_between_users: 1.0
+    max_annotations_per_user: 20
+
+  output:
+    dir: simulator_output_llm
+    format: json
+
+# Note: If Ollama is not available, the simulator will fall back to random selection
