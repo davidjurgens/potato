@@ -120,12 +120,17 @@
 }
 
 /* Span manager labels should be visible by default */
-.span-overlay .span-label {
+/* BUG FIX: JS creates span-overlay-pure, not span-overlay - target both */
+.span-overlay .span-label,
+.span-overlay-pure .span-label,
+.span-overlay-ai .span-label {
     display: block !important;
 }
 
 /* Span manager delete buttons should be visible by default */
-.span-overlay .span-delete-btn {
+.span-overlay .span-delete-btn,
+.span-overlay-pure .span-delete-btn,
+.span-overlay-ai .span-delete-btn {
     display: block !important;
 }
 

@@ -4,6 +4,19 @@
  * This module provides unified text positioning for span annotations.
  */
 
+// Debug logging utility - respects the debug setting from server config
+function spanCoreDebugLog(...args) {
+    if (window.config && window.config.debug) {
+        console.log(...args);
+    }
+}
+
+function spanCoreDebugWarn(...args) {
+    if (window.config && window.config.debug) {
+        console.warn(...args);
+    }
+}
+
 /**
  * Get font metrics for positioning calculations
  */
