@@ -74,3 +74,5 @@ annotation_schemes:
         key_value: "n"
       - name: "Very noisy"
         key_value: "v"
+
+site_dir: default

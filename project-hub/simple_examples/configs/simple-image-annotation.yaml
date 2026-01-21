@@ -65,3 +65,5 @@ annotation_schemes:
         key_value: "s"
       - name: "Blurry"
         key_value: "b"
+
+site_dir: default
