@@ -1,173 +1,224 @@
-# 🥔Potato: the POrtable Text Annotation TOol
- 
-[📖Documentation](https://potato-annotation.readthedocs.io/) | [🍎Feature hightlights](#Feature-hightlights)  |  [🛫️Quick Start](#Quick-Start) | [🌰Example projects (project hub)](#Example-projects-project-hub) | [🔥Design Team and Support](#Design-Team-and-Support) | [💰License](#License) | [🍞Cite us](#Cite-us)
+# Potato: The Portable Text Annotation Tool
+
+[![Documentation](https://img.shields.io/badge/docs-readthedocs-blue)](https://potato-annotation.readthedocs.io/)
+[![PyPI](https://img.shields.io/pypi/v/potato-annotation)](https://pypi.org/project/potato-annotation/)
+[![License](https://img.shields.io/badge/license-Polyform%20Shield-green)](LICENSE)
+[![Paper](https://img.shields.io/badge/paper-EMNLP%202022-orange)](https://aclanthology.org/2022.emnlp-demos.33/)
 
 <p align="center">
 <img src="https://github.com/davidjurgens/potato/raw/master/docs/img/potato-goal.png" width="600" height="280">
 </p>
 
+**Potato** is a lightweight, configuration-driven annotation tool for NLP research. Go from zero to annotating in minutes—no coding required.
 
+## Why Potato?
 
-Potato is an easy-to-use  web-based annotation tool accepted by EMNLP 2022 DEMO track. Potato allows you to quickly mock-up and deploy a variety of text annotation tasks. Potato works in the back-end as a web server that you can launch locally and then annotators use the web-based front-end to work through data. Our goal is to allow folks to quickly and easily annotate text data by themselves or in small teams&mdash;going from zero to annotating in a matter of a few lines of configuration.
+| Feature | Potato | Other Tools |
+|---------|--------|-------------|
+| Setup time | Minutes (YAML config) | Hours/days (custom code) |
+| Coding required | None | Often extensive |
+| Self-hosted | Yes (full data control) | Often cloud-only |
+| AI assistance | Built-in LLM support | Rarely available |
+| Cost | Free for research | Often paid |
 
-Potato is driven by a single configuration file that specifies the type of task and data you want to use. Potato does not require any coding to get up and running. For most tasks, no additional web design is needed, though Potato is easily customizable so you can tweak the interface and elements your annotators see.
+---
 
-Please check out our [official documentation](https://potato-annotation.readthedocs.io/) for detailed instructions.
+## Key Features
 
->Jiaxin Pei, Aparna Ananthasubramaniam, Xingyao Wang, Naitian Zhou, Jackson Sargent, Apostolos Dedeloudis and David Jurgens. 🥔Potato: the POrtable Text Annotation TOol. In Proceedings of the 2022 Conference on Empirical Methods on Natural Language Processing (EMNLP'22 demo)
+### Multi-Modal Annotation
+Potato supports annotation across multiple data types:
 
+| Modality | Features |
+|----------|----------|
+| **Text** | Classification, span labeling, pairwise comparison, free-form responses |
+| **Audio** | Waveform visualization, segment labeling, playback controls ([docs](docs/audio_annotation.md)) |
+| **Video** | Frame-by-frame annotation, temporal segments, playback sync ([docs](docs/video_annotation.md)) |
+| **Images** | Region labeling, classification, comparison tasks |
+| **Dialogue** | Turn-level annotation, conversation threading |
 
+### Annotation Schemes
+- **Classification**: Radio buttons, checkboxes, Likert scales
+- **Span Annotation**: Highlight and label text spans with keyboard shortcuts
+- **Pairwise Comparison**: Side-by-side comparisons, best-worst scaling
+- **Free Text**: Text boxes with validation and character limits
 
-## Recent Updates
-- **2.0.0** Major release with new features:
-  - **AI Support**: Integrated LLM assistance with support for OpenAI, Anthropic, Gemini, Ollama, VLLM, and more ([Documentation](docs/ai_support.md))
-  - **Audio Annotation**: Waveform-based audio segmentation with Peaks.js ([Documentation](docs/audio_annotation.md))
-  - **Video Annotation**: Frame-by-frame video labeling with playback controls ([Documentation](docs/video_annotation.md))
-  - **Active Learning**: ML-based instance prioritization using uncertainty sampling ([Documentation](docs/active_learning_guide.md))
-  - **Training Phase**: Practice annotations with feedback before main task ([Documentation](docs/training_phase.md))
-  - **Enhanced Admin Dashboard**: Real-time monitoring, suspicious activity detection ([Documentation](docs/admin_dashboard.md))
-  - **Database Backend**: MySQL support for large-scale deployments
-  - **Config Migration CLI**: Upgrade older configs to v2 format (`potato migrate config.yaml --to-v2`) ([Documentation](docs/migration_cli.md))
-  - **Debug Mode**: Skip to specific phases and selective logging (`--debug-phase`, `--debug-log`) ([Documentation](docs/debugging_guide.md))
-  - See [CHANGELOG.md](CHANGELOG.md) and [New Features Guide](docs/new_features_v2.md) for full details
-- 1.2.2.4 Fixing several bugs for multirate schema ("required" not working and keyboard conflicts).
-- 1.2.2.3 Supports randomizing the order of multirate schema options ([Documentation](https://potato-annotation.readthedocs.io/en/latest/schemas_and_templates/#multirate) | [Example project](https://github.com/davidjurgens/potato/blob/master/project-hub/simple_examples/configs/simple-multirate.yaml))
-- 1.2.2.2 small bugs fixed for label suggestions
-- 1.2.2.1 Supports displaying or prefilling label suggestions ([Documentation](https://potato-annotation.readthedocs.io/en/latest/productivity/#label-suggestions) | [Example project](https://github.com/davidjurgens/potato/tree/master/project-hub/label_suggestions))
-- 1.2.2.0 Supports automatic task management with prolific apis ([Documentation](https://potato-annotation.readthedocs.io/en/latest/crowdsourcing/#4-set-up-the-configuration-file-for-your-prolific-study) | [Example project](https://github.com/davidjurgens/potato/tree/master/project-hub/prolific_api_example))
-- 1.2.1.7 Supports randomizing the order of the displayed instances when it is defined with a dictionary ([link](https://potato-annotation.readthedocs.io/en/latest/data_format/#displaying-a-list-or-a-dictionary-of-instances))
-- 1.2.1.6 Supports different HTML templates for surveyflow and annotation pages ([link](https://potato-annotation.readthedocs.io/en/latest/schemas_and_templates/#different-layouts-for-surveyflow-and-annotation-pages))
-- 1.2.1.5 Supports disallowing copy-pasting into textboxes ([link](https://potato-annotation.readthedocs.io/en/latest/schemas_and_templates/#text-box))
+### AI-Powered Assistance
+- **Label Suggestions**: LLM-powered pre-annotations to speed up work
+- **Active Learning**: Prioritize uncertain instances for efficient labeling
+- **Multiple Backends**: OpenAI, Anthropic, Ollama, vLLM, and more
 
+### Quality Control
+- **Attention Checks**: Automatically inserted validation questions
+- **Gold Standards**: Track annotator accuracy against known answers
+- **Inter-Annotator Agreement**: Built-in Krippendorff's alpha calculation
+- **Time Tracking**: Monitor annotation speed per instance
 
+### Productivity
+- **Keyboard Shortcuts**: Full keyboard navigation and labeling
+- **Dynamic Highlighting**: Smart keyword highlighting based on labels
+- **Tooltips**: Hover descriptions for complex label schemes
+- **Progress Tracking**: Real-time completion statistics
 
+### Deployment Options
+- **Local Development**: Single command startup
+- **Team Annotation**: Multi-user with authentication
+- **Crowdsourcing**: Prolific and MTurk integration
+- **Enterprise**: MySQL backend for large-scale deployments
 
+---
 
-## Feature hightlights 
-Potato supports a wide range of features that can make your data annotation easier:
+## Quick Start
 
-### Easy setup and flexible for diverse needs
-Potato can be easily set up with simply editing a configuration file. You don't need to write any codes to set up your annotation webpage. Potato also comes with a series of features for diverse needs.
-- [Built-in schemas and templates](https://potato-annotation.readthedocs.io/en/latest/schemas_and_templates): Potato supports a wide range of annotation schemas including radio, likert, checkbox, textbox, span, pairwise comparison, best-worst-scaling, image/video-as-label, etc. All these schemas can be 
-- [Flexible data types](https://potato-annotation.readthedocs.io/en/latest/data_format): Potato supports displaying short documents, long documents, dialogue, comparisons, etc.. 
-- [Multi-task setup](https://potato-annotation.readthedocs.io/en/latest/schemas_and_templates): NLP researchers may need to set up a series of similar but different tasks (e.g. multilingual annotation). Potato allows you to easily generate configuration files for all the tasks with minimum configurations and has supported the [SemEval 2023 Task 9: Multilingual Tweet Intimacy Analysis](https://sites.google.com/umich.edu/semeval-2023-tweet-intimacy/home)
+### Option 1: Install from PyPI (Recommended)
 
-### Improving Annotator Productivity
-Potato is carefully desinged with a series of features that can make your annotators experience better and help you get your annotations faster. You can easily set up 
-- [Keyboard Shortcuts](https://potato-annotation.readthedocs.io/en/latest/productivity/#keyboard-shortcuts): Annotators can direcly type in their answers with keyboards
-- [Dynamic Highlighting](https://potato-annotation.readthedocs.io/en/latest/productivity/#dynamic-highlighting): For tasks that have a lot of labels or super long documents, you can setup dynamic highlighting which will smartly highlight the potential association between labels and keywords in the document (as defined by you). 
-- [Label Tooltips](https://potato-annotation.readthedocs.io/en/latest/productivity/#tooltips): When you have a lot of labels (e.g. 30 labels in 4 categories), it'd be extremely hard for annotators to remember all the detailed descriptions of each of them. Potato allows you to set up label tooltips and annotators can hover the mouse over labels to view the description.
+```bash
+pip install potato-annotation
 
-### Knowing better about your annotators
-Potato allows a series of features that can help you to better understand the background of annotators and identify potential data biases in your data.
-- [Pre and Post screening questions](https://potato-annotation.readthedocs.io/en/latest/surveyflow/#pre-study-survey): Potato allows you to easily set up prescreening and postscreening questions and can help you to better understand the backgrounds of your annotators. Potato comes with a seires of question templates that allows you to easily setup common prescreening questions like [demographics](https://potato-annotation.readthedocs.io/en/latest/surveyflow/#built-in-demographic-questions).
+# List available templates
+potato list all
 
-### Better quality control
-Potato comes with features that allows you to collect more reliable annotations and identify potential spammers.
-- [Attention Test](https://potato-annotation.readthedocs.io/en/latest/surveyflow/#attention-test): Potato allows you to easily set up attention test questions and will randomly insert them into the annotation queue, allowing you to better identify potential spammers.
-- [Qualification Test](https://potato-annotation.readthedocs.io/en/latest/surveyflow/#pre-study-test): Potato allows you to easily set up qualification test before the full data labeling and allows you to easily identify disqualified annotators.
-- [Built-in time check](https://potato-annotation.readthedocs.io/en/latest/annotator_stats/#annotation-time): Potato automatically keeps track of the time annotators spend on each instance and allows you to better analyze annotator behaviors.
+# Get a template project
+potato get sentiment_analysis
 
+# Start annotating
+potato start sentiment_analysis
+```
 
-## Quick start
-install potato [pypi package](https://pypi.org/project/potato-annotation/)
+### Option 2: Run from Source
 
-    pip install potato-annotation
+```bash
+git clone https://github.com/davidjurgens/potato.git
+cd potato
+pip install -r requirements.txt
 
-Check all the available project templates
+# Start a simple annotation task
+python potato/flask_server.py start project-hub/simple_examples/configs/simple-check-box.yaml -p 8000
+```
 
-    potato list all
+Then open [http://localhost:8000](http://localhost:8000) in your browser.
 
-Get one from the project hub
+---
 
-    potato get sentiment_analysis
+## Documentation
 
-Start the project
+| Topic | Description |
+|-------|-------------|
+| [Getting Started](https://potato-annotation.readthedocs.io/en/latest/usage/) | Installation and first project setup |
+| [Configuration Guide](https://potato-annotation.readthedocs.io/en/latest/schemas_and_templates/) | YAML configuration options |
+| [Annotation Schemas](https://potato-annotation.readthedocs.io/en/latest/schemas_and_templates/) | Radio, checkbox, span, likert, and more |
+| [Data Formats](https://potato-annotation.readthedocs.io/en/latest/data_format/) | Input/output data specifications |
+| [AI Support](docs/ai_support.md) | LLM integration for label suggestions |
+| [Quality Control](docs/quality_control.md) | Attention checks and gold standards |
+| [Active Learning](docs/active_learning_guide.md) | ML-based instance prioritization |
+| [Admin Dashboard](docs/admin_dashboard.md) | Monitoring and analytics |
+| [Crowdsourcing](https://potato-annotation.readthedocs.io/en/latest/crowdsourcing/) | Prolific and MTurk setup |
+| [User Simulator](docs/simulator.md) | Testing and load simulation |
 
-    potato start sentiment_analysis
+---
 
+## Example Projects
 
-## Start directly from the github repo
-Clone the github repo to your computer
+Ready-to-use annotation setups in [`project-hub/`](project-hub/):
 
-    git clone https://github.com/davidjurgens/potato.git
+| Project | Description | Config |
+|---------|-------------|--------|
+| [Sentiment Analysis](project-hub/sentiment_analysis/) | Document-level sentiment classification | Radio buttons |
+| [Dialogue Analysis](project-hub/dialogue_analysis/) | Span labeling in conversations | Span annotation |
+| [Summarization Eval](project-hub/summarization_evaluation/) | Compare and rate summaries | Likert + pairwise |
+| [Question Answering](project-hub/question_answering/) | Extract answer spans | Span + checkbox |
+| [Simple Examples](project-hub/simple_examples/) | Minimal configs for each schema type | Various |
 
-Install all the required dependencies
+**More examples**: Browse the [Potato Showcase](https://github.com/davidjurgens/potato-showcase/) for a gallery of real-world annotation configurations and interfaces.
 
-    pip install -r requirements.txt
+See [all example projects](https://potato-annotation.readthedocs.io/en/latest/example-projects/) in the documentation.
 
-To run a simple check-box style annotation on text data, run
+---
 
-    python potato/flask_server.py start project-hub/simple_examples/configs/simple-check-box.yaml -p 8000
-        
-This will launch the webserver on port 8000 which can be accessed at [http://localhost:8000](http://localhost:8000). 
+## What's New in v2.0
 
-Clicking "Submit" will autoadvance to the next instance and you can navigate between items using the arrow keys.
+- **AI Support**: Integrated LLM assistance with OpenAI, Anthropic, Gemini, Ollama, vLLM
+- **Audio Annotation**: Waveform-based segmentation with Peaks.js
+- **Video Annotation**: Frame-by-frame labeling with playback controls
+- **Active Learning**: Uncertainty sampling for efficient annotation
+- **Training Phase**: Practice annotations with feedback
+- **Quality Control**: Attention checks, gold standards, agreement metrics
+- **User Simulator**: Automated testing with configurable annotator behaviors
+- **Database Backend**: MySQL support for large-scale deployments
+- **Debug Mode**: Skip to specific phases, selective logging
 
-The `project-hub/simple_examples/configs` folder contains example `.yaml` configuration files that match many common simple use-cases. See the full [documentation](https://potato-annotation.readthedocs.io/en/latest/usage/) for all configuration options.
+See [CHANGELOG.md](CHANGELOG.md) for full release history.
 
+---
 
+## Architecture
 
-## Baked potatoes
-Potato aims to improve the replicability of data annotation and reduce the cost for researchers to set up new annotation tasks. Therefore, Potato comes with a list of predefined example projects, and welcome public contribution to the project hub. If you have used potato for your own annotation, you are encouraged to create a pull request and release your annotation setup. 
+```
+potato/
+├── flask_server.py      # Main application server
+├── routes.py            # HTTP endpoints
+├── templates/           # Jinja2 HTML templates
+├── static/              # JavaScript, CSS
+├── server_utils/
+│   └── schemas/         # Annotation type implementations
+├── ai/                  # LLM endpoint integrations
+├── simulator/           # User simulation for testing
+└── quality_control.py   # QC validation logic
 
-Potato currently include the following example projects:
+project-hub/             # Example annotation projects
+tests/                   # Test suite
+docs/                    # Documentation
+```
 
-- [simple_schema_examples](https://potato-annotation.readthedocs.io/en/latest/example-projects/#simple-schema-examples)
-- [dialogue_analysis](https://potato-annotation.readthedocs.io/en/latest/example-projects/#dialogue-analysis-span-categorization)
-- [empathy](https://potato-annotation.readthedocs.io/en/latest/example-projects/#empathy)
-- [gif_reply](https://potato-annotation.readthedocs.io/en/latest/example-projects/#gif-reply)
-- [immigration_framing](https://potato-annotation.readthedocs.io/en/latest/example-projects/#immigration-framing)
-- [match_finding](https://potato-annotation.readthedocs.io/en/latest/example-projects/#match-finding)
-- [match_finding_with_prestudy](https://potato-annotation.readthedocs.io/en/latest/example-projects/#match-findings-in-papers-and-news-prestudy-test)
-- [sentiment_analysis](https://potato-annotation.readthedocs.io/en/latest/example-projects/#sentiment-analysis)
-- [summarization_evaluation](https://potato-annotation.readthedocs.io/en/latest/example-projects/#summarization-evaluation)
-- [textual_uncertainty](https://potato-annotation.readthedocs.io/en/latest/example-projects/#textual-uncertainty)
-- [question_answering](https://potato-annotation.readthedocs.io/en/latest/example-projects/#question-answering)
+---
 
-Please check full list of [baked potatoes](https://potato-annotation.readthedocs.io/en/latest/example-projects/) for more details!
+## Development
 
+```bash
+# Run tests
+pytest tests/ -v
 
-## Design Team and Support
+# Run specific test categories
+pytest tests/unit/ -v        # Unit tests
+pytest tests/simulator/ -v   # Simulator tests
+pytest tests/server/ -v      # Integration tests
 
-Potato is run by a small and engergetic team of academics doing the best they can. For support, please leave a issue on this git repo. Feature requests and issues are both welcomed!
-If you have any questions or want to collaborate on this project, please email pedropei@umich.edu or jurgens@umich.edu
+# Run with coverage
+pytest --cov=potato --cov-report=html
+```
 
+---
+
+## Support
+
+- **Issues**: [GitHub Issues](https://github.com/davidjurgens/potato/issues)
+- **Questions**: pedropei@umich.edu or jurgens@umich.edu
+- **Documentation**: [potato-annotation.readthedocs.io](https://potato-annotation.readthedocs.io/)
+
+---
 
 ## License
-Potato is dual-licensed. All use cases are covered by Polyform Shield but a commercial license is available for those use cases not allowed by Polyform Shield. Please contact us for details on commercial licensing.
 
-FAQ:
-1. If I am an open-source developer, can I fork potato and work on it separately?
-    
-    Yes, this is allowed with the license
-2. If I am an open-source developer, can I fork potato and publicly release a new version with my own features?
-    
-    No, this is not allowed with the license; such a product would be considered as a “competitor” (see the license for details)
-3. If I am working for a company, can I use potato to annotate my data?
-    
-    Yes, this is allowed with the license
-4. If I am working for a company, can I use potato within my company’s pipelines for data annotation (e.g., integrate potato within my company’s internal infrastructure)?
-    
-    Yes, this is allowed with the license—we’d love to hear about these to advertise, so please contact us at jurgens@umich.edu.
-5. Can I integrate potato within a larger annotation pipeline and release that pipeline as an open-source library or service for others to use?
-    
-    Yes, this is allowed with the license—we’d love to hear about these to advertise, so please contact us
-6. Can I integrate potato within a larger annotation pipeline and release that publicly as commercial software/service/resource for others to use?
-   
-   No, this is not allowed by Polyform Shield but commercial licensing of potato for this purpose is available. Please reach out to us at jurgens@umich.edu for details.
-7. I am working for a crowdsourcing platform, can I combine potato in our platform to provide better service for my customers?
-   
-   No, this is not allowed by Polyform Shield but commercial licensing of potato for this purpose is available. Please reach out to us at jurgens@umich.edu for details.
+Potato is dual-licensed under [Polyform Shield](LICENSE) for non-commercial use. Commercial licensing is available—contact jurgens@umich.edu for details.
 
-Have a question or case not covered by the above? Please reach out to us and we’ll add it to the list!
+<details>
+<summary>License FAQ</summary>
 
+| Use Case | Allowed? |
+|----------|----------|
+| Academic research | Yes |
+| Internal company annotation | Yes |
+| Fork for personal development | Yes |
+| Integration in open-source pipelines | Yes |
+| Commercial annotation service | Contact us |
+| Competing annotation platform | Contact us |
 
+</details>
 
+---
 
-## Cite us
-Please use the following bibtex when referencing this work:
-```
+## Citation
+
+```bibtex
 @inproceedings{pei2022potato,
   title={POTATO: The Portable Text Annotation Tool},
   author={Pei, Jiaxin and Ananthasubramaniam, Aparna and Wang, Xingyao and Zhou, Naitian and Dedeloudis, Apostolos and Sargent, Jackson and Jurgens, David},
