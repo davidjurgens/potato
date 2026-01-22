@@ -220,6 +220,114 @@ class TestGetDisplayedTextList:
         assert "<b>A.</b>" in result
         assert "<b>B.</b>" in result
 
+    def test_list_with_bullet_prefix(self, mock_config):
+        """List with bullet prefix type."""
+        mock_config.get.side_effect = lambda key, default=None: {
+            "list_as_text": {"text_list_prefix_type": "bullet"},
+            "highlight_linebreaks": False
+        }.get(key, default)
+
+        from potato.flask_server import get_displayed_text
+
+        result = get_displayed_text(["First", "Second", "Third"])
+
+        assert "<b>•</b>" in result
+        assert "First" in result
+        assert "Second" in result
+        assert "Third" in result
+
+    def test_list_with_none_prefix(self, mock_config):
+        """List with no prefix (for dialogue with speaker names in text)."""
+        mock_config.get.side_effect = lambda key, default=None: {
+            "list_as_text": {"text_list_prefix_type": "none"},
+            "highlight_linebreaks": False
+        }.get(key, default)
+
+        from potato.flask_server import get_displayed_text
+
+        result = get_displayed_text(["Alice: Hello!", "Bob: Hi there!"])
+
+        # Should not have any prefix markers
+        assert "<b>A.</b>" not in result
+        assert "<b>1.</b>" not in result
+        assert "<b>•</b>" not in result
+        # But should have the content
+        assert "Alice: Hello!" in result
+        assert "Bob: Hi there!" in result
+
+
+class TestGetDisplayedTextDialogueFeatures:
+    """Test dialogue-specific features like alternating shading and horizontal layout."""
+
+    @pytest.fixture(autouse=True)
+    def mock_config(self):
+        """Mock the config module for testing."""
+        mock_config = MagicMock()
+        mock_config.get.return_value = {}
+        with patch('potato.flask_server.config', mock_config):
+            yield mock_config
+
+    def test_alternating_shading(self, mock_config):
+        """Alternating shading wraps turns in styled divs."""
+        mock_config.get.side_effect = lambda key, default=None: {
+            "list_as_text": {
+                "text_list_prefix_type": "none",
+                "alternating_shading": True
+            },
+            "highlight_linebreaks": False
+        }.get(key, default)
+
+        from potato.flask_server import get_displayed_text
+
+        result = get_displayed_text(["Turn 1", "Turn 2", "Turn 3"])
+
+        # Should have dialogue turn divs with even/odd classes
+        assert 'class="dialogue-turn dialogue-turn-even"' in result
+        assert 'class="dialogue-turn dialogue-turn-odd"' in result
+        assert "Turn 1" in result
+        assert "Turn 2" in result
+        assert "Turn 3" in result
+
+    def test_horizontal_layout(self, mock_config):
+        """Horizontal layout displays items side-by-side."""
+        mock_config.get.side_effect = lambda key, default=None: {
+            "list_as_text": {
+                "text_list_prefix_type": "alphabet",
+                "horizontal": True
+            },
+            "highlight_linebreaks": False
+        }.get(key, default)
+
+        from potato.flask_server import get_displayed_text
+
+        result = get_displayed_text(["Option A text", "Option B text"])
+
+        # Should have pairwise container and cells
+        assert 'pairwise-container' in result
+        assert 'pairwise-cell' in result
+        assert "Option A text" in result
+        assert "Option B text" in result
+
+    def test_alternating_shading_with_alphabet_prefix(self, mock_config):
+        """Alternating shading works with alphabet prefixes."""
+        mock_config.get.side_effect = lambda key, default=None: {
+            "list_as_text": {
+                "text_list_prefix_type": "alphabet",
+                "alternating_shading": True
+            },
+            "highlight_linebreaks": False
+        }.get(key, default)
+
+        from potato.flask_server import get_displayed_text
+
+        result = get_displayed_text(["First", "Second"])
+
+        # Should have both prefix and shading
+        assert "<b>A.</b>" in result
+        assert "<b>B.</b>" in result
+        assert "dialogue-turn-even" in result
+        assert "dialogue-turn-odd" in result
+
 
 class TestGetDisplayedTextEdgeCases:
     """Edge case tests for get_displayed_text."""

@@ -16,7 +16,7 @@ user_config:
   users: []
 list_as_text:
   text_list_prefix_type: none
-  horizontal: true
+  alternating_shading: true
 alert_time_each_instance: 10000000
 annotation_schemes:
 - annotation_type: span

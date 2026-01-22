@@ -958,32 +958,70 @@ def get_abs_or_rel_path(fname: str, config: dict) -> str:
 def get_displayed_text(text):
     """Render the text to display to the user in the annotation interface.
 
-    Handles both string and list inputs. When text is a list (for pairwise
-    comparisons), it formats the list items according to list_as_text config.
+    Handles both string and list inputs. When text is a list (for dialogue
+    or pairwise comparisons), it formats the list items according to list_as_text config.
+
+    Supported prefix types:
+    - alphabet: A. B. C. prefixes
+    - number: 1. 2. 3. prefixes
+    - bullet: • prefixes
+    - none: No prefix (use for dialogue with speaker names in text)
+
+    Additional options:
+    - horizontal: Display items side-by-side (for pairwise comparison)
+    - alternating_shading: Shade every other turn (for dialogue readability)
     """
     import re
 
-    # Handle list inputs (for pairwise comparisons with list_as_text config)
+    # Handle list inputs (for dialogue or pairwise comparisons with list_as_text config)
     if isinstance(text, list):
         list_config = config.get("list_as_text", {})
         prefix_type = list_config.get("text_list_prefix_type", "alphabet")
+        horizontal = list_config.get("horizontal", False)
+        alternating_shading = list_config.get("alternating_shading", False)
 
         formatted_items = []
         for i, item in enumerate(text):
             # Generate prefix based on type
             if prefix_type == "alphabet":
-                prefix = chr(ord('A') + i)
+                prefix = f"<b>{chr(ord('A') + i)}.</b> "
             elif prefix_type == "number":
-                prefix = str(i + 1)
+                prefix = f"<b>{i + 1}.</b> "
+            elif prefix_type == "bullet":
+                prefix = "<b>•</b> "
+            elif prefix_type == "none":
+                prefix = ""
             else:
-                prefix = chr(ord('A') + i)
+                # Default to alphabet for unknown types
+                prefix = f"<b>{chr(ord('A') + i)}.</b> "
 
             # Recursively process each item
             processed_item = get_displayed_text(item) if isinstance(item, str) else str(item)
-            formatted_items.append(f"<b>{prefix}.</b> {processed_item}")
 
-        # Join with double line breaks for separation
-        text = "<br/><br/>".join(formatted_items)
+            # Apply alternating shading for dialogue readability
+            if alternating_shading:
+                shade_class = "dialogue-turn-even" if i % 2 == 0 else "dialogue-turn-odd"
+                formatted_items.append(
+                    f'<div class="dialogue-turn {shade_class}">{prefix}{processed_item}</div>'
+                )
+            else:
+                formatted_items.append(f"{prefix}{processed_item}")
+
+        # Join based on layout type
+        if horizontal:
+            # Horizontal layout for pairwise comparison
+            cell_width = 100 // len(formatted_items) if formatted_items else 100
+            cells = [
+                f'<div class="pairwise-cell" style="width:{cell_width}%;display:inline-block;vertical-align:top;padding:10px;box-sizing:border-box;">{item}</div>'
+                for item in formatted_items
+            ]
+            text = '<div class="pairwise-container" style="display:flex;gap:20px;">' + ''.join(cells) + '</div>'
+        elif alternating_shading:
+            # Already wrapped in divs, join without extra breaks
+            text = ''.join(formatted_items)
+        else:
+            # Vertical layout with double line breaks
+            text = "<br/><br/>".join(formatted_items)
         return text
 
     # Normalize text for consistent positioning (matches client-side normalization)
