@@ -746,7 +746,7 @@ async function saveAnnotations() {
         };
 
         // Add API key if available
-        if (window.config.api_key) {
+        if (window.config && window.config.api_key) {
             headers['X-API-Key'] = window.config.api_key;
         }
 
@@ -762,6 +762,18 @@ async function saveAnnotations() {
                 labelAnnotations[key] = value;
             }
         }
+
+        // Also collect data from hidden annotation inputs (image/audio/video annotations)
+        const hiddenInputs = document.querySelectorAll('.annotation-data-input');
+        hiddenInputs.forEach(input => {
+            if (input.name && input.value) {
+                // Store the raw JSON value with schema name as key
+                // Use ::: separator to match the format used by other annotation types
+                const key = `${input.name}:::_data`;
+                labelAnnotations[key] = input.value;
+                debugLog('[DEBUG] saveAnnotations: collected hidden input:', input.name, '=', input.value.substring(0, 100) + '...');
+            }
+        });
 
         const response = await fetch('/updateinstance', {
             method: 'POST',

@@ -2668,6 +2668,9 @@ def update_instance():
             logger.error(f"User state not found for user: {username}")
             return jsonify({"status": "error", "message": "User state not found"})
 
+        # Debug: Log user phase for debugging annotation storage issues
+        logger.debug(f"User '{username}' phase: {user_state.get_phase()}, current_phase_and_page: {user_state.current_phase_and_page}")
+
         # Track session
         if not user_state.session_start_time:
             user_state.start_session(session.get('session_id', str(uuid.uuid4())))
@@ -2696,38 +2699,47 @@ def update_instance():
             # Handle label annotations from frontend format
             annotations = request.json.get("annotations", {})
             for key, value in annotations.items():
-                if ":" in key:
+                if ":::" in key:
+                    # Use ::: separator for image/audio/video annotation data
+                    # e.g., "video_segments:::_data" -> schema="video_segments", label="_data"
+                    schema_name, label_name = key.split(":::", 1)
+                    label = Label(schema_name, label_name)
+                elif ":" in key:
+                    # Legacy format with single colon
                     schema_name, label_name = key.split(":", 1)
                     label = Label(schema_name, label_name)
+                else:
+                    logger.warning(f"Skipping annotation with no separator: {key}")
+                    continue
 
-                    # Get old value for comparison
-                    old_value = None
-                    if instance_id in user_state.instance_id_to_label_to_value:
-                        old_value = user_state.instance_id_to_label_to_value[instance_id].get(label)
+                # Get old value for comparison
+                old_value = None
+                if instance_id in user_state.instance_id_to_label_to_value:
+                    old_value = user_state.instance_id_to_label_to_value[instance_id].get(label)
 
-                    # Determine action type
-                    action_type = "add_label" if old_value is None else "update_label"
+                # Determine action type
+                action_type = "add_label" if old_value is None else "update_label"
 
-                    # Create annotation action
-                    action = AnnotationHistoryManager.create_action(
-                        user_id=username,
-                        instance_id=instance_id,
-                        action_type=action_type,
-                        schema_name=schema_name,
-                        label_name=label_name,
-                        old_value=old_value,
-                        new_value=value,
-                        session_id=user_state.current_session_id,
-                        client_timestamp=client_timestamp,
-                        metadata=metadata
-                    )
+                # Create annotation action
+                action = AnnotationHistoryManager.create_action(
+                    user_id=username,
+                    instance_id=instance_id,
+                    action_type=action_type,
+                    schema_name=schema_name,
+                    label_name=label_name,
+                    old_value=old_value,
+                    new_value=value,
+                    session_id=user_state.current_session_id,
+                    client_timestamp=client_timestamp,
+                    metadata=metadata
+                )
 
-                    # Add to history
-                    user_state.add_annotation_action(action)
+                # Add to history
+                user_state.add_annotation_action(action)
 
-                    # Update annotation
-                    user_state.add_label_annotation(instance_id, label, value)
-                    logger.debug(f"Added label annotation: {schema_name}:{label_name} = {value}")
+                # Update annotation
+                user_state.add_label_annotation(instance_id, label, value)
+                logger.debug(f"Added label annotation: {schema_name}:{label_name} = {value[:100]}..." if len(str(value)) > 100 else f"Added label annotation: {schema_name}:{label_name} = {value}")
 
             # Handle span annotations from frontend format
             span_annotations = request.json.get("span_annotations", [])

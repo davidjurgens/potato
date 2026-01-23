@@ -350,10 +350,12 @@ def _generate_html(
                 </div>
 
                 <!-- Hidden input for storing annotation data -->
+                <!-- autocomplete="off" prevents Firefox from restoring old values on reload -->
                 <input type="hidden"
                        name="{escaped_name}"
                        id="input-{escaped_name}"
                        class="annotation-data-input"
+                       autocomplete="off"
                        value="">
 
             </div>

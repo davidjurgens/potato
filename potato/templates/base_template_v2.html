@@ -18,10 +18,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}">
 
     <!-- Image Annotation Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='image-annotation.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='image-annotation.css') }}?v=2">
 
     <!-- Audio Annotation Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='audio-annotation.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='audio-annotation.css') }}?v=2">
 
     <!-- Video Annotation Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='video-annotation.css') }}">
@@ -112,6 +112,12 @@
                         <div id="instance-text" class="instance-text-container" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0);">
                             <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}">{{instance | sanitize_html}}</div>
                         </div>
+                        {% elif has_image_annotation | default(false) %}
+                        <!-- For image annotation, hide this section - the image is loaded directly into the annotation canvas -->
+                        <!-- Store the image URL in a hidden element for JavaScript to access -->
+                        <div id="instance-text" style="display: none;">
+                            <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}" data-image-url="{{instance | sanitize_html}}">{{instance | sanitize_html}}</div>
+                        </div>
                         {% else %}
                         <h5 class="mb-3">Text to Annotate:</h5>
                         <div id="instance-text" class="p-3 border rounded instance-text-container" style="background-color: var(--light-bg); min-height: 100px; position: relative;">
@@ -180,13 +186,13 @@
     <!-- Configuration from server -->
     <script type="text/javascript">
         window.config = {
-            annotation_task_name: "{{ annotation_task_name }}",
+            annotation_task_name: {{ annotation_task_name | tojson }},
             debug: {{ 'true' if debug_mode else 'false' }},
             ui_debug: {{ 'true' if ui_debug else 'false' }},
             server_debug: {{ 'true' if server_debug else 'false' }},
-            debug_phase: {{ ('"%s"' % debug_phase) if debug_phase else 'null' }},
+            debug_phase: {{ debug_phase | tojson if debug_phase else 'null' }},
             api_key: "test_api_key",
-            username: "{{ username }}",
+            username: {{ username | tojson }},
             ui_config: {}
         };
 
@@ -232,19 +238,26 @@
     <!-- Load annotation JavaScript -->
     <script src="{{ url_for('static', filename='span-core.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='ai_assistant_manager.js') }}?v=1"></script>
-    <script src="{{ url_for('static', filename='annotation.js') }}?v=11"></script>
+    <script src="{{ url_for('static', filename='annotation.js') }}?v=14"></script>
 
     <!-- Fabric.js for image annotation (loaded from CDN) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
     <!-- Image annotation manager -->
-    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=2"></script>
 
     <!-- Peaks.js for audio/video annotation (stored locally for reliability) -->
     <script src="{{ url_for('static', filename='peaks.min.js') }}"></script>
     <!-- Audio annotation manager -->
-    <script src="{{ url_for('static', filename='audio-annotation.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='audio-annotation.js') }}?v=2"></script>
     <!-- Video annotation manager -->
-    <script src="{{ url_for('static', filename='video-annotation.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='video-annotation.js') }}?v=10"></script>
+
+    <!-- Global keyboard debug (temporary) -->
+    <script>
+        window.addEventListener('keydown', function(e) {
+            console.log('[GLOBAL DEBUG] keydown:', e.key, 'code:', e.code, 'target:', e.target.tagName);
+        }, true);
+    </script>
 
     <!-- Instance height limit functionality -->
     <script>

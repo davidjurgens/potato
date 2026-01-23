@@ -1282,6 +1282,13 @@ def render_page_with_annotations(username) -> str:
         for scheme in config.get("annotation_schemes", [])
     )
 
+    # Detect if any annotation scheme is image_annotation type
+    # This is used to customize the display (show "Image to Annotate:" instead of "Text to Annotate:")
+    has_image_annotation = any(
+        scheme.get("annotation_type") == "image_annotation"
+        for scheme in config.get("annotation_schemes", [])
+    )
+
     # Get pre-annotation configuration
     pre_annotation_config = {}
     if qc_manager:
@@ -1310,6 +1317,7 @@ def render_page_with_annotations(username) -> str:
         ui_config=ui_config,
         has_video_annotation=has_video_annotation,
         has_audio_annotation=has_audio_annotation,
+        has_image_annotation=has_image_annotation,
         # Pre-annotation data for model predictions
         pre_annotations=pre_annotation_data,
         pre_annotation_config=pre_annotation_config,
@@ -1401,6 +1409,15 @@ def render_page_with_annotations(username) -> str:
                         {"schema": schema, "label_name": label}
                     )
 
+                # For image/audio/video annotation data, the hidden input has name=schema_name
+                # and the label is "_data"
+                if not input_fields and label == "_data":
+                    input_fields = soup.find_all(
+                        ["input"],
+                        {"name": schema, "class": "annotation-data-input"}
+                    )
+                    logger.debug(f"Looking for annotation-data-input with name={schema}, found {len(input_fields)}")
+
                 for input_field in input_fields:
 
                     if input_field is None:
@@ -1419,6 +1436,14 @@ def render_page_with_annotations(username) -> str:
                     if input_field.get('type') == 'text' or input_field.get('type') == 'textarea':
                         if isinstance(value, str):
                             input_field['value'] = value
+
+                    # Handle hidden inputs for image/audio/video annotation data
+                    if input_field.get('type') == 'hidden':
+                        if isinstance(value, str):
+                            input_field['value'] = value
+                            # Mark this input as server-set to distinguish from browser-cached values
+                            input_field['data-server-set'] = 'true'
+                            logger.debug(f"Set hidden input {name} value (length: {len(value)}) with server-set flag")
 
                     if False:
                         # If it's not a text area, let's see if this is the button

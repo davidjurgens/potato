@@ -82,6 +82,28 @@ class VideoAnnotationManager {
         this.questionsEl = document.getElementById(this.questionsId);
         this.trackingCanvas = document.getElementById(this.trackingCanvasId);
 
+        // Debug: Log input element state at construction time
+        console.log('[VideoAnnotation] Constructor - inputId:', this.inputId);
+        console.log('[VideoAnnotation] Constructor - inputEl found:', !!this.inputEl);
+        if (this.inputEl) {
+            console.log('[VideoAnnotation] Constructor - inputEl.value length:', this.inputEl.value ? this.inputEl.value.length : 0);
+            if (this.inputEl.value) {
+                console.log('[VideoAnnotation] Constructor - inputEl.value (first 100 chars):', this.inputEl.value.substring(0, 100));
+            }
+
+            // Check for browser-cached values that should be cleared
+            // Browser form restoration can restore old values from previous page loads
+            // We detect this by checking if the input has data-server-set="true" attribute
+            // If not set, the value might be from browser caching
+            if (this.inputEl.value && !this.inputEl.dataset.serverSet) {
+                console.log('[VideoAnnotation] WARNING: Found value in hidden input without server-set flag, might be browser-cached. Value will be validated after video loads.');
+                // Store the cached value temporarily - we'll validate it after video metadata loads
+                this._cachedInputValue = this.inputEl.value;
+                // Clear the input for now
+                this.inputEl.value = '';
+            }
+        }
+
         // Bind methods
         this._onSegmentClick = this._onSegmentClick.bind(this);
         this._onSegmentDragEnd = this._onSegmentDragEnd.bind(this);
@@ -125,6 +147,8 @@ class VideoAnnotationManager {
             // Hide timeline containers since they won't work
             if (this.zoomviewEl) this.zoomviewEl.style.display = 'none';
             if (this.overviewEl) this.overviewEl.style.display = 'none';
+            // Still load existing annotations even without Peaks.js
+            this._loadExistingAnnotations();
             return;
         }
 
@@ -773,27 +797,52 @@ class VideoAnnotationManager {
      * Set up keyboard shortcuts
      */
     _setupKeyboardShortcuts() {
-        document.addEventListener('keydown', this._handleKeydown);
+        // Use capture phase (third param = true) to intercept events before
+        // Chrome's video element can capture them
+        document.addEventListener('keydown', this._handleKeydown, true);
     }
 
     /**
      * Handle keydown events
      */
     _handleKeydown(event) {
+        // Debug: Log all key presses to help diagnose keyboard issues
+        console.log('[VideoAnnotation] Keydown:', event.key, 'code:', event.code, 'target:', event.target.tagName);
+
         // Don't handle if typing in input/textarea
         if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+            console.log('[VideoAnnotation] Ignoring: in text input');
             return;
         }
 
-        // Check if this container is focused/active
-        if (!this.container.contains(document.activeElement) &&
-            document.activeElement !== document.body) {
+        // Check if this container exists (simplified check - removed offsetParent)
+        if (!this.container) {
+            console.log('[VideoAnnotation] Ignoring: no container');
             return;
         }
 
-        const key = event.key.toLowerCase();
+        const key = event.key;
+        const code = event.code;
 
-        switch (key) {
+        // Handle bracket keys explicitly using both key and code for cross-platform compatibility
+        // code is more reliable across different keyboard layouts
+        if (key === '[' || code === 'BracketLeft') {
+            console.log('[VideoAnnotation] Handling [ key (code:', code, ')');
+            event.preventDefault();
+            this.setSelectionStart();
+            return;
+        }
+        if (key === ']' || code === 'BracketRight') {
+            console.log('[VideoAnnotation] Handling ] key (code:', code, ')');
+            event.preventDefault();
+            this.setSelectionEnd();
+            return;
+        }
+
+        // For other keys, use lowercase comparison
+        const keyLower = key.toLowerCase();
+
+        switch (keyLower) {
             case ' ': // Space - Play/Pause
                 event.preventDefault();
                 this.togglePlayPause();
@@ -829,16 +878,6 @@ class VideoAnnotationManager {
             case '.': // Frame forward
                 event.preventDefault();
                 this.stepFrameForward();
-                break;
-
-            case '[':
-                event.preventDefault();
-                this.setSelectionStart();
-                break;
-
-            case ']':
-                event.preventDefault();
-                this.setSelectionEnd();
                 break;
 
             case 'enter':
@@ -1128,18 +1167,70 @@ class VideoAnnotationManager {
             tracking: this.trackingData
         };
 
+        // Always log save operations for debugging
+        console.log('[VideoAnnotation] _saveData called');
+        console.log('[VideoAnnotation] inputEl:', this.inputEl);
+        console.log('[VideoAnnotation] inputEl id:', this.inputEl ? this.inputEl.id : 'N/A');
+        console.log('[VideoAnnotation] segments count:', this.segments.length);
+
         if (this.inputEl) {
             this.inputEl.value = JSON.stringify(data);
+            console.log('[VideoAnnotation] Set input value, length:', this.inputEl.value.length);
+        } else {
+            console.error('[VideoAnnotation] ERROR: inputEl is null, cannot save data!');
         }
 
         videoDebugLog('Saved annotation data:', data);
     }
 
     _loadExistingAnnotations() {
-        if (!this.inputEl || !this.inputEl.value) return;
+        // Always log to help debug loading issues
+        console.log('[VideoAnnotation] _loadExistingAnnotations called');
+
+        // Re-fetch the input element in case it was replaced during page render
+        if (!this.inputEl) {
+            this.inputEl = document.getElementById(this.inputId);
+            console.log('[VideoAnnotation] Re-fetched inputEl:', this.inputEl);
+        }
+
+        console.log('[VideoAnnotation] inputEl:', this.inputEl);
+        console.log('[VideoAnnotation] inputEl id:', this.inputEl ? this.inputEl.id : 'N/A');
+        console.log('[VideoAnnotation] inputEl value length:', this.inputEl && this.inputEl.value ? this.inputEl.value.length : 0);
+
+        // Log first 200 chars of value for debugging
+        if (this.inputEl && this.inputEl.value) {
+            console.log('[VideoAnnotation] inputEl value (first 200 chars):', this.inputEl.value.substring(0, 200));
+        }
+
+        if (!this.inputEl || !this.inputEl.value) {
+            console.log('[VideoAnnotation] _loadExistingAnnotations: No input element or empty value, returning');
+            return;
+        }
 
         try {
             const data = JSON.parse(this.inputEl.value);
+            console.log('[VideoAnnotation] _loadExistingAnnotations: Parsed data:', data);
+            console.log('[VideoAnnotation] Found', data.segments ? data.segments.length : 0, 'segments to load');
+
+            // Validate that the stored data is for this video by checking video metadata
+            // This protects against browser form restoration (bfcache) loading data from a different video
+            if (data.video_metadata) {
+                const storedDuration = data.video_metadata.duration;
+                const currentDuration = this.videoMetadata.duration;
+
+                // Allow 0.5 second tolerance for floating point differences
+                if (Math.abs(storedDuration - currentDuration) > 0.5) {
+                    console.warn('[VideoAnnotation] Video metadata mismatch detected!');
+                    console.warn('[VideoAnnotation] Stored duration:', storedDuration, 'Current duration:', currentDuration);
+                    console.warn('[VideoAnnotation] This appears to be browser-cached data from a different video. Clearing stale data.');
+
+                    // Clear the stale data
+                    this.inputEl.value = '';
+                    return;
+                }
+
+                console.log('[VideoAnnotation] Video metadata validated - data is for current video');
+            }
 
             // Load segments
             if (data.segments) {
@@ -1247,7 +1338,7 @@ class VideoAnnotationManager {
      * Clean up when destroying the manager
      */
     destroy() {
-        document.removeEventListener('keydown', this._handleKeydown);
+        document.removeEventListener('keydown', this._handleKeydown, true);
         this.videoEl.removeEventListener('timeupdate', this._onVideoTimeUpdate);
 
         if (this.peaks) {
