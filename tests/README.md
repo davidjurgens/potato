@@ -338,21 +338,50 @@ The test suite is designed to work with CI/CD pipelines:
 - **Selenium tests**: UI validation (can be run separately)
 - **Coverage reporting**: Code quality metrics
 
-## Test Consolidation Recommendations
+## Test Consolidation Status
 
-The test suite has grown organically and contains significant duplication, particularly in span and persistence tests. Below are recommendations for future consolidation:
+The test suite has been partially consolidated to reduce duplication and improve maintainability.
 
-### Span Tests (~41 files)
+### Span Unit Tests (Completed)
 
-**Current state:** Span annotation tests are spread across unit, server, and selenium directories with significant overlap.
+**Consolidated file:** `tests/unit/test_span_consolidated.py` (40 tests)
 
-**Recommended consolidation into 3 files:**
+**Common helpers:** `tests/helpers/span_test_helpers.py` provides shared utilities:
+- `MockSpanAnnotation` - Mock class for unit tests
+- `SpanTestData` - Standard test data and schemas
+- `create_span_test_config()` - Test configuration builder
+- Assertion helpers: `assert_span_valid`, `assert_spans_equal`, `assert_no_html_in_span`
+- `spans_overlap()`, `calculate_overlap_depth()` - Overlap utilities
+- `SpanSeleniumHelpers` - Helpers for Selenium tests
 
-| Target File | Purpose | Source Files |
-|-------------|---------|--------------|
-| `tests/unit/test_span_schema.py` | Schema generation, HTML output, offset calculations | `test_span_annotations.py`, `test_span_schema_loading.py`, `test_span_integration.py`, `test_span_offset_*.py`, `test_span_overlap_*.py` |
-| `tests/server/test_span_e2e.py` | Full workflow tests, API endpoints | `test_span_annotation_workflow.py`, `test_robust_span_annotation.py`, `test_span_schema_api.py`, `test_span_persistence_bug.py` |
-| `tests/selenium/test_span_browser.py` | Browser interactions, overlay rendering | All selenium `test_*span*.py` files |
+**Removed redundant files:** (covered by consolidated file)
+- `test_span_annotations.py`
+- `test_span_integration.py`
+- `test_span_offset_fix.py`
+- `test_span_overlap_position.py`
+- `test_span_overlap_fix_unit.py`
+- `test_span_persistence.py`
+
+**Remaining span unit tests:** (have unique functionality)
+- `test_span_schema_loading.py` - Schema loading and API format tests
+- `test_span_offset_calculation.py` - Flask client-based offset tests
+- `test_span_manager_fix.py` - JavaScript behavior simulation
+- `test_span_rendering_bug.py` - Bug reproduction tests
+- Other overlay/positioning tests
+
+### Span Server Tests
+
+**Status:** All 4 files are skipped for fast CI execution (`pytest.mark.skip`)
+- `test_robust_span_annotation.py`
+- `test_span_annotation_workflow.py`
+- `test_span_persistence_bug.py`
+- `test_span_schema_api.py`
+
+### Span Selenium Tests
+
+**Status:** 22 files exist with infrastructure issues (server startup problems)
+- Consolidation pending infrastructure fixes
+- See Selenium Test Issues in Troubleshooting section
 
 ### Persistence Tests (~15 files)
 
