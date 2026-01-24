@@ -23,6 +23,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.firefox.options import Options as FirefoxOptions
 from tests.helpers.flask_test_setup import FlaskTestServer
+from tests.helpers.port_manager import find_free_port
 
 
 class BaseSeleniumTest(unittest.TestCase):
@@ -64,7 +65,9 @@ class BaseSeleniumTest(unittest.TestCase):
         # Store for cleanup
         cls.test_dir = test_dir
 
-        cls.server = FlaskTestServer(port=9008, debug=False, config_file=config_file)
+        # Use dynamic port allocation to avoid conflicts with concurrent tests
+        port = find_free_port(preferred_port=9008)
+        cls.server = FlaskTestServer(port=port, debug=False, config_file=config_file)
         started = cls.server.start_server()
         assert started, "Failed to start Flask server"
 

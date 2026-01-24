@@ -25,6 +25,9 @@ from datetime import timedelta
 # Add the project root to the path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+# Import port manager for reliable port allocation
+from tests.helpers.port_manager import find_free_port, release_port
+
 class FlaskTestServer:
     """A test server that can be started and stopped for integration tests."""
 
@@ -127,27 +130,11 @@ class FlaskTestServer:
         if self.temp_config_file and os.path.exists(self.temp_config_file):
             os.remove(self.temp_config_file)
 
-    def _is_port_available(self, port):
-        """Check if a port is available for use."""
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(1)
-            s.bind(("localhost", port))
-            s.close()
-            return True
-        except (socket.error, OSError):
-            return False
-
-    def _find_free_port(self):
-        """Find an available port by letting the OS assign one."""
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.bind(("localhost", 0))
-        port = s.getsockname()[1]
-        s.close()
-        return port
-
     def _get_available_port(self, requested_port=None):
         """Get an available port, using requested_port if available, otherwise find a free one.
+
+        Uses the port_manager module for reliable port allocation with retry logic
+        to handle TOCTOU race conditions.
 
         Args:
             requested_port: Preferred port to use. If None or unavailable, finds a free port.
@@ -155,17 +142,7 @@ class FlaskTestServer:
         Returns:
             An available port number.
         """
-        if requested_port is not None:
-            if self._is_port_available(requested_port):
-                return requested_port
-            else:
-                import warnings
-                warnings.warn(
-                    f"Requested port {requested_port} is in use, finding an alternative port. "
-                    "Consider not specifying a port to avoid conflicts.",
-                    RuntimeWarning
-                )
-        return self._find_free_port()
+        return find_free_port(preferred_port=requested_port)
 
     def _create_temp_config_file(self, config_data, prefix):
         """Create a temporary config file within the project directory."""

@@ -31,6 +31,9 @@ from selenium.common.exceptions import TimeoutException, WebDriverException
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+# Import port manager for reliable port allocation
+from tests.helpers.port_manager import find_free_port, release_port
+
 
 class ServerStartupError(Exception):
     """Exception raised when server fails to start."""
@@ -167,14 +170,12 @@ class IntegrationTestServer:
             self.process = None
 
     def _find_available_port(self, start_port: int) -> int:
-        """Find an available port starting from start_port."""
-        port = start_port
-        while port < start_port + 100:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                if s.connect_ex(('localhost', port)) != 0:
-                    return port
-            port += 1
-        raise RuntimeError(f"No available ports found starting from {start_port}")
+        """Find an available port starting from start_port.
+
+        Uses the port_manager module for reliable port allocation with retry logic
+        to handle TOCTOU race conditions.
+        """
+        return find_free_port(preferred_port=start_port)
 
     def _is_server_ready(self) -> bool:
         """Check if server is accepting connections."""

@@ -34,6 +34,7 @@ def get_example_configs() -> List[Path]:
         # Skip configs known to have issues or are templates
         skip_patterns = [
             "empty-to-copy",  # Template, not functional
+            "simulator-",     # Simulator configs, not server configs
         ]
 
         if any(pattern in config_file.name for pattern in skip_patterns):
@@ -52,6 +53,9 @@ CONFIGS_WITH_KNOWN_ISSUES = {
     "simple-image-annotation": "Missing required field: site_dir",
     "simple-pairwise-comparison": "TypeError in pairwise comparison annotation",
     "two-sliders": "Server startup timeout (may need investigation)",
+    "category-assignment-example": "Missing data directory: category-assignment-example/data/",
+    "icl-labeling-example": "Data file path relative to wrong task_dir",
+    "quality-control-example": "Data file paths use incorrect relative path",
 }
 
 
