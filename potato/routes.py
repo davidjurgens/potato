@@ -1861,6 +1861,60 @@ def admin_item_state_detail(item_id):
         }), 500
 
 
+# Test Support Endpoints (only available in debug mode)
+
+@app.route("/admin/api/test/reset_state", methods=["POST"])
+def admin_api_test_reset_state():
+    """
+    Reset server state for testing purposes.
+    Only available in debug mode.
+
+    This endpoint clears user state and reloads data, allowing tests
+    to start with a fresh state without restarting the server.
+
+    Returns:
+        flask.Response: JSON response with reset status
+    """
+    if not config.get('debug', False):
+        return jsonify({'error': 'This endpoint is only available in debug mode'}), 403
+
+    try:
+        from potato.user_state_management import clear_user_state_manager, init_user_state_manager
+        from potato.item_state_management import clear_item_state_manager, init_item_state_manager
+        from potato.flask_server import load_all_data
+        from potato.authentication import UserAuthenticator
+
+        # Clear existing state
+        clear_user_state_manager()
+        clear_item_state_manager()
+
+        # Clear ICL labeler if it exists
+        try:
+            from potato.ai.icl_labeler import clear_icl_labeler
+            clear_icl_labeler()
+        except ImportError:
+            pass
+
+        # Reinitialize state
+        UserAuthenticator.init_from_config(config)
+        init_user_state_manager(config)
+        init_item_state_manager(config)
+        load_all_data(config)
+
+        logger.info("Server state reset successfully for testing")
+        return jsonify({
+            'status': 'success',
+            'message': 'Server state reset successfully'
+        })
+
+    except Exception as e:
+        logger.error(f"Failed to reset server state: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to reset state: {str(e)}'
+        }), 500
+
+
 # New Admin Dashboard API Endpoints
 
 @app.route("/admin/api/overview", methods=["GET"])

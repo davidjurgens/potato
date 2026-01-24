@@ -39,17 +39,28 @@ class FlaskTestServer:
         self.debug = debug
         self.test_data_file = test_data_file
 
-        # Handle port parameter
-        if port is not None:
-            self.port = port
-        else:
-            self.port = self._find_free_port()
+        # Handle port parameter - use requested port if available, otherwise find a free one
+        self.port = self._get_available_port(port)
 
         self.base_url = f"http://localhost:{self.port}"
 
         # Handle config_file parameter (new pattern)
         if config_file is not None:
-            self.config = config_file
+            # Load and modify the config file to ensure port matches
+            with open(config_file, 'r') as f:
+                config_data = yaml.safe_load(f)
+
+            # Update port to match the actual port being used
+            config_data['port'] = self.port
+            config_data['host'] = '0.0.0.0'
+
+            # Write updated config to a temp file in the same directory
+            config_dir = os.path.dirname(os.path.abspath(config_file))
+            temp_config_path = os.path.join(config_dir, f'test_config_port_{self.port}.yaml')
+            with open(temp_config_path, 'w') as f:
+                yaml.dump(config_data, f)
+            self.temp_config_file = temp_config_path
+            self.config = temp_config_path
         elif config is not None:
             if isinstance(config, dict):
                 # Ensure debug is false and add all required config keys
@@ -116,12 +127,45 @@ class FlaskTestServer:
         if self.temp_config_file and os.path.exists(self.temp_config_file):
             os.remove(self.temp_config_file)
 
+    def _is_port_available(self, port):
+        """Check if a port is available for use."""
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(1)
+            s.bind(("localhost", port))
+            s.close()
+            return True
+        except (socket.error, OSError):
+            return False
+
     def _find_free_port(self):
+        """Find an available port by letting the OS assign one."""
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.bind(("localhost", 0))
         port = s.getsockname()[1]
         s.close()
         return port
+
+    def _get_available_port(self, requested_port=None):
+        """Get an available port, using requested_port if available, otherwise find a free one.
+
+        Args:
+            requested_port: Preferred port to use. If None or unavailable, finds a free port.
+
+        Returns:
+            An available port number.
+        """
+        if requested_port is not None:
+            if self._is_port_available(requested_port):
+                return requested_port
+            else:
+                import warnings
+                warnings.warn(
+                    f"Requested port {requested_port} is in use, finding an alternative port. "
+                    "Consider not specifying a port to avoid conflicts.",
+                    RuntimeWarning
+                )
+        return self._find_free_port()
 
     def _create_temp_config_file(self, config_data, prefix):
         """Create a temporary config file within the project directory."""

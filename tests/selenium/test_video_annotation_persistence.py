@@ -166,6 +166,25 @@ site_dir: default
 
     def setUp(self):
         """Set up WebDriver for each test."""
+        # Clean up annotation output directory to ensure fresh state
+        import shutil
+        import requests
+        annotation_dir = os.path.join(self.test_output_dir, "annotation_output")
+        if os.path.exists(annotation_dir):
+            shutil.rmtree(annotation_dir)
+        os.makedirs(annotation_dir, exist_ok=True)
+
+        # Reset server state via admin API
+        # This ensures each test starts with fresh user/item state
+        try:
+            response = requests.post(f"{self.server.base_url}/admin/api/test/reset_state")
+            if response.status_code == 200:
+                print("[TEST] Server state reset successfully")
+            else:
+                print(f"[TEST] Warning: Could not reset server state: {response.status_code}")
+        except Exception as e:
+            print(f"[TEST] Warning: Could not reset server state: {e}")
+
         # Use Firefox by default (better keyboard support for video annotation)
         self.driver = webdriver.Firefox(options=self.firefox_options)
         self.driver.implicitly_wait(5)
