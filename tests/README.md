@@ -167,8 +167,11 @@ JavaScript unit tests for frontend functionality using jsdom.
 
 ### Test Infrastructure
 - **`tests/helpers/flask_test_setup.py`** - FlaskTestServer class and test utilities
+- **`tests/helpers/port_manager.py`** - Reliable port allocation with retry logic (prevents TOCTOU race conditions)
+- **`tests/helpers/test_utils.py`** - Test configuration and data file utilities
 - **`tests/selenium/test_base.py`** - BaseSeleniumTest class for Selenium tests
 - **`tests/integration/base.py`** - IntegrationTestServer class for E2E tests
+- **`tests/integration/conftest.py`** - Integration test fixtures and known issue tracking
 - **`tests/jest/setup.js`** - Jest test environment setup
 - **`tests/conftest.py`** - Pytest fixtures and shared test setup
 - **`tests/configs/`** - Test configuration files
@@ -334,6 +337,46 @@ The test suite is designed to work with CI/CD pipelines:
 - **Server tests**: Integration validation
 - **Selenium tests**: UI validation (can be run separately)
 - **Coverage reporting**: Code quality metrics
+
+## Test Consolidation Recommendations
+
+The test suite has grown organically and contains significant duplication, particularly in span and persistence tests. Below are recommendations for future consolidation:
+
+### Span Tests (~41 files)
+
+**Current state:** Span annotation tests are spread across unit, server, and selenium directories with significant overlap.
+
+**Recommended consolidation into 3 files:**
+
+| Target File | Purpose | Source Files |
+|-------------|---------|--------------|
+| `tests/unit/test_span_schema.py` | Schema generation, HTML output, offset calculations | `test_span_annotations.py`, `test_span_schema_loading.py`, `test_span_integration.py`, `test_span_offset_*.py`, `test_span_overlap_*.py` |
+| `tests/server/test_span_e2e.py` | Full workflow tests, API endpoints | `test_span_annotation_workflow.py`, `test_robust_span_annotation.py`, `test_span_schema_api.py`, `test_span_persistence_bug.py` |
+| `tests/selenium/test_span_browser.py` | Browser interactions, overlay rendering | All selenium `test_*span*.py` files |
+
+### Persistence Tests (~15 files)
+
+**Current state:** Persistence tests exist in multiple directories with overlapping coverage.
+
+**Recommended consolidation:**
+- Keep `tests/selenium/test_annotation_type_persistence.py` (5 passing tests)
+- Merge other persistence tests into `tests/integration/test_persistence.py`
+- Remove clearly redundant bug-specific tests once functionality is verified
+
+### Port Allocation
+
+**Infrastructure improvement completed:**
+- `tests/helpers/port_manager.py` provides reliable port allocation with retry logic
+- Mitigates TOCTOU race conditions in parallel test execution
+- Used by both `FlaskTestServer` and `IntegrationTestServer`
+
+### Known Issues
+
+Some configs are marked as expected failures in `tests/integration/conftest.py`:
+- `simple-audio-annotation`, `simple-best-worst-scaling`, `simple-image-annotation`: Missing `site_dir` field
+- `simple-pairwise-comparison`: TypeError in annotation type
+- `two-sliders`: Server startup timeout
+- `category-assignment-example`, `icl-labeling-example`, `quality-control-example`: Missing data files
 
 ## Troubleshooting
 
