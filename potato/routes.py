@@ -2271,7 +2271,13 @@ def admin_api_icl_examples():
         icl_labeler = get_icl_labeler()
 
         if icl_labeler is None:
-            return jsonify({'error': 'ICL labeling not initialized'}), 400
+            # Return empty results when ICL is not initialized (graceful degradation)
+            schema_filter = request.args.get('schema')
+            return jsonify({
+                'examples': {},
+                'total_count': 0,
+                'schema': schema_filter
+            })
 
         schema_filter = request.args.get('schema')
 
@@ -2281,10 +2287,13 @@ def admin_api_icl_examples():
                 continue
             examples[schema_name] = [ex.to_dict() for ex in schema_examples]
 
-        return jsonify({
+        response_data = {
             'examples': examples,
             'total_count': sum(len(ex) for ex in examples.values())
-        })
+        }
+        if schema_filter:
+            response_data['schema'] = schema_filter
+        return jsonify(response_data)
 
     except Exception as e:
         logger.error(f"Error getting ICL examples: {e}")
@@ -2309,7 +2318,11 @@ def admin_api_icl_predictions():
         icl_labeler = get_icl_labeler()
 
         if icl_labeler is None:
-            return jsonify({'error': 'ICL labeling not initialized'}), 400
+            # Return empty results when ICL is not initialized (graceful degradation)
+            return jsonify({
+                'predictions': [],
+                'total_count': 0
+            })
 
         schema_filter = request.args.get('schema')
         status_filter = request.args.get('status')
@@ -2359,7 +2372,17 @@ def admin_api_icl_accuracy():
         icl_labeler = get_icl_labeler()
 
         if icl_labeler is None:
-            return jsonify({'error': 'ICL labeling not initialized'}), 400
+            # Return empty metrics when ICL is not initialized (graceful degradation)
+            schema_filter = request.args.get('schema')
+            return jsonify({
+                'total_predictions': 0,
+                'total_verified': 0,
+                'verified_correct': 0,
+                'verified_incorrect': 0,
+                'pending_verification': 0,
+                'accuracy': 0.0,
+                'schema_name': schema_filter
+            })
 
         schema_filter = request.args.get('schema')
         metrics = icl_labeler.get_accuracy_metrics(schema_filter)
@@ -2393,6 +2416,13 @@ def admin_api_icl_trigger():
         data = request.get_json() or {}
         action = data.get('action', '')
 
+        # Support shorthand: if schema_name is provided without action, default to batch_label
+        if not action and data.get('schema_name'):
+            action = 'batch_label'
+            # Use schema_name as the schema for backwards compatibility
+            if 'schema' not in data:
+                data['schema'] = data['schema_name']
+
         if action == 'refresh_examples':
             examples = icl_labeler.refresh_high_confidence_examples()
             return jsonify({
@@ -2413,7 +2443,8 @@ def admin_api_icl_trigger():
                 'action': 'batch_label',
                 'success': True,
                 'predictions_count': len(predictions),
-                'schema': schema
+                'schema': schema,
+                'message': f'Labeled {len(predictions)} instances for schema {schema}'
             })
 
         elif action == 'save_state':

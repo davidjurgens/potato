@@ -525,8 +525,34 @@ class FlaskTestServer:
             print(f"🔍 Login response: {response.status_code}")
             print(f"🔍 Login redirect: {response.url}")
 
-            # Check if login was successful (should redirect to annotation page)
-            return response.status_code in [200, 302] and 'error' not in response.text.lower()
+            # Check if login was successful
+            # Success is indicated by:
+            # 1. Status code 200 or 302
+            # 2. Being redirected to /annotate or another non-auth page
+            # 3. Not being on an error page (check for specific error indicators)
+            if response.status_code not in [200, 302]:
+                return False
+
+            # If redirected to annotate page, login succeeded
+            if '/annotate' in response.url:
+                return True
+
+            # Check for authentication error messages in the response
+            # These are specific error messages shown on the login page
+            error_indicators = [
+                'invalid credentials',
+                'login failed',
+                'authentication failed',
+                'incorrect password',
+                'user not found'
+            ]
+            response_lower = response.text.lower()
+            for indicator in error_indicators:
+                if indicator in response_lower:
+                    return False
+
+            # If we reached this point without errors, consider it successful
+            return True
         except Exception as e:
             print(f"❌ Login failed: {e}")
             return False

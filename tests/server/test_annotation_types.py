@@ -51,6 +51,7 @@ class TestAnnotationTypes:
         args.customjs = None
         args.customjs_hostname = None
         args.persist_sessions = False
+        args.port = None  # Port can be specified via CLI or config file
         return args
 
     def _setup_config(self, original_config_name):

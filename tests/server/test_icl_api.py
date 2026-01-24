@@ -321,7 +321,7 @@ class TestICLVerificationEndpoint(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        """Set up test server."""
+        """Set up test server with user authentication."""
         cls.test_dir = create_test_directory("icl_verification")
 
         test_data = [
@@ -342,12 +342,20 @@ class TestICLVerificationEndpoint(unittest.TestCase):
             "output_annotation_dir": os.path.join(cls.test_dir, "output"),
             "icl_labeling": {
                 "enabled": True
+            },
+            # Add user config for authentication
+            "user_config": {
+                "allow_all_users": True
             }
         }
 
         cls.config_file = create_test_config(cls.test_dir, **config_dict)
         cls.server = FlaskTestServer(config=cls.config_file)
         assert cls.server.start(), "Failed to start test server"
+
+        # Login as a test user to establish session
+        login_success = cls.server.login_user("test_user", "any_password")
+        assert login_success, "Failed to login test user"
 
     @classmethod
     def tearDownClass(cls):
