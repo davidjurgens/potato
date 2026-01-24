@@ -119,3 +119,6 @@ project-hub/simple_examples/configs/all-phases-example/
 project-hub/simple_examples/data/toy-example.*.json
 project-hub/simple_examples/toy-example.*.json
 temp_screenshots/
+
+# Virtual Environments
+venv/

@@ -438,3 +438,15 @@ surveyflow_html_layout: "default"
 ## Examples and Templates
 
 For complete working examples, see the [project-hub](https://potato-annotation.readthedocs.io/en/latest/example-projects/) directory which contains ready-to-use configurations for various annotation tasks.
+
+### Customizing the Instance Area
+
+If you want to make changes to the instance area, simply edit the corresponding div:
+
+```html
+<div id="instance-text" name="instance_text" style="max-width:400px;">
+    {{instance | safe}}
+</div>
+```
+
+This will change the `max-width` of the instance area.

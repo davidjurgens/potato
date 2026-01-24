@@ -99,6 +99,25 @@ def arguments():
         default=False,
     )
 
+    # SSL arguments (from master branch)
+    parser.add_argument(
+        "--ssl-cert",
+        action="store",
+        type=str,
+        dest="ssl_cert",
+        help="custom ssl cert location (should end in .pem)",
+        default=None
+    )
+
+    parser.add_argument(
+        "--ssl-key",
+        action="store",
+        type=str,
+        dest="ssl_key",
+        help="custom ssl key location (should end in .pem)",
+        default=None
+    )
+
     # Migration-specific arguments
     parser.add_argument(
         "--to-v2",

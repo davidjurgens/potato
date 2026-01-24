@@ -169,6 +169,13 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
         # Generate name with span prefix so ingestion code can skip this
         name_with_span = f"span_label:::{scheme_name}"
 
+        # Support abbreviation for label display (from master branch fix)
+        # Users can specify an abbreviation for the label shown above the span
+        if isinstance(label_data, dict) and label_data.get('abbreviation'):
+            label_title = label_data['abbreviation']
+        else:
+            label_title = label_content
+
         # Use label as title if span_title is empty
         effective_title = span_title if span_title else label
 

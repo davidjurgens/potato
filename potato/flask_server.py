@@ -32,6 +32,7 @@ Key Components:
 - Error handling and logging
 """
 from __future__ import annotations
+from dataclasses import dataclass
 
 import logging
 import os

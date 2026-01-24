@@ -528,17 +528,17 @@ def generate_slider_layout_internal(annotation_scheme):
     max_label = str(max_value) if show_labels else ''
     
     identifiers = generate_element_identifier(annotation_scheme["name"], "slider", "range")
-    
+
     # Get step from annotation_scheme or default to 1
     step_value = annotation_scheme.get("step", 1)
     max_tick = annotation_scheme.get("maxTick", 8)
-    
+
     schematic = f"""
     <form id="{identifiers['schema']}" class="annotation-form slider" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" >
             {get_ai_wrapper()}
         <fieldset schema="{identifiers['schema']}">
             <legend class="custom-slider-title">{annotation_scheme['description']}</legend>
-            
+
             <div class="custom-slider-container" id="customSlider_{identifiers['id']}" tabindex="0">
                 <!-- Hidden actual input for form submission -->
                 <input type="range"
@@ -553,7 +553,7 @@ def generate_slider_layout_internal(annotation_scheme):
                     name="{identifiers['name']}"
                     id="{identifiers['id']}"
                     schema="{identifiers['schema']}">
-                    
+
                 <!-- Custom visual elements -->
                 <div class="custom-slider-track">
                     <div class="custom-slider-track-active" id="sliderTrackActive_{identifiers['id']}"></div>

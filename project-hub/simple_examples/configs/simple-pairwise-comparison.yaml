@@ -30,7 +30,7 @@ surveyflow:
 automatic_assignment:
   'on': false
   output_filename: task_assignment.json
-  'sampling_strategy:': random
+  sampling_strategy: random
   labels_per_instance: 2
   instance_per_annotator: 1
   users: []
