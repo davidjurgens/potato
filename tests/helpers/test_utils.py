@@ -84,13 +84,23 @@ def create_test_config(
     # Ensure all data files are relative to test_dir
     relative_data_files = [os.path.basename(f) for f in data_files]
 
+    # Convert test_dir to absolute path to avoid path resolution issues
+    # when the server changes its working directory
+    abs_test_dir = os.path.abspath(test_dir)
+
+    # Default user config that shows login/register form
+    default_user_config = {
+        "allow_all_users": True,
+        "users": []
+    }
+
     config = {
         "annotation_task_name": kwargs.get("annotation_task_name", "Test Task"),
-        "task_dir": test_dir,
+        "task_dir": abs_test_dir,
         "data_files": relative_data_files,
         "item_properties": kwargs.get("item_properties", {"id_key": "id", "text_key": "text"}),
         "annotation_schemes": annotation_schemes,
-        "output_annotation_dir": os.path.join(test_dir, "output"),
+        "output_annotation_dir": os.path.join(abs_test_dir, "output"),
         "site_dir": kwargs.get("site_dir", "default"),
         "alert_time_each_instance": kwargs.get("alert_time_each_instance", 0),
         "require_password": kwargs.get("require_password", False),
@@ -101,12 +111,13 @@ def create_test_config(
         "host": kwargs.get("host", "0.0.0.0"),
         "secret_key": kwargs.get("secret_key", "test-secret-key"),
         "session_lifetime_days": kwargs.get("session_lifetime_days", 1),
+        "user_config": kwargs.get("user_config", default_user_config),
     }
 
     # Add optional kwargs that are passed through
     optional_fields = [
         "max_annotations_per_user", "assignment_strategy", "output_annotation_format",
-        "random_seed", "user_config", "admin_api_key", "max_annotations_per_item",
+        "random_seed", "admin_api_key", "max_annotations_per_item",
         "icl_labeling"
     ]
     for field in optional_fields:

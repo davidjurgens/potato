@@ -22,6 +22,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.firefox.options import Options as FirefoxOptions
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from tests.helpers.flask_test_setup import FlaskTestServer
 from tests.helpers.port_manager import find_free_port
 
@@ -149,65 +150,69 @@ class BaseSeleniumTest(unittest.TestCase):
         """
         Register a new test user via the web interface.
 
-        This method:
-        1. Navigates to the home page
-        2. Switches to the registration tab
-        3. Fills out the registration form
-        4. Submits the form
-        5. Waits for successful registration
+        This method handles two cases:
+        1. require_password=True: Uses login-tab/register-tab to register with password
+        2. require_password=False: Just enters username in the simple login form
 
         The user credentials are stored in self.test_user and self.test_password.
         """
         self.driver.get(f"{self.server.base_url}/")
 
-        # Wait for page to load - should show login/register form
+        # Wait for page to load - look for login-content which is present in both modes
         WebDriverWait(self.driver, 10).until(
-            EC.presence_of_element_located((By.ID, "login-tab"))
+            EC.presence_of_element_located((By.ID, "login-content"))
         )
 
-        # Switch to registration tab
-        register_tab = self.driver.find_element(By.ID, "register-tab")
-        register_tab.click()
+        # Check if this is password mode (has login-tab) or simple mode (no tabs)
+        try:
+            login_tab = self.driver.find_element(By.ID, "login-tab")
+            # Password mode - switch to registration tab
+            register_tab = self.driver.find_element(By.ID, "register-tab")
+            register_tab.click()
 
-        # Wait for register form to be visible
-        WebDriverWait(self.driver, 10).until(
-            EC.visibility_of_element_located((By.ID, "register-content"))
-        )
+            # Wait for register form to be visible
+            WebDriverWait(self.driver, 10).until(
+                EC.visibility_of_element_located((By.ID, "register-content"))
+            )
 
-        # Fill registration form using correct field IDs
-        username_field = self.driver.find_element(By.ID, "register-email")
-        password_field = self.driver.find_element(By.ID, "register-pass")
+            # Fill registration form using correct field IDs
+            username_field = self.driver.find_element(By.ID, "register-email")
+            password_field = self.driver.find_element(By.ID, "register-pass")
 
-        username_field.clear()
-        password_field.clear()
-        username_field.send_keys(self.test_user)
-        password_field.send_keys(self.test_password)
+            username_field.clear()
+            password_field.clear()
+            username_field.send_keys(self.test_user)
+            password_field.send_keys(self.test_password)
 
-        # Submit registration form
-        register_form = self.driver.find_element(By.CSS_SELECTOR, "#register-content form")
-        register_form.submit()
+            # Submit registration form
+            register_form = self.driver.find_element(By.CSS_SELECTOR, "#register-content form")
+            register_form.submit()
+        except NoSuchElementException:
+            # Simple mode (require_password=False) - just enter username
+            username_field = self.driver.find_element(By.ID, "login-email")
+            username_field.clear()
+            username_field.send_keys(self.test_user)
 
-        # Wait for redirect after registration
+            # Submit the login form
+            login_form = self.driver.find_element(By.CSS_SELECTOR, "#login-content form")
+            login_form.submit()
+
+        # Wait for redirect after registration/login
         time.sleep(2)
 
     def login_user(self):
         """
         Login the test user via the web interface.
 
-        This method:
-        1. Navigates to the home page (if not already there)
-        2. Switches to the login tab
-        3. Fills out the login form
-        4. Submits the form
-        5. Waits for successful login
+        This method handles two cases:
+        1. require_password=True: Uses login-tab with username and password
+        2. require_password=False: Just enters username (user already registered)
 
         Uses the credentials from self.test_user and self.test_password.
         """
         # Check if already logged in by looking for annotation interface elements
-        # The home page (/) serves the annotation interface when logged in
         try:
-            # If we can find annotation elements, user is already logged in
-            self.driver.find_element(By.ID, "annotation-forms")
+            self.driver.find_element(By.ID, "task_layout")
             return  # Already logged in, no need to login again
         except:
             pass  # Not logged in, continue with login
@@ -216,36 +221,43 @@ class BaseSeleniumTest(unittest.TestCase):
         if "/annotate" not in self.driver.current_url:
             self.driver.get(f"{self.server.base_url}/")
 
-            # Wait for page to load - either login form or annotation interface
+            # Wait for page to load - look for login-content
             try:
                 WebDriverWait(self.driver, 5).until(
-                    EC.presence_of_element_located((By.ID, "login-tab"))
+                    EC.presence_of_element_located((By.ID, "login-content"))
                 )
             except:
-                # If login-tab not found, check if we're at annotation interface
+                # If login-content not found, check if we're at annotation interface
                 try:
-                    self.driver.find_element(By.ID, "annotation-forms")
+                    self.driver.find_element(By.ID, "task_layout")
                     return  # Already logged in
                 except:
                     raise Exception("Could not find login form or annotation interface")
 
-            # Switch to login tab
-            login_tab = self.driver.find_element(By.ID, "login-tab")
-            login_tab.click()
+            # Check if password mode (has login-tab) or simple mode
+            try:
+                login_tab = self.driver.find_element(By.ID, "login-tab")
+                # Password mode - click login tab and fill with password
+                login_tab.click()
 
-            # Wait for login form to be visible
-            WebDriverWait(self.driver, 10).until(
-                EC.visibility_of_element_located((By.ID, "login-content"))
-            )
+                # Wait for login form to be visible
+                WebDriverWait(self.driver, 10).until(
+                    EC.visibility_of_element_located((By.ID, "login-content"))
+                )
 
-            # Fill login form using correct field IDs
-            username_field = self.driver.find_element(By.ID, "login-email")
-            password_field = self.driver.find_element(By.ID, "login-pass")
+                # Fill login form using correct field IDs
+                username_field = self.driver.find_element(By.ID, "login-email")
+                password_field = self.driver.find_element(By.ID, "login-pass")
 
-            username_field.clear()
-            password_field.clear()
-            username_field.send_keys(self.test_user)
-            password_field.send_keys(self.test_password)
+                username_field.clear()
+                password_field.clear()
+                username_field.send_keys(self.test_user)
+                password_field.send_keys(self.test_password)
+            except NoSuchElementException:
+                # Simple mode - just enter username
+                username_field = self.driver.find_element(By.ID, "login-email")
+                username_field.clear()
+                username_field.send_keys(self.test_user)
 
             # Submit login form
             login_form = self.driver.find_element(By.CSS_SELECTOR, "#login-content form")
@@ -265,17 +277,21 @@ class BaseSeleniumTest(unittest.TestCase):
 
         Raises an assertion error if authentication failed.
         """
-        # Check if we're currently on the annotation interface
-        # After registration, user should be on / which serves the annotation page
-        current_url = self.driver.current_url
-
-        # If we're still on the login page, authentication failed
+        # Check if we're still on the login page by looking for login-content
+        # (which is present in both password and simple modes)
         try:
-            login_tab = self.driver.find_element(By.ID, "login-tab")
-            if login_tab.is_displayed():
+            login_content = self.driver.find_element(By.ID, "login-content")
+            if login_content.is_displayed():
+                # Still on login page - check if there's an error message
+                try:
+                    error = self.driver.find_element(By.CSS_SELECTOR, ".text-destructive, [style*='destructive']")
+                    if error.is_displayed():
+                        raise Exception(f"Login failed with error: {error.text}")
+                except NoSuchElementException:
+                    pass
                 raise Exception("User is still on login page - authentication failed")
-        except:
-            pass  # login-tab not found or not visible - good, we're not on login page
+        except NoSuchElementException:
+            pass  # login-content not found - good, we've moved past the login page
 
         # Wait for annotation interface to fully load
         # First check for the task layout structure
