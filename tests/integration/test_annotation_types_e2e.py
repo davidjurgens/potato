@@ -164,7 +164,6 @@ class TestRadioButtonE2E:
         assert not radios[0].is_selected(), "First radio should be deselected"
         assert radios[1].is_selected(), "Second radio should be selected"
 
-    @pytest.mark.xfail(reason="Known persistence issue")
     def test_radio_button_persists_after_navigation(self, server, browser, test_user):
         """Test that radio selection persists after navigation."""
         register_and_wait_for_annotation(browser, server, test_user)

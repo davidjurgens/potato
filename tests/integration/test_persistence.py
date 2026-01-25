@@ -100,7 +100,6 @@ class TestNavigationPersistence:
         yield server
         server.stop()
 
-    @pytest.mark.xfail(reason="Known persistence issue - annotations not persisting after navigation")
     def test_annotation_survives_next_prev_navigation(self, server, browser, test_user):
         """Test that annotation persists when navigating next and then back."""
         register_user(browser, server, test_user)
@@ -139,7 +138,6 @@ class TestNavigationPersistence:
         assert checkbox is not None, f"Could not find checkbox with label {checkbox_label}"
         assert checkbox.is_selected(), "Annotation should persist after navigation"
 
-    @pytest.mark.xfail(reason="Known persistence issue")
     def test_multiple_annotations_persist(self, server, browser, test_user):
         """Test that multiple checkbox selections persist."""
         register_user(browser, server, test_user)
@@ -202,7 +200,6 @@ class TestBrowserRefreshPersistence:
         assert "main-content" in browser.page_source, \
             "Session should be preserved after browser refresh"
 
-    @pytest.mark.xfail(reason="Known persistence issue")
     def test_annotation_survives_refresh(self, server, browser, test_user):
         """Test that annotation survives browser refresh."""
         register_user(browser, server, test_user)
@@ -397,7 +394,6 @@ class TestRadioButtonPersistence:
         yield server
         server.stop()
 
-    @pytest.mark.xfail(reason="Known persistence issue")
     def test_radio_selection_persists(self, server, browser, test_user):
         """Test that radio button selection persists after navigation."""
         register_user(browser, server, test_user)
