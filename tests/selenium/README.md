@@ -23,11 +23,18 @@ Jest/jsdom tests **cannot** verify visual positioning because `getBoundingClient
 
 ### Archived Tests
 
-Debug/diagnostic tests have been moved to `archived/` and are not run in CI:
-- `test_span_debug.py`
-- `test_span_offset_diagnostics.py`
-- `test_span_persistence_debug.py`
-- `test_debug_span_overlay_clearing.py`
+Debug/diagnostic and failing tests have been moved to `archived/` and are not run in CI:
+
+**Span tests:**
+- `test_span_manager_bug.py` - All 5 tests failing
+- `test_span_manager_init_and_render.py` - Redundant with main tests
+- `test_span_persistence_bug_selenium.py` - 1 test failing
+
+**Persistence tests:**
+- `test_annotation_persistence_frontend.py` - All 8 tests erroring
+- `test_annotation_persistence_verification.py` - All 6 tests failing
+
+A `conftest.py` in `archived/` prevents pytest from collecting these tests.
 
 ---
 

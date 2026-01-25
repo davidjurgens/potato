@@ -379,18 +379,33 @@ The test suite has been partially consolidated to reduce duplication and improve
 
 ### Span Selenium Tests
 
-**Status:** 22 files exist with infrastructure issues (server startup problems)
-- Consolidation pending infrastructure fixes
-- See Selenium Test Issues in Troubleshooting section
+**Status:** 19 active files (infrastructure issues resolved)
+- `test_frontend_span_system.py` - 11 tests, all passing
+- `test_span_annotation_selenium.py` - 22 tests, comprehensive coverage
+- `test_comprehensive_span_annotation_selenium.py` - 20 tests, pytest fixtures
+- Various overlay, positioning, and persistence tests
 
-### Persistence Tests (~15 files)
+**Archived files:** (in `tests/selenium/archived/`, not collected by pytest)
+- `test_span_manager_bug.py` - All tests failing
+- `test_span_manager_init_and_render.py` - Redundant with main tests
+- `test_span_persistence_bug_selenium.py` - Failing
 
-**Current state:** Persistence tests exist in multiple directories with overlapping coverage.
+### Persistence Tests
 
-**Recommended consolidation:**
-- Keep `tests/selenium/test_annotation_type_persistence.py` (5 passing tests)
-- Merge other persistence tests into `tests/integration/test_persistence.py`
-- Remove clearly redundant bug-specific tests once functionality is verified
+**Status:** 10 active Selenium files + integration tests (infrastructure improved)
+
+**Integration tests:** `tests/integration/test_persistence.py`
+- 6 passing tests, 3 xfailed
+- XFAIL markers removed from tests that now pass
+
+**Selenium tests:** 10 files covering various persistence scenarios
+- `test_annotation_type_persistence.py` - 5 tests, all passing
+- `test_checkbox_persistence.py` - 3 tests, all passing
+- `test_cross_browser_persistence.py` - 7 tests, Chrome/Firefox/Safari
+
+**Archived files:** (in `tests/selenium/archived/`)
+- `test_annotation_persistence_frontend.py` - All tests erroring
+- `test_annotation_persistence_verification.py` - All tests failing
 
 ### Port Allocation
 
