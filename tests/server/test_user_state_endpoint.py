@@ -6,19 +6,15 @@ and handles various scenarios properly.
 """
 
 import pytest
-
-# Skip server integration tests for fast CI - run with pytest -m slow
-pytestmark = pytest.mark.skip(reason="Server integration tests skipped for fast CI execution")
-import json
-import tempfile
 import os
-import yaml
+import shutil
 import requests
 from tests.helpers.flask_test_setup import FlaskTestServer
-from tests.helpers.port_manager import find_free_port
-
-
-
+from tests.helpers.test_utils import (
+    create_test_directory,
+    create_span_annotation_config,
+    cleanup_test_directory
+)
 
 
 class TestUserStateEndpoint:
@@ -27,79 +23,26 @@ class TestUserStateEndpoint:
     @pytest.fixture(scope="class", autouse=True)
     def flask_server(self, request):
         """Create a Flask test server with span annotation config."""
-        # Create a temporary directory for this test
-        test_dir = tempfile.mkdtemp()
+        # Create a test directory using modern utilities
+        test_dir = create_test_directory("user_state_endpoint_test")
 
-        # Create test data file
-        test_data = [
-            {
-                "id": "user_state_test_item_1",
-                "text": "This is a positive statement about the product.",
-                "displayed_text": "This is a positive statement about the product."
-            },
-            {
-                "id": "user_state_test_item_2",
-                "text": "This is a negative statement about the product.",
-                "displayed_text": "This is a negative statement about the product."
-            }
-        ]
-
-        data_file = os.path.join(test_dir, 'user_state_test_data.jsonl')
-        with open(data_file, 'w') as f:
-            for item in test_data:
-                f.write(json.dumps(item) + '\n')
-
-        # Create config with span annotation scheme
-        config = {
-            "debug": False,
-            "max_annotations_per_user": 10,
-            "assignment_strategy": "fixed_order",
-            "annotation_task_name": "User State Endpoint Test",
-            "require_password": False,
-            "authentication": {
-                "method": "in_memory"
-            },
-            "data_files": [data_file],  # Use absolute path
-            "item_properties": {
-                "text_key": "text",
-                "id_key": "id"
-            },
-            "annotation_schemes": [
-                {
-                    "annotation_type": "span",
-                    "name": "sentiment",
-                    "description": "Annotate the sentiment of text spans",
-                    "labels": ["happy", "sad", "angry", "neutral"],
-                    "colors": {
-                        "happy": "#4CAF50",
-                        "sad": "#2196F3",
-                        "angry": "#f44336",
-                        "neutral": "#9E9E9E"
-                    }
-                }
-            ],
-            "site_file": "base_template_v2.html",
-            "output_annotation_dir": os.path.join(test_dir, "output"),
-            "task_dir": os.path.join(test_dir, "task"),
-            "site_dir": os.path.join(test_dir, "templates"),
-            "alert_time_each_instance": 0
-        }
-
-        # Write config file
-        config_file = os.path.join(test_dir, 'user_state_test_config.yaml')
-        with open(config_file, 'w') as f:
-            yaml.dump(config, f)
+        # Create span annotation config with admin API key
+        config_file, data_file = create_span_annotation_config(
+            test_dir,
+            annotation_task_name="User State Endpoint Test",
+            require_password=False,
+            admin_api_key="admin_api_key",
+            max_annotations_per_user=10
+        )
 
         # Create server with the config file
         server = FlaskTestServer(
-            port=find_free_port(),
-            debug=False,
             config_file=config_file,
-            test_data_file=data_file
+            debug=False
         )
 
         # Start server
-        if not server.start_server(test_dir):
+        if not server.start():
             pytest.fail("Failed to start Flask test server")
 
         # Store server for cleanup
@@ -110,8 +53,7 @@ class TestUserStateEndpoint:
 
         # Cleanup
         server.stop()
-        import shutil
-        shutil.rmtree(test_dir, ignore_errors=True)
+        cleanup_test_directory(test_dir)
 
     def register_and_login(self, username, password):
         """Register and login a user using production endpoints, return session."""
@@ -168,6 +110,7 @@ class TestUserStateEndpoint:
 
     def test_user_state_endpoint_json_serializable(self):
         """Test that the response is valid JSON."""
+        import json
         username = "testuser3"
         password = "testpass"
         session = self.register_and_login(username, password)

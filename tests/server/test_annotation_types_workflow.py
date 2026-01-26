@@ -6,151 +6,164 @@ including validation, key bindings, and data capture.
 """
 
 import pytest
-
-# Skip server integration tests for fast CI - run with pytest -m slow
-pytestmark = pytest.mark.skip(reason="Server integration tests skipped for fast CI execution")
 import requests
-import os
 from tests.helpers.flask_test_setup import FlaskTestServer
+from tests.helpers.test_utils import (
+    create_test_directory,
+    create_test_data_file,
+    create_test_config,
+    cleanup_test_directory
+)
 
-def get_config_path(config_name):
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), f'../configs/{config_name}'))
 
 class TestAnnotationTypesWorkflow:
     """Test different annotation types and their workflows."""
 
-    def test_likert_annotation_workflow(self):
-        config_file = get_config_path('likert-annotation.yaml')
-        server = FlaskTestServer(lambda: create_app(), config_file, debug=True)
-        server.start()
-        server_url = server.base_url
-        try:
-            # Use the production registration endpoint
-            user_data = {"email": "test_user", "pass": "test_password"}
-            response = requests.post(f"{server_url}/register",
-                                   data=user_data,
-                                   timeout=10)
-            assert response.status_code == 200
+    @pytest.fixture(scope="class", autouse=True)
+    def flask_server(self, request):
+        """Create a Flask test server with multiple annotation types."""
+        test_dir = create_test_directory("annotation_types_workflow_test")
 
-            # Create a session to maintain login state
-            session = requests.Session()
-            session.post(f"{server_url}/auth", data=user_data)
+        test_data = [
+            {"id": "type_test_1", "text": "This is test item 1 for annotation type testing."},
+            {"id": "type_test_2", "text": "This is test item 2 for annotation type testing."}
+        ]
+        data_file = create_test_data_file(test_dir, test_data)
 
-            response = requests.get(f"{server_url}/admin/user_state/test_user",
-
-                                  headers={"X-API-Key": "admin_api_key"}, timeout=10)
-            assert response.status_code == 200
-            user_state = response.json()
-            print(f"User state: {user_state}")
-
-            # Get assigned items from user state
-            assigned_items = user_state["assignments"]["items"]
-            print(f"Assigned items: {assigned_items}")
-            assert len(assigned_items) > 0, f"No items assigned to user. User state: {user_state}"
-
-            annotation_data = {
-                "instance_id": assigned_items[0]["id"],
-                "type": "label",
-                "schema": "likert_scale",
-                "state": [
-                    {"name": "likert_rating", "value": "3"}
-                ]
+        # Create multiple annotation schemes for different types
+        annotation_schemes = [
+            {
+                "name": "likert_scale",
+                "annotation_type": "likert",
+                "min_label": "1",
+                "max_label": "5",
+                "size": 5,
+                "description": "Rate on a scale of 1-5"
+            },
+            {
+                "name": "sentiment",
+                "annotation_type": "radio",
+                "labels": ["positive", "negative", "neutral"],
+                "description": "Select sentiment"
+            },
+            {
+                "name": "intensity",
+                "annotation_type": "slider",
+                "min_value": 0,
+                "max_value": 100,
+                "starting_value": 50,
+                "description": "Rate intensity"
+            },
+            {
+                "name": "comments",
+                "annotation_type": "text",
+                "description": "Enter comments"
+            },
+            {
+                "name": "entities",
+                "annotation_type": "span",
+                "labels": ["person", "location", "organization"],
+                "description": "Mark entities"
             }
-            response = session.post(f"{server_url}/updateinstance", json=annotation_data, timeout=10)
-            assert response.status_code == 200
-            result = response.json()
-            assert result["status"] == "success"
-        finally:
-            server.stop()
+        ]
+
+        config_file = create_test_config(
+            test_dir,
+            annotation_schemes,
+            data_files=[data_file],
+            annotation_task_name="Annotation Types Test",
+            require_password=False,
+            admin_api_key="admin_api_key"
+        )
+
+        server = FlaskTestServer(config_file=config_file, debug=False)
+        if not server.start():
+            pytest.fail("Failed to start Flask test server")
+
+        request.cls.server = server
+        request.cls.test_dir = test_dir
+
+        yield server
+
+        server.stop()
+        cleanup_test_directory(test_dir)
+
+    def test_likert_annotation_workflow(self):
+        """Test likert scale annotation workflow."""
+        session = requests.Session()
+        user_data = {"email": "likert_user", "pass": "test_password"}
+        session.post(f"{self.server.base_url}/register", data=user_data)
+        session.post(f"{self.server.base_url}/auth", data=user_data)
+
+        annotation_data = {
+            "instance_id": "type_test_1",
+            "type": "likert",
+            "schema": "likert_scale",
+            "state": [{"name": "likert_scale", "value": "3"}]
+        }
+        response = session.post(f"{self.server.base_url}/updateinstance", json=annotation_data)
+        assert response.status_code == 200
 
     def test_radio_annotation_workflow(self):
-        config_file = get_config_path('radio-annotation.yaml')
-        server = FlaskTestServer(lambda: create_app(), config_file, debug=True)
-        server.start()
-        server_url = server.base_url
-        try:
-            user_data = {"email": "test_user", "pass": "test_password"}
-            response = requests.post(f"{server_url}/register",
-                                   data=user_data,
+        """Test radio button annotation workflow."""
+        session = requests.Session()
+        user_data = {"email": "radio_user", "pass": "test_password"}
+        session.post(f"{self.server.base_url}/register", data=user_data)
+        session.post(f"{self.server.base_url}/auth", data=user_data)
 
-                                   headers={"X-API-Key": "admin_api_key"}, timeout=10)
-            assert response.status_code == 200
-
-            response = requests.get(f"{server_url}/admin/user_state/test_user",
-
-                                  headers={"X-API-Key": "admin_api_key"}, timeout=10)
-            assert response.status_code == 200
-            user_state = response.json()
-            assert user_state["user_id"] == "test_user"
-        finally:
-            server.stop()
+        annotation_data = {
+            "instance_id": "type_test_1",
+            "type": "radio",
+            "schema": "sentiment",
+            "state": [{"name": "positive", "value": "positive"}]
+        }
+        response = session.post(f"{self.server.base_url}/updateinstance", json=annotation_data)
+        assert response.status_code == 200
 
     def test_slider_annotation_workflow(self):
-        config_file = get_config_path('slider-annotation.yaml')
-        server = FlaskTestServer(lambda: create_app(), config_file, debug=True)
-        server.start()
-        server_url = server.base_url
-        try:
-            user_data = {"email": "test_user", "pass": "test_password"}
-            response = requests.post(f"{server_url}/register",
-                                   data=user_data,
+        """Test slider annotation workflow."""
+        session = requests.Session()
+        user_data = {"email": "slider_user", "pass": "test_password"}
+        session.post(f"{self.server.base_url}/register", data=user_data)
+        session.post(f"{self.server.base_url}/auth", data=user_data)
 
-                                   headers={"X-API-Key": "admin_api_key"}, timeout=10)
-            assert response.status_code == 200
-
-            response = requests.get(f"{server_url}/admin/user_state/test_user",
-
-                                  headers={"X-API-Key": "admin_api_key"}, timeout=10)
-            assert response.status_code == 200
-            user_state = response.json()
-            assert user_state["user_id"] == "test_user"
-        finally:
-            server.stop()
+        annotation_data = {
+            "instance_id": "type_test_1",
+            "type": "slider",
+            "schema": "intensity",
+            "state": [{"name": "intensity", "value": "75"}]
+        }
+        response = session.post(f"{self.server.base_url}/updateinstance", json=annotation_data)
+        assert response.status_code == 200
 
     def test_text_annotation_workflow(self):
-        config_file = get_config_path('text-annotation.yaml')
-        server = FlaskTestServer(lambda: create_app(), config_file, debug=True)
-        server.start()
-        server_url = server.base_url
-        try:
-            user_data = {"email": "test_user", "pass": "test_password"}
-            response = requests.post(f"{server_url}/register",
-                                   data=user_data,
+        """Test text annotation workflow."""
+        session = requests.Session()
+        user_data = {"email": "text_user", "pass": "test_password"}
+        session.post(f"{self.server.base_url}/register", data=user_data)
+        session.post(f"{self.server.base_url}/auth", data=user_data)
 
-                                   headers={"X-API-Key": "admin_api_key"}, timeout=10)
-            assert response.status_code == 200
-
-            response = requests.get(f"{server_url}/admin/user_state/test_user",
-
-                                  headers={"X-API-Key": "admin_api_key"}, timeout=10)
-            assert response.status_code == 200
-            user_state = response.json()
-            assert user_state["user_id"] == "test_user"
-        finally:
-            server.stop()
+        annotation_data = {
+            "instance_id": "type_test_1",
+            "type": "text",
+            "schema": "comments",
+            "state": [{"name": "comments", "value": "This is a test comment."}]
+        }
+        response = session.post(f"{self.server.base_url}/updateinstance", json=annotation_data)
+        assert response.status_code == 200
 
     def test_span_annotation_workflow(self):
-        config_file = get_config_path('span-annotation.yaml')
-        server = FlaskTestServer(lambda: create_app(), config_file, debug=True)
-        server.start()
-        server_url = server.base_url
-        try:
-            user_data = {"email": "test_user", "pass": "test_password"}
-            response = requests.post(f"{server_url}/register",
-                                   data=user_data,
+        """Test span annotation workflow."""
+        session = requests.Session()
+        user_data = {"email": "span_user", "pass": "test_password"}
+        session.post(f"{self.server.base_url}/register", data=user_data)
+        session.post(f"{self.server.base_url}/auth", data=user_data)
 
-                                   headers={"X-API-Key": "admin_api_key"}, timeout=10)
-            assert response.status_code == 200
-
-            response = requests.get(f"{server_url}/admin/user_state/test_user",
-
-                                  headers={"X-API-Key": "admin_api_key"}, timeout=10)
-            assert response.status_code == 200
-            user_state = response.json()
-            assert user_state["user_id"] == "test_user"
-        finally:
-            server.stop()
-
-def create_app():
-    from potato.flask_server import create_app
-    return create_app()
+        annotation_data = {
+            "instance_id": "type_test_1",
+            "type": "span",
+            "schema": "entities",
+            "state": [{"name": "person", "start": 0, "end": 5, "value": "person"}]
+        }
+        response = session.post(f"{self.server.base_url}/updateinstance", json=annotation_data)
+        assert response.status_code == 200

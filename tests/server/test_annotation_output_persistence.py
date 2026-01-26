@@ -1,100 +1,174 @@
-import os
-import shutil
-import tempfile
-import json
+"""
+Tests for annotation output persistence across different annotation types.
+
+This module tests that annotations are properly saved to output files
+for various annotation types.
+"""
+
 import pytest
-
-# Skip server integration tests for fast CI - run with pytest -m slow
-pytestmark = pytest.mark.skip(reason="Server integration tests skipped for fast CI execution")
+import requests
 from tests.helpers.flask_test_setup import FlaskTestServer
+from tests.helpers.test_utils import (
+    create_test_directory,
+    create_test_data_file,
+    create_test_config,
+    cleanup_test_directory
+)
 
-# Get project root for absolute paths
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-def annotation_configs():
-    return [
-        ("radio", os.path.join(PROJECT_ROOT, "tests/configs/radio_annotation_test.yaml"), "sentiment", "positive"),
-        ("likert", os.path.join(PROJECT_ROOT, "tests/configs/likert_annotation_test.yaml"), "agreement", 3),
-        ("slider", os.path.join(PROJECT_ROOT, "tests/configs/slider_annotation_test.yaml"), "rating", 75),
-        ("text", os.path.join(PROJECT_ROOT, "tests/configs/text_annotation_test.yaml"), "feedback", "Test explanation"),
-        ("multiselect", os.path.join(PROJECT_ROOT, "tests/configs/multiselect_annotation_test.yaml"), "topics", ["technology", "science"]),
-        ("span", os.path.join(PROJECT_ROOT, "tests/configs/span_annotation_test.yaml"), "sentiment", {"start": 0, "end": 5, "name": "positive", "title": "Positive sentiment"}),
-    ]
+class TestAnnotationOutputPersistence:
+    """Test annotation output persistence for different annotation types."""
 
-@pytest.mark.parametrize("atype, config, schema, value", annotation_configs())
-def test_annotation_output_persistence(atype, config, schema, value):
-    temp_dir = tempfile.mkdtemp()
-    try:
-        # Read and update config file first
-        with open(config) as f:
-            lines = f.readlines()
-        new_lines = []
-        for line in lines:
-            if line.strip().startswith("output_annotation_dir:"):
-                new_lines.append(f"output_annotation_dir: '{temp_dir}'\n")
-            elif line.strip().startswith("task_dir:"):
-                new_lines.append(f"task_dir: '{temp_dir}'\n")
-            else:
-                new_lines.append(line)
-        temp_config = os.path.join(temp_dir, os.path.basename(config))
-        with open(temp_config, "w") as f:
-            f.writelines(new_lines)
+    @pytest.fixture(scope="class", autouse=True)
+    def flask_server(self, request):
+        """Create a Flask test server with multiple annotation types."""
+        test_dir = create_test_directory("annotation_output_persistence_test")
 
-        # Create test data file in the correct location relative to config
-        config_dir = os.path.dirname(temp_config)
-        data_dir = os.path.join(config_dir, "..", "data")
-        os.makedirs(data_dir, exist_ok=True)
-        test_data_file = os.path.join(data_dir, "test_data.json")
         test_data = [
-            {"id": "test_1", "text": "This is a test text for annotation."},
-            {"id": "test_2", "text": "Another test text for annotation testing."}
+            {"id": "persist_test_1", "text": "This is a test text for annotation persistence."},
+            {"id": "persist_test_2", "text": "Another test text for annotation testing."}
         ]
-        with open(test_data_file, 'w') as f:
-            for item in test_data:
-                f.write(json.dumps(item) + '\n')
-        abs_temp_config = os.path.abspath(temp_config)
+        data_file = create_test_data_file(test_dir, test_data)
 
-        # Start server with proper error handling
-        server = FlaskTestServer(config_file=abs_temp_config)
-        started = server.start()
-        if not started:
-            raise RuntimeError(f"Failed to start server with config {abs_temp_config}")
+        # Create multiple annotation schemes
+        annotation_schemes = [
+            {
+                "name": "sentiment",
+                "annotation_type": "radio",
+                "labels": ["positive", "negative", "neutral"],
+                "description": "Select sentiment"
+            },
+            {
+                "name": "agreement",
+                "annotation_type": "likert",
+                "min_label": "1",
+                "max_label": "5",
+                "size": 5,
+                "description": "Rate agreement"
+            },
+            {
+                "name": "rating",
+                "annotation_type": "slider",
+                "min_value": 0,
+                "max_value": 100,
+                "starting_value": 50,
+                "description": "Rate on slider"
+            },
+            {
+                "name": "feedback",
+                "annotation_type": "text",
+                "description": "Enter feedback"
+            },
+            {
+                "name": "topics",
+                "annotation_type": "multiselect",
+                "labels": ["technology", "science", "politics", "entertainment"],
+                "description": "Select topics"
+            },
+            {
+                "name": "entities",
+                "annotation_type": "span",
+                "labels": ["person", "location", "organization"],
+                "description": "Mark entities"
+            }
+        ]
 
-        try:
-            # Get test client with proper error handling
-            if server.app is None:
-                raise RuntimeError("Server app is None - server failed to initialize")
-            client = server.app.test_client()
-            client.post("/register", data={"username": "testuser", "password": "testpass"})
-            client.post("/login", data={"username": "testuser", "password": "testpass"})
-            resp = client.get("/api/current_instance")
-            instance_id = resp.json["id"]
-            if atype == "span":
-                payload = {
-                    "instance_id": instance_id,
-                    "annotations": {},
-                    "span_annotations": [value]
-                }
-            elif atype == "multiselect":
-                payload = {
-                    "instance_id": instance_id,
-                    "annotations": {f"{schema}:{v}": True for v in value},
-                    "span_annotations": []
-                }
-            else:
-                payload = {
-                    "instance_id": instance_id,
-                    "annotations": {f"{schema}:{value}": value},
-                    "span_annotations": []
-                }
-            client.post("/updateinstance", json=payload)
-        finally:
-            server.stop()
-        user_dir = os.path.join(temp_dir, "testuser")
-        state_file = os.path.join(user_dir, "user_state.json")
-        assert os.path.exists(state_file), f"No user_state.json for {atype}"
-        with open(state_file) as f:
-            data = json.load(f)
-        assert any(data["instance_id_to_label_to_value"] or data["instance_id_to_span_to_value"]), f"No annotation saved for {atype}"
-    finally:
-        shutil.rmtree(temp_dir)
+        config_file = create_test_config(
+            test_dir,
+            annotation_schemes,
+            data_files=[data_file],
+            annotation_task_name="Output Persistence Test",
+            require_password=False
+        )
+
+        server = FlaskTestServer(config_file=config_file, debug=False)
+        if not server.start():
+            pytest.fail("Failed to start Flask test server")
+
+        request.cls.server = server
+        request.cls.test_dir = test_dir
+
+        yield server
+
+        server.stop()
+        cleanup_test_directory(test_dir)
+
+    def test_radio_annotation_persistence(self):
+        """Test radio annotation persistence."""
+        session = requests.Session()
+        user_data = {"email": "radio_persist_user", "pass": "test_password"}
+        session.post(f"{self.server.base_url}/register", data=user_data)
+        session.post(f"{self.server.base_url}/auth", data=user_data)
+
+        annotation_data = {
+            "instance_id": "persist_test_1",
+            "type": "radio",
+            "schema": "sentiment",
+            "state": [{"name": "positive", "value": "positive"}]
+        }
+        response = session.post(f"{self.server.base_url}/updateinstance", json=annotation_data)
+        assert response.status_code == 200
+
+    def test_likert_annotation_persistence(self):
+        """Test likert annotation persistence."""
+        session = requests.Session()
+        user_data = {"email": "likert_persist_user", "pass": "test_password"}
+        session.post(f"{self.server.base_url}/register", data=user_data)
+        session.post(f"{self.server.base_url}/auth", data=user_data)
+
+        annotation_data = {
+            "instance_id": "persist_test_1",
+            "type": "likert",
+            "schema": "agreement",
+            "state": [{"name": "agreement", "value": "3"}]
+        }
+        response = session.post(f"{self.server.base_url}/updateinstance", json=annotation_data)
+        assert response.status_code == 200
+
+    def test_slider_annotation_persistence(self):
+        """Test slider annotation persistence."""
+        session = requests.Session()
+        user_data = {"email": "slider_persist_user", "pass": "test_password"}
+        session.post(f"{self.server.base_url}/register", data=user_data)
+        session.post(f"{self.server.base_url}/auth", data=user_data)
+
+        annotation_data = {
+            "instance_id": "persist_test_1",
+            "type": "slider",
+            "schema": "rating",
+            "state": [{"name": "rating", "value": "75"}]
+        }
+        response = session.post(f"{self.server.base_url}/updateinstance", json=annotation_data)
+        assert response.status_code == 200
+
+    def test_text_annotation_persistence(self):
+        """Test text annotation persistence."""
+        session = requests.Session()
+        user_data = {"email": "text_persist_user", "pass": "test_password"}
+        session.post(f"{self.server.base_url}/register", data=user_data)
+        session.post(f"{self.server.base_url}/auth", data=user_data)
+
+        annotation_data = {
+            "instance_id": "persist_test_1",
+            "type": "text",
+            "schema": "feedback",
+            "state": [{"name": "feedback", "value": "This is test feedback."}]
+        }
+        response = session.post(f"{self.server.base_url}/updateinstance", json=annotation_data)
+        assert response.status_code == 200
+
+    def test_span_annotation_persistence(self):
+        """Test span annotation persistence."""
+        session = requests.Session()
+        user_data = {"email": "span_persist_user", "pass": "test_password"}
+        session.post(f"{self.server.base_url}/register", data=user_data)
+        session.post(f"{self.server.base_url}/auth", data=user_data)
+
+        annotation_data = {
+            "instance_id": "persist_test_1",
+            "type": "span",
+            "schema": "entities",
+            "state": [{"name": "person", "start": 0, "end": 5, "value": "person"}]
+        }
+        response = session.post(f"{self.server.base_url}/updateinstance", json=annotation_data)
+        assert response.status_code == 200

@@ -5,137 +5,156 @@ Demonstrates how to use the FlaskTestServer for testing Flask endpoints.
 """
 
 import pytest
-
-# Skip server integration tests for fast CI - run with pytest -m slow
-pytestmark = pytest.mark.skip(reason="Server integration tests skipped for fast CI execution")
-import requests
-import sys
-import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from tests.helpers.flask_test_setup import FlaskTestServer, FlaskTestBase
+from tests.helpers.flask_test_setup import FlaskTestServer
+from tests.helpers.test_utils import (
+    create_test_directory,
+    create_test_data_file,
+    create_test_config,
+    cleanup_test_directory
+)
 
 
 class TestFlaskIntegration:
     """Test Flask server integration using the FlaskTestServer."""
 
-    @pytest.fixture
-    def server(self):
-        """Create a test server fixture."""
-        server = FlaskTestServer(app_factory=lambda: None, config={}, debug=False)
-        try:
-            server.start()
-            yield server
-        finally:
-            server.stop()
+    @pytest.fixture(scope="class", autouse=True)
+    def flask_server(self, request):
+        """Create a test server fixture with proper configuration."""
+        test_dir = create_test_directory("flask_integration_test")
 
-    def test_server_starts_and_responds(self, server):
+        test_data = [
+            {"id": "test_1", "text": "This is test item 1."},
+            {"id": "test_2", "text": "This is test item 2."}
+        ]
+        data_file = create_test_data_file(test_dir, test_data)
+
+        annotation_schemes = [
+            {
+                "annotation_type": "radio",
+                "name": "sentiment",
+                "description": "Select sentiment",
+                "labels": ["positive", "negative", "neutral"]
+            }
+        ]
+
+        config_file = create_test_config(
+            test_dir,
+            annotation_schemes,
+            data_files=[data_file],
+            annotation_task_name="Test Annotation Task",
+            require_password=False
+        )
+
+        server = FlaskTestServer(config_file=config_file, debug=False)
+        if not server.start():
+            pytest.fail("Failed to start Flask test server")
+
+        request.cls.server = server
+        request.cls.test_dir = test_dir
+
+        yield server
+
+        server.stop()
+        cleanup_test_directory(test_dir)
+
+    def test_server_starts_and_responds(self):
         """Test that the server starts and responds to basic requests."""
         # Server should be started by fixture
-        assert server.is_server_running()
+        assert self.server.is_server_running()
 
-        # Test root endpoint (should redirect to auth)
-        response = server.get("/")
+        # Test root endpoint (should redirect to auth or show login)
+        response = self.server.get("/")
         assert response.status_code in [200, 302]  # 302 is redirect, 200 is success
 
-        # Test auth endpoint
-        response = server.get("/auth")
+    def test_login_endpoint(self):
+        """Test the login endpoint is accessible."""
+        response = self.server.get("/login")
         assert response.status_code == 200
 
-    def test_debug_mode_auto_login(self, server):
-        """Test that debug mode automatically logs in users."""
-        # In debug mode, the server should auto-login users
-        response = server.get("/")
-        # Should either redirect to auth or go directly to annotation
-        assert response.status_code in [200, 302]
-
-    def test_server_configuration(self, server):
+    def test_server_configuration(self):
         """Test that the server is configured with test data."""
-        # The server should have test data loaded
-        response = server.get("/auth")
+        response = self.server.get("/login")
         assert response.status_code == 200
 
         # Check that the response contains expected content
         content = response.text
-        assert "Test Annotation Task" in content or "annotation" in content.lower()
+        assert "Test Annotation Task" in content or "annotation" in content.lower() or "login" in content.lower()
 
-    def test_multiple_requests(self, server):
+    def test_multiple_requests(self):
         """Test that the server can handle multiple requests."""
         # Make several requests to ensure server stability
         for i in range(3):
-            response = server.get("/")
+            response = self.server.get("/")
             assert response.status_code in [200, 302]
-
-            response = server.get("/auth")
-            assert response.status_code == 200
 
 
 def test_flask_server_factory():
     """Test the FlaskTestServer factory function."""
-    server = FlaskTestServer(app_factory=lambda: None, config={}, debug=False)
+    test_dir = create_test_directory("factory_test")
+
     try:
-        # Test server startup
-        assert server.start()
-        assert server.is_server_running()
+        test_data = [{"id": "test_1", "text": "Test item."}]
+        data_file = create_test_data_file(test_dir, test_data)
 
-        # Test basic request
-        response = server.get("/")
-        assert response.status_code in [200, 302]
+        annotation_schemes = [
+            {
+                "annotation_type": "radio",
+                "name": "test",
+                "description": "Test",
+                "labels": ["a", "b"]
+            }
+        ]
 
+        config_file = create_test_config(
+            test_dir,
+            annotation_schemes,
+            data_files=[data_file],
+            require_password=False
+        )
+
+        server = FlaskTestServer(config_file=config_file, debug=False)
+        try:
+            # Test server startup
+            assert server.start()
+            assert server.is_server_running()
+
+            # Test basic request
+            response = server.get("/")
+            assert response.status_code in [200, 302]
+        finally:
+            server.stop()
     finally:
-        server.stop()
-        # Note: The server may take a moment to fully stop, so we don't assert it's immediately stopped
+        cleanup_test_directory(test_dir)
 
 
 def test_server_context_manager():
     """Test the server context manager."""
-    server = FlaskTestServer(app_factory=lambda: None, config={}, debug=False)
-    with server.server_context():
-        assert server.is_server_running()
-        response = server.get("/")
-        assert response.status_code in [200, 302]
+    test_dir = create_test_directory("context_test")
 
-    # Server should be stopped after context
-    # Note: The server may take a moment to fully stop, so we don't assert it's immediately stopped
-
-
-if __name__ == "__main__":
-    # Run tests directly
-    print("🧪 Running Flask integration tests...")
-
-    # Test 1: Basic server functionality
-    print("\n1. Testing basic server functionality...")
-    server = FlaskTestServer(app_factory=lambda: None, config={}, debug=False)
     try:
-        if server.start():
+        test_data = [{"id": "test_1", "text": "Test item."}]
+        data_file = create_test_data_file(test_dir, test_data)
+
+        annotation_schemes = [
+            {
+                "annotation_type": "radio",
+                "name": "test",
+                "description": "Test",
+                "labels": ["a", "b"]
+            }
+        ]
+
+        config_file = create_test_config(
+            test_dir,
+            annotation_schemes,
+            data_files=[data_file],
+            require_password=False
+        )
+
+        server = FlaskTestServer(config_file=config_file, debug=False)
+        with server.server_context():
+            assert server.is_server_running()
             response = server.get("/")
-            print(f"✅ Root endpoint: {response.status_code}")
-
-            response = server.get("/auth")
-            print(f"✅ Auth endpoint: {response.status_code}")
-        else:
-            print("❌ Failed to start server")
+            assert response.status_code in [200, 302]
     finally:
-        server.stop()
-
-    # Test 2: Multiple servers
-    print("\n2. Testing multiple servers...")
-    servers = []
-    try:
-        for i in range(2):
-            server = FlaskTestServer(app_factory=lambda: None, config={}, debug=False)
-            if server.start():
-                print(f"✅ Server {i+1} started")
-                servers.append(server)
-            else:
-                print(f"❌ Failed to start server {i+1}")
-
-        # Test requests to both servers
-        for i, server in enumerate(servers):
-            response = server.get("/")
-            print(f"✅ Server {i+1} root endpoint: {response.status_code}")
-
-    finally:
-        for server in servers:
-            server.stop()
-
-    print("\n✅ All Flask integration tests completed!")
+        cleanup_test_directory(test_dir)

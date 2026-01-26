@@ -7,14 +7,14 @@ annotation state management.
 """
 
 import pytest
-
-# Skip server integration tests for fast CI - run with pytest -m slow
-pytestmark = pytest.mark.skip(reason="Server integration tests skipped for fast CI execution")
 import requests
-import tempfile
-import os
-import json
 from tests.helpers.flask_test_setup import FlaskTestServer
+from tests.helpers.test_utils import (
+    create_test_directory,
+    create_test_data_file,
+    create_test_config,
+    cleanup_test_directory
+)
 
 
 class TestAnnotationPersistence:
@@ -30,87 +30,76 @@ class TestAnnotationPersistence:
         """
         Create a Flask test server with annotation persistence test configuration.
         """
-        # Create temporary test data
+        # Create test directory using modern utilities
+        test_dir = create_test_directory("annotation_persistence_test")
+
+        # Create test data
         test_data = [
             {"id": "persistence_test_1", "text": "First test instance for annotation persistence testing."},
             {"id": "persistence_test_2", "text": "Second test instance for annotation persistence testing."},
             {"id": "persistence_test_3", "text": "Third test instance for annotation persistence testing."}
         ]
+        data_file = create_test_data_file(test_dir, test_data)
 
-        # Create temporary data file
-        fd, temp_data_file = tempfile.mkstemp(suffix='.jsonl', prefix='persistence_test_data_')
-        with os.fdopen(fd, 'w') as f:
-            for item in test_data:
-                f.write(json.dumps(item) + '\n')
+        # Create annotation schemes with multiple types
+        annotation_schemes = [
+            {
+                "name": "quality_rating",
+                "annotation_type": "likert",
+                "min_label": "1",
+                "max_label": "5",
+                "size": 5,
+                "description": "Rate quality from 1 to 5"
+            },
+            {
+                "name": "sentiment",
+                "annotation_type": "radio",
+                "labels": ["Positive", "Neutral", "Negative"],
+                "description": "Select sentiment"
+            },
+            {
+                "name": "complexity",
+                "annotation_type": "slider",
+                "min_value": 1,
+                "max_value": 10,
+                "starting_value": 5,
+                "description": "Rate complexity"
+            },
+            {
+                "name": "summary",
+                "annotation_type": "text",
+                "description": "Enter your summary here"
+            }
+        ]
 
-        # Create test configuration
-        test_config = {
-            "debug": False,
-            "port": 9012,  # Use a specific port to avoid conflicts
-            "host": "0.0.0.0",
-            "task_dir": os.path.dirname(temp_data_file),
-            "output_annotation_dir": os.path.join(os.path.dirname(temp_data_file), "output"),
-            "data_files": [temp_data_file],
-            "annotation_schemes": [
-                {
-                    "name": "quality_rating",
-                    "type": "likert",
-                    "options": ["1", "2", "3", "4", "5"]
-                },
-                {
-                    "name": "sentiment",
-                    "type": "radio",
-                    "options": ["Positive", "Neutral", "Negative"]
-                },
-                {
-                    "name": "complexity",
-                    "type": "slider",
-                    "min_value": 1,
-                    "max_value": 10,
-                    "starting_value": 5
-                },
-                {
-                    "name": "summary",
-                    "type": "text",
-                    "placeholder": "Enter your summary here"
-                }
-            ],
-            "item_properties": {"id_key": "id", "text_key": "text"},
-            "authentication": {"method": "in_memory"},
-            "require_password": False,
-            "persist_sessions": False,
-            "random_seed": 1234,
-            "session_lifetime_days": 2,
-            "secret_key": "test-secret-key",
-            "annotation_task_name": "Annotation Persistence Test"
-        }
-
-        # Create temporary config file
-        fd, temp_config_file = tempfile.mkstemp(suffix='.yaml', prefix='persistence_test_config_')
-        import yaml
-        with os.fdopen(fd, 'w') as f:
-            yaml.dump(test_config, f)
+        # Create config file
+        config_file = create_test_config(
+            test_dir,
+            annotation_schemes,
+            data_files=[data_file],
+            annotation_task_name="Annotation Persistence Test",
+            require_password=False,
+            random_seed=1234
+        )
 
         # Create and start test server
         server = FlaskTestServer(
-            port=9012,
-            debug=False,
-            config_file=temp_config_file
+            config_file=config_file,
+            debug=False
         )
 
         if not server.start():
             pytest.fail("Failed to start test server")
 
-        # Cleanup function
-        def cleanup():
-            server.stop()
-            if os.path.exists(temp_data_file):
-                os.remove(temp_data_file)
-            if os.path.exists(temp_config_file):
-                os.remove(temp_config_file)
+        # Store for cleanup
+        request.cls.server = server
+        request.cls.test_dir = test_dir
 
-        request.addfinalizer(cleanup)
-        return server
+        yield server
+
+        # Cleanup
+        server.stop()
+        cleanup_test_directory(test_dir)
 
     def test_likert_annotation_persistence(self, flask_server):
         """

@@ -7,9 +7,6 @@ that comply with path security requirements.
 """
 
 import pytest
-
-# Skip server integration tests for fast CI - run with pytest -m slow
-pytestmark = pytest.mark.skip(reason="Server integration tests skipped for fast CI execution")
 import requests
 from tests.helpers.flask_test_setup import FlaskTestServer
 from tests.helpers.port_manager import find_free_port
