@@ -12,6 +12,7 @@ import pytest
 pytestmark = pytest.mark.skip(reason="Server integration tests skipped for fast CI execution")
 import requests
 from tests.helpers.flask_test_setup import FlaskTestServer
+from tests.helpers.port_manager import find_free_port
 from tests.helpers.test_utils import (
     create_test_directory,
     create_test_data_file,
@@ -43,7 +44,7 @@ class TestSecurePatterns:
         with TestConfigManager("basic_test", annotation_schemes) as test_config:
             # Create server with secure config
             server = FlaskTestServer(
-                port=9010,
+                port=find_free_port(),
                 debug=False,
                 config_file=test_config.config_path
             )
@@ -82,7 +83,7 @@ class TestSecurePatterns:
 
             # Create server
             server = FlaskTestServer(
-                port=9011,
+                port=find_free_port(),
                 debug=False,
                 config_file=config_file
             )
@@ -129,7 +130,7 @@ class TestSecurePatterns:
 
             # Create server
             server = FlaskTestServer(
-                port=9012,
+                port=find_free_port(),
                 debug=False,
                 config_file=config_file
             )
@@ -208,7 +209,7 @@ class TestSecurePatterns:
 
             # Create server
             server = FlaskTestServer(
-                port=9013,
+                port=find_free_port(),
                 debug=False,
                 config_file=config_file
             )
@@ -265,7 +266,7 @@ class TestSecurePatternsWithFixtures:
 
         with TestConfigManager("fixture_test", annotation_schemes) as test_config:
             server = FlaskTestServer(
-                port=9014,
+                port=find_free_port(),
                 debug=False,
                 config_file=test_config.config_path
             )

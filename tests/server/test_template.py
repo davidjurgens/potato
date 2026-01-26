@@ -14,6 +14,7 @@ import tempfile
 import os
 import requests
 from tests.helpers.flask_test_setup import FlaskTestServer
+from tests.helpers.port_manager import find_free_port
 
 
 class TestTemplate:
@@ -80,7 +81,7 @@ class TestTemplate:
 
         # Create and start server
         server = FlaskTestServer(
-            port=9010,  # Use unique port for this test class
+            port=find_free_port(),
             debug=False,
             config_file=config_file
         )
@@ -294,7 +295,7 @@ class TestTemplateAdvanced:
             yaml.dump(config, f)
 
         server = FlaskTestServer(
-            port=9011,  # Different port
+            port=find_free_port(),
             debug=False,
             config_file=config_file
         )

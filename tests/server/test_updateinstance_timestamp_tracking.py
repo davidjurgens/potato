@@ -22,6 +22,7 @@ import yaml
 from unittest.mock import Mock, patch, MagicMock
 
 from tests.helpers.flask_test_setup import FlaskTestServer
+from tests.helpers.port_manager import find_free_port
 from tests.helpers.test_utils import create_test_directory, create_test_config, create_test_data_file
 
 
@@ -51,14 +52,15 @@ class TestUpdateInstanceTimestampTracking(unittest.TestCase):
         ]
 
         # Create config using proper utilities
+        self.port = find_free_port()
         self.config_file = create_test_config(
             self.test_dir,
             annotation_schemes,
             data_files=[self.data_file],
-            port=9001
+            port=self.port
         )
 
-        self.server = FlaskTestServer(port=9001, debug=False, config_file=self.config_file)
+        self.server = FlaskTestServer(port=self.port, debug=False, config_file=self.config_file)
         self.server_started = False
 
     def tearDown(self):

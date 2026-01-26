@@ -21,11 +21,44 @@ _allocated_ports: Set[int] = set()
 # Port range for test servers (high range to avoid conflicts with common services)
 DEFAULT_PORT_RANGE = (9100, 9999)
 
+# Number of ports to allocate per worker for partitioning
+PORTS_PER_WORKER = 200
+
+
+def _get_worker_port_range() -> tuple:
+    """
+    Get the port range for the current pytest-xdist worker.
+
+    When running with pytest-xdist, each worker gets a dedicated port range
+    to eliminate cross-process race conditions.
+
+    Returns:
+        Tuple of (min_port, max_port) for this worker.
+    """
+    worker_id = os.environ.get("PYTEST_XDIST_WORKER", None)
+
+    if worker_id is None:
+        # Not running in pytest-xdist, use full range
+        return DEFAULT_PORT_RANGE
+
+    # Extract worker number from ID like "gw0", "gw1", etc.
+    try:
+        worker_num = int(worker_id.replace("gw", ""))
+    except ValueError:
+        # Unknown format, use full range
+        return DEFAULT_PORT_RANGE
+
+    # Each worker gets a dedicated slice of the port range
+    base_port = DEFAULT_PORT_RANGE[0] + (worker_num * PORTS_PER_WORKER)
+    max_port = min(base_port + PORTS_PER_WORKER - 1, DEFAULT_PORT_RANGE[1])
+
+    return (base_port, max_port)
+
 
 def find_free_port(
     preferred_port: Optional[int] = None,
-    port_range: tuple = DEFAULT_PORT_RANGE,
-    max_attempts: int = 10
+    port_range: tuple = None,
+    max_attempts: int = 20
 ) -> int:
     """
     Find an available port with retry logic to handle race conditions.
@@ -33,10 +66,14 @@ def find_free_port(
     This function mitigates TOCTOU (Time-of-Check-Time-of-Use) race conditions
     by attempting multiple times with random ports from a range.
 
+    When running with pytest-xdist, each worker gets a dedicated port range
+    to eliminate cross-process collisions.
+
     Args:
         preferred_port: Preferred port to try first. If None or unavailable,
                        a random port from port_range is selected.
         port_range: Tuple of (min_port, max_port) to select from.
+                   If None, uses worker-specific range for parallel tests.
         max_attempts: Maximum number of attempts before raising an error.
 
     Returns:
@@ -45,13 +82,21 @@ def find_free_port(
     Raises:
         RuntimeError: If no port could be found after max_attempts.
     """
+    # Use worker-specific range if not explicitly provided
+    if port_range is None:
+        port_range = _get_worker_port_range()
+
     min_port, max_port = port_range
 
     with _port_lock:
         for attempt in range(max_attempts):
             # Determine which port to try
             if attempt == 0 and preferred_port is not None:
-                port = preferred_port
+                # Only use preferred port if it's within our range
+                if min_port <= preferred_port <= max_port:
+                    port = preferred_port
+                else:
+                    port = random.randint(min_port, max_port)
             else:
                 # Random port to reduce collision probability
                 port = random.randint(min_port, max_port)
@@ -67,11 +112,11 @@ def find_free_port(
 
             # Small delay before retry to let other processes release ports
             if attempt < max_attempts - 1:
-                time.sleep(0.1 * (attempt + 1))
+                time.sleep(0.05 * (attempt + 1))
 
         raise RuntimeError(
             f"Could not find an available port after {max_attempts} attempts. "
-            f"Tried range {min_port}-{max_port}. "
+            f"Tried range {min_port}-{max_port} (worker: {os.environ.get('PYTEST_XDIST_WORKER', 'main')}). "
             f"Already allocated in this process: {len(_allocated_ports)} ports."
         )
 

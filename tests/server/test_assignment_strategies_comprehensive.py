@@ -30,6 +30,7 @@ import tempfile
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from tests.helpers.flask_test_setup import FlaskTestServer
+from tests.helpers.port_manager import find_free_port
 from collections import defaultdict
 import requests
 
@@ -134,7 +135,7 @@ class TestAssignmentStrategiesComprehensive:
 
         # Create server with the config file
         server = FlaskTestServer(
-            port=9005,
+            port=find_free_port(),
             debug=False,
             config_file=config_file,
             test_data_file=data_file

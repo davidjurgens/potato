@@ -18,6 +18,7 @@ from potato.simulator import (
     CompetenceLevel,
 )
 from tests.helpers.flask_test_setup import FlaskTestServer
+from tests.helpers.port_manager import find_free_port
 from tests.helpers.test_utils import create_test_directory
 
 
@@ -97,7 +98,7 @@ def test_config(test_data_dir, test_data_file):
 @pytest.fixture(scope="module")
 def flask_server(test_config):
     """Start Flask test server."""
-    server = FlaskTestServer(port=9876, debug=False, config_file=test_config)
+    server = FlaskTestServer(port=find_free_port(), debug=False, config_file=test_config)
     started = server.start()
 
     if not started:

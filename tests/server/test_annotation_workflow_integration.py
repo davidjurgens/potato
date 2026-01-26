@@ -15,6 +15,7 @@ import time
 import tempfile
 import os
 from tests.helpers.flask_test_setup import FlaskTestServer
+from tests.helpers.port_manager import find_free_port
 import requests
 
 class TestAnnotationWorkflowIntegration:
@@ -123,7 +124,7 @@ class TestAnnotationWorkflowIntegration:
 
         # Create server with the config file
         server = FlaskTestServer(
-            port=9004,
+            port=find_free_port(),
             debug=False,
             config_file=config_file,
             test_data_file=data_file

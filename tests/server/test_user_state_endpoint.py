@@ -15,6 +15,10 @@ import os
 import yaml
 import requests
 from tests.helpers.flask_test_setup import FlaskTestServer
+from tests.helpers.port_manager import find_free_port
+
+
+
 
 
 class TestUserStateEndpoint:
@@ -88,7 +92,7 @@ class TestUserStateEndpoint:
 
         # Create server with the config file
         server = FlaskTestServer(
-            port=9012,
+            port=find_free_port(),
             debug=False,
             config_file=config_file,
             test_data_file=data_file

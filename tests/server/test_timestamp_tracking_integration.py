@@ -17,6 +17,7 @@ import yaml
 import requests
 import time
 from tests.helpers.flask_test_setup import FlaskTestServer
+from tests.helpers.port_manager import find_free_port
 
 
 class TestTimestampTrackingIntegration:
@@ -101,7 +102,7 @@ class TestTimestampTrackingIntegration:
 
         # Create and start server
         server = FlaskTestServer(
-            port=9015,  # Use unique port for this test class
+            port=find_free_port(),
             debug=False,
             config_file=config_file
         )
@@ -559,7 +560,7 @@ class TestTimestampTrackingEdgeCases:
 
         # Create and start server
         server = FlaskTestServer(
-            port=9016,  # Use unique port for this test class
+            port=find_free_port(),
             debug=False,
             config_file=config_file
         )
