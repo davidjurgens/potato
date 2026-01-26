@@ -1,16 +1,15 @@
 """
 Performance and Scalability Tests for Active Learning
 
-This module contains tests for large dataset training, classifier comparison, concurrent annotations, and model persistence with large models.
+This module contains tests for large dataset training, classifier comparison,
+concurrent annotations, and model persistence with large models.
 """
 
 import pytest
-
-# Skip server-side active learning tests for fast CI execution
-pytestmark = pytest.mark.skip(reason="Active learning server tests skipped for fast CI - run with pytest -m slow")
 import time
-from tests.helpers.active_learning_test_utils import start_flask_server_with_config
 from potato.active_learning_manager import ActiveLearningConfig, init_active_learning_manager, clear_active_learning_manager
+from potato.item_state_management import Label
+
 
 class TestActiveLearningPerformance:
     """Performance and scalability tests for active learning."""
@@ -73,15 +72,11 @@ class TestActiveLearningPerformance:
         user = user_manager.add_user("test_user@example.com")
         user.advance_to_phase(UserPhase.ANNOTATION, None)
 
-        # Assign first 100 items to user
-        for i in range(100):
-            user.assign_instance(item_manager.get_item(f"item_{i}"))
-
-        # Annotate 50 items with diverse labels
+        # Annotate 50 items with diverse labels using Label objects
         labels = ["positive", "negative", "neutral"]
         for i in range(50):
             label = labels[i % 3]
-            user.set_annotation(f"item_{i}", {"sentiment": label}, None, None)
+            user.add_label_annotation(f"item_{i}", Label("sentiment", label), True)
 
         # Initialize active learning manager
         al_config = ActiveLearningConfig(
@@ -97,7 +92,7 @@ class TestActiveLearningPerformance:
         manager.force_training()
 
         # Wait for training to complete with strict timeout
-        max_wait = 10  # seconds (reduced from 30)
+        max_wait = 10  # seconds
         trained = False
         while time.time() - start_time < max_wait:
             stats = manager.get_stats()
@@ -108,12 +103,8 @@ class TestActiveLearningPerformance:
 
         elapsed = time.time() - start_time
 
-        # Note: Training may not complete if data format doesn't match expectations
-        # This is acceptable - we're testing performance, not correctness
-        if not trained:
-            pytest.skip("Training did not complete - may need annotation format fixes")
-
-        print(f"Training completed in {elapsed:.2f} seconds")
+        assert trained, f"Training did not complete within {max_wait} seconds"
+        assert elapsed < max_wait, f"Training took too long: {elapsed:.2f} seconds"
 
     def test_classifier_comparison_performance(self):
         """Test performance comparison between different classifiers."""
@@ -158,11 +149,11 @@ class TestActiveLearningPerformance:
         user = user_manager.add_user("test_user@example.com")
         user.advance_to_phase(UserPhase.ANNOTATION, None)
 
-        # Annotate 30 items with diverse labels
+        # Annotate 30 items with diverse labels using Label objects
         labels = ["positive", "negative", "neutral"]
         for i in range(30):
             label = labels[i % 3]
-            user.set_annotation(f"item_{i}", {"sentiment": label}, None, None)
+            user.add_label_annotation(f"item_{i}", Label("sentiment", label), True)
 
         # Test LogisticRegression
         start_time = time.time()
@@ -212,16 +203,14 @@ class TestActiveLearningPerformance:
 
         rf_time = time.time() - start_time
 
-        # Skip if training didn't complete (data format issues)
-        if not lr_trained and not rf_trained:
-            pytest.skip("Training did not complete - may need annotation format fixes")
-
-        print(f"LogisticRegression: {lr_time:.2f}s (trained={lr_trained}), RandomForest: {rf_time:.2f}s (trained={rf_trained})")
+        # At least one classifier should train successfully
+        assert lr_trained or rf_trained, "Neither classifier completed training"
 
     def test_model_persistence_performance(self):
         """Test performance of model saving and loading with large models."""
         import tempfile
         import os
+        import shutil
         from potato.item_state_management import init_item_state_manager, get_item_state_manager
         from potato.user_state_management import init_user_state_manager, get_user_state_manager
         from potato.phase import UserPhase
@@ -267,11 +256,11 @@ class TestActiveLearningPerformance:
             user = user_manager.add_user("test_user@example.com")
             user.advance_to_phase(UserPhase.ANNOTATION, None)
 
-            # Annotate 100 items with diverse labels
+            # Annotate 100 items with diverse labels using Label objects
             labels = ["positive", "negative", "neutral"]
             for i in range(100):
                 label = labels[i % 3]
-                user.set_annotation(f"item_{i}", {"sentiment": label}, None, None)
+                user.add_label_annotation(f"item_{i}", Label("sentiment", label), True)
 
             # Test with model persistence enabled
             al_config = ActiveLearningConfig(
@@ -302,13 +291,11 @@ class TestActiveLearningPerformance:
 
             training_time = time.time() - start_time
 
-            if not trained:
-                pytest.skip("Training did not complete - may need annotation format fixes")
+            assert trained, f"Training did not complete within {max_wait} seconds"
 
             # Check that model files were created
             model_files = [f for f in os.listdir(temp_dir) if f.endswith('.pkl')]
-            if len(model_files) == 0:
-                pytest.skip("No model files created - model persistence may need fixing")
+            assert len(model_files) > 0, "No model files were created"
 
             # Test model loading performance
             start_time = time.time()
@@ -316,19 +303,14 @@ class TestActiveLearningPerformance:
             model_persistence = ModelPersistence(temp_dir, retention_count=3)
 
             # Load the most recent model
-            if model_files:
-                latest_model_file = sorted(model_files)[-1]
-                model_path = os.path.join(temp_dir, latest_model_file)
-                loaded_model = model_persistence.load_model(model_path)
-                if loaded_model is None:
-                    pytest.skip("Model loading returned None - may need fixing")
-
+            latest_model_file = sorted(model_files)[-1]
+            model_path = os.path.join(temp_dir, latest_model_file)
+            loaded_model = model_persistence.load_model(model_path)
             loading_time = time.time() - start_time
 
-            print(f"Training with persistence: {training_time:.2f}s, Model loading: {loading_time:.2f}s")
-            print(f"Created {len(model_files)} model files")
+            assert loaded_model is not None, "Model loading returned None"
+            assert loading_time < 5.0, f"Model loading took too long: {loading_time:.2f}s"
 
         finally:
             # Cleanup
-            import shutil
             shutil.rmtree(temp_dir, ignore_errors=True)
