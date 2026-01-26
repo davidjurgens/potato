@@ -24,6 +24,7 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 
 from tests.helpers.flask_test_setup import FlaskTestServer
+from tests.helpers.port_manager import find_free_port
 
 
 class TestVideoAnnotation:
@@ -34,7 +35,7 @@ class TestVideoAnnotation:
         """Set up the Flask server with video annotation config."""
         # Create temp directory for test
         cls.test_dir = tempfile.mkdtemp(prefix="video_test_")
-        cls.port = 9010  # Use different port to avoid conflicts
+        cls.port = find_free_port()  # Use dynamic port to avoid conflicts
 
         # Create data directory
         data_dir = os.path.join(cls.test_dir, "data")
@@ -137,7 +138,7 @@ site_dir: default
 
     def _login_and_navigate_to_annotation(self):
         """Helper to login and get to the annotation page."""
-        self.driver.get(f"http://localhost:{self.port}/")
+        self.driver.get(f"{self.server.base_url}/")
         self.wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
         # Handle login - the login form uses 'login-email' as the input ID
@@ -150,7 +151,7 @@ site_dir: default
             # Submit login
             submit_btn = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
             submit_btn.click()
-            time.sleep(2)  # Wait for page to load after login
+            time.sleep(0.05)  # Wait for page to load after login
         except:
             pass  # May already be logged in
 
@@ -173,7 +174,7 @@ site_dir: default
             )
             if ready_state >= 1:  # HAVE_METADATA
                 return video
-            time.sleep(0.5)
+            time.sleep(0.1)
 
         raise TimeoutError("Video did not become ready within timeout")
 
@@ -186,7 +187,7 @@ site_dir: default
         assert video is not None, "Video element should exist"
 
         # Check video has src set (may take a moment)
-        time.sleep(2)
+        time.sleep(0.05)
         src = self.driver.execute_script("return arguments[0].src;", video)
         assert src and len(src) > 0, f"Video should have src set, got: {src}"
 
@@ -200,7 +201,7 @@ site_dir: default
             By.CSS_SELECTOR, ".playback-btn[data-action='play']"
         )
         play_btn.click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Test stop button
         stop_btn = self.driver.find_element(
@@ -221,32 +222,32 @@ site_dir: default
 
         # Set video to a specific time for start
         self.driver.execute_script("arguments[0].currentTime = 1.0;", video)
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Click set-start button
         start_btn = self.driver.find_element(
             By.CSS_SELECTOR, ".segment-btn[data-action='set-start']"
         )
         start_btn.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Move to end time
         self.driver.execute_script("arguments[0].currentTime = 3.0;", video)
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Click set-end button
         end_btn = self.driver.find_element(
             By.CSS_SELECTOR, ".segment-btn[data-action='set-end']"
         )
         end_btn.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Create segment
         create_btn = self.driver.find_element(
             By.CSS_SELECTOR, ".segment-btn[data-action='create-segment']"
         )
         create_btn.click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Verify segment was created
         segment_count = self.driver.execute_script(
@@ -280,23 +281,23 @@ site_dir: default
 
         # Set video to start time
         self.driver.execute_script("arguments[0].currentTime = 2.0;", video)
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Press [ to set start
         ActionChains(self.driver).send_keys('[').perform()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Move to end time
         self.driver.execute_script("arguments[0].currentTime = 5.0;", video)
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Press ] to set end
         ActionChains(self.driver).send_keys(']').perform()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Press Enter to create segment
         ActionChains(self.driver).send_keys(Keys.ENTER).perform()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Verify segment was created
         segment_count = self.driver.execute_script(
@@ -323,14 +324,14 @@ site_dir: default
 
         self.driver.execute_script("arguments[0].currentTime = 0.5;", video)
         self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='set-start']").click()
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         self.driver.execute_script("arguments[0].currentTime = 1.5;", video)
         self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='set-end']").click()
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='create-segment']").click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Create second segment with 'outro' label
         outro_btn = self.driver.find_element(
@@ -340,14 +341,14 @@ site_dir: default
 
         self.driver.execute_script("arguments[0].currentTime = 4.0;", video)
         self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='set-start']").click()
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         self.driver.execute_script("arguments[0].currentTime = 5.0;", video)
         self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='set-end']").click()
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='create-segment']").click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Verify both segments were created with correct labels
         segments = self.driver.execute_script(
@@ -373,14 +374,14 @@ site_dir: default
 
         self.driver.execute_script("arguments[0].currentTime = 1.0;", video)
         self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='set-start']").click()
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         self.driver.execute_script("arguments[0].currentTime = 2.0;", video)
         self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='set-end']").click()
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='create-segment']").click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Verify segment exists
         initial_count = self.driver.execute_script(
@@ -396,7 +397,7 @@ site_dir: default
             EC.element_to_be_clickable((By.CSS_SELECTOR, ".annotation-delete"))
         )
         delete_btn.click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Verify segment was deleted
         final_count = self.driver.execute_script(
@@ -423,14 +424,14 @@ site_dir: default
 
         self.driver.execute_script("arguments[0].currentTime = 1.0;", video)
         self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='set-start']").click()
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         self.driver.execute_script("arguments[0].currentTime = 2.0;", video)
         self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='set-end']").click()
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='create-segment']").click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Check updated count
         updated_count = count_element.text
@@ -447,14 +448,14 @@ site_dir: default
 
         self.driver.execute_script("arguments[0].currentTime = 1.0;", video)
         self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='set-start']").click()
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         self.driver.execute_script("arguments[0].currentTime = 2.5;", video)
         self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='set-end']").click()
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='create-segment']").click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Check hidden input has data
         hidden_input = self.driver.find_element(By.CSS_SELECTOR, ".annotation-data-input")
@@ -480,7 +481,7 @@ site_dir: default
         from selenium.webdriver.support.ui import Select
         select = Select(speed_select)
         select.select_by_value("2")
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Verify playback rate changed
         playback_rate = self.driver.execute_script(
@@ -502,7 +503,7 @@ site_dir: default
             By.CSS_SELECTOR, ".frame-btn[data-action='frame-forward']"
         )
         frame_forward.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Verify time increased
         new_time = self.driver.execute_script("return arguments[0].currentTime;", video)
@@ -513,7 +514,7 @@ site_dir: default
             By.CSS_SELECTOR, ".frame-btn[data-action='frame-back']"
         )
         frame_back.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Verify time decreased
         final_time = self.driver.execute_script("return arguments[0].currentTime;", video)
@@ -527,7 +528,7 @@ class TestVideoAnnotationWithoutPeaks:
     def setup_class(cls):
         """Set up the Flask server with video annotation config."""
         cls.test_dir = tempfile.mkdtemp(prefix="video_test_no_peaks_")
-        cls.port = 9011  # Different port
+        cls.port = find_free_port()  # Dynamic port to avoid conflicts
 
         # Create data directory
         data_dir = os.path.join(cls.test_dir, "data")
@@ -614,7 +615,7 @@ site_dir: default
 
     def _login_and_navigate(self):
         """Helper to login and navigate to annotation page."""
-        self.driver.get(f"http://localhost:{self.port}/")
+        self.driver.get(f"{self.server.base_url}/")
         self.wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
         try:
@@ -624,7 +625,7 @@ site_dir: default
             username_input.send_keys("test_user")
             submit_btn = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
             submit_btn.click()
-            time.sleep(2)
+            time.sleep(0.05)
         except:
             pass
 
@@ -640,7 +641,7 @@ site_dir: default
         video = self.wait.until(
             EC.presence_of_element_located((By.CSS_SELECTOR, ".video-element"))
         )
-        time.sleep(2)  # Wait for video to load
+        time.sleep(0.05)  # Wait for video to load
 
         # Check if Peaks is available
         peaks_available = self.driver.execute_script("return typeof Peaks !== 'undefined';")
@@ -652,20 +653,20 @@ site_dir: default
 
         # Set times directly via JavaScript since video controls work
         self.driver.execute_script("arguments[0].currentTime = 0.5;", video)
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         # Click segment buttons
         self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='set-start']").click()
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         self.driver.execute_script("arguments[0].currentTime = 1.5;", video)
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='set-end']").click()
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='create-segment']").click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Verify segment was created
         segment_count = self.driver.execute_script(

@@ -24,6 +24,7 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 
 from tests.helpers.flask_test_setup import FlaskTestServer
+from tests.helpers.port_manager import find_free_port
 
 
 class TestAudioAnnotationIntegration:
@@ -33,17 +34,19 @@ class TestAudioAnnotationIntegration:
     def setup_class(cls):
         """Set up the Flask server with audio annotation config."""
         cls.test_dir = tempfile.mkdtemp(prefix="audio_integration_test_")
-        cls.port = 9020  # Use different port to avoid conflicts
+        cls.port = find_free_port()  # Use dynamic port to avoid conflicts
 
         # Create data directory
         data_dir = os.path.join(cls.test_dir, "data")
         os.makedirs(data_dir, exist_ok=True)
 
-        # Create data file with test audio - use short, reliable test audio
+        # Create data file with test audio - use 10-second local audio
+        # Some tests (segment label assignment) need longer audio for multiple segments
+        # The Flask test server serves files from /test-audio/ route
         data_file = os.path.join(data_dir, "test_audio.json")
         test_data = [
-            {"id": "audio_001", "audio_url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"},
-            {"id": "audio_002", "audio_url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"},
+            {"id": "audio_001", "audio_url": "/test-audio/test_audio_10s.mp3"},
+            {"id": "audio_002", "audio_url": "/test-audio/test_audio_10s.mp3"},
         ]
         with open(data_file, "w") as f:
             for item in test_data:
@@ -135,7 +138,7 @@ site_dir: default
 
     def _login_and_navigate_to_annotation(self):
         """Helper to login and get to the annotation page."""
-        self.driver.get(f"http://localhost:{self.port}/")
+        self.driver.get(f"{self.server.base_url}/")
         self.wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
         # Handle login - the login form uses 'login-email' as the input ID
@@ -148,7 +151,7 @@ site_dir: default
             # Submit login
             submit_btn = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
             submit_btn.click()
-            time.sleep(2)
+            time.sleep(0.05)
         except:
             pass
 
@@ -157,17 +160,20 @@ site_dir: default
             EC.presence_of_element_located((By.CLASS_NAME, "audio-annotation-container"))
         )
 
-    def _wait_for_audio_manager_ready(self, timeout=20):
-        """Wait for AudioAnnotationManager to be initialized."""
+    def _wait_for_audio_manager_ready(self, timeout=30):
+        """Wait for AudioAnnotationManager to be fully initialized with Peaks.js."""
         end_time = time.time() + timeout
         while time.time() < end_time:
             manager_ready = self.driver.execute_script("""
                 var container = document.querySelector('.audio-annotation-container');
-                return container && container.audioAnnotationManager !== undefined;
+                if (!container || !container.audioAnnotationManager) return false;
+                var manager = container.audioAnnotationManager;
+                // Check if both manager exists and Peaks.js is initialized
+                return manager.isReady === true && manager.peaks !== null;
             """)
             if manager_ready:
                 return True
-            time.sleep(0.5)
+            time.sleep(0.1)
         return False
 
     def _wait_for_audio_element(self, timeout=15):
@@ -184,7 +190,7 @@ site_dir: default
             )
             if ready_state >= 1:  # HAVE_METADATA
                 return audio
-            time.sleep(0.5)
+            time.sleep(0.1)
 
         # Return audio even if not fully ready
         return audio
@@ -209,7 +215,7 @@ site_dir: default
         # Check audio has src
         src = self.driver.execute_script("return arguments[0].src;", audio)
         assert src and len(src) > 0, f"Audio should have src set, got: {src}"
-        assert "soundhelix" in src.lower() or "http" in src.lower(), "Audio should have valid URL"
+        assert "test-audio" in src.lower() or "http" in src.lower(), "Audio should have valid URL"
 
     def test_label_buttons_exist_and_selectable(self):
         """Test that label buttons exist and can be selected."""
@@ -228,7 +234,7 @@ site_dir: default
 
         # Click speech label
         speech_btn.click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # If manager is ready, verify active state
         if manager_ready:
@@ -236,7 +242,7 @@ site_dir: default
             for _ in range(10):
                 if "active" in (speech_btn.get_attribute("class") or ""):
                     break
-                time.sleep(0.2)
+                time.sleep(0.05)
             assert "active" in speech_btn.get_attribute("class"), "Speech label should be active after click"
 
     def test_segment_creation_with_buttons(self):
@@ -251,30 +257,30 @@ site_dir: default
         # Select a label first
         label_btn = self.driver.find_element(By.CSS_SELECTOR, ".label-btn[data-label='speech']")
         label_btn.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Set audio to a specific time for start
         self.driver.execute_script("arguments[0].currentTime = 1.0;", audio)
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Click set-start button
         start_btn = self.driver.find_element(By.CSS_SELECTOR, "[data-action='set-start']")
         start_btn.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Move to end time
         self.driver.execute_script("arguments[0].currentTime = 5.0;", audio)
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Click set-end button
         end_btn = self.driver.find_element(By.CSS_SELECTOR, "[data-action='set-end']")
         end_btn.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Create segment
         create_btn = self.driver.find_element(By.CSS_SELECTOR, "[data-action='create-segment']")
         create_btn.click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Verify segment was created
         segment_count = self.driver.execute_script("""
@@ -303,23 +309,23 @@ site_dir: default
 
         # Set audio to start time
         self.driver.execute_script("arguments[0].currentTime = 2.0;", audio)
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Press [ to set start
         ActionChains(self.driver).send_keys('[').perform()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Move to end time
         self.driver.execute_script("arguments[0].currentTime = 8.0;", audio)
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Press ] to set end
         ActionChains(self.driver).send_keys(']').perform()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Press Enter to create segment
         ActionChains(self.driver).send_keys(Keys.ENTER).perform()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Verify segment was created
         segment_count = self.driver.execute_script("""
@@ -344,14 +350,14 @@ site_dir: default
 
         self.driver.execute_script("arguments[0].currentTime = 1.0;", audio)
         self.driver.find_element(By.CSS_SELECTOR, "[data-action='set-start']").click()
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         self.driver.execute_script("arguments[0].currentTime = 3.0;", audio)
         self.driver.find_element(By.CSS_SELECTOR, "[data-action='set-end']").click()
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         self.driver.find_element(By.CSS_SELECTOR, "[data-action='create-segment']").click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Create segment with 'music' label
         music_btn = self.driver.find_element(By.CSS_SELECTOR, "[data-label='music']")
@@ -359,14 +365,14 @@ site_dir: default
 
         self.driver.execute_script("arguments[0].currentTime = 5.0;", audio)
         self.driver.find_element(By.CSS_SELECTOR, "[data-action='set-start']").click()
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         self.driver.execute_script("arguments[0].currentTime = 8.0;", audio)
         self.driver.find_element(By.CSS_SELECTOR, "[data-action='set-end']").click()
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         self.driver.find_element(By.CSS_SELECTOR, "[data-action='create-segment']").click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Verify segments have correct labels
         segments = self.driver.execute_script("""
@@ -395,14 +401,14 @@ site_dir: default
 
         self.driver.execute_script("arguments[0].currentTime = 1.0;", audio)
         self.driver.find_element(By.CSS_SELECTOR, "[data-action='set-start']").click()
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         self.driver.execute_script("arguments[0].currentTime = 4.0;", audio)
         self.driver.find_element(By.CSS_SELECTOR, "[data-action='set-end']").click()
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         self.driver.find_element(By.CSS_SELECTOR, "[data-action='create-segment']").click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Verify segment exists
         initial_count = self.driver.execute_script("""
@@ -417,11 +423,11 @@ site_dir: default
         segment_items = self.driver.find_elements(By.CSS_SELECTOR, ".segment-item")
         if segment_items:
             segment_items[0].click()
-            time.sleep(0.3)
+            time.sleep(0.1)
 
         delete_btn = self.driver.find_element(By.CSS_SELECTOR, "[data-action='delete-segment']")
         delete_btn.click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Verify segment was deleted
         final_count = self.driver.execute_script("""
@@ -452,14 +458,14 @@ site_dir: default
 
         self.driver.execute_script("arguments[0].currentTime = 1.0;", audio)
         self.driver.find_element(By.CSS_SELECTOR, "[data-action='set-start']").click()
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         self.driver.execute_script("arguments[0].currentTime = 3.0;", audio)
         self.driver.find_element(By.CSS_SELECTOR, "[data-action='set-end']").click()
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         self.driver.find_element(By.CSS_SELECTOR, "[data-action='create-segment']").click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Check updated count
         if count_elements:
@@ -481,14 +487,14 @@ site_dir: default
 
         self.driver.execute_script("arguments[0].currentTime = 1.0;", audio)
         self.driver.find_element(By.CSS_SELECTOR, "[data-action='set-start']").click()
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         self.driver.execute_script("arguments[0].currentTime = 5.0;", audio)
         self.driver.find_element(By.CSS_SELECTOR, "[data-action='set-end']").click()
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         self.driver.find_element(By.CSS_SELECTOR, "[data-action='create-segment']").click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Check hidden input has data
         hidden_input = self.driver.find_element(By.CSS_SELECTOR, ".annotation-data-input")
@@ -522,7 +528,7 @@ site_dir: default
         from selenium.webdriver.support.ui import Select
         select = Select(speed_select)
         select.select_by_value("2")
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Verify playback rate changed
         playback_rate = self.driver.execute_script(
@@ -550,9 +556,9 @@ site_dir: default
 
         # Verify buttons are clickable (no exceptions)
         zoom_in[0].click()
-        time.sleep(0.2)
+        time.sleep(0.05)
         zoom_out[0].click()
-        time.sleep(0.2)
+        time.sleep(0.05)
         zoom_fit[0].click()
 
     def test_playback_controls(self):
@@ -569,12 +575,12 @@ site_dir: default
 
         # Click play (may not actually play due to browser autoplay restrictions)
         play_btn.click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Find stop button and click
         stop_btn = self.driver.find_element(By.CSS_SELECTOR, "[data-action='stop']")
         stop_btn.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Verify audio is paused
         is_paused = self.driver.execute_script("return arguments[0].paused;", audio)
@@ -588,16 +594,16 @@ class TestAudioAnnotationFallback:
     def setup_class(cls):
         """Set up the Flask server."""
         cls.test_dir = tempfile.mkdtemp(prefix="audio_fallback_test_")
-        cls.port = 9021
+        cls.port = find_free_port()
 
         # Create data directory
         data_dir = os.path.join(cls.test_dir, "data")
         os.makedirs(data_dir, exist_ok=True)
 
-        # Create data file
+        # Create data file - use local test audio for speed
         data_file = os.path.join(data_dir, "test_audio.json")
         test_data = [
-            {"id": "audio_001", "audio_url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"},
+            {"id": "audio_001", "audio_url": "/test-audio/test_audio_short.mp3"},
         ]
         with open(data_file, "w") as f:
             for item in test_data:
@@ -677,7 +683,7 @@ site_dir: default
 
     def _login_and_navigate(self):
         """Helper to login and navigate to annotation page."""
-        self.driver.get(f"http://localhost:{self.port}/")
+        self.driver.get(f"{self.server.base_url}/")
         self.wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
         try:
@@ -687,7 +693,7 @@ site_dir: default
             username_input.send_keys("test_user")
             submit_btn = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
             submit_btn.click()
-            time.sleep(2)
+            time.sleep(0.05)
         except:
             pass
 
@@ -716,7 +722,7 @@ site_dir: default
         # Find and click label button - should not throw error
         label_btn = self.driver.find_element(By.CSS_SELECTOR, ".label-btn")
         label_btn.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Test passes if no exception was raised
         assert True, "Label button click should not throw error"

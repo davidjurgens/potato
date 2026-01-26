@@ -141,7 +141,7 @@ site_dir: default
 
     def _login_and_navigate_to_annotation(self):
         """Helper to login and get to the annotation page."""
-        self.driver.get(f"http://localhost:{self.port}/")
+        self.driver.get(f"{self.server.base_url}/")
         self.wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
         # Handle login - the login form uses 'login-email' as the input ID

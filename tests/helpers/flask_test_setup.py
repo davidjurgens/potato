@@ -249,6 +249,19 @@ class FlaskTestServer:
                 config_dir = os.path.dirname(os.path.abspath(config_file))
                 os.chdir(config_dir)
 
+                # Clear any existing state from previous test runs to ensure isolation
+                try:
+                    from potato.user_state_management import clear_user_state_manager
+                    from potato.item_state_management import clear_item_state_manager
+                    from potato.server_utils.config_module import clear_config
+                    from potato.server_utils.schemas.span import reset_span_counter
+                    clear_user_state_manager()
+                    clear_item_state_manager()
+                    clear_config()
+                    reset_span_counter()
+                except Exception as e:
+                    print(f"[DEBUG] Error clearing state managers at startup: {e}")
+
                 # Create a fresh Flask app instance instead of importing the global one
                 from flask import Flask
                 from potato.server_utils.config_module import init_config
@@ -265,7 +278,8 @@ class FlaskTestServer:
                 args.customjs_hostname = None
                 args.debug = self.debug
                 args.persist_sessions = False  # Add missing attribute
-                args.require_password = False
+                # Let require_password come from config file if set, otherwise default to False
+                args.require_password = None  # Will be set from config file
                 args.port = self.port
 
                 # Initialize config
@@ -276,7 +290,9 @@ class FlaskTestServer:
                 config['debug'] = self.debug
                 config['persist_sessions'] = False
                 config['random_seed'] = 1234
-                config['require_password'] = False
+                # Don't override require_password if it's set in the config file
+                if 'require_password' not in config:
+                    config['require_password'] = False
                 config['port'] = self.port
                 config['host'] = '0.0.0.0'
                 config['session_lifetime_days'] = 2
@@ -411,18 +427,33 @@ class FlaskTestServer:
                 from potato.routes import configure_routes
                 configure_routes(app, config)
 
-                app.run(host='0.0.0.0', port=self.port, debug=False, use_reloader=False, threaded=True)
+                # Add route to serve test audio files from tests/data directory
+                test_data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../data'))
+
+                @app.route('/test-audio/<path:filename>')
+                def serve_test_audio(filename):
+                    """Serve test audio files from the tests/data directory."""
+                    from flask import send_from_directory
+                    return send_from_directory(test_data_dir, filename)
+
+                # Use make_server instead of app.run() for proper shutdown support
+                from werkzeug.serving import make_server
+                self._wsgi_server = make_server('0.0.0.0', self.port, app, threaded=True)
+                self._wsgi_server.serve_forever()
             except Exception as e:
                 print(f"Error starting server: {e}")
                 import traceback
                 traceback.print_exc()
+
+        # Initialize server reference
+        self._wsgi_server = None
 
         # Start server in a separate thread
         self.server_thread = threading.Thread(target=run_server, daemon=True)
         self.server_thread.start()
 
         # Wait for server to start
-        max_wait = 30  # seconds - increased timeout
+        max_wait = 10  # seconds - reduced timeout for faster test failures
         wait_time = 0
         while wait_time < max_wait:
             try:
@@ -446,8 +477,8 @@ class FlaskTestServer:
                 if wait_time % 5 == 0:  # Print every 5 seconds
                     print(f"🔄 Waiting for server... ({wait_time}s) - {type(e).__name__}: {e}")
 
-            time.sleep(0.5)
-            wait_time += 0.5
+            time.sleep(0.2)
+            wait_time += 0.2
 
         print(f"❌ Failed to start server on {self.base_url} after {max_wait}s")
         return False
@@ -574,23 +605,34 @@ class FlaskTestServer:
 
     def stop_server(self):
         """Stop the Flask server."""
+        # Shutdown the WSGI server if it exists
+        if hasattr(self, '_wsgi_server') and self._wsgi_server is not None:
+            try:
+                self._wsgi_server.shutdown()
+                self._wsgi_server = None
+            except Exception as e:
+                print(f"[DEBUG] Error shutting down WSGI server: {e}")
+
+        # Wait for server thread to finish (with timeout)
+        if hasattr(self, 'server_thread') and self.server_thread and self.server_thread.is_alive():
+            self.server_thread.join(timeout=2.0)
+
+        # Release the port for reuse by other tests
+        if hasattr(self, 'port') and self.port:
+            release_port(self.port)
+
         # Clear the state managers and config to clean up resources
         try:
             from potato.user_state_management import clear_user_state_manager
             from potato.item_state_management import clear_item_state_manager
             from potato.server_utils.config_module import clear_config
+            from potato.server_utils.schemas.span import reset_span_counter
             clear_user_state_manager()
             clear_item_state_manager()
             clear_config()
+            reset_span_counter()
         except Exception as e:
             print(f"[DEBUG] Error clearing state managers: {e}")
-
-        # The server thread is a daemon thread, so it will be killed automatically
-        # when the main thread exits. For test isolation, we just clear state.
-        if hasattr(self, 'server_thread') and self.server_thread:
-            # Don't try to join the daemon thread - it will block forever
-            # Just let it die when the test process ends
-            pass
 
     def stop(self):
         """Alias for stop_server() method for backward compatibility."""

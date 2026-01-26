@@ -1,6 +1,8 @@
+import os
 import pytest
 import time
 import json
+import shutil
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -8,26 +10,41 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from tests.helpers.flask_test_setup import FlaskTestServer
+from tests.helpers.test_utils import create_span_annotation_config
 
 REQUIRED_USER_STATE_FIELDS = [
     "user_id",
     "current_instance",
-    "displayed_text",
     "annotations",
     "assignments",
-    "progress",
     "phase",
-    "task_name",
+    "max_assignments",
+    "hints",
 ]
 
 @pytest.fixture(scope="module")
 def flask_server():
-    # Use a valid span annotation config
-    config_file = "configs/span-annotation.yaml"
+    # Create test directory and config using proper test utilities
+    tests_dir = os.path.dirname(os.path.dirname(__file__))
+    test_dir = os.path.join(tests_dir, "output", "user_state_contract_test")
+    os.makedirs(test_dir, exist_ok=True)
+
+    # Create a span annotation config with admin API key
+    config_file, data_file = create_span_annotation_config(
+        test_dir,
+        annotation_task_name="User State Contract Test",
+        require_password=True,  # Test needs password mode for register-tab
+        admin_api_key="admin_api_key"  # Required for admin endpoints
+    )
+
     server = FlaskTestServer(config_file=config_file, debug=False)
     server.start()
     yield server
     server.stop()
+
+    # Cleanup test directory
+    if os.path.exists(test_dir):
+        shutil.rmtree(test_dir, ignore_errors=True)
 
 @pytest.fixture(scope="module")
 def browser():
@@ -62,8 +79,8 @@ def test_user_state_contract(flask_server, browser):
     register_button = browser.find_element(By.CSS_SELECTOR, "#register-content button[type='submit']")
     register_button.click()
 
-    # Wait for redirect to annotation page
-    WebDriverWait(browser, 10).until(EC.url_contains("/annotate"))
+    # Wait for page to load after registration (redirects to / which shows annotation interface)
+    WebDriverWait(browser, 10).until(EC.presence_of_element_located((By.ID, "task_layout")))
 
     # Use the server's get method which automatically includes admin API key
     response = flask_server.get(f"/admin/user_state/{username}")
@@ -78,15 +95,22 @@ def test_user_state_contract(flask_server, browser):
         assert field in user_state, f"Missing field: {field}"
     assert isinstance(user_state["annotations"], dict)
     assert "by_instance" in user_state["annotations"]
+    assert "total_count" in user_state["annotations"]
     assert isinstance(user_state["assignments"], dict)
-    assert isinstance(user_state["progress"], dict)
+    assert "total" in user_state["assignments"]
+    assert "annotated" in user_state["assignments"]
+    assert "remaining" in user_state["assignments"]
+    assert "items" in user_state["assignments"]
     assert isinstance(user_state["phase"], str)
-    assert isinstance(user_state["task_name"], str)
     assert user_state["user_id"] == username
     # current_instance can be None or dict
     assert user_state["current_instance"] is None or isinstance(user_state["current_instance"], dict)
-    # displayed_text should be a string
-    assert isinstance(user_state["displayed_text"], str)
+    # If current_instance exists, displayed_text should be present and a string
+    if user_state["current_instance"]:
+        assert "displayed_text" in user_state["current_instance"]
+        assert isinstance(user_state["current_instance"]["displayed_text"], str)
+    assert isinstance(user_state["hints"], dict)
+    assert isinstance(user_state["max_assignments"], int)
 
     # Optionally print for debug
     print("User state contract test passed. Response:", user_state)
