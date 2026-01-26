@@ -28,6 +28,66 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 # Import port manager for reliable port allocation
 from tests.helpers.port_manager import find_free_port, release_port
 
+
+def clear_all_global_state():
+    """Clear all global singleton state to ensure test isolation.
+
+    This function clears all known singleton managers in the potato package.
+    Call this between tests to ensure no state leaks.
+    """
+    # Core state managers
+    clear_item_state_manager()
+    clear_user_state_manager()
+
+    # Config module
+    try:
+        from potato.server_utils.config_module import clear_config
+        clear_config()
+    except ImportError:
+        pass
+
+    # Span counter reset
+    try:
+        from potato.server_utils.schemas.span import reset_span_counter
+        reset_span_counter()
+    except ImportError:
+        pass
+
+    # Expertise manager
+    try:
+        from potato.expertise_manager import clear_expertise_manager
+        clear_expertise_manager()
+    except ImportError:
+        pass
+
+    # Quality control manager
+    try:
+        from potato.quality_control import clear_quality_control_manager
+        clear_quality_control_manager()
+    except ImportError:
+        pass
+
+    # Active learning manager
+    try:
+        from potato.active_learning_manager import clear_active_learning_manager
+        clear_active_learning_manager()
+    except ImportError:
+        pass
+
+    # ICL labeler
+    try:
+        from potato.ai.icl_labeler import clear_icl_labeler
+        clear_icl_labeler()
+    except ImportError:
+        pass
+
+    # Directory watcher
+    try:
+        from potato.directory_watcher import clear_directory_watcher
+        clear_directory_watcher()
+    except ImportError:
+        pass
+
 class FlaskTestServer:
     """A test server that can be started and stopped for integration tests."""
 
@@ -621,18 +681,11 @@ class FlaskTestServer:
         if hasattr(self, 'port') and self.port:
             release_port(self.port)
 
-        # Clear the state managers and config to clean up resources
+        # Clear all global state to ensure test isolation
         try:
-            from potato.user_state_management import clear_user_state_manager
-            from potato.item_state_management import clear_item_state_manager
-            from potato.server_utils.config_module import clear_config
-            from potato.server_utils.schemas.span import reset_span_counter
-            clear_user_state_manager()
-            clear_item_state_manager()
-            clear_config()
-            reset_span_counter()
+            clear_all_global_state()
         except Exception as e:
-            print(f"[DEBUG] Error clearing state managers: {e}")
+            print(f"[DEBUG] Error clearing global state: {e}")
 
     def stop(self):
         """Alias for stop_server() method for backward compatibility."""
@@ -746,7 +799,6 @@ def reset_state_managers(request):
     Note: For tests using class-scoped fixtures (like flask_server),
     we skip clearing config to avoid wiping out server configuration.
     """
-    from potato.server_utils.config_module import clear_config
     import os
 
     # Save original working directory
@@ -759,19 +811,19 @@ def reset_state_managers(request):
         # Check if this class has a flask_server fixture
         has_class_scoped_server = hasattr(request.cls, 'flask_server') or 'flask_server' in getattr(request, 'fixturenames', [])
 
-    if not has_class_scoped_server:
-        # Clear state before test (only for tests without class-scoped servers)
-        clear_item_state_manager()
-        clear_user_state_manager()
-        clear_config()
+    # Also check for session-scoped servers in fixture names
+    session_scoped_fixtures = ['shared_flask_server', 'shared_form_server', 'shared_span_server']
+    has_session_scoped_server = any(f in getattr(request, 'fixturenames', []) for f in session_scoped_fixtures)
+
+    if not has_class_scoped_server and not has_session_scoped_server:
+        # Clear state before test (only for tests without scoped servers)
+        clear_all_global_state()
 
     yield
 
-    if not has_class_scoped_server:
-        # Clear state after test (only for tests without class-scoped servers)
-        clear_item_state_manager()
-        clear_user_state_manager()
-        clear_config()
+    if not has_class_scoped_server and not has_session_scoped_server:
+        # Clear state after test (only for tests without scoped servers)
+        clear_all_global_state()
 
     # Restore original working directory (init_config changes it)
     try:
