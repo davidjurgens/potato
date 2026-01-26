@@ -804,12 +804,17 @@ def reset_state_managers(request):
     # Save original working directory
     original_cwd = os.getcwd()
 
-    # Check if this test class has a class-scoped flask_server fixture
+    # Check if this test class has a class-scoped flask_server fixture or class attribute
     # If so, don't clear config as it would wipe out the server's configuration
     has_class_scoped_server = False
     if hasattr(request, 'cls') and request.cls is not None:
-        # Check if this class has a flask_server fixture
-        has_class_scoped_server = hasattr(request.cls, 'flask_server') or 'flask_server' in getattr(request, 'fixturenames', [])
+        # Check if this class has a flask_server fixture or a 'server' class attribute
+        # (many unittest-style tests use cls.server instead of a pytest fixture)
+        has_class_scoped_server = (
+            hasattr(request.cls, 'flask_server') or
+            hasattr(request.cls, 'server') or
+            'flask_server' in getattr(request, 'fixturenames', [])
+        )
 
     # Also check for session-scoped servers in fixture names
     session_scoped_fixtures = ['shared_flask_server', 'shared_form_server', 'shared_span_server']
