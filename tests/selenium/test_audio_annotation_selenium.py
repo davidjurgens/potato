@@ -59,14 +59,16 @@ class TestAudioAnnotationSelenium(unittest.TestCase):
         os.makedirs(cls.test_dir, exist_ok=True)
 
         # Create audio annotation config
+        # require_password=True is needed because the test uses register/login forms
+        # which only appear when password authentication is enabled
         cls.config_file, cls.data_file = create_audio_annotation_config(
             cls.test_dir,
             annotation_task_name="Audio Annotation Selenium Test",
-            require_password=False
+            require_password=True
         )
 
         # Start server
-        cls.server = FlaskTestServer(port=9014, debug=False, config_file=cls.config_file)
+        cls.server = FlaskTestServer(debug=False, config_file=cls.config_file)
         started = cls.server.start_server()
         assert started, "Failed to start Flask server"
 
@@ -97,13 +99,13 @@ class TestAudioAnnotationSelenium(unittest.TestCase):
         """Set up for each test."""
         self.driver = webdriver.Chrome(options=self.chrome_options)
 
-        # Register and login user
+        # Register user - after registration, user is automatically logged in
         timestamp = int(time.time())
         self.test_user = f"audio_test_user_{timestamp}"
         self.test_password = "test_password_123"
 
         self._register_user()
-        self._login_user()
+        # No need to call _login_user() as registration automatically logs in
 
     def tearDown(self):
         """Clean up after each test."""
@@ -137,7 +139,7 @@ class TestAudioAnnotationSelenium(unittest.TestCase):
         # Submit
         register_form = self.driver.find_element(By.CSS_SELECTOR, "#register-content form")
         register_form.submit()
-        time.sleep(2)
+        time.sleep(0.05)
 
     def _login_user(self):
         """Login the test user."""
@@ -164,7 +166,7 @@ class TestAudioAnnotationSelenium(unittest.TestCase):
 
             login_form = self.driver.find_element(By.CSS_SELECTOR, "#login-content form")
             login_form.submit()
-            time.sleep(2)
+            time.sleep(0.05)
 
     def test_audio_annotation_container_loads(self):
         """Test that the audio annotation container loads properly."""
@@ -361,7 +363,7 @@ class TestAudioAnnotationSelenium(unittest.TestCase):
             """)
             if manager_ready:
                 break
-            time.sleep(0.2)
+            time.sleep(0.05)
 
         # Find speech label button - it should exist regardless of manager state
         speech_btn = self.driver.find_element(By.CSS_SELECTOR, '[data-label="speech"]')
@@ -375,7 +377,7 @@ class TestAudioAnnotationSelenium(unittest.TestCase):
             return  # Test passes - we verified the button exists and is clickable
 
         # Wait a bit more for event listeners to be attached
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Click speech label
         speech_btn.click()
@@ -386,7 +388,7 @@ class TestAudioAnnotationSelenium(unittest.TestCase):
             if "active" in (speech_btn.get_attribute("class") or ""):
                 active_found = True
                 break
-            time.sleep(0.2)
+            time.sleep(0.05)
 
         self.assertTrue(active_found, "Speech label should be active after click")
 
@@ -400,7 +402,7 @@ class TestAudioAnnotationSelenium(unittest.TestCase):
             if "active" in (music_btn.get_attribute("class") or ""):
                 active_found = True
                 break
-            time.sleep(0.2)
+            time.sleep(0.05)
 
         self.assertTrue(active_found, "Music label should be active after click")
 
@@ -419,13 +421,15 @@ class TestAudioAnnotationInteraction(unittest.TestCase):
         cls.test_dir = os.path.join(tests_dir, "output", "audio_interaction_selenium_test")
         os.makedirs(cls.test_dir, exist_ok=True)
 
+        # require_password=True is needed because the test uses register/login forms
+        # which only appear when password authentication is enabled
         cls.config_file, cls.data_file = create_audio_annotation_config(
             cls.test_dir,
             annotation_task_name="Audio Interaction Selenium Test",
-            require_password=False
+            require_password=True
         )
 
-        cls.server = FlaskTestServer(port=9015, debug=False, config_file=cls.config_file)
+        cls.server = FlaskTestServer(debug=False, config_file=cls.config_file)
         started = cls.server.start_server()
         assert started, "Failed to start Flask server"
         cls.server._wait_for_server_ready(timeout=15)
@@ -485,7 +489,7 @@ class TestAudioAnnotationInteraction(unittest.TestCase):
 
         register_form = self.driver.find_element(By.CSS_SELECTOR, "#register-content form")
         register_form.submit()
-        time.sleep(2)
+        time.sleep(0.05)
 
     def test_zoom_in_button_click(self):
         """Test clicking the zoom in button."""
@@ -495,13 +499,13 @@ class TestAudioAnnotationInteraction(unittest.TestCase):
             EC.presence_of_element_located((By.CLASS_NAME, "audio-annotation-container"))
         )
 
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Click zoom in
         zoom_in_btn = self.driver.find_element(By.CSS_SELECTOR, '[data-action="zoom-in"]')
         zoom_in_btn.click()
 
-        time.sleep(0.5)
+        time.sleep(0.1)
         # Test passes if no exceptions
 
     def test_zoom_out_button_click(self):
@@ -512,13 +516,13 @@ class TestAudioAnnotationInteraction(unittest.TestCase):
             EC.presence_of_element_located((By.CLASS_NAME, "audio-annotation-container"))
         )
 
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Click zoom out
         zoom_out_btn = self.driver.find_element(By.CSS_SELECTOR, '[data-action="zoom-out"]')
         zoom_out_btn.click()
 
-        time.sleep(0.5)
+        time.sleep(0.1)
         # Test passes if no exceptions
 
     def test_zoom_fit_button_click(self):
@@ -529,13 +533,13 @@ class TestAudioAnnotationInteraction(unittest.TestCase):
             EC.presence_of_element_located((By.CLASS_NAME, "audio-annotation-container"))
         )
 
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Click zoom fit
         zoom_fit_btn = self.driver.find_element(By.CSS_SELECTOR, '[data-action="zoom-fit"]')
         zoom_fit_btn.click()
 
-        time.sleep(0.5)
+        time.sleep(0.1)
         # Test passes if no exceptions
 
     def test_playback_rate_change(self):
@@ -546,7 +550,7 @@ class TestAudioAnnotationInteraction(unittest.TestCase):
             EC.presence_of_element_located((By.CLASS_NAME, "audio-annotation-container"))
         )
 
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Find playback rate selector
         rate_selector = self.driver.find_element(By.CLASS_NAME, "playback-rate-select")
@@ -556,7 +560,7 @@ class TestAudioAnnotationInteraction(unittest.TestCase):
         select = Select(rate_selector)
         select.select_by_value("1.5")
 
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Verify selection changed
         self.assertEqual(rate_selector.get_attribute("value"), "1.5",
@@ -570,7 +574,7 @@ class TestAudioAnnotationInteraction(unittest.TestCase):
             EC.presence_of_element_located((By.CLASS_NAME, "audio-annotation-container"))
         )
 
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Find delete button
         delete_buttons = self.driver.find_elements(By.CSS_SELECTOR, '[data-action="delete-segment"]')
@@ -605,7 +609,7 @@ class TestAudioAnnotationInteraction(unittest.TestCase):
             """)
             if manager_exists:
                 break
-            time.sleep(0.5)
+            time.sleep(0.1)
 
         # If manager doesn't exist, check if it's a CDN issue
         if not manager_exists:
@@ -632,7 +636,7 @@ class TestAudioAnnotationInteraction(unittest.TestCase):
             EC.presence_of_element_located((By.CLASS_NAME, "audio-annotation-container"))
         )
 
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Find segment count value
         count_values = self.driver.find_elements(By.CLASS_NAME, "count-value")

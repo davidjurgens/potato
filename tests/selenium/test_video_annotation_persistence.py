@@ -44,7 +44,7 @@ class TestVideoAnnotationPersistence(unittest.TestCase):
         cls.data_file = cls._create_test_data()
 
         # Start server
-        cls.server = FlaskTestServer(port=9020, debug=True, config_file=cls.config_file)
+        cls.server = FlaskTestServer(debug=True, config_file=cls.config_file)
         started = cls.server.start_server()
         assert started, "Failed to start Flask server"
 
@@ -263,12 +263,12 @@ site_dir: default
         label_buttons = container.find_elements(By.CSS_SELECTOR, ".label-btn")
         if label_buttons and label_index < len(label_buttons):
             label_buttons[label_index].click()
-            time.sleep(0.3)
+            time.sleep(0.1)
 
         # Click set-start button
         start_btn = container.find_element(By.CSS_SELECTOR, '[data-action="set-start"]')
         start_btn.click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Seek video forward a bit (use JavaScript since video controls may vary)
         self.driver.execute_script("""
@@ -277,29 +277,29 @@ site_dir: default
                 video.currentTime = Math.min(video.currentTime + 2, video.duration - 1);
             }
         """)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Click set-end button
         end_btn = container.find_element(By.CSS_SELECTOR, '[data-action="set-end"]')
         end_btn.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Click create segment button
         create_btn = container.find_element(By.CSS_SELECTOR, '[data-action="create-segment"]')
         create_btn.click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
     def _navigate_to_next(self):
         """Click the Next button to navigate to next instance."""
         next_btn = self.driver.find_element(By.ID, "next-btn")
         next_btn.click()
-        time.sleep(2)  # Wait for navigation and page load
+        time.sleep(0.05)  # Wait for navigation and page load
 
     def _navigate_to_previous(self):
         """Click the Previous button to navigate to previous instance."""
         prev_btn = self.driver.find_element(By.ID, "prev-btn")
         prev_btn.click()
-        time.sleep(2)  # Wait for navigation and page load
+        time.sleep(0.05)  # Wait for navigation and page load
 
     def _get_current_instance_id(self):
         """Get the current instance ID from the hidden input."""
@@ -313,7 +313,7 @@ site_dir: default
         """Test that creating a segment saves data to the hidden input."""
         # Navigate to annotation page
         self.driver.get(f"{self.server.base_url}/")
-        time.sleep(3)  # Wait for page and video to load
+        time.sleep(0.1)  # Wait for page and video to load
 
         # Wait for video annotation container
         self._wait_for_video_container()
@@ -351,7 +351,7 @@ site_dir: default
 
         # Navigate to annotation page
         self.driver.get(f"{self.server.base_url}/")
-        time.sleep(3)
+        time.sleep(0.1)
 
         # Wait for video annotation container
         self._wait_for_video_container()
@@ -378,9 +378,9 @@ site_dir: default
         self._navigate_to_next()
 
         # Wait for new page to load
-        time.sleep(3)
+        time.sleep(0.1)
         self._wait_for_video_container()
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Verify we're on a different instance
         second_instance_id = self._get_current_instance_id()
@@ -405,11 +405,11 @@ site_dir: default
         self._navigate_to_previous()
 
         # Wait for page to fully load after navigation
-        time.sleep(4)
+        time.sleep(0.5)
 
         # Set up console capture for debugging
         self._setup_console_capture()
-        time.sleep(2)  # Wait for any async operations
+        time.sleep(0.05)  # Wait for any async operations
 
         # Check what instance we're on now
         current_instance_after_back = self._get_current_instance_id()
@@ -431,7 +431,7 @@ site_dir: default
         except:
             print("[TEST] Video did not load, but continuing with test...")
 
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Verify we're back on first instance
         restored_instance_id = self._get_current_instance_id()
@@ -468,7 +468,7 @@ site_dir: default
         """Test that multiple segments are all preserved."""
         # Navigate to annotation page
         self.driver.get(f"{self.server.base_url}/")
-        time.sleep(3)
+        time.sleep(0.1)
 
         self._wait_for_video_container()
         self._wait_for_video_loaded()
@@ -482,7 +482,7 @@ site_dir: default
             var video = document.querySelector('.video-element');
             if (video) video.currentTime = 5;
         """)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Create second segment with label B
         self._create_segment_via_ui(label_index=1)
@@ -490,9 +490,9 @@ site_dir: default
 
         # Navigate away and back
         self._navigate_to_next()
-        time.sleep(2)
+        time.sleep(0.05)
         self._navigate_to_previous()
-        time.sleep(2)
+        time.sleep(0.05)
 
         self._wait_for_video_container()
         self._wait_for_video_loaded()
@@ -506,7 +506,7 @@ site_dir: default
         """Test that the annotation list UI shows restored segments."""
         # Navigate to annotation page
         self.driver.get(f"{self.server.base_url}/")
-        time.sleep(3)
+        time.sleep(0.1)
 
         self._wait_for_video_container()
         self._wait_for_video_loaded()
@@ -521,9 +521,9 @@ site_dir: default
 
         # Navigate away and back
         self._navigate_to_next()
-        time.sleep(2)
+        time.sleep(0.05)
         self._navigate_to_previous()
-        time.sleep(2)
+        time.sleep(0.05)
 
         self._wait_for_video_container()
         self._wait_for_video_loaded()

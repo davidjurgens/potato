@@ -37,7 +37,7 @@ class TestCheckboxPersistenceFirefox(unittest.TestCase):
             require_password=False
         )
 
-        cls.server = FlaskTestServer(port=9024, debug=False, config_file=cls.config_file)
+        cls.server = FlaskTestServer(debug=False, config_file=cls.config_file)
         started = cls.server.start_server()
         assert started, "Failed to start Flask server"
         cls.server._wait_for_server_ready(timeout=10)
@@ -74,7 +74,7 @@ class TestCheckboxPersistenceFirefox(unittest.TestCase):
         username_field.send_keys(self.test_user)
         login_form = self.driver.find_element(By.CSS_SELECTOR, "#login-content form")
         login_form.submit()
-        time.sleep(2)
+        time.sleep(0.05)
         WebDriverWait(self.driver, 10).until(
             EC.presence_of_element_located((By.ID, "task_layout"))
         )
@@ -83,7 +83,7 @@ class TestCheckboxPersistenceFirefox(unittest.TestCase):
         WebDriverWait(self.driver, timeout).until(
             EC.presence_of_element_located((By.CLASS_NAME, "annotation-form"))
         )
-        time.sleep(1)
+        time.sleep(0.1)
 
     def _get_checked_checkboxes(self):
         checkboxes = self.driver.find_elements(By.CSS_SELECTOR, 'input[type="checkbox"].annotation-input')
@@ -97,7 +97,7 @@ class TestCheckboxPersistenceFirefox(unittest.TestCase):
 
     def _click_checkbox(self, checkbox):
         checkbox.click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
     def _navigate_next(self):
         try:
@@ -105,7 +105,7 @@ class TestCheckboxPersistenceFirefox(unittest.TestCase):
         except:
             next_button = self.driver.find_element(By.CSS_SELECTOR, 'a[onclick*="click_to_next"]')
         next_button.click()
-        time.sleep(2)
+        time.sleep(0.05)
         self._wait_for_annotation_page()
 
     def _navigate_prev(self):
@@ -114,7 +114,7 @@ class TestCheckboxPersistenceFirefox(unittest.TestCase):
         except:
             prev_button = self.driver.find_element(By.CSS_SELECTOR, 'a[onclick*="click_to_prev"]')
         prev_button.click()
-        time.sleep(2)
+        time.sleep(0.05)
         self._wait_for_annotation_page()
 
     def _get_current_instance_id(self):

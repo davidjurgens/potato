@@ -112,7 +112,7 @@ class TestSpanOverlayBugs(unittest.TestCase):
         config_file, data_file = create_span_config_with_colors(cls.test_dir)
         cls.config_file = config_file
 
-        cls.server = FlaskTestServer(port=9021, debug=False, config_file=config_file)
+        cls.server = FlaskTestServer(debug=False, config_file=config_file)
         started = cls.server.start_server()
         assert started, "Failed to start Flask server"
         cls.server._wait_for_server_ready(timeout=10)
@@ -159,7 +159,7 @@ class TestSpanOverlayBugs(unittest.TestCase):
 
         login_form = self.driver.find_element(By.CSS_SELECTOR, "#login-content form")
         login_form.submit()
-        time.sleep(2)
+        time.sleep(0.05)
 
         self.wait.until(EC.presence_of_element_located((By.ID, "task_layout")))
 
@@ -167,7 +167,7 @@ class TestSpanOverlayBugs(unittest.TestCase):
         """Navigate to the annotation page."""
         self.driver.get(f"{self.server.base_url}/annotate")
         self.wait.until(EC.presence_of_element_located((By.ID, 'text-content')))
-        time.sleep(0.5)
+        time.sleep(0.1)
 
     def _select_word_and_get_rect(self, word):
         """Select a word and return its bounding rect."""
@@ -204,7 +204,7 @@ class TestSpanOverlayBugs(unittest.TestCase):
         )
         if not label_checkbox.is_selected():
             label_checkbox.click()
-            time.sleep(0.2)
+            time.sleep(0.05)
 
         # Select the word
         selection_rect = self._select_word_and_get_rect(word)
@@ -213,7 +213,7 @@ class TestSpanOverlayBugs(unittest.TestCase):
         # Trigger mouseup to create span
         text_element = self.driver.find_element(By.ID, 'text-content')
         ActionChains(self.driver).move_to_element(text_element).release().perform()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         return selection_rect
 
@@ -359,14 +359,14 @@ class TestSpanOverlayBugs(unittest.TestCase):
             By.CSS_SELECTOR, '.shadcn-span-checkbox[value="positive"]'
         )
         positive_checkbox.click()
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         # Now click negative label (red) - this is the label we want to use
         negative_checkbox = self.driver.find_element(
             By.CSS_SELECTOR, '.shadcn-span-checkbox[value="negative"]'
         )
         negative_checkbox.click()
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         # Now select text and create span - should use NEGATIVE (red) color
         selection_rect = self._select_word_and_get_rect("thrilled")
@@ -376,7 +376,7 @@ class TestSpanOverlayBugs(unittest.TestCase):
         text_element = self.driver.find_element(By.ID, 'text-content')
         from selenium.webdriver.common.action_chains import ActionChains
         ActionChains(self.driver).move_to_element(text_element).release().perform()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Get the overlay color
         segment = self._get_overlay_segment()
@@ -432,7 +432,7 @@ class TestSpanOverlayBugs(unittest.TestCase):
             By.CSS_SELECTOR, '.shadcn-span-checkbox[value="negative"]'
         )
         negative_checkbox.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Log the state of spanManager after clicking checkbox
         state_before = self.driver.execute_script('''
@@ -472,7 +472,7 @@ class TestSpanOverlayBugs(unittest.TestCase):
         # Trigger mouseup to create span
         text_element = self.driver.find_element(By.ID, 'text-content')
         ActionChains(self.driver).move_to_element(text_element).release().perform()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Get the overlay color
         segment = self._get_overlay_segment()
@@ -520,7 +520,7 @@ class TestSpanOverlayBugs(unittest.TestCase):
         # Step 1: Select text FIRST (before clicking any checkbox)
         selection_rect = self._select_word_and_get_rect("thrilled")
         self.assertIsNotNone(selection_rect, "Could not find word 'thrilled' in text")
-        time.sleep(0.2)
+        time.sleep(0.05)
 
         # Verify selection is active
         has_selection = self.driver.execute_script('''
@@ -546,7 +546,7 @@ class TestSpanOverlayBugs(unittest.TestCase):
         print(f"[DEBUG] State BEFORE checkbox click: {state_before}")
 
         negative_checkbox.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Log state after clicking checkbox
         state_after_click = self.driver.execute_script('''
@@ -572,7 +572,7 @@ class TestSpanOverlayBugs(unittest.TestCase):
             # Need to trigger mouseup on text container to create span
             text_element = self.driver.find_element(By.ID, 'text-content')
             ActionChains(self.driver).move_to_element(text_element).release().perform()
-            time.sleep(0.5)
+            time.sleep(0.1)
 
         # Get the overlay color
         segment = self._get_overlay_segment()
@@ -639,13 +639,13 @@ class TestSpanOverlayBugs(unittest.TestCase):
             By.CSS_SELECTOR, '.shadcn-span-checkbox[value="negative"]'
         )
         negative_checkbox.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Select text and create span
         self._select_word_and_get_rect("thrilled")
         text_element = self.driver.find_element(By.ID, 'text-content')
         ActionChains(self.driver).move_to_element(text_element).release().perform()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Get debug logs
         debug_logs = self.driver.execute_script('return window._debugSpanCreation;')
@@ -738,7 +738,7 @@ class TestSpanOverlayBugs(unittest.TestCase):
             (By.CSS_SELECTOR, '.span-delete-btn')
         ))
         delete_btn.click()
-        time.sleep(1)  # Wait for delete to complete
+        time.sleep(0.1)  # Wait for delete to complete
 
         # Verify overlay is completely removed
         final_count = self._count_overlays()
@@ -767,7 +767,7 @@ class TestSpanOverlayBugs(unittest.TestCase):
         """
         # Create span on first instance
         self._create_span_on_word("thrilled", "positive")
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Verify overlay exists
         initial_count = self._count_overlays()
@@ -798,7 +798,7 @@ class TestSpanOverlayBugs(unittest.TestCase):
             (By.CSS_SELECTOR, '.span-delete-btn')
         ))
         delete_btn.click()
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Verify overlay is COMPLETELY removed (not just label/button)
         overlay_count = self._count_overlays()
@@ -818,7 +818,7 @@ class TestSpanOverlayBugs(unittest.TestCase):
         Verify navigation doesn't create duplicate overlays.
         """
         self._create_span_on_word("thrilled", "positive")
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         initial_count = self._count_overlays()
 
@@ -848,7 +848,7 @@ class TestSpanOverlayBugs(unittest.TestCase):
         Verify the label remains visible after navigation (part of Bug 3).
         """
         self._create_span_on_word("thrilled", "positive")
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Navigate away and back
         next_btn = self.driver.find_element(By.ID, 'next-btn')
@@ -893,7 +893,7 @@ class TestSpanOverlayBugs(unittest.TestCase):
         Verify the delete button remains visible after navigation (part of Bug 3).
         """
         self._create_span_on_word("thrilled", "positive")
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Navigate away and back
         next_btn = self.driver.find_element(By.ID, 'next-btn')
@@ -953,7 +953,7 @@ class TestSpanOverlayDefaultColors(unittest.TestCase):
         config_file, data_file = create_span_config_default_colors(cls.test_dir)
         cls.config_file = config_file
 
-        cls.server = FlaskTestServer(port=9022, debug=False, config_file=config_file)
+        cls.server = FlaskTestServer(debug=False, config_file=config_file)
         started = cls.server.start_server()
         assert started, "Failed to start Flask server"
         cls.server._wait_for_server_ready(timeout=10)
@@ -1000,7 +1000,7 @@ class TestSpanOverlayDefaultColors(unittest.TestCase):
 
         login_form = self.driver.find_element(By.CSS_SELECTOR, "#login-content form")
         login_form.submit()
-        time.sleep(2)
+        time.sleep(0.05)
 
         self.wait.until(EC.presence_of_element_located((By.ID, "task_layout")))
 
@@ -1008,7 +1008,7 @@ class TestSpanOverlayDefaultColors(unittest.TestCase):
         """Navigate to the annotation page."""
         self.driver.get(f"{self.server.base_url}/annotate")
         self.wait.until(EC.presence_of_element_located((By.ID, 'text-content')))
-        time.sleep(0.5)
+        time.sleep(0.1)
 
     def _select_word_and_get_rect(self, word):
         """Select a word and return its bounding rect."""
@@ -1056,7 +1056,7 @@ class TestSpanOverlayDefaultColors(unittest.TestCase):
             By.CSS_SELECTOR, '.shadcn-span-checkbox[value="happy"]'
         )
         happy_checkbox.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Check the color that's loaded for this label
         colors = self.driver.execute_script('''
@@ -1075,7 +1075,7 @@ class TestSpanOverlayDefaultColors(unittest.TestCase):
 
         text_element = self.driver.find_element(By.ID, 'text-content')
         ActionChains(self.driver).move_to_element(text_element).release().perform()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Get the overlay color
         segment = self.wait.until(EC.presence_of_element_located(
@@ -1130,7 +1130,7 @@ class TestSpanOverlayDefaultColors(unittest.TestCase):
             By.CSS_SELECTOR, '.shadcn-span-checkbox[value="sad"]'
         )
         sad_checkbox.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Check the color that's loaded for this label
         colors = self.driver.execute_script('''
@@ -1155,7 +1155,7 @@ class TestSpanOverlayDefaultColors(unittest.TestCase):
 
         text_element = self.driver.find_element(By.ID, 'text-content')
         ActionChains(self.driver).move_to_element(text_element).release().perform()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Get the overlay color
         segment = self.wait.until(EC.presence_of_element_located(

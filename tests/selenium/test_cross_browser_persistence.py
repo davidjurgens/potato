@@ -81,9 +81,9 @@ class CrossBrowserTestBase:
             require_password=False
         )
 
-        # Start server on a unique port for each browser
-        cls.port = 9030 + hash(cls.browser_name) % 10 if cls.browser_name else 9030
-        cls.server = FlaskTestServer(port=cls.port, debug=False, config_file=cls.config_file)
+        # Start server (port auto-assigned by find_free_port)
+        cls.server = FlaskTestServer(debug=False, config_file=cls.config_file)
+        cls.port = cls.server.port  # Store the actual port for use in tests
         started = cls.server.start_server()
         if not started:
             raise RuntimeError(f"Failed to start Flask server for {cls.browser_name}")
@@ -125,7 +125,7 @@ class CrossBrowserTestBase:
         username_field.send_keys(self.test_user)
         login_form = self.driver.find_element(By.CSS_SELECTOR, "#login-content form")
         login_form.submit()
-        time.sleep(2)
+        time.sleep(0.05)
         WebDriverWait(self.driver, 10).until(
             EC.presence_of_element_located((By.ID, "task_layout"))
         )
@@ -135,7 +135,7 @@ class CrossBrowserTestBase:
         WebDriverWait(self.driver, timeout).until(
             EC.presence_of_element_located((By.CLASS_NAME, "annotation-form"))
         )
-        time.sleep(1)
+        time.sleep(0.1)
 
     def _get_instance_id(self):
         """Get current instance ID."""
@@ -150,10 +150,10 @@ class CrossBrowserTestBase:
         # Use JavaScript click for Safari reliability
         if self.browser_name == "safari":
             self.driver.execute_script("arguments[0].click();", btn)
-            time.sleep(3)
+            time.sleep(0.1)
         else:
             btn.click()
-            time.sleep(2)
+            time.sleep(0.05)
         self._wait_for_page()
 
     def _navigate_prev(self):
@@ -165,10 +165,10 @@ class CrossBrowserTestBase:
         # Use JavaScript click for Safari reliability
         if self.browser_name == "safari":
             self.driver.execute_script("arguments[0].click();", btn)
-            time.sleep(3)
+            time.sleep(0.1)
         else:
             btn.click()
-            time.sleep(2)
+            time.sleep(0.05)
         self._wait_for_page()
 
     def _get_checked_checkboxes(self):
@@ -197,10 +197,10 @@ class CrossBrowserTestBase:
         # Use JavaScript click for Safari reliability
         if self.browser_name == "safari":
             self.driver.execute_script("arguments[0].click();", cb)
-            time.sleep(0.8)
+            time.sleep(0.1)
         else:
             cb.click()
-            time.sleep(0.5)
+            time.sleep(0.1)
 
     def _click_radio(self, label):
         """Click a radio button."""
@@ -210,10 +210,10 @@ class CrossBrowserTestBase:
         # Use JavaScript click for Safari reliability
         if self.browser_name == "safari":
             self.driver.execute_script("arguments[0].click();", r)
-            time.sleep(0.8)
+            time.sleep(0.1)
         else:
             r.click()
-            time.sleep(0.5)
+            time.sleep(0.1)
 
     def _enter_text(self, text):
         """Enter text."""
@@ -222,9 +222,9 @@ class CrossBrowserTestBase:
         txt.send_keys(text)
         # Safari needs more time
         if self.browser_name == "safari":
-            time.sleep(2.0)
+            time.sleep(0.2)
         else:
-            time.sleep(1.5)
+            time.sleep(0.15)
 
     # ==================== TESTS ====================
 
@@ -370,6 +370,7 @@ class TestFirefoxAnnotationPersistence(CrossBrowserTestBase, unittest.TestCase):
         return webdriver.Firefox(options=options)
 
 
+@pytest.mark.skip(reason="Safari tests disabled - no headless mode, opens visible browser window")
 class TestSafariAnnotationPersistence(CrossBrowserTestBase, unittest.TestCase):
     """Safari-specific tests - requires manual enabling of remote automation."""
 

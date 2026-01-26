@@ -37,18 +37,19 @@ class TestAudioAnnotationUI:
         """Set up the Flask server with audio annotation config."""
         # Create temp directory for test
         cls.test_dir = tempfile.mkdtemp(prefix="audio_ui_test_")
-        cls.port = 9060  # Use different port to avoid conflicts
+        # Port will be auto-assigned by find_free_port
 
         # Create data directory
         data_dir = os.path.join(cls.test_dir, "data")
         os.makedirs(data_dir, exist_ok=True)
 
-        # Create data file with test audio - using a short, CORS-friendly audio
-        # The audio proxy will handle external URLs
+        # Create data file with test audio - use 10-second local audio
+        # Some tests (segment resize, handle tests) need longer audio for their timing
+        # The Flask test server serves files from /test-audio/ route
         data_file = os.path.join(data_dir, "test_audio.json")
         test_data = [
-            {"id": "audio_001", "audio_url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"},
-            {"id": "audio_002", "audio_url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"},
+            {"id": "audio_001", "audio_url": "/test-audio/test_audio_10s.mp3"},
+            {"id": "audio_002", "audio_url": "/test-audio/test_audio_10s.mp3"},
         ]
         with open(data_file, "w") as f:
             for item in test_data:
@@ -57,7 +58,7 @@ class TestAudioAnnotationUI:
         # Create config file
         config_file = os.path.join(cls.test_dir, "config.yaml")
         config_content = f"""
-port: {cls.port}
+port: 8000  # Will be overwritten by FlaskTestServer
 server_name: Audio Annotation UI Test
 annotation_task_name: Audio Annotation UI Test
 task_dir: {cls.test_dir}
@@ -101,8 +102,9 @@ site_dir: default
 
         cls.config_file = config_file
 
-        # Start the server
-        cls.server = FlaskTestServer(port=cls.port, debug=False, config_file=config_file)
+        # Start the server (port auto-assigned by find_free_port)
+        cls.server = FlaskTestServer(debug=False, config_file=config_file)
+        cls.port = cls.server.port  # Store actual port for use in tests
         started = cls.server.start_server()
         if not started:
             raise RuntimeError(f"Failed to start Flask server on port {cls.port}")
@@ -152,7 +154,7 @@ site_dir: default
             # Submit login
             submit_btn = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
             submit_btn.click()
-            time.sleep(2)  # Wait for page to load after login
+            time.sleep(0.05)  # Wait for page to load after login
         except:
             pass  # May already be logged in
 
@@ -176,7 +178,7 @@ site_dir: default
             """)
             if has_waveform:
                 return True
-            time.sleep(0.5)
+            time.sleep(0.1)
 
         raise TimeoutError("Waveform did not render within timeout")
 
@@ -325,7 +327,7 @@ site_dir: default
         # Select a label first
         label_btn = self.driver.find_element(By.CSS_SELECTOR, ".label-btn[data-label='speech']")
         label_btn.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Wait for audio to be ready for seeking (readyState >= HAVE_METADATA = 1)
         for _ in range(20):
@@ -337,7 +339,7 @@ site_dir: default
             """)
             if ready_state >= 1:  # HAVE_METADATA or better
                 break
-            time.sleep(0.5)
+            time.sleep(0.1)
 
         # Set audio to a specific time for start
         self.driver.execute_script("""
@@ -352,12 +354,12 @@ site_dir: default
                 }
             }
         """)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Click set-start button
         start_btn = self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='set-start']")
         start_btn.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Move to end time
         self.driver.execute_script("""
@@ -372,17 +374,17 @@ site_dir: default
                 }
             }
         """)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Click set-end button
         end_btn = self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='set-end']")
         end_btn.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Create segment
         create_btn = self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='create-segment']")
         create_btn.click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Get segment count from manager directly
         manager_count = self.driver.execute_script("""
@@ -412,7 +414,7 @@ site_dir: default
                 container.audioAnnotationManager.createSegment(0, 3);
             }
         """)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Create second segment (5-8 seconds)
         self.driver.execute_script("""
@@ -421,7 +423,7 @@ site_dir: default
                 container.audioAnnotationManager.createSegment(5, 8);
             }
         """)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Verify both segments exist
         count = self._get_segment_count()
@@ -443,7 +445,7 @@ site_dir: default
                 container.audioAnnotationManager.createSegment(2, 6);
             }
         """)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Select different label
         music_btn = self.driver.find_element(By.CSS_SELECTOR, ".label-btn[data-label='music']")
@@ -456,7 +458,7 @@ site_dir: default
                 container.audioAnnotationManager.createSegment(4, 8);
             }
         """)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Verify both segments exist
         count = self._get_segment_count()
@@ -477,7 +479,7 @@ site_dir: default
                 container.audioAnnotationManager.createSegment(1, 4);
             }
         """)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         initial_count = self._get_segment_count()
         assert initial_count >= 1, "Should have at least 1 segment before deletion"
@@ -492,12 +494,12 @@ site_dir: default
                 }
             }
         """)
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Click delete button
         delete_btn = self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='delete-segment']")
         delete_btn.click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Verify segment was deleted
         new_count = self._get_segment_count()
@@ -511,7 +513,7 @@ site_dir: default
         # Select 'music' label
         music_btn = self.driver.find_element(By.CSS_SELECTOR, ".label-btn[data-label='music']")
         music_btn.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Create segment
         self.driver.execute_script("""
@@ -520,7 +522,7 @@ site_dir: default
                 container.audioAnnotationManager.createSegment(1, 3);
             }
         """)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Check the segment has the correct label
         segment_label = self.driver.execute_script("""
@@ -549,11 +551,11 @@ site_dir: default
         # Select a label first
         label_btn = self.driver.find_element(By.CSS_SELECTOR, ".label-btn[data-label='speech']")
         label_btn.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Perform right-click drag from 20% to 40% of waveform width
         self._right_click_drag_on_waveform(20, 40)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Verify segment was created
         new_count = self._get_segment_count()
@@ -572,7 +574,7 @@ site_dir: default
         # Select a label
         label_btn = self.driver.find_element(By.CSS_SELECTOR, ".label-btn[data-label='speech']")
         label_btn.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Zoom out to see more of the waveform
         self.driver.execute_script("""
@@ -580,12 +582,12 @@ site_dir: default
             var manager = container ? container.audioAnnotationManager : null;
             if (manager) manager.zoomToFit();
         """)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Create FIRST segment at 5% to 15% of waveform width using right-click drag
         print("Creating first segment via right-click drag...")
         self._right_click_drag_on_waveform(5, 15)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Check first segment was created
         count_after_first = self.driver.execute_script("""
@@ -610,10 +612,10 @@ site_dir: default
 
         # Create SECOND segment at 60% to 70% of waveform width using right-click drag
         print("Creating second segment via right-click drag...")
-        time.sleep(0.5)  # Give some time between segments
+        time.sleep(0.1)  # Give some time between segments
 
         self._right_click_drag_on_waveform(60, 70)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Check second segment was created
         count_after_second = self.driver.execute_script("""
@@ -647,7 +649,7 @@ site_dir: default
 
         # Click play
         play_btn.click()
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Check that audio is playing or was played
         is_playing = self.driver.execute_script("""
@@ -661,7 +663,7 @@ site_dir: default
         # Click stop
         stop_btn = self.driver.find_element(By.CSS_SELECTOR, ".playback-btn[data-action='stop']")
         stop_btn.click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
     def test_zoom_controls(self):
         """Test that zoom controls exist and work."""
@@ -682,11 +684,11 @@ site_dir: default
 
         # Click zoom controls (verify they don't crash)
         zoom_in_btn.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
         zoom_out_btn.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
         zoom_fit_btn.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
     def test_segment_resize(self):
         """Test that segments can be resized by dragging handles."""
@@ -703,7 +705,7 @@ site_dir: default
                 container.audioAnnotationManager.createSegment(5, 10);
             }
         """)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Get original segment bounds
         original_bounds = self.driver.execute_script("""
@@ -739,15 +741,15 @@ site_dir: default
         # Create a segment
         label_btn = self.driver.find_element(By.CSS_SELECTOR, ".label-btn[data-label='speech']")
         label_btn.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         self.driver.execute_script("""
             var container = document.querySelector('.audio-annotation-container');
             if (container && container.audioAnnotationManager) {
-                container.audioAnnotationManager.createSegment(10, 30);
+                container.audioAnnotationManager.createSegment(2, 6);
             }
         """)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Verify we have exactly 1 segment
         initial_count = self.driver.execute_script("""
@@ -804,7 +806,7 @@ site_dir: default
                 manager.zoomToFit();
             }
         """)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Get the x position for the segment end (30 seconds)
         click_info = self.driver.execute_script("""
@@ -820,8 +822,8 @@ site_dir: default
             var waveform = document.querySelector('.waveform-container');
             var rect = waveform.getBoundingClientRect();
 
-            // Segment end is at 30 seconds
-            var segmentEndTime = 30;
+            // Segment end is at 6 seconds
+            var segmentEndTime = 6;
             var xRatio = (segmentEndTime - startTime) / visibleDuration;
             var clickX = xRatio * rect.width;
 
@@ -849,7 +851,7 @@ site_dir: default
             actions.move_to_element_with_offset(waveform, offset_x, 0)
             actions.click()
             actions.perform()
-            time.sleep(0.5)
+            time.sleep(0.1)
 
         # Verify we still have exactly 1 segment (no new segment was created)
         final_count = self.driver.execute_script("""
@@ -874,15 +876,15 @@ site_dir: default
         # Create a segment
         label_btn = self.driver.find_element(By.CSS_SELECTOR, ".label-btn[data-label='speech']")
         label_btn.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         self.driver.execute_script("""
             var container = document.querySelector('.audio-annotation-container');
             if (container && container.audioAnnotationManager) {
-                container.audioAnnotationManager.createSegment(10, 30);
+                container.audioAnnotationManager.createSegment(2, 6);
             }
         """)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Verify we have exactly 1 segment
         initial_count = self.driver.execute_script("""
@@ -912,7 +914,7 @@ site_dir: default
                 manager.zoomToFit();
             }
         """)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Get the x positions for the segment start and a point past the end
         positions = self.driver.execute_script("""
@@ -928,10 +930,10 @@ site_dir: default
             var waveform = document.querySelector('.waveform-container');
             var rect = waveform.getBoundingClientRect();
 
-            // Segment is at 10-30 seconds
-            var segStartX = ((10 - startTime) / visibleDuration) * rect.width;
-            var segEndX = ((30 - startTime) / visibleDuration) * rect.width;
-            var dragToX = ((40 - startTime) / visibleDuration) * rect.width;  // Drag to 40 seconds
+            // Segment is at 2-6 seconds
+            var segStartX = ((2 - startTime) / visibleDuration) * rect.width;
+            var segEndX = ((6 - startTime) / visibleDuration) * rect.width;
+            var dragToX = ((8 - startTime) / visibleDuration) * rect.width;  // Drag to 8 seconds (within 10s audio)
 
             return {
                 segStartX: segStartX,
@@ -957,7 +959,7 @@ site_dir: default
             actions.move_to_element_with_offset(waveform, end_offset_x, 0)
             actions.release()
             actions.perform()
-            time.sleep(0.5)
+            time.sleep(0.1)
 
         # Check final segment count
         final_count = self.driver.execute_script("""

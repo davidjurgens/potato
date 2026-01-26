@@ -77,9 +77,9 @@ class TestSpanWithOtherTypes(unittest.TestCase):
             require_password=False
         )
 
-        # Start the server
-        cls.port = 9023
-        cls.server = FlaskTestServer(port=cls.port, debug=False, config_file=cls.config_file)
+        # Start the server (port auto-assigned by find_free_port)
+        cls.server = FlaskTestServer(debug=False, config_file=cls.config_file)
+        cls.port = cls.server.port  # Store the actual port for use in tests
         started = cls.server.start_server()
         assert started, "Failed to start Flask server"
 
@@ -136,7 +136,7 @@ class TestSpanWithOtherTypes(unittest.TestCase):
         login_form = self.driver.find_element(By.CSS_SELECTOR, "#login-content form")
         login_form.submit()
 
-        time.sleep(2)
+        time.sleep(0.05)
 
         WebDriverWait(self.driver, 10).until(
             EC.presence_of_element_located((By.ID, "task_layout"))
@@ -153,7 +153,7 @@ class TestSpanWithOtherTypes(unittest.TestCase):
         WebDriverWait(self.driver, timeout).until(
             EC.presence_of_element_located((By.CLASS_NAME, "annotation-form"))
         )
-        time.sleep(1)
+        time.sleep(0.1)
 
     def _get_current_instance_id(self):
         """Get the current instance ID."""
@@ -167,7 +167,7 @@ class TestSpanWithOtherTypes(unittest.TestCase):
         except:
             next_button = self.driver.find_element(By.CSS_SELECTOR, 'a[onclick*="click_to_next"]')
         next_button.click()
-        time.sleep(2)
+        time.sleep(0.05)
         self._wait_for_annotation_page()
 
     def _navigate_prev(self):
@@ -177,7 +177,7 @@ class TestSpanWithOtherTypes(unittest.TestCase):
         except:
             prev_button = self.driver.find_element(By.CSS_SELECTOR, 'a[onclick*="click_to_prev"]')
         prev_button.click()
-        time.sleep(2)
+        time.sleep(0.05)
         self._wait_for_annotation_page()
 
     def _create_span_via_api(self, instance_id, label, start, end, text):
@@ -212,7 +212,7 @@ class TestSpanWithOtherTypes(unittest.TestCase):
             By.CSS_SELECTOR, f'input[type="checkbox"][schema="checkbox_schema"][label_name="{label_name}"]'
         )
         checkbox.click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
     def _click_radio(self, label_name):
         """Click a radio button."""
@@ -220,7 +220,7 @@ class TestSpanWithOtherTypes(unittest.TestCase):
             By.CSS_SELECTOR, f'input[type="radio"][schema="radio_schema"][label_name="{label_name}"]'
         )
         radio.click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
     def _get_checked_checkboxes(self):
         """Get checked checkbox labels."""

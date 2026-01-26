@@ -94,14 +94,14 @@ class TestSecureSeleniumPatterns(BaseSeleniumTest):
         """)
 
         # Wait a moment for selection to be processed
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Click on the "positive" label to create the span annotation
         positive_label = self.wait_for_element(By.ID, "emotion_spans_positive")
         positive_label.click()
 
         # Wait for the span overlay to appear
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Check that the span overlay exists and contains the correct text
         span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
@@ -159,14 +159,14 @@ class TestSecureSeleniumPatterns(BaseSeleniumTest):
         """)
 
         # Wait a moment for selection to be processed
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Click on the "positive" label to create the span annotation
         positive_label = self.wait_for_element(By.ID, "emotion_spans_positive")
         positive_label.click()
 
         # Wait for the span overlay to appear
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Get the initial overlay position
         span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
@@ -184,14 +184,14 @@ class TestSecureSeleniumPatterns(BaseSeleniumTest):
         next_button.click()
 
         # Wait for navigation to complete
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Navigate back to the first instance
         prev_button = self.wait_for_element(By.ID, "prev-button")
         prev_button.click()
 
         # Wait for navigation to complete
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Check that the span overlay still exists and has the correct text
         span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
@@ -270,14 +270,14 @@ class TestSecureSeleniumPatterns(BaseSeleniumTest):
             """)
 
             # Wait a moment for selection to be processed
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             # Click on the label to create the span annotation
             label = self.wait_for_element(By.ID, span_info["label"])
             label.click()
 
             # Wait for the span overlay to appear
-            time.sleep(1)
+            time.sleep(0.1)
 
             # Store overlay info
             span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
@@ -369,7 +369,7 @@ class TestCustomSeleniumConfig(BaseSeleniumTest):
 
         # Create and start server with custom config
         from tests.helpers.flask_test_setup import FlaskTestServer
-        cls.server = FlaskTestServer(port=9015, debug=False, config_file=config_file)
+        cls.server = FlaskTestServer(debug=False, config_file=config_file)
         started = cls.server.start_server()
         assert started, "Failed to start Flask server"
 
@@ -434,7 +434,7 @@ class TestCustomSeleniumConfig(BaseSeleniumTest):
         register_button.click()
 
         # Wait for registration to complete
-        time.sleep(2)
+        time.sleep(0.05)
 
     def login_user(self):
         """Login the test user."""
@@ -452,7 +452,7 @@ class TestCustomSeleniumConfig(BaseSeleniumTest):
         login_button.click()
 
         # Wait for login to complete
-        time.sleep(2)
+        time.sleep(0.05)
 
     def test_custom_span_annotation(self):
         """Test custom span annotation functionality."""
@@ -499,14 +499,14 @@ class TestCustomSeleniumConfig(BaseSeleniumTest):
         """)
 
         # Wait for selection
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Click on the "highlight" label
         highlight_label = wait.until(EC.element_to_be_clickable((By.ID, "custom_span_highlight")))
         highlight_label.click()
 
         # Wait for overlay to appear
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Verify overlay was created
         span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")

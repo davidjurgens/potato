@@ -77,7 +77,7 @@ class TestAnnotationTypePersistence(unittest.TestCase):
         )
 
         # Start the server
-        cls.server = FlaskTestServer(port=9021, debug=False, config_file=cls.config_file)
+        cls.server = FlaskTestServer(debug=False, config_file=cls.config_file)
         started = cls.server.start_server()
         assert started, "Failed to start Flask server"
 
@@ -138,7 +138,7 @@ class TestAnnotationTypePersistence(unittest.TestCase):
         login_form.submit()
 
         # Wait for redirect to annotation page
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Verify we're on the annotation interface
         WebDriverWait(self.driver, 10).until(
@@ -151,7 +151,7 @@ class TestAnnotationTypePersistence(unittest.TestCase):
             EC.presence_of_element_located((By.CLASS_NAME, "annotation-form"))
         )
         # Give JavaScript time to initialize
-        time.sleep(1)
+        time.sleep(0.1)
 
     def _get_current_instance_id(self):
         """Get the current instance ID from the hidden field."""
@@ -165,7 +165,7 @@ class TestAnnotationTypePersistence(unittest.TestCase):
         except:
             next_button = self.driver.find_element(By.CSS_SELECTOR, 'a[onclick*="click_to_next"]')
         next_button.click()
-        time.sleep(2)
+        time.sleep(0.05)
         self._wait_for_annotation_page()
 
     def _navigate_prev(self):
@@ -175,7 +175,7 @@ class TestAnnotationTypePersistence(unittest.TestCase):
         except:
             prev_button = self.driver.find_element(By.CSS_SELECTOR, 'a[onclick*="click_to_prev"]')
         prev_button.click()
-        time.sleep(2)
+        time.sleep(0.05)
         self._wait_for_annotation_page()
 
     def test_radio_does_not_persist_to_next_instance(self):
@@ -204,7 +204,7 @@ class TestAnnotationTypePersistence(unittest.TestCase):
 
         self.assertIsNotNone(radio_option_b, "Should find option_b radio button")
         radio_option_b.click()
-        time.sleep(0.5)  # Wait for save
+        time.sleep(0.1)  # Wait for save
 
         self.assertTrue(radio_option_b.is_selected(), "Radio button should be selected")
         print("Selected 'option_b' radio button on instance 1")
@@ -247,7 +247,7 @@ class TestAnnotationTypePersistence(unittest.TestCase):
         test_text = "This is my annotation on instance 1"
         textbox.clear()
         textbox.send_keys(test_text)
-        time.sleep(1.5)  # Wait for debounced save
+        time.sleep(0.15)  # Wait for debounced save
 
         self.assertEqual(textbox.get_attribute('value'), test_text)
         print(f"Entered text on instance 1: '{test_text}'")
@@ -291,7 +291,7 @@ class TestAnnotationTypePersistence(unittest.TestCase):
                 break
 
         radio_option_c.click()
-        time.sleep(0.5)
+        time.sleep(0.1)
         print(f"Selected 'option_c' on instance {instance_id_1}")
 
         # Navigate to instance 2
@@ -338,7 +338,7 @@ class TestAnnotationTypePersistence(unittest.TestCase):
         test_text = "Preserved text annotation"
         textbox.clear()
         textbox.send_keys(test_text)
-        time.sleep(1.5)  # Wait for debounced save
+        time.sleep(0.15)  # Wait for debounced save
         print(f"Entered text on instance {instance_id_1}: '{test_text}'")
 
         # Navigate to instance 2
@@ -382,14 +382,14 @@ class TestAnnotationTypePersistence(unittest.TestCase):
             if rb.get_attribute('label_name') == 'option_a':
                 rb.click()
                 break
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         textbox_1 = self.driver.find_element(
             By.CSS_SELECTOR, 'input[type="text"][schema="text_input"], textarea[schema="text_input"]'
         )
         textbox_1.clear()
         textbox_1.send_keys("text1")
-        time.sleep(1.5)
+        time.sleep(0.15)
         print(f"Instance 1: radio=option_a, text='text1'")
 
         # Instance 2: Select radio option_b, enter text "text2"
@@ -403,14 +403,14 @@ class TestAnnotationTypePersistence(unittest.TestCase):
             if rb.get_attribute('label_name') == 'option_b':
                 rb.click()
                 break
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         textbox_2 = self.driver.find_element(
             By.CSS_SELECTOR, 'input[type="text"][schema="text_input"], textarea[schema="text_input"]'
         )
         textbox_2.clear()
         textbox_2.send_keys("text2")
-        time.sleep(1.5)
+        time.sleep(0.15)
         print(f"Instance 2: radio=option_b, text='text2'")
 
         # Navigate back to Instance 1 and verify

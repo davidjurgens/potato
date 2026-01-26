@@ -66,7 +66,7 @@ class TestImageAnnotationSelenium(unittest.TestCase):
         )
 
         # Start server
-        cls.server = FlaskTestServer(port=9012, debug=False, config_file=cls.config_file)
+        cls.server = FlaskTestServer(debug=False, config_file=cls.config_file)
         started = cls.server.start_server()
         assert started, "Failed to start Flask server"
 
@@ -135,7 +135,7 @@ class TestImageAnnotationSelenium(unittest.TestCase):
         # Submit
         register_form = self.driver.find_element(By.CSS_SELECTOR, "#register-content form")
         register_form.submit()
-        time.sleep(2)
+        time.sleep(0.05)
 
     def _login_user(self):
         """Login the test user."""
@@ -162,7 +162,7 @@ class TestImageAnnotationSelenium(unittest.TestCase):
 
             login_form = self.driver.find_element(By.CSS_SELECTOR, "#login-content form")
             login_form.submit()
-            time.sleep(2)
+            time.sleep(0.05)
 
     def test_image_annotation_container_loads(self):
         """Test that the image annotation container loads properly."""
@@ -241,14 +241,14 @@ class TestImageAnnotationSelenium(unittest.TestCase):
         )
 
         # Wait a moment for JavaScript to initialize
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Select bbox tool
         bbox_btn = self.driver.find_element(By.CSS_SELECTOR, '[data-tool="bbox"]')
         bbox_btn.click()
 
         # Verify it's selected (has active class)
-        time.sleep(0.5)
+        time.sleep(0.1)
         self.assertIn("active", bbox_btn.get_attribute("class") or "",
                      "Bbox button should be active after click")
 
@@ -256,7 +256,7 @@ class TestImageAnnotationSelenium(unittest.TestCase):
         polygon_btn = self.driver.find_element(By.CSS_SELECTOR, '[data-tool="polygon"]')
         polygon_btn.click()
 
-        time.sleep(0.5)
+        time.sleep(0.1)
         self.assertIn("active", polygon_btn.get_attribute("class") or "",
                      "Polygon button should be active after click")
 
@@ -268,13 +268,13 @@ class TestImageAnnotationSelenium(unittest.TestCase):
             EC.presence_of_element_located((By.CLASS_NAME, "image-annotation-container"))
         )
 
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Find and click person label
         person_btn = self.driver.find_element(By.CSS_SELECTOR, '[data-label="person"]')
         person_btn.click()
 
-        time.sleep(0.5)
+        time.sleep(0.1)
         self.assertIn("active", person_btn.get_attribute("class") or "",
                      "Person label should be active after click")
 
@@ -282,7 +282,7 @@ class TestImageAnnotationSelenium(unittest.TestCase):
         animal_btn = self.driver.find_element(By.CSS_SELECTOR, '[data-label="animal"]')
         animal_btn.click()
 
-        time.sleep(0.5)
+        time.sleep(0.1)
         self.assertIn("active", animal_btn.get_attribute("class") or "",
                      "Animal label should be active after click")
 
@@ -348,7 +348,7 @@ class TestImageAnnotationSelenium(unittest.TestCase):
             """)
             if manager_exists:
                 break
-            time.sleep(0.5)
+            time.sleep(0.1)
 
         self.assertTrue(manager_exists, "ImageAnnotationManager should be initialized on container (stored as container.annotationManager)")
 
@@ -360,7 +360,7 @@ class TestImageAnnotationSelenium(unittest.TestCase):
             EC.presence_of_element_located((By.CLASS_NAME, "image-annotation-container"))
         )
 
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Check for keybinding help section or verify shortcuts exist
         page_source = self.driver.page_source
@@ -398,7 +398,7 @@ class TestImageAnnotationInteraction(unittest.TestCase):
             require_password=False
         )
 
-        cls.server = FlaskTestServer(port=9013, debug=False, config_file=cls.config_file)
+        cls.server = FlaskTestServer(debug=False, config_file=cls.config_file)
         started = cls.server.start_server()
         assert started, "Failed to start Flask server"
         cls.server._wait_for_server_ready(timeout=15)
@@ -457,7 +457,7 @@ class TestImageAnnotationInteraction(unittest.TestCase):
 
         register_form = self.driver.find_element(By.CSS_SELECTOR, "#register-content form")
         register_form.submit()
-        time.sleep(2)
+        time.sleep(0.05)
 
     def test_zoom_in_button_click(self):
         """Test clicking the zoom in button."""
@@ -467,7 +467,7 @@ class TestImageAnnotationInteraction(unittest.TestCase):
             EC.presence_of_element_located((By.CLASS_NAME, "image-annotation-container"))
         )
 
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Get initial zoom level if exposed
         initial_zoom = self.driver.execute_script("""
@@ -482,7 +482,7 @@ class TestImageAnnotationInteraction(unittest.TestCase):
         zoom_in_btn = self.driver.find_element(By.CSS_SELECTOR, '[data-action="zoom-in"]')
         zoom_in_btn.click()
 
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Verify zoom changed
         new_zoom = self.driver.execute_script("""
@@ -504,18 +504,18 @@ class TestImageAnnotationInteraction(unittest.TestCase):
             EC.presence_of_element_located((By.CLASS_NAME, "image-annotation-container"))
         )
 
-        time.sleep(1)
+        time.sleep(0.1)
 
         # First zoom in
         zoom_in_btn = self.driver.find_element(By.CSS_SELECTOR, '[data-action="zoom-in"]')
         zoom_in_btn.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Then zoom out
         zoom_out_btn = self.driver.find_element(By.CSS_SELECTOR, '[data-action="zoom-out"]')
         zoom_out_btn.click()
 
-        time.sleep(0.5)
+        time.sleep(0.1)
         # Test passes if no exceptions
 
     def test_zoom_fit_button_click(self):
@@ -526,13 +526,13 @@ class TestImageAnnotationInteraction(unittest.TestCase):
             EC.presence_of_element_located((By.CLASS_NAME, "image-annotation-container"))
         )
 
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Click zoom fit
         zoom_fit_btn = self.driver.find_element(By.CSS_SELECTOR, '[data-action="zoom-fit"]')
         zoom_fit_btn.click()
 
-        time.sleep(0.5)
+        time.sleep(0.1)
         # Test passes if no exceptions
 
     def test_delete_button_disabled_initially(self):
@@ -543,7 +543,7 @@ class TestImageAnnotationInteraction(unittest.TestCase):
             EC.presence_of_element_located((By.CLASS_NAME, "image-annotation-container"))
         )
 
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Find delete button
         delete_buttons = self.driver.find_elements(By.CSS_SELECTOR, '[data-action="delete"]')

@@ -70,7 +70,7 @@ class TestSpanOverlayVisualVerification(unittest.TestCase):
         )
         cls.config_file = config_file
 
-        cls.server = FlaskTestServer(port=9020, debug=False, config_file=config_file)
+        cls.server = FlaskTestServer(debug=False, config_file=config_file)
         started = cls.server.start_server()
         assert started, "Failed to start Flask server"
         cls.server._wait_for_server_ready(timeout=10)
@@ -105,7 +105,7 @@ class TestSpanOverlayVisualVerification(unittest.TestCase):
         # Navigate to annotation page
         self.driver.get(f"{self.server.base_url}/annotate")
         self.wait.until(EC.presence_of_element_located((By.ID, 'text-content')))
-        time.sleep(0.5)  # Wait for JS to initialize
+        time.sleep(0.1)  # Wait for JS to initialize
 
     def tearDown(self):
         """Close browser after each test."""
@@ -129,7 +129,7 @@ class TestSpanOverlayVisualVerification(unittest.TestCase):
         login_form.submit()
 
         # Wait for redirect to annotation page
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Verify we're on the annotation interface
         self.wait.until(EC.presence_of_element_located((By.ID, "task_layout")))
@@ -182,7 +182,7 @@ class TestSpanOverlayVisualVerification(unittest.TestCase):
         )
         if not label_checkbox.is_selected():
             label_checkbox.click()
-            time.sleep(0.2)
+            time.sleep(0.05)
 
         # Select the word
         selection_rect = self._select_word_and_get_rect(word)
@@ -191,7 +191,7 @@ class TestSpanOverlayVisualVerification(unittest.TestCase):
         # Trigger mouseup to create span
         text_element = self.driver.find_element(By.ID, 'text-content')
         ActionChains(self.driver).move_to_element(text_element).release().perform()
-        time.sleep(0.5)  # Wait for span to be created
+        time.sleep(0.1)  # Wait for span to be created
 
         return selection_rect
 
@@ -424,7 +424,7 @@ class TestSpanOverlayVisualVerification(unittest.TestCase):
             (By.CSS_SELECTOR, '.span-delete-btn')
         ))
         delete_btn.click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Verify overlay is COMPLETELY removed
         overlays_after = self.driver.find_elements(By.CSS_SELECTOR, '.span-overlay-pure')
@@ -456,12 +456,12 @@ class TestSpanOverlayVisualVerification(unittest.TestCase):
         # Navigate away
         next_btn = self.driver.find_element(By.ID, 'next-btn')
         next_btn.click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Navigate back
         prev_btn = self.driver.find_element(By.ID, 'prev-btn')
         prev_btn.click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Wait for overlay to re-render
         self.wait.until(EC.presence_of_element_located(
@@ -500,11 +500,11 @@ class TestSpanOverlayVisualVerification(unittest.TestCase):
         # Navigate away and back
         next_btn = self.driver.find_element(By.ID, 'next-btn')
         next_btn.click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         prev_btn = self.driver.find_element(By.ID, 'prev-btn')
         prev_btn.click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Wait for overlay
         self.wait.until(EC.presence_of_element_located(
