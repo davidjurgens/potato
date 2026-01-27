@@ -16,6 +16,9 @@ phases:
   order:
   - consent
   - prescreen
+  - general_instructions
+  - specific_instructions
+  - baseline_check
   consent:
     type: consent
     file: configs/all-phases-example/consent.json
@@ -72,10 +75,10 @@ annotation_schemes:
   labels:
   - text: good vibes
     name: good
-    abbreviation": good
+    abbreviation: good
   - text: bad vibes
     name: bad
-    abbreviation": bad
+    abbreviation: bad
   sequential_key_binding: true
 - annotation_type: slider
   name: vibe_level

@@ -198,7 +198,7 @@ class BaseSeleniumTest(unittest.TestCase):
             login_form.submit()
 
         # Wait for redirect after registration/login
-        time.sleep(2)
+        time.sleep(0.05)
 
     def login_user(self):
         """
@@ -264,7 +264,7 @@ class BaseSeleniumTest(unittest.TestCase):
             login_form.submit()
 
             # Wait for redirect after login
-            time.sleep(2)
+            time.sleep(0.05)
 
     def verify_authentication(self):
         """
@@ -304,7 +304,7 @@ class BaseSeleniumTest(unittest.TestCase):
 
         # Wait for JavaScript to initialize and show main content
         # Give extra time for async API calls to complete
-        time.sleep(2)  # Allow time for API calls to complete
+        time.sleep(0.05)  # Allow time for API calls to complete
 
         try:
             WebDriverWait(self.driver, 15).until(

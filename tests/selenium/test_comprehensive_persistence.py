@@ -27,6 +27,7 @@ class TestComprehensivePersistence(unittest.TestCase):
     def setUpClass(cls):
         """Set up the Flask server for all tests in this class."""
         from tests.helpers.flask_test_setup import FlaskTestServer
+        from tests.helpers.port_manager import find_free_port
         from tests.helpers.test_utils import (
             create_test_config,
             create_test_data_file,
@@ -81,7 +82,8 @@ class TestComprehensivePersistence(unittest.TestCase):
         )
 
         # Start the server
-        cls.server = FlaskTestServer(port=9022, debug=False, config_file=cls.config_file)
+        cls.port = find_free_port()
+        cls.server = FlaskTestServer(port=cls.port, debug=False, config_file=cls.config_file)
         started = cls.server.start_server()
         assert started, "Failed to start Flask server"
 
@@ -142,7 +144,7 @@ class TestComprehensivePersistence(unittest.TestCase):
         login_form.submit()
 
         # Wait for redirect to annotation page
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Verify we're on the annotation interface
         WebDriverWait(self.driver, 10).until(
@@ -155,7 +157,7 @@ class TestComprehensivePersistence(unittest.TestCase):
             EC.presence_of_element_located((By.CLASS_NAME, "annotation-form"))
         )
         # Give JavaScript time to initialize
-        time.sleep(1)
+        time.sleep(0.1)
 
     def _get_current_instance_id(self):
         """Get the current instance ID from the hidden field."""
@@ -169,7 +171,7 @@ class TestComprehensivePersistence(unittest.TestCase):
         except:
             next_button = self.driver.find_element(By.CSS_SELECTOR, 'a[onclick*="click_to_next"]')
         next_button.click()
-        time.sleep(2)
+        time.sleep(0.05)
         self._wait_for_annotation_page()
 
     def _navigate_prev(self):
@@ -179,7 +181,7 @@ class TestComprehensivePersistence(unittest.TestCase):
         except:
             prev_button = self.driver.find_element(By.CSS_SELECTOR, 'a[onclick*="click_to_prev"]')
         prev_button.click()
-        time.sleep(2)
+        time.sleep(0.05)
         self._wait_for_annotation_page()
 
     def _get_checked_checkboxes(self, schema="multi_choice"):
@@ -218,7 +220,7 @@ class TestComprehensivePersistence(unittest.TestCase):
             By.CSS_SELECTOR, f'input[type="checkbox"][schema="{schema}"][label_name="{label_name}"]'
         )
         checkbox.click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
     def _click_radio(self, label_name, schema="single_choice"):
         """Click a radio button by label name."""
@@ -226,7 +228,7 @@ class TestComprehensivePersistence(unittest.TestCase):
             By.CSS_SELECTOR, f'input[type="radio"][schema="{schema}"][label_name="{label_name}"]'
         )
         radio.click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
     def _enter_text(self, text, schema="text_response"):
         """Enter text into a textbox."""
@@ -235,7 +237,7 @@ class TestComprehensivePersistence(unittest.TestCase):
         )
         textbox.clear()
         textbox.send_keys(text)
-        time.sleep(1.5)  # Wait for debounced save
+        time.sleep(0.15)  # Wait for debounced save
 
     def test_all_types_do_not_persist_to_next_instance(self):
         """

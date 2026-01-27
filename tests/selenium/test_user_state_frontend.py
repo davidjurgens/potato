@@ -17,6 +17,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from tests.helpers.flask_test_setup import FlaskTestServer
+from tests.helpers.port_manager import find_free_port
 
 
 class TestUserStateFrontendIntegration:
@@ -90,9 +91,9 @@ class TestUserStateFrontendIntegration:
         with open(config_file, 'w') as f:
             yaml.dump(config, f)
 
-        # Create server with the config file
+        # Create server with dynamic port
         server = FlaskTestServer(
-            port=9013,
+            port=find_free_port(),
             debug=False,
             config_file=config_file
         )
@@ -243,7 +244,7 @@ class TestUserStateFrontendIntegration:
         """)
 
         # Wait a moment for selection to be processed
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Check for span annotation UI elements
         try:
@@ -252,7 +253,7 @@ class TestUserStateFrontendIntegration:
             if span_labels:
                 # Click on a span label if available
                 span_labels[0].click()
-                time.sleep(1)
+                time.sleep(0.1)
         except:
             # Span labels might not be present, which is OK for this test
             pass

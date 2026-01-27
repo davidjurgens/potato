@@ -9,7 +9,7 @@ annotation_codebook_url: ''
 max_annotations_per_user: 10
 assignment_strategy: fixed_order
 data_files:
-- ../data/test_data.json
+- ../../../data/test_data.json
 item_properties:
   id_key: id
   text_key: text

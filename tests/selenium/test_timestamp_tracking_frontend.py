@@ -42,14 +42,14 @@ class TestTimestampTrackingFrontend(BaseSeleniumTest):
         submit_button.click()
 
         # Wait for submission to complete
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Navigate to next instance
         next_button = self.wait_for_element(By.ID, "next-button")
         next_button.click()
 
         # Wait for next instance to load
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Verify we're on a new instance
         new_instance_text = self.driver.find_element(By.ID, "instance-text").text
@@ -82,14 +82,14 @@ class TestTimestampTrackingFrontend(BaseSeleniumTest):
             submit_button.click()
 
             # Wait for submission
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             # Navigate to next instance
             next_button = self.wait_for_element(By.ID, "next-button")
             next_button.click()
 
             # Wait for navigation
-            time.sleep(0.5)
+            time.sleep(0.1)
 
         # Check that no errors occurred
         logs = self.driver.get_log('browser')
@@ -125,7 +125,7 @@ class TestTimestampTrackingFrontend(BaseSeleniumTest):
             """, text_element)
 
             # Wait a moment for selection
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             # Try to find and click a span annotation button
             try:
@@ -133,14 +133,14 @@ class TestTimestampTrackingFrontend(BaseSeleniumTest):
                 span_button.click()
 
                 # Wait for span to be created
-                time.sleep(0.5)
+                time.sleep(0.1)
 
                 # Submit the annotation
                 submit_button = self.driver.find_element(By.ID, "submit-button")
                 submit_button.click()
 
                 # Wait for submission
-                time.sleep(1)
+                time.sleep(0.1)
 
             except Exception as e:
                 print(f"Span annotation not available: {e}")
@@ -168,7 +168,7 @@ class TestTimestampTrackingFrontend(BaseSeleniumTest):
             submit_button.click()
 
             # Wait for dashboard to load
-            time.sleep(1)
+            time.sleep(0.1)
         except:
             # API key might already be set or not required
             pass
@@ -202,11 +202,11 @@ class TestTimestampTrackingFrontend(BaseSeleniumTest):
 
             submit_button = self.wait_for_element(By.ID, "submit-button")
             submit_button.click()
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             next_button = self.wait_for_element(By.ID, "next-button")
             next_button.click()
-            time.sleep(0.5)
+            time.sleep(0.1)
 
         # Navigate to admin dashboard to check history
         self.driver.get(f"{self.server.base_url}/admin")
@@ -295,7 +295,7 @@ class TestTimestampTrackingFrontend(BaseSeleniumTest):
         submit_button.click()
 
         # Wait for any error handling
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Check for error messages
         try:
@@ -340,7 +340,7 @@ class TestTimestampTrackingFrontend(BaseSeleniumTest):
             submit_button.click()
 
             # Wait for redirect
-            time.sleep(1)
+            time.sleep(0.1)
 
             # Navigate to annotation page
             second_driver.get(f"{self.server.base_url}/annotate")
@@ -353,7 +353,7 @@ class TestTimestampTrackingFrontend(BaseSeleniumTest):
             submit_button.click()
 
             # Wait for submission
-            time.sleep(1)
+            time.sleep(0.1)
 
             # Submit annotation in first session
             self.driver.get(f"{self.server.base_url}/annotate")
@@ -366,7 +366,7 @@ class TestTimestampTrackingFrontend(BaseSeleniumTest):
             submit_button.click()
 
             # Wait for submission
-            time.sleep(1)
+            time.sleep(0.1)
 
             # Check that both sessions worked
             logs1 = self.driver.get_log('browser')
@@ -391,7 +391,7 @@ class TestTimestampTrackingFrontend(BaseSeleniumTest):
 
         submit_button = self.wait_for_element(By.ID, "submit-button")
         submit_button.click()
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Close and reopen browser (simulate new session)
         self.driver.quit()
@@ -410,7 +410,7 @@ class TestTimestampTrackingFrontend(BaseSeleniumTest):
         submit_button.click()
 
         # Wait for redirect
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Navigate to admin dashboard to check if history persisted
         self.driver.get(f"{self.server.base_url}/admin")

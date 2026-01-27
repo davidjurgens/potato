@@ -10,35 +10,73 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from tests.helpers.flask_test_setup import FlaskTestServer, create_chrome_options
+from selenium.webdriver.chrome.options import Options as ChromeOptions
+from tests.helpers.flask_test_setup import FlaskTestServer
+from tests.helpers.test_utils import create_test_config, create_test_data_file
+from tests.helpers.port_manager import find_free_port
 
 
 @pytest.fixture(scope="module")
 def flask_server():
-    """Start the Flask server in production mode using a test config."""
-    # Calculate path relative to this test file
-    test_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(os.path.dirname(test_dir))
-    config_file = os.path.join(project_root, "tests", "configs", "radio-annotation.yaml")
+    """Start the Flask server in production mode using a dynamically created config."""
+    # Create test directory
+    test_dir = os.path.join(os.path.dirname(__file__), "..", "output", f"frontend_annotation_test_{int(time.time())}")
+    os.makedirs(test_dir, exist_ok=True)
 
-    server = FlaskTestServer(
-        app_factory=None,
-        config=config_file,
-        debug=False  # Production mode
+    # Create test data
+    test_data = [
+        {"id": "item_1", "text": "This is test item 1 for annotation testing."},
+        {"id": "item_2", "text": "This is test item 2 for annotation testing."},
+        {"id": "item_3", "text": "This is test item 3 for annotation testing."},
+    ]
+    data_file = create_test_data_file(test_dir, test_data)
+
+    # Create annotation schemes - radio buttons for sentiment
+    annotation_schemes = [
+        {
+            "name": "sentiment",
+            "annotation_type": "radio",
+            "labels": ["positive", "negative", "neutral"],
+            "description": "What is the sentiment of this text?"
+        }
+    ]
+
+    config_file = create_test_config(
+        test_dir,
+        annotation_schemes,
+        data_files=[data_file],
+        annotation_task_name="Frontend Annotation Test",
+        require_password=True  # Enable login/register tabs
     )
 
-    started = server.start()
+    port = find_free_port()
+    server = FlaskTestServer(port=port, debug=False, config_file=config_file)
+
+    started = server.start_server()
     assert started, "Failed to start Flask server in production mode"
 
     yield server
 
-    server.stop()
+    server.stop_server()
+
+    # Cleanup
+    import shutil
+    try:
+        shutil.rmtree(test_dir, ignore_errors=True)
+    except Exception:
+        pass
 
 
 @pytest.fixture
 def browser():
     """Create a headless Chrome browser for testing."""
-    chrome_options = create_chrome_options(headless=True)
+    chrome_options = ChromeOptions()
+    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080")
+
     driver = webdriver.Chrome(options=chrome_options)
 
     yield driver
@@ -81,7 +119,7 @@ def test_annotation_ui_loads_after_login(flask_server, browser):
     register_form.submit()
 
     # Wait for redirect after registration
-    time.sleep(3)
+    time.sleep(0.1)
 
     # Step 2: Verify we're on the annotation page
     print("2. Verifying annotation page elements...")
@@ -161,7 +199,7 @@ def test_annotation_form_interaction(flask_server, browser):
     register_form = browser.find_element(By.CSS_SELECTOR, "#register-content form")
     register_form.submit()
 
-    time.sleep(3)
+    time.sleep(0.1)
 
     # Wait for annotation page
     WebDriverWait(browser, 10).until(
@@ -175,7 +213,7 @@ def test_annotation_form_interaction(flask_server, browser):
         # Select the first option
         sentiment_radios[0].click()
         print("   ✅ Selected first sentiment option")
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Verify it's selected
         assert sentiment_radios[0].is_selected(), "First sentiment option should be selected"
@@ -186,7 +224,7 @@ def test_annotation_form_interaction(flask_server, browser):
     # Test navigation
     next_btn = browser.find_element(By.ID, "next-btn")
     next_btn.click()
-    time.sleep(2)
+    time.sleep(0.05)
 
     print(f"   After clicking next - URL: {browser.current_url}")
 

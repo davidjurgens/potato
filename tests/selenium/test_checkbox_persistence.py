@@ -30,6 +30,7 @@ class TestCheckboxPersistence(unittest.TestCase):
     def setUpClass(cls):
         """Set up the Flask server for all tests in this class."""
         from tests.helpers.flask_test_setup import FlaskTestServer
+        from tests.helpers.port_manager import find_free_port
         from tests.helpers.test_utils import (
             create_test_directory,
             create_multiselect_annotation_config,
@@ -51,7 +52,8 @@ class TestCheckboxPersistence(unittest.TestCase):
         )
 
         # Start the server
-        cls.server = FlaskTestServer(port=9020, debug=False, config_file=cls.config_file)
+        cls.port = find_free_port()
+        cls.server = FlaskTestServer(port=cls.port, debug=False, config_file=cls.config_file)
         started = cls.server.start_server()
         assert started, "Failed to start Flask server"
 
@@ -112,7 +114,7 @@ class TestCheckboxPersistence(unittest.TestCase):
         login_form.submit()
 
         # Wait for redirect to annotation page
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Verify we're on the annotation interface
         WebDriverWait(self.driver, 10).until(
@@ -125,7 +127,7 @@ class TestCheckboxPersistence(unittest.TestCase):
             EC.presence_of_element_located((By.CLASS_NAME, "annotation-form"))
         )
         # Give JavaScript time to initialize
-        time.sleep(1)
+        time.sleep(0.1)
 
     def _get_checked_checkboxes(self):
         """Get all checked checkboxes on the page."""
@@ -143,7 +145,7 @@ class TestCheckboxPersistence(unittest.TestCase):
         """Click a checkbox and wait for the real-time save."""
         checkbox.click()
         # Wait for the /updateinstance call to complete
-        time.sleep(0.5)
+        time.sleep(0.1)
 
     def _navigate_next(self):
         """Navigate to the next instance."""
@@ -155,7 +157,7 @@ class TestCheckboxPersistence(unittest.TestCase):
             next_button = self.driver.find_element(By.CSS_SELECTOR, 'a[onclick*="click_to_next"]')
         next_button.click()
         # Wait for page reload
-        time.sleep(2)
+        time.sleep(0.05)
         self._wait_for_annotation_page()
 
     def _navigate_prev(self):
@@ -168,7 +170,7 @@ class TestCheckboxPersistence(unittest.TestCase):
             prev_button = self.driver.find_element(By.CSS_SELECTOR, 'a[onclick*="click_to_prev"]')
         prev_button.click()
         # Wait for page reload
-        time.sleep(2)
+        time.sleep(0.05)
         self._wait_for_annotation_page()
 
     def _get_current_instance_id(self):

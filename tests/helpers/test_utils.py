@@ -522,15 +522,29 @@ def create_audio_annotation_config(test_dir: str, **kwargs) -> Tuple[str, str]:
     Args:
         test_dir: Directory to create the config in
         **kwargs: Additional config options
+            - use_local_audio: If True (default), use local test audio file served by Flask.
+                              If False, use external SoundHelix URLs (slower, requires internet).
 
     Returns:
         Tuple of (config_file_path, data_file_path)
     """
-    # Create test data with audio URLs
-    test_data = [
-        {"id": "audio_001", "audio_url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"},
-        {"id": "audio_002", "audio_url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"}
-    ]
+    # Use local test audio by default for faster tests
+    # The Flask test server serves files from /test-audio/ route
+    use_local_audio = kwargs.pop('use_local_audio', True)
+
+    if use_local_audio:
+        # Use local test audio file (served by Flask test server at /test-audio/)
+        # This is much faster than downloading from external URLs
+        test_data = [
+            {"id": "audio_001", "audio_url": "/test-audio/test_audio_short.mp3"},
+            {"id": "audio_002", "audio_url": "/test-audio/test_audio_short.mp3"}
+        ]
+    else:
+        # Use external URLs (slower, requires internet)
+        test_data = [
+            {"id": "audio_001", "audio_url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"},
+            {"id": "audio_002", "audio_url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"}
+        ]
 
     data_file = create_test_data_file(test_dir, test_data, filename="audio_data.jsonl")
 
@@ -560,3 +574,102 @@ def create_audio_annotation_config(test_dir: str, **kwargs) -> Tuple[str, str]:
     )
 
     return config_file, data_file
+
+
+# ==================== Selenium Wait Helpers ====================
+
+def wait_for_audio_ready(driver, timeout: int = 10) -> bool:
+    """
+    Wait for AudioAnnotationManager to be fully initialized.
+
+    Args:
+        driver: Selenium WebDriver instance
+        timeout: Maximum time to wait in seconds
+
+    Returns:
+        True if audio manager is ready, False if timeout
+    """
+    import time
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        ready = driver.execute_script("""
+            var container = document.querySelector('.audio-annotation-container');
+            if (!container || !container.audioAnnotationManager) return false;
+            var manager = container.audioAnnotationManager;
+            return manager.isReady === true && manager.peaks !== null;
+        """)
+        if ready:
+            return True
+        time.sleep(0.5)
+    return False
+
+
+def wait_for_span_manager_ready(driver, timeout: int = 10) -> bool:
+    """
+    Wait for SpanManager to be initialized.
+
+    Args:
+        driver: Selenium WebDriver instance
+        timeout: Maximum time to wait in seconds
+
+    Returns:
+        True if span manager is ready, False if timeout
+    """
+    import time
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        ready = driver.execute_script("""
+            return window.spanManager && window.spanManager.isInitialized === true;
+        """)
+        if ready:
+            return True
+        time.sleep(0.5)
+    return False
+
+
+def wait_for_annotation_inputs(driver, timeout: int = 10) -> bool:
+    """
+    Wait for annotation inputs (checkboxes, radios, or text inputs) to appear.
+
+    Args:
+        driver: Selenium WebDriver instance
+        timeout: Maximum time to wait in seconds
+
+    Returns:
+        True if inputs found, False if timeout
+    """
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+
+    try:
+        WebDriverWait(driver, timeout).until(
+            EC.presence_of_element_located((
+                By.CSS_SELECTOR,
+                "input[type='checkbox'], input[type='radio'], textarea, input.annotation-input"
+            ))
+        )
+        return True
+    except Exception:
+        return False
+
+
+def wait_for_page_load(driver, timeout: int = 10) -> bool:
+    """
+    Wait for page to be fully loaded (document.readyState == 'complete').
+
+    Args:
+        driver: Selenium WebDriver instance
+        timeout: Maximum time to wait in seconds
+
+    Returns:
+        True if page loaded, False if timeout
+    """
+    import time
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        state = driver.execute_script("return document.readyState")
+        if state == "complete":
+            return True
+        time.sleep(0.2)
+    return False

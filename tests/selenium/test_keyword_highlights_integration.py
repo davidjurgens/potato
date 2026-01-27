@@ -31,6 +31,7 @@ class TestKeywordHighlightsIntegration(unittest.TestCase):
     def setUpClass(cls):
         """Set up the Flask server with keyword highlights enabled."""
         from tests.helpers.flask_test_setup import FlaskTestServer
+        from tests.helpers.port_manager import find_free_port
         from tests.helpers.test_utils import cleanup_test_directory
 
         # Create test directory
@@ -70,8 +71,8 @@ class TestKeywordHighlightsIntegration(unittest.TestCase):
 
         # Create config file with keyword highlights
         cls.config_file = os.path.join(cls.test_dir, "config.yaml")
+        # Note: port is set dynamically below, not in config
         config_content = f"""
-port: 9050
 server_name: keyword highlights test
 annotation_task_name: Keyword Highlights Test
 task_dir: {cls.test_dir}
@@ -104,8 +105,8 @@ site_dir: default
         with open(cls.config_file, 'w') as f:
             f.write(config_content)
 
-        # Start server
-        cls.port = 9050
+        # Start server with dynamic port
+        cls.port = find_free_port()
         cls.server = FlaskTestServer(port=cls.port, debug=False, config_file=cls.config_file)
         started = cls.server.start_server()
         assert started, "Failed to start Flask server"
@@ -152,7 +153,7 @@ site_dir: default
         username_field.send_keys(self.test_user)
         login_form = self.driver.find_element(By.CSS_SELECTOR, "#login-content form")
         login_form.submit()
-        time.sleep(2)
+        time.sleep(0.05)
         WebDriverWait(self.driver, 10).until(
             EC.presence_of_element_located((By.ID, "task_layout"))
         )
@@ -167,7 +168,7 @@ site_dir: default
         WebDriverWait(self.driver, timeout).until(
             EC.presence_of_element_located((By.CLASS_NAME, "annotation-form"))
         )
-        time.sleep(2)  # Wait for keyword highlights to load
+        time.sleep(0.05)  # Wait for keyword highlights to load
 
     def _get_instance_id(self):
         """Get current instance ID."""
@@ -180,7 +181,7 @@ site_dir: default
         except:
             btn = self.driver.find_element(By.CSS_SELECTOR, 'a[onclick*="click_to_next"]')
         btn.click()
-        time.sleep(3)
+        time.sleep(0.1)
         self._wait_for_page()
 
     def _navigate_prev(self):
@@ -190,7 +191,7 @@ site_dir: default
         except:
             btn = self.driver.find_element(By.CSS_SELECTOR, 'a[onclick*="click_to_prev"]')
         btn.click()
-        time.sleep(3)
+        time.sleep(0.1)
         self._wait_for_page()
 
     def _get_keyword_highlights(self):
@@ -275,7 +276,7 @@ site_dir: default
         self._wait_for_page()
 
         # Wait a bit more for keyword highlights to render
-        time.sleep(2)
+        time.sleep(0.05)
 
         highlights = self._get_keyword_highlights()
         print(f"Found {len(highlights)} keyword highlight overlays")

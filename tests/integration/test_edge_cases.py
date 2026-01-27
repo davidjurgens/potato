@@ -77,13 +77,8 @@ class TestRapidNavigation:
         yield server
         server.stop()
 
-    @pytest.mark.xfail(reason="Rapid navigation may cause race conditions with stale elements")
     def test_rapid_next_navigation(self, server, browser, test_user):
-        """Test that rapidly pressing next doesn't crash the UI.
-
-        This test may fail due to race conditions when navigating too quickly.
-        The stale element exception is expected as elements are replaced during navigation.
-        """
+        """Test that rapidly pressing next doesn't crash the UI."""
         register_user(browser, server, test_user)
 
         # Rapidly navigate next multiple times
@@ -101,12 +96,8 @@ class TestRapidNavigation:
                "main-content" in browser.page_source, \
             "Should still be on valid annotation page after rapid navigation"
 
-    @pytest.mark.xfail(reason="Rapid navigation may cause race conditions with stale elements")
     def test_rapid_prev_next_alternating(self, server, browser, test_user):
-        """Test rapid alternating navigation.
-
-        This test may fail due to race conditions when navigating too quickly.
-        """
+        """Test rapid alternating navigation."""
         register_user(browser, server, test_user)
 
         # First go forward a bit

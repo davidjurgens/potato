@@ -95,7 +95,7 @@ class TestIntervalRendering(BaseSeleniumTest):
         """, word_start, word_end)
 
         # Wait a moment for selection to be processed
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Check that span overlays were created
         span_overlays = self.driver.find_element(By.ID, "span-overlays")
@@ -147,7 +147,7 @@ class TestIntervalRendering(BaseSeleniumTest):
         self.create_span_by_selection(phrase_start, phrase_end)
 
         # Wait for first span to be rendered
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Create second overlapping span
         self.select_span_label("negative")
@@ -160,7 +160,7 @@ class TestIntervalRendering(BaseSeleniumTest):
         self.create_span_by_selection(overlap_start, overlap_end)
 
         # Wait for second span to be rendered
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Check that both spans exist
         span_overlays = self.driver.find_element(By.ID, "span-overlays")
@@ -211,7 +211,7 @@ class TestIntervalRendering(BaseSeleniumTest):
         self.create_span_by_selection(word_start, word_end)
 
         # Wait for span to be rendered
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Verify span exists
         span_overlays = self.driver.find_element(By.ID, "span-overlays")
@@ -223,7 +223,7 @@ class TestIntervalRendering(BaseSeleniumTest):
         delete_button.click()
 
         # Wait for deletion to complete
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Verify span was deleted
         overlay_elements_after = span_overlays.find_elements(By.CLASS_NAME, "span-overlay")
@@ -250,7 +250,7 @@ class TestIntervalRendering(BaseSeleniumTest):
         """, start, end)
 
         # Wait a moment for selection to be processed
-        time.sleep(0.5)
+        time.sleep(0.1)
 
 
 if __name__ == "__main__":

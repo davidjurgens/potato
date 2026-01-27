@@ -1,6 +1,6 @@
 annotation_task_name: "Radio Button Annotation Test"
 data_files:
-- "../data/test_data.json"
+- "../../../data/test_data.json"
 item_properties:
   id_key: id
   text_key: text

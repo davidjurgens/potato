@@ -85,7 +85,7 @@ class TestSpanOverlayPositioningSelenium(BaseSeleniumTest):
         print(f"DEBUG: Text selection info: {selection_info}")
 
         # Wait a moment for selection to be processed
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Select the "positive" label checkbox to enable span creation
         positive_checkbox = self.wait_for_element(By.ID, "emotion_spans_positive")
@@ -104,7 +104,7 @@ class TestSpanOverlayPositioningSelenium(BaseSeleniumTest):
         print(f"DEBUG: Label selection info: {label_selection_info}")
 
         # Wait a moment for label selection to be processed
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Trigger the span creation by calling handleTextSelection
         span_creation_result = self.execute_script_safe("""
@@ -142,7 +142,7 @@ class TestSpanOverlayPositioningSelenium(BaseSeleniumTest):
         print(f"DEBUG: DOM structure: {dom_structure}")
 
         # Wait for the span overlay to appear
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Debug: Check if any overlays were created
         overlay_debug = self.execute_script_safe("""
@@ -257,14 +257,14 @@ class TestSpanOverlayPositioningSelenium(BaseSeleniumTest):
         """)
 
         # Wait a moment for selection to be processed
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Select the "positive" label checkbox to enable span creation
         positive_checkbox = self.wait_for_element(By.ID, "emotion_spans_positive")
         positive_checkbox.click()
 
         # Wait a moment for label selection to be processed
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Trigger the span creation by calling handleTextSelection
         self.execute_script_safe("""
@@ -276,7 +276,7 @@ class TestSpanOverlayPositioningSelenium(BaseSeleniumTest):
         """)
 
         # Wait for the span overlay to appear
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Get the initial overlay position
         span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
@@ -294,14 +294,14 @@ class TestSpanOverlayPositioningSelenium(BaseSeleniumTest):
         next_button.click()
 
         # Wait for navigation to complete
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Navigate back to the first instance
         prev_button = self.wait_for_element(By.ID, "prev-button")
         prev_button.click()
 
         # Wait for navigation to complete
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Check that the span overlay still exists and has the correct text
         span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
@@ -394,14 +394,14 @@ class TestSpanOverlayPositioningSelenium(BaseSeleniumTest):
             """)
 
             # Wait a moment for selection to be processed
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             # Select the label checkbox to enable span creation
             label = self.wait_for_element(By.ID, span_info["label"])
             label.click()
 
             # Wait a moment for label selection to be processed
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             # Trigger the span creation by calling handleTextSelection
             self.execute_script_safe("""
@@ -413,7 +413,7 @@ class TestSpanOverlayPositioningSelenium(BaseSeleniumTest):
             """)
 
             # Wait for the span overlay to appear
-            time.sleep(1)
+            time.sleep(0.1)
 
             # Store overlay info
             span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")

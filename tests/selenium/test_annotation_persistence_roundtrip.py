@@ -30,6 +30,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 
 from tests.helpers.flask_test_setup import FlaskTestServer
+from tests.helpers.port_manager import find_free_port
 from tests.helpers.test_utils import create_test_config, create_test_data_file
 
 
@@ -138,7 +139,7 @@ class TestAnnotationPersistenceRoundtrip(unittest.TestCase):
             require_password=False
         )
 
-        cls.server = FlaskTestServer(port=9020, debug=False, config_file=cls.config_file)
+        cls.server = FlaskTestServer(port=find_free_port(), debug=False, config_file=cls.config_file)
         started = cls.server.start_server()
         assert started, "Failed to start Flask server"
         cls.server._wait_for_server_ready(timeout=10)
@@ -199,7 +200,7 @@ class TestAnnotationPersistenceRoundtrip(unittest.TestCase):
         register_form.submit()
 
         # Wait for annotation page to load
-        time.sleep(2)
+        time.sleep(0.05)
         WebDriverWait(self.driver, 15).until(
             EC.presence_of_element_located((By.ID, "main-content"))
         )
@@ -213,7 +214,7 @@ class TestAnnotationPersistenceRoundtrip(unittest.TestCase):
         WebDriverWait(self.driver, 10).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='checkbox']"))
         )
-        time.sleep(0.5)  # Allow JS to initialize
+        time.sleep(0.1)  # Allow JS to initialize
 
     def _get_checkbox_states(self):
         """Get the checked state of all checkboxes."""
@@ -231,20 +232,20 @@ class TestAnnotationPersistenceRoundtrip(unittest.TestCase):
         self.driver.execute_script("arguments[0].scrollIntoView(true);", checkbox)
         time.sleep(0.1)
         checkbox.click()
-        time.sleep(0.3)  # Allow state to update
+        time.sleep(0.1)  # Allow state to update
 
     def _navigate_next(self):
         """Navigate to the next instance using keyboard."""
         body = self.driver.find_element(By.TAG_NAME, "body")
         body.send_keys(Keys.ARROW_RIGHT)
-        time.sleep(1)  # Wait for navigation and page reload
+        time.sleep(0.1)  # Wait for navigation and page reload
         self._wait_for_page_ready()
 
     def _navigate_prev(self):
         """Navigate to the previous instance using keyboard."""
         body = self.driver.find_element(By.TAG_NAME, "body")
         body.send_keys(Keys.ARROW_LEFT)
-        time.sleep(1)  # Wait for navigation and page reload
+        time.sleep(0.1)  # Wait for navigation and page reload
         self._wait_for_page_ready()
 
     def test_checkbox_persistence_after_navigation_roundtrip(self):
@@ -368,9 +369,9 @@ class TestAnnotationPersistenceRoundtrip(unittest.TestCase):
         # Use keyboard shortcuts to select checkboxes
         body = self.driver.find_element(By.TAG_NAME, "body")
         body.send_keys("1")  # Select red
-        time.sleep(0.3)
+        time.sleep(0.1)
         body.send_keys("3")  # Select blue
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Navigate away and back
         self._navigate_next()
@@ -401,7 +402,7 @@ class TestRadioButtonPersistenceRoundtrip(unittest.TestCase):
             require_password=False
         )
 
-        cls.server = FlaskTestServer(port=9021, debug=False, config_file=cls.config_file)
+        cls.server = FlaskTestServer(port=find_free_port(), debug=False, config_file=cls.config_file)
         started = cls.server.start_server()
         assert started, "Failed to start Flask server"
         cls.server._wait_for_server_ready(timeout=10)
@@ -452,7 +453,7 @@ class TestRadioButtonPersistenceRoundtrip(unittest.TestCase):
         register_form = self.driver.find_element(By.CSS_SELECTOR, "#register-content form")
         register_form.submit()
 
-        time.sleep(2)
+        time.sleep(0.05)
         WebDriverWait(self.driver, 15).until(
             EC.presence_of_element_located((By.ID, "main-content"))
         )
@@ -464,7 +465,7 @@ class TestRadioButtonPersistenceRoundtrip(unittest.TestCase):
         WebDriverWait(self.driver, 10).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='radio']"))
         )
-        time.sleep(0.5)
+        time.sleep(0.1)
 
     def _get_selected_radio(self):
         """Get the value of the currently selected radio button."""
@@ -480,18 +481,18 @@ class TestRadioButtonPersistenceRoundtrip(unittest.TestCase):
         self.driver.execute_script("arguments[0].scrollIntoView(true);", radio)
         time.sleep(0.1)
         radio.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
     def _navigate_next(self):
         body = self.driver.find_element(By.TAG_NAME, "body")
         body.send_keys(Keys.ARROW_RIGHT)
-        time.sleep(1)
+        time.sleep(0.1)
         self._wait_for_page_ready()
 
     def _navigate_prev(self):
         body = self.driver.find_element(By.TAG_NAME, "body")
         body.send_keys(Keys.ARROW_LEFT)
-        time.sleep(1)
+        time.sleep(0.1)
         self._wait_for_page_ready()
 
     def test_radio_persistence_after_navigation_roundtrip(self):

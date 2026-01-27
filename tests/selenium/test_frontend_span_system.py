@@ -57,7 +57,7 @@ class TestFrontendSpanSystem(BaseSeleniumTest):
         self.wait_for_element(By.ID, "instance-text")
 
         # Wait a bit for JavaScript to initialize
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Check that span manager JavaScript is loaded
         span_manager_available = self.execute_script_safe(
@@ -125,7 +125,7 @@ class TestFrontendSpanSystem(BaseSeleniumTest):
         self.wait_for_element(By.ID, "instance-text")
 
         # Wait for spans to be rendered by frontend
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Check that the span is rendered by frontend (span-overlay-pure is the actual class)
         span_elements = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
@@ -161,7 +161,7 @@ class TestFrontendSpanSystem(BaseSeleniumTest):
         actions.perform()
 
         # Wait for span creation dialog or menu
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Check if span creation UI appears
         # This depends on the specific UI implementation
@@ -223,7 +223,7 @@ class TestFrontendSpanSystem(BaseSeleniumTest):
         self.assertEqual(len(spans_data['spans']), 1)
 
         # Wait for spans to be rendered by frontend
-        time.sleep(2)
+        time.sleep(0.05)
 
         span_elements = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
         self.assertEqual(len(span_elements), 1, "Frontend should show one span")
@@ -254,7 +254,7 @@ class TestFrontendSpanSystem(BaseSeleniumTest):
         # Reload page to trigger frontend to update
         self.driver.refresh()
         self.wait_for_element(By.ID, "instance-text")
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Verify span is removed from frontend
         span_elements_after = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
@@ -305,7 +305,7 @@ class TestFrontendSpanSystem(BaseSeleniumTest):
         # Reload page to trigger frontend to load the new spans
         self.driver.refresh()
         self.wait_for_element(By.ID, "instance-text")
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Check that spans are rendered with different colors
         # The actual colored elements are span-highlight-segment children
@@ -367,7 +367,7 @@ class TestFrontendSpanSystem(BaseSeleniumTest):
         # Reload page to trigger frontend to load the new spans
         self.driver.refresh()
         self.wait_for_element(By.ID, "instance-text")
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Check that both spans are rendered
         span_elements = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
@@ -389,7 +389,7 @@ class TestFrontendSpanSystem(BaseSeleniumTest):
         self.wait_for_element(By.ID, "instance-text")
 
         # Wait for JavaScript to initialize
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Check that span manager is initialized
         span_manager_initialized = self.execute_script_safe(
@@ -420,7 +420,7 @@ class TestFrontendSpanSystem(BaseSeleniumTest):
         """)
 
         # Wait a bit for the async operation
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Get spans after loadAnnotations
         spans_after_load = self.execute_script_safe(
@@ -442,7 +442,7 @@ class TestFrontendSpanSystem(BaseSeleniumTest):
         self.wait_for_element(By.ID, "instance-text")
 
         # Wait for JavaScript to initialize
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Check that span manager is initialized
         span_manager_initialized = self.execute_script_safe(
@@ -460,7 +460,7 @@ class TestFrontendSpanSystem(BaseSeleniumTest):
         label_buttons = self.driver.find_elements(By.CSS_SELECTOR, ".shadcn-span-checkbox")
         if label_buttons:
             label_buttons[0].click()
-            time.sleep(0.5)
+            time.sleep(0.1)
 
         # Get text content for selection
         text_element = self.driver.find_element(By.ID, "instance-text")
@@ -503,7 +503,7 @@ class TestFrontendSpanSystem(BaseSeleniumTest):
         """)
 
         # Wait for span creation
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Check if spans were created
         spans_after_selection = self.execute_script_safe(
@@ -630,7 +630,7 @@ class TestFrontendSpanSystem(BaseSeleniumTest):
         # Reload page to trigger frontend to load the new spans
         self.driver.refresh()
         self.wait_for_element(By.ID, "instance-text")
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Check that span overlay elements are now present (rendered by frontend)
         span_elements = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")

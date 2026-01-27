@@ -114,7 +114,7 @@ class TestSpanOverlapFix(BaseSeleniumTest):
         self.create_span_by_text_selection(first_span_text, "positive")
 
         # Wait for first span to be created
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Debug: Check what span elements are present
         print("Checking for span elements after first span creation...")
@@ -135,7 +135,7 @@ class TestSpanOverlapFix(BaseSeleniumTest):
         self.create_span_by_text_selection(second_span_text, "negative")
 
         # Wait for second span to be created
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Debug: Check what span elements are present after second span
         print("Checking for span elements after second span creation...")
@@ -240,13 +240,13 @@ class TestSpanOverlapFix(BaseSeleniumTest):
         self.create_span_by_text_selection(span_text, "positive")
 
         # Wait for first span to be created
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Create second span: select the same phrase (full overlap)
         self.create_span_by_text_selection(span_text, "negative")
 
         # Wait for second span to be created
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Verify both spans are visible
         spans = self.driver.find_elements(By.CLASS_NAME, "annotation-span")
@@ -291,11 +291,11 @@ class TestSpanOverlapFix(BaseSeleniumTest):
 
         # Create spans
         self.create_span_by_text_selection(span1_text, "positive")
-        time.sleep(1)
+        time.sleep(0.1)
         self.create_span_by_text_selection(span2_text, "negative")
-        time.sleep(1)
+        time.sleep(0.1)
         self.create_span_by_text_selection(span3_text, "neutral")
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Verify all three spans are visible
         spans = self.driver.find_elements(By.CLASS_NAME, "annotation-span")
@@ -339,9 +339,9 @@ class TestSpanOverlapFix(BaseSeleniumTest):
         span2_text = " ".join(words[1:4])  # Overlaps with span1
 
         self.create_span_by_text_selection(span1_text, "positive")
-        time.sleep(1)
+        time.sleep(0.1)
         self.create_span_by_text_selection(span2_text, "negative")
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Verify both spans exist
         spans = self.driver.find_elements(By.CLASS_NAME, "annotation-span")
@@ -351,7 +351,7 @@ class TestSpanOverlapFix(BaseSeleniumTest):
         delete_buttons = self.driver.find_elements(By.CLASS_NAME, "span-delete-btn")
         if len(delete_buttons) > 0:
             delete_buttons[0].click()
-            time.sleep(1)
+            time.sleep(0.1)
 
         # Verify second span still exists
         remaining_spans = self.driver.find_elements(By.CLASS_NAME, "annotation-span")
@@ -393,9 +393,9 @@ class TestSpanOverlapFix(BaseSeleniumTest):
         span2_text = " ".join(words[1:4])  # Overlaps with span1
 
         self.create_span_by_text_selection(span1_text, "positive")
-        time.sleep(1)
+        time.sleep(0.1)
         self.create_span_by_text_selection(span2_text, "negative")
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Verify both spans exist
         spans = self.driver.find_elements(By.CLASS_NAME, "annotation-span")
@@ -406,14 +406,14 @@ class TestSpanOverlapFix(BaseSeleniumTest):
         next_button.click()
 
         # Wait for navigation
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Navigate back to previous instance
         prev_button = self.driver.find_element(By.ID, "prev-btn")
         prev_button.click()
 
         # Wait for navigation
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Verify spans are still there
         spans_after_navigation = self.driver.find_elements(By.CLASS_NAME, "annotation-span")
@@ -458,9 +458,9 @@ class TestSpanOverlapFix(BaseSeleniumTest):
         # Test 1: Spans that start at the same position
         same_start_text = " ".join(words[:3])
         self.create_span_by_text_selection(same_start_text, "positive")
-        time.sleep(1)
+        time.sleep(0.1)
         self.create_span_by_text_selection(same_start_text, "negative")
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Verify both spans are visible
         spans = self.driver.find_elements(By.CLASS_NAME, "annotation-span")
@@ -470,12 +470,12 @@ class TestSpanOverlapFix(BaseSeleniumTest):
         # First create a longer span
         long_span_text = " ".join(words[:5])
         self.create_span_by_text_selection(long_span_text, "mixed")
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Then create a shorter span within it
         short_span_text = " ".join(words[1:4])
         self.create_span_by_text_selection(short_span_text, "neutral")
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Verify both spans are visible
         all_spans = self.driver.find_elements(By.CLASS_NAME, "annotation-span")
@@ -510,14 +510,14 @@ class TestSpanOverlapFix(BaseSeleniumTest):
         self.create_span_by_text_selection(first_span_text, "positive")
 
         # Wait for first span to be created
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Create second span: select different words (no overlap)
         second_span_text = " ".join(words[3:5])
         self.create_span_by_text_selection(second_span_text, "negative")
 
         # Wait for second span to be created
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Debug: Check what span elements are present after second span
         print("Checking for span elements after second span creation...")
@@ -572,7 +572,7 @@ class TestSpanOverlapFix(BaseSeleniumTest):
         label_xpath = f"//label[.//span[text()='{label}']]"
         label_element = self.driver.find_element(By.XPATH, label_xpath)
         label_element.click()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Find and select the text
         instance_text = self.driver.find_element(By.ID, "instance-text")
@@ -639,7 +639,7 @@ class TestSpanOverlapFix(BaseSeleniumTest):
         """
 
         self.driver.execute_script(script)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
 
 if __name__ == '__main__':

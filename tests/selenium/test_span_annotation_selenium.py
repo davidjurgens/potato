@@ -109,7 +109,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
             """)
             if status.get('isInitialized') and status.get('positioningReady'):
                 return True
-            time.sleep(0.5)
+            time.sleep(0.1)
         return False
 
     def select_label_checkbox(self, index=0):
@@ -118,7 +118,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         if not checkboxes or index >= len(checkboxes):
             return None
         checkboxes[index].click()
-        time.sleep(0.3)
+        time.sleep(0.1)
         return checkboxes[index].get_attribute('value')
 
     def trigger_span_creation(self):
@@ -174,7 +174,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
             """)
             if status.get('isInitialized') and status.get('positioningReady'):
                 break
-            time.sleep(0.5)
+            time.sleep(0.1)
 
         print(f"Step 1 - SpanManager status: {status}")
         self.assertTrue(status.get('isInitialized'), "SpanManager should be initialized")
@@ -187,7 +187,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         first_checkbox = label_checkboxes[0]
         checkbox_value = first_checkbox.get_attribute('value')
         first_checkbox.click()
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Verify label is selected
         label_status = self.execute_script_safe("""
@@ -289,7 +289,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         self.assertIsNone(handler_result.get('handlerError'), f"Handler should not error: {handler_result.get('handlerError')}")
 
         # Step 5: Wait for span to be saved and check results
-        time.sleep(2)  # Wait for async save operation
+        time.sleep(0.1)  # Wait for async save operation
 
         after_state = self.execute_script_safe("""
             return {
@@ -345,7 +345,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
                 print("✅ Span manager is ready and initialized")
                 break
 
-            time.sleep(0.5)
+            time.sleep(0.1)
 
         if not span_manager_ready:
             self.fail("Span manager failed to initialize within timeout period")
@@ -424,7 +424,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         self.assertTrue(result.get('success'), "Handler should be called")
 
         # Wait for async save
-        time.sleep(2)
+        time.sleep(0.1)
 
         # Verify span was created
         state = self.get_span_state()
@@ -448,7 +448,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         self.assertTrue(selection_result.get('success'), f"Selection failed: {selection_result}")
 
         self.trigger_span_creation()
-        time.sleep(2)
+        time.sleep(0.1)
 
         # Verify span was created
         state_before = self.get_span_state()
@@ -464,7 +464,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
             return { success: true };
         """)
         self.assertTrue(delete_result.get('success'), f"Delete button click failed: {delete_result}")
-        time.sleep(2)
+        time.sleep(0.1)
 
         # Verify span was deleted
         state_after = self.get_span_state()
@@ -488,7 +488,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         self.assertTrue(selection_result.get('success'), f"Selection failed: {selection_result}")
 
         self.trigger_span_creation()
-        time.sleep(2)
+        time.sleep(0.1)
 
         # Verify span was created
         state_before = self.get_span_state()
@@ -505,7 +505,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
 
         # Wait for span manager to reinitialize
         self.assertTrue(self.wait_for_span_manager(), "Span manager should reinitialize")
-        time.sleep(2)
+        time.sleep(0.1)
 
         # Check that span persisted after reload
         state_after = self.get_span_state()
@@ -573,13 +573,14 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         # Wait for page to load
         self.wait_for_element(By.ID, "instance-text")
 
-        # Wait for span manager to initialize
-        time.sleep(2)
+        # Wait for span manager to initialize with explicit wait
+        span_manager_ready = self.wait_for_span_manager()
 
         # Check that span manager is available
-        span_manager_ready = self.execute_script_safe("""
-            return window.spanManager && window.spanManager.isInitialized;
-        """)
+        if not span_manager_ready:
+            span_manager_ready = self.execute_script_safe("""
+                return window.spanManager && window.spanManager.isInitialized;
+            """)
         self.assertTrue(span_manager_ready, "Span manager should be initialized")
 
         # Test span manager methods
@@ -626,7 +627,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         for i, checkbox in enumerate(label_checkboxes[:3]):  # Create up to 3 spans
             # Select this label
             checkbox.click()
-            time.sleep(0.3)
+            time.sleep(0.1)
 
             # Create selection at different positions
             char_start = i * 15  # Offset each span
@@ -664,11 +665,11 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
 
             if selection_result.get('success') and selection_result.get('selectedText'):
                 self.trigger_span_creation()
-                time.sleep(1)
+                time.sleep(0.05)
                 spans_created += 1
 
         # Wait for all spans to be saved
-        time.sleep(2)
+        time.sleep(0.1)
 
         # Verify multiple spans were created
         state = self.get_span_state()
@@ -706,7 +707,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         self.assertTrue(selection_result.get('success'), f"Selection should succeed: {selection_result}")
 
         self.trigger_span_creation()
-        time.sleep(2)
+        time.sleep(0.1)
 
         # Verify span was created without errors
         state = self.get_span_state()
@@ -742,7 +743,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
                 print("✅ Span manager is ready")
                 break
 
-            time.sleep(0.5)
+            time.sleep(0.1)
         else:
             self.fail("Span manager did not initialize within timeout period")
 
@@ -941,7 +942,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         print(f"✅ Combined selection/handler result: {combined_result}")
 
         # Wait for span creation
-        time.sleep(2)
+        time.sleep(0.1)
 
         # Check span count
         span_count = self.execute_script_safe("""
@@ -977,7 +978,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         self.assertTrue(handler_result.get('success'), "Handler should be called")
 
         # Wait for span creation
-        time.sleep(2)
+        time.sleep(0.1)
 
         # Verify span was created and overlay appeared
         state = self.get_span_state()
@@ -1027,7 +1028,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         self.assertTrue(handler_result.get('success'), "Handler should be called")
 
         # Wait for span creation
-        time.sleep(2)
+        time.sleep(0.1)
 
         # Verify span was created and overlay appeared
         state = self.get_span_state()
@@ -1098,7 +1099,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         self.assertGreater(len(initial_structure.get('textContentText', '')), 0, "text-content is empty")
 
         # Wait a bit and check structure again
-        time.sleep(1)
+        time.sleep(0.05)
 
         # Get DOM structure after waiting
         after_wait_structure = self.execute_script_safe("""
@@ -1129,7 +1130,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
 
         # Simulate some interactions that might trigger DOM changes
         self.driver.execute_script("arguments[0].focus();", text_content)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Check structure after interaction
         after_interaction_structure = self.execute_script_safe("""
@@ -1178,7 +1179,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         self.assertTrue(selection_result.get('success'), f"Selection should succeed: {selection_result}")
 
         self.trigger_span_creation()
-        time.sleep(2)
+        time.sleep(0.1)
 
         # Verify span was created
         state = self.get_span_state()
@@ -1203,7 +1204,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
             return { success: true };
         """)
         self.assertTrue(delete_result.get('success'), f"Delete button click failed: {delete_result}")
-        time.sleep(2)
+        time.sleep(0.1)
 
         # Verify span was deleted
         state_after = self.get_span_state()
@@ -1229,7 +1230,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         self.assertTrue(selection_result.get('success'), f"Selection should succeed: {selection_result}")
 
         self.trigger_span_creation()
-        time.sleep(2)
+        time.sleep(0.1)
 
         # Verify span was created
         state = self.get_span_state()
@@ -1250,7 +1251,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         # Test navigation doesn't cause text selection
         next_button = self.driver.find_element(By.ID, "next-btn")
         next_button.click()
-        time.sleep(2)
+        time.sleep(0.3)
 
         selection_after_nav = self.execute_script_safe("""
             const selection = window.getSelection();
@@ -1277,7 +1278,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         self.select_label_checkbox(0)
         self.create_text_selection(10)
         self.trigger_span_creation()
-        time.sleep(1)
+        time.sleep(0.05)
 
         # Create second span at different position
         self.select_label_checkbox(1)
@@ -1307,7 +1308,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
             return { success: true, selectedText: selection.toString() };
         """)
         self.trigger_span_creation()
-        time.sleep(1)
+        time.sleep(0.05)
 
         # Verify spans were created
         state = self.get_span_state()
@@ -1323,7 +1324,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
             return { success: true };
         """)
         self.assertTrue(delete_result.get('success'), "Delete should succeed")
-        time.sleep(1)
+        time.sleep(0.05)
 
         # Verify span was deleted
         state_after = self.get_span_state()
@@ -1344,7 +1345,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         self.select_label_checkbox(0)
         self.create_text_selection(10)
         self.trigger_span_creation()
-        time.sleep(2)
+        time.sleep(0.3)
 
         # Verify span is created
         state_before = self.get_span_state()
@@ -1358,7 +1359,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
             return { success: true };
         """)
         self.assertTrue(delete_result.get('success'), "Delete should succeed")
-        time.sleep(2)
+        time.sleep(0.1)
 
         # Verify span is deleted
         state_after_delete = self.get_span_state()
@@ -1367,12 +1368,12 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         # Navigate to next instance
         next_button = self.driver.find_element(By.ID, "next-btn")
         next_button.click()
-        time.sleep(2)
+        time.sleep(0.3)
 
         # Navigate back to first instance
         prev_button = self.driver.find_element(By.ID, "prev-btn")
         prev_button.click()
-        time.sleep(2)
+        time.sleep(0.3)
 
         # Verify span is still deleted (doesn't reappear)
         state_after_navigation = self.get_span_state()
@@ -1410,7 +1411,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
 
         # Reload annotations
         self.execute_script_safe("""if (window.spanManager) return window.spanManager.loadAnnotations('1');""")
-        time.sleep(2)
+        time.sleep(0.3)
 
         # Debug: Print initial overlay count and details
         overlays = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
@@ -1494,7 +1495,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
             }
         """)
         print(f"DEBUG: handleTextSelection result: {result}")
-        time.sleep(1)
+        time.sleep(0.05)
 
         # Debug: Print overlay count and details after partial overlap
         overlays = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
@@ -1521,7 +1522,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         self.execute_script_safe(script_full)
         label_btn.click()
         self.execute_script_safe("window.spanManager.handleTextSelection()")
-        time.sleep(1)
+        time.sleep(0.05)
 
         # Debug: Print overlay count and details after full containment
         overlays = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
@@ -1548,7 +1549,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         self.execute_script_safe(script_non)
         label_btn.click()
         self.execute_script_safe("window.spanManager.handleTextSelection()")
-        time.sleep(1)
+        time.sleep(0.05)
 
         # Debug: Print overlay count and details after non-overlapping
         overlays = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
@@ -1594,7 +1595,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
                 print("✅ Span manager is ready and initialized")
                 break
 
-            time.sleep(0.5)
+            time.sleep(0.3)
 
         if not span_manager_ready:
             # Try to force initialization
@@ -1608,7 +1609,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
             print(f"🔍 Force initialization result: {init_result}")
 
             # Wait a bit more after forced initialization
-            time.sleep(2)
+            time.sleep(0.1)
 
             # Check again
             final_status = self.execute_script_safe("""
@@ -1712,7 +1713,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
             self.fail(f"Failed to call handleTextSelection: {handler_result}")
 
         # Wait for potential span creation
-        time.sleep(3)
+        time.sleep(0.1)
 
         # Check if any spans were created
         span_count = self.execute_script_safe("""
@@ -1759,7 +1760,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         self.assertTrue(selection_result.get('success'), f"Selection should succeed: {selection_result}")
 
         self.trigger_span_creation()
-        time.sleep(2)
+        time.sleep(0.1)
 
         # Verify span was created
         state = self.get_span_state()
@@ -1781,7 +1782,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         # Test navigation doesn't cause text selection
         next_button = self.driver.find_element(By.ID, "next-btn")
         next_button.click()
-        time.sleep(2)
+        time.sleep(0.3)
 
         selection_after_nav = self.execute_script_safe("""
             const selection = window.getSelection();
@@ -1902,7 +1903,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
             self.fail(f"Failed to call handleTextSelection: {handler_result}")
 
         # Wait for span creation and rendering
-        time.sleep(3)
+        time.sleep(0.3)
 
         # Check if spans were created
         span_count = self.execute_script_safe("""
@@ -2013,7 +2014,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         print("✅ Clicked next button")
 
         # Wait for navigation
-        time.sleep(2)
+        time.sleep(0.3)
 
         # Check if text is selected after navigation
         selection_after_nav = self.execute_script_safe("""
@@ -2074,7 +2075,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         print(f"Handler call result: {handler_result}")
 
         # Wait for async operations
-        time.sleep(2)
+        time.sleep(0.1)
 
         # Verify span was created using helper method
         state = self.get_span_state()
@@ -2104,7 +2105,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         self.assertTrue(selection_result.get('success'), f"Selection should succeed: {selection_result}")
 
         self.trigger_span_creation()
-        time.sleep(2)
+        time.sleep(0.1)
 
         # Verify span was created
         state = self.get_span_state()
@@ -2114,7 +2115,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         # Navigate to next instance
         next_button = self.driver.find_element(By.ID, "next-btn")
         next_button.click()
-        time.sleep(2)
+        time.sleep(0.3)
 
         # Check if text selection is cleared after navigation
         selection_after_nav = self.execute_script_safe("""
@@ -2127,7 +2128,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         # Navigate back
         prev_button = self.driver.find_element(By.ID, "prev-btn")
         prev_button.click()
-        time.sleep(2)
+        time.sleep(0.3)
 
         # Check selection after back navigation
         selection_after_back = self.execute_script_safe("""
@@ -2225,7 +2226,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         print(f"✅ Handler call result: {handler_result}")
 
         # Wait a moment for any async operations
-        time.sleep(2)
+        time.sleep(0.3)
 
         # Get captured console logs
         captured_logs = self.execute_script_safe("""
@@ -2315,7 +2316,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         print(f"✅ Navigation result: {navigation_result}")
 
         # Wait for navigation
-        time.sleep(2)
+        time.sleep(0.3)
 
         # Check if text selection is cleared
         selection_after_nav = self.execute_script_safe("""
@@ -2344,7 +2345,7 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         print(f"✅ Back navigation result: {back_result}")
 
         # Wait for navigation back
-        time.sleep(2)
+        time.sleep(0.1)
 
         # Check selection again
         selection_after_back = self.execute_script_safe("""

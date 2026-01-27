@@ -3,7 +3,7 @@ task_dir: output/simple-checkbox
 output_annotation_dir: output/simple-checkbox/annotations
 output_annotation_format: jsonl
 data_files:
-- ../data/test_data.json
+- ../../../data/test_data.json
 item_properties:
   id_key: id
   text_key: text

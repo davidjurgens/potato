@@ -234,14 +234,8 @@ class TestMultiPhaseWorkflow:
         yield server
         server.stop()
 
-    @pytest.mark.xfail(reason="all-phases-example config has registration issues that need investigation")
     def test_user_goes_through_consent_phase(self, server, browser, test_user):
-        """Test that user encounters consent phase after registration.
-
-        This test is currently failing because the all-phases-example config
-        doesn't properly redirect after registration. This needs investigation
-        to determine if it's a config issue or a platform bug.
-        """
+        """Test that user encounters consent phase after registration."""
         register_user(browser, server, test_user["username"], test_user["password"])
 
         # Wait for page to load

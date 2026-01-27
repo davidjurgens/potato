@@ -577,7 +577,6 @@ class TestMixedAnnotationTypesE2E:
         yield server
         server.stop()
 
-    @pytest.mark.xfail(reason="all-phases-example has registration issues")
     def test_multiple_annotation_types_on_page(self, server, browser, test_user):
         """Test that pages with multiple annotation types render correctly."""
         try:
@@ -596,7 +595,6 @@ class TestMixedAnnotationTypesE2E:
         # Should have at least some inputs
         assert total_inputs > 0, "Page should have annotation inputs"
 
-    @pytest.mark.xfail(reason="all-phases-example has registration issues")
     def test_can_interact_with_different_types(self, server, browser, test_user):
         """Test that user can interact with different annotation types."""
         try:

@@ -28,7 +28,7 @@ class TestSpanOverlapSelection(BaseSeleniumTest):
         print(f"Original text: {original_text}")
 
         # Wait for span manager to be ready
-        time.sleep(2)
+        time.sleep(0.05)
         span_manager_ready = self.execute_script_safe("""
             return window.spanManager && window.spanManager.isInitialized;
         """)
@@ -43,7 +43,7 @@ class TestSpanOverlapSelection(BaseSeleniumTest):
         self._create_span_by_text_selection(first_span_text)
 
         # Wait for the first span to be created
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Verify first span was created
         spans = self.driver.find_elements(By.CLASS_NAME, "annotation-span")
@@ -64,7 +64,7 @@ class TestSpanOverlapSelection(BaseSeleniumTest):
         self._create_span_by_text_selection(second_span_text)
 
         # Wait for the second span to be created
-        time.sleep(3)
+        time.sleep(0.1)
 
         # Verify both spans were created and the first span still exists
         spans = self.driver.find_elements(By.CLASS_NAME, "annotation-span")
@@ -158,7 +158,7 @@ class TestSpanOverlapSelection(BaseSeleniumTest):
 
         try:
             self.driver.execute_script(script)
-            time.sleep(0.5)  # Wait for selection to be applied
+            time.sleep(0.1)  # Wait for selection to be applied
 
             # Trigger the text selection handler
             self.driver.execute_script("""
@@ -182,7 +182,7 @@ class TestSpanOverlapSelection(BaseSeleniumTest):
         text_element = self.wait_for_element(By.ID, "instance-text")
 
         # Wait for span manager to be ready
-        time.sleep(2)
+        time.sleep(0.05)
         span_manager_ready = self.execute_script_safe("""
             return window.spanManager && window.spanManager.isInitialized;
         """)
@@ -194,7 +194,7 @@ class TestSpanOverlapSelection(BaseSeleniumTest):
 
         # Create first span: "artificial intelligence"
         self._create_span_by_text_selection("artificial intelligence")
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Select the second label (sad)
         sad_label = self.driver.find_element(By.CSS_SELECTOR, '[data-label="sad"]')
@@ -202,7 +202,7 @@ class TestSpanOverlapSelection(BaseSeleniumTest):
 
         # Create second span: "natural language processing" (disjoint)
         self._create_span_by_text_selection("natural language processing")
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Verify both spans were created
         spans = self.driver.find_elements(By.CLASS_NAME, "annotation-span")
@@ -218,7 +218,7 @@ class TestSpanOverlapSelection(BaseSeleniumTest):
         text_element = self.wait_for_element(By.ID, "instance-text")
 
         # Wait for span manager to be ready
-        time.sleep(2)
+        time.sleep(0.05)
         span_manager_ready = self.execute_script_safe("""
             return window.spanManager && window.spanManager.isInitialized;
         """)
@@ -230,7 +230,7 @@ class TestSpanOverlapSelection(BaseSeleniumTest):
 
         # Create first span: "artificial intelligence model"
         self._create_span_by_text_selection("artificial intelligence model")
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Select the second label (sad)
         sad_label = self.driver.find_element(By.CSS_SELECTOR, '[data-label="sad"]')
@@ -238,7 +238,7 @@ class TestSpanOverlapSelection(BaseSeleniumTest):
 
         # Create second span: "intelligence" (fully nested)
         self._create_span_by_text_selection("intelligence")
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Verify both spans were created
         spans = self.driver.find_elements(By.CLASS_NAME, "annotation-span")

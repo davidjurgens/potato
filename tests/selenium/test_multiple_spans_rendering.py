@@ -37,7 +37,7 @@ class TestMultipleSpansRendering(BaseSeleniumTest):
 
         # Wait for page to load
         self.wait_for_element(By.ID, "instance-text")
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Wait for span manager to be ready
         span_manager_ready = self.execute_script_safe("""
@@ -161,7 +161,7 @@ class TestMultipleSpansRendering(BaseSeleniumTest):
             print(f"🔧 Load annotations result: {load_result}")
 
             # Wait for the span to be created and rendered
-            time.sleep(2)
+            time.sleep(0.05)
 
             # Verify all existing spans are still present and correct
             self._verify_all_spans_present(test_spans[:i+1], full_text)
@@ -180,7 +180,7 @@ class TestMultipleSpansRendering(BaseSeleniumTest):
 
         # Wait for page to load
         self.wait_for_element(By.ID, "instance-text")
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Wait for span manager to be ready
         span_manager_ready = self.execute_script_safe("""
@@ -241,7 +241,7 @@ class TestMultipleSpansRendering(BaseSeleniumTest):
             print(f"🔧 Span creation result: {create_result}")
 
             # Wait for the span to be created and rendered
-            time.sleep(2)
+            time.sleep(0.05)
 
             # Verify all existing spans are still present and correct
             self._verify_all_spans_present(adjacent_spans[:i+1], full_text)
@@ -260,7 +260,7 @@ class TestMultipleSpansRendering(BaseSeleniumTest):
 
         # Wait for page to load
         self.wait_for_element(By.ID, "instance-text")
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Wait for span manager to be ready
         span_manager_ready = self.execute_script_safe("""
@@ -300,7 +300,7 @@ class TestMultipleSpansRendering(BaseSeleniumTest):
                 return null;
             """, span_info['text'], start_index, end_index, span_info['label'])
 
-            time.sleep(1)
+            time.sleep(0.1)
 
         # Verify both spans are present
         span_elements = text_element.find_elements(By.CLASS_NAME, "annotation-span")
@@ -315,7 +315,7 @@ class TestMultipleSpansRendering(BaseSeleniumTest):
         delete_button.click()
 
         # Wait for deletion to complete
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Verify the second span is still present and correct
         remaining_spans = text_element.find_elements(By.CLASS_NAME, "annotation-span")
@@ -344,7 +344,7 @@ class TestMultipleSpansRendering(BaseSeleniumTest):
 
         # Navigate to annotation page
         self.driver.get(f"{self.server.base_url}/annotate")
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Wait for span manager to be ready
         span_manager_ready = self.execute_script_safe("""
@@ -372,7 +372,7 @@ class TestMultipleSpansRendering(BaseSeleniumTest):
         print(f"🔧 First span creation result: {first_span_result}")
 
         # Wait for rendering
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Now test offset calculation for a later position
         print("\n📝 Testing offset calculation for position after first span...")
@@ -443,7 +443,7 @@ class TestMultipleSpansRendering(BaseSeleniumTest):
         print(f"🔧 Second span creation result: {second_span_result}")
 
         # Wait for rendering
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Check if both spans are rendered correctly
         span_elements = self.driver.find_elements(By.CLASS_NAME, "annotation-span")

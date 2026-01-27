@@ -11,7 +11,7 @@ assignment_strategy: fixed_order
 # Malicious data files with excessive path traversal attempts
 data_files:
 - ../../../etc/passwd  # 3 levels of .. - should be blocked
-- ../data/../../../../etc/shadow  # 4 levels of .. - should be blocked
+- ../../../data/../../../../etc/shadow  # 4 levels of .. - should be blocked
 - data/../../../..  # 4 levels of .. - should be blocked
 - ../../../../../../etc/hosts  # 6 levels of .. - should be blocked
 

@@ -76,7 +76,7 @@ class TestFrontendSpanRendering(BaseSeleniumTest):
         self.assertEqual(response.status_code, 200)
 
         # Wait for span to be rendered
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Check that span elements are present
         span_elements = self.driver.find_elements(By.CLASS_NAME, "span-highlight")
@@ -142,7 +142,7 @@ class TestFrontendSpanRendering(BaseSeleniumTest):
             self.assertEqual(response.status_code, 200)
 
         # Wait for spans to be rendered
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Check that all spans are rendered
         span_elements = self.driver.find_elements(By.CLASS_NAME, "span-highlight")
@@ -196,7 +196,7 @@ class TestFrontendSpanRendering(BaseSeleniumTest):
         self.assertEqual(response.status_code, 200)
 
         # Wait for span to be rendered
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Check for delete button
         delete_buttons = self.driver.find_elements(By.CLASS_NAME, "span-delete")
@@ -259,7 +259,7 @@ class TestFrontendSpanRendering(BaseSeleniumTest):
             self.assertEqual(response.status_code, 200)
 
         # Wait for spans to be rendered
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Check that spans have different colors
         span_elements = self.driver.find_elements(By.CLASS_NAME, "span-highlight")
@@ -310,7 +310,7 @@ class TestFrontendSpanRendering(BaseSeleniumTest):
         self.assertEqual(response.status_code, 200)
 
         # Wait for span to be rendered
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Get initial span position
         span_element = self.driver.find_element(By.CLASS_NAME, "span-highlight")
@@ -318,7 +318,7 @@ class TestFrontendSpanRendering(BaseSeleniumTest):
 
         # Resize window
         self.driver.set_window_size(800, 600)
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Check that span is still present
         span_elements_after_resize = self.driver.find_elements(By.CLASS_NAME, "span-highlight")
@@ -373,7 +373,7 @@ class TestFrontendSpanRendering(BaseSeleniumTest):
         self.assertEqual(response.status_code, 200)
 
         # Wait for span to be rendered
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Check that text content is preserved
         text_element_after = self.driver.find_element(By.ID, "instance-text")
@@ -423,7 +423,7 @@ class TestFrontendSpanRendering(BaseSeleniumTest):
         self.assertEqual(response.status_code, 200)
 
         # Wait for span to be rendered
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Check span accessibility attributes
         span_element = self.driver.find_element(By.CLASS_NAME, "span-highlight")

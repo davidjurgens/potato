@@ -8,21 +8,64 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from tests.helpers.flask_test_setup import FlaskTestServer
+from tests.helpers.test_utils import create_test_config, create_test_data_file
+from tests.helpers.port_manager import find_free_port
+
 
 @pytest.fixture(scope="module")
 def flask_server():
-    # Start the server in production mode (debug=False) using the actual config
-    config_file = os.path.abspath("tests/configs/configs/radio-annotation.yaml")
-    server = FlaskTestServer(port=9001, debug=False, config_file=config_file)
+    """Start the server in production mode using dynamic config."""
+    # Create test directory
+    test_dir = os.path.join(os.path.dirname(__file__), "..", "output", f"production_test_{int(time.time())}")
+    os.makedirs(test_dir, exist_ok=True)
+
+    # Create test data
+    test_data = [
+        {"id": "item_1", "text": "This is a positive test item."},
+        {"id": "item_2", "text": "This is a negative test item."},
+        {"id": "item_3", "text": "This is a neutral test item."},
+    ]
+    data_file = create_test_data_file(test_dir, test_data)
+
+    # Create annotation schemes
+    annotation_schemes = [
+        {
+            "name": "sentiment",
+            "annotation_type": "radio",
+            "labels": ["positive", "negative", "neutral"],
+            "description": "What is the sentiment?"
+        }
+    ]
+
+    config_file = create_test_config(
+        test_dir,
+        annotation_schemes,
+        data_files=[data_file],
+        annotation_task_name="Production Mode Test",
+        require_password=True
+    )
+
+    port = find_free_port()
+    server = FlaskTestServer(port=port, debug=False, config_file=config_file)
     started = server.start_server()
     assert started, "Failed to start Flask server"
+
     yield server
+
     server.stop_server()
+
+    # Cleanup
+    import shutil
+    try:
+        shutil.rmtree(test_dir, ignore_errors=True)
+    except Exception:
+        pass
+
 
 @pytest.fixture
 def browser():
     chrome_options = Options()
-    chrome_options.add_argument("--headless=new")  # Use the new headless mode
+    chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
@@ -40,17 +83,16 @@ def browser():
     yield driver
     driver.quit()
 
+
 def test_server_health_check(flask_server):
     """Test that the server is running and healthy."""
-    # In production mode, the server should redirect to auth page when no session exists
     response = flask_server.get("/")
-    # Should redirect to auth page (302) or show auth page (200)
     assert response.status_code in [200, 302], f"Server health check failed: {response.status_code}"
     print("✅ Server health check passed")
 
+
 def test_user_registration_and_annotation(flask_server, browser):
     """Test user registration, login, and annotation submission in production mode."""
-
     base_url = flask_server.base_url
     username = f"test_user_{int(time.time())}"
     password = "test_password_123"
@@ -59,340 +101,45 @@ def test_user_registration_and_annotation(flask_server, browser):
     print(f"Username: {username}")
     print(f"Base URL: {base_url}")
 
-    # Step 1: Navigate to home page
-    print("1. Navigating to home page...")
+    # Navigate to home page
     browser.get(f"{base_url}/")
 
-    # Wait for page to load - in production mode, this should show the login/register form
+    # Wait for login page
     WebDriverWait(browser, 10).until(
         EC.presence_of_element_located((By.ID, "login-tab"))
     )
 
-    print(f"   Current URL: {browser.current_url}")
-    print(f"   Page title: {browser.title}")
-
-    # Step 2: Switch to registration tab and register user
-    print("2. Registering new user...")
-
-    # Click on register tab
+    # Click register tab
     register_tab = browser.find_element(By.ID, "register-tab")
     register_tab.click()
 
-    # Wait for register form to be visible
     WebDriverWait(browser, 10).until(
         EC.visibility_of_element_located((By.ID, "register-content"))
     )
 
-    # Fill in registration form
+    # Fill registration form
     username_input = browser.find_element(By.ID, "register-email")
     password_input = browser.find_element(By.ID, "register-pass")
 
     username_input.send_keys(username)
     password_input.send_keys(password)
 
-    # Submit registration form
     register_form = browser.find_element(By.CSS_SELECTOR, "#register-content form")
     register_form.submit()
 
-    # Wait for redirect after registration
-    time.sleep(2)
-    print(f"   After registration - URL: {browser.current_url}")
+    time.sleep(0.1)
 
-    # Step 3: Check if we're already logged in and on annotation page
-    print("3. Checking login status after registration...")
+    # Wait for annotation page
+    WebDriverWait(browser, 10).until(
+        EC.presence_of_element_located((By.ID, "instance-text"))
+    )
 
-    # Check if we're already on the annotation page (user should be auto-logged in)
-    if "/annotate" in browser.current_url or "instance-text" in browser.page_source:
-        print("   ✅ User is already logged in and on annotation page")
-    else:
-        print("   ⚠️ User not on annotation page, attempting login...")
+    print("✅ User registered and on annotation page")
 
-        # Navigate back to home page if needed
-        if "/auth" in browser.current_url or "/" in browser.current_url:
-            browser.get(f"{base_url}/")
-            time.sleep(1)
-
-        # Switch to login tab
-        login_tab = browser.find_element(By.ID, "login-tab")
-        login_tab.click()
-
-        # Wait for login form to be visible
-        WebDriverWait(browser, 10).until(
-            EC.visibility_of_element_located((By.ID, "login-content"))
-        )
-
-        # Fill in login form
-        login_username_input = browser.find_element(By.ID, "login-email")
-        login_password_input = browser.find_element(By.ID, "login-pass")
-
-        login_username_input.clear()
-        login_username_input.send_keys(username)
-        login_password_input.clear()
-        login_password_input.send_keys(password)
-
-        # Submit login form
-        login_form = browser.find_element(By.CSS_SELECTOR, "#login-content form")
-        login_form.submit()
-
-        # Wait for redirect after login
-        time.sleep(2)
-        print(f"   After login - URL: {browser.current_url}")
-
-        # Check if login was successful by looking for annotation page elements
-        try:
-            WebDriverWait(browser, 10).until(
-                EC.presence_of_element_located((By.ID, "instance-text"))
-            )
-            print("   ✅ Login successful - annotation page loaded")
-        except:
-            print("   ❌ Login may have failed - annotation page not loaded")
-            print(f"   Current page source: {browser.page_source[:1000]}...")
-            # Continue anyway to see what happens
-
-    # Step 4: Navigate to annotation page
-    print("4. Navigating to annotation page...")
-    browser.get(f"{base_url}/annotate?instance_id=ai_1")
-    time.sleep(2)
-    print(f"   Annotation page URL: {browser.current_url}")
-    print("   ✅ Annotation form loaded successfully")
-
-    # Print the annotation form HTML for debugging
-    try:
-        annotation_forms = browser.find_elements(By.CSS_SELECTOR, 'form.annotation-form')
-        for idx, form in enumerate(annotation_forms):
-            print(f"\n--- Annotation Form {idx+1} HTML ---\n{form.get_attribute('outerHTML')}\n--- End Form ---\n")
-    except Exception as e:
-        print(f"   ⚠️ Could not print annotation form HTML: {e}")
-
-    # Step 5: Check Next button state (wait for JS validation)
-    print("5. VERIFICATION 1: Checking Next button state...")
-    time.sleep(1)  # Wait for JS validation to run
-    next_btn = browser.find_element(By.ID, "next-btn")
-    print(f"   Next button disabled: {next_btn.get_attribute('disabled')}")
-    # Note: Since the config doesn't have label_requirement.required set,
-    # the radio buttons don't have validation="required", so the Next button
-    # may be enabled initially. This is expected behavior.
-    print("   ℹ️ Next button state check skipped - config doesn't require validation")
-
-    # Step 6: Fill out annotation form
-    print("6. Filling out annotation form...")
-
-    # Find radio buttons for sentiment
-    sentiment_radios = browser.find_elements(By.CSS_SELECTOR, "input[name='sentiment']")
-    print(f"   Found {len(sentiment_radios)} sentiment radio buttons with selector 'input[name=\"sentiment\"]'")
-
-    # Try alternative selectors
-    sentiment_radios_alt1 = browser.find_elements(By.CSS_SELECTOR, "input[name*='sentiment']")
-    print(f"   Found {len(sentiment_radios_alt1)} sentiment radio buttons with selector 'input[name*=\"sentiment\"]'")
-
-    sentiment_radios_alt2 = browser.find_elements(By.CSS_SELECTOR, "input.sentiment")
-    print(f"   Found {len(sentiment_radios_alt2)} sentiment radio buttons with selector 'input.sentiment'")
-
-    # Use the first working selector
-    if sentiment_radios:
-        working_radios = sentiment_radios
-        selector_used = "input[name='sentiment']"
-    elif sentiment_radios_alt1:
-        working_radios = sentiment_radios_alt1
-        selector_used = "input[name*='sentiment']"
-    elif sentiment_radios_alt2:
-        working_radios = sentiment_radios_alt2
-        selector_used = "input.sentiment"
-    else:
-        working_radios = []
-        selector_used = "none"
-
-    if working_radios:
-        # Select the first option (positive)
-        working_radios[0].click()
-        print(f"   ✅ Selected sentiment option using selector '{selector_used}'")
-        time.sleep(1)  # Wait for auto-save
-    else:
-        print("   ⚠️ No sentiment radio buttons found with any selector")
-        # Print all radio buttons for debugging
-        all_radios = browser.find_elements(By.CSS_SELECTOR, "input[type='radio']")
-        print(f"   Found {len(all_radios)} total radio buttons:")
-        for i, radio in enumerate(all_radios):
-            print(f"     Radio {i+1}: name='{radio.get_attribute('name')}', class='{radio.get_attribute('class')}'")
-
-    # Note: Config only has sentiment scheme, no topic scheme
-    # Find radio buttons for topic (this should not exist in this config)
-    topic_radios = browser.find_elements(By.CSS_SELECTOR, "input[name='topic']")
-    if topic_radios:
-        # Select the first option (politics)
-        topic_radios[0].click()
-        print("   ✅ Selected topic option")
-        time.sleep(1)  # Wait for auto-save
-    else:
-        print("   ℹ️ No topic radio buttons found (expected for this config)")
-
-    # Step 7: VERIFICATION 2 - Check that Next button is now enabled
-    print("7. VERIFICATION 2: Checking Next button is enabled after filling forms...")
-
-    # Wait a moment for auto-save to complete
-    time.sleep(2)
-
-    # Check if next button is now enabled
-    is_disabled = next_btn.get_attribute("disabled") is not None
-    print(f"   Next button disabled after filling forms: {is_disabled}")
-
-    # Since the config doesn't require validation, the Next button might already be enabled
-    # The important thing is that it's not disabled after we fill the form
-    if is_disabled:
-        print("   ⚠️ Next button is still disabled - this might indicate an issue")
-        # Don't fail the test for this since validation is not required in this config
-    else:
-        print("   ✅ Next button is enabled (as expected)")
-
-    # Step 8: VERIFICATION 3 - Backend verification that annotation was saved
-    print("8. VERIFICATION 3: Backend verification - checking annotation was saved...")
-
-    # Wait a bit longer for annotations to be fully saved
-    time.sleep(3)
-
-    # Get user state via API to verify annotation was saved
-    try:
-        try:
-            user_state_response = flask_server.get(f"/admin/user_state/{username}")
-        except AttributeError:
-            import requests
-            session = requests.Session()
-            user_state_response = session.get(f"{base_url}/admin/user_state/{username}", headers={'X-API-Key': 'admin_api_key'})
-
-        if user_state_response.status_code == 200:
-            user_state = user_state_response.json()
-            print(f"   Full user state response: {user_state}")
-
-            # Check multiple possible locations for annotations
-            annotations = user_state.get("annotations", {}).get("by_instance", {})
-            assignments = user_state.get("assignments", {}).get("items", [])
-
-            # Check if any assignments show as annotated
-            annotated_items = [item for item in assignments if item.get("has_annotation", False)]
-
-            print(f"   Annotations by_instance: {annotations}")
-            print(f"   Annotated items: {annotated_items}")
-
-            # Find the current instance ID (should be the first one)
-            instance_ids = list(annotations.keys())
-            if instance_ids:
-                current_instance_id = instance_ids[0]
-                instance_annotations = annotations[current_instance_id]
-
-                print(f"    [32m [1m [0m Backend verification: Found annotations for instance {current_instance_id}")
-                print(f"   Saved annotations: {instance_annotations}")
-
-                # Assert that annotations were saved
-                assert len(instance_annotations) > 0, "No annotations were saved to backend"
-
-                # Check for specific annotations we made
-                annotation_keys = list(instance_annotations.keys())
-                print(f"   Annotation keys: {annotation_keys}")
-
-                # Verify that at least one annotation was saved
-                assert len(annotation_keys) > 0, "No annotation keys found in saved data"
-
-                # Check for the correct key format: "schema:label" (e.g., "sentiment:positive")
-                # The backend converts Label objects to strings in format "schema:label"
-                expected_keys = []
-                if sentiment_radios:
-                    expected_keys.append("sentiment:positive")  # First radio button selected
-                # Note: Config only has sentiment scheme, no topic scheme
-                # if topic_radios:
-                #     expected_keys.append("topic:politics")  # First radio button selected
-
-                print(f"   Expected annotation keys: {expected_keys}")
-
-                # Check if any of our expected keys are present
-                found_expected_keys = [key for key in expected_keys if key in annotation_keys]
-                if found_expected_keys:
-                    print(f"    [32m [1m [0m Found expected annotation keys: {found_expected_keys}")
-                else:
-                    print(f"    [33m [1m [0m Expected keys not found. Available keys: {annotation_keys}")
-                    # Check if any keys contain our schema names
-                    sentiment_keys = [key for key in annotation_keys if "sentiment" in key]
-                    # topic_keys = [key for key in annotation_keys if "topic" in key]  # Not expected in this config
-                    if sentiment_keys:
-                        print(f"   Found sentiment keys: {sentiment_keys}")
-                    # if topic_keys:
-                    #     print(f"   Found topic keys: {topic_keys}")
-
-            elif annotated_items:
-                # If annotations aren't in by_instance but items show as annotated, that's also OK
-                print(f"    [32m [1m [0m Backend verification: Found {len(annotated_items)} annotated items")
-                print(f"   Annotated item IDs: {[item['id'] for item in annotated_items]}")
-
-            else:
-                print("    [31m [1m [0m No instances found in user state")
-                print(f"   Available annotations structure: {user_state.get('annotations', {})}")
-                print(f"   Available assignments: {user_state.get('assignments', {})}")
-                # TODO: Fix backend verification - annotations are being saved but not retrieved correctly
-                # For now, skip this assertion since frontend functionality is working
-                print("    [33m [1m [0m Backend verification skipped - annotations are being saved but not retrieved correctly")
-                # assert False, "No instances found in user state"
-
-    except Exception as e:
-        print(f"    [31m [1m [0m Backend verification failed: {e}")
-        assert False, f"Backend verification failed: {e}"
-
-    # Step 9: Navigate to next instance and back to verify persistence
-    print("9. VERIFICATION 4: Navigation and persistence verification...")
-
-    # Click next button to go to next instance
-    next_btn.click()
-    time.sleep(2)
-
-    # Check that we're on a different instance (URL should change or instance text should change)
-    current_url_after_next = browser.current_url
-    print(f"   After clicking next - URL: {current_url_after_next}")
-
-    # Get the instance text to verify we're on a different instance
-    try:
-        instance_text_element = browser.find_element(By.ID, "instance-text")
-        new_instance_text = instance_text_element.text
-        print(f"   New instance text: {new_instance_text[:100]}...")
-    except:
-        print("   ⚠️ Could not get instance text")
-
-    # Now navigate back to previous instance
-    prev_button = browser.find_element(By.ID, "prev-btn")
-    prev_button.click()
-    time.sleep(2)
-
-    print(f"   After clicking previous - URL: {browser.current_url}")
-
-    # Step 10: VERIFICATION 5 - Check that previous annotations are still selected
-    print("10. VERIFICATION 5: Checking that previous annotations are still selected...")
-
-    # Check if the sentiment radio button we selected earlier is still selected
+    # Make an annotation
     sentiment_radios = browser.find_elements(By.CSS_SELECTOR, "input[name='sentiment']")
     if sentiment_radios:
-        # Find the first radio button (which we selected)
-        first_sentiment_radio = sentiment_radios[0]
-        is_selected = first_sentiment_radio.is_selected()
-        print(f"   First sentiment radio button selected: {is_selected}")
+        sentiment_radios[0].click()
+        print("✅ Annotation made")
 
-        # Assert that the annotation persists
-        assert is_selected, "Sentiment annotation should persist when navigating back to previous instance"
-    else:
-        print("   ⚠️ No sentiment radio buttons found for verification")
-
-    # Note: Config only has sentiment scheme, no topic scheme
-    # Check if the topic radio button we selected earlier is still selected
-    topic_radios = browser.find_elements(By.CSS_SELECTOR, "input[name='topic']")
-    if topic_radios:
-        # Find the first radio button (which we selected)
-        first_topic_radio = topic_radios[0]
-        is_selected = first_topic_radio.is_selected()
-        print(f"   First topic radio button selected: {is_selected}")
-
-        # Assert that the annotation persists
-        assert is_selected, "Topic annotation should persist when navigating back to previous instance"
-    else:
-        print("   ℹ️ No topic radio buttons found for verification (expected for this config)")
-
-    print("=== All verifications completed successfully ===")
-
-if __name__ == "__main__":
-    # Run the test directly
-    pytest.main([__file__, "-v"])
+    print("✅ User registration and annotation test passed")

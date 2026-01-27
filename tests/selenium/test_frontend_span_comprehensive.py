@@ -86,7 +86,7 @@ class TestFrontendSpanComprehensive(BaseSeleniumTest):
             created_spans.append(span_data)
 
         # Wait for spans to be rendered
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Verify all spans are rendered
         span_elements = self.driver.find_elements(By.CLASS_NAME, "span-highlight")
@@ -117,7 +117,7 @@ class TestFrontendSpanComprehensive(BaseSeleniumTest):
             self.assertEqual(response.status_code, 200)
 
         # Wait for spans to be removed
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Verify all spans are removed
         span_elements_after = self.driver.find_elements(By.CLASS_NAME, "span-highlight")
@@ -166,7 +166,7 @@ class TestFrontendSpanComprehensive(BaseSeleniumTest):
             self.assertEqual(response.status_code, 200)
 
         # Wait for spans to be rendered
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Verify all spans are rendered (overlapping spans should still be rendered)
         span_elements = self.driver.find_elements(By.CLASS_NAME, "span-highlight")
@@ -274,7 +274,7 @@ class TestFrontendSpanComprehensive(BaseSeleniumTest):
             self.assertEqual(response.status_code, 200)
 
         # Wait for all spans to be rendered
-        time.sleep(3)
+        time.sleep(0.1)
 
         end_time = time.time()
         creation_time = end_time - start_time
@@ -331,7 +331,7 @@ class TestFrontendSpanComprehensive(BaseSeleniumTest):
         self.assertEqual(response.status_code, 200)
 
         # Wait for span to be rendered
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Get span data via API
         api_response = requests.get(
@@ -358,7 +358,7 @@ class TestFrontendSpanComprehensive(BaseSeleniumTest):
         # Navigate away and back to test persistence
         self.driver.get(f"{self.server.base_url}/annotate")
         self.wait_for_element(By.ID, "instance-text")
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Verify span is still there
         span_elements_after = self.driver.find_elements(By.CLASS_NAME, "span-highlight")
@@ -430,7 +430,7 @@ class TestFrontendSpanComprehensive(BaseSeleniumTest):
         self.wait_for_element(By.ID, "instance-text")
 
         # Wait for span manager to initialize
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Check that span manager is available
         span_manager_ready = self.execute_script_safe("""

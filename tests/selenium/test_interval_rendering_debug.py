@@ -91,7 +91,7 @@ class TestIntervalRenderingDebug(BaseSeleniumTest):
             print("✅ Text selection created")
 
             # Wait a moment
-            time.sleep(1)
+            time.sleep(0.1)
 
             # Check if span overlays were created
             span_overlays = self.driver.find_element(By.ID, "span-overlays")

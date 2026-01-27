@@ -1,6 +1,6 @@
 annotation_task_name: "Span Annotation Test"
-task_dir: "output/span-annotation"
-output_annotation_dir: "output/span-annotation"
+task_dir: "../output/span-annotation"
+output_annotation_dir: "../output/span-annotation"
 output_annotation_format: "jsonl"
 max_annotations_per_user: 10
 assignment_strategy: "fixed_order"
@@ -33,7 +33,7 @@ annotation_schemes:
       - "high"
     sequential_key_binding: true
 ui:
-  max_instance_height: 300  # Maximum height in pixels for instance text
+  max_instance_height: 300
   spans:
     span_colors:
       emotion:

@@ -59,7 +59,7 @@ class TestAdvancedBrowserIntegration(BaseSeleniumTest):
 
         # Test Ctrl+A (select all)
         self.actions.key_down(Keys.CONTROL).send_keys('a').key_up(Keys.CONTROL).perform()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         select_all_result = self.execute_script_safe("""
             const selection = window.getSelection();
@@ -111,7 +111,7 @@ class TestAdvancedBrowserIntegration(BaseSeleniumTest):
 
         # Test Escape key to clear selection
         self.actions.send_keys(Keys.ESCAPE).perform()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         escape_result = self.execute_script_safe("""
             const selection = window.getSelection();
@@ -159,7 +159,7 @@ class TestAdvancedBrowserIntegration(BaseSeleniumTest):
 
         # Test double-click selection
         self.actions.double_click(text_content).perform()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         double_click_result = self.execute_script_safe("""
             const selection = window.getSelection();
@@ -179,7 +179,7 @@ class TestAdvancedBrowserIntegration(BaseSeleniumTest):
 
         # Test triple-click selection (select line)
         self.actions.click(text_content).click(text_content).click(text_content).perform()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         triple_click_result = self.execute_script_safe("""
             const selection = window.getSelection();
@@ -388,7 +388,7 @@ class TestAdvancedBrowserIntegration(BaseSeleniumTest):
 
         # Test Tab navigation
         body.send_keys(Keys.TAB)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         tab_result = self.execute_script_safe("""
             const activeElement = document.activeElement;
@@ -404,7 +404,7 @@ class TestAdvancedBrowserIntegration(BaseSeleniumTest):
 
         # Test arrow key navigation
         body.send_keys(Keys.ARROW_RIGHT)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         arrow_result = self.execute_script_safe("""
             const selection = window.getSelection();
@@ -499,7 +499,7 @@ class TestAdvancedBrowserIntegration(BaseSeleniumTest):
         # Test pinch-to-zoom simulation (resize window)
         original_size = self.driver.get_window_size()
         self.driver.set_window_size(400, 600)  # Simulate mobile viewport
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         mobile_view_result = self.execute_script_safe("""
             if (window.spanManager && window.spanManager.positioningStrategy) {

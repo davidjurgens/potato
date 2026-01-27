@@ -46,7 +46,7 @@ class TestSpanOverlayPersistenceFix(BaseSeleniumTest):
         # Navigate to annotation page
         self.driver.get(f"{self.server.base_url}/annotate")
         self.wait_for_element(By.ID, "instance-text")
-        time.sleep(3)
+        time.sleep(0.1)
 
         # Verify span manager is initialized
         span_manager_ready = self.execute_script_safe("""
@@ -89,7 +89,7 @@ class TestSpanOverlayPersistenceFix(BaseSeleniumTest):
             }
             return Promise.resolve();
         """)
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Verify span on instance 1
         span_overlays_1 = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
@@ -98,7 +98,7 @@ class TestSpanOverlayPersistenceFix(BaseSeleniumTest):
         # Navigate to instance 2
         next_button = self.driver.find_element(By.ID, "next-btn")
         next_button.click()
-        time.sleep(3)
+        time.sleep(0.1)
 
         # Verify no spans on instance 2 (overlays cleared)
         span_overlays_2 = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
@@ -134,7 +134,7 @@ class TestSpanOverlayPersistenceFix(BaseSeleniumTest):
             }
             return Promise.resolve();
         """)
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Verify span on instance 2
         span_overlays_2_after = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
@@ -143,7 +143,7 @@ class TestSpanOverlayPersistenceFix(BaseSeleniumTest):
         # Navigate back to instance 1
         prev_button = self.driver.find_element(By.ID, "prev-btn")
         prev_button.click()
-        time.sleep(3)
+        time.sleep(0.1)
 
         # Verify correct span on instance 1 (should be positive, not negative)
         span_overlays_1_after = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
@@ -162,7 +162,7 @@ class TestSpanOverlayPersistenceFix(BaseSeleniumTest):
         # Navigate directly to instance 3
         self.driver.get(f"{self.server.base_url}/annotate?instance_id=3")
         self.wait_for_element(By.ID, "instance-text")
-        time.sleep(3)
+        time.sleep(0.1)
 
         # Verify no spans on instance 3 (overlays cleared)
         span_overlays_3 = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
@@ -176,7 +176,7 @@ class TestSpanOverlayPersistenceFix(BaseSeleniumTest):
         # Navigate to instance 4 using go-to
         self.driver.get(f"{self.server.base_url}/annotate")
         self.wait_for_element(By.ID, "instance-text")
-        time.sleep(3)
+        time.sleep(0.1)
 
         # Find and use go-to input
         go_to_input = self.driver.find_element(By.ID, "go_to")
@@ -185,7 +185,7 @@ class TestSpanOverlayPersistenceFix(BaseSeleniumTest):
         go_to_input.clear()
         go_to_input.send_keys("4")
         go_to_button.click()
-        time.sleep(3)
+        time.sleep(0.1)
 
         # Verify no spans on instance 4 (overlays cleared)
         span_overlays_4 = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
@@ -219,7 +219,7 @@ class TestSpanOverlayPersistenceFix(BaseSeleniumTest):
         # Navigate to annotation page
         self.driver.get(f"{self.server.base_url}/annotate")
         self.wait_for_element(By.ID, "instance-text")
-        time.sleep(3)
+        time.sleep(0.1)
 
         session_cookies = self.get_session_cookies()
 
@@ -256,13 +256,13 @@ class TestSpanOverlayPersistenceFix(BaseSeleniumTest):
             }
             return Promise.resolve();
         """)
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Rapidly navigate between instances
         for i in range(3):
             next_button = self.driver.find_element(By.ID, "next-btn")
             next_button.click()
-            time.sleep(1)  # Short delay
+            time.sleep(0.1)  # Short delay
 
             # Verify no overlays persist
             span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
@@ -276,7 +276,7 @@ class TestSpanOverlayPersistenceFix(BaseSeleniumTest):
         # Navigate back to instance 1
         self.driver.get(f"{self.server.base_url}/annotate")
         self.wait_for_element(By.ID, "instance-text")
-        time.sleep(3)
+        time.sleep(0.1)
 
         # Create multiple spans on instance 1
         spans_request = {
@@ -315,7 +315,7 @@ class TestSpanOverlayPersistenceFix(BaseSeleniumTest):
             }
             return Promise.resolve();
         """)
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Verify both spans are present
         span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
@@ -324,11 +324,11 @@ class TestSpanOverlayPersistenceFix(BaseSeleniumTest):
         # Navigate away and back
         next_button = self.driver.find_element(By.ID, "next-btn")
         next_button.click()
-        time.sleep(2)
+        time.sleep(0.05)
 
         prev_button = self.driver.find_element(By.ID, "prev-btn")
         prev_button.click()
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Verify both spans are restored
         span_overlays_restored = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
@@ -342,7 +342,7 @@ class TestSpanOverlayPersistenceFix(BaseSeleniumTest):
         # Refresh the page
         self.driver.refresh()
         self.wait_for_element(By.ID, "instance-text")
-        time.sleep(3)
+        time.sleep(0.1)
 
         # Verify spans are restored after refresh
         span_overlays_after_refresh = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
@@ -359,7 +359,7 @@ class TestSpanOverlayPersistenceFix(BaseSeleniumTest):
         # Navigate to annotation page
         self.driver.get(f"{self.server.base_url}/annotate")
         self.wait_for_element(By.ID, "instance-text")
-        time.sleep(3)
+        time.sleep(0.1)
 
         # Document the fix implementation
         fix_verification = self.execute_script_safe("""

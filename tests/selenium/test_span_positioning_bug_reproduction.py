@@ -99,7 +99,7 @@ class TestSpanPositioningBugReproduction(BaseSeleniumTest):
         self.assertEqual(response.status_code, 200, f"Failed to save span annotation: {response.text}")
 
         # Wait for the span manager to reload annotations from server
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Force span manager to reload annotations
         load_result = self.execute_script_safe("""
@@ -122,7 +122,7 @@ class TestSpanPositioningBugReproduction(BaseSeleniumTest):
                        f"Failed to load annotations: {load_result.get('error', 'Unknown error')}")
 
         # Wait for the span overlay to appear
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Step 2: Verify initial span overlay
         print("\n📝 Step 2: Verifying initial span overlay...")
@@ -171,7 +171,7 @@ class TestSpanPositioningBugReproduction(BaseSeleniumTest):
         print("🔧 Navigated to next instance")
 
         # Wait for navigation to complete
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Navigate back to the first instance
         prev_button = self.wait_for_element(By.ID, "prev-btn")
@@ -179,7 +179,7 @@ class TestSpanPositioningBugReproduction(BaseSeleniumTest):
         print("🔧 Navigated back to first instance")
 
         # Wait for navigation to complete and span manager to reinitialize
-        time.sleep(3)
+        time.sleep(0.1)
 
         # Step 4: Verify span overlay after navigation
         print("\n📝 Step 4: Verifying span overlay after navigation...")
@@ -336,7 +336,7 @@ class TestSpanPositioningBugReproduction(BaseSeleniumTest):
         self.assertEqual(response.status_code, 200, f"Failed to save span annotation: {response.text}")
 
         # Wait for the span manager to reload annotations from server
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Force span manager to reload annotations
         load_result = self.execute_script_safe("""
@@ -363,7 +363,7 @@ class TestSpanPositioningBugReproduction(BaseSeleniumTest):
         print(f"🔧 Load annotations result: {load_result}")
 
         # Wait a moment for any async operations to complete
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Test the API endpoint directly to see what it returns
         print("\n🔧 Testing API endpoint directly...")
@@ -426,7 +426,7 @@ class TestSpanPositioningBugReproduction(BaseSeleniumTest):
             else:
                 self.fail("API returned no spans")
 
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Verify initial overlay exists
         span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
@@ -445,15 +445,15 @@ class TestSpanPositioningBugReproduction(BaseSeleniumTest):
             if next_button.is_enabled():
                 next_button.click()
                 print("🔧 Navigated to next instance")
-                time.sleep(2)
+                time.sleep(0.05)
             else:
                 print("🔧 Next button not available, refreshing page instead")
                 self.driver.refresh()
-                time.sleep(2)
+                time.sleep(0.05)
         except:
             print("🔧 Next button not found, refreshing page instead")
             self.driver.refresh()
-            time.sleep(2)
+            time.sleep(0.05)
 
         # Step 3: Navigate back (to the original instance)
         print("\n📝 Step 3: Navigating back...")
@@ -472,7 +472,7 @@ class TestSpanPositioningBugReproduction(BaseSeleniumTest):
 
         # Wait for page to load and span manager to reinitialize
         self.wait_for_element(By.ID, "instance-text")
-        time.sleep(3)
+        time.sleep(0.1)
 
         # Wait for span manager to be reinitialized
         self.execute_script_safe("""
@@ -618,7 +618,7 @@ class TestSpanPositioningBugReproduction(BaseSeleniumTest):
                        f"Span creation failed: {span_creation_result.get('error', 'Unknown error')}")
 
         # Wait for the span overlay to appear
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Check that the span overlay exists (pure CSS system)
         span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
@@ -1001,7 +1001,7 @@ class TestSpanPositioningBugReproduction(BaseSeleniumTest):
         print(f"🔧 API response: {api_response.text}")
 
         # Wait a moment for the server to process
-        time.sleep(1)
+        time.sleep(0.1)
 
         # Test the API endpoint directly
         api_response = requests.get(
@@ -2000,7 +2000,7 @@ class TestSpanPositioningBugReproduction(BaseSeleniumTest):
         self.assertTrue(span_creation_result.get('success', False))
 
         # Wait for the span overlay to appear
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Check for different overlay class names
         debug_result = self.execute_script_safe("""
@@ -2061,7 +2061,7 @@ class TestSpanPositioningBugReproduction(BaseSeleniumTest):
         self.wait_for_element(By.ID, "instance-text")
 
         # Wait for page to load
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Check for navigation elements
         navigation_elements = self.execute_script_safe("""

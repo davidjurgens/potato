@@ -426,14 +426,8 @@ class TestBasicAnnotation:
             browser.save_screenshot(str(screenshot_path / "checkbox_click_failure.png"))
             raise
 
-    @pytest.mark.xfail(reason="Known persistence issue - annotations via direct click not persisting")
     def test_annotation_triggers_save(self, annotation_session):
-        """Test that making an annotation triggers a save to server.
-
-        This test is currently failing due to a persistence issue where
-        annotations made by directly clicking checkboxes don't persist
-        after navigation. The issue is tracked and needs investigation.
-        """
+        """Test that making an annotation triggers a save to server."""
         from selenium.webdriver.common.by import By
         from selenium.webdriver.common.keys import Keys
         from selenium.webdriver.support.ui import WebDriverWait

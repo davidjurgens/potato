@@ -68,7 +68,7 @@ class FirefoxSpanAnnotationHelper:
             try:
                 # Scroll element into view
                 driver.execute_script("arguments[0].scrollIntoView(true);", element)
-                time.sleep(0.5)
+                time.sleep(0.1)
 
                 # Wait for element to be clickable
                 WebDriverWait(driver, 5).until(
@@ -84,7 +84,7 @@ class FirefoxSpanAnnotationHelper:
                 if attempt == max_retries - 1:
                     print(f"   ❌ Failed to click {description} after {max_retries} attempts")
                     raise
-                time.sleep(1)
+                time.sleep(0.1)
         return False
 
     @staticmethod
@@ -303,7 +303,7 @@ class FirefoxSpanAnnotationHelper:
                     }
                 """, instance_id)
 
-                time.sleep(3)  # Wait for reload
+                time.sleep(0.1)  # Wait for reload
                 return True
             else:
                 print(f"   ❌ Failed to create span via API: {response.status_code}")
@@ -345,13 +345,13 @@ class FirefoxSpanAnnotationHelper:
             actions.click_and_hold()
             actions.perform()
 
-            time.sleep(1)
+            time.sleep(0.1)
 
             # Click the label button
             label_button = driver.find_element(By.CSS_SELECTOR, f"[data-label='{label_name}']")
             label_button.click()
 
-            time.sleep(2)
+            time.sleep(0.05)
             print(f"   ✅ Span created via UI")
             return True
 
@@ -468,7 +468,7 @@ class TestFirefoxSpanAnnotationComprehensive(BaseSeleniumTest):
         print(f"   🔄 Step 2: Navigating to instance 2...")
         next_button = self.driver.find_element(By.ID, "next-button")
         next_button.click()
-        time.sleep(3)
+        time.sleep(0.1)
 
         # Check if span appears on instance 2 (incorrectly)
         spans_found_2, overlays_2, labels_2, deletes_2 = FirefoxSpanAnnotationHelper.check_span_elements(self.driver)
@@ -482,7 +482,7 @@ class TestFirefoxSpanAnnotationComprehensive(BaseSeleniumTest):
         print(f"   🔄 Step 3: Navigating to instance 3...")
         next_button = self.driver.find_element(By.ID, "next-button")
         next_button.click()
-        time.sleep(3)
+        time.sleep(0.1)
 
         # Check if span disappears on instance 3
         spans_found_3, overlays_3, labels_3, deletes_3 = FirefoxSpanAnnotationHelper.check_span_elements(self.driver)
@@ -496,12 +496,12 @@ class TestFirefoxSpanAnnotationComprehensive(BaseSeleniumTest):
         print(f"   🔄 Step 4. Navigating back to instance 1...")
         prev_button = self.driver.find_element(By.ID, "prev-button")
         prev_button.click()
-        time.sleep(3)
+        time.sleep(0.1)
 
         # Navigate back again to get to instance 1
         prev_button = self.driver.find_element(By.ID, "prev-button")
         prev_button.click()
-        time.sleep(3)
+        time.sleep(0.1)
 
         # Check if span doesn't appear on instance 1
         spans_found_1_again, overlays_1_again, labels_1_again, deletes_1_again = FirefoxSpanAnnotationHelper.check_span_elements(self.driver)
@@ -515,7 +515,7 @@ class TestFirefoxSpanAnnotationComprehensive(BaseSeleniumTest):
         print(f"   🔄 Step 5: Navigating 'prev' from instance 1...")
         prev_button = self.driver.find_element(By.ID, "prev-button")
         prev_button.click()
-        time.sleep(3)
+        time.sleep(0.1)
 
         # Check if span reappears (should be on instance 3 now)
         spans_found_3_again, overlays_3_again, labels_3_again, deletes_3_again = FirefoxSpanAnnotationHelper.check_span_elements(self.driver)
@@ -766,7 +766,7 @@ class TestFirefoxSpanAnnotationComprehensive(BaseSeleniumTest):
         next_button = self.driver.find_element(By.ID, "next-button")
         next_button.click()
 
-        time.sleep(3)
+        time.sleep(0.1)
 
         # Capture logs after navigation
         FirefoxSpanAnnotationHelper.capture_browser_logs(self.driver, "after navigation")
@@ -789,7 +789,7 @@ class TestFirefoxSpanAnnotationComprehensive(BaseSeleniumTest):
         prev_button = self.driver.find_element(By.ID, "prev-button")
         prev_button.click()
 
-        time.sleep(3)
+        time.sleep(0.1)
 
         # Capture final logs
         FirefoxSpanAnnotationHelper.capture_browser_logs(self.driver, "final state")
@@ -855,7 +855,7 @@ class TestFirefoxSpanAnnotationComprehensive(BaseSeleniumTest):
 
             # Click delete button
             deletes[0].click()
-            time.sleep(2)
+            time.sleep(0.05)
 
             # Check if span was deleted
             spans_after_delete, _, _, _ = FirefoxSpanAnnotationHelper.check_span_elements(self.driver, expected_count=0)
@@ -892,7 +892,7 @@ class TestFirefoxSpanAnnotationComprehensive(BaseSeleniumTest):
             # Navigate to next
             next_button = self.driver.find_element(By.ID, "next-button")
             next_button.click()
-            time.sleep(2)
+            time.sleep(0.05)
 
             # Get new instance details
             new_details = FirefoxSpanAnnotationHelper.get_instance_details(self.driver)

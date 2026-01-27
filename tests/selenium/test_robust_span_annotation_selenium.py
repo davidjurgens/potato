@@ -178,7 +178,7 @@ class TestRobustSpanAnnotationSelenium:
                 actions.perform()
 
                 # Wait for the span annotation dialog or highlight to appear
-                time.sleep(1)
+                time.sleep(0.1)
 
                 # Check if the text is highlighted (should have span-highlight class)
                 highlighted_elements = driver.find_elements(By.CLASS_NAME, "span-highlight")
@@ -192,7 +192,7 @@ class TestRobustSpanAnnotationSelenium:
                 print('User state:', user_state)
 
                 # Wait a moment for the backend check to complete
-                time.sleep(2)
+                time.sleep(0.05)
 
                 # The span annotation should be visible in the DOM
                 span_elements = driver.find_elements(By.CSS_SELECTOR, ".span-highlight")
@@ -246,7 +246,7 @@ class TestRobustSpanAnnotationSelenium:
                 actions.release()
                 actions.perform()
 
-                time.sleep(1)
+                time.sleep(0.1)
 
                 # Second selection: "happy today" (overlaps with first)
                 actions = ActionChains(driver)
@@ -256,7 +256,7 @@ class TestRobustSpanAnnotationSelenium:
                 actions.release()
                 actions.perform()
 
-                time.sleep(1)
+                time.sleep(0.1)
 
                 # Check that both spans are visible
                 span_elements = driver.find_elements(By.CSS_SELECTOR, ".span-highlight")
@@ -311,13 +311,13 @@ class TestRobustSpanAnnotationSelenium:
                 actions.release()
                 actions.perform()
 
-                time.sleep(1)
+                time.sleep(0.1)
 
                 # Now create a radio button annotation
                 radio_button = driver.find_element(By.CSS_SELECTOR, "input[type='radio'][value='positive']")
                 radio_button.click()
 
-                time.sleep(1)
+                time.sleep(0.1)
 
                 # Verify both annotations are present
                 span_elements = driver.find_elements(By.CSS_SELECTOR, ".span-highlight")

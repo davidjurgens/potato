@@ -81,7 +81,7 @@ class TestInstanceIdUpdate(BaseSeleniumTest):
 
         # Wait a moment for any API calls to be made
         import time
-        time.sleep(2)
+        time.sleep(0.05)
 
         # Get console logs
         logs = self.driver.get_log('browser')

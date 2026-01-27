@@ -39,7 +39,7 @@ class TestSpanOverlayAlignment(BaseSeleniumTest):
 
         # Trigger selection handler and wait a moment
         self.driver.execute_script("window.spanManager && window.spanManager.handleTextSelection();")
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Get first overlay segment rect
         rects = self.driver.execute_script(
@@ -81,15 +81,15 @@ class TestSpanOverlayNavigation(BaseSeleniumTest):
         except Exception:
             self.driver.execute_script("window.spanManager && window.spanManager.selectLabel('positive','emotion_spans');")
         self.driver.execute_script("window.spanManager && window.spanManager.handleTextSelection();")
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Navigate next then previous
         self.driver.find_element(By.ID, "next-btn").click()
         WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.ID, "text-content")))
-        time.sleep(0.5)
+        time.sleep(0.1)
         self.driver.find_element(By.ID, "prev-btn").click()
         WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.ID, "text-content")))
-        time.sleep(0.8)
+        time.sleep(0.1)
 
         # Assert overlays exist and none covers full container
         full_cover = self.driver.execute_script(
@@ -134,7 +134,7 @@ class TestSpanOverlayNavigation(BaseSeleniumTest):
         except Exception:
             pass
         self.driver.execute_script("window.spanManager && window.spanManager.handleTextSelection();")
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Verify overlay appears and has a reasonable height
         seg_height = self.driver.execute_script(
