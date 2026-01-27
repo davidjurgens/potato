@@ -176,7 +176,8 @@ function setupEventListeners() {
     document.getElementById('go-to-btn').addEventListener('click', function() {
         const goToValue = document.getElementById('go_to').value;
         if (goToValue && goToValue > 0) {
-            navigateToInstance(parseInt(goToValue));
+            // User enters 1-based index (item 1, 2, 3...) but server uses 0-based
+            navigateToInstance(parseInt(goToValue) - 1);
         }
     });
 

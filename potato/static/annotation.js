@@ -1,8 +1,32 @@
+// annotation.js - PERSISTENCE_FIX_20240124
+console.log('[PERSISTENCE FIX] annotation.js loaded - Version 20240124');
+
 // Debug logging utility - respects the debug setting from server config
 function debugLog(...args) {
     if (window.config && window.config.debug) {
         console.log(...args);
     }
+}
+
+/**
+ * Compatibility stub for registerAnnotation from base_template.html
+ * This function is called by onclick handlers in checkbox/radio schemas.
+ * In the v1 template, this sent annotations directly to the server.
+ * In the v2 template (annotation.js), we use change event listeners instead.
+ * This stub prevents JavaScript errors while the change event handler does the work.
+ */
+function registerAnnotation(element) {
+    debugLog('[COMPAT] registerAnnotation called for:', element?.id);
+    // The actual annotation saving is handled by the change event listener
+    // in setupInputEventListeners(). This stub just prevents the ReferenceError.
+}
+
+/**
+ * Compatibility stub for registerTextAnnotation from base_template.html
+ */
+function registerTextAnnotation(element) {
+    debugLog('[COMPAT] registerTextAnnotation called for:', element?.id);
+    // Actual saving is handled by the input event listener.
 }
 
 function debugWarn(...args) {
@@ -198,7 +222,8 @@ function setupEventListeners() {
     document.getElementById('go-to-btn').addEventListener('click', function () {
         const goToValue = document.getElementById('go_to').value;
         if (goToValue && goToValue > 0) {
-            navigateToInstance(parseInt(goToValue));
+            // User enters 1-based index (item 1, 2, 3...) but server uses 0-based
+            navigateToInstance(parseInt(goToValue) - 1);
         }
     });
 
@@ -685,14 +710,22 @@ async function loadAnnotations() {
             }
         });
 
-        // Read text input state from HTML 'value' ATTRIBUTE
+        // Read text input state from HTML
         // For text inputs, the server sets the value attribute
+        // For textareas, the server sets the content between the tags (textContent)
         const textInputs = document.querySelectorAll('input[type="text"], textarea.annotation-input');
         textInputs.forEach(input => {
             const schema = input.getAttribute('schema');
             const labelName = input.getAttribute('label_name');
-            // Read from the HTML attribute, not the current input value
-            const serverValue = input.getAttribute('value') || '';
+            // Read the server-rendered value:
+            // - For <input type="text">: use getAttribute('value') which returns the HTML attribute
+            // - For <textarea>: use textContent which returns the content between tags
+            let serverValue;
+            if (input.tagName.toLowerCase() === 'textarea') {
+                serverValue = input.textContent || '';
+            } else {
+                serverValue = input.getAttribute('value') || '';
+            }
             // Sync browser state to server state
             input.value = serverValue;
             if (schema && labelName && serverValue) {
@@ -721,6 +754,26 @@ async function loadAnnotations() {
             }
         });
 
+        // Read select dropdown state from server-rendered HTML
+        // The server sets the 'selected' attribute on the appropriate option
+        const selectInputs = document.querySelectorAll('select.annotation-input');
+        selectInputs.forEach(select => {
+            const schema = select.getAttribute('schema');
+            const labelName = select.getAttribute('label_name');
+            // Find the option with 'selected' attribute (server-rendered)
+            const selectedOption = select.querySelector('option[selected]');
+            if (selectedOption) {
+                // Sync browser state to server state
+                select.value = selectedOption.value;
+            }
+            if (schema && labelName && select.value) {
+                if (!currentAnnotations[schema]) {
+                    currentAnnotations[schema] = {};
+                }
+                currentAnnotations[schema][labelName] = select.value;
+            }
+        });
+
         debugLog('🔍 Annotations loaded from DOM:', currentAnnotations);
     } catch (error) {
         console.error('❌ Error loading annotations:', error);
@@ -738,7 +791,13 @@ function generateAnnotationForms() {
 }
 
 async function saveAnnotations() {
-    if (!currentInstance) return;
+    console.log('[PERSISTENCE FIX] saveAnnotations called');
+    console.log('[PERSISTENCE FIX] currentInstance:', currentInstance?.id);
+
+    if (!currentInstance) {
+        console.log('[PERSISTENCE FIX] saveAnnotations - no currentInstance, returning');
+        return;
+    }
 
     try {
         const headers = {
@@ -749,6 +808,12 @@ async function saveAnnotations() {
         if (window.config && window.config.api_key) {
             headers['X-API-Key'] = window.config.api_key;
         }
+
+        // Sync currentAnnotations from DOM to ensure we have the latest state
+        // This handles cases where change events may not have fired (e.g., JS clicks)
+        console.log('[PERSISTENCE FIX] before syncAnnotationsFromDOM:', JSON.stringify(currentAnnotations));
+        syncAnnotationsFromDOM();
+        console.log('[PERSISTENCE FIX] after syncAnnotationsFromDOM:', JSON.stringify(currentAnnotations));
 
         // Save both label and span annotations via /updateinstance
         const spanAnnotations = extractSpanAnnotationsFromDOM();
@@ -1010,10 +1075,21 @@ async function navigateToNext() {
 }
 
 async function navigateToInstance(instanceIndex) {
-    if (isLoading) return;
+    console.log('[PERSISTENCE FIX] navigateToInstance called with index:', instanceIndex);
+    if (isLoading) {
+        console.log('[PERSISTENCE FIX] navigateToInstance - blocked, isLoading=true');
+        return;
+    }
 
     try {
         setLoading(true);
+
+        // Save annotations before navigating away (same as navigateToPrevious/Next)
+        console.log('[PERSISTENCE FIX] navigateToInstance - About to call saveAnnotations');
+        console.log('[PERSISTENCE FIX] currentAnnotations before save:', JSON.stringify(currentAnnotations));
+        debugLog('[DEEP DEBUG NAV] navigateToInstance - Saving annotations before navigation');
+        await saveAnnotations();
+        console.log('[PERSISTENCE FIX] navigateToInstance - saveAnnotations completed');
 
         // DEBUG: Track overlays before navigation
         debugTrackOverlays('BEFORE_GO_TO_NAVIGATION', currentInstance?.id);
@@ -1173,6 +1249,102 @@ function updateAnnotation(schema, label, value) {
         currentAnnotations[schema] = {};
     }
     currentAnnotations[schema][label] = value;
+}
+
+/**
+ * Sync currentAnnotations from DOM to ensure we capture all current input states.
+ * This is needed before saving because change events may not fire for JS-triggered clicks.
+ */
+function syncAnnotationsFromDOM() {
+    // Sync checkboxes
+    const checkboxes = document.querySelectorAll('input[type="checkbox"].annotation-input');
+    checkboxes.forEach(input => {
+        const schema = input.getAttribute('schema');
+        const labelName = input.getAttribute('label_name');
+        if (schema && labelName) {
+            if (input.checked) {
+                if (!currentAnnotations[schema]) {
+                    currentAnnotations[schema] = {};
+                }
+                currentAnnotations[schema][labelName] = input.value;
+            } else {
+                // Remove unchecked checkboxes
+                if (currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
+                    delete currentAnnotations[schema][labelName];
+                    if (Object.keys(currentAnnotations[schema]).length === 0) {
+                        delete currentAnnotations[schema];
+                    }
+                }
+            }
+        }
+    });
+
+    // Sync radio buttons
+    const radios = document.querySelectorAll('input[type="radio"].annotation-input');
+    radios.forEach(input => {
+        const schema = input.getAttribute('schema');
+        const labelName = input.getAttribute('label_name');
+        if (schema && labelName && input.checked) {
+            if (!currentAnnotations[schema]) {
+                currentAnnotations[schema] = {};
+            }
+            currentAnnotations[schema][labelName] = input.value;
+        }
+    });
+
+    // Sync text inputs
+    const textInputs = document.querySelectorAll('input[type="text"].annotation-input, textarea.annotation-input');
+    textInputs.forEach(input => {
+        const schema = input.getAttribute('schema');
+        const labelName = input.getAttribute('label_name');
+        if (schema && labelName && input.value) {
+            if (!currentAnnotations[schema]) {
+                currentAnnotations[schema] = {};
+            }
+            currentAnnotations[schema][labelName] = input.value;
+        }
+    });
+
+    // Sync sliders
+    const sliders = document.querySelectorAll('input[type="range"].annotation-input');
+    sliders.forEach(input => {
+        const schema = input.getAttribute('schema');
+        const labelName = input.getAttribute('label_name');
+        if (schema && labelName) {
+            if (!currentAnnotations[schema]) {
+                currentAnnotations[schema] = {};
+            }
+            currentAnnotations[schema][labelName] = input.value;
+        }
+    });
+
+    // Sync select dropdowns
+    const selects = document.querySelectorAll('select.annotation-input');
+    selects.forEach(input => {
+        const schema = input.getAttribute('schema');
+        const labelName = input.getAttribute('label_name');
+        if (schema && labelName && input.value) {
+            if (!currentAnnotations[schema]) {
+                currentAnnotations[schema] = {};
+            }
+            currentAnnotations[schema][labelName] = input.value;
+        }
+    });
+
+    // Sync number inputs
+    const numberInputs = document.querySelectorAll('input[type="number"].annotation-input');
+    numberInputs.forEach(input => {
+        const schema = input.getAttribute('schema');
+        const labelName = input.getAttribute('label_name');
+        if (schema && labelName && input.value) {
+            if (!currentAnnotations[schema]) {
+                currentAnnotations[schema] = {};
+            }
+            currentAnnotations[schema][labelName] = input.value;
+        }
+    });
+
+    debugLog('[DEBUG] syncAnnotationsFromDOM: synced annotations:', currentAnnotations);
 }
 
 // Function to handle "None" option in multiselect annotations

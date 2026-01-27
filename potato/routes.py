@@ -787,13 +787,17 @@ def register():
     phases_config = config.get('phases', {})
     phases_order = phases_config.get('order', ['annotation'])
     first_phase_name = phases_order[0] if phases_order else 'annotation'
-    first_phase = UserPhase.fromstr(first_phase_name)
-    logger.debug(f"First phase from config: {first_phase_name} -> {first_phase}")
+    # Get the phase type from the config (phase name may differ from type, e.g., 'prescreen' has type 'prestudy')
+    first_phase_config = phases_config.get(first_phase_name, {})
+    first_phase_type = first_phase_config.get('type', first_phase_name)
+    first_phase = UserPhase.fromstr(first_phase_type)
+    logger.debug(f"First phase from config: {first_phase_name} (type={first_phase_type}) -> {first_phase}")
 
     # Set user to the first phase if they're in LOGIN
     if user_state and user_state.get_phase() == UserPhase.LOGIN:
         logger.debug(f"Advancing user {username} to first phase: {first_phase}")
-        user_state.advance_to_phase(first_phase, None)
+        # Use first_phase_name as the page since that's the key in the phase config
+        user_state.advance_to_phase(first_phase, first_phase_name)
         logger.debug(f"User state phase after advancement: {user_state.get_phase()}")
 
     # Assign instances if user doesn't have any
@@ -884,8 +888,16 @@ def instructions():
         usm = get_user_state_manager()
         # Look up the html template for the current instructions
         instructions_html_fname = usm.get_phase_html_fname(phase, page)
-        # Render the instructions
-        return render_template(instructions_html_fname)
+        # Render the instructions with necessary context variables
+        return render_template(instructions_html_fname,
+                             annotation_task_name=config.get("annotation_task_name", "Annotation Task"),
+                             title=config.get("annotation_task_name", "Instructions"),
+                             username=session.get('username', ''),
+                             debug_mode=config.get("debug", False),
+                             ui_debug=config.get("ui_debug", False),
+                             server_debug=config.get("server_debug", False),
+                             debug_phase=config.get("debug_phase"),
+                             ui_config=config.get("ui_config", {}))
 
 @app.route("/training", methods=["GET", "POST"])
 def training():

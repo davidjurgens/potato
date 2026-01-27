@@ -48,6 +48,12 @@ SPAN_COLOR_PALETTE = [
 span_counter = 0
 SPAN_COLOR_PALETTE_LENGTH = len(SPAN_COLOR_PALETTE)
 
+
+def reset_span_counter():
+    """Reset the span color counter to 0. Used for test isolation."""
+    global span_counter
+    span_counter = 0
+
 def get_span_color(schema, span_label):
     """
     Returns the color of a span with this label as a string with an RGB triple

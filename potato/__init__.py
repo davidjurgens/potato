@@ -29,6 +29,6 @@ Usage:
 
 from .flask_server import create_app
 
-__version__ = "0.1.0"
+__version__ = "2.0.0rc1"
 __author__ = "Potato Annotation Platform Team"
 __description__ = "A flexible, web-based platform for text annotation tasks"

@@ -1127,13 +1127,28 @@ def go_to_id(user_id: str, instance_index: int):
 def get_current_page_html(config, username):
     """
     Returns the HTML for the current page that the user is on.
+
+    For phase pages (consent, instructions, etc.), this provides minimal
+    context variables needed by the shared template structure.
     """
     user_state = get_user_state(username)
     phase, page = user_state.get_current_phase_and_page()
 
     usm = get_user_state_manager()
     html_fname = usm.get_phase_html_fname(phase, page)
-    return render_template(html_fname)
+
+    # Provide context variables needed by the template
+    # For phase pages, many annotation-specific fields can be empty/default
+    context = {
+        'username': username,
+        'instance': '',
+        'instance_plain_text': '',
+        'instance_id': '',
+        'finished': 0,
+        'total_count': user_state.get_assigned_instance_count() if hasattr(user_state, 'get_assigned_instance_count') else 0,
+        'ui_config': config.get('ui_config', {}),
+    }
+    return render_template(html_fname, **context)
 
 def render_page_with_annotations(username) -> str:
     '''
@@ -1432,11 +1447,29 @@ def render_page_with_annotations(username) -> str:
 
                     if input_field.get('type') == 'checkbox' or input_field.get('type') == 'radio':
                         if value:
-                            input_field['checked'] = True
+                            # For radio buttons, only check if the value matches
+                            # (multiple radios share the same schema/label_name but have different values)
+                            if input_field.get('type') == 'radio':
+                                if input_field.get('value') == value:
+                                    input_field['checked'] = True
+                            else:
+                                # For checkboxes, set checked
+                                input_field['checked'] = True
 
-                    if input_field.get('type') == 'text' or input_field.get('type') == 'textarea':
+                    # Handle text inputs - set value attribute
+                    if input_field.get('type') == 'text':
                         if isinstance(value, str):
                             input_field['value'] = value
+
+                    # Handle number inputs - set value attribute
+                    if input_field.get('type') == 'number':
+                        input_field['value'] = str(value)
+
+                    # Handle textareas - set content between tags (not value attribute)
+                    # Textareas don't have a type attribute, check tag name instead
+                    if input_field.name == 'textarea':
+                        if isinstance(value, str):
+                            input_field.string = value
 
                     # Handle hidden inputs for image/audio/video annotation data
                     if input_field.get('type') == 'hidden':
@@ -1445,6 +1478,17 @@ def render_page_with_annotations(username) -> str:
                             # Mark this input as server-set to distinguish from browser-cached values
                             input_field['data-server-set'] = 'true'
                             logger.debug(f"Set hidden input {name} value (length: {len(value)}) with server-set flag")
+
+                    # Handle select elements - set the 'selected' attribute on matching option
+                    if input_field.name == 'select':
+                        if isinstance(value, str):
+                            # Find the option with the matching value and set it as selected
+                            options = input_field.find_all("option", {"value": value})
+                            if options:
+                                options[0]["selected"] = "selected"
+                                logger.debug(f"Set select {name} option to {value}")
+                            else:
+                                logger.debug(f"No option found with value {value} for select {name}")
 
                     if False:
                         # If it's not a text area, let's see if this is the button
@@ -1926,16 +1970,18 @@ def create_app():
     # Configure the app
     configure_app(app)
 
-    # Add context processor for debug settings
+    # Add context processor for debug settings and common config values
     @app.context_processor
-    def inject_debug_settings():
-        """Inject debug settings into all templates."""
+    def inject_template_context():
+        """Inject debug settings and common config values into all templates."""
         from potato.logging_config import is_ui_debug_enabled, is_server_debug_enabled
         return {
             'ui_debug': is_ui_debug_enabled(),
             'server_debug': is_server_debug_enabled(),
             'debug_mode': config.get('debug', False),
             'debug_phase': config.get('debug_phase'),
+            # Add common config values needed by templates
+            'annotation_task_name': config.get('annotation_task_name', 'Annotation Task'),
         }
 
     return app

@@ -53,6 +53,11 @@ class AudioAnnotationManager {
         this.isPlaying = false;
         this.segmentCounter = 0;
 
+        // Ready state for tests to wait on
+        this.isReady = false;
+        this.readyPromise = null;
+        this._resolveReady = null;
+
         // Selection for segment creation
         this.selectionStart = null;
         this.selectionEnd = null;
@@ -84,6 +89,11 @@ class AudioAnnotationManager {
      */
     async loadAudio(audioUrl, waveformUrl = null) {
         audioDebugLog('Loading audio:', audioUrl);
+
+        // Create ready promise for tests to wait on
+        this.readyPromise = new Promise((resolve) => {
+            this._resolveReady = resolve;
+        });
 
         // Set audio source
         this.audioEl.src = audioUrl;
@@ -146,9 +156,21 @@ class AudioAnnotationManager {
             // Load existing annotations if any
             this._loadExistingAnnotations();
 
+            // Mark as ready
+            this.isReady = true;
+            if (this._resolveReady) {
+                this._resolveReady(true);
+            }
+            audioDebugLog('AudioAnnotationManager is ready');
+
         } catch (error) {
             console.error('Failed to initialize Peaks.js:', error);
             this._showError('Failed to load audio waveform. Please try refreshing the page.');
+            // Still resolve the promise but with false
+            this.isReady = false;
+            if (this._resolveReady) {
+                this._resolveReady(false);
+            }
         }
     }
 
