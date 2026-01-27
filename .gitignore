@@ -122,3 +122,4 @@ temp_screenshots/
 
 # Virtual Environments
 venv/
+.pypirc
