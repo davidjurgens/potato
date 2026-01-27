@@ -1,0 +1,40 @@
+annotation_task_name: "Select Dropdown Annotation Test"
+task_dir: "output/select-annotation"
+output_annotation_dir: "output/select-annotation"
+output_annotation_format: "jsonl"
+max_annotations_per_user: 10
+assignment_strategy: "fixed_order"
+data_files:
+  - "../data/test_data.json"
+item_properties:
+  id_key: "id"
+  text_key: "text"
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+  - annotation_type: "select"
+    name: "category"
+    description: "Select the most appropriate category for this text:"
+    labels:
+      - "News"
+      - "Opinion"
+      - "Review"
+      - "Tutorial"
+      - "Story"
+      - "Technical"
+      - "Other"
+  - annotation_type: "select"
+    name: "audience"
+    description: "What is the target audience for this text?"
+    labels:
+      - "General Public"
+      - "Students"
+      - "Professionals"
+      - "Researchers"
+      - "Children"
+      - "Experts"
+site_dir: "default"
+customjs: null
+customjs_hostname: null

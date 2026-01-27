@@ -1,44 +1,59 @@
 from setuptools import setup, find_packages
-with open("README.md", "r", encoding="utf-8") as fh:
-    long_description = fh.read()
+import os
+
+# Read the README file for long description
+def read_readme():
+    with open("README.md", "r", encoding="utf-8") as fh:
+        return fh.read()
+
+# Read requirements if they exist
+def read_requirements():
+    requirements = []
+    if os.path.exists("requirements.txt"):
+        with open("requirements.txt", "r", encoding="utf-8") as fh:
+            requirements = [line.strip() for line in fh if line.strip() and not line.startswith("#")]
+    return requirements
+
 setup(
-    name='potato-annotation',
-    version='1.2.2.5',
+    name="potato-annotation",
+    version='2.0.0b1',
+    author="Potato Development Team",
+    author_email="jurgens@umich.edu",
+    description="A flexible, stand-alone, web-based platform for text annotation tasks",
+    long_description=read_readme(),
+    long_description_content_type="text/markdown",
+    url="https://github.com/davidjurgens/potato",
     packages=find_packages(),
+    classifiers=[
+        "Development Status :: 4 - Beta",
+        "Intended Audience :: Science/Research",
+        "License :: Other/Proprietary License",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Topic :: Scientific/Engineering :: Artificial Intelligence",
+        "Topic :: Text Processing :: Linguistic",
+    ],
+    python_requires=">=3.7",
+    install_requires=read_requirements(),
+    include_package_data=True,
     entry_points={
-        'console_scripts': [
-            'potato = potato.cli:potato',
+        "console_scripts": [
+            "potato=potato.flask_server:main",
         ],
     },
-    url="https://github.com/davidjurgens/potato",
-    author="Jiaxin Pei",
-    author_email="pedropei@umich.edu",
-    description="Potato text annotation tool",
-    include_package_data=True,
-    long_description=long_description,
-    long_description_content_type="text/markdown",
-    install_requires=[
-        'beautifulsoup4>=4.10.0',
-        'click>=8.0.3',
-        'Flask>=2.0.2',
-        'itsdangerous>=2.0.1',
-        'Jinja2>=3.0.3',
-        'joblib>=1.2.0',
-        'simpledorff>=0.0.2',
-        'MarkupSafe>=2.0.1',
-        'numpy>=1.21.0',
-        'pandas>=1.3.5',
-        'python-dateutil>=2.8.2',
-        'pytz>=2021.3',
-        'PyYAML>=6.0',
-        'requests>=2.29.0',
-        'scikit-learn>=1.0.2',
-        'scipy>=1.7.3',
-        'six>=1.16.0',
-        'soupsieve>=2.3.1',
-        'threadpoolctl>=3.0.0',
-        'tqdm>=4.62.3',
-        'ujson>=5.4.0',
-        'Werkzeug>=2.0.2'
-    ]
+    package_data={
+        "potato": [
+            "templates/*.html",
+            "base_html/*.html",
+            "base_html/examples/*.html",
+            "static/*",
+            "static/styles/*",
+            "static/survey_assets/*",
+        ],
+    },
 )

@@ -1,0 +1,324 @@
+/**
+ * Image Annotation Styles
+ *
+ * Styling for the canvas-based image annotation interface.
+ */
+
+/* Container */
+.image-annotation-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Toolbar */
+.image-annotation-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 15px;
+    padding: 10px 15px;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+}
+
+.tool-group,
+.label-group,
+.zoom-group,
+.edit-group,
+.count-group {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.tool-group-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #495057;
+    margin-right: 5px;
+}
+
+/* Tool buttons */
+.tool-btn,
+.label-btn,
+.zoom-btn,
+.edit-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    background: #fff;
+    color: #495057;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.tool-btn:hover,
+.label-btn:hover,
+.zoom-btn:hover,
+.edit-btn:hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
+}
+
+.tool-btn.active,
+.label-btn.active {
+    background: #0d6efd;
+    border-color: #0d6efd;
+    color: #fff;
+}
+
+.tool-btn:focus,
+.label-btn:focus,
+.zoom-btn:focus,
+.edit-btn:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
+}
+
+/* Label buttons with color indicator */
+.label-btn {
+    position: relative;
+    padding-left: 28px;
+}
+
+.label-color-dot {
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid rgba(0, 0, 0, 0.1);
+}
+
+.label-btn.active .label-color-dot {
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* Zoom buttons */
+.zoom-btn {
+    min-width: 40px;
+    padding: 6px 10px;
+}
+
+/* Edit buttons */
+.edit-btn {
+    padding: 6px 10px;
+}
+
+.edit-btn.delete-btn {
+    color: #dc3545;
+    border-color: #dc3545;
+}
+
+.edit-btn.delete-btn:hover {
+    background: #dc3545;
+    color: #fff;
+}
+
+.edit-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Annotation count */
+.annotation-count {
+    font-size: 13px;
+    color: #6c757d;
+    padding: 6px 12px;
+    background: #e9ecef;
+    border-radius: 4px;
+}
+
+.count-value {
+    font-weight: 600;
+    color: #495057;
+}
+
+/* Canvas wrapper */
+.canvas-wrapper {
+    position: relative;
+    width: 100%;
+    min-height: 400px;
+    background: #f0f0f0;
+    border: 2px solid #dee2e6;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.annotation-canvas {
+    display: block;
+    width: 100%;
+    cursor: crosshair;
+}
+
+/* Canvas checkered background for transparency */
+.canvas-wrapper::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image:
+        linear-gradient(45deg, #e0e0e0 25%, transparent 25%),
+        linear-gradient(-45deg, #e0e0e0 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #e0e0e0 75%),
+        linear-gradient(-45deg, transparent 75%, #e0e0e0 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+    pointer-events: none;
+    z-index: -1;
+}
+
+/* Hidden data input */
+.annotation-data-input {
+    display: none;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .image-annotation-toolbar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .tool-group,
+    .label-group,
+    .zoom-group,
+    .edit-group {
+        flex-wrap: wrap;
+    }
+
+    .tool-btn,
+    .label-btn,
+    .zoom-btn,
+    .edit-btn {
+        font-size: 12px;
+        padding: 5px 10px;
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .image-annotation-toolbar {
+        background: #2d3748;
+        border-color: #4a5568;
+    }
+
+    .tool-group-label {
+        color: #a0aec0;
+    }
+
+    .tool-btn,
+    .label-btn,
+    .zoom-btn,
+    .edit-btn {
+        background: #4a5568;
+        border-color: #718096;
+        color: #e2e8f0;
+    }
+
+    .tool-btn:hover,
+    .label-btn:hover,
+    .zoom-btn:hover,
+    .edit-btn:hover {
+        background: #718096;
+        border-color: #a0aec0;
+    }
+
+    .canvas-wrapper {
+        background: #1a202c;
+        border-color: #4a5568;
+    }
+
+    .canvas-wrapper::before {
+        background-image:
+            linear-gradient(45deg, #2d3748 25%, transparent 25%),
+            linear-gradient(-45deg, #2d3748 25%, transparent 25%),
+            linear-gradient(45deg, transparent 75%, #2d3748 75%),
+            linear-gradient(-45deg, transparent 75%, #2d3748 75%);
+    }
+
+    .annotation-count {
+        background: #4a5568;
+        color: #a0aec0;
+    }
+
+    .count-value {
+        color: #e2e8f0;
+    }
+}
+
+/* Form styling within image annotation */
+.annotation-form.image-annotation fieldset {
+    border: none;
+    padding: 0;
+    margin: 0;
+}
+
+.annotation-form.image-annotation legend {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #dee2e6;
+    width: 100%;
+}
+
+/* Loading state */
+.image-annotation-container.loading .canvas-wrapper::after {
+    content: 'Loading image...';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 14px;
+    color: #6c757d;
+}
+
+/* Error state */
+.image-annotation-container.error .canvas-wrapper::after {
+    content: 'Failed to load image';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 14px;
+    color: #dc3545;
+}
+
+/* Annotation highlight on hover */
+.canvas-container canvas {
+    outline: none;
+}
+
+/* Custom scrollbar for toolbar overflow */
+.image-annotation-toolbar::-webkit-scrollbar {
+    height: 6px;
+}
+
+.image-annotation-toolbar::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.image-annotation-toolbar::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+.image-annotation-toolbar::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}

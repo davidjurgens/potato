@@ -1,0 +1,40 @@
+# Malicious config file for testing path traversal protection
+# This file should be rejected by the security validation
+
+annotation_task_name: Malicious Path Traversal Test
+task_dir: output/malicious-test
+output_annotation_dir: output/malicious-test
+output_annotation_format: json
+max_annotations_per_user: 10
+assignment_strategy: fixed_order
+
+# Malicious data files with excessive path traversal attempts
+data_files:
+- ../../../etc/passwd  # 3 levels of .. - should be blocked
+- ../data/../../../../etc/shadow  # 4 levels of .. - should be blocked
+- data/../../../..  # 4 levels of .. - should be blocked
+- ../../../../../../etc/hosts  # 6 levels of .. - should be blocked
+
+item_properties:
+  id_key: id
+  text_key: text
+
+user_config:
+  allow_all_users: true
+  users: []
+
+alert_time_each_instance: 10000000
+
+annotation_schemes:
+- annotation_type: radio
+  name: sentiment
+  description: What is the sentiment of this text?
+  labels:
+  - positive
+  - negative
+  - neutral
+  sequential_key_binding: true
+
+site_dir: default
+customjs: null
+customjs_hostname: null

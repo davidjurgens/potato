@@ -1,0 +1,22 @@
+annotation_task_name: "Slider Annotation Test"
+data_files:
+- "../data/test_data.json"
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+annotation_schemes:
+- annotation_type: slider
+  name: rating
+  description: "Rate this text from 0 to 100"
+  min_value: 0
+  max_value: 100
+  starting_value: 50
+task_dir: "output/slider_annotation_test"
+output_annotation_dir: "output/slider_annotation_test"
+site_dir: "default"
+customjs: null
+customjs_hostname: null
+alert_time_each_instance: 10000000

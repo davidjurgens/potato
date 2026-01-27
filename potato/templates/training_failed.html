@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{annotation_task_name}} - Training Failed</title>
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+
+    <!-- Training Failed specific styles -->
+    <style>
+        .failed-header {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+            border-radius: 0.5rem;
+        }
+
+        .failed-content {
+            background-color: #f8f9fa;
+            border: 2px solid #e9ecef;
+            border-radius: 0.5rem;
+            padding: 2rem;
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+
+        .failed-icon {
+            font-size: 4rem;
+            color: #dc3545;
+            margin-bottom: 1rem;
+        }
+
+        .failed-message {
+            font-size: 1.25rem;
+            color: #495057;
+            margin-bottom: 1.5rem;
+        }
+
+        .stats-box {
+            background-color: white;
+            border: 1px solid #dee2e6;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin: 1rem auto;
+            max-width: 400px;
+        }
+
+        .stats-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .stats-row:last-child {
+            border-bottom: none;
+        }
+
+        .stats-label {
+            color: #6c757d;
+        }
+
+        .stats-value {
+            font-weight: 600;
+        }
+
+        .contact-info {
+            background-color: #e9ecef;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-top: 1.5rem;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Header navigation bar -->
+    <nav class="navbar sticky-top shadow-sm" style="background-color: var(--primary-color); padding: 0.75rem 1rem; margin-bottom: 1.5rem;">
+        <div class="container-fluid d-flex align-items-center">
+            <!-- Task name (left aligned) -->
+            <div class="navbar-brand">
+                <span class="fw-bold" style="color: var(--light-color); font-size: 1.25rem">{{annotation_task_name}}</span>
+            </div>
+
+            <!-- Middle section -->
+            <div class="d-flex align-items-center justify-content-center flex-grow-1">
+                <div class="d-flex align-items-center" style="color: var(--light-color);">
+                    <span><i class="fas fa-times-circle me-2"></i>Training Not Passed</span>
+                </div>
+            </div>
+
+            <!-- User info and logout (right aligned) -->
+            <div class="d-flex align-items-center"
+                 style="background-color: rgba(255, 255, 255, 0.15); padding: 0.5rem 1rem; border-radius: var(--radius);">
+                <div class="me-3" style="color: var(--light-color)">
+                    <span>Logged in as <span class="fw-medium">{{username}}</span></span>
+                </div>
+                <div class="border-start" style="padding-left: 20px; height: 24px; display: flex; align-items: center;">
+                    <a href="/logout" class="shadcn-button"
+                       style="background-color: var(--light-color); color: var(--primary-color); height: auto; padding: 0.25rem 0.75rem !important; font-size: 0.875rem; min-width: 60px; text-align: center; border: none; text-decoration: none;">
+                        Logout
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <!-- Failed header -->
+        <div class="failed-header text-center">
+            <h2><i class="fas fa-times-circle me-3"></i>Training Not Passed</h2>
+            <p class="mb-0">Unfortunately, you did not pass the training phase</p>
+        </div>
+
+        <!-- Failed content -->
+        <div class="failed-content">
+            <div class="failed-icon">
+                <i class="fas fa-user-times"></i>
+            </div>
+
+            <h3 class="mb-3">We're sorry</h3>
+
+            <p class="failed-message">
+                {{ message }}
+            </p>
+
+            {% if explanation %}
+            <div class="alert alert-info" role="alert">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>Explanation:</strong> {{ explanation }}
+            </div>
+            {% endif %}
+
+            <!-- Statistics -->
+            <div class="stats-box">
+                <h6 class="mb-3"><i class="fas fa-chart-bar me-2"></i>Your Training Statistics</h6>
+
+                {% if correct_count is defined %}
+                <div class="stats-row">
+                    <span class="stats-label">Correct Answers:</span>
+                    <span class="stats-value text-success">{{ correct_count }}</span>
+                </div>
+                {% endif %}
+
+                {% if total_mistakes is defined %}
+                <div class="stats-row">
+                    <span class="stats-label">Total Mistakes:</span>
+                    <span class="stats-value text-danger">{{ total_mistakes }}</span>
+                </div>
+                {% endif %}
+
+                {% if max_mistakes is defined and max_mistakes > 0 %}
+                <div class="stats-row">
+                    <span class="stats-label">Maximum Allowed:</span>
+                    <span class="stats-value">{{ max_mistakes }}</span>
+                </div>
+                {% endif %}
+
+                {% if question_mistakes is defined %}
+                <div class="stats-row">
+                    <span class="stats-label">Mistakes on Question:</span>
+                    <span class="stats-value text-danger">{{ question_mistakes }}</span>
+                </div>
+                {% endif %}
+
+                {% if max_mistakes_per_question is defined and max_mistakes_per_question > 0 %}
+                <div class="stats-row">
+                    <span class="stats-label">Max Per Question:</span>
+                    <span class="stats-value">{{ max_mistakes_per_question }}</span>
+                </div>
+                {% endif %}
+
+                {% if total_questions is defined %}
+                <div class="stats-row">
+                    <span class="stats-label">Total Questions:</span>
+                    <span class="stats-value">{{ total_questions }}</span>
+                </div>
+                {% endif %}
+
+                {% if min_correct is defined %}
+                <div class="stats-row">
+                    <span class="stats-label">Required Correct:</span>
+                    <span class="stats-value">{{ min_correct }}</span>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Contact info -->
+            <div class="contact-info">
+                <p class="mb-0">
+                    <i class="fas fa-envelope me-2"></i>
+                    If you believe this is an error or have questions, please contact the study administrator.
+                </p>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <hr style="color: var(--border)">
+        <footer class="py-2 text-center" style="font-size: 0.75rem; color: var(--muted-foreground)">
+            Copyright &copy; 2025
+            <a href="https://blablablab.si.umich.edu/" style="color: var(--primary); text-decoration: none">Blablablab</a>
+            <span class="mx-2">|</span>
+            <a href="https://github.com/davidjurgens/potato" style="color: var(--primary); text-decoration: none">Chat with us on GitHub</a>
+            <span class="mx-2">|</span>
+            <a href="https://github.com/davidjurgens/potato#cite-us" style="color: var(--primary); text-decoration: none">Cite Us</a>
+        </footer>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

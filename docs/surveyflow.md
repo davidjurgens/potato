@@ -1,187 +1,308 @@
-# Surveyflow
+# Multi-Phase Workflows
 
-Potato allows you to easily set up a series of modules traditionally
-used in social science surveys.
+Potato supports multi-phase annotation workflows that guide annotators through a structured sequence of stages. This is useful for setting up consent forms, pre-screening questions, training/qualification, the main annotation task, and post-study surveys.
 
-## Pre-screening questions
-You could easily insert any survey questions before the annotation instances using our
-built-in schemas: likert, radio, checkbox, textbox, drop-down list.
-Potato also provide templates for setting up task instructions and user
-consents.
+## Phase System Overview
 
-![image](img/screenshots/prescreening_questions.gif)
+Potato's workflow consists of the following phases (in order):
 
-Step 1, prepare a .jsonl file for the survey questions you want to
-insert. For example, if you want to insert a page of censent questions,
-you can add the following likes to a jsonl file named consent.jsonl
+| Phase | Purpose | Required |
+|-------|---------|----------|
+| `consent` | Collect informed consent | Optional |
+| `prestudy` | Pre-screening questions, demographics | Optional |
+| `instructions` | Task instructions and guidelines | Optional |
+| `training` | Qualification/training with feedback | Optional |
+| `annotation` | Main annotation task | Required |
+| `poststudy` | Post-study surveys, feedback | Optional |
 
-``` YAML
-{"id":"1","text":"I certify that I am at least 18 years of age.","schema": "radio", "choices": ["I agree", "I disagree"], "label_requirement": {"right_label":["I agree"]}}
-{"id":"2","text":"I have read and understood the information above.","schema": "radio", "choices": ["Yes", "No"], "label_requirement": {"right_label":["Yes"]}}
-{"id":"3","text":"I understand I might see potentially offensive or sexual content.","schema": "radio", "choices": ["Yes", "No"], "label_requirement": {"right_label":["Yes"]}}
-{"id":"4","text":"I want to participate in this research and continue with the study.","schema": "radio", "choices": ["Yes", "No"], "label_requirement": {"right_label":["Yes"]}}
+Users automatically progress through enabled phases in this order.
+
+## Configuration
+
+### Modern Phases Configuration (Recommended)
+
+The recommended way to configure multi-phase workflows is using the `phases` section in your YAML config:
+
+```yaml
+phases:
+  order: [consent, prestudy, instructions, annotation, poststudy]
+
+  consent:
+    file: surveyflow/consent.json
+
+  prestudy:
+    file: surveyflow/prescreening.json
+
+  instructions:
+    file: surveyflow/instructions.html
+
+  poststudy:
+    file: surveyflow/demographics.json
 ```
 
-Step 2, insert the file path into the configuration file:
+### Phase Data Files
 
-``` YAML
-"surveyflow": {
-        "on": true,
-        "order": [
-            "pre_annotation",
-            "post_annotation"
-        ],
-        "pre_annotation": [
-            "projects/your-project-name/surveyflow/English/consent.jsonl",
-        ],
-        "post_annotation": [
+Each phase references a data file containing the questions or content for that phase.
 
-        ],
-        "testing": [
+#### JSON Format for Survey Questions
 
-        ]
-},
+```json
+[
+  {
+    "id": "consent_1",
+    "text": "I certify that I am at least 18 years of age.",
+    "schema": "radio",
+    "choices": ["I agree", "I disagree"],
+    "label_requirement": {"right_label": ["I agree"]}
+  },
+  {
+    "id": "consent_2",
+    "text": "I have read and understood the information above.",
+    "schema": "radio",
+    "choices": ["Yes", "No"],
+    "label_requirement": {"right_label": ["Yes"]}
+  }
+]
 ```
 
-Potato will automatically create a consent page for all the annotators
-when you launch it.
-<!---
-## Pre-study qualification test 
-Details coming soon
+#### Supported Schema Types
 
-## Attention test
+- `radio` - Single choice from options
+- `checkbox` / `multiselect` - Multiple selections
+- `text` - Free text response
+- `number` - Numeric input
+- `likert` - Likert scale rating
+- `select` - Dropdown selection
 
-Potato also allows you to easily assign attention test questions into
-the annotation instances, just create another jsonl file, for example:
+### Label Requirements
 
-``` YAML
-{"id":"test_question","text":"This is a test question, please select [test_question_choice].", "choices": ["1", "2", "3", "4", "5"]}
+Control which answers are acceptable to proceed:
+
+```json
+{
+  "id": "age_check",
+  "text": "Are you at least 18 years old?",
+  "schema": "radio",
+  "choices": ["Yes", "No"],
+  "label_requirement": {
+    "right_label": ["Yes"],
+    "required": true
+  }
+}
 ```
 
-`[test_question_choice]` is the placeholder where the desired option will be displayed.
-`choices` defines all the potential options and the system will automatically choose one from it. 
-In the example above, `["1", "2", "3", "4", "5"]` will be randomly used to replace `[test_question_choice]`
-and the annotators are required to choose the displayed option as an attention test.
+- `right_label`: List of acceptable answers (user must select one to proceed)
+- `required`: Whether the question must be answered
 
-and edit the surveyflow section in the configuration file:
+## Pre-Screening Questions
 
-``` YAML
-"surveyflow": {
-        "on": true,
-        "order": [
-            "pre_annotation",
-            "post_annotation"
-        ],
-        "pre_annotation": [
-            "surveyflow/consent.jsonl",
-        ],
-        "post_annotation": [
+![Pre-screening questions example](img/screenshots/prescreening_questions.gif)
 
-        ],
-        "testing": [
-             "surveyflow/testing.jsonl",
-        ]
-},
-```
---->
+Pre-screening questions appear before the main annotation task. Use them to:
+- Verify eligibility (age, consent)
+- Collect demographic information
+- Assess prior knowledge
 
-## Post-screening questions 
+### Example Prestudy Configuration
 
-![image](img/screenshots/postscreening_questions.gif)
-
-You can also insert post study surveys just like the prestudy survey:
-
-``` YAML
-{"id":"1","text":"What gender do you most closely identify with?","schema": "radio", "choices": ["Male", "Female", "Non-binary"], "label_requirement": {"required":true}}
+```yaml
+phases:
+  order: [prestudy, annotation]
+  prestudy:
+    file: surveyflow/prescreening.json
 ```
 
-and add the filename into the surveyflow section of your configuration
-file:
-
-``` YAML
-"surveyflow": {
-        "on": true,
-        "order": [
-            "pre_annotation",
-            "post_annotation"
-        ],
-        "pre_annotation": [
-            "surveyflow/consent.jsonl",
-        ],
-        "post_annotation": [
-            "surveyflow/demographics.jsonl",
-        ],
-        "testing": [
-             "surveyflow/testing.jsonl",
-        ]
-},
-```
-## Customize the header for each surveyflow page
-On each page of the surveyflow, we display the filename of the page by default. For example,
-for the page of `surveyflow/consent.jsonl`, we will display `consent` as the theme of the page.
-If you want to display a different theme text, you could use a `dict` to define the surveyflow pages. For example:
-
-``` YAML
-"surveyflow": {
-        "on": true,
-        "order": [
-            "pre_annotation",
-            "post_annotation"
-        ],
-        "pre_annotation": [
-            {"file":"surveyflow/consent.jsonl", "text":"Please answer all the consent questions"},
-        ],
-        "post_annotation": [
-            "surveyflow/demographics.jsonl",
-        ],
-        "testing": [
-             "surveyflow/testing.jsonl",
-        ]
-},
+**prescreening.json:**
+```json
+[
+  {
+    "id": "1",
+    "text": "What is your native language?",
+    "schema": "select",
+    "use_predefined_labels": "language",
+    "label_requirement": {"required": true}
+  },
+  {
+    "id": "2",
+    "text": "How familiar are you with this topic?",
+    "schema": "likert",
+    "choices": ["Not at all", "Slightly", "Moderately", "Very", "Extremely"],
+    "label_requirement": {"required": true}
+  }
+]
 ```
 
-## Different layouts for surveyflow and annotation pages
-Surveyflow and annotation pages share the same layout file by default, however, if you want to use 
-different html layouts for them, you could use `surveyflow_html_layout` to set up the layout for surveyflow
-pages.
+## Post-Study Surveys
 
-For example, if you want to use a customized page for the annotation task but keep the default layout for the 
-surveyflow pages, you can use the follow configuration in your `.yaml` file. `surveyflow_html_layout` pages accept the same
-template strings as the normal `html_layout` (i.e. `default`, `fixed_keybinding`, `kwargs` and custom html file).
-``` yaml
-    "html_layout": "templates/layout.html",
-    "surveyflow_html_layout": "default",
+![Post-study questions example](img/screenshots/postscreening_questions.gif)
+
+Post-study surveys appear after annotation is complete:
+
+```yaml
+phases:
+  order: [annotation, poststudy]
+  poststudy:
+    file: surveyflow/demographics.json
 ```
 
-if you want to use another customized page for the surveyflow pages:
-``` yaml
-    "html_layout": "templates/layout.html",
-    "surveyflow_html_layout": "templates/surveyflow-layout.html",
+**demographics.json:**
+```json
+[
+  {
+    "id": "gender",
+    "text": "What gender do you most closely identify with?",
+    "schema": "radio",
+    "choices": ["Male", "Female", "Non-binary", "Prefer not to say"],
+    "label_requirement": {"required": true}
+  },
+  {
+    "id": "feedback",
+    "text": "Please share any feedback about this study (optional)",
+    "schema": "text"
+  }
+]
 ```
 
+## Built-in Question Templates
 
-## Built-in demographic questions 
-Potato provides a list of basic demographic questions covering common needs:
+Potato provides predefined label sets for common survey questions:
 
-``` YAML
-{"id":"1","text":"What is your gender?","schema": "radio", "choices": ["Woman", "Man", "Non-binary","Prefer not to disclose", "Prefer to self-describe (please specify)"], "has_free_response": {"instruction": ""},"label_requirement": {"required":true}}
-{"id":"2","text":"What is your current age?","schema": "number", "label_requirement": {"required":true}}
-{"id":"3","text":"What is your occupation?","schema": "radio", "choices": ["Employed", "Unemployed", "Student", "Retired", "Homemaker", "Self-employed", "Other"], "label_requirement": {"required":true}}
-{"id":"4","text":"What is your education level?","schema": "radio", "choices": ["Less than a high school diploma", "High school diploma or equivalent", "College degree", "Graduate degree", "Other"], "label_requirement": {"required":true}}
-{"id":"5","text":"What is your country of birth?","schema": "select", "use_predefined_labels": "country", "label_requirement": {"required":true}}
-{"id":"6","text":"In which country did you spend most of your time before you turned 18?","schema": "select", "use_predefined_labels": "country", "label_requirement": {"required":true}}
-{"id":"7","text":"Which country are you currently living in?", "schema": "select", "use_predefined_labels": "country", "label_requirement": {"required":true}}
-{"id":"8","text":"What ethnic group do you belong to?","schema": "select", "use_predefined_labels": "ethnicity", "label_requirement": {"required":true}}
-{"id":"9","text":"What is your present religion, if any?","schema": "select", "use_predefined_labels": "religion", "label_requirement": {"required":true}}
-{"id":"10","text":"Please feel free to leave any comments about our study (optional)","schema": "text"}
+### Countries
+```json
+{"schema": "select", "use_predefined_labels": "country"}
 ```
 
-## Built-in study experience survey:
-Potato also supports you to survey the user annotation experience with the
-following questions:
-
-``` YAML
-{"id":"1","text":"How satisfied do you feel about your experience participating our study?","schema": "radio", "choices": ["Not satisfied", "Satisfied", "Very satisfied"], "label_requirement": {"required":true}}
-{"id":"2","text":"How do you feel about your experience participating our study compared with other studies?","schema": "radio", "choices": ["Much worse than others", "Worse than others", "Similar", "Better than others", "Much better than others"], "label_requirement": {"required":true}}
-{"id":"3","text":"Please feel free to leave any comments about our study (optional)","schema": "text"}
+### Languages
+```json
+{"schema": "select", "use_predefined_labels": "language"}
 ```
+
+### Ethnicity
+```json
+{"schema": "select", "use_predefined_labels": "ethnicity"}
+```
+
+### Religion
+```json
+{"schema": "select", "use_predefined_labels": "religion"}
+```
+
+## Complete Example
+
+Here's a complete multi-phase workflow configuration:
+
+```yaml
+annotation_task_name: "Sentiment Annotation Study"
+
+# Enable multi-phase workflow
+phases:
+  order: [consent, prestudy, instructions, training, annotation, poststudy]
+
+  consent:
+    file: phases/consent.json
+
+  prestudy:
+    file: phases/demographics.json
+
+  instructions:
+    file: phases/instructions.html
+
+  poststudy:
+    file: phases/exit_survey.json
+
+# Training phase configuration (optional)
+training:
+  enabled: true
+  data_file: phases/training_questions.json
+  passing_criteria:
+    min_correct: 3
+    max_attempts: 2
+
+# Main annotation configuration
+data_files:
+  - data/instances.json
+
+annotation_schemes:
+  - name: sentiment
+    annotation_type: radio
+    labels: [Positive, Negative, Neutral]
+    description: "Select the sentiment of this text"
+```
+
+## Free Response Fields
+
+Add optional text input to any question:
+
+```json
+{
+  "id": "gender",
+  "text": "What is your gender?",
+  "schema": "radio",
+  "choices": ["Woman", "Man", "Non-binary", "Prefer not to disclose", "Prefer to self-describe"],
+  "has_free_response": {"instruction": "Please specify:"},
+  "label_requirement": {"required": true}
+}
+```
+
+## Page Headers
+
+Customize the header text displayed on each survey page:
+
+```yaml
+phases:
+  prestudy:
+    file: surveyflow/consent.json
+    header: "Please answer all consent questions"
+```
+
+---
+
+## Legacy Surveyflow Configuration
+
+> **Note:** The configuration format below is deprecated but still supported for backward compatibility. New projects should use the `phases` configuration format shown above.
+
+The legacy `surveyflow` configuration uses this format:
+
+```yaml
+surveyflow:
+  on: true
+  order:
+    - pre_annotation
+    - post_annotation
+  pre_annotation:
+    - surveyflow/consent.jsonl
+    - surveyflow/demographics.jsonl
+  post_annotation:
+    - surveyflow/exit_survey.jsonl
+```
+
+### Migration Guide
+
+To migrate from legacy `surveyflow` to the modern `phases` system:
+
+| Legacy | Modern |
+|--------|--------|
+| `surveyflow.on: true` | Use `phases` section |
+| `surveyflow.pre_annotation` | `phases.prestudy` or `phases.consent` |
+| `surveyflow.post_annotation` | `phases.poststudy` |
+| `surveyflow.testing` | `training.data_file` |
+| `.jsonl` files | `.json` files (array format) |
+
+### Legacy surveyflow_html_layout
+
+If you were using `surveyflow_html_layout` to customize survey page appearance:
+
+```yaml
+# Legacy
+surveyflow_html_layout: "templates/survey-layout.html"
+
+# Modern equivalent - customize via UI configuration
+ui_configuration:
+  phase_layout: "templates/survey-layout.html"
+```
+
+## Related Documentation
+
+- [Training Phase](training_phase.md) - Configure qualification training with feedback
+- [Category-Based Assignment](category_assignment.md) - Assign tasks based on training performance
+- [Configuration](configuration.md) - Full configuration reference

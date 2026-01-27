@@ -42,7 +42,7 @@ annotation process. To enable dynamic highlighting, just provide a path
 to a tab-separated values file of keywords. The keywords file should
 have this format:
 
-``` 
+```
 Word Label   Schema
 good*    Negative    Sentiment
 bad* Positive    Sentiment
@@ -105,68 +105,45 @@ your mouse over the response option.
 ]
 ```
 
-## Active learning
+## Active Learning
 
-Active learning can be enabled and configured by providing the
-`active_learning_config` key to the configuration file. See below for a
-basic example of the active learning configuration.
+Active learning uses machine learning to intelligently prioritize annotation tasks, helping you maximize the value of your annotation budget. For comprehensive configuration and usage instructions, see the [Active Learning Guide](active_learning_guide.md).
 
-``` yaml
-# This controls whether Potato will actively re-order unlabeled instances
-# during annotation after a certain number of items are annotated to
-# prioritize those that a basic classifier model is most uncertain about. If
-# you have lots of unlabeled data, active learning can potentially help
-# maximize the data you get for your "annotation budget", though if you plan
-# on annotative *all* the data, active learning will have no effect.    
-"active_learning_config": {
+### Basic Configuration
 
-  "enable_active_learning": True,
-
-  # The fully specified name of an sklearn classifier object with packages,
-  # e.g., "sklearn.linear_model.LogisticRegression". This classifier will be
-  # trained on the annotated data and used to re-order the remaining
-  # instances.
-  "classifier_name": "sklearn.linear_model.LogisticRegression",
-
-  # Any kwargs that you want to pass to the classifier during instantiation
-  "classifier_kwargs": { },
-
-  # The fully specified name of an sklearn tokenizer object with packages,
-  # e.g., "sklearn.feature_extraction.text.CountVectorizer". This tokenizer
-  # will be used to tranform the text instances into features.
-  "vectorizer_name": "sklearn.feature_extraction.text.CountVectorizer", 
-
-  # Any kwargs that you want to pass to the tokenizer during instantiation.
-  #
-  # NOTE: it's generally a good idea to keep the active learning classifier
-  # "fast" so that annotators aren't waiting long when classifying. This
-  # often meanings capping the number of features
-  "vectorizer_kwargs": { },
-
-  # When multiple annotators have labeled the same data, this option decides
-  # how to resolve the mulitple annotations to a single label for the
-  # purpose of training the active learning classifier. 
-  "resolution_strategy": "random",
-
-  # Some part of the data should still be randomly selected (i.e., not based
-  # on active learning). This ensure the annotation process can still see a
-  # variety of unbiased samples and that the test data can be drawn from an
-  # empirical distribution of the data.
-  "random_sample_percent": 50,
-
-  # The names of all annotation schema that active learning should be run
-  # for. If multiple schema are provided, an instance will be prioritized
-  # based on its lowest certainty across all schema (i.e., the
-  # least-confident items).
-  #
-  # NOTE: if this field is left unset, active learning will use all schema.
-  "active_learning_schema": [ "favorite_food" ],
-
-  "update_rate": 5,
-
-  "max_inferred_predictions": 20,
-},
+```yaml
+active_learning:
+  enabled: true
+  schema_names: ["sentiment", "topic"]
+  min_annotations_per_instance: 2
+  min_instances_for_training: 20
+  update_frequency: 10
+  max_instances_to_reorder: 100
+  classifier_name: "sklearn.linear_model.LogisticRegression"
+  vectorizer_name: "sklearn.feature_extraction.text.TfidfVectorizer"
+  vectorizer_kwargs:
+    max_features: 1000
+    stop_words: "english"
+  resolution_strategy: "majority_vote"
+  random_sample_percent: 20
 ```
+
+### Key Benefits
+
+- **Maximize annotation efficiency** by focusing on the most informative instances
+- **Reduce annotation costs** by requiring fewer annotations for the same model performance
+- **Improve model quality** by ensuring diverse and representative training data
+- **Scale annotation workflows** with intelligent instance prioritization
+
+### How It Works
+
+1. **Training**: A machine learning classifier is trained on existing annotations
+2. **Prediction**: The model predicts confidence scores for unannotated instances
+3. **Reordering**: Instances are reordered based on uncertainty (lowest confidence first)
+4. **Annotation**: Annotators work on the most uncertain instances
+5. **Retraining**: The model is retrained periodically as new annotations are added
+
+For advanced features including LLM integration, model persistence, and multi-schema support, refer to the [Active Learning Guide](active_learning_guide.md).
 
 ## Automatic task assignent
 
@@ -190,8 +167,8 @@ for this function
 ```
 
 ## Label suggestions
-Starting from 1.2.2.1, Potato supports displaying suggestions to improve the productivity of annotators. Currently we 
-support two types of label suggestions: `prefill` and `highlight`. `prefill` will automatically 
+Starting from 1.2.2.1, Potato supports displaying suggestions to improve the productivity of annotators. Currently we
+support two types of label suggestions: `prefill` and `highlight`. `prefill` will automatically
 pre-select the labels or prefill the text inputs for the annotators while `highlight` will only
 highlight the text of the labels. `highlight` can only be used for `multiselect` and `radio`.
 `prefill` can also be used with textboxes.
@@ -199,8 +176,8 @@ highlight the text of the labels. `highlight` can only be used for `multiselect`
 There are two steps to set up label suggestions for your annotation tasks:
 
 ### Step 1: modify your configuration file
-Labels suggestions are defined for each scheme. In your configuration file, you can simply add 
-a field named `label_suggestions` to specific annotation schemes. You can use different suggestion 
+Labels suggestions are defined for each scheme. In your configuration file, you can simply add
+a field named `label_suggestions` to specific annotation schemes. You can use different suggestion
 types for different schemes.
 ``` yaml
 {

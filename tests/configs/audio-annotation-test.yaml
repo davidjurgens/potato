@@ -1,0 +1,71 @@
+# Test configuration for audio annotation
+# This config tests the audio_annotation schema type
+
+task_dir: ".."
+port: 8000
+server_name: Audio Annotation Test
+annotation_task_name: Audio Annotation Test Task
+output_annotation_dir: annotation_output/
+output_annotation_format: json
+
+data_files:
+  - data/test_audio.jsonl
+
+item_properties:
+  id_key: id
+  text_key: audio_url
+
+user_config:
+  allow_all_users: true
+  users: []
+
+alert_time_each_instance: 300000
+
+# Audio annotation configuration
+audio_annotation:
+  waveform_cache_dir: waveform_cache/
+  waveform_look_ahead: 5
+  waveform_cache_max_size: 100
+  client_fallback_max_duration: 1800  # 30 minutes
+
+annotation_schemes:
+  # Label-based audio annotation
+  - annotation_type: audio_annotation
+    name: audio_segmentation
+    description: "Segment the audio by content type"
+    mode: label
+    labels:
+      - name: speech
+        color: "#4ECDC4"
+        key_value: "1"
+      - name: music
+        color: "#FF6B6B"
+        key_value: "2"
+      - name: silence
+        color: "#95A5A6"
+        key_value: "3"
+      - name: noise
+        color: "#F39C12"
+        key_value: "4"
+    min_segments: 1
+    zoom_enabled: true
+    playback_rate_control: true
+
+  # Additional question about the audio quality
+  - annotation_type: radio
+    name: audio_quality
+    description: "Rate the overall audio quality"
+    labels:
+      - name: "Clear"
+        key_value: "c"
+      - name: "Slightly noisy"
+        key_value: "s"
+      - name: "Very noisy"
+        key_value: "v"
+      - name: "Unusable"
+        key_value: "u"
+
+  # Optional comments
+  - annotation_type: text
+    name: comments
+    description: "Any additional notes about the audio (optional)"

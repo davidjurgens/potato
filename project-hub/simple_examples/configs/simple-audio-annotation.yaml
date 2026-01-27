@@ -1,0 +1,78 @@
+# Simple Audio Annotation Example
+#
+# This example demonstrates how to set up an audio segmentation task
+# where annotators mark time regions and assign labels.
+#
+# Requirements:
+#   - For best performance with long audio, install audiowaveform:
+#     brew install audiowaveform (macOS) or apt-get install audiowaveform (Linux)
+#   - Without audiowaveform, client-side waveform generation is used (slower for long files)
+#
+# To run this example:
+#   python potato/flask_server.py start project-hub/simple_examples/configs/simple-audio-annotation.yaml -p 8000
+#
+# Then open http://localhost:8000 in your browser.
+
+task_dir: .
+port: 8000
+server_name: Audio Annotation Example
+annotation_task_name: Audio Segmentation Demo
+output_annotation_dir: annotation_output/simple-audio-annotation/
+output_annotation_format: json
+
+# Data file containing audio URLs
+data_files:
+  - data/audio-annotation-example.json
+
+# Map data fields to Potato's expected format
+item_properties:
+  id_key: id
+  text_key: audio_url  # The field containing the audio URL
+
+# Allow anyone to annotate (no login required)
+user_config:
+  allow_all_users: true
+  users: []
+
+# Audio annotation configuration
+audio_annotation:
+  waveform_cache_dir: waveform_cache/  # Where to store pre-computed waveforms
+  waveform_look_ahead: 3               # Pre-compute next 3 instances
+  waveform_cache_max_size: 50          # Max cached files
+
+annotation_schemes:
+  # Audio segmentation with labels
+  - annotation_type: audio_annotation
+    name: audio_segmentation
+    description: "Listen to the audio and create segments for different content types. Use [ and ] keys to set segment boundaries, then press Enter to create a segment."
+    mode: label
+    labels:
+      - name: speech
+        color: "#4ECDC4"
+        key_value: "1"
+      - name: music
+        color: "#FF6B6B"
+        key_value: "2"
+      - name: silence
+        color: "#95A5A6"
+        key_value: "3"
+      - name: noise
+        color: "#F39C12"
+        key_value: "4"
+    min_segments: 1              # Require at least one segment
+    zoom_enabled: true           # Allow zooming into waveform
+    playback_rate_control: true  # Show speed control (0.5x to 2x)
+
+  # Optional: Rate the audio quality
+  - annotation_type: radio
+    name: audio_quality
+    description: "How is the overall audio quality?"
+    labels:
+      - name: "Clear"
+        key_value: "c"
+      - name: "Noisy"
+        key_value: "n"
+      - name: "Very noisy"
+        key_value: "v"
+
+site_dir: default

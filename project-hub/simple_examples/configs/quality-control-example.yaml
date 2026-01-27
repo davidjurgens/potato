@@ -1,0 +1,118 @@
+# Quality Control Example Configuration
+# This example demonstrates attention checks, gold standards, and pre-annotation support
+
+annotation_task_name: "Sentiment Analysis with Quality Control"
+
+# Task directory (where output will be saved)
+task_dir: .
+
+# Output settings
+output_annotation_dir: annotation_output/quality-control-example
+output_annotation_format: json
+
+# Data files (relative to task_dir)
+data_files:
+  - data/quality-control-example.json
+
+# Item properties
+item_properties:
+  id_key: id
+  text_key: text
+
+# Annotation scheme
+annotation_schemes:
+  - name: sentiment
+    annotation_type: radio
+    labels:
+      - name: positive
+        tooltip: "Positive sentiment - happy, satisfied, enthusiastic"
+      - name: negative
+        tooltip: "Negative sentiment - unhappy, dissatisfied, angry"
+      - name: neutral
+        tooltip: "Neutral sentiment - factual, balanced, no strong emotion"
+    description: "What is the overall sentiment of this text?"
+
+# ============================================
+# QUALITY CONTROL CONFIGURATION
+# ============================================
+
+# Attention Checks: Known-answer items to verify annotator engagement
+attention_checks:
+  enabled: true
+
+  # Path to JSON file with attention check items (relative to task_dir)
+  items_file: data/attention-checks.json
+
+  # Insert attention check every 10 regular items
+  frequency: 10
+
+  # Flag responses faster than 2 seconds as suspicious
+  min_response_time: 2.0
+
+  # Failure handling
+  failure_handling:
+    warn_threshold: 2
+    warn_message: "Please read each item carefully before selecting your answer. Quality responses are important for this task."
+    block_threshold: 5
+    block_message: "Unfortunately, you have been unable to complete the attention check items correctly. Your session has ended."
+
+# Gold Standards: Expert-labeled items for accuracy tracking
+# Gold standards are "silent" by default - results are recorded for admin review
+# but annotators don't see feedback (unlike attention checks which are explicit)
+gold_standards:
+  enabled: true
+
+  # Path to JSON file with gold standard items (relative to task_dir)
+  items_file: data/gold-standards.json
+
+  # Mix into regular annotation (vs training-only or separate phase)
+  mode: mixed
+
+  # Insert gold standard every 20 regular items
+  frequency: 20
+
+  # Accuracy requirements (tracked in admin dashboard)
+  accuracy:
+    min_threshold: 0.7    # 70% accuracy required
+    evaluation_count: 5   # Evaluate after 5 gold items
+
+  # Feedback is disabled by default (silent tracking for admin only)
+  # Uncomment to show feedback to users (useful for training scenarios)
+  # feedback:
+  #   show_correct_answer: true
+  #   show_explanation: true
+
+  # Auto-promotion: items become gold standards when annotators agree
+  auto_promote:
+    enabled: true
+    min_annotators: 3       # Minimum annotators before checking agreement
+    agreement_threshold: 1.0  # 1.0 = unanimous agreement required
+
+# Pre-annotation: Pre-fill forms with model predictions
+pre_annotation:
+  enabled: true
+  field: predictions      # Field in data containing predictions
+  allow_modification: true
+  show_confidence: true
+  highlight_low_confidence: 0.7
+
+# Agreement Metrics: Real-time inter-annotator agreement in admin dashboard
+agreement_metrics:
+  enabled: true
+  min_overlap: 2          # Minimum 2 annotators per item
+  refresh_interval: 60    # Update every 60 seconds
+
+# ============================================
+# OTHER SETTINGS
+# ============================================
+
+# UI configuration
+ui:
+  show_progress_bar: true
+  show_statistics: true
+
+# User configuration
+user_config:
+  allow_anonymous: true
+
+site_dir: default

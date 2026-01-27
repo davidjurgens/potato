@@ -1,0 +1,71 @@
+# Keyword Highlights Example
+# This example demonstrates how to use admin-defined keyword highlights
+# to draw annotators' attention to relevant words in the text.
+
+port: 8000
+server_name: potato annotator
+annotation_task_name: Sentiment Analysis with Keyword Highlights
+
+# Output settings
+output_annotation_dir: annotation_output/
+output_annotation_format: json
+
+# Data files
+data_files:
+  - data.json
+
+# Item properties - how to identify text in each item
+item_properties:
+  id_key: id
+  text_key: text
+
+# User configuration - allow any user without password
+user_config:
+  allow_all_users: true
+  users: []
+
+# Keyword highlights file
+# This TSV file defines words/phrases that will be automatically highlighted
+# in the text to help annotators identify relevant content.
+# Format: Word (tab) Label (tab) Schema
+# - Word: The keyword or phrase (supports * wildcards like "excel*" for "excellent", "excels", etc.)
+# - Label: The category/label for this keyword (e.g., "positive", "negative")
+# - Schema: The annotation schema name this keyword is relevant to
+keyword_highlights_file: sentiment_keywords.tsv
+
+# UI configuration - define colors for each label
+ui:
+  spans:
+    span_colors:
+      sentiment:
+        positive: "(22, 163, 74)"    # Green for positive sentiment
+        negative: "(239, 68, 68)"    # Red for negative sentiment
+
+# Annotation schemes
+annotation_schemes:
+  # Span annotation for marking sentiment-bearing phrases
+  - annotation_type: span
+    name: sentiment
+    description: "Mark sentiment-bearing phrases in the text. Keywords are highlighted with colored borders."
+    labels:
+      - name: positive
+        tooltip: "Phrases expressing positive sentiment or emotions"
+      - name: negative
+        tooltip: "Phrases expressing negative sentiment or emotions"
+
+  # Overall sentiment classification
+  - annotation_type: radio
+    name: overall_sentiment
+    description: "What is the overall sentiment of this text?"
+    labels:
+      - name: positive
+        tooltip: "The text is predominantly positive"
+      - name: negative
+        tooltip: "The text is predominantly negative"
+      - name: mixed
+        tooltip: "The text contains both positive and negative sentiment"
+      - name: neutral
+        tooltip: "The text does not express clear sentiment"
+
+# Site configuration
+site_dir: default

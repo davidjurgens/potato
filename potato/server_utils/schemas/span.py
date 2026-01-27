@@ -4,195 +4,152 @@ Span Layout
 
 import logging
 from collections.abc import Mapping
-from potato.server_utils.config_module import config
+from collections import defaultdict
+from ai.ai_help_wrapper import get_ai_wrapper, get_dynamic_ai_help
+from server_utils.config_module import config
+from .identifier_utils import (
+    safe_generate_layout,
+    generate_element_identifier,
+    generate_element_value,
+    generate_validation_attribute,
+    escape_html_content
+)
+
+
+from item_state_management import SpanAnnotation
 
 logger = logging.getLogger(__name__)
 
 SPAN_COLOR_PALETTE = [
-    "(230, 25, 75)",
-    "(60, 180, 75)",
-    "(255, 225, 25)",
-    "(0, 130, 200)",
-    "(245, 130, 48)",
-    "(145, 30, 180)",
-    "(70, 240, 240)",
-    "(240, 50, 230)",
-    "(210, 245, 60)",
-    "(250, 190, 212)",
-    "(0, 128, 128)",
-    "(220, 190, 255)",
-    "(170, 110, 40)",
-    "(255, 250, 200)",
-    "(128, 0, 0)",
-    "(170, 255, 195)",
-    "(128, 128, 0)",
-    "(255, 215, 180)",
-    "(0, 0, 128)",
-    "(128, 128, 128)",
-    "(255, 255, 255)",
-    "(0, 0, 0)",
+    "(110, 86, 207)",   # Primary purple #6E56CF
+    "(239, 68, 68)",    # Destructive red #EF4444
+    "(113, 113, 122)",  # Gray #71717A
+    "(245, 158, 11)",   # Amber #F59E0B
+    "(16, 185, 129)",   # Success green #10B981
+    "(59, 130, 246)",   # Blue #3B82F6
+    "(220, 38, 38)",    # Red #DC2626
+    "(139, 92, 246)",   # Purple #8B5CF6
+    "(156, 163, 175)",  # Light gray #9CA3AF
+    "(107, 114, 128)",  # Medium gray #6B7280
+    "(55, 65, 81)",     # Dark gray #374151
+    "(249, 115, 22)",   # Orange #F97316
+    "(6, 182, 212)",    # Cyan #06B6D4
+    "(236, 72, 153)",   # Pink #EC4899
+    "(5, 150, 105)",    # Dark green #059669
+    "(124, 58, 237)",   # Violet #7C3AED
+    "(22, 163, 74)",    # Green #16A34A
+    "(234, 88, 12)",    # Dark orange #EA580C
+    "(37, 99, 235)",    # Blue #2563EB
+    "(127, 29, 29)",    # Dark red #7F1D1D
+    "(168, 85, 247)",   # Purple #A855F7
+    "(34, 197, 94)",    # Green #22C55E
 ]
 
 span_counter = 0
 SPAN_COLOR_PALETTE_LENGTH = len(SPAN_COLOR_PALETTE)
 
-def get_span_color(span_label):
+def get_span_color(schema, span_label):
     """
     Returns the color of a span with this label as a string with an RGB triple
     in parentheses, or None if the span is unmapped.
     """
-    return (
-        config.get("ui", {})
-            .get("spans", {})
-            .get("span_colors", {})
-            .get(span_label, None)
-    )
+
+    if "ui" not in config or "spans" not in config["ui"]:
+        return None
+
+    span_ui = config["ui"]["spans"]
+
+    if "span_colors" not in span_ui:
+        return None
+
+    if schema in span_ui["span_colors"]:
+        schema_colors = span_ui["span_colors"][schema]
+        if span_label in schema_colors:
+            return schema_colors[span_label]
+
+    return None
 
 
-def set_span_color(span_label, color):
+def set_span_color(schema, span_label, color):
     """
     Sets the color of a span with this label as a string with an RGB triple in parentheses.
 
     :color: a string containing an RGB triple in parentheses
     """
-    (
-        config.setdefault("ui", {})
-            .setdefault("spans", {})
-            .setdefault("span_colors", {})
-    )[span_label] = color
+    if "ui" not in config:
+        ui = {}
+        config["ui"] = ui
+    else:
+        ui = config["ui"]
 
+    if "spans" not in ui:
+        span_ui = {}
+        ui["spans"] = span_ui
+    else:
+        span_ui = ui["spans"]
 
-def render_span_annotations(text, span_annotations):
+    if "span_colors" not in span_ui:
+        span_colors = defaultdict(dict)
+        span_ui["span_colors"] = span_colors
+    else:
+        span_colors = span_ui["span_colors"]
+
+    span_colors[schema][span_label] = color
+
+def _generate_span_layout_internal(annotation_scheme, horizontal=False):
     """
-    Retuns a modified version of the text with span annotation overlays inserted
-    into the text.
-
-    :text: some instance to be annotated
-    :span_annotations: annotations already made by the user that need to be
-       re-inserted into the text
+    Internal function to generate span layout after validation.
     """
-    # This code is synchronized with the javascript function
-    # surroundSelection(selectionLabel) function in base_template.html which
-    # wraps any labeled text with a <div> element indicating its label. We
-    # replicate this code here (in python).
-    #
-    # This synchrony also means that any changes to the UI code for rendering
-    # need to be updated here too.
-
-    # We need to go in reverse order to make the string update in the right
-    # places, so make sure things are ordered in reverse of start
-
-    rev_order_sa = sorted(span_annotations, key=lambda d: d["start"], reverse=True)
-
-    ann_wrapper = (
-        '<span class="span_container" selection_label="{annotation}" '
-        + 'data-schema="{schema}" style="background-color:rgb{bg_color};">'
-        + "{span}"
-        + '<div class="span_label" name="{annotation}" data-schema="{schema}" '
-        + 'style="background-color:white;border:2px solid rgb{color};">'
-        + "{annotation_title}</div></span>"
-    )
-    for a in rev_order_sa:
-        # Spans are colored according to their order in the list and we need to
-        # retrofit the color
-        color = get_span_color(a["annotation"])
-        # The color is an RGB triple like (1,2,3) and we want the background for
-        # the text to be somewhat transparent so we switch to RGBA for bg
-        bg_color = color.replace(")", ",0.25)")
-
-        # The text above the span is its title and we display whatever its set to
-        annotation_title= a["annotation_title"]
-
-        ann = ann_wrapper.format(
-            annotation=a["annotation"], annotation_title=annotation_title, \
-              span=a["span"], color=color, bg_color=bg_color, schema=a["schema"]
-        )
-        text = text[: a["start"]] + ann + text[a["end"] :]
-
-    return text
-
-
-def generate_span_layout(annotation_scheme, horizontal=False):
+    # Initialize form wrapper
+    scheme_name = annotation_scheme["name"]
+    schematic = f"""
+    <form id="{escape_html_content(scheme_name)}" class="annotation-form span shadcn-span-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" >
+            {get_ai_wrapper()}
+        <fieldset schema="{escape_html_content(scheme_name)}">
+            <legend class="shadcn-span-title">{escape_html_content(annotation_scheme["description"])}</legend>
+            <div class="shadcn-span-options">
     """
-    Renders a span annotation option selection in the annotation panel and
-    returns the HTML code
-    """
-    # when horizontal is specified in the annotation_scheme, set horizontal = True
-    if "horizontal" in annotation_scheme and annotation_scheme["horizontal"]:
-        horizontal = True
 
-    schematic = (
-          ('<form id="%s" class="annotation-form span" action="/action_page.php">' % annotation_scheme["name"])
-        + "  <fieldset>"
-        + ("  <legend>%s</legend>" % annotation_scheme["description"])
-    )
+    if isinstance(annotation_scheme["labels"], list) and len(annotation_scheme["labels"]) > 0:
+        labels = annotation_scheme["labels"]
+    else:
+        labels = [annotation_scheme["labels"]]
 
-    # TODO: display keyboard shortcuts on the annotation page
+    # Initialize keyboard shortcuts
     key2label = {}
     label2key = {}
     key_bindings = []
+    span_title = annotation_scheme.get("title", "")
 
-    # setting up label validation for each label, if "required" is True, the annotators will be asked to finish the current instance to proceed
-    validation = ""
-    label_requirement = (
-        annotation_scheme["label_requirement"] if "label_requirement" in annotation_scheme else None
-    )
-    if label_requirement and ("required" in label_requirement) and label_requirement["required"]:
-        validation = "required"
+    # Setup validation
+    validation = generate_validation_attribute(annotation_scheme)
+    span_color = "var(--primary-color)"
 
-    for i, label_data in enumerate(annotation_scheme["labels"], 1):
+    # Generate checkbox inputs for each label
+    for i, label_data in enumerate(labels, 1):
+        # Extract label information
+        if isinstance(label_data, str):
+            label = label_data
+            key_value = label  # Use label name as value
+            tooltip = ""
+        else:
+            label = label_data["name"]
+            key_value = label_data.get("key_value", str(i))
+            tooltip = _generate_tooltip(label_data)
 
-        label = label_data if isinstance(label_data, str) else label_data["name"]
-        name = annotation_scheme["name"] + ":::" + label
-        class_name = annotation_scheme["name"]
-        key_value = name
-
-        span_color = get_span_color(label)
-        if span_color is None:
+        # Check for color mappings
+        custom_color = get_span_color(scheme_name, label)
+        if custom_color:
+            span_color = custom_color
+        else:
+            # Assign a color from palette
             global span_counter
-            if span_counter > SPAN_COLOR_PALETTE_LENGTH:
-                logger.warning("Not enough colors to support annotation! please add more colors!")
-            elif span_counter > 65536:
-                raise RuntimeError("Span Counter Overflow")
-
-            span_color = SPAN_COLOR_PALETTE[(span_counter) % SPAN_COLOR_PALETTE_LENGTH]
+            idx = span_counter % SPAN_COLOR_PALETTE_LENGTH
+            span_color = SPAN_COLOR_PALETTE[idx]
             span_counter += 1
-            set_span_color(label, span_color)
+            set_span_color(scheme_name, label, span_color)
 
-        # For better or worse, we need to cache these label-color pairings
-        # somewhere so that we can render them in the colored instances later in
-        # render_span_annotations(). The config object seems like a reasonable
-        # place to do since it's global and the colors are persistent
-        config["ui"]
-
-        tooltip = ""
-        if isinstance(label_data, Mapping):
-            tooltip_text = ""
-            if "tooltip" in label_data:
-                tooltip_text = label_data["tooltip"]
-                # print('direct: ', tooltip_text)
-            elif "tooltip_file" in label_data:
-                with open(label_data["tooltip_file"], "rt") as f:
-                    lines = f.readlines()
-                tooltip_text = "".join(lines)
-                # print('file: ', tooltip_text)
-            if len(tooltip_text) > 0:
-                tooltip = (
-                    'data-toggle="tooltip" data-html="true" data-placement="top" title="%s"'
-                    % tooltip_text
-                )
-
-            # Bind the keys
-            if "key_value" in label_data:
-                key_value = label_data["key_value"]
-                if key_value in key2label:
-                    logger.warning("Keyboard input conflict: %s" % key_value)
-                    quit()
-                key2label[key_value] = label
-                label2key[label] = key_value
-                key_bindings.append((key_value, class_name + ": " + label))
-            # print(key_value)
-
+        # Handle sequential key bindings
         if (
             "sequential_key_binding" in annotation_scheme
             and annotation_scheme["sequential_key_binding"]
@@ -201,92 +158,200 @@ def generate_span_layout(annotation_scheme, horizontal=False):
             key_value = str(i % 10)
             key2label[key_value] = label
             label2key[label] = key_value
-            key_bindings.append((key_value, class_name + ": " + label))
+            key_bindings.append((key_value, f"{scheme_name}: {label}"))
 
+        # Format label content
         if "displaying_score" in annotation_scheme and annotation_scheme["displaying_score"]:
-            label_content = label_data["key_value"] + "." + label
+            label_content = f"{key_value}.{label}"
         else:
             label_content = label
 
-        # Because the text of the label in the radio button could be long, users can
-        # specify an abbreviation for the label which is shown as the name above the span label.
-        # itself. If the abbreviation is not specified, we just use the full label text.
-        if 'abbreviation' in label_data and label_data['abbreviation']:
+        # Generate name with span prefix so ingestion code can skip this
+        name_with_span = f"span_label:::{scheme_name}"
+
+        # Support abbreviation for label display (from master branch fix)
+        # Users can specify an abbreviation for the label shown above the span
+        if isinstance(label_data, dict) and label_data.get('abbreviation'):
             label_title = label_data['abbreviation']
         else:
             label_title = label_content
 
-        # Check the first radio
-        if i == 1:
-            is_checked = 'xchecked="checked"'
-        else:
-            is_checked = ""
+        # Use label as title if span_title is empty
+        effective_title = span_title if span_title else label
 
-        # TODO: add support for horizontal layout
-        br_label = "<br/>"
-        if horizontal:
-            br_label = ""
+        schematic += f"""
+            <div class="shadcn-span-option">
+                <input class="{escape_html_content(scheme_name)} shadcn-span-checkbox"
+                       for_span="true"
+                       type="checkbox"
+                       id="{escape_html_content(scheme_name)}_{escape_html_content(label)}"
+                       name="{escape_html_content(name_with_span)}"
+                       value="{escape_html_content(key_value)}"
+                       onclick="onlyOne(this); changeSpanLabel(this, '{escape_html_content(scheme_name)}', '{escape_html_content(label)}', '{escape_html_content(effective_title)}', '{escape_html_content(span_color)}');"
+                       validation="{validation}">
+                <label for="{escape_html_content(scheme_name)}_{escape_html_content(label)}" class="shadcn-span-label" {tooltip}>
+                    <span style="background-color:rgb{span_color.replace(')', ',0.4)')};">{escape_html_content(label_content)}</span>
+                </label>
+            </div>
+        """
 
-        # We want to mark that this input isn't actually an annotation (unlike,
-        # say, checkboxes) so we prefix the name with span_label so that the
-        # answer ingestion code in update_annotation_state() can skip over which
-        # radio was checked as being annotations that need saving (while the
-        # spans themselves are saved)
-        name_with_span = "span_label:::" + name
+    schematic += "</div>"
 
-        schematic += (
-            '      <input class="{class_name}" for_span="{for_span}" type="checkbox" id="{name}" name="{name_with_span}" '
-            + ' value="{key_value}" {is_checked} '
-            + "onclick=\"onlyOne(this); changeSpanLabel(this, '{class_name}','{label_content}', '{label_title}', '{span_color}');\" validation=\"{validation}\">"
-            + '  <label for="{name}" {tooltip}>'
-            + '<span style="background-color:rgb{bg_color};" name="{label_content}">{label_content}</span></label>{br_label}'
-        ).format(
-            class_name=class_name,
-            for_span = True,
-            name=name,
-            key_value=key_value,
-            label_content=label_content,
-            validation=validation,
-            tooltip=tooltip,
-            br_label=br_label,
-            label_title=label_title,
-            is_checked=is_checked,
-            name_with_span=name_with_span,
-            bg_color=span_color.replace(")", ",0.25)"),
-            span_color=span_color,
-        )
-
-    # allow annotators to choose bad_text label
-    bad_text_schematic = ""
+    # Add optional bad text option
     if "label_content" in annotation_scheme.get("bad_text_label", {}):
-        name = annotation_scheme["name"] + ":::" + "bad_text"
-        bad_text_schematic = (
-            (
-                    ' <input class="{class_name}" for_span="{for_span}" type="checkbox" id="{id}" name="{name}" value="{value}" onclick="onlyOne(this)" validation="{validation}">'
-                    + ' {line_break} <label for="{label_for}" {label_args}>{label_text}</label>'
-            )
-        ).format(
-            class_name=annotation_scheme["name"],
-            for_span=True,
-            id=name,
-            name=name,
-            value=0,
-            validation=validation,
-            line_break="",
-            label_for=name,
-            label_args="",
-            label_text=annotation_scheme["bad_text_label"]["label_content"],
-        )
+        bad_text_identifiers = generate_element_identifier(annotation_scheme['name'], "bad_text", "checkbox")
+
+        schematic += f"""
+            <div class="shadcn-span-bad-text">
+                <input class="{bad_text_identifiers['schema']} shadcn-span-checkbox"
+                       for_span="true"
+                       type="checkbox"
+                       id="{bad_text_identifiers['id']}"
+                       name="{bad_text_identifiers['name']}"
+                       value="0"
+                       onclick="onlyOne(this)"
+                       validation="{validation}">
+                <label for="{bad_text_identifiers['id']}" class="shadcn-span-label">
+                    {escape_html_content(annotation_scheme["bad_text_label"]["label_content"])}
+                </label>
+            </div>
+        """
+
         if (
-                "sequential_key_binding" in annotation_scheme
-                and annotation_scheme["sequential_key_binding"]
-                and len(annotation_scheme["labels"]) <= 10
+            "sequential_key_binding" in annotation_scheme
+            and annotation_scheme["sequential_key_binding"]
+            and len(annotation_scheme["labels"]) <= 10
         ):
             key_bindings.append(
-                (0, class_name + ": " + annotation_scheme["bad_text_label"]["label_content"])
+                (0, f"{scheme_name}: {annotation_scheme['bad_text_label']['label_content']}")
             )
 
-    schematic += bad_text_schematic
-
-    schematic += "  </fieldset>\n</form>\n"
+    schematic += "</fieldset></form>"
     return schematic, key_bindings
+
+def _generate_tooltip(label_data):
+    """
+    Generate tooltip HTML attribute from label data.
+
+    Args:
+        label_data (dict): Label configuration containing tooltip information
+
+    Returns:
+        str: Tooltip HTML attribute or empty string if no tooltip
+    """
+    tooltip_text = ""
+    if "tooltip" in label_data:
+        tooltip_text = label_data["tooltip"]
+    elif "tooltip_file" in label_data:
+        try:
+            with open(label_data["tooltip_file"], "rt") as f:
+                tooltip_text = "".join(f.readlines())
+        except Exception as e:
+            logger.error(f"Failed to read tooltip file: {e}")
+            return ""
+
+    if tooltip_text:
+        escaped_tooltip = escape_html_content(tooltip_text)
+        return f'data-toggle="tooltip" data-html="true" data-placement="top" title="{escaped_tooltip}"'
+    return ""
+
+
+def generate_span_layout(annotation_scheme, horizontal=False):
+    """
+    Generate span layout HTML for the given annotation scheme.
+
+    Args:
+        annotation_scheme (dict): The annotation scheme configuration
+        horizontal (bool): Whether to display horizontally
+
+    Returns:
+        tuple: (HTML string, key bindings list)
+    """
+    return safe_generate_layout(annotation_scheme, _generate_span_layout_internal, horizontal)
+
+
+def render_span_annotations(text, span_annotations):
+    """
+    Render span annotations into HTML with boundary-based algorithm.
+    Args:
+        text (str): The original text to annotate
+        span_annotations: Dictionary of span_id -> span data, or list of SpanAnnotation objects
+    Returns:
+        str: HTML with span annotations rendered
+    """
+    if not span_annotations:
+        return text
+
+    # Handle both dict and list inputs
+    if isinstance(span_annotations, dict):
+        # Convert dictionary to list of tuples (span_id, span_data)
+        sorted_spans = sorted(
+            span_annotations.items(),
+            key=lambda x: x[1].get('start', 0)
+        )
+    else:
+        # Convert list of SpanAnnotation objects to list of tuples
+        spans_as_tuples = []
+        for span in span_annotations:
+            if hasattr(span, 'get_id'):
+                # SpanAnnotation object with methods
+                span_id = span.get_id()
+                span_data = {
+                    'schema': span.get_schema() if hasattr(span, 'get_schema') else getattr(span, 'schema', ''),
+                    'name': span.get_name() if hasattr(span, 'get_name') else getattr(span, 'name', ''),
+                    'title': span.get_title() if hasattr(span, 'get_title') else getattr(span, 'title', ''),
+                    'start': span.get_start() if hasattr(span, 'get_start') else getattr(span, 'start', 0),
+                    'end': span.get_end() if hasattr(span, 'get_end') else getattr(span, 'end', 0),
+                }
+            elif isinstance(span, dict):
+                span_id = span.get('id', f"span_{span.get('start', 0)}_{span.get('end', 0)}")
+                span_data = span
+            else:
+                continue
+            spans_as_tuples.append((span_id, span_data))
+        sorted_spans = sorted(spans_as_tuples, key=lambda x: x[1].get('start', 0))
+    
+    # Create boundary points
+    boundaries = []
+    for span_id, span_data in sorted_spans:
+        boundaries.append((span_data['start'], 'start', span_id, span_data))
+        boundaries.append((span_data['end'], 'end', span_id, span_data))
+    
+    # Sort boundaries by position
+    boundaries.sort(key=lambda x: x[0])
+    
+    # Build the rendered text
+    result = ""
+    current_pos = 0
+    active_spans = []
+    
+    for pos, boundary_type, span_id, span_data in boundaries:
+        # Add text before this boundary
+        if pos > current_pos:
+            result += text[current_pos:pos]
+        
+        if boundary_type == 'start':
+            # Start a new span
+            active_spans.append(span_id)
+            # Get color for this span
+            color = get_span_color(span_data['schema'], span_data['name'])
+            if not color:
+                color = "(128, 128, 128)"  # Default gray
+            # Convert RGB to hex with alpha
+            color_parts = color.strip("()").split(", ")
+            r, g, b = int(color_parts[0]), int(color_parts[1]), int(color_parts[2])
+            hex_color = f"#{r:02x}{g:02x}{b:02x}66"  # 66 = 40% alpha to match label background
+            result += f'<span class="span-highlight" data-annotation-id="{span_id}" data-label="{span_data["name"]}" schema="{span_data["schema"]}" style="background-color: {hex_color};">'
+        elif boundary_type == 'end':
+            # End the span
+            result += "</span>"
+            # Remove from active spans
+            active_spans = [s for s in active_spans if s != span_id]
+        
+        current_pos = pos
+    
+    # Add remaining text
+    if current_pos < len(text):
+        result += text[current_pos:]
+    
+    return result

@@ -1,0 +1,41 @@
+port: 9012
+server_name: potato legacy layout test
+annotation_task_name: Legacy Layout Test
+debug: true
+task_dir: output/legacy-layout-test
+output_annotation_dir: output/legacy-layout-test
+output_annotation_format: json
+annotation_codebook_url: ''
+max_annotations_per_user: 10
+assignment_strategy: fixed_order
+data_files:
+- ../data/test_data.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: radio
+  name: sentiment
+  description: What kind of sentiment does the given text hold?
+  labels:
+  - positive
+  - neutral
+  - negative
+  sequential_key_binding: true
+- annotation_type: slider
+  name: confidence
+  description: How confident are you in your assessment?
+  min_value: 0
+  max_value: 10
+  starting_value: 5
+  step: 1
+  min_label: Not Confident
+  max_label: Very Confident
+use_dedicated_layout: false
+site_dir: default
+customjs: null
+customjs_hostname: null

@@ -1,0 +1,22 @@
+annotation_task_name: Simple Span Labeling Test
+task_dir: output/simple-span-labeling
+output_annotation_dir: output/simple-span-labeling/annotations
+output_annotation_format: jsonl
+data_files:
+- ../data/test_data.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 0
+annotation_schemes:
+- annotation_type: span
+  name: certainty
+  description: Highlight which phrases express certainty or uncertainty
+  labels:
+  - certain
+  - uncertain
+  sequential_key_binding: true
+site_dir: output

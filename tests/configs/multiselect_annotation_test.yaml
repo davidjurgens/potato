@@ -1,0 +1,25 @@
+annotation_task_name: "Multiselect Annotation Test"
+data_files:
+- "../data/test_data.json"
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+annotation_schemes:
+- annotation_type: multiselect
+  name: topics
+  description: "Select all topics that apply to this text"
+  labels:
+  - technology
+  - science
+  - politics
+  - sports
+  - entertainment
+task_dir: "output/multiselect_annotation_test"
+output_annotation_dir: "output/multiselect_annotation_test"
+site_dir: "default"
+customjs: null
+customjs_hostname: null
+alert_time_each_instance: 10000000

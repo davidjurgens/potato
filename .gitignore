@@ -50,5 +50,75 @@ coverage.xml
 # Sphinx documentation
 docs/_build/
 
+# Generated template files
+potato/templates/generated/
+
+# IDE and editor configs
+.cursorignore
+.cursorrules
+.idea/
+.vscode/
+*.swp
+*~
+\#*\#
+
+# AI assistant files
+CLAUDE.md
+
+# Node.js
+node_modules/
+package.json
+package-lock.json
+
+# Annotation output directories
+annotation_output/
+output/
+tests/output/
+tests/server/output/
+project-hub/*/annotation_output/
+
+# Test results and debug files
+test_output.txt
+test_results.txt
+full_test_results.txt
+tests/debug_*.html
+tests/debug_*.png
+
+# Temporary files and directories
+tmp/
+*.zip
+quick_test.py
+resumes/
+my_annotation_task/
+
+# Demo and test configs (user-specific)
+admin_demo_config.yaml
+demo_config.yaml
+create_admin_demo_data.py
+
+# Development junk files
+potato/static/junk.js
+potato/templates/test_*.html
+potato/archive/
+
+# Example projects (optional, user-created)
+example-projects/
+example-tasks/
+examples/
+layouts/
+
+# Duplicate/temp test directories
+tests/tests/
+
+# Debug test configs
+tests/configs/*debug*.yaml
+
+# Project hub examples (user-created)
+project-hub/training_example/
+project-hub/simple_examples/configs/all-phases-example/
+project-hub/simple_examples/data/toy-example.*.json
+project-hub/simple_examples/toy-example.*.json
+temp_screenshots/
+
 # Virtual Environments
 venv/

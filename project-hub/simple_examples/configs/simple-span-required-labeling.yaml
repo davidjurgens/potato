@@ -5,6 +5,9 @@
 
     "annotation_task_name": "Simple Highlighting Example",
 
+    # Task directory for relative path resolution
+    "task_dir": ".",
+
     # Potato will write the annotation file for all annotations to this
     # directory, as well as per-annotator output files and state information
     # necessary to restart annotation.
@@ -46,7 +49,7 @@
 
     "annotation_schemes": [
         {
-            "annotation_type": "highlight",
+            "annotation_type": "span",
             "name": "certainty",
             "description": "Highlight which phrases correspond to which categories",
             "labels": [
@@ -60,11 +63,11 @@
             # specification to bind all labels to keys.
             "sequential_key_binding": True,
             "label_requirement": {
-                required: True
+                "required": true
             }
         },
         {
-            "annotation_type": "highlight",
+            "annotation_type": "span",
             "name": "DnD-Class",
             "description": "Highlight the phrases which make you think of the following DnD Class",
             "labels": [
@@ -79,7 +82,7 @@
             # specification to bind all labels to keys.
             "sequential_key_binding": True,
             "label_requirement": {
-                required: True
+                "required": true
             }
         },
     ],

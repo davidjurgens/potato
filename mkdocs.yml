@@ -1,17 +1,40 @@
-site_name: potato annotation
+site_name: Potato Annotation
 site_url: https://github.com/davidjurgens/potato
 nav:
     - Home: index.md
     - Quick Start: quick-start.md
-    - Example Projects: example-projects.md
-    - Usage: usage.md
-    - Data Format: data_format.md
-    - Schemas and Templates: schemas_and_templates.md
-    - User and Collaboration: user_and_collaboration.md
-    - Task Assignment: task_assignment.md
-    - Productivity: productivity.md
-    - Surveyflow: surveyflow.md
-    - Crowdsourcing: crowdsourcing.md
-    - Annotator Stats: annotator_stats.md
-    - Open Sourcing: open-sourcing.md
+    - "What's New in v2": new_features_v2.md
+    - Configuration:
+        - Overview: configuration.md
+        - Config File Structure: config_file_structure.md
+        - Data Format: data_format.md
+        - Data Directory: data_directory.md
+        - UI Configuration: ui_configuration.md
+    - Annotation Types:
+        - Schemas and Templates: schemas_and_templates.md
+        - Image Annotation: image_annotation.md
+        - Audio Annotation: audio_annotation.md
+    - Workflow Phases:
+        - Multi-Phase Workflows: surveyflow.md
+        - Training Phase: training_phase.md
+    - Advanced Features:
+        - AI Support: ai_support.md
+        - Active Learning Guide: active_learning_guide.md
+        - ICL Labeling: icl_labeling.md
+        - Category-Based Assignment: category_assignment.md
+        - Task Assignment: task_assignment.md
+        - Assignment Strategies: assignment_strategies_summary.md
+    - Administration:
+        - Admin Dashboard: admin_dashboard.md
+        - Annotator Stats: annotator_stats.md
+        - User and Collaboration: user_and_collaboration.md
+        - Passwordless Login: passwordless_login.md
+        - Annotation History: annotation_history.md
+        - Productivity: productivity.md
+    - Tools:
+        - Preview CLI: preview_cli.md
+    - Deployment:
+        - Usage: usage.md
+        - Crowdsourcing: crowdsourcing.md
+        - Open Sourcing: open-sourcing.md
 theme: readthedocs

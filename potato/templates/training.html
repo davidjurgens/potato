@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{annotation_task_name}} - Training</title>
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+
+    <!-- Training-specific styles -->
+    <style>
+        .training-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+            border-radius: 0.5rem;
+        }
+
+        .feedback-alert {
+            border-radius: 0.5rem;
+            border: none;
+            padding: 1rem 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .feedback-correct {
+            background-color: #d4edda;
+            color: #155724;
+            border-left: 4px solid #28a745;
+        }
+
+        .feedback-incorrect {
+            background-color: #f8d7da;
+            color: #721c24;
+            border-left: 4px solid #dc3545;
+        }
+
+        .feedback-warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border-left: 4px solid #ffc107;
+        }
+
+        .training-instance {
+            background-color: #f8f9fa;
+            border: 2px solid #e9ecef;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .training-instance h5 {
+            color: #495057;
+            margin-bottom: 1rem;
+        }
+
+        .training-instance-text {
+            background-color: white;
+            border: 1px solid #dee2e6;
+            border-radius: 0.25rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            line-height: 1.6;
+        }
+
+        .retry-button {
+            background-color: #ffc107;
+            border-color: #ffc107;
+            color: #212529;
+        }
+
+        .retry-button:hover {
+            background-color: #e0a800;
+            border-color: #d39e00;
+            color: #212529;
+        }
+
+        .submit-button {
+            background-color: #007bff;
+            border-color: #007bff;
+        }
+
+        .submit-button:hover {
+            background-color: #0056b3;
+            border-color: #0056b3;
+        }
+    </style>
+
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+
+<body>
+    <!-- Header navigation bar -->
+    <nav class="navbar sticky-top shadow-sm" style="background-color: var(--primary-color); padding: 0.75rem 1rem; margin-bottom: 1.5rem;">
+        <div class="container-fluid d-flex align-items-center">
+            <!-- Task name (left aligned) -->
+            <div class="navbar-brand">
+                <span class="fw-bold" style="color: var(--light-color); font-size: 1.25rem">{{annotation_task_name}}</span>
+            </div>
+
+            <!-- Middle section with training progress -->
+            <div class="d-flex align-items-center justify-content-center flex-grow-1">
+                <div class="d-flex align-items-center" style="color: var(--light-color);">
+                    <span><i class="fas fa-graduation-cap me-2"></i>Training Phase</span>
+                </div>
+            </div>
+
+            <!-- User info and logout (right aligned) -->
+            <div class="d-flex align-items-center"
+                 style="background-color: rgba(255, 255, 255, 0.15); padding: 0.5rem 1rem; border-radius: var(--radius);">
+                <div class="me-3" style="color: var(--light-color)">
+                    <span>Logged in as <span class="fw-medium">{{username}}</span></span>
+                </div>
+                <div class="border-start" style="padding-left: 20px; height: 24px; display: flex; align-items: center;">
+                    <a href="/logout" class="shadcn-button"
+                       style="background-color: var(--light-color); color: var(--primary-color); height: auto; padding: 0.25rem 0.75rem !important; font-size: 0.875rem; min-width: 60px; text-align: center; border: none; text-decoration: none;">
+                        Logout
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <!-- Training header -->
+        <div class="training-header text-center">
+            <h2><i class="fas fa-graduation-cap me-3"></i>Training Phase</h2>
+            <p class="mb-0">Practice your annotation skills with feedback on your answers</p>
+        </div>
+
+        <!-- Progress bar -->
+        <div class="training-progress mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="text-muted">
+                    <i class="fas fa-tasks me-2"></i>Question {{ current_question }} of {{ total_questions }}
+                </span>
+                <span class="text-muted">
+                    <i class="fas fa-check-circle text-success me-1"></i>{{ correct_count }} correct
+                    {% if mistake_count > 0 %}
+                    <span class="ms-2"><i class="fas fa-times-circle text-danger me-1"></i>{{ mistake_count }} mistakes</span>
+                    {% endif %}
+                </span>
+            </div>
+            <div class="progress" style="height: 8px;">
+                <div class="progress-bar bg-success" role="progressbar"
+                     style="width: {{ (current_question / total_questions * 100)|int }}%"
+                     aria-valuenow="{{ current_question }}" aria-valuemin="0" aria-valuemax="{{ total_questions }}">
+                </div>
+            </div>
+        </div>
+
+        <!-- Feedback alert (shown when feedback is available) -->
+        {% if show_feedback %}
+        <div class="feedback-alert {% if feedback_type == 'success' %}feedback-correct{% elif feedback_type == 'warning' %}feedback-warning{% else %}feedback-incorrect{% endif %}">
+            <div class="d-flex align-items-start">
+                <i class="fas {% if feedback_type == 'success' %}fa-check-circle{% elif feedback_type == 'warning' %}fa-exclamation-triangle{% else %}fa-exclamation-circle{% endif %} me-3 mt-1"></i>
+                <div>
+                    <h6 class="mb-2">{{ feedback }}</h6>
+                    {% if allow_retry %}
+                    <p class="mb-0">Please review the explanation and try again.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Training instance -->
+        <div class="training-instance">
+            <h5><i class="fas fa-question-circle me-2"></i>Training Question</h5>
+
+            <!-- Instance text -->
+            <div class="training-instance-text">
+                {{ instance_text | safe }}
+            </div>
+
+            <!-- Annotation form -->
+            <form method="POST" id="training-form">
+                <div id="annotation-forms">
+                    {{ TASK_LAYOUT }}
+                </div>
+
+                <!-- Submit button -->
+                <div class="d-flex justify-content-end mt-3">
+                    {% if allow_retry %}
+                    <button type="submit" class="btn retry-button me-2">
+                        <i class="fas fa-redo me-2"></i>Try Again
+                    </button>
+                    {% else %}
+                    <button type="submit" class="btn submit-button">
+                        <i class="fas fa-paper-plane me-2"></i>Submit Answer
+                    </button>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+
+        <!-- Footer -->
+        <hr style="color: var(--border)">
+        <footer class="py-2 text-center" style="font-size: 0.75rem; color: var(--muted-foreground)">
+            Copyright &copy; 2025
+            <a href="https://blablablab.si.umich.edu/" style="color: var(--primary); text-decoration: none">Blablablab</a>
+            <span class="mx-2">|</span>
+            <a href="https://github.com/davidjurgens/potato" style="color: var(--primary); text-decoration: none">Chat with us on GitHub</a>
+            <span class="mx-2">|</span>
+            <a href="https://github.com/davidjurgens/potato#cite-us" style="color: var(--primary); text-decoration: none">Cite Us</a>
+        </footer>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Configuration from server -->
+    <script type="text/javascript">
+        window.config = {
+            annotation_task_name: "{{ annotation_task_name }}",
+            debug: false,
+            api_key: "test_api_key",
+            username: "{{ username }}"
+        };
+    </script>
+
+    <!-- Load annotation JavaScript -->
+    <script src="{{ url_for('static', filename='ai_assistant_manager.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='annotation.js') }}?v=11"></script>
+
+    <!-- Training-specific JavaScript -->
+    <script>
+        $(document).ready(function() {
+            // Auto-scroll to feedback if it exists
+            if ($('.feedback-alert').length > 0) {
+                $('html, body').animate({
+                    scrollTop: $('.feedback-alert').offset().top - 100
+                }, 500);
+            }
+
+            // Form submission handling
+            $('#training-form').on('submit', function(e) {
+                // Show loading state
+                const submitBtn = $(this).find('button[type="submit"]');
+                const originalText = submitBtn.html();
+                submitBtn.html('<i class="fas fa-spinner fa-spin me-2"></i>Processing...');
+                submitBtn.prop('disabled', true);
+            });
+        });
+    </script>
+</body>
+</html>

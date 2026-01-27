@@ -1,0 +1,32 @@
+# Malicious config file for testing structure validation
+# This file should be rejected by the validation
+
+# Missing required fields
+item_properties: "not_a_dict"  # Should be a dictionary
+data_files: "not_a_list"  # Should be a list
+
+# Invalid annotation schemes
+annotation_schemes:
+- "not_a_dict"  # Should be a dictionary
+- annotation_type: "invalid_type"  # Invalid annotation type
+  name: "test"
+  description: "test"
+- annotation_type: "radio"  # Missing required fields
+  name: "test"
+- annotation_type: "likert"  # Invalid likert config
+  name: "test"
+  description: "test"
+  min_label: "Poor"
+  max_label: "Excellent"
+  size: 1  # Too small
+- annotation_type: "slider"  # Invalid slider config
+  name: "test"
+  description: "test"
+  min: 10
+  max: 5  # min >= max
+
+# Invalid database config
+database:
+  type: "invalid_type"
+  host: "localhost"
+  port: 70000  # Invalid port

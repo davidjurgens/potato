@@ -1,0 +1,64 @@
+# Training Phase Test Configuration
+# This configuration enables the training phase for testing purposes
+
+annotation_task_name: "Training Test Task"
+item_properties:
+  text_key: "text"
+  id_key: "id"
+data_files: ["../data/test_data.json"]
+task_dir: "../task"
+output_annotation_dir: "../output"
+alert_time_each_instance: 300
+
+annotation_schemes:
+  - name: sentiment
+    annotation_type: radio
+    description: "What is the sentiment of this text?"
+    labels: [positive, negative, neutral]
+    required: true
+  - name: topic
+    annotation_type: multiselect
+    description: "What topics are discussed?"
+    labels: [emotion, politics, technology, sports]
+    required: false
+  - name: confidence
+    annotation_type: likert
+    description: "How confident are you?"
+    min_label: "Not confident"
+    max_label: "Very confident"
+    size: 5
+    required: true
+
+training:
+  enabled: true
+  data_file: "../training_test_data.json"
+  annotation_schemes: [sentiment, topic]
+  passing_criteria:
+    min_correct: 2
+    require_all_correct: false
+  allow_retry: true
+  failure_action: repeat_training
+
+phases:
+  order: [consent, instructions, training, annotation]
+  consent:
+    type: consent
+    file: "../data/consent.json"
+  instructions:
+    type: instructions
+    file: "../data/instructions.json"
+  training:
+    type: training
+    file: "../data/training.json"
+
+data:
+  file: "../data/test_data.json"
+  format: json
+
+assignment_strategy:
+  type: random
+  batch_size: 1
+
+admin:
+  api_key: "test_admin_key"
+  enabled: true

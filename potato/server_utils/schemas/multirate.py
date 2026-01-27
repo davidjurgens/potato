@@ -1,128 +1,244 @@
 """
 Multirate Layout
+
+Generates a matrix-style interface for rating multiple items on the same scale.
+Features include:
+- Multiple column layout support
+- Configurable rating options
+- Vertical/horizontal arrangement options
+- Tooltip support
+- Required/optional validation
 """
 
 import logging
+import os
 from collections.abc import Mapping
+from jinja2 import Template
+from .identifier_utils import (
+    safe_generate_layout,
+    generate_element_identifier,
+    generate_validation_attribute,
+    escape_html_content
+)
 
 logger = logging.getLogger(__name__)
 
+# HTML template using Jinja2 with comprehensive styling that preserves horizontal layout
+MULTIRATE_TEMPLATE = """
+<form id="{{ schema_name }}" class="annotation-form multirate shadcn-multirate-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" >
+    <fieldset schema="{{ schema_name }}">
+        <legend class="shadcn-multirate-title">{{ description }}</legend>
+        <table class="shadcn-multirate-table">
+            <thead>
+                <tr>
+                    {% for col in range(num_headers) %}
+                        <th>&nbsp;</th>
+                        {% for rating in ratings %}
+                            <th>{{ rating }}</th>
+                        {% endfor %}
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                    <tr schema="multirate">
+                        {% for item in row %}
+                            {% if item %}
+                                <td {{ item.tooltip|safe }}>{{ item.label }}</td>
+                                {% for rating in ratings %}
+                                    <td class="shadcn-radio-cell">
+                                        <input name="{{ item.name }}"
+                                               type="radio"
+                                               id="{{ item.id }}.{{ rating }}"
+                                               value="{{ rating }}"
+                                               onclick="this.blur();"
+                                               validation="{{ validation }}"
+                                               class="shadcn-multirate-radio annotation-input"
+                                               schema="{{ schema_name }}"
+                                               label_name="{{ item.label_name }}"
+                                               aria-label="{{ item.label }}: {{ rating }}" />
+                                    </td>
+                                {% endfor %}
+                            {% else %}
+                                <td></td>
+                                {% for rating in ratings %}
+                                    <td></td>
+                                {% endfor %}
+                            {% endif %}
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </fieldset>
+</form>
+"""
 
 def generate_multirate_layout(annotation_scheme):
-    schematic = (
-          ('<form class="annotation-form multirate" id="%s" nameaction="/action_page.php">' % annotation_scheme["name"])
-        + "  <fieldset>"
-        + ("  <legend>%s</legend>" % annotation_scheme["description"])
-    )
+    """
+    Generate HTML for a multi-item rating interface.
 
-    # TODO: display keyboard shortcuts on the annotation page
-    key2label = {}
-    label2key = {}
+    Args:
+        annotation_scheme (dict): Configuration including:
+            - name: Schema identifier
+            - description: Display description
+            - options: List of items to be rated
+            - labels: List of rating options to choose from
+            - display_config (dict): Optional display settings
+            - arrangement (str): Layout direction ('vertical' or 'horizontal')
+            - label_requirement (dict): Optional validation settings
 
-    key_bindings = []
+    Returns:
+        tuple: (html_string, key_bindings)
+            html_string: Complete HTML for the multirate interface
+            key_bindings: List of (key, description) tuples for keyboard shortcuts
+    """
+    return safe_generate_layout(annotation_scheme, _generate_multirate_layout_internal)
 
-    display_info = (
-        annotation_scheme["display_config"] if "display_config" in annotation_scheme else {}
-    )
+def _generate_multirate_layout_internal(annotation_scheme):
+    """
+    Internal function to generate multirate layout after validation.
+    """
+    logger.debug(f"Generating multirate layout for schema: {annotation_scheme['name']}")
 
-    n_columns = display_info["num_columns"] if "num_columns" in display_info else 1
+    # Extract configuration
+    schema_name = annotation_scheme['name']
+    description = annotation_scheme['description']
+    options = annotation_scheme['options']
+    ratings = annotation_scheme['labels']
 
-    schematic += "<table>"
+    # Get display configuration
+    display_config = annotation_scheme.get('display_config', {})
+    num_columns = display_config.get('num_columns', 1)
 
-    # Put in the header that has all options
-    num_headers = min(len(annotation_scheme["options"]), n_columns)
+    # Set validation
+    validation = generate_validation_attribute(annotation_scheme)
 
-    ratings = annotation_scheme["labels"]
-    schematic += "<tr>"
-    for _ in range(num_headers):
-        schematic += "<td>&nbsp;</td>"
-        for rating in ratings:
-            schematic += "<td>&nbsp;%s&nbsp;</td>" % rating
-    schematic += "</tr>"
-    
+    # Preprocess items for template
+    processed_items = []
+    for option in options:
+        if isinstance(option, str):
+            identifiers = generate_element_identifier(schema_name, option, "radio")
+            processed_items.append({
+                'label': escape_html_content(option),
+                'name': identifiers['name'],
+                'id': identifiers['id'],
+                'label_name': identifiers['label_name'],
+                'tooltip': ""
+            })
+        else:
+            identifiers = generate_element_identifier(schema_name, option['name'], "radio")
+            processed_items.append({
+                'label': escape_html_content(option['label']),
+                'name': identifiers['name'],
+                'id': identifiers['id'],
+                'label_name': identifiers['label_name'],
+                'tooltip': _generate_tooltip(option)
+            })
 
-    options = annotation_scheme["options"]
+    # Arrange items according to specified layout
+    if annotation_scheme.get('arrangement') == 'vertical':
+        arranged_items = _arrange_items_vertically(processed_items, num_columns)
+    else:
+        arranged_items = _arrange_items_horizontally(processed_items, num_columns)
 
-    if 'arrangement' in annotation_scheme and annotation_scheme['arrangement'] == 'vertical':
-        cols = [[] for _ in range(n_columns)]
-        n_rows = len(options) // n_columns 
-        if (len(options) % n_columns) > 0:
-            n_rows += 1
-        wc = 0
-        #print('n_rows', n_rows)
-        for i, opt in enumerate(options):
-            #print(opt)
-            if i > 0 and i % n_rows == 0:
-                wc += 1
-            cols[wc].append(opt)
+    # Format template data
+    template_data = {
+        'schema_name': escape_html_content(schema_name),
+        'description': escape_html_content(description),
+        'ratings': [escape_html_content(rating) for rating in ratings],
+        'num_headers': min(len(options), num_columns),
+        'rows': arranged_items,
+        'validation': validation
+    }
 
-        #for c in cols[0]:
-        #    print(c)
-        reordered_options = []
-        for r in range(n_rows):
-            for c in cols:
-                if r < len(c):
-                    reordered_options.append(c[r])
-        options = reordered_options
-            
-    
-    #schematic += "<tr>"    
-    for i, label_data in enumerate(options, 1):
+    # Render template
+    template = Template(MULTIRATE_TEMPLATE)
+    html = template.render(**template_data)
 
-        if (i - 1) % n_columns == 0:
-            schematic += '<tr schema="multirate">'
-        
+    logger.info(f"Successfully generated multirate layout for {schema_name} "
+                f"with {len(options)} items and {len(ratings)} rating options")
 
-        label = label_data if isinstance(label_data, str) else label_data["label"]
-
-        option = label_data if isinstance(label_data, str) else label_data["name"]
-        name = annotation_scheme["name"] + ":::" + option
-        class_name = annotation_scheme["name"]
-        key_value = name
-
-        tooltip = ""
-        if isinstance(label_data, Mapping):
-            tooltip_text = ""
-            if "tooltip" in label_data:
-                tooltip_text = label_data["tooltip"]
-                # print('direct: ', tooltip_text)
-            elif "tooltip_file" in label_data:
-                with open(label_data["tooltip_file"], "rt") as f:
-                    lines = f.readlines()
-                tooltip_text = "".join(lines)
-                # print('file: ', tooltip_text)
-            if len(tooltip_text) > 0:
-                tooltip = (
-                    'data-toggle="tooltip" data-html="true" data-placement="top" title="%s"'
-                    % tooltip_text
-                )
-
-        validation = ""
-        label_requirement = annotation_scheme.get("label_requirement")
-        if label_requirement and label_requirement.get("required"):
-            validation = "required"
-
-        label_content = label
-        radio_style = "vertical-align: middle; margin: 0px;"
-        schematic += '<td style="text-align:right; vertical-align: middle; margin: 0px;">%s</td>' % label
-        for rating in ratings:
-
-            input_name = name # + ':::' + rating
-            #print(input_name)
-            
-            schematic += (
-                '<td style="text-align:center;">' +
-                '<input name="{name}" type="radio" id="{id}" ' +
-                'value="{value}" onclick="onlyOne(this);this.blur();" validation="{validation}" style="{radio_style}"/></td>'
-            ).format(name=name, tooltip=tooltip, class_name=class_name, id=name+'.'+rating,
-                     radio_style=radio_style, value=rating, validation=validation)
-
-        #schematic += "</td>"
-        if i % n_columns == 0:
-            schematic += "</tr>"
+    return html, []  # No key bindings implemented
 
 
-    schematic += "</table>"
-    schematic += "  </fieldset>\n</form>\n"
+def _arrange_items_horizontally(items, num_columns):
+    """
+    Arrange items in a horizontal layout with specified number of columns.
 
-    return schematic, key_bindings
+    Args:
+        items (list): List of processed item dictionaries
+        num_columns (int): Number of columns
+
+    Returns:
+        list: List of rows, where each row is a list of items
+    """
+    rows = []
+    for i in range(0, len(items), num_columns):
+        row = items[i:i+num_columns]
+        # Pad the row if it's not full
+        while len(row) < num_columns:
+            row.append(None)
+        rows.append(row)
+    return rows
+
+
+def _arrange_items_vertically(items, num_columns):
+    """
+    Rearrange items for vertical column layout.
+
+    Args:
+        items (list): List of processed item dictionaries
+        num_columns (int): Number of columns
+
+    Returns:
+        list: List of rows, where each row is a list of items arranged vertically
+    """
+    logger.debug(f"Rearranging {len(items)} items into {num_columns} vertical columns")
+
+    # Calculate rows needed
+    num_rows = (len(items) + num_columns - 1) // num_columns  # Ceiling division
+
+    # Distribute items into columns
+    columns = [[] for _ in range(num_columns)]
+    for i, item in enumerate(items):
+        col_idx = i // num_rows
+        if col_idx < num_columns:
+            columns[col_idx].append(item)
+
+    # Create rows from columns
+    rows = []
+    for row_idx in range(num_rows):
+        row = []
+        for col in columns:
+            row.append(col[row_idx] if row_idx < len(col) else None)
+        rows.append(row)
+
+    return rows
+
+
+def _generate_tooltip(label_data):
+    """
+    Generate tooltip HTML attribute from label data.
+
+    Args:
+        label_data (dict): Label configuration containing tooltip information
+
+    Returns:
+        str: Tooltip HTML attribute or empty string if no tooltip
+    """
+    tooltip_text = ""
+    if "tooltip" in label_data:
+        tooltip_text = label_data["tooltip"]
+    elif "tooltip_file" in label_data:
+        try:
+            with open(label_data["tooltip_file"], "rt") as f:
+                tooltip_text = "".join(f.readlines())
+        except Exception as e:
+            logger.error(f"Failed to read tooltip file: {e}")
+            return ""
+
+    if tooltip_text:
+        escaped_tooltip = escape_html_content(tooltip_text)
+        return f'data-toggle="tooltip" data-html="true" data-placement="top" title="{escaped_tooltip}"'
+    return ""

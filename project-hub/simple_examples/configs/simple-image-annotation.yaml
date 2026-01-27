@@ -1,0 +1,69 @@
+# Simple Image Annotation Example
+#
+# This example demonstrates how to set up an image annotation task
+# where annotators draw bounding boxes and polygons around objects.
+#
+# To run this example:
+#   python potato/flask_server.py start project-hub/simple_examples/configs/simple-image-annotation.yaml -p 8000
+#
+# Then open http://localhost:8000 in your browser.
+
+task_dir: .
+port: 8000
+server_name: Image Annotation Example
+annotation_task_name: Object Detection Demo
+output_annotation_dir: annotation_output/simple-image-annotation/
+output_annotation_format: json
+
+# Data file containing image URLs
+data_files:
+  - data/image-annotation-example.json
+
+# Map data fields to Potato's expected format
+item_properties:
+  id_key: id
+  text_key: image_url  # The field containing the image URL
+
+# Allow anyone to annotate (no login required)
+user_config:
+  allow_all_users: true
+  users: []
+
+annotation_schemes:
+  # Image annotation with bounding boxes and polygons
+  - annotation_type: image_annotation
+    name: object_detection
+    description: "Draw boxes around objects you see in the image. Use the polygon tool for irregular shapes."
+    tools:
+      - bbox      # Bounding box tool
+      - polygon   # Polygon tool for precise boundaries
+    labels:
+      - name: person
+        color: "#FF6B6B"
+        key_value: "1"
+      - name: vehicle
+        color: "#4ECDC4"
+        key_value: "2"
+      - name: animal
+        color: "#45B7D1"
+        key_value: "3"
+      - name: object
+        color: "#96CEB4"
+        key_value: "4"
+    min_annotations: 1      # Require at least one annotation
+    zoom_enabled: true      # Allow zooming for detail
+    pan_enabled: true       # Allow panning on large images
+
+  # Optional: Rate the image quality
+  - annotation_type: radio
+    name: image_quality
+    description: "How clear is this image?"
+    labels:
+      - name: "Very clear"
+        key_value: "c"
+      - name: "Somewhat clear"
+        key_value: "s"
+      - name: "Blurry"
+        key_value: "b"
+
+site_dir: default

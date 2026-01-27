@@ -1,0 +1,172 @@
+# Active Learning Test Configuration
+# This configuration tests the enhanced active learning system with all features
+
+project_name: "Active Learning Test Project"
+project_description: "Comprehensive test of enhanced active learning capabilities"
+
+# Database configuration
+database:
+  type: "file"
+  database: "active_learning_test.db"
+
+# Item properties
+item_properties:
+  text_key: "text"
+  id_key: "id"
+
+# Assignment strategy
+assignment_strategy: "active_learning"
+
+# Active learning configuration
+active_learning:
+  enabled: true
+
+  # Classifier configuration
+  classifier:
+    name: "sklearn.linear_model.LogisticRegression"
+    hyperparameters:
+      C: 1.0
+      max_iter: 1000
+      random_state: 42
+
+  # Vectorizer configuration
+  vectorizer:
+    name: "sklearn.feature_extraction.text.TfidfVectorizer"
+    hyperparameters:
+      max_features: 1000
+      ngram_range: [1, 2]
+      stop_words: "english"
+
+  # Training parameters
+  min_annotations_per_instance: 2
+  min_instances_for_training: 5
+  max_instances_to_reorder: 50
+  update_frequency: 3
+  resolution_strategy: "majority_vote"
+  random_sample_percent: 0.2
+
+  # Schema configuration
+  schema_names: ["sentiment", "topic"]
+
+  # Database persistence
+  database:
+    enabled: true
+    type: "file"
+
+  # Model persistence
+  model_persistence:
+    enabled: true
+    save_directory: "tests/output/models"
+    retention_count: 3
+
+  # LLM integration (using mock for testing)
+  llm:
+    enabled: true
+    use_mock: true
+    endpoint_url: "http://localhost:8000/v1/chat/completions"
+    model_name: "mock-model"
+    max_tokens: 512
+    temperature: 0.1
+    timeout: 30
+    batch_size: 5
+    retry_attempts: 3
+    retry_delay: 1.0
+
+# Annotation schemes
+annotation_schemes:
+  sentiment:
+    type: "label"
+    title: "Sentiment Analysis"
+    description: "Classify the sentiment of the text"
+    options:
+      - name: "positive"
+        title: "Positive"
+        description: "The text expresses positive sentiment"
+      - name: "negative"
+        title: "Negative"
+        description: "The text expresses negative sentiment"
+      - name: "neutral"
+        title: "Neutral"
+        description: "The text is neutral or balanced"
+
+  topic:
+    type: "label"
+    title: "Topic Classification"
+    description: "Classify the main topic of the text"
+    options:
+      - name: "technology"
+        title: "Technology"
+        description: "Technology-related content"
+      - name: "politics"
+        title: "Politics"
+        description: "Political content"
+      - name: "sports"
+        title: "Sports"
+        description: "Sports-related content"
+      - name: "entertainment"
+        title: "Entertainment"
+        description: "Entertainment and culture"
+
+# Phases configuration
+phases:
+  - name: "consent"
+    title: "Consent"
+    description: "Please read and agree to participate"
+    type: "consent"
+    required: true
+
+  - name: "instructions"
+    title: "Instructions"
+    description: "Learn how to annotate the data"
+    type: "instructions"
+    required: true
+
+  - name: "annotation"
+    title: "Annotation"
+    description: "Annotate the text data"
+    type: "annotation"
+    required: true
+    schemes: ["sentiment", "topic"]
+
+  - name: "demographics"
+    title: "Demographics"
+    description: "Tell us about yourself"
+    type: "demographics"
+    required: false
+
+# Training configuration
+training:
+  enabled: true
+  instances:
+    - id: "train_001"
+      text: "I love this new technology! It's amazing how it works."
+      explanation: "This text expresses positive sentiment about technology"
+      sentiment: "positive"
+      topic: "technology"
+
+    - id: "train_002"
+      text: "This political decision is terrible for our country."
+      explanation: "This text expresses negative sentiment about politics"
+      sentiment: "negative"
+      topic: "politics"
+
+    - id: "train_003"
+      text: "The weather today is sunny and warm."
+      explanation: "This text is neutral and about general topics"
+      sentiment: "neutral"
+      topic: "entertainment"
+
+    - id: "train_004"
+      text: "The new smartphone features are incredible and innovative."
+      explanation: "This text expresses positive sentiment about technology"
+      sentiment: "positive"
+      topic: "technology"
+
+    - id: "train_005"
+      text: "I'm disappointed with the election results."
+      explanation: "This text expresses negative sentiment about politics"
+      sentiment: "negative"
+      topic: "politics"
+
+# Data file configuration
+data_file: "tests/data/active_learning_test_data.json"

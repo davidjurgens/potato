@@ -1,0 +1,66 @@
+# Simple Video Frame Annotation Example
+#
+# Demonstrates video annotation with temporal segments, frame classification,
+# and keyframe marking using Peaks.js for timeline visualization.
+#
+# Features:
+# - Temporal segment marking ([ and ] keys)
+# - Frame-by-frame navigation (, and . keys)
+# - Playback speed control (0.1x to 2.0x)
+# - Keyframe marking (K key)
+# - Timeline visualization with waveform
+#
+# To run:
+#   python potato/flask_server.py start project-hub/simple_examples/configs/simple-video-frame-annotation.yaml -p 8000
+#
+# Then open http://localhost:8000 in your browser.
+
+port: 8000
+server_name: potato annotator
+annotation_task_name: Video Frame Annotation Example
+task_dir: .
+output_annotation_dir: annotation_output/video-frame-annotation/
+output_annotation_format: json
+annotation_codebook_url: ''
+
+data_files:
+  - data/video-frame-example.json
+
+item_properties:
+  id_key: id
+  text_key: video_url
+
+user_config:
+  allow_all_users: true
+  users: []
+
+alert_time_each_instance: 10000000
+
+annotation_schemes:
+  # Video segment annotation
+  - annotation_type: video_annotation
+    name: video_segments
+    description: "Watch the video and mark segments for different content types. Press [ to mark segment start, ] to mark segment end, then Enter to create the segment."
+    mode: segment
+    labels:
+      - name: intro
+        color: "#4ECDC4"
+        key_value: "1"
+      - name: main_content
+        color: "#FF6B6B"
+        key_value: "2"
+      - name: transition
+        color: "#45B7D1"
+        key_value: "3"
+      - name: outro
+        color: "#95A5A6"
+        key_value: "4"
+    min_segments: 1
+    timeline_height: 70
+    zoom_enabled: true
+    playback_rate_control: true
+    frame_stepping: true
+    show_timecode: true
+    video_fps: 30
+
+site_dir: default

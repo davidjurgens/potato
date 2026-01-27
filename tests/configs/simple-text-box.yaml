@@ -1,0 +1,21 @@
+annotation_task_name: Text Annotation Test
+task_dir: output/simple-text-box
+output_annotation_dir: output/simple-text-box/annotations
+output_annotation_format: jsonl
+data_files:
+- ../data/test_data.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 0
+annotation_schemes:
+- annotation_type: text
+  name: feedback
+  description: Provide feedback about the text
+  textarea:
+    'on': true
+  sequential_key_binding: true
+site_dir: output
