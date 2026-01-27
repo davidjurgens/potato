@@ -5,10 +5,6 @@
 [![License](https://img.shields.io/badge/license-Polyform%20Shield-green)](LICENSE)
 [![Paper](https://img.shields.io/badge/paper-EMNLP%202022-orange)](https://aclanthology.org/2022.emnlp-demos.33/)
 
-<p align="center">
-<img src="https://github.com/davidjurgens/potato/raw/master/docs/img/potato-goal.png" width="600" height="280">
-</p>
-
 **Potato** is a lightweight, configuration-driven annotation tool for NLP research. Go from zero to annotating in minutes—no coding required.
 
 ## Why Potato?
