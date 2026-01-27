@@ -4,11 +4,10 @@
 annotation_task_name: "Sentiment Analysis with Quality Control"
 
 # Task directory (where output will be saved)
-# Using parent directory so relative paths work correctly
-task_dir: ../
+task_dir: .
 
 # Output settings
-output_annotation_dir: quality_control_output
+output_annotation_dir: annotation_output/quality-control-example
 output_annotation_format: json
 
 # Data files (relative to task_dir)
@@ -115,3 +114,5 @@ ui:
 # User configuration
 user_config:
   allow_anonymous: true
+
+site_dir: default

@@ -16,6 +16,7 @@
 # Basic project settings
 "port": 8000
 "debug": true
+"annotation_task_name": "ICL Labeling Example"
 
 # Data files
 "data_files": ["data/icl-labeling-example.json"]
@@ -26,9 +27,11 @@
   "text_key": "text"
 
 # Output directory
-"task_dir": "icl_labeling_example_output"
-"output_annotation_dir": "icl_labeling_example_output/annotations"
+"task_dir": "."
+"output_annotation_dir": "annotation_output/icl-labeling-example"
 "output_annotation_format": "jsonl"
+
+"site_dir": "default"
 
 # Enable multiple annotators per item (needed for consensus)
 "max_annotations_per_item": 3

@@ -18,7 +18,7 @@ output_annotation_format: jsonl
 
 # Data files with instances tagged by category
 data_files:
-  - category-assignment-example/data/category-assignment-data.json
+  - data/category-assignment-data.json
 
 # Item properties - note the category_key
 item_properties:
@@ -48,7 +48,7 @@ category_assignment:
 # Training configuration with category-tagged questions
 training:
   enabled: true
-  data_file: category-assignment-example/data/category-training-data.json
+  data_file: ../data/category-training-data.json
   annotation_schemes:
     - classification
   passing_criteria:

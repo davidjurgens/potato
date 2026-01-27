@@ -50,9 +50,7 @@ def get_example_configs() -> List[Path]:
 # Configs with known issues that are expected to fail
 # These need to be fixed in the example configs themselves
 CONFIGS_WITH_KNOWN_ISSUES = {
-    "category-assignment-example": "Data path references non-existent category-assignment-example/data/ directory",
-    "icl-labeling-example": "task_dir set to 'icl_labeling_example_output' but config file is not in that directory",
-    "quality-control-example": "task_dir uses '../' which is blocked by path security validation",
+    # All example configs now work - no known issues!
 }
 
 
