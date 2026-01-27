@@ -15,7 +15,7 @@
 | Coding required | None | Often extensive |
 | Self-hosted | Yes (full data control) | Often cloud-only |
 | AI assistance | Built-in LLM support | Rarely available |
-| Cost | Free for research | Often paid |
+| Cost | Free | Often paid |
 
 ---
 
