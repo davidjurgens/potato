@@ -47,15 +47,12 @@ def get_example_configs() -> List[Path]:
 
 # Configs with known issues that are expected to fail
 # These should be fixed in the configs themselves, not the tests
+# Configs with known issues that are expected to fail
+# These need to be fixed in the example configs themselves
 CONFIGS_WITH_KNOWN_ISSUES = {
-    "simple-audio-annotation": "Missing required field: site_dir",
-    "simple-best-worst-scaling": "Missing required field: site_dir",
-    "simple-image-annotation": "Missing required field: site_dir",
-    "simple-pairwise-comparison": "TypeError in pairwise comparison annotation",
-    "two-sliders": "Server startup timeout (may need investigation)",
-    "category-assignment-example": "Missing data directory: category-assignment-example/data/",
-    "icl-labeling-example": "Data file path relative to wrong task_dir",
-    "quality-control-example": "Data file paths use incorrect relative path",
+    "category-assignment-example": "Data path references non-existent category-assignment-example/data/ directory",
+    "icl-labeling-example": "task_dir set to 'icl_labeling_example_output' but config file is not in that directory",
+    "quality-control-example": "task_dir uses '../' which is blocked by path security validation",
 }
 
 
@@ -241,3 +238,17 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "edge_case: marks tests as edge case tests (boundary conditions)"
     )
+
+
+def pytest_collection_modifyitems(config, items):
+    """
+    Mark all integration tests as slow.
+
+    Integration tests typically involve starting servers and browsers,
+    which takes significant time.
+    """
+    slow_marker = pytest.mark.slow
+
+    for item in items:
+        if "integration" in item.nodeid:
+            item.add_marker(slow_marker)
