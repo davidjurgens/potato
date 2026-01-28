@@ -118,7 +118,7 @@ def _generate_multirate_layout_internal(annotation_scheme):
     processed_items = []
     for option in options:
         if isinstance(option, str):
-            identifiers = generate_element_identifier(schema_name, option, "radio")
+            identifiers = generate_element_identifier(schema_name, option, "multirate")
             processed_items.append({
                 'label': escape_html_content(option),
                 'name': identifiers['name'],
@@ -127,7 +127,7 @@ def _generate_multirate_layout_internal(annotation_scheme):
                 'tooltip': ""
             })
         else:
-            identifiers = generate_element_identifier(schema_name, option['name'], "radio")
+            identifiers = generate_element_identifier(schema_name, option['name'], "multirate")
             processed_items.append({
                 'label': escape_html_content(option['label']),
                 'name': identifiers['name'],

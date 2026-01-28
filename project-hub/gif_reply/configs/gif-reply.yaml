@@ -1,4 +1,4 @@
-task_dir: ".."
+task_dir: "."
 port: 9001
 __debug___: true
 server_name: potato annotator

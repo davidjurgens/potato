@@ -6,6 +6,67 @@ predefined example projects, and welcome public contribution to the
 project hub. If you have used potato for your own annotation, you are
 encouraged to create a pull request and release your annotation setup.
 
+---
+
+## How to Run Examples
+
+All examples follow a consistent directory structure and should be run **from within the project directory**.
+
+### Quick Start
+
+```bash
+# 1. Navigate to the example project
+cd project-hub/sentiment_analysis
+
+# 2. Run the server
+python ../../potato/flask_server.py start configs/sentiment-analysis.yaml -p 8000
+
+# 3. Open in browser
+# http://localhost:8000
+```
+
+### Directory Structure
+
+Each project follows this pattern:
+
+```
+my_project/                    # Run from HERE
+├── configs/
+│   └── my-config.yaml         # Config file (task_dir: .)
+├── data/ or data_files/
+│   └── data.json              # Input data
+└── annotation_output/         # Generated output
+```
+
+**Important:** Always run from the project root directory (where `configs/` and `data/` are located), not from within `configs/`.
+
+### Simple Examples
+
+Each simple example is self-contained in its own directory within `simple_examples/`:
+
+```bash
+# List available examples
+ls project-hub/simple_examples/
+
+# Run any example
+cd project-hub/simple_examples/simple-likert
+python ../../../potato/flask_server.py start config.yaml -p 8000
+```
+
+Available examples include:
+- `simple-check-box` - Multiple choice checkboxes
+- `simple-likert` - Likert scale rating
+- `simple-slider` - Continuous slider
+- `simple-span-labeling` - Text span annotation
+- `simple-multirate` - Rate multiple items
+- `simple-audio-annotation` - Audio segmentation
+- `simple-video-annotation` - Video annotation
+- `all-annotation-types` - Showcase of all schema types
+- `all-phases-example` - Multi-phase workflow (consent, instructions, training, annotation)
+- And many more...
+
+---
+
 ## How to contribute
 If you have a polished annotation project and you would like to share it in our project hub, please pack it as a .zip file and submit a pull request
 

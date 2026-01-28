@@ -1,0 +1,12 @@
+{
+    "id":"1",
+    "name": "ocean_Q1",
+    "description":"How extroverted are you?",
+    "annotation_type": "likert",
+    "min_label": "Not very",
+    "max_label": "Very",
+    "size": 5,
+    "label_requirement": {
+        "required":true
+    }
+}

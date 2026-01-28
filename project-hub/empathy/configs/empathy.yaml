@@ -1,4 +1,4 @@
-task_dir: ".."
+task_dir: "."
 annotation_task_name: Empathy Annotation
 output_annotation_dir: annotation_output/empathy/
 output_annotation_format: csv

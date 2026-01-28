@@ -1,0 +1,89 @@
+annotation_task_name: All the Phases Annotations
+task_dir: .
+output_annotation_dir: annotation_output/all-phases-example/
+output_annotation_format: jsonl
+annotation_codebook_url: ''
+data_files:
+- data/toy-example.3.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+phases:
+  order:
+  - consent
+  - prescreen
+  - general_instructions
+  - specific_instructions
+  - baseline_check
+  consent:
+    type: consent
+    file: surveys/consent.json
+  general_instructions:
+    type: instructions
+    file: surveys/instructions.json
+  specific_instructions:
+    type: instructions
+    file: surveys/specific-instructions.json
+  prescreen:
+    type: prestudy
+    file: surveys/prescreen.json
+  baseline_check:
+    type: training
+    file: surveys/baseline.json
+  personality:
+    type: poststudy
+    file: surveys/big5.json
+  study_satisfaction:
+    type: poststudy
+    file: surveys/studysatisfaction.json
+annotation_schemes:
+- annotation_type: radio
+  name: thing_name
+  description: What is this thing called?
+  labels:
+  - name: bug
+    text: a bug
+  - name: feature
+    text: a feature
+  has_free_response: true
+  sequential_key_binding: true
+- annotation_type: multiselect
+  name: features
+  description: What features does it have?
+  labels:
+  - name: fast
+    text: very fast
+  - name: shiny
+    text: nice UI
+  - name: cheap
+    text: cheap to use
+  sequential_key_binding: true
+- annotation_type: text
+  name: pure_vibes
+  description: How does this product make you feel?
+  textarea:
+    'on': false
+    rows: 2
+    cols: 40
+- annotation_type: span
+  name: text_vibes
+  description: Which parts have this kind of vibe?
+  labels:
+  - text: good vibes
+    name: good
+    abbreviation: good
+  - text: bad vibes
+    name: bad
+    abbreviation: bad
+  sequential_key_binding: true
+- annotation_type: slider
+  name: vibe_level
+  description: How many vibes?
+  min_value: 1
+  max_value: 10
+  starting_value: 5
+site_dir: default

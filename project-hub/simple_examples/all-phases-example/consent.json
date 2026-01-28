@@ -1,0 +1,18 @@
+[
+    {
+        "id":"1",
+        "name": "age_consent",
+        "description":"I certify that I am at least 18 years of age.",
+        "annotation_type": "radio",
+        "labels": ["I agree", "I disagree"],
+        "label_requirement": {"required_label":["I agree"]}
+    },
+    {
+        "id":"2",
+        "description":"I have read and understood the information above.",
+        "name": "info_consent",
+        "annotation_type": "radio",
+        "labels": ["Yes", "No"],
+        "label_requirement": {"required_label":["Yes"]}
+    }
+]

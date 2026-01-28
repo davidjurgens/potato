@@ -1,0 +1,180 @@
+# All Annotation Types Example
+#
+# This example demonstrates ALL annotation schema types available in Potato.
+# Use this as a reference to see how each type renders and behaves.
+#
+# Run with:
+#   cd project-hub/simple_examples
+#   python ../../potato/flask_server.py start config.yaml -p 8000
+
+annotation_task_name: All Annotation Types Showcase
+task_dir: .
+output_annotation_dir: annotation_output/all-annotation-types/
+output_annotation_format: jsonl
+data_files:
+  - data/toy-example.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+site_dir: default
+
+annotation_schemes:
+
+  # ============================================================
+  # SECTION 1: SELECTION TYPES
+  # ============================================================
+
+  - annotation_type: pure_display
+    name: selection_header
+    description: "## Selection Types"
+
+  # Radio - Single choice selection
+  - annotation_type: radio
+    name: single_choice
+    description: "**Radio Buttons** - Select exactly one option"
+    labels:
+      - name: positive
+        tooltip: "The text expresses positive sentiment"
+        key_value: "1"
+      - name: neutral
+        tooltip: "The text is neutral or factual"
+        key_value: "2"
+      - name: negative
+        tooltip: "The text expresses negative sentiment"
+        key_value: "3"
+    sequential_key_binding: true
+
+  # Multiselect - Multiple choice selection (checkboxes)
+  - annotation_type: multiselect
+    name: multi_choice
+    description: "**Checkboxes** - Select all that apply"
+    labels:
+      - name: informative
+        tooltip: "Contains factual information"
+      - name: emotional
+        tooltip: "Contains emotional language"
+      - name: persuasive
+        tooltip: "Attempts to convince the reader"
+      - name: unclear
+        tooltip: "Meaning is ambiguous"
+    sequential_key_binding: true
+
+  # Select - Dropdown selection
+  - annotation_type: select
+    name: dropdown_choice
+    description: "**Dropdown** - Select from a list"
+    labels:
+      - news
+      - opinion
+      - review
+      - social_media
+      - academic
+      - other
+
+  # ============================================================
+  # SECTION 2: SCALE/RATING TYPES
+  # ============================================================
+
+  - annotation_type: pure_display
+    name: scale_header
+    description: "## Scale & Rating Types"
+
+  # Likert - Scale with labeled endpoints
+  - annotation_type: likert
+    name: likert_scale
+    description: "**Likert Scale** - Rate on a scale with labeled endpoints"
+    min_label: Strongly Disagree
+    max_label: Strongly Agree
+    size: 5
+    sequential_key_binding: true
+
+  # Slider - Continuous value selection
+  - annotation_type: slider
+    name: slider_rating
+    description: "**Slider** - Select a value in a continuous range"
+    min_value: 0
+    max_value: 100
+    starting_value: 50
+
+  # Multirate - Rate multiple items on the same scale
+  - annotation_type: multirate
+    name: multirate_matrix
+    description: "**Multirate Matrix** - Rate multiple aspects on the same scale"
+    options:
+      - Clarity
+      - Relevance
+      - Completeness
+    labels:
+      - Poor
+      - Fair
+      - Good
+      - Excellent
+    display_config:
+      num_columns: 1
+
+  # ============================================================
+  # SECTION 3: TEXT INPUT TYPES
+  # ============================================================
+
+  - annotation_type: pure_display
+    name: text_header
+    description: "## Text Input Types"
+
+  # Text - Single line text input
+  - annotation_type: text
+    name: short_answer
+    description: "**Text Input** - Single line response"
+    labels:
+      - "Enter a brief summary:"
+    textarea:
+      'on': false
+      rows: 1
+      cols: 50
+
+  # Text (textarea) - Multi-line text input
+  - annotation_type: text
+    name: long_answer
+    description: "**Textarea** - Multi-line response"
+    labels:
+      - "Provide detailed feedback:"
+    textarea:
+      'on': true
+      rows: 4
+      cols: 60
+
+  # Number - Numeric input
+  - annotation_type: number
+    name: numeric_input
+    description: "**Number Input** - Enter a numeric value (e.g., word count estimate)"
+    min: 0
+    max: 1000
+    step: 1
+
+  # ============================================================
+  # SECTION 4: SPAN ANNOTATION
+  # ============================================================
+
+  - annotation_type: pure_display
+    name: span_header
+    description: "## Span Annotation"
+
+  # Span - Highlight and label text spans
+  - annotation_type: span
+    name: span_labels
+    description: "**Span Annotation** - Highlight text and assign labels (select text above)"
+    labels:
+      - name: entity
+        tooltip: "Named entity (person, place, org)"
+        key_value: "e"
+        color: "#4CAF50"
+      - name: claim
+        tooltip: "A factual claim or assertion"
+        key_value: "c"
+        color: "#2196F3"
+      - name: opinion
+        tooltip: "Subjective opinion or judgment"
+        key_value: "o"
+        color: "#FF9800"
+    sequential_key_binding: true

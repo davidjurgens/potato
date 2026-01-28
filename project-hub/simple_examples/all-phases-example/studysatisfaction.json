@@ -1,0 +1,29 @@
+[
+    {
+        "id":"1",
+        "name": "study_satisfaction",
+        "description": "How satisfied do you feel about your experience participating our study?",
+        "annotation_type": "radio",
+        "labels": ["Not satisfied", "Somewhat Satisfied", "Satisfied", "Very satisfied"]
+    },
+    {
+        "id":"2",
+        "name": "study_satisfaction_comparison",
+        "description":"How do you feel about your experience participating our study compared with other studies?",
+        "annotation_type": "radio",
+        "labels": [
+            "Much worse than others",
+            "Worse than others",
+            "Similar",
+            "Better than others",
+            "Much better than others"
+            ]
+        },
+    {
+        "id":"3",
+        "name": "study_satisfaction_comments",
+        "description":"Please feel free to leave any comments about our study (optional)",
+        "annotation_type": "text"
+    }
+]
+

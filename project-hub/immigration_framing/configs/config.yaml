@@ -2,7 +2,7 @@ port: 8000
 server_name: potato annotator
 annotation_task_name: Immigration Framing
 output_annotation_dir: annotation_output/
-task_dir: immigration_framing
+task_dir: .
 output_annotation_format: tsv
 annotation_codebook_url: ''
 data_files:
