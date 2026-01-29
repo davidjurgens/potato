@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Optional, Type
 from pydantic import BaseModel
-from server_utils.config_module import config
+from potato.server_utils.config_module import config
 ANNOTATIONS = None
 
 class ModelManager:

@@ -156,10 +156,23 @@ emphasis_corpus_to_schemas = defaultdict(set)
 # List of dicts: {pattern: str, regex: compiled_regex, label: str, schema: str}
 keyword_highlight_patterns = []
 
+# Keyword highlight settings (probabilities, random word config)
+# These control randomization and caching behavior for keyword highlights
+keyword_highlight_settings = {
+    'keyword_probability': 1.0,        # Probability of showing a matched keyword (0.0-1.0)
+    'random_word_probability': 0.05,   # Probability of highlighting random words
+    'random_word_label': 'distractor', # Label for random word highlights
+    'random_word_schema': 'keyword',   # Schema for random word highlights
+}
+
 def get_keyword_highlight_patterns():
     """Get the current keyword highlight patterns list."""
     logger.debug(f"[get_keyword_highlight_patterns] Returning {len(keyword_highlight_patterns)} patterns")
     return keyword_highlight_patterns
+
+def get_keyword_highlight_settings():
+    """Get the current keyword highlight settings."""
+    return keyword_highlight_settings
 
 # Response Highlight Class
 @dataclass(frozen=True)
@@ -692,6 +705,12 @@ def load_highlights_data(config: dict) -> None:
     - 'word*' matches 'word', 'words', 'wording', etc.
     - '*word' matches 'sword', 'keyword', etc.
     - 'word' matches exactly 'word' (case-insensitive, word boundaries)
+
+    Also loads keyword_highlight_settings from config:
+    - keyword_probability: Probability of showing matched keywords (default: 1.0)
+    - random_word_probability: Probability of highlighting random words (default: 0.05)
+    - random_word_label: Label for random highlights (default: 'distractor')
+    - random_word_schema: Schema for random highlights (default: 'keyword')
     """
     # IMPORTANT: When running as __main__, we need to modify the list in the
     # package module (potato.flask_server) so that routes.py can see the changes.
@@ -702,10 +721,20 @@ def load_highlights_data(config: dict) -> None:
         pkg_module = sys.modules['potato.flask_server']
         patterns_list = pkg_module.keyword_highlight_patterns
         emphasis_map = pkg_module.emphasis_corpus_to_schemas
+        settings_dict = pkg_module.keyword_highlight_settings
     else:
-        global keyword_highlight_patterns, emphasis_corpus_to_schemas
+        global keyword_highlight_patterns, emphasis_corpus_to_schemas, keyword_highlight_settings
         patterns_list = keyword_highlight_patterns
         emphasis_map = emphasis_corpus_to_schemas
+        settings_dict = keyword_highlight_settings
+
+    # Load keyword highlight settings from config (with defaults)
+    config_settings = config.get('keyword_highlight_settings', {})
+    settings_dict['keyword_probability'] = config_settings.get('keyword_probability', 1.0)
+    settings_dict['random_word_probability'] = config_settings.get('random_word_probability', 0.05)
+    settings_dict['random_word_label'] = config_settings.get('random_word_label', 'distractor')
+    settings_dict['random_word_schema'] = config_settings.get('random_word_schema', 'keyword')
+    logger.debug(f"Loaded keyword highlight settings: {settings_dict}")
 
     keyword_highlights_file = config.get("keyword_highlights_file")
     if not keyword_highlights_file:
@@ -1794,6 +1823,10 @@ def update_annotation_state(username, form):
     )
     # update the behavioral information regarding time only when the annotations are changed
     if did_change:
+        # Include keyword highlight state in behavioral data for research tracking
+        keyword_state = user_state.get_keyword_highlight_state(instance_id)
+        if keyword_state:
+            behavioral_data_dict['keyword_highlights_shown'] = keyword_state.get('highlights', [])
         user_state.instance_id_to_behavioral_data[instance_id] = behavioral_data_dict
     return did_change
 

@@ -10,7 +10,7 @@ Generates a form interface for numeric input. Features include:
 
 import logging
 
-from ai.ai_help_wrapper import get_ai_wrapper, get_dynamic_ai_help
+from potato.ai.ai_help_wrapper import get_ai_wrapper, get_dynamic_ai_help
 from .identifier_utils import (
     safe_generate_layout,
     generate_element_identifier,

@@ -121,11 +121,42 @@ class BaseAIEndpoint(ABC):
         """
         Parse the response content and extract JSON, handling markdown code blocks.
         """
+        # Handle empty or None content
+        if not response_content:
+            raise ValueError(f"Empty response content received from AI endpoint")
+
+        # If it's already a dict, return it
+        if isinstance(response_content, dict):
+            return response_content
+
+        # Convert to string if needed
+        content_str = str(response_content).strip()
+
+        # Check for empty after stripping whitespace
+        if not content_str:
+            raise ValueError(f"Empty response content received from AI endpoint")
+
+        # Try to extract JSON from markdown code blocks if present
+        if '```json' in content_str:
+            import re
+            json_match = re.search(r'```json\s*([\s\S]*?)\s*```', content_str)
+            if json_match:
+                content_str = json_match.group(1).strip()
+        elif '```' in content_str:
+            import re
+            json_match = re.search(r'```\s*([\s\S]*?)\s*```', content_str)
+            if json_match:
+                content_str = json_match.group(1).strip()
+
         try:
-            parsed = json.loads(response_content)
+            parsed = json.loads(content_str)
             return parsed
-        except json.JSONDecodeError:
-            raise ValueError(f"Failed to parse JSON from ollama response: {response_content}")
+        except json.JSONDecodeError as e:
+            # Log more details about the failure
+            logger.error(f"JSON parse error: {e}")
+            logger.error(f"Content length: {len(content_str)}")
+            logger.error(f"Content (first 500 chars): {content_str[:500]}")
+            raise ValueError(f"Failed to parse JSON from response: {e}. Content: {content_str[:200]}")
 
     def get_ai(self, data: AnnotationInput, output_format) -> str:
         """
@@ -139,8 +170,9 @@ class BaseAIEndpoint(ABC):
         """
         
         try:
-            # Check if annotation type exists
-            if data.annotation_type not in Annotation_Type:
+            # Check if annotation type exists (comparing string against enum values)
+            valid_types = [e.value for e in Annotation_Type]
+            if data.annotation_type not in valid_types:
                 logger.warning(f"Annotation type '{data.annotation_type}' not found")
                 return "Unable to generate suggestion - annotation type not configured"
                     
@@ -165,8 +197,10 @@ class BaseAIEndpoint(ABC):
             )
             return self.query(prompt, output_format)
         except Exception as e:
-            logger.error(data)
-            logger.error(f"Error getting hint: {data.annotation_type, data.ai_assistant, e}")
+            logger.error(f"[get_ai] AnnotationInput: {data}")
+            logger.error(f"[get_ai] Error for {data.annotation_type}/{data.ai_assistant}: {type(e).__name__}: {e}")
+            import traceback
+            logger.error(f"[get_ai] Traceback:\n{traceback.format_exc()}")
             return "Unable to generate hint at this time."
 
     def health_check(self) -> bool:

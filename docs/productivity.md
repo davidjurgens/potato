@@ -106,6 +106,39 @@ price	economic	topic
 election	political	topic
 ```
 
+### Randomization Settings
+
+For research purposes, you can configure keyword highlight randomization to prevent annotators from relying solely on the highlights:
+
+```yaml
+keyword_highlights_file: data/keywords.tsv
+
+keyword_highlight_settings:
+  keyword_probability: 1.0       # Probability of showing each matched keyword (0.0-1.0)
+  random_word_probability: 0.05  # Probability of highlighting random words as distractors
+  random_word_label: "distractor" # Label for random word highlights
+  random_word_schema: "keyword"   # Schema for random word highlights
+```
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `keyword_probability` | 1.0 | Probability (0.0-1.0) that each matched keyword is shown. Set to 0.8 to show 80% of keywords. |
+| `random_word_probability` | 0.05 | Probability of highlighting random words as distractors. Set to 0.05 to highlight ~5% of words. |
+| `random_word_label` | "distractor" | The label applied to randomly highlighted words. |
+| `random_word_schema` | "keyword" | The schema for random word highlights. |
+
+**Key Features:**
+
+- **Persistence**: Highlighted words are cached per user+instance, so the same user sees the same highlights when returning to an instance.
+- **Deterministic randomization**: Uses a hash of username + instance_id as a random seed, ensuring reproducibility.
+- **Behavioral tracking**: The `keyword_highlights_shown` field in behavioral data records which words were highlighted (both keywords and random distractors).
+
+**Use Cases:**
+
+1. **Distractor words**: Add random word highlights to prevent annotators from relying entirely on keyword hints.
+2. **Partial keyword hints**: Set `keyword_probability: 0.5` to show only 50% of matching keywords.
+3. **Research studies**: Track which highlights each annotator saw to analyze their impact on annotation quality.
+
 ### Example
 
 See the [keyword-highlights-example](https://github.com/davidjurgens/potato/tree/master/project-hub/simple_examples/keyword-highlights-example) in the project hub for a complete working example.

@@ -657,6 +657,25 @@ Features:
 - **Word boundaries**: Non-wildcard terms match whole words only
 - **Multiple schemas**: One file can define keywords for multiple annotation schemas
 
+#### Randomization Settings
+
+For research purposes, you can configure keyword highlight randomization:
+
+```yaml
+keyword_highlight_settings:
+  keyword_probability: 1.0       # Probability of showing each matched keyword (0.0-1.0)
+  random_word_probability: 0.05  # Probability of highlighting random words as distractors
+  random_word_label: "distractor" # Label for random word highlights
+  random_word_schema: "keyword"   # Schema for random word highlights
+```
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `keyword_probability` | 1.0 | Probability (0.0-1.0) that each matched keyword is shown |
+| `random_word_probability` | 0.05 | Probability of highlighting random words as distractors |
+| `random_word_label` | "distractor" | Label for randomly highlighted words |
+| `random_word_schema` | "keyword" | Schema for random word highlights |
+
 See [Productivity Features](productivity.md#admin-keyword-highlights) for detailed documentation.
 
 ## Complete Example

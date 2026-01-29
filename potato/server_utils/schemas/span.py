@@ -5,8 +5,8 @@ Span Layout
 import logging
 from collections.abc import Mapping
 from collections import defaultdict
-from ai.ai_help_wrapper import get_ai_wrapper, get_dynamic_ai_help
-from server_utils.config_module import config
+from potato.ai.ai_help_wrapper import get_ai_wrapper, get_dynamic_ai_help
+from potato.server_utils.config_module import config
 from .identifier_utils import (
     safe_generate_layout,
     generate_element_identifier,

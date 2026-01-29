@@ -547,8 +547,16 @@ async function saveAnnotations() {
         });
 
         if (response.ok) {
-            const result = await response.json();
-            console.log('[DEBUG] saveAnnotations: annotations saved:', result);
+            // Get response text first to debug any JSON parsing issues
+            const responseText = await response.text();
+            try {
+                const result = JSON.parse(responseText);
+                console.log('[DEBUG] saveAnnotations: annotations saved:', result);
+            } catch (jsonError) {
+                console.error('[DEBUG] saveAnnotations: JSON parse error:', jsonError);
+                console.error('[DEBUG] saveAnnotations: Response text (first 500 chars):', responseText.substring(0, 500));
+                // Don't throw - the save may have succeeded even if response parsing failed
+            }
         } else {
             console.warn('[DEBUG] saveAnnotations: failed to save annotations:', await response.text());
         }

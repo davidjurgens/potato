@@ -3,7 +3,7 @@
 # """
 
 # # Needed for the fall-back radio layout
-# from ai.ai_help_wrapper import get_ai_wrapper, get_dynamic_ai_help
+# from potato.ai.ai_help_wrapper import get_ai_wrapper, get_dynamic_ai_help
 # from .radio import generate_radio_layout
 # from .identifier_utils import (
 #     safe_generate_layout,
@@ -462,7 +462,7 @@ slider Layout
 import logging
 
 # Needed for the fall-back radio layout
-from ai.ai_help_wrapper import get_ai_wrapper, get_dynamic_ai_help
+from potato.ai.ai_help_wrapper import get_ai_wrapper, get_dynamic_ai_help
 from .radio import generate_radio_layout
 from .identifier_utils import (
     safe_generate_layout,

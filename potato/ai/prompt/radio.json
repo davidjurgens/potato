@@ -5,7 +5,7 @@
     "img": "/static/ai_assistant_img/blub.svg"
   },
   "keyword": {
-    "prompt": "TASK: Extract words/phrases that indicate the correct single label choice.\n\nINPUT DETAILS:\n- Text: \"${text}\"\n- Annotation task: ${description}\n- Available labels: ${labels}\n\nOBJECTIVE: Identify 3-5 most significant words/phrases that point toward the correct label selection.\n\nSELECTION CRITERIA:\n- Words that strongly indicate one label over others\n- Classification markers specific to the task\n- Context clues that distinguish between label options\n- Domain-specific terminology\n- Structural or stylistic indicators",
+    "prompt": "TASK: Identify words or short phrases in the text that relate to each label.\n\nINPUT DETAILS:\n- Text: \"${text}\"\n- Annotation task: ${description}\n- Available labels: ${labels}\n\nINSTRUCTIONS:\nFor each label, find words or short phrases from the text that indicate or relate to that label. Only include words/phrases that actually appear in the text. Return 1-5 keywords per label. If no words relate to a label, return an empty list for that label.\n\nEXAMPLE OUTPUT FORMAT:\n{\"label_keywords\": [{\"label\": \"positive\", \"keywords\": [\"great\", \"love it\"]}, {\"label\": \"negative\", \"keywords\": [\"terrible\"]}]}",
     "output_format": "default_keyword",
     "img": "/static/ai_assistant_img/highlight.svg"
   },

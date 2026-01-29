@@ -34,6 +34,14 @@
   --box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
   --transition: all 0.2s ease;
   --section-padding-top: 100px;
+
+  /* Overlay Z-Index Hierarchy (higher = on top)
+   * Must match OVERLAY_Z_INDEX constants in span-core.js */
+  --z-overlay-admin-keyword: 100;
+  --z-overlay-ai-keyword: 110;
+  --z-overlay-user-span: 120;
+  --z-overlay-controls: 200;
+  --z-overlay-tooltip: 300;
 }
 
 body {
@@ -1801,9 +1809,10 @@ fieldset[schema] {
 }
 
 /* AI span overlay styles (for keyword highlighting) */
+/* AI keyword overlay styles (AI-suggested highlights) */
 .span-overlay-ai {
   pointer-events: none;
-  z-index: 999;
+  z-index: var(--z-overlay-ai-keyword);
 }
 
 .span-overlay-ai .span-highlight-segment {
@@ -1814,7 +1823,7 @@ fieldset[schema] {
 /* Admin keyword highlight overlay styles */
 .keyword-highlight-overlay {
   pointer-events: none;
-  z-index: 998; /* Slightly below AI suggestions */
+  z-index: var(--z-overlay-admin-keyword);
 }
 
 .keyword-highlight-overlay .span-highlight-segment {
@@ -1822,6 +1831,21 @@ fieldset[schema] {
   cursor: help;
   /* Keyword highlights use dashed border to distinguish from AI suggestions */
   border-style: dashed !important;
+}
+
+/* User-created span overlay styles */
+.span-overlay-pure {
+  z-index: var(--z-overlay-user-span);
+}
+
+/* Span controls (label + delete button) */
+.span-controls {
+  z-index: var(--z-overlay-controls);
+}
+
+/* Overlay tooltip */
+.overlay-tooltip {
+  z-index: var(--z-overlay-tooltip);
 }
 
 /* Tooltip styling for AI suggestions */

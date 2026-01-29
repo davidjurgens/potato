@@ -9,15 +9,15 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 import threading
 from builtins import open
-from server_utils.config_module import config
+from potato.server_utils.config_module import config
 
 logger = logging.getLogger(__name__)
 
-from item_state_management import get_item_state_manager
-from ai.ai_endpoint import AIEndpointFactory, Annotation_Type, AnnotationInput
-from ai.ollama_endpoint import OllamaEndpoint
-from ai.openrouter_endpoint import OpenRouterEndpoint
-from ai.ai_prompt import ModelManager, get_ai_prompt 
+from potato.item_state_management import get_item_state_manager
+from potato.ai.ai_endpoint import AIEndpointFactory, Annotation_Type, AnnotationInput
+from potato.ai.ollama_endpoint import OllamaEndpoint
+from potato.ai.openrouter_endpoint import OpenRouterEndpoint
+from potato.ai.ai_prompt import ModelManager, get_ai_prompt 
 
 
 AICACHEMANAGER = None
@@ -476,8 +476,17 @@ class AiCacheManager:
                 self.in_progress[key] = future
         try:
             result = future.result(timeout=60)
-            if self.disk_cache_enabled:
+            # Don't cache error responses
+            is_error_response = (
+                isinstance(result, str) and
+                (result.startswith("Unable to generate") or
+                 result.startswith("Error:") or
+                 "error" in result.lower()[:50])
+            )
+            if self.disk_cache_enabled and not is_error_response:
                 self.add_to_cache(key, result)
+            elif is_error_response:
+                logger.warning(f"Not caching error response for key {key}: {result[:100]}")
             with self.lock:
                 self.in_progress.pop(key, None)
             return result
