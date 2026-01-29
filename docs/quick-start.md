@@ -57,7 +57,7 @@ Create a YAML configuration file `config.yaml` in your task directory:
 port: 8000
 server_name: My First Annotation Task
 annotation_task_name: Sentiment Analysis
-task_dir: my_annotation_task/  # This must contain the config file
+task_dir: .  # Resolves to the directory containing this config file
 
 # Data Configuration
 data_files:
@@ -151,6 +151,14 @@ my_annotation_task/
     └── annotations/
 ```
 
+In this case, your config files should use `task_dir: ..` to point to the parent directory:
+
+```yaml
+task_dir: ..  # Resolves to my_annotation_task/ (parent of configs/)
+data_files:
+  - data/my_data.json
+```
+
 Then start the server with:
 
 ```bash
@@ -163,7 +171,18 @@ python potato/flask_server.py start my_annotation_task/configs/experiment1.yaml 
 
 ## Path Resolution
 
-All relative paths in your configuration are resolved relative to the `task_dir`:
+### Task Directory
+
+The `task_dir` setting is resolved relative to the config file's directory. This makes configurations portable:
+
+| `task_dir` Value | Config File Location | Resolved `task_dir` |
+|------------------|---------------------|---------------------|
+| `.` | `my_task/config.yaml` | `my_task/` |
+| `..` | `my_task/configs/config.yaml` | `my_task/` |
+
+### Other Paths
+
+All other relative paths in your configuration are resolved relative to the `task_dir`:
 
 - `data/my_data.json` → `{task_dir}/data/my_data.json`
 - `output/annotations/` → `{task_dir}/output/annotations/`

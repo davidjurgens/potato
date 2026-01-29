@@ -1,3 +1,10 @@
-{"id":"1","text":"Isn't this awesome?!","gifs":["GIF-ID-1", "GIF-ID-2", "GIF-ID-3"],"gifs_path":["1.mp4", "2.mp4", "3.mp4"]}
-{"id":"2","text":"A different set of response gifs!","gifs":["GIF-ID-4", "GIF-ID-3", "GIF-ID-2"],"gifs_path":["4.mp4", "3.mp4", "2.mp4"]}
-{"id":"3","text":"You can also do fewer GIFs!","gifs":["GIF-ID-1", "GIF-ID-2", "[PlaceHolder DoNotSelect]"],"gifs_path":["1.mp4", "2.mp4", "[PlaceHolder DoNotSelect]"]}
+{"id":"1","text":"I just got promoted at work!","gifs":["celebration-dance", "thumbs-up", "confused-face"],"gifs_path":["videos/sample1.gif", "videos/sample2.gif", "videos/sample3.gif"]}
+{"id":"2","text":"My flight got cancelled and I'm stuck at the airport","gifs":["crying-sad", "angry-yelling", "happy-jumping"],"gifs_path":["videos/sample4.gif", "videos/sample5.gif", "videos/sample6.gif"]}
+{"id":"3","text":"Did you see the game last night? What a comeback!","gifs":["mind-blown", "excited-clapping", "bored-yawning"],"gifs_path":["videos/sample7.gif", "videos/sample8.gif", "videos/sample9.gif"]}
+{"id":"4","text":"I can't believe she said that to me...","gifs":["shocked-gasp", "eye-roll", "laughing-hard"],"gifs_path":["videos/sample10.gif", "videos/sample11.gif", "videos/sample12.gif"]}
+{"id":"5","text":"Finally finished my thesis after 2 years!","gifs":["victory-arms", "relieved-sigh", "skeptical-look"],"gifs_path":["videos/sample13.gif", "videos/sample14.gif", "videos/sample15.gif"]}
+{"id":"6","text":"Who wants to grab pizza tonight?","gifs":["hungry-drooling", "thinking-hmm", "disgusted-face"],"gifs_path":["videos/sample16.gif", "videos/sample17.gif", "videos/sample18.gif"]}
+{"id":"7","text":"I just found out my ex is getting married","gifs":["fake-smile", "crying-dramatically", "unbothered-shrug"],"gifs_path":["videos/sample19.gif", "videos/sample20.gif", "videos/sample21.gif"]}
+{"id":"8","text":"Look at this cute puppy I adopted!","gifs":["heart-eyes", "aww-cute", "scared-running"],"gifs_path":["videos/sample22.gif", "videos/sample23.gif", "videos/sample24.gif"]}
+{"id":"9","text":"Meeting got pushed back another hour...","gifs":["frustrated-sigh", "waiting-impatiently", "dancing-happy"],"gifs_path":["videos/sample25.gif", "videos/sample26.gif", "videos/sample27.gif"]}
+{"id":"10","text":"Guess who just won the lottery!","gifs":["shocked-jaw-drop", "money-raining", "suspicious-squint"],"gifs_path":["videos/sample28.gif", "videos/sample29.gif", "videos/sample30.gif"]}

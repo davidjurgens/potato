@@ -112,13 +112,17 @@ class TestMaliciousConfigFiles:
 
             config_file = os.path.join(temp_project, "configs", "malicious-symlink.yaml")
 
+            # Note: task_dir is resolved relative to config file directory (configs/)
+            # So "../output" resolves to temp_project/output
+            # And "../data/malicious_symlink/sensitive_file.txt" from temp_project/output
+            # resolves to temp_project/data/malicious_symlink/sensitive_file.txt
             config_content = {
                 "item_properties": {
                     "id_key": "id",
                     "text_key": "text"
                 },
-                "data_files": ["../data/malicious_symlink/sensitive_file.txt"],  # Use relative path from configs
-                "task_dir": "output",
+                "data_files": ["../data/malicious_symlink/sensitive_file.txt"],
+                "task_dir": "../output",  # Relative to configs/, resolves to temp_project/output
                 "output_annotation_dir": "output",
                 "annotation_task_name": "Test Task",
                 "alert_time_each_instance": 1000,

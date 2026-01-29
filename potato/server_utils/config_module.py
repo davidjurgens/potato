@@ -1172,6 +1172,15 @@ def load_and_validate_config(config_file: str, project_dir: str) -> Dict[str, An
     # Get the directory containing the config file for relative path resolution
     config_file_dir = os.path.dirname(validated_config_path)
 
+    # Resolve task_dir relative to config file directory if it's '.' or a relative path
+    if 'task_dir' in config_data:
+        task_dir = config_data['task_dir']
+        if task_dir == '.' or not os.path.isabs(task_dir):
+            # Resolve relative to config file's directory
+            task_dir = os.path.normpath(os.path.join(config_file_dir, task_dir))
+            config_data['task_dir'] = task_dir
+            logger.debug(f"Resolved task_dir to: {task_dir}")
+
     # Validate the configuration structure
     validate_yaml_structure(config_data, project_dir, config_file_dir)
 
@@ -1245,11 +1254,23 @@ def init_config(args):
             except Exception as e:
                 raise ConfigValidationError(f"Error loading configuration file: {str(e)}")
 
+            # Get the config file's directory for resolving relative paths
+            config_file_abs = os.path.abspath(config_file)
+            config_file_dir = os.path.dirname(config_file_abs)
+
+            # Resolve task_dir relative to config file directory if it's '.' or a relative path
+            if 'task_dir' in temp_config_data:
+                task_dir = temp_config_data['task_dir']
+                if task_dir == '.' or not os.path.isabs(task_dir):
+                    # Resolve relative to config file's directory
+                    task_dir = os.path.normpath(os.path.join(config_file_dir, task_dir))
+                    temp_config_data['task_dir'] = task_dir
+                    logger.debug(f"Resolved task_dir to: {task_dir}")
+
             # Validate that config file is in task_dir (skip in test mode)
             skip_path_validation = os.environ.get('POTATO_SKIP_CONFIG_PATH_VALIDATION', '').lower() in ('1', 'true')
             if 'task_dir' in temp_config_data and not skip_path_validation:
                 task_dir = temp_config_data['task_dir']
-                config_file_abs = os.path.abspath(config_file)
                 task_dir_abs = os.path.abspath(task_dir)
                 if not config_file_abs.startswith(task_dir_abs):
                     raise ConfigValidationError(f"Configuration file must be in the task_dir. Config file is at '{config_file_abs}' but task_dir is '{task_dir_abs}'")
@@ -1257,6 +1278,9 @@ def init_config(args):
 
             # Now load and validate with the correct project_dir
             config_data = load_and_validate_config(config_file, os.getcwd())
+            # Update config_data with resolved task_dir
+            if 'task_dir' in temp_config_data:
+                config_data['task_dir'] = temp_config_data['task_dir']
         else:
             config_data = load_and_validate_config(config_file, project_dir)
 

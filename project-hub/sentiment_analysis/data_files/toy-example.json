@@ -1,3 +1,25 @@
-{"id":"1","text":"<div id=\"instance-text\" name=\"instance_text\" data-toggle=\"tooltip\" data-html=\"true\" data-placement=\"top\" data-original-title=\"test tool tip\">Tom: Isn't this awesome?!</div>"}
-{"id":"2","text":"<div id=\"instance-text\" name=\"instance_text\" data-toggle=\"tooltip\" data-html=\"true\" data-placement=\"top\" data-original-title=\"test tool tip\">Tom: Isn't this awesome?!</div>"}
-{"id":"3","text":"<div id=\"instance-text\" name=\"instance_text\" data-toggle=\"tooltip\" data-html=\"true\" data-placement=\"top\" data-original-title=\"test tool tip\">Tom: Isn't this awesome?!</div>"}
+{"id": "1", "text": "I absolutely love this product! It exceeded all my expectations and I would highly recommend it to everyone.", "context": "product review"}
+{"id": "2", "text": "The service was terrible. I waited over an hour and the staff were rude and unhelpful.", "context": "restaurant review"}
+{"id": "3", "text": "The weather today is partly cloudy with temperatures around 65 degrees Fahrenheit.", "context": "weather report"}
+{"id": "4", "text": "This movie was a complete waste of time. The plot made no sense and the acting was wooden.", "context": "movie review"}
+{"id": "5", "text": "Had an amazing experience at this hotel! The rooms were spotless and the staff went above and beyond.", "context": "hotel review"}
+{"id": "6", "text": "The meeting has been rescheduled to 3pm on Tuesday in Conference Room B.", "context": "office communication"}
+{"id": "7", "text": "I'm so frustrated with this company. They charged me twice and their customer service is impossible to reach.", "context": "customer complaint"}
+{"id": "8", "text": "What a wonderful surprise party! Everyone came together to make it truly special. So grateful for my friends!", "context": "social media post"}
+{"id": "9", "text": "The quarterly earnings report shows revenue of $2.3 million, which is consistent with projections.", "context": "financial report"}
+{"id": "10", "text": "This restaurant is decent. The food was okay but nothing special, and prices are a bit high for what you get.", "context": "restaurant review"}
+{"id": "11", "text": "Devastated to hear about the layoffs at work today. Many good people lost their jobs unfairly.", "context": "social media post"}
+{"id": "12", "text": "Just finished running my first marathon! Can't believe I actually did it. Best feeling ever!", "context": "social media post"}
+{"id": "13", "text": "The instructions were unclear and the assembly process took much longer than expected. Very disappointed.", "context": "product review"}
+{"id": "14", "text": "The library will be closed on Monday for the national holiday and will reopen Tuesday at 9am.", "context": "public notice"}
+{"id": "15", "text": "This book completely changed my perspective on life. A must-read for anyone seeking personal growth.", "context": "book review"}
+{"id": "16", "text": "Worst purchase I've ever made. Broke after two days and the warranty claim was denied.", "context": "product review"}
+{"id": "17", "text": "The conference agenda includes keynote speeches at 10am and breakout sessions beginning at 2pm.", "context": "event notice"}
+{"id": "18", "text": "Mediocre at best. I've had better coffee from a gas station. Won't be returning.", "context": "cafe review"}
+{"id": "19", "text": "So proud of my daughter for graduating with honors! All her hard work paid off!", "context": "social media post"}
+{"id": "20", "text": "The traffic on Highway 101 is moving slowly due to an earlier accident. Expect 20-minute delays.", "context": "traffic update"}
+{"id": "21", "text": "This app is fantastic! So intuitive and has made my daily workflow so much easier.", "context": "app review"}
+{"id": "22", "text": "Incredibly rude staff. They acted like I was bothering them just by being a customer.", "context": "service review"}
+{"id": "23", "text": "The study found that 47% of respondents prefer option A while 53% prefer option B.", "context": "research finding"}
+{"id": "24", "text": "Thank you so much for the birthday wishes! Feeling blessed to have such wonderful people in my life.", "context": "social media post"}
+{"id": "25", "text": "This airline lost my luggage and offered no compensation. Never flying with them again.", "context": "travel review"}

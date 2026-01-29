@@ -550,13 +550,16 @@ class TestLoadAndValidateConfig:
         """Test loading a valid configuration file."""
         config_file = os.path.join(temp_project, "configs", "test.yaml")
 
+        # Note: task_dir is resolved relative to the config file directory (configs/)
+        # So "../output" resolves to temp_project/output
+        # And "../data/test.json" from temp_project/output resolves to temp_project/data/test.json
         config_content = {
             "item_properties": {
                 "id_key": "id",
                 "text_key": "text"
             },
             "data_files": ["../data/test.json"],
-            "task_dir": "output",
+            "task_dir": "../output",  # Relative to configs/, resolves to temp_project/output
             "output_annotation_dir": "output",
             "annotation_task_name": "Test Task",
             "alert_time_each_instance": 1000,
@@ -576,6 +579,8 @@ class TestLoadAndValidateConfig:
         # Should not raise any exceptions
         result = load_and_validate_config(config_file, temp_project)
         assert result["annotation_task_name"] == "Test Task"
+        # Verify task_dir was resolved correctly
+        assert result["task_dir"] == os.path.join(temp_project, "output")
 
     def test_invalid_yaml_format(self, temp_project):
         """Test handling of invalid YAML format."""
@@ -1042,3 +1047,173 @@ class TestQualityControlConfigValidation:
 
         with pytest.raises(ConfigValidationError, match="refresh_interval must be an integer >= 10"):
             validate_quality_control_config(config)
+
+
+class TestTaskDirResolution:
+    """Tests for task_dir resolution relative to config file directory."""
+
+    @pytest.fixture
+    def temp_project(self):
+        """Create a temporary project directory with nested config structure."""
+        temp_dir = tempfile.mkdtemp()
+
+        # Create nested project structure:
+        # temp_dir/
+        #   projects/
+        #     my_project/
+        #       configs/
+        #         config.yaml
+        #         data/           <- data files for task_dir='.' test
+        #           test.json
+        #       data/             <- data files for task_dir='..' test
+        #         test.json
+        #       output/
+        project_dir = os.path.join(temp_dir, "projects", "my_project")
+        config_dir = os.path.join(project_dir, "configs")
+        os.makedirs(config_dir)
+        os.makedirs(os.path.join(config_dir, "data"))  # For task_dir='.' tests
+        os.makedirs(os.path.join(project_dir, "data"))  # For task_dir='..' tests
+        os.makedirs(os.path.join(project_dir, "output"))
+
+        # Create test data files in both locations
+        # For task_dir='.' (resolves to configs/)
+        data_file1 = os.path.join(config_dir, "data", "test.json")
+        with open(data_file1, 'w') as f:
+            f.write('[{"id": "1", "text": "Test item"}]')
+
+        # For task_dir='..' (resolves to my_project/)
+        data_file2 = os.path.join(project_dir, "data", "test.json")
+        with open(data_file2, 'w') as f:
+            f.write('[{"id": "1", "text": "Test item"}]')
+
+        yield temp_dir
+        shutil.rmtree(temp_dir)
+
+    def test_task_dir_dot_resolves_to_config_directory(self, temp_project):
+        """Test that task_dir='.' resolves to config file's directory, not CWD."""
+        project_dir = os.path.join(temp_project, "projects", "my_project")
+        config_dir = os.path.join(project_dir, "configs")
+
+        # Create config with task_dir='.'
+        config_content = {
+            "annotation_task_name": "Test Task",
+            "task_dir": ".",
+            "output_annotation_dir": "output",
+            "data_files": ["data/test.json"],
+            "item_properties": {
+                "id_key": "id",
+                "text_key": "text"
+            },
+            "annotation_schemes": [
+                {
+                    "name": "sentiment",
+                    "annotation_type": "radio",
+                    "labels": ["positive", "negative"],
+                    "description": "Sentiment"
+                }
+            ]
+        }
+
+        config_file = os.path.join(config_dir, "config.yaml")
+        with open(config_file, 'w') as f:
+            yaml.dump(config_content, f)
+
+        # Load and validate from a different working directory
+        original_cwd = os.getcwd()
+        try:
+            # Change to temp_project root (different from config file location)
+            os.chdir(temp_project)
+
+            # The task_dir='.' should resolve to configs/ directory (where config.yaml is)
+            # not to temp_project/ (the CWD)
+            config_data = load_and_validate_config(config_file, temp_project)
+
+            # task_dir should be resolved to the config file's directory
+            expected_task_dir = config_dir
+            assert config_data['task_dir'] == expected_task_dir, \
+                f"task_dir should be '{expected_task_dir}' but got '{config_data['task_dir']}'"
+        finally:
+            os.chdir(original_cwd)
+
+    def test_relative_task_dir_resolves_to_config_directory(self, temp_project):
+        """Test that relative task_dir resolves relative to config file's directory."""
+        project_dir = os.path.join(temp_project, "projects", "my_project")
+        config_dir = os.path.join(project_dir, "configs")
+
+        # Create config with task_dir='..' (parent of configs/)
+        config_content = {
+            "annotation_task_name": "Test Task",
+            "task_dir": "..",
+            "output_annotation_dir": "output",
+            "data_files": ["data/test.json"],
+            "item_properties": {
+                "id_key": "id",
+                "text_key": "text"
+            },
+            "annotation_schemes": [
+                {
+                    "name": "sentiment",
+                    "annotation_type": "radio",
+                    "labels": ["positive", "negative"],
+                    "description": "Sentiment"
+                }
+            ]
+        }
+
+        config_file = os.path.join(config_dir, "config.yaml")
+        with open(config_file, 'w') as f:
+            yaml.dump(config_content, f)
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(temp_project)
+
+            config_data = load_and_validate_config(config_file, temp_project)
+
+            # task_dir='..' from configs/ should resolve to my_project/
+            expected_task_dir = project_dir
+            assert config_data['task_dir'] == expected_task_dir, \
+                f"task_dir should be '{expected_task_dir}' but got '{config_data['task_dir']}'"
+        finally:
+            os.chdir(original_cwd)
+
+    def test_absolute_task_dir_unchanged(self, temp_project):
+        """Test that absolute task_dir is not modified."""
+        project_dir = os.path.join(temp_project, "projects", "my_project")
+        config_dir = os.path.join(project_dir, "configs")
+
+        # Create config with absolute task_dir
+        config_content = {
+            "annotation_task_name": "Test Task",
+            "task_dir": project_dir,  # Absolute path
+            "output_annotation_dir": "output",
+            "data_files": ["data/test.json"],
+            "item_properties": {
+                "id_key": "id",
+                "text_key": "text"
+            },
+            "annotation_schemes": [
+                {
+                    "name": "sentiment",
+                    "annotation_type": "radio",
+                    "labels": ["positive", "negative"],
+                    "description": "Sentiment"
+                }
+            ]
+        }
+
+        config_file = os.path.join(config_dir, "config.yaml")
+        with open(config_file, 'w') as f:
+            yaml.dump(config_content, f)
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(temp_project)
+
+            config_data = load_and_validate_config(config_file, temp_project)
+
+            # Absolute path should remain unchanged
+            assert config_data['task_dir'] == project_dir, \
+                f"task_dir should remain '{project_dir}' but got '{config_data['task_dir']}'"
+        finally:
+            os.chdir(original_cwd)

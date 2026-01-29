@@ -545,8 +545,8 @@ phases:
 ```yaml
 port: 9001
 annotation_task_name: AI-Assisted Sentiment
-task_dir: sentiment_project/
-output_annotation_dir: sentiment_project/output/
+task_dir: .  # Resolves to the directory containing this config file
+output_annotation_dir: output/
 data_files:
   - data/texts.json
 item_properties:
@@ -570,8 +570,8 @@ ai_support:
 ```yaml
 port: 9001
 annotation_task_name: Active Learning Demo
-task_dir: active_project/
-output_annotation_dir: active_project/output/
+task_dir: .  # Resolves to the directory containing this config file
+output_annotation_dir: output/
 data_files:
   - data/large_dataset.json
 item_properties:
@@ -595,8 +595,8 @@ active_learning:
 ```yaml
 port: 9001
 annotation_task_name: Trained Annotation Task
-task_dir: trained_project/
-output_annotation_dir: trained_project/output/
+task_dir: .  # Resolves to the directory containing this config file
+output_annotation_dir: output/
 data_files:
   - data/main_data.json
 item_properties:

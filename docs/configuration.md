@@ -44,6 +44,27 @@ output_annotation_dir: output/annotations/
 # ... other configuration
 ```
 
+#### Alternative Structure: Using task_dir='.' (Recommended for Portability)
+
+Using `task_dir: .` makes your configuration portable because paths are resolved relative to the config file's location.
+
+```
+my_annotation_project/
+├── config.yaml                    # ✅ Config file with task_dir: .
+├── data/
+│   └── my_data.json
+└── output/
+    └── annotations/
+```
+
+```yaml
+task_dir: .                        # Resolves to my_annotation_project/
+data_files:
+  - data/my_data.json
+output_annotation_dir: output/annotations/
+# ... other configuration
+```
+
 #### Alternative Structure with Configs Subdirectory
 
 ```
@@ -59,12 +80,14 @@ my_annotation_project/
 
 With this structure, your config files would contain:
 ```yaml
-task_dir: my_annotation_project/
+task_dir: ..                       # Resolves to my_annotation_project/ (parent of configs/)
 data_files:
   - data/my_data.json
 output_annotation_dir: output/annotations/
 # ... other configuration
 ```
+
+**Note**: `task_dir` is resolved relative to the config file's directory, so `..` from `configs/` becomes `my_annotation_project/`.
 
 ### Starting the Server
 
@@ -82,7 +105,20 @@ python potato/flask_server.py start my_annotation_project/ -p 8000
 
 ### Path Resolution Rules
 
-All relative paths in your configuration are resolved relative to the `task_dir`:
+#### Task Directory Resolution
+
+**Important**: The `task_dir` setting is resolved relative to the config file's directory, not the current working directory. This makes configurations portable.
+
+| `task_dir` Value | Config File Location | Resolved `task_dir` |
+|------------------|---------------------|---------------------|
+| `.` | `/project/configs/config.yaml` | `/project/configs/` |
+| `..` | `/project/configs/config.yaml` | `/project/` |
+| `../output` | `/project/configs/config.yaml` | `/project/output/` |
+| `/absolute/path` | (anywhere) | `/absolute/path` (unchanged) |
+
+#### Other Paths
+
+All other relative paths in your configuration are resolved relative to the `task_dir`:
 
 - **Data files**: `data/my_data.json` → `{task_dir}/data/my_data.json`
 - **Output directory**: `output/annotations/` → `{task_dir}/output/annotations/`
@@ -141,7 +177,7 @@ port: 8000
 - **`server_name`**: Display name for the server (shown in browser title)
 - **`annotation_task_name`**: Name of the annotation task (shown to annotators)
 - **`port`**: Port number for the server (default: 8000)
-- **`task_dir`**: The root directory for the task and all of the custom layout, data, and annotations will be placed in this directory.
+- **`task_dir`**: The root directory for the task. All custom layout, data, and annotations will be placed in this directory. When set to `.` or a relative path, it is resolved relative to the config file's directory (not the current working directory). Using `task_dir: .` is recommended for portable configurations.
 
 ## Server Configuration
 

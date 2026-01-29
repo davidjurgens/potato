@@ -38,7 +38,33 @@ output_annotation_dir: output/annotations/
 # ... other configuration
 ```
 
-#### Structure 2: Config Files in Configs Subdirectory
+#### Structure 2: Config File with task_dir='.' (Recommended for Portability)
+
+Using `task_dir: .` makes your configuration portable because paths are resolved relative to the config file's location.
+
+```
+my_annotation_project/
+├── config.yaml                    # ✅ Config file with task_dir: .
+├── data/
+│   └── my_data.json
+├── output/
+│   └── annotations/
+└── templates/
+    └── custom_layout.html
+```
+
+With this structure, your `config.yaml` would contain:
+```yaml
+task_dir: .                        # Resolves to my_annotation_project/
+data_files:
+  - data/my_data.json
+output_annotation_dir: output/annotations/
+# ... other configuration
+```
+
+This approach is portable - you can move the entire `my_annotation_project/` folder anywhere and it will still work.
+
+#### Structure 3: Config Files in Configs Subdirectory
 
 ```
 my_annotation_project/
@@ -53,12 +79,14 @@ my_annotation_project/
 
 With this structure, your config files would contain:
 ```yaml
-task_dir: my_annotation_project/
+task_dir: ..                       # Resolves to my_annotation_project/ (parent of configs/)
 data_files:
   - data/my_data.json
 output_annotation_dir: output/annotations/
 # ... other configuration
 ```
+
+**Note**: `task_dir: ..` is resolved relative to the config file's directory (`configs/`), so it becomes `my_annotation_project/`.
 
 ### Invalid Config File Structures
 
@@ -94,7 +122,20 @@ python potato/flask_server.py start my_annotation_project/ -p 8000
 
 ## Path Resolution Rules
 
-All relative paths in your configuration are resolved relative to the `task_dir`:
+### Task Directory Resolution
+
+**Important**: The `task_dir` setting itself is resolved relative to the config file's directory, not the current working directory. This makes configurations portable.
+
+| `task_dir` Value | Config File Location | Resolved `task_dir` |
+|------------------|---------------------|---------------------|
+| `.` | `/project/configs/config.yaml` | `/project/configs/` |
+| `..` | `/project/configs/config.yaml` | `/project/` |
+| `../output` | `/project/configs/config.yaml` | `/project/output/` |
+| `/absolute/path` | (anywhere) | `/absolute/path` (unchanged) |
+
+### Other Path Resolution
+
+Once `task_dir` is resolved, all other relative paths in your configuration are resolved relative to the `task_dir`:
 
 | Config Field | Example Path | Resolved To |
 |--------------|--------------|-------------|
