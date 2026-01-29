@@ -9,9 +9,10 @@
     "output_format": "default_keyword",
     "img": "/static/ai_assistant_img/highlight.svg"
   },
-  "random": {
-    "prompt": "Generate random things",
-    "output_format": "default_random",
+  "rationale": {
+    "name": "Rationale",
+    "prompt": "TASK: Generate rationales for different positions on the Likert scale.\n\nINPUT DETAILS:\n- Text to annotate: \"${text}\"\n- Annotation task: ${description}\n- Scale: ${min_label} (1) to ${max_label} (${size})\n\nINSTRUCTIONS:\nProvide rationales for different scale positions (low, middle, high). Explain what evidence in the text could support each position. Be balanced and objective.\n\nOUTPUT FORMAT:\nReturn a JSON object with \"rationales\" array containing objects with \"label\" (scale position descriptor) and \"reasoning\" fields.\n\nEXAMPLE OUTPUT:\n{\"rationales\": [{\"label\": \"low (1-2)\", \"reasoning\": \"The negative tone and words like 'disappointing' suggest a low rating\"}, {\"label\": \"middle (3)\", \"reasoning\": \"Mixed signals with both positive and negative elements\"}, {\"label\": \"high (4-5)\", \"reasoning\": \"Strong positive language like 'excellent' supports a high rating\"}]}",
+    "output_format": "default_rationale",
     "img": "/static/ai_assistant_img/question.svg"
   }
 }

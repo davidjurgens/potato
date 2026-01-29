@@ -1,15 +1,18 @@
 {
   "hint": {
     "prompt": "TASK: Generate guidance for numerical value extraction/estimation.\n\nINPUT DETAILS:\n- Text to annotate: \"${text}\"\n- Annotation task: ${description}\n\nINSTRUCTIONS:\n1. Analyze the text for numerical clues or quantifiable elements\n2. Guide the annotator toward identifying the correct numerical value\n3. Focus on mathematical, statistical, or countable aspects\n\nHINT REQUIREMENTS:\n- Identify numerical indicators, quantities, or measurable elements\n- Point out calculation methods or counting strategies\n- Highlight context that affects numerical interpretation\n- Guide toward systematic analysis approach",
-    "output_format": "default_hint"
+    "output_format": "default_hint",
+    "img": "/static/ai_assistant_img/blub.svg"
   },
   "keyword": {
     "prompt": "TASK: Extract words/phrases that contain or indicate numerical information.\n\nINPUT DETAILS:\n- Text: \"${text}\"\n- Annotation task: ${description}\n\nOBJECTIVE: Identify words/phrases that directly relate to the numerical answer.\n\nSELECTION CRITERIA:\n- Explicit numbers, quantities, or measurements\n- Words indicating amount, frequency, or degree\n- Mathematical or statistical terminology\n- Comparative language (more, less, double, half)\n- Time references, percentages, ratios",
-    "output_format": "default_keyword"
+    "output_format": "default_keyword",
+    "img": "/static/ai_assistant_img/highlight.svg"
   },
-  "random": {
-    "prompt": "Generate random things",
-    "output_format": "default_random",
+  "rationale": {
+    "name": "Rationale",
+    "prompt": "TASK: Generate rationales for different approaches to determining the numerical answer.\n\nINPUT DETAILS:\n- Text to annotate: \"${text}\"\n- Annotation task: ${description}\n\nINSTRUCTIONS:\nProvide different rationales or approaches for determining the numerical value. Consider different interpretations or calculation methods if applicable.\n\nOUTPUT FORMAT:\nReturn a JSON object with \"rationales\" array containing objects with \"label\" (approach name) and \"reasoning\" fields.\n\nEXAMPLE OUTPUT:\n{\"rationales\": [{\"label\": \"literal count\", \"reasoning\": \"Counting explicit mentions gives X\"}, {\"label\": \"inclusive interpretation\", \"reasoning\": \"Including implicit references increases the count to Y\"}]}",
+    "output_format": "default_rationale",
     "img": "/static/ai_assistant_img/question.svg"
   }
 }

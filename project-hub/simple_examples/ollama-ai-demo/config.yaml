@@ -1,9 +1,9 @@
 # Ollama AI-Assisted Annotation Demo
 #
 # This example demonstrates all AI enhancement features using a local Ollama instance:
-# - Intelligent Hints: Contextual guidance for annotators
-# - Keyword Highlighting: AI identifies and highlights relevant text
-# - Label Suggestions: Visual indicators for likely labels
+# - Intelligent Hints: Contextual guidance for annotators without revealing the answer
+# - Keyword Highlighting: AI identifies and highlights relevant text for each label
+# - Label Rationales: AI explains why each label might apply to the text
 #
 # Prerequisites:
 #   1. Install Ollama: https://ollama.ai
@@ -39,6 +39,7 @@ output_annotation_dir: annotation_output
 output_annotation_format: json
 
 # Annotation scheme - single radio button for sentiment classification
+# AI buttons available: Hint, Keyword, Rationale (configured via ai_support below)
 annotation_schemes:
   - annotation_type: radio
     annotation_id: 0

@@ -2,8 +2,13 @@
 #
 # This example demonstrates all three overlay systems working together:
 # 1. User Span Annotations - filled overlays created by selecting text
-# 2. AI Keyword Highlights - bordered overlays from AI suggestions (click keyword button)
+# 2. AI Keyword Highlights - bordered overlays from AI suggestions (click Keyword button)
 # 3. Admin Keyword Highlights - bordered overlays from pre-defined keyword list
+#
+# AI Assistant buttons available:
+# - Hint: Guidance on what to look for without revealing the answer
+# - Keyword: Highlights relevant words/phrases in the text for each label
+# - Rationale: Explains why each label might apply to this text
 #
 # Prerequisites:
 #   1. Install Ollama: https://ollama.ai
@@ -49,7 +54,7 @@ annotation_schemes:
   - annotation_type: span
     annotation_id: 0
     name: entities
-    description: "Highlight entities in the text. Use the 'keyword' button to see AI suggestions."
+    description: "Highlight entities in the text. Use the AI buttons (Hint, Keyword, Rationale) for assistance."
     labels:
       - name: positive
         tooltip: "Positive sentiment expressions"

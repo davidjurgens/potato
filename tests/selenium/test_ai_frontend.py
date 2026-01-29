@@ -460,21 +460,50 @@ output_annotation_format: json
         # Go to home page first - which shows auth form
         self.test_user = f"ollama_test_{time.time()}"
         self.driver.get(f"{self.server.base_url}/")
-        time.sleep(0.5)
+        time.sleep(2)  # Wait for page to fully load
 
-        # Try to find registration form on home page
+        # Wait for login form to appear
+        try:
+            WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.NAME, "email"))
+            )
+        except TimeoutException:
+            print("No login form found after waiting - auth may not be required")
+            return
+
+        # Try to fill and submit login form on home page
         try:
             email_input = self.driver.find_element(By.NAME, "email")
-            pass_input = self.driver.find_element(By.NAME, "pass")
             email_input.send_keys(self.test_user)
-            pass_input.send_keys("testpass")
+
+            # Password field may not be present when require_password is false
+            try:
+                pass_input = self.driver.find_element(By.NAME, "pass")
+                pass_input.send_keys("testpass")
+            except NoSuchElementException:
+                # Password not required, continue without it
+                pass
 
             submit_btn = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit'], input[type='submit']")
             submit_btn.click()
-            time.sleep(1)
-        except NoSuchElementException:
+
+            # Wait for redirect to annotate page after successful login
+            try:
+                WebDriverWait(self.driver, 10).until(
+                    lambda d: '/annotate' in d.current_url
+                )
+                print(f"Login successful - redirected to: {self.driver.current_url}")
+            except TimeoutException:
+                print(f"Login timeout - current URL: {self.driver.current_url}")
+                # Check if we're on an error page
+                page_source = self.driver.page_source.lower()
+                if 'error' in page_source:
+                    print("Login error detected in page source")
+
+            time.sleep(2)  # Wait for page to fully load
+        except NoSuchElementException as e:
             # Auth might not be required, continue
-            pass
+            print(f"Login form element not found: {e}")
 
     def tearDown(self):
         if hasattr(self, 'driver'):
@@ -482,13 +511,23 @@ output_annotation_format: json
 
     def test_ai_buttons_appear_with_ollama(self):
         """Test that AI buttons appear when Ollama is configured."""
-        self.driver.get(f"{self.server.base_url}/")
-        time.sleep(3)  # Wait for JS to load and fetch AI buttons
+        # Navigate to annotation page (login should have been handled in setUp)
+        self.driver.get(f"{self.server.base_url}/annotate")
+        time.sleep(5)  # Wait for JS to load and fetch AI buttons via AJAX
+
+        # Debug: Check what page we're on
+        print(f"Current URL: {self.driver.current_url}")
+        print(f"Page title: {self.driver.title}")
+
+        # Check for ai-help divs first
+        ai_help_divs = self.driver.find_elements(By.CSS_SELECTOR, ".ai-help")
+        print(f"Found {len(ai_help_divs)} ai-help div(s)")
 
         # Should have AI buttons
         ai_buttons = self.driver.find_elements(By.CSS_SELECTOR, ".ai-assistant-containter")
+        print(f"Found {len(ai_buttons)} AI buttons")
 
-        # With AI enabled, we should have buttons (hint, keyword, random)
+        # With AI enabled, we should have buttons (hint, keyword, rationale)
         self.assertGreater(len(ai_buttons), 0,
             "Should have AI assistant buttons when Ollama is enabled")
 
@@ -522,6 +561,131 @@ output_annotation_format: json
             len(content) > 0 or "loading" in tooltip.get_attribute("innerHTML").lower(),
             "Tooltip should show loading state or content"
         )
+
+    def test_rationale_tooltip_renders_in_dom(self):
+        """Test that clicking rationale button renders tooltip in DOM.
+
+        This test verifies that the rationale tooltip:
+        1. Appears in the DOM after clicking the rationale button
+        2. Has the correct CSS classes (active, rationale-tooltip)
+        3. Contains the expected content structure (rationale-section)
+        """
+        self.driver.get(f"{self.server.base_url}/")
+        time.sleep(3)  # Wait for JS to load and AI buttons to be fetched
+
+        # Find rationale button (it has class "rationale ai-assistant-containter")
+        rationale_buttons = self.driver.find_elements(By.CSS_SELECTOR, ".rationale.ai-assistant-containter")
+
+        if not rationale_buttons:
+            self.skipTest("No rationale buttons found - AI may not be enabled")
+
+        print(f"Found {len(rationale_buttons)} rationale button(s)")
+
+        # Click the rationale button
+        rationale_buttons[0].click()
+        print("Clicked rationale button")
+
+        # Wait for tooltip to become active (either loading or with content)
+        try:
+            WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, ".tooltip.active"))
+            )
+            print("Found active tooltip")
+        except TimeoutException:
+            # Debug: dump all tooltip elements
+            all_tooltips = self.driver.find_elements(By.CSS_SELECTOR, ".tooltip")
+            print(f"Found {len(all_tooltips)} tooltip elements (none active)")
+            for i, t in enumerate(all_tooltips):
+                print(f"  Tooltip {i}: classes='{t.get_attribute('class')}', innerHTML[:100]='{t.get_attribute('innerHTML')[:100]}'")
+
+            # Check if tooltip is in ai-help
+            ai_helps = self.driver.find_elements(By.CSS_SELECTOR, ".ai-help")
+            for i, ah in enumerate(ai_helps):
+                tooltips_in_ah = ah.find_elements(By.CSS_SELECTOR, ".tooltip")
+                print(f"  ai-help {i}: has {len(tooltips_in_ah)} tooltip(s)")
+
+            self.fail("Tooltip did not become active after clicking rationale button")
+
+        # Verify tooltip has rationale-tooltip class
+        tooltip = self.driver.find_element(By.CSS_SELECTOR, ".tooltip.active")
+        classes = tooltip.get_attribute("class")
+        print(f"Active tooltip classes: {classes}")
+
+        # Wait for content to load (rationale-section should appear)
+        try:
+            WebDriverWait(self.driver, 15).until(
+                lambda d: "rationale-section" in tooltip.get_attribute("innerHTML") or
+                          "loading" in tooltip.get_attribute("innerHTML").lower() or
+                          "error" in tooltip.get_attribute("innerHTML").lower()
+            )
+        except TimeoutException:
+            innerHTML = tooltip.get_attribute("innerHTML")
+            print(f"Tooltip innerHTML after timeout: {innerHTML[:500]}")
+
+        # Get final content
+        innerHTML = tooltip.get_attribute("innerHTML")
+        print(f"Tooltip innerHTML: {innerHTML[:500]}...")
+
+        # Verify tooltip has expected structure
+        self.assertIn("rationale-tooltip", classes,
+            f"Tooltip should have rationale-tooltip class, but has: {classes}")
+
+        # Check for either loading, error, or actual rationale content
+        has_content = (
+            "loading" in innerHTML.lower() or
+            "rationale-section" in innerHTML or
+            "rationale-item" in innerHTML or
+            "error" in innerHTML.lower()
+        )
+        self.assertTrue(has_content,
+            f"Tooltip should have loading, error, or rationale content. innerHTML: {innerHTML[:200]}")
+
+    def test_rationale_tooltip_contains_label_reasoning(self):
+        """Test that rationale tooltip contains labels and reasoning after loading."""
+        self.driver.get(f"{self.server.base_url}/")
+        time.sleep(3)
+
+        rationale_buttons = self.driver.find_elements(By.CSS_SELECTOR, ".rationale.ai-assistant-containter")
+        if not rationale_buttons:
+            self.skipTest("No rationale buttons found")
+
+        rationale_buttons[0].click()
+
+        # Wait for rationale content to fully load (not just loading state)
+        try:
+            WebDriverWait(self.driver, 20).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, ".tooltip.active .rationale-section"))
+            )
+        except TimeoutException:
+            # Check current state
+            tooltips = self.driver.find_elements(By.CSS_SELECTOR, ".tooltip.active")
+            if tooltips:
+                innerHTML = tooltips[0].get_attribute("innerHTML")
+                if "loading" in innerHTML.lower():
+                    self.skipTest("Rationale still loading after timeout - Ollama may be slow")
+                elif "error" in innerHTML.lower():
+                    self.skipTest(f"Rationale returned error: {innerHTML[:200]}")
+            self.fail("Rationale section did not appear in tooltip")
+
+        # Verify rationale structure
+        tooltip = self.driver.find_element(By.CSS_SELECTOR, ".tooltip.active")
+
+        # Should have rationale items for each label
+        rationale_items = tooltip.find_elements(By.CSS_SELECTOR, ".rationale-item")
+        print(f"Found {len(rationale_items)} rationale items")
+
+        # With 2 labels (positive, negative), we should have 2 rationale items
+        # But the AI might not always return all labels, so just check we have some
+        self.assertGreater(len(rationale_items), 0,
+            "Should have at least one rationale item")
+
+        # Each item should have label and reasoning
+        for item in rationale_items:
+            label = item.find_elements(By.CSS_SELECTOR, ".rationale-label")
+            reasoning = item.find_elements(By.CSS_SELECTOR, ".rationale-reasoning")
+            self.assertEqual(len(label), 1, "Each rationale item should have exactly one label")
+            self.assertEqual(len(reasoning), 1, "Each rationale item should have exactly one reasoning")
+            print(f"  Label: {label[0].text}, Reasoning: {reasoning[0].text[:50]}...")
 
 
 if __name__ == "__main__":

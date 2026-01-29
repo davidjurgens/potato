@@ -27,11 +27,11 @@ class AIAssistantManager {
                 errorText: 'Failed to load keywords',
                 className: 'keyword-tooltip'
             },
-            random: {
+            rationale: {
                 apiEndpoint: '/api/get_ai_suggestion',
-                loadingText: 'Loading random...',
-                errorText: 'Failed to load random',
-                className: 'random-tooltip'
+                loadingText: 'Loading rationales...',
+                errorText: 'Failed to load rationales',
+                className: 'rationale-tooltip'
             },
         };
 
@@ -86,19 +86,25 @@ class AIAssistantManager {
             if (!annotationForm) return;
 
             const annotationId = annotationForm.getAttribute("data-annotation-id");
-            const tooltip = node.querySelector('.tooltip');
+            // Note: We DON'T capture tooltip here because getAiAssistantName() replaces
+            // the aiHelp innerHTML later, which creates a new tooltip element.
+            // Instead, we query for the tooltip fresh in the click handler.
 
             node.addEventListener("click", (event) => {
                 const clickedHint = event.target.closest('.hint');
                 const clickKeyword = event.target.closest('.keyword');
-                const clickedRandom = event.target.closest('.random');
+                const clickedRationale = event.target.closest('.rationale');
+
+                // Query tooltip fresh each time - it may have been replaced by getAiAssistantName()
+                const tooltip = node.querySelector('.tooltip');
 
                 console.log('[AIAssistant] Click detected on ai-help:', {
                     target: event.target.className,
                     clickedHint: !!clickedHint,
                     clickKeyword: !!clickKeyword,
-                    clickedRandom: !!clickedRandom,
-                    annotationId
+                    clickedRationale: !!clickedRationale,
+                    annotationId,
+                    hasTooltip: !!tooltip
                 });
 
                 event.stopPropagation();
@@ -109,8 +115,8 @@ class AIAssistantManager {
                     this.toggleAssistant("hint", annotationId, tooltip);
                 } else if (clickKeyword && node.contains(clickKeyword)) {
                     this.toggleAssistant("keyword", annotationId, tooltip);
-                } else if (clickedRandom && node.contains(clickedRandom)) {
-                    this.toggleAssistant("random", annotationId, tooltip);
+                } else if (clickedRationale && node.contains(clickedRationale)) {
+                    this.toggleAssistant("rationale", annotationId, tooltip);
                 }
 
             });
@@ -154,6 +160,45 @@ class AIAssistantManager {
         }
     }
 
+    positionTooltip(tooltip) {
+        // Get the parent ai-help element to position relative to
+        const aiHelp = tooltip.closest('.ai-help');
+        console.log('[AIAssistant] positionTooltip called, aiHelp:', aiHelp);
+        if (!aiHelp) {
+            console.log('[AIAssistant] No aiHelp found, cannot position');
+            return;
+        }
+
+        const rect = aiHelp.getBoundingClientRect();
+        const tooltipRect = tooltip.getBoundingClientRect();
+        console.log('[AIAssistant] aiHelp rect:', rect);
+        console.log('[AIAssistant] tooltip rect:', tooltipRect);
+
+        // Position below the button, centered
+        let top = rect.bottom + 8; // 8px gap below the button
+        let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+
+        // Keep tooltip within viewport
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+
+        // Adjust horizontal position if needed
+        if (left < 10) left = 10;
+        if (left + tooltipRect.width > viewportWidth - 10) {
+            left = viewportWidth - tooltipRect.width - 10;
+        }
+
+        // If tooltip would go below viewport, position above the button
+        if (top + tooltipRect.height > viewportHeight - 10) {
+            top = rect.top - tooltipRect.height - 8;
+        }
+
+        console.log('[AIAssistant] Setting tooltip position:', { top, left });
+        tooltip.style.top = `${top}px`;
+        tooltip.style.left = `${left}px`;
+        console.log('[AIAssistant] Tooltip computed style:', window.getComputedStyle(tooltip).cssText.substring(0, 200));
+    }
+
     startLoading(tooltip, assistantType) {
         if (!tooltip || assistantType == "keyword") return;
 
@@ -169,6 +214,9 @@ class AIAssistantManager {
         `;
 
         this.activeTooltips.add(tooltip);
+
+        // Position the tooltip after adding content
+        requestAnimationFrame(() => this.positionTooltip(tooltip));
     }
 
     toggleAssistant(assistantType, annotationId, tooltip) {
@@ -284,6 +332,9 @@ class AIAssistantManager {
                 case 'keyword':
                     this.renderKeyword(data.res, annotationId);
                     return;
+                case 'rationale':
+                    content = this.renderRationale(data.res);
+                    break;
                 default:
                     content = '<div>Unknown assistant type</div>';
             }
@@ -292,14 +343,19 @@ class AIAssistantManager {
         }
 
 
+        console.log('[AIAssistant] Setting tooltip content:', content);
         tooltip.innerHTML = `
             <div class="assistant-content">
                 ${content}
             </div>
         `;
+        console.log('[AIAssistant] Tooltip innerHTML set, tooltip element:', tooltip);
 
         this.activeTooltips.add(tooltip);
         console.log(this.activeTooltips);
+
+        // Position the tooltip after content is set
+        requestAnimationFrame(() => this.positionTooltip(tooltip));
     }
 
     renderHint(data) {
@@ -440,15 +496,55 @@ class AIAssistantManager {
         return 'rgba(245, 158, 11, 0.8)';
     }
 
-    renderRandom(data) {
-        return `
-            <div class="random-section">
-                <div class="content-item">
-                    <span class="label">Random Suggestion:</span>
-                    <span class="value">${data.random || 'No random suggestion available'}</span>
+    renderRationale(data) {
+        console.log('[AIAssistant] renderRationale called with data:', data);
+        console.log('[AIAssistant] rationales:', data.rationales);
+
+        // Handle error responses
+        if (data.error) {
+            return `
+                <div class="rationale-section">
+                    <div class="content-item">
+                        <span class="label">Error:</span>
+                        <span class="value">${this.escapeHtml(data.error)}</span>
+                    </div>
                 </div>
+            `;
+        }
+
+        const rationales = data.rationales || [];
+
+        if (rationales.length === 0) {
+            return `
+                <div class="rationale-section">
+                    <div class="content-item">
+                        <span class="label">Rationale:</span>
+                        <span class="value">No rationales available</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        const rationaleItems = rationales.map(r => `
+            <div class="rationale-item">
+                <span class="rationale-label">${this.escapeHtml(r.label)}:</span>
+                <span class="rationale-reasoning">${this.escapeHtml(r.reasoning)}</span>
+            </div>
+        `).join('');
+
+        return `
+            <div class="rationale-section">
+                <div class="rationale-header">Rationales for each label:</div>
+                ${rationaleItems}
             </div>
         `;
+    }
+
+    escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     /**

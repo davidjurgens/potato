@@ -28,11 +28,33 @@ class GeneralKeywordFormat(BaseModel):
 
 
 class GeneralRandomFormat(BaseModel):
+    """Deprecated: Use GeneralRationaleFormat instead."""
     random: str
+
+
+class LabelRationale(BaseModel):
+    """Rationale/reasoning for why a specific label might apply."""
+    label: str
+    reasoning: str
+
+
+class GeneralRationaleFormat(BaseModel):
+    """Rationale format: explanations for how each label might apply to the text.
+
+    Example output:
+    {
+        "rationales": [
+            {"label": "positive", "reasoning": "The phrase 'excellent quality' suggests satisfaction"},
+            {"label": "negative", "reasoning": "The mention of 'delayed shipping' indicates frustration"}
+        ]
+    }
+    """
+    rationales: List[LabelRationale]
 
 
 CLASS_REGISTRY = {
     "default_hint": GeneralHintFormat,
     "default_keyword": GeneralKeywordFormat,
-    "default_random": GeneralRandomFormat
+    "default_random": GeneralRandomFormat,  # Keep for backwards compatibility
+    "default_rationale": GeneralRationaleFormat
 }

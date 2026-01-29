@@ -100,6 +100,9 @@ def set_span_color(schema, span_label, color):
     else:
         span_colors = span_ui["span_colors"]
 
+    # Ensure the schema key exists (span_colors may be a regular dict, not defaultdict)
+    if schema not in span_colors:
+        span_colors[schema] = {}
     span_colors[schema][span_label] = color
 
 def _generate_span_layout_internal(annotation_scheme, horizontal=False):

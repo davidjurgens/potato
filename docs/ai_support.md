@@ -4,11 +4,12 @@ Potato provides integrated AI support to enhance annotation workflows with intel
 
 ## Overview
 
-AI support in Potato offers three main features:
+AI support in Potato offers four main features:
 
 1. **Intelligent Hints**: Provides contextual guidance to help annotators think about the annotation task, with an optional suggested label
 2. **Keyword Highlighting**: Identifies and highlights relevant keywords in the text with visual box overlays
-3. **Label Suggestions**: Visually highlights which labels the AI thinks are most likely (with sparkle indicator)
+3. **Label Rationales**: Generates explanations for why each label might apply to the text, helping annotators understand the reasoning behind different classifications
+4. **Label Suggestions**: Visually highlights which labels the AI thinks are most likely (with sparkle indicator on hint)
 
 ## Supported LLM Providers
 
@@ -157,14 +158,22 @@ Each prompt file contains templates for different AI assistance types:
 ```json
 {
   "hint": {
+    "name": "Hint",
     "prompt": "TASK: Generate annotation guidance for single-choice selection.\n\nINPUT DETAILS:\n- Text to annotate: \"${text}\"\n- Annotation task: ${description}\n- Available labels: ${labels}\n\nINSTRUCTIONS:\n1. Analyze the text...",
     "output_format": "default_hint",
     "img": "/static/ai_assistant_img/blub.svg"
   },
   "keyword": {
-    "prompt": "TASK: Extract words/phrases that indicate the correct single label choice...",
+    "name": "Keyword",
+    "prompt": "TASK: Extract words/phrases that relate to each label...",
     "output_format": "default_keyword",
     "img": "/static/ai_assistant_img/highlight.svg"
+  },
+  "rationale": {
+    "name": "Rationale",
+    "prompt": "TASK: Generate rationales explaining why each label might apply...",
+    "output_format": "default_rationale",
+    "img": "/static/ai_assistant_img/question.svg"
   }
 }
 ```
@@ -187,8 +196,8 @@ Each prompt file contains templates for different AI assistance types:
 The `output_format` field specifies the expected response structure:
 
 - `default_hint`: Returns `{hint: string, suggestive_choice: string|number}`
-- `default_keyword`: Returns `{keywords: [{label: string, start: int, end: int, text: string, reasoning: string}]}`
-- `default_random`: Returns `{random: string}`
+- `default_keyword`: Returns `{label_keywords: [{label: string, keywords: [string]}]}`
+- `default_rationale`: Returns `{rationales: [{label: string, reasoning: string}]}`
 
 ## Provider-Specific Configuration
 
@@ -343,7 +352,12 @@ When AI support is enabled, annotators will see AI assistance buttons on each an
 
 2. **Keyword Button** (highlight icon): Click to highlight relevant text
    - Draws box overlays around keywords identified by the AI
-   - Each keyword includes reasoning (visible on hover)
+   - Each keyword is associated with a specific label
+
+3. **Rationale Button** (question mark icon): Click to see reasoning for each label
+   - Shows a tooltip with explanations for why each label might apply
+   - Provides balanced reasoning for all available labels, helping annotators understand the classification criteria
+   - Useful for training annotators or when decisions are difficult
 
 ### Visual Indicators
 

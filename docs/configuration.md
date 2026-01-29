@@ -198,7 +198,29 @@ customjs: null  # Path to custom JavaScript file
 customjs_hostname: null  # Hostname for custom JS
 site_dir: default  # or path to custom template directory
 alert_time_each_instance: 10  # Seconds before alert (very high = disabled)
+debug: false  # Enable debug mode (bypasses admin authentication)
 ```
+
+### Admin Dashboard Authentication
+
+The admin dashboard at `/admin` requires an API key for access. Configure it using one of these methods:
+
+```yaml
+# Option 1: Set in config file
+admin_api_key: your_secret_key_here
+```
+
+```bash
+# Option 2: Set via environment variable
+export POTATO_ADMIN_API_KEY=your_secret_key_here
+```
+
+If no key is configured, Potato automatically generates a secure random key and saves it to `admin_api_key.txt` in your task directory. The key persists across server restarts.
+
+| Setting | Description |
+|---------|-------------|
+| `admin_api_key` | API key for admin dashboard access. If not set, auto-generated. |
+| `debug` | When `true`, admin endpoints are accessible without authentication. |
 
 ## Data Configuration
 

@@ -131,20 +131,21 @@ body {
 
 /* ai help */
 .ai-help {
+  position: absolute;
+  top: -0.75rem;
+  right: -0.05rem;
   width: fit-content;
   height: 2.063rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--box-shadow);
-  position: absolute;
-  top: -0.75rem;
-  right: -0.05rem;
   background-color: white;
   display: flex;
   justify-content: center;
   align-items: center;
   gap: 0.5rem;
   padding: 0.75rem;
+  overflow: visible;
 }
 
 .ai-help-word {
@@ -158,16 +159,13 @@ body {
 }
 
 .tooltip {
-  position: absolute;
-  top: 120%;
-  left: 50%;
-  transform: translateX(-50%);
+  position: fixed;
   background-color: white;
   padding: 1rem;
   border-radius: 0.5rem;
   white-space: nowrap;
   box-shadow: var(--box-shadow);
-  z-index: 1000;
+  z-index: 10000;
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.3s, visibility 0.3s;
@@ -1898,6 +1896,52 @@ fieldset[schema] {
   background-color: rgba(59, 130, 246, 0.95);
   color: white;
   border: 1px solid #3b82f6;
+}
+
+/* Rationale tooltip styling */
+.tooltip.rationale-tooltip {
+  background-color: rgba(255, 255, 255, 0.98);
+  color: #1f2937;
+  border: 1px solid #8b5cf6;
+  min-width: 300px;
+  max-width: 450px;
+}
+
+.tooltip.rationale-tooltip .rationale-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tooltip.rationale-tooltip .rationale-header {
+  font-weight: 600;
+  color: #5b21b6;
+  font-size: 12px;
+  text-transform: uppercase;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 8px;
+}
+
+.tooltip.rationale-tooltip .rationale-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  background-color: #f9fafb;
+  border-radius: 6px;
+  border-left: 3px solid #8b5cf6;
+}
+
+.tooltip.rationale-tooltip .rationale-label {
+  font-weight: 600;
+  color: #5b21b6;
+  font-size: 13px;
+}
+
+.tooltip.rationale-tooltip .rationale-reasoning {
+  color: #374151;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 /* =====================================================

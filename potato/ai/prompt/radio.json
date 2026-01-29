@@ -9,9 +9,10 @@
     "output_format": "default_keyword",
     "img": "/static/ai_assistant_img/highlight.svg"
   },
-  "random": {
-    "prompt": "Generate random things",
-    "output_format": "default_random",
+  "rationale": {
+    "name": "Rationale",
+    "prompt": "TASK: Generate rationales explaining why each label might apply to this text.\n\nINPUT DETAILS:\n- Text to annotate: \"${text}\"\n- Annotation task: ${description}\n- Available labels: ${labels}\n\nCRITICAL REQUIREMENT:\nYou MUST provide a rationale for EVERY label listed above. Your output must have exactly one entry per label.\n\nINSTRUCTIONS:\nFor EACH available label (ALL of them), provide a brief rationale explaining what evidence in the text could support choosing that label. Be balanced and objective - present the case for each label fairly. If a label doesn't strongly apply, explain what would need to be present.\n\nOUTPUT FORMAT:\nReturn a JSON object with \"rationales\" array containing one object per label, each with \"label\" and \"reasoning\" fields.\n\nEXAMPLE (if labels are: positive, negative, neutral, mixed):\n{\"rationales\": [{\"label\": \"positive\", \"reasoning\": \"The phrase 'excellent service' suggests satisfaction\"}, {\"label\": \"negative\", \"reasoning\": \"No clear negative indicators present\"}, {\"label\": \"neutral\", \"reasoning\": \"The tone is more emotional than neutral\"}, {\"label\": \"mixed\", \"reasoning\": \"Would need both positive and negative elements\"}]}",
+    "output_format": "default_rationale",
     "img": "/static/ai_assistant_img/question.svg"
   }
 }

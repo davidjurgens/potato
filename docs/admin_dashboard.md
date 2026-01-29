@@ -8,18 +8,38 @@ The Admin Dashboard provides comprehensive monitoring and management capabilitie
 
 ### API Key Authentication
 
-The admin dashboard requires an API key for access. The default API key is `admin_api_key`.
+The admin dashboard requires an API key for access. The API key can be configured in several ways (in priority order):
+
+1. **Config file**: Set `admin_api_key` in your YAML configuration
+   ```yaml
+   admin_api_key: your_secret_key_here
+   ```
+
+2. **Environment variable**: Set `POTATO_ADMIN_API_KEY`
+   ```bash
+   export POTATO_ADMIN_API_KEY=your_secret_key_here
+   ```
+
+3. **Auto-generated**: If no key is configured, Potato automatically generates a secure random key and saves it to `admin_api_key.txt` in your task directory. The key is logged to the console on server startup.
 
 **Access Methods:**
 1. **Direct Access**: Navigate to `/admin` and enter the API key when prompted
-2. **Header Access**: Include `X-API-Key: admin_api_key` in request headers
+2. **Header Access**: Include `X-API-Key: <your_key>` in request headers
 3. **Debug Mode**: When `debug: true` is set in config, no API key is required
+
+### Finding Your Auto-Generated Key
+
+If you didn't configure an API key explicitly, find it in one of these ways:
+- Check the server console output for the message "Generated admin API key"
+- Read the file `{task_dir}/admin_api_key.txt`
 
 ### Security Notes
 
 - API keys are stored in the session for the duration of the browser session
 - All admin API endpoints require the API key in headers
 - The dashboard automatically redirects to login if no valid API key is provided
+- Auto-generated keys are persisted across server restarts (stored in `admin_api_key.txt`)
+- For production deployments, consider setting an explicit key via config or environment variable
 
 ## Dashboard Features
 
@@ -473,9 +493,10 @@ The dashboard provides:
 ### Common Issues
 
 1. **API Key Not Working**
-   - Verify the API key is `admin_api_key`
-   - Check that debug mode is disabled
-   - Ensure the key is included in request headers
+   - Check `admin_api_key.txt` in your task directory for the auto-generated key
+   - If you set a custom key, verify it matches what's in your config or environment variable
+   - Ensure the key is included in request headers (`X-API-Key: <your_key>`)
+   - In debug mode (`debug: true`), no API key is required
 
 2. **No Data Displayed**
    - Check if there are any users or instances in the system

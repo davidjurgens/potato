@@ -8,7 +8,7 @@ range of features throughout your entire annotation pipeline.
 # Contents
 
 - [Quick Start](quick-start.md)
-- [Example Projects](example-projects.md)
+- [What's New in v2](new_features_v2.md)
 - [Configuration](configuration.md)
 - [Config File Structure](config_file_structure.md)
 - [AI Support](ai_support.md)
@@ -23,7 +23,7 @@ range of features throughout your entire annotation pipeline.
 - [Crowdsourcing](crowdsourcing.md)
 - [Annotator Stats](annotator_stats.md)
 - [Active Learning Guide](active_learning_guide.md)
-- [Open Sourcing](open_sourcing.md)
+- [Open Sourcing](open-sourcing.md)
 
 ## Annotation Types
 

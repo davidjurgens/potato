@@ -441,7 +441,31 @@ class FlaskTestServer:
                 # Initialize managers
                 init_user_state_manager(config)
                 init_item_state_manager(config)
+
+                # Initialize AI support if enabled (BEFORE load_all_data)
+                # This must happen before load_all_data() because template generation
+                # needs get_ai_wrapper() to return the AI help div
+                if config.get("ai_support", {}).get("enabled", False):
+                    try:
+                        from potato.ai.ai_prompt import init_ai_prompt
+                        from potato.ai.ai_help_wrapper import init_dynamic_ai_help
+                        print("[DEBUG] Initializing AI prompt and wrapper...")
+                        init_ai_prompt(config)
+                        init_dynamic_ai_help()
+                        print("[DEBUG] AI prompt and wrapper initialized successfully")
+                    except Exception as e:
+                        print(f"[DEBUG] Error initializing AI support: {e}")
+
                 load_all_data(config)
+
+                # Initialize AI cache manager AFTER load_all_data
+                if config.get("ai_support", {}).get("enabled", False):
+                    try:
+                        from potato.ai.ai_cache import init_ai_cache_manager
+                        init_ai_cache_manager()
+                        print("[DEBUG] AI cache manager initialized successfully")
+                    except Exception as e:
+                        print(f"[DEBUG] Error initializing AI cache manager: {e}")
 
                 # Initialize ICL labeler if configured (same as run_server does)
                 icl_config = config.get('icl_labeling', {})

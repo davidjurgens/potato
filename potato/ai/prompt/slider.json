@@ -9,9 +9,10 @@
     "output_format": "default_keyword",
     "img": "/static/ai_assistant_img/highlight.svg"
   },
-  "random": {
-    "prompt": "Generate random things",
-    "output_format": "default_random",
+  "rationale": {
+    "name": "Rationale",
+    "prompt": "TASK: Generate rationales for different positions on the numerical scale.\n\nINPUT DETAILS:\n- Text to annotate: \"${text}\"\n- Annotation task: ${description}\n- Range: ${min_value} to ${max_value}\n\nINSTRUCTIONS:\nProvide rationales for different positions on the scale (low, middle, high range). Explain what evidence in the text could support each position. Be balanced and objective.\n\nOUTPUT FORMAT:\nReturn a JSON object with \"rationales\" array containing objects with \"label\" (scale range descriptor) and \"reasoning\" fields.\n\nEXAMPLE OUTPUT:\n{\"rationales\": [{\"label\": \"low range\", \"reasoning\": \"Weak indicators and hedging language suggest a lower value\"}, {\"label\": \"mid range\", \"reasoning\": \"Moderate language without strong indicators\"}, {\"label\": \"high range\", \"reasoning\": \"Strong intensity markers and superlatives support a higher value\"}]}",
+    "output_format": "default_rationale",
     "img": "/static/ai_assistant_img/question.svg"
   }
 }

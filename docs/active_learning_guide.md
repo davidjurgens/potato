@@ -488,4 +488,4 @@ active_learning:
 
 Active learning in Potato provides powerful capabilities for optimizing annotation workflows. By following this guide and best practices, administrators can configure and use active learning effectively to improve annotation efficiency and model quality.
 
-For additional support and advanced configurations, refer to the [Active Learning Refactoring Summary](active_learning_refactoring_summary.md) and [Status Report](active_learning_status.md).
+For additional support and advanced configurations, refer to the [Active Learning Status Report](active_learning_status.md).

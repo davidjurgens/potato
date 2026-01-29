@@ -14,16 +14,22 @@ nav:
         - Schemas and Templates: schemas_and_templates.md
         - Image Annotation: image_annotation.md
         - Audio Annotation: audio_annotation.md
+        - Video Annotation: video_annotation.md
+        - Dialogue Annotation: dialogue_annotation.md
     - Workflow Phases:
         - Multi-Phase Workflows: surveyflow.md
         - Training Phase: training_phase.md
+        - Quality Control: quality_control.md
     - Advanced Features:
         - AI Support: ai_support.md
+        - AI Integration Internals: ai_integration_internals.md
         - Active Learning Guide: active_learning_guide.md
+        - Active Learning Status: active_learning_status.md
         - ICL Labeling: icl_labeling.md
         - Category-Based Assignment: category_assignment.md
         - Task Assignment: task_assignment.md
         - Assignment Strategies: assignment_strategies_summary.md
+        - Behavioral Tracking: behavioral_tracking.md
     - Administration:
         - Admin Dashboard: admin_dashboard.md
         - Annotator Stats: annotator_stats.md
@@ -33,8 +39,15 @@ nav:
         - Productivity: productivity.md
     - Tools:
         - Preview CLI: preview_cli.md
+        - Migration CLI: migration_cli.md
+        - Simulator: simulator.md
+        - Debugging Guide: debugging_guide.md
     - Deployment:
         - Usage: usage.md
         - Crowdsourcing: crowdsourcing.md
+        - MTurk Integration: mturk_integration.md
         - Open Sourcing: open-sourcing.md
+    - API Reference:
+        - REST API: api.md
+        - API Reference: api_reference.md
 theme: readthedocs
