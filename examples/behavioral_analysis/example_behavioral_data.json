@@ -1,0 +1,188 @@
+{
+  "user_001": {
+    "instance_1": {
+      "instance_id": "instance_1",
+      "session_start": 1706500000.0,
+      "session_end": 1706500035.0,
+      "total_time_ms": 35000,
+      "interactions": [
+        {"event_type": "navigation", "timestamp": 1706500000.0, "target": "instance_load", "instance_id": "instance_1", "client_timestamp": 1706500000000, "metadata": {"from_instance": null}},
+        {"event_type": "click", "timestamp": 1706500005.5, "target": "label:positive", "instance_id": "instance_1", "client_timestamp": 1706500005500, "metadata": {"x": 150, "y": 320}},
+        {"event_type": "focus_in", "timestamp": 1706500010.0, "target": "textbox:explanation", "instance_id": "instance_1", "client_timestamp": 1706500010000, "metadata": {}},
+        {"event_type": "focus_out", "timestamp": 1706500025.0, "target": "textbox:explanation", "instance_id": "instance_1", "client_timestamp": 1706500025000, "metadata": {"duration_ms": 15000}},
+        {"event_type": "click", "timestamp": 1706500030.0, "target": "nav:next", "instance_id": "instance_1", "client_timestamp": 1706500030000, "metadata": {}}
+      ],
+      "ai_usage": [],
+      "annotation_changes": [
+        {"timestamp": 1706500005.5, "schema_name": "sentiment", "label_name": "positive", "action": "select", "old_value": null, "new_value": true, "source": "user"}
+      ],
+      "navigation_history": [
+        {"action": "instance_load", "from_instance": null, "to_instance": "instance_1", "timestamp": 1706500000.0}
+      ],
+      "focus_time_by_element": {"label:positive": 500, "textbox:explanation": 15000},
+      "scroll_depth_max": 25.0,
+      "keyword_highlights_shown": [{"text": "excellent", "label": "positive", "start": 10, "end": 19, "type": "keyword"}]
+    },
+    "instance_2": {
+      "instance_id": "instance_2",
+      "session_start": 1706500040.0,
+      "session_end": 1706500085.0,
+      "total_time_ms": 45000,
+      "interactions": [
+        {"event_type": "navigation", "timestamp": 1706500040.0, "target": "instance_load", "instance_id": "instance_2", "client_timestamp": 1706500040000, "metadata": {"from_instance": "instance_1"}},
+        {"event_type": "ai_request", "timestamp": 1706500045.0, "target": "schema:sentiment", "instance_id": "instance_2", "client_timestamp": 1706500045000, "metadata": {}},
+        {"event_type": "ai_response", "timestamp": 1706500047.5, "target": "schema:sentiment", "instance_id": "instance_2", "client_timestamp": 1706500047500, "metadata": {"suggestions": ["negative"]}},
+        {"event_type": "click", "timestamp": 1706500055.0, "target": "label:negative", "instance_id": "instance_2", "client_timestamp": 1706500055000, "metadata": {}},
+        {"event_type": "click", "timestamp": 1706500080.0, "target": "nav:next", "instance_id": "instance_2", "client_timestamp": 1706500080000, "metadata": {}}
+      ],
+      "ai_usage": [
+        {"request_timestamp": 1706500045.0, "response_timestamp": 1706500047.5, "schema_name": "sentiment", "suggestions_shown": ["negative"], "suggestion_accepted": "negative", "time_to_decision_ms": 7500}
+      ],
+      "annotation_changes": [
+        {"timestamp": 1706500055.0, "schema_name": "sentiment", "label_name": "negative", "action": "select", "old_value": null, "new_value": true, "source": "ai_accept"}
+      ],
+      "navigation_history": [
+        {"action": "instance_load", "from_instance": "instance_1", "to_instance": "instance_2", "timestamp": 1706500040.0}
+      ],
+      "focus_time_by_element": {"label:negative": 3000, "ai:panel": 10000},
+      "scroll_depth_max": 50.0,
+      "keyword_highlights_shown": [{"text": "terrible", "label": "negative", "start": 5, "end": 13, "type": "keyword"}]
+    },
+    "instance_3": {
+      "instance_id": "instance_3",
+      "session_start": 1706500090.0,
+      "session_end": 1706500150.0,
+      "total_time_ms": 60000,
+      "interactions": [
+        {"event_type": "navigation", "timestamp": 1706500090.0, "target": "instance_load", "instance_id": "instance_3", "client_timestamp": 1706500090000, "metadata": {}},
+        {"event_type": "click", "timestamp": 1706500100.0, "target": "label:neutral", "instance_id": "instance_3", "client_timestamp": 1706500100000, "metadata": {}},
+        {"event_type": "click", "timestamp": 1706500110.0, "target": "label:neutral", "instance_id": "instance_3", "client_timestamp": 1706500110000, "metadata": {}},
+        {"event_type": "click", "timestamp": 1706500115.0, "target": "label:positive", "instance_id": "instance_3", "client_timestamp": 1706500115000, "metadata": {}},
+        {"event_type": "focus_in", "timestamp": 1706500120.0, "target": "textbox:explanation", "instance_id": "instance_3", "client_timestamp": 1706500120000, "metadata": {}},
+        {"event_type": "focus_out", "timestamp": 1706500140.0, "target": "textbox:explanation", "instance_id": "instance_3", "client_timestamp": 1706500140000, "metadata": {"duration_ms": 20000}},
+        {"event_type": "save", "timestamp": 1706500145.0, "target": "instance:instance_3", "instance_id": "instance_3", "client_timestamp": 1706500145000, "metadata": {}}
+      ],
+      "ai_usage": [],
+      "annotation_changes": [
+        {"timestamp": 1706500100.0, "schema_name": "sentiment", "label_name": "neutral", "action": "select", "old_value": null, "new_value": true, "source": "user"},
+        {"timestamp": 1706500110.0, "schema_name": "sentiment", "label_name": "neutral", "action": "deselect", "old_value": true, "new_value": null, "source": "user"},
+        {"timestamp": 1706500115.0, "schema_name": "sentiment", "label_name": "positive", "action": "select", "old_value": null, "new_value": true, "source": "user"}
+      ],
+      "navigation_history": [],
+      "focus_time_by_element": {"label:neutral": 5000, "label:positive": 2000, "textbox:explanation": 20000},
+      "scroll_depth_max": 100.0,
+      "keyword_highlights_shown": []
+    }
+  },
+  "user_002": {
+    "instance_1": {
+      "instance_id": "instance_1",
+      "session_start": 1706510000.0,
+      "session_end": 1706510005.0,
+      "total_time_ms": 5000,
+      "interactions": [
+        {"event_type": "navigation", "timestamp": 1706510000.0, "target": "instance_load", "instance_id": "instance_1", "client_timestamp": 1706510000000, "metadata": {}},
+        {"event_type": "click", "timestamp": 1706510002.0, "target": "label:positive", "instance_id": "instance_1", "client_timestamp": 1706510002000, "metadata": {}},
+        {"event_type": "click", "timestamp": 1706510004.0, "target": "nav:next", "instance_id": "instance_1", "client_timestamp": 1706510004000, "metadata": {}}
+      ],
+      "ai_usage": [],
+      "annotation_changes": [
+        {"timestamp": 1706510002.0, "schema_name": "sentiment", "label_name": "positive", "action": "select", "old_value": null, "new_value": true, "source": "user"}
+      ],
+      "navigation_history": [],
+      "focus_time_by_element": {"label:positive": 500},
+      "scroll_depth_max": 0.0,
+      "keyword_highlights_shown": []
+    },
+    "instance_2": {
+      "instance_id": "instance_2",
+      "session_start": 1706510010.0,
+      "session_end": 1706510014.0,
+      "total_time_ms": 4000,
+      "interactions": [
+        {"event_type": "navigation", "timestamp": 1706510010.0, "target": "instance_load", "instance_id": "instance_2", "client_timestamp": 1706510010000, "metadata": {}},
+        {"event_type": "click", "timestamp": 1706510012.0, "target": "label:negative", "instance_id": "instance_2", "client_timestamp": 1706510012000, "metadata": {}},
+        {"event_type": "click", "timestamp": 1706510013.5, "target": "nav:next", "instance_id": "instance_2", "client_timestamp": 1706510013500, "metadata": {}}
+      ],
+      "ai_usage": [],
+      "annotation_changes": [
+        {"timestamp": 1706510012.0, "schema_name": "sentiment", "label_name": "negative", "action": "select", "old_value": null, "new_value": true, "source": "user"}
+      ],
+      "navigation_history": [],
+      "focus_time_by_element": {"label:negative": 300},
+      "scroll_depth_max": 0.0,
+      "keyword_highlights_shown": []
+    },
+    "instance_3": {
+      "instance_id": "instance_3",
+      "session_start": 1706510020.0,
+      "session_end": 1706510023.0,
+      "total_time_ms": 3000,
+      "interactions": [
+        {"event_type": "navigation", "timestamp": 1706510020.0, "target": "instance_load", "instance_id": "instance_3", "client_timestamp": 1706510020000, "metadata": {}},
+        {"event_type": "keypress", "timestamp": 1706510021.5, "target": "key:1", "instance_id": "instance_3", "client_timestamp": 1706510021500, "metadata": {}},
+        {"event_type": "click", "timestamp": 1706510022.5, "target": "nav:next", "instance_id": "instance_3", "client_timestamp": 1706510022500, "metadata": {}}
+      ],
+      "ai_usage": [],
+      "annotation_changes": [
+        {"timestamp": 1706510021.5, "schema_name": "sentiment", "label_name": "positive", "action": "select", "old_value": null, "new_value": true, "source": "keyboard"}
+      ],
+      "navigation_history": [],
+      "focus_time_by_element": {},
+      "scroll_depth_max": 0.0,
+      "keyword_highlights_shown": []
+    }
+  },
+  "user_003": {
+    "instance_1": {
+      "instance_id": "instance_1",
+      "session_start": 1706520000.0,
+      "session_end": 1706520090.0,
+      "total_time_ms": 90000,
+      "interactions": [
+        {"event_type": "navigation", "timestamp": 1706520000.0, "target": "instance_load", "instance_id": "instance_1", "client_timestamp": 1706520000000, "metadata": {}},
+        {"event_type": "ai_request", "timestamp": 1706520010.0, "target": "schema:sentiment", "instance_id": "instance_1", "client_timestamp": 1706520010000, "metadata": {}},
+        {"event_type": "ai_response", "timestamp": 1706520012.0, "target": "schema:sentiment", "instance_id": "instance_1", "client_timestamp": 1706520012000, "metadata": {"suggestions": ["positive"]}},
+        {"event_type": "click", "timestamp": 1706520030.0, "target": "label:neutral", "instance_id": "instance_1", "client_timestamp": 1706520030000, "metadata": {}},
+        {"event_type": "focus_in", "timestamp": 1706520035.0, "target": "textbox:explanation", "instance_id": "instance_1", "client_timestamp": 1706520035000, "metadata": {}},
+        {"event_type": "focus_out", "timestamp": 1706520075.0, "target": "textbox:explanation", "instance_id": "instance_1", "client_timestamp": 1706520075000, "metadata": {"duration_ms": 40000}},
+        {"event_type": "save", "timestamp": 1706520085.0, "target": "instance:instance_1", "instance_id": "instance_1", "client_timestamp": 1706520085000, "metadata": {}}
+      ],
+      "ai_usage": [
+        {"request_timestamp": 1706520010.0, "response_timestamp": 1706520012.0, "schema_name": "sentiment", "suggestions_shown": ["positive"], "suggestion_accepted": null, "time_to_decision_ms": 18000}
+      ],
+      "annotation_changes": [
+        {"timestamp": 1706520030.0, "schema_name": "sentiment", "label_name": "neutral", "action": "select", "old_value": null, "new_value": true, "source": "user"}
+      ],
+      "navigation_history": [],
+      "focus_time_by_element": {"label:neutral": 5000, "textbox:explanation": 40000, "ai:panel": 8000},
+      "scroll_depth_max": 100.0,
+      "keyword_highlights_shown": [{"text": "good", "label": "positive", "start": 20, "end": 24, "type": "keyword"}]
+    },
+    "instance_2": {
+      "instance_id": "instance_2",
+      "session_start": 1706520100.0,
+      "session_end": 1706520180.0,
+      "total_time_ms": 80000,
+      "interactions": [
+        {"event_type": "navigation", "timestamp": 1706520100.0, "target": "instance_load", "instance_id": "instance_2", "client_timestamp": 1706520100000, "metadata": {}},
+        {"event_type": "click", "timestamp": 1706520110.0, "target": "label:negative", "instance_id": "instance_2", "client_timestamp": 1706520110000, "metadata": {}},
+        {"event_type": "click", "timestamp": 1706520120.0, "target": "label:negative", "instance_id": "instance_2", "client_timestamp": 1706520120000, "metadata": {}},
+        {"event_type": "click", "timestamp": 1706520125.0, "target": "label:very_negative", "instance_id": "instance_2", "client_timestamp": 1706520125000, "metadata": {}},
+        {"event_type": "focus_in", "timestamp": 1706520130.0, "target": "textbox:explanation", "instance_id": "instance_2", "client_timestamp": 1706520130000, "metadata": {}},
+        {"event_type": "focus_out", "timestamp": 1706520170.0, "target": "textbox:explanation", "instance_id": "instance_2", "client_timestamp": 1706520170000, "metadata": {"duration_ms": 40000}},
+        {"event_type": "save", "timestamp": 1706520175.0, "target": "instance:instance_2", "instance_id": "instance_2", "client_timestamp": 1706520175000, "metadata": {}}
+      ],
+      "ai_usage": [],
+      "annotation_changes": [
+        {"timestamp": 1706520110.0, "schema_name": "sentiment", "label_name": "negative", "action": "select", "old_value": null, "new_value": true, "source": "user"},
+        {"timestamp": 1706520120.0, "schema_name": "sentiment", "label_name": "negative", "action": "deselect", "old_value": true, "new_value": null, "source": "user"},
+        {"timestamp": 1706520125.0, "schema_name": "sentiment", "label_name": "very_negative", "action": "select", "old_value": null, "new_value": true, "source": "user"}
+      ],
+      "navigation_history": [],
+      "focus_time_by_element": {"label:negative": 10000, "label:very_negative": 5000, "textbox:explanation": 40000},
+      "scroll_depth_max": 100.0,
+      "keyword_highlights_shown": []
+    }
+  }
+}

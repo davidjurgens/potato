@@ -1559,6 +1559,175 @@ class AdminDashboard:
             self.logger.error(f"Error getting quality control data: {e}")
             return {"error": f"Failed to get quality control data: {str(e)}"}, 500
 
+    def get_behavioral_analytics_data(self) -> Dict[str, Any]:
+        """
+        Get comprehensive behavioral analytics data for all annotators.
+
+        Returns:
+            Dict containing behavioral analytics metrics including:
+            - Per-user statistics (time, interactions, AI usage)
+            - Aggregate statistics
+            - Quality indicators
+            - AI assistance analysis
+        """
+        if not self.check_admin_access():
+            return {"error": "Admin access required"}, 403
+
+        try:
+            usm = get_user_state_manager()
+            users = get_users()
+
+            # Collect behavioral data from all users
+            user_stats = []
+            ai_usage_total = {'requests': 0, 'accepts': 0, 'rejects': 0, 'decision_times': []}
+            all_times = []
+            interaction_counts = Counter()
+            change_sources = Counter()
+
+            for user_id in users:
+                user_state = usm.get_user_state(user_id)
+                if not user_state:
+                    continue
+
+                behavioral_data = user_state.instance_id_to_behavioral_data
+                if not behavioral_data:
+                    continue
+
+                # Per-user metrics
+                user_times = []
+                user_interactions = 0
+                user_changes = 0
+                user_ai_requests = 0
+                user_ai_accepts = 0
+                user_fast_count = 0
+                user_low_interaction_count = 0
+                user_no_scroll_count = 0
+
+                for instance_id, bd in behavioral_data.items():
+                    # Handle both BehavioralData objects and dicts
+                    if hasattr(bd, 'to_dict'):
+                        bd = bd.to_dict()
+
+                    # Time
+                    time_ms = bd.get('total_time_ms', 0)
+                    time_sec = time_ms / 1000
+                    user_times.append(time_sec)
+                    all_times.append(time_sec)
+
+                    if time_sec < 5:
+                        user_fast_count += 1
+
+                    # Interactions
+                    interactions = bd.get('interactions', [])
+                    user_interactions += len(interactions)
+                    if len(interactions) < 3:
+                        user_low_interaction_count += 1
+
+                    for event in interactions:
+                        event_type = event.get('event_type') if isinstance(event, dict) else getattr(event, 'event_type', 'unknown')
+                        interaction_counts[event_type] += 1
+
+                    # Scroll depth
+                    scroll = bd.get('scroll_depth_max', 0)
+                    if scroll < 25:
+                        user_no_scroll_count += 1
+
+                    # Annotation changes
+                    changes = bd.get('annotation_changes', [])
+                    user_changes += len(changes)
+
+                    for change in changes:
+                        source = change.get('source') if isinstance(change, dict) else getattr(change, 'source', 'user')
+                        change_sources[source] += 1
+
+                    # AI usage
+                    for ai in bd.get('ai_usage', []):
+                        user_ai_requests += 1
+                        ai_usage_total['requests'] += 1
+
+                        accepted = ai.get('suggestion_accepted') if isinstance(ai, dict) else getattr(ai, 'suggestion_accepted', None)
+                        if accepted:
+                            user_ai_accepts += 1
+                            ai_usage_total['accepts'] += 1
+                        else:
+                            ai_usage_total['rejects'] += 1
+
+                        decision_time = ai.get('time_to_decision_ms') if isinstance(ai, dict) else getattr(ai, 'time_to_decision_ms', None)
+                        if decision_time:
+                            ai_usage_total['decision_times'].append(decision_time)
+
+                total_instances = len(behavioral_data)
+                if total_instances > 0:
+                    # Calculate suspicion score
+                    fast_rate = user_fast_count / total_instances
+                    low_interaction_rate = user_low_interaction_count / total_instances
+                    no_scroll_rate = user_no_scroll_count / total_instances
+                    suspicion_score = fast_rate * 0.3 + low_interaction_rate * 0.35 + no_scroll_rate * 0.35
+
+                    user_stats.append({
+                        'user_id': user_id,
+                        'total_instances': total_instances,
+                        'total_time_sec': sum(user_times),
+                        'avg_time_sec': sum(user_times) / len(user_times) if user_times else 0,
+                        'min_time_sec': min(user_times) if user_times else 0,
+                        'max_time_sec': max(user_times) if user_times else 0,
+                        'total_interactions': user_interactions,
+                        'avg_interactions': user_interactions / total_instances,
+                        'total_changes': user_changes,
+                        'avg_changes': user_changes / total_instances,
+                        'ai_requests': user_ai_requests,
+                        'ai_accepts': user_ai_accepts,
+                        'ai_accept_rate': user_ai_accepts / user_ai_requests if user_ai_requests > 0 else None,
+                        'fast_annotation_rate': fast_rate,
+                        'low_interaction_rate': low_interaction_rate,
+                        'no_scroll_rate': no_scroll_rate,
+                        'suspicion_score': suspicion_score,
+                        'quality_flag': 'SUSPICIOUS' if suspicion_score > 0.5 else 'WARNING' if suspicion_score > 0.3 else 'OK'
+                    })
+
+            # Calculate aggregate statistics
+            aggregate = {
+                'total_users_with_data': len(user_stats),
+                'total_instances': sum(u['total_instances'] for u in user_stats),
+                'total_time_minutes': sum(u['total_time_sec'] for u in user_stats) / 60,
+                'avg_time_per_instance': sum(all_times) / len(all_times) if all_times else 0,
+                'median_time_per_instance': sorted(all_times)[len(all_times)//2] if all_times else 0,
+            }
+
+            # AI usage summary
+            ai_summary = {
+                'total_requests': ai_usage_total['requests'],
+                'total_accepts': ai_usage_total['accepts'],
+                'total_rejects': ai_usage_total['rejects'],
+                'accept_rate': ai_usage_total['accepts'] / ai_usage_total['requests'] if ai_usage_total['requests'] > 0 else 0,
+                'avg_decision_time_ms': sum(ai_usage_total['decision_times']) / len(ai_usage_total['decision_times']) if ai_usage_total['decision_times'] else None
+            }
+
+            # Quality summary
+            flagged_users = [u for u in user_stats if u['quality_flag'] == 'SUSPICIOUS']
+            warning_users = [u for u in user_stats if u['quality_flag'] == 'WARNING']
+            quality_summary = {
+                'total_flagged': len(flagged_users),
+                'total_warnings': len(warning_users),
+                'flagged_user_ids': [u['user_id'] for u in flagged_users],
+                'warning_user_ids': [u['user_id'] for u in warning_users]
+            }
+
+            return {
+                'aggregate': aggregate,
+                'ai_usage': ai_summary,
+                'quality_summary': quality_summary,
+                'interaction_types': dict(interaction_counts.most_common(20)),
+                'change_sources': dict(change_sources),
+                'users': sorted(user_stats, key=lambda x: -x['suspicion_score'])
+            }
+
+        except Exception as e:
+            self.logger.error(f"Error getting behavioral analytics data: {e}")
+            import traceback
+            traceback.print_exc()
+            return {"error": f"Failed to get behavioral analytics data: {str(e)}"}, 500
+
 
 # Global instance
 admin_dashboard = AdminDashboard()

@@ -531,6 +531,11 @@ async function loadCurrentInstance() {
         // Set global variable for span manager
         window.currentInstance = currentInstance;
 
+        // Notify interaction tracker of instance change
+        if (window.interactionTracker && instanceId) {
+            window.interactionTracker.setInstanceId(instanceId);
+        }
+
         // Get progress from the progress counter element
         const progressCounter = document.getElementById('progress-counter');
         if (progressCounter) {
@@ -799,6 +804,11 @@ async function saveAnnotations() {
         return;
     }
 
+    // Track save event
+    if (window.interactionTracker) {
+        window.interactionTracker.trackSave(currentInstance.id);
+    }
+
     try {
         const headers = {
             'Content-Type': 'application/json',
@@ -851,8 +861,16 @@ async function saveAnnotations() {
         });
 
         if (response.ok) {
-            const result = await response.json();
-            debugLog('[DEBUG] saveAnnotations: annotations saved:', result);
+            // Get response text first to debug any JSON parsing issues
+            const responseText = await response.text();
+            try {
+                const result = JSON.parse(responseText);
+                debugLog('[DEBUG] saveAnnotations: annotations saved:', result);
+            } catch (jsonError) {
+                console.error('[DEBUG] saveAnnotations: JSON parse error:', jsonError);
+                console.error('[DEBUG] saveAnnotations: Response text (first 500 chars):', responseText.substring(0, 500));
+                // Don't throw - the save may have succeeded even if response parsing failed
+            }
         } else {
             console.warn('[DEBUG] saveAnnotations: failed to save annotations:', await response.text());
         }
@@ -882,6 +900,11 @@ async function navigateToPrevious() {
 
     setLoading(true);
     debugLog('[DEEP DEBUG NAV] navigateToPrevious - Loading set to true');
+
+    // Track navigation event
+    if (window.interactionTracker) {
+        window.interactionTracker.trackNavigation('prev', currentInstance?.id, null);
+    }
 
     try {
         // Save annotations before navigating away
@@ -986,6 +1009,11 @@ async function navigateToNext() {
 
     setLoading(true);
     debugLog('[DEEP DEBUG NAV] navigateToNext - Loading set to true');
+
+    // Track navigation event
+    if (window.interactionTracker) {
+        window.interactionTracker.trackNavigation('next', currentInstance?.id, null);
+    }
 
     try {
         // Save annotations before navigating away
@@ -1433,7 +1461,12 @@ function handleInputChange(element) {
     if (inputType === 'radio') {
         // For radio buttons, only save if checked
         if (element.checked) {
+            const oldValue = currentAnnotations[schema] ? currentAnnotations[schema][labelName] : null;
             value = element.value;
+            // Track radio button selection
+            if (window.interactionTracker) {
+                window.interactionTracker.trackAnnotationChange(schema, labelName, 'select', oldValue, value, 'user');
+            }
         } else {
             return; // Don't save unchecked radio buttons
         }
@@ -1441,8 +1474,13 @@ function handleInputChange(element) {
         // For checkboxes, save the checked state
         if (element.checked) {
             value = element.value;
+            // Track annotation selection
+            if (window.interactionTracker) {
+                window.interactionTracker.trackAnnotationChange(schema, labelName, 'select', null, value, 'user');
+            }
         } else {
             // For unchecked checkboxes, remove the annotation or set to false
+            const oldValue = currentAnnotations[schema] ? currentAnnotations[schema][labelName] : null;
             if (currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
                 delete currentAnnotations[schema][labelName];
                 // If the schema is empty, remove it too
@@ -1451,6 +1489,11 @@ function handleInputChange(element) {
                 }
             }
             debugLog(`Removed annotation: ${schema}.${labelName}`);
+
+            // Track annotation deselection
+            if (window.interactionTracker) {
+                window.interactionTracker.trackAnnotationChange(schema, labelName, 'deselect', oldValue, null, 'user');
+            }
 
             // Auto-save the removal
             clearTimeout(textSaveTimer);
@@ -1461,7 +1504,12 @@ function handleInputChange(element) {
         }
     } else {
         // For text inputs, save the value
+        const oldValue = currentAnnotations[schema] ? currentAnnotations[schema][labelName] : null;
         value = element.value;
+        // Track text input change
+        if (window.interactionTracker) {
+            window.interactionTracker.trackAnnotationChange(schema, labelName, 'update', oldValue, value, 'user');
+        }
     }
 
     // Update the current annotations

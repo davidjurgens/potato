@@ -210,16 +210,54 @@ class AIAssistantManager {
             return;
         }
 
+        // Track AI request
+        if (window.interactionTracker) {
+            window.interactionTracker.trackAIRequest(annotationId);
+        }
+
         try {
             this.startLoading(tooltip, assistantType);
             console.log('[AIAssistant] Fetching data for:', assistantType);
             const data = await this.fetchAssistantData(assistantType, annotationId);
             console.log('[AIAssistant] Received data:', data);
+
+            // Track AI response
+            if (window.interactionTracker) {
+                const suggestions = this.extractSuggestionsFromData(data);
+                window.interactionTracker.trackAIResponse(annotationId, suggestions);
+            }
+
             this.renderAssistant(tooltip, assistantType, data, annotationId);
         } catch (error) {
             console.error('Error getting AI assistant:', error);
             this.showError(tooltip, assistantType);
         }
+    }
+
+    /**
+     * Extract suggestion values from AI response data for tracking
+     */
+    extractSuggestionsFromData(data) {
+        if (!data || !data.res) return [];
+
+        if (data.type === "json") {
+            const res = data.res;
+            const suggestions = [];
+
+            // Extract suggestive_choice if present
+            if (res.suggestive_choice) {
+                suggestions.push(res.suggestive_choice);
+            }
+
+            // Extract keywords if present
+            if (res.keywords && Array.isArray(res.keywords)) {
+                suggestions.push(...res.keywords.map(k => k.label || k.name || k));
+            }
+
+            return suggestions;
+        }
+
+        return [];
     }
 
     showError(tooltip, assistantType) {

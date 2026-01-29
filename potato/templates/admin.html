@@ -576,6 +576,7 @@
           <div class="admin-tab" data-tab="annotators">Annotators</div>
           <div class="admin-tab" data-tab="instances">Instances</div>
           <div class="admin-tab" data-tab="questions">Questions</div>
+          <div class="admin-tab" data-tab="behavioral">Behavioral</div>
           <div class="admin-tab" data-tab="crowdsourcing">Crowdsourcing</div>
           <div class="admin-tab" data-tab="config">Configuration</div>
         </div>
@@ -705,6 +706,64 @@
 
           <div id="questionsContainer">
             <!-- Questions data will be loaded here -->
+          </div>
+        </div>
+
+        <!-- Behavioral Analytics Tab -->
+        <div class="admin-tab-content" id="behavioral">
+          <div class="table-controls">
+            <button
+              onclick="refreshBehavioral()"
+              class="shadcn-button shadcn-button-primary"
+            >
+              Refresh Data
+            </button>
+          </div>
+
+          <!-- Summary Cards -->
+          <div class="dashboard-grid" id="behavioralGrid">
+            <!-- Behavioral summary cards will be loaded here -->
+          </div>
+
+          <!-- AI Usage Section -->
+          <div class="question-card" id="aiUsageSection" style="margin-bottom: 1.5rem;">
+            <div class="question-header">
+              <h3 class="question-title">AI Assistance Usage</h3>
+            </div>
+            <div id="aiUsageContent">
+              <!-- AI usage data will be loaded here -->
+            </div>
+          </div>
+
+          <!-- Quality Summary Section -->
+          <div class="question-card" id="qualitySection" style="margin-bottom: 1.5rem;">
+            <div class="question-header">
+              <h3 class="question-title">Quality Indicators</h3>
+            </div>
+            <div id="qualityContent">
+              <!-- Quality indicators will be loaded here -->
+            </div>
+          </div>
+
+          <!-- Per-User Behavioral Data -->
+          <div class="admin-table-container">
+            <table class="admin-table" id="behavioralTable">
+              <thead>
+                <tr>
+                  <th>User ID</th>
+                  <th>Instances</th>
+                  <th>Avg Time (s)</th>
+                  <th>Interactions</th>
+                  <th>Changes</th>
+                  <th>AI Requests</th>
+                  <th>AI Accept Rate</th>
+                  <th>Suspicion</th>
+                </tr>
+              </thead>
+              <tbody id="behavioralTableBody">
+                <!-- Behavioral data will be loaded here -->
+              </tbody>
+            </table>
           </div>
         </div>
 
@@ -853,6 +912,9 @@
             break;
           case "questions":
             loadQuestions();
+            break;
+          case "behavioral":
+            loadBehavioral();
             break;
           case "crowdsourcing":
             loadCrowdsourcing();
@@ -1575,6 +1637,152 @@
 
       function refreshCrowdsourcing() {
         loadCrowdsourcing();
+      }
+
+      // Behavioral Analytics functions
+      async function loadBehavioral() {
+        try {
+          const data = await makeApiRequest("/admin/api/behavioral_analytics");
+          displayBehavioral(data);
+        } catch (error) {
+          console.error("Error loading behavioral data:", error);
+          showError("Failed to load behavioral analytics data");
+        }
+      }
+
+      function displayBehavioral(data) {
+        const grid = document.getElementById("behavioralGrid");
+        const aiContent = document.getElementById("aiUsageContent");
+        const qualityContent = document.getElementById("qualityContent");
+        const tbody = document.getElementById("behavioralTableBody");
+
+        // Display summary cards
+        const stats = data.aggregate_stats;
+        grid.innerHTML = `
+          <div class="dashboard-card">
+            <h3>Users with Data</h3>
+            <div class="value">${stats.total_users}</div>
+            <div class="description">Users with behavioral tracking</div>
+          </div>
+          <div class="dashboard-card">
+            <h3>Total Instances</h3>
+            <div class="value">${stats.total_instances}</div>
+            <div class="description">Tracked annotation sessions</div>
+          </div>
+          <div class="dashboard-card">
+            <h3>Avg Time</h3>
+            <div class="value">${stats.avg_time_per_instance_sec.toFixed(1)}s</div>
+            <div class="description">Per annotation instance</div>
+          </div>
+          <div class="dashboard-card">
+            <h3>Total Interactions</h3>
+            <div class="value">${stats.total_interactions}</div>
+            <div class="description">Clicks, focus, navigation</div>
+          </div>
+          <div class="dashboard-card">
+            <h3>Annotation Changes</h3>
+            <div class="value">${stats.total_changes}</div>
+            <div class="description">Label modifications</div>
+          </div>
+          <div class="dashboard-card">
+            <h3>AI Requests</h3>
+            <div class="value">${stats.total_ai_requests}</div>
+            <div class="description">AI assistance requests</div>
+          </div>
+        `;
+
+        // Display AI usage section
+        const ai = data.ai_usage;
+        if (ai.total_requests > 0) {
+          aiContent.innerHTML = `
+            <div class="question-stats">
+              <div class="question-stat">
+                <span class="value">${ai.total_requests}</span>
+                <span class="label">Total Requests</span>
+              </div>
+              <div class="question-stat">
+                <span class="value">${ai.total_accepts}</span>
+                <span class="label">Accepted</span>
+              </div>
+              <div class="question-stat">
+                <span class="value">${ai.total_rejects}</span>
+                <span class="label">Rejected</span>
+              </div>
+              <div class="question-stat">
+                <span class="value">${ai.accept_rate.toFixed(1)}%</span>
+                <span class="label">Accept Rate</span>
+              </div>
+              <div class="question-stat">
+                <span class="value">${(ai.avg_decision_time_ms / 1000).toFixed(1)}s</span>
+                <span class="label">Avg Decision Time</span>
+              </div>
+            </div>
+          `;
+        } else {
+          aiContent.innerHTML = `<p style="color: var(--muted-foreground);">No AI assistance usage recorded yet.</p>`;
+        }
+
+        // Display quality indicators
+        const quality = data.quality_summary;
+        const suspicionColor = quality.high_suspicion_users > 0 ? "var(--error-color)" : "var(--success-color)";
+        qualityContent.innerHTML = `
+          <div class="question-stats">
+            <div class="question-stat">
+              <span class="value" style="color: ${suspicionColor}">${quality.high_suspicion_users}</span>
+              <span class="label">High Suspicion Users</span>
+            </div>
+            <div class="question-stat">
+              <span class="value">${quality.fast_annotation_rate.toFixed(1)}%</span>
+              <span class="label">Fast Annotations (&lt;2s)</span>
+            </div>
+            <div class="question-stat">
+              <span class="value">${quality.low_interaction_rate.toFixed(1)}%</span>
+              <span class="label">Low Interaction Rate</span>
+            </div>
+            <div class="question-stat">
+              <span class="value">${quality.no_change_rate.toFixed(1)}%</span>
+              <span class="label">No Change Rate</span>
+            </div>
+          </div>
+          <div style="margin-top: 1rem;">
+            <h4>Interaction Types</h4>
+            <div class="common-words">
+              ${Object.entries(data.interaction_types).map(([type, count]) =>
+                `<span class="word-tag">${type}<span class="count">(${count})</span></span>`
+              ).join('')}
+            </div>
+          </div>
+          <div style="margin-top: 1rem;">
+            <h4>Change Sources</h4>
+            <div class="common-words">
+              ${Object.entries(data.change_sources).map(([source, count]) =>
+                `<span class="word-tag">${source}<span class="count">(${count})</span></span>`
+              ).join('')}
+            </div>
+          </div>
+        `;
+
+        // Display per-user table
+        tbody.innerHTML = data.users.map(user => {
+          const suspicionClass = user.suspicion_score > 0.5 ? "color: var(--error-color); font-weight: bold;" :
+                                user.suspicion_score > 0.3 ? "color: orange;" : "";
+          return `
+            <tr>
+              <td>${user.user_id}</td>
+              <td>${user.total_instances}</td>
+              <td>${user.avg_time_sec.toFixed(1)}</td>
+              <td>${user.total_interactions}</td>
+              <td>${user.total_changes}</td>
+              <td>${user.ai_requests}</td>
+              <td>${user.ai_requests > 0 ? user.ai_accept_rate.toFixed(0) + '%' : 'N/A'}</td>
+              <td style="${suspicionClass}">${(user.suspicion_score * 100).toFixed(0)}%</td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      function refreshBehavioral() {
+        loadBehavioral();
       }
 
       // Configuration functions

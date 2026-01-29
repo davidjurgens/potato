@@ -114,7 +114,72 @@ For **Span** questions:
 - Items with spans
 - Span range statistics
 
-### 5. Crowdsourcing Tab
+### 5. Behavioral Analytics Tab
+
+The Behavioral Analytics tab provides comprehensive insights into annotator behavior patterns, AI assistance usage, and quality indicators derived from interaction tracking data.
+
+**Summary Statistics:**
+- **Users with Data**: Number of users with behavioral tracking data
+- **Total Instances**: Total tracked annotation sessions
+- **Avg Time**: Average time per annotation instance
+- **Total Interactions**: All tracked interactions (clicks, focus, navigation)
+- **Annotation Changes**: Total label modifications
+- **AI Requests**: Total AI assistance requests
+
+**AI Assistance Usage Section:**
+
+Displays AI assistance metrics when available:
+- **Total Requests**: Number of times annotators requested AI help
+- **Accepted**: Number of AI suggestions accepted
+- **Rejected**: Number of AI suggestions rejected
+- **Accept Rate**: Percentage of suggestions accepted
+- **Avg Decision Time**: Average time from seeing suggestion to making a decision
+
+**Quality Indicators Section:**
+
+Displays metrics that help identify potential quality issues:
+- **High Suspicion Users**: Count of users with suspicious behavior patterns
+- **Fast Annotation Rate**: Percentage of annotations completed in under 2 seconds
+- **Low Interaction Rate**: Percentage of instances with minimal interaction
+- **No Change Rate**: Percentage of instances where no annotation changes were made
+
+**Interaction Types Breakdown:**
+
+Visual display of interaction types recorded:
+- clicks, focus_in, focus_out, navigation, save, keypress, etc.
+
+**Change Sources Breakdown:**
+
+Shows how annotation changes were made:
+- `user`: Direct user interaction
+- `ai_accept`: User accepted AI suggestion
+- `keyboard`: Keyboard shortcut used
+- `prefill`: Pre-filled from configuration
+
+**Per-User Behavioral Table:**
+
+Detailed behavioral metrics for each annotator:
+- **User ID**: Annotator identifier
+- **Instances**: Number of instances with behavioral data
+- **Avg Time (s)**: Average annotation time in seconds
+- **Interactions**: Total interaction count
+- **Changes**: Number of annotation modifications
+- **AI Requests**: Number of AI assistance requests
+- **AI Accept Rate**: Percentage of AI suggestions accepted
+- **Suspicion**: Suspicion score (0-100%, higher = more suspicious)
+
+Users are sorted by suspicion score to help identify potentially problematic annotators.
+
+**Quality Detection:**
+
+The suspicion score is calculated based on:
+1. **Fast Annotation Rate**: Annotations completed too quickly may indicate low effort
+2. **Low Interaction Rate**: Very few interactions may indicate random clicking
+3. **No Change Rate**: Never changing initial selections may indicate lack of careful consideration
+
+Users with suspicion scores above 50% are highlighted in red.
+
+### 6. Crowdsourcing Tab
 
 The Crowdsourcing tab provides dedicated monitoring for workers from crowdsourcing platforms like Prolific and Amazon Mechanical Turk (MTurk).
 
@@ -152,7 +217,7 @@ This tab is particularly useful for:
 - Tracking multiple studies/HITs
 - Ensuring workers receive completion codes
 
-### 6. Configuration Tab
+### 7. Configuration Tab
 
 The Configuration tab allows administrators to modify system settings in real-time.
 
@@ -252,6 +317,65 @@ Returns crowdsourcing platform statistics including:
     "hit_ids": ["HIT123", "HIT456"],
     "workers": [...]
   }
+}
+```
+
+### Behavioral Analytics
+```
+GET /admin/api/behavioral_analytics
+Headers: X-API-Key: admin_api_key
+```
+
+Returns comprehensive behavioral analytics data for all annotators.
+
+**Response Structure:**
+```json
+{
+  "aggregate_stats": {
+    "total_users": 25,
+    "total_instances": 500,
+    "avg_time_per_instance_sec": 45.2,
+    "total_interactions": 15000,
+    "total_changes": 2500,
+    "total_ai_requests": 150
+  },
+  "ai_usage": {
+    "total_requests": 150,
+    "total_accepts": 105,
+    "total_rejects": 45,
+    "accept_rate": 70.0,
+    "avg_decision_time_ms": 3500
+  },
+  "quality_summary": {
+    "high_suspicion_users": 2,
+    "fast_annotation_rate": 5.5,
+    "low_interaction_rate": 3.2,
+    "no_change_rate": 8.1
+  },
+  "interaction_types": {
+    "click": 8000,
+    "focus_in": 3000,
+    "focus_out": 3000,
+    "navigation": 500,
+    "save": 500
+  },
+  "change_sources": {
+    "user": 2000,
+    "ai_accept": 400,
+    "keyboard": 100
+  },
+  "users": [
+    {
+      "user_id": "user_001",
+      "total_instances": 50,
+      "avg_time_sec": 45.2,
+      "total_interactions": 600,
+      "total_changes": 150,
+      "ai_requests": 10,
+      "ai_accept_rate": 70.0,
+      "suspicion_score": 0.15
+    }
+  ]
 }
 ```
 

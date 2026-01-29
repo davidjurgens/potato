@@ -1103,10 +1103,15 @@ class UserState:
                 [ pp_to_tuple(pp) for pp in self.completed_phase_and_pages],
             'max_assignments': self.max_assignments,
         }
-        # TODO once we figure out the type of the behavioral data
-        #d['instance_id_to_behavioral_data']:
-
-        {k: {k2: v2 for k2, v2 in v.items()} for k, v in self.instance_id_to_behavioral_data.items()}
+        # Serialize behavioral data (used for interaction tracking)
+        d['instance_id_to_behavioral_data'] = {}
+        for instance_id, bd in self.instance_id_to_behavioral_data.items():
+            if hasattr(bd, 'to_dict'):
+                d['instance_id_to_behavioral_data'][instance_id] = bd.to_dict()
+            elif isinstance(bd, dict):
+                d['instance_id_to_behavioral_data'][instance_id] = bd
+            else:
+                d['instance_id_to_behavioral_data'][instance_id] = {}
         d['instance_id_to_label_to_value'] = {k: convert_label_dict(v) for k,v in self.instance_id_to_label_to_value.items()}
         d['instance_id_to_span_to_value'] = {k: convert_span_dict(v) for k,v in self.instance_id_to_span_to_value.items()}
         d['phase_to_page_to_label_to_value'] = {str(k): {k2: convert_label_dict(v2) for k2, v2 in v.items()} for k, v in self.phase_to_page_to_label_to_value.items()}
@@ -1114,6 +1119,9 @@ class UserState:
 
         # Save training state
         d['training_state'] = self.training_state.to_dict()
+
+        # Save keyword highlight state for randomization consistency
+        d['instance_id_to_keyword_highlight_state'] = self.instance_id_to_keyword_highlight_state
 
         return d
 
@@ -1170,8 +1178,15 @@ class UserState:
         user_state.assigned_instance_ids = set(j['instance_id_ordering'])
         user_state.current_instance_index = j['current_instance_index']
 
-        # TODO...
-        #user_state.instance_id_to_behavioral_data = j['instance_id_to_behavioral_data']
+        # Restore behavioral data (used for interaction tracking)
+        from potato.interaction_tracking import BehavioralData
+        behavioral_data = j.get('instance_id_to_behavioral_data', {})
+        for instance_id, bd_dict in behavioral_data.items():
+            if isinstance(bd_dict, dict):
+                user_state.instance_id_to_behavioral_data[instance_id] = BehavioralData.from_dict(bd_dict)
+            else:
+                user_state.instance_id_to_behavioral_data[instance_id] = bd_dict
+
         for iid, l2v in j['instance_id_to_label_to_value'].items():
             user_state.instance_id_to_label_to_value[iid] = {to_label(k): v for k, v in l2v}
 
@@ -1211,6 +1226,10 @@ class UserState:
             user_state.qualified_categories = set(j['qualified_categories'])
         if 'category_qualification_scores' in j:
             user_state.category_qualification_scores = j['category_qualification_scores']
+
+        # Restore keyword highlight state if present
+        if 'instance_id_to_keyword_highlight_state' in j:
+            user_state.instance_id_to_keyword_highlight_state = j['instance_id_to_keyword_highlight_state']
 
         return user_state
 
@@ -1509,6 +1528,11 @@ class InMemoryUserState(UserState):
         # Maps instance_id -> schema_name for instances that are LLM verification tasks
         self.icl_verification_tasks: Dict[str, str] = {}
 
+        # Keyword highlight state per instance for randomization consistency
+        # Maps instance_id -> {highlights: [...], seed: int, settings: {...}}
+        # This ensures the same user sees the same highlights for an instance across navigation
+        self.instance_id_to_keyword_highlight_state: Dict[str, Dict[str, Any]] = {}
+
     def hint_exists(self, instance_id: str) -> bool:
         return instance_id in self.ai_hints
 
@@ -1517,6 +1541,32 @@ class InMemoryUserState(UserState):
 
     def cache_hint(self, instance_id: str, hint: str) -> None:
         self.ai_hints[instance_id] = hint
+
+    def get_keyword_highlight_state(self, instance_id: str) -> Optional[Dict[str, Any]]:
+        """Get cached keyword highlight state for an instance.
+
+        Returns the stored randomization state for keyword highlights, or None
+        if no state has been cached yet for this instance.
+
+        Args:
+            instance_id: The instance ID to get state for
+
+        Returns:
+            Dict with 'highlights', 'seed', 'settings' keys, or None
+        """
+        return self.instance_id_to_keyword_highlight_state.get(instance_id)
+
+    def set_keyword_highlight_state(self, instance_id: str, state: Dict[str, Any]) -> None:
+        """Cache keyword highlight state for an instance.
+
+        Stores the randomization state so that the same highlights are shown
+        when the user returns to this instance.
+
+        Args:
+            instance_id: The instance ID to cache state for
+            state: Dict with 'highlights', 'seed', 'settings' keys
+        """
+        self.instance_id_to_keyword_highlight_state[instance_id] = state
 
     def add_new_assigned_data(self, new_assigned_data):
         """
@@ -1979,10 +2029,15 @@ class InMemoryUserState(UserState):
                 [ pp_to_tuple(pp) for pp in self.completed_phase_and_pages],
             'max_assignments': self.max_assignments,
         }
-        # TODO once we figure out the type of the behavioral data
-        #d['instance_id_to_behavioral_data']:
-
-        {k: {k2: v2 for k2, v2 in v.items()} for k, v in self.instance_id_to_behavioral_data.items()}
+        # Serialize behavioral data (used for interaction tracking)
+        d['instance_id_to_behavioral_data'] = {}
+        for instance_id, bd in self.instance_id_to_behavioral_data.items():
+            if hasattr(bd, 'to_dict'):
+                d['instance_id_to_behavioral_data'][instance_id] = bd.to_dict()
+            elif isinstance(bd, dict):
+                d['instance_id_to_behavioral_data'][instance_id] = bd
+            else:
+                d['instance_id_to_behavioral_data'][instance_id] = {}
         d['instance_id_to_label_to_value'] = {k: convert_label_dict(v) for k,v in self.instance_id_to_label_to_value.items()}
         d['instance_id_to_span_to_value'] = {k: convert_span_dict(v) for k,v in self.instance_id_to_span_to_value.items()}
         d['phase_to_page_to_label_to_value'] = {str(k): {k2: convert_label_dict(v2) for k2, v2 in v.items()} for k, v in self.phase_to_page_to_label_to_value.items()}
@@ -1993,6 +2048,9 @@ class InMemoryUserState(UserState):
         # Category qualification data
         d['qualified_categories'] = list(self.qualified_categories)
         d['category_qualification_scores'] = self.category_qualification_scores
+
+        # Save keyword highlight state for randomization consistency
+        d['instance_id_to_keyword_highlight_state'] = self.instance_id_to_keyword_highlight_state
 
         return d
 
@@ -2049,8 +2107,15 @@ class InMemoryUserState(UserState):
         user_state.assigned_instance_ids = set(j['instance_id_ordering'])
         user_state.current_instance_index = j['current_instance_index']
 
-        # TODO...
-        #user_state.instance_id_to_behavioral_data = j['instance_id_to_behavioral_data']
+        # Restore behavioral data (used for interaction tracking)
+        from potato.interaction_tracking import BehavioralData
+        behavioral_data = j.get('instance_id_to_behavioral_data', {})
+        for instance_id, bd_dict in behavioral_data.items():
+            if isinstance(bd_dict, dict):
+                user_state.instance_id_to_behavioral_data[instance_id] = BehavioralData.from_dict(bd_dict)
+            else:
+                user_state.instance_id_to_behavioral_data[instance_id] = bd_dict
+
         for iid, l2v in j['instance_id_to_label_to_value'].items():
             user_state.instance_id_to_label_to_value[iid] = {to_label(k): v for k, v in l2v}
 
@@ -2090,6 +2155,10 @@ class InMemoryUserState(UserState):
             user_state.qualified_categories = set(j['qualified_categories'])
         if 'category_qualification_scores' in j:
             user_state.category_qualification_scores = j['category_qualification_scores']
+
+        # Restore keyword highlight state if present
+        if 'instance_id_to_keyword_highlight_state' in j:
+            user_state.instance_id_to_keyword_highlight_state = j['instance_id_to_keyword_highlight_state']
 
         return user_state
 

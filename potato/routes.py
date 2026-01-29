@@ -48,7 +48,8 @@ from potato.flask_server import (
     get_ai_cache_manager,
     get_users, get_total_annotations, update_annotation_state, ai_hints,
     get_training_instances, get_training_correct_answers, get_training_explanation,
-    get_training_instance_categories, get_prolific_study, get_keyword_highlight_patterns
+    get_training_instance_categories, get_prolific_study, get_keyword_highlight_patterns,
+    get_keyword_highlight_settings
 )
 
 # Import admin dashboard functionality
@@ -2153,6 +2154,27 @@ def admin_api_quality_control():
     return jsonify(result)
 
 
+@app.route("/admin/api/behavioral_analytics", methods=["GET"])
+def admin_api_behavioral_analytics():
+    """
+    Get behavioral analytics data for all annotators.
+    Admin-only endpoint requiring API key.
+
+    Returns:
+        flask.Response: JSON response with behavioral analytics including:
+        - aggregate_stats: Overall statistics (total users, instances, avg time)
+        - ai_usage: AI assistance usage statistics
+        - quality_summary: Quality indicators and suspicious activity flags
+        - interaction_types: Breakdown of interaction types
+        - change_sources: Sources of annotation changes
+        - users: Per-user behavioral metrics sorted by suspicion score
+    """
+    result = admin_dashboard.get_behavioral_analytics_data()
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
 # === ICL Verification Helper ===
 
 def _maybe_record_icl_verification(user_state, instance_id: str, annotations: dict) -> bool:
@@ -3510,6 +3532,12 @@ def get_keyword_highlights(instance_id):
     and returns them in the same format as AI keyword suggestions, so they can be
     displayed using the same visual system (bounding boxes around keywords).
 
+    The endpoint supports randomization for research purposes:
+    - keyword_probability: Probability of showing each matched keyword (default: 1.0)
+    - random_word_probability: Probability of highlighting random words as distractors (default: 0.05)
+
+    Highlights are cached per user+instance to ensure consistency across navigation.
+
     Colors are assigned based on schema/label to match the span annotation color scheme.
 
     Returns:
@@ -3523,14 +3551,19 @@ def get_keyword_highlights(instance_id):
                     "text": "employment",
                     "reasoning": "Keyword match: employ*",
                     "schema": "Issue-General",
-                    "color": "rgba(110, 86, 207, 0.8)"
+                    "color": "rgba(110, 86, 207, 0.8)",
+                    "type": "keyword"
                 },
                 ...
             ],
-            "instance_id": "item_1"
+            "instance_id": "item_1",
+            "from_cache": false
         }
     """
     import urllib.parse
+    import random
+    import hashlib
+    import re
 
     logger.debug(f"=== GET_KEYWORD_HIGHLIGHTS START ===")
     logger.debug(f"Instance ID: {instance_id}")
@@ -3541,11 +3574,41 @@ def get_keyword_highlights(instance_id):
         logger.warning("Get keyword highlights without active session")
         return jsonify({"error": "No active session"}), 401
 
+    username = session.get('username')
+
+    # Get user state for caching
+    user_state = get_user_state(username) if username else None
+
+    # Check for cached state
+    if user_state:
+        cached_state = user_state.get_keyword_highlight_state(instance_id)
+        if not cached_state:
+            # Try with decoded ID
+            cached_state = user_state.get_keyword_highlight_state(decoded_instance_id)
+        if cached_state:
+            logger.debug(f"Returning cached keyword highlights for {instance_id}")
+            return jsonify({
+                "keywords": cached_state.get("highlights", []),
+                "instance_id": instance_id,
+                "from_cache": True
+            })
+
+    # Get settings for randomization
+    settings = get_keyword_highlight_settings()
+    keyword_prob = settings.get('keyword_probability', 1.0)
+    random_word_prob = settings.get('random_word_probability', 0.05)
+    random_word_label = settings.get('random_word_label', 'distractor')
+    random_word_schema = settings.get('random_word_schema', 'keyword')
+
+    logger.debug(f"Keyword highlight settings: keyword_prob={keyword_prob}, random_word_prob={random_word_prob}")
+
+    # Create deterministic seed from username + instance_id for reproducibility
+    seed_str = f"{username}:{instance_id}" if username else instance_id
+    seed = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
+    rng = random.Random(seed)
+
     # Check if keyword highlights are enabled
     keyword_patterns = get_keyword_highlight_patterns()
-    if not keyword_patterns:
-        logger.debug("No keyword highlight patterns loaded")
-        return jsonify({"keywords": [], "instance_id": instance_id})
 
     # Get the instance text
     try:
@@ -3588,6 +3651,12 @@ def get_keyword_highlights(instance_id):
             span_key = (start, end)
             if span_key in seen_spans:
                 continue
+
+            # Apply keyword probability filter
+            if rng.random() > keyword_prob:
+                logger.debug(f"Skipping keyword '{matched_text}' due to probability filter")
+                continue
+
             seen_spans.add(span_key)
 
             # Get or assign color for this schema/label combination
@@ -3614,19 +3683,382 @@ def get_keyword_highlights(instance_id):
                 "text": matched_text,
                 "reasoning": f"Keyword: {pattern_str} → {label}",
                 "schema": schema,
-                "color": rgba_color
+                "color": rgba_color,
+                "type": "keyword"
             })
+
+    # Generate random word highlights (distractors)
+    random_highlights = []
+    if random_word_prob > 0:
+        random_highlights = generate_random_word_highlights(
+            original_text, rng, random_word_prob,
+            random_word_label, random_word_schema,
+            seen_spans
+        )
+        keywords.extend(random_highlights)
 
     # Sort by start position
     keywords.sort(key=lambda k: k['start'])
 
-    logger.debug(f"Found {len(keywords)} keyword matches")
+    logger.debug(f"Found {len(keywords)} total highlights ({len(keywords) - len(random_highlights)} keywords, {len(random_highlights)} random)")
+
+    # Cache the state for this user+instance
+    if user_state:
+        user_state.set_keyword_highlight_state(instance_id, {
+            "highlights": keywords,
+            "seed": seed,
+            "settings": {
+                "keyword_probability": keyword_prob,
+                "random_word_probability": random_word_prob
+            }
+        })
+        logger.debug(f"Cached keyword highlight state for {username}:{instance_id}")
+
     logger.debug("=== GET_KEYWORD_HIGHLIGHTS END ===")
 
     return jsonify({
         "keywords": keywords,
-        "instance_id": instance_id
+        "instance_id": instance_id,
+        "from_cache": False
     })
+
+
+def generate_random_word_highlights(text: str, rng, probability: float,
+                                    label: str, schema: str, excluded_spans: set) -> list:
+    """
+    Generate random word highlights based on probability.
+
+    This function selects random words from the text to highlight as "distractors"
+    to prevent annotators from relying solely on keyword highlights.
+
+    Args:
+        text: The instance text
+        rng: Seeded random.Random instance for reproducibility
+        probability: Probability of selecting each word (0.0-1.0)
+        label: Label for random highlights (e.g., 'distractor')
+        schema: Schema for random highlights (e.g., 'keyword')
+        excluded_spans: Set of (start, end) tuples to avoid (already highlighted)
+
+    Returns:
+        List of highlight dictionaries with keys: label, start, end, text, reasoning, schema, color, type
+    """
+    import re
+
+    highlights = []
+
+    # Find all words (sequences of word characters)
+    word_pattern = re.compile(r'\b\w+\b')
+
+    # Get color for random highlights
+    color = get_span_color(schema, label)
+    if not color:
+        # Use a gray color for distractors by default
+        color = "(156, 163, 175)"
+        set_span_color(schema, label, color)
+
+    # Convert to rgba
+    if color.startswith("(") and color.endswith(")"):
+        color_str = f"rgba{color[:-1]}, 0.6)"
+    else:
+        color_str = color
+
+    for match in word_pattern.finditer(text):
+        start = match.start()
+        end = match.end()
+        word = match.group()
+
+        # Skip if overlaps with existing highlight
+        overlaps = False
+        for ex_start, ex_end in excluded_spans:
+            if start < ex_end and end > ex_start:
+                overlaps = True
+                break
+        if overlaps:
+            continue
+
+        # Skip very short words (1-2 chars) - articles, prepositions, etc.
+        if len(word) <= 2:
+            continue
+
+        # Apply probability
+        if rng.random() < probability:
+            highlights.append({
+                "label": label,
+                "start": start,
+                "end": end,
+                "text": word,
+                "reasoning": "Random selection",
+                "schema": schema,
+                "color": color_str,
+                "type": "random"
+            })
+            excluded_spans.add((start, end))
+
+    return highlights
+
+
+# =============================================================================
+# Behavioral Tracking API Endpoints
+# =============================================================================
+
+@app.route("/api/track_interactions", methods=["POST"])
+def track_interactions():
+    """
+    Receive batched interaction events from the frontend.
+
+    Expected JSON payload:
+    {
+        "instance_id": "...",
+        "events": [...],
+        "focus_time": {"element": ms, ...},
+        "scroll_depth": float
+    }
+    """
+    import time as time_module
+    from potato.interaction_tracking import get_or_create_behavioral_data
+
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    username = session['username']
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    instance_id = data.get('instance_id')
+    events = data.get('events', [])
+
+    user_state = get_user_state(username)
+    if not user_state:
+        return jsonify({"error": "User state not found"}), 404
+
+    # Get or create behavioral data for this instance
+    bd = get_or_create_behavioral_data(
+        user_state.instance_id_to_behavioral_data,
+        instance_id
+    )
+
+    # Record server timestamp for each event
+    server_timestamp = time_module.time()
+
+    # Add events
+    for event in events:
+        # Add server timestamp if not present
+        if 'timestamp' not in event or event.get('timestamp') is None:
+            event['timestamp'] = server_timestamp
+
+        # Ensure instance_id is set
+        event['instance_id'] = instance_id
+
+        # Add to behavioral data
+        if hasattr(bd, 'interactions'):
+            from potato.interaction_tracking import InteractionEvent
+            bd.interactions.append(InteractionEvent(
+                event_type=event.get('event_type', 'unknown'),
+                timestamp=event.get('timestamp', server_timestamp),
+                target=event.get('target', ''),
+                instance_id=instance_id,
+                client_timestamp=event.get('client_timestamp'),
+                metadata=event.get('metadata', {}),
+            ))
+
+    # Update focus time if provided
+    focus_time = data.get('focus_time', {})
+    for element, time_ms in focus_time.items():
+        if hasattr(bd, 'update_focus_time'):
+            bd.update_focus_time(element, time_ms)
+        elif hasattr(bd, 'focus_time_by_element'):
+            bd.focus_time_by_element[element] = bd.focus_time_by_element.get(element, 0) + time_ms
+
+    # Update scroll depth
+    if 'scroll_depth' in data:
+        scroll_depth = data['scroll_depth']
+        if hasattr(bd, 'update_scroll_depth'):
+            bd.update_scroll_depth(scroll_depth)
+        elif hasattr(bd, 'scroll_depth_max'):
+            bd.scroll_depth_max = max(bd.scroll_depth_max, scroll_depth)
+
+    return jsonify({"status": "ok", "events_recorded": len(events)})
+
+
+@app.route("/api/track_ai_usage", methods=["POST"])
+def track_ai_usage():
+    """
+    Track AI assistance request, response, and user decisions.
+
+    Expected JSON payload:
+    {
+        "instance_id": "...",
+        "schema_name": "...",
+        "event_type": "request" | "response" | "accept" | "reject",
+        "suggestions": [...],  # for response events
+        "accepted_value": "..."  # for accept events
+    }
+    """
+    import time as time_module
+    from potato.interaction_tracking import get_or_create_behavioral_data, AIUsageEvent
+
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    username = session['username']
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    instance_id = data.get('instance_id')
+    schema_name = data.get('schema_name')
+    event_type = data.get('event_type')  # 'request', 'response', 'accept', 'reject'
+
+    if not instance_id or not schema_name or not event_type:
+        return jsonify({"error": "Missing required fields"}), 400
+
+    user_state = get_user_state(username)
+    if not user_state:
+        return jsonify({"error": "User state not found"}), 404
+
+    # Get or create behavioral data
+    bd = get_or_create_behavioral_data(
+        user_state.instance_id_to_behavioral_data,
+        instance_id
+    )
+
+    timestamp = time_module.time()
+
+    if event_type == 'request':
+        # Create new AI usage event
+        ai_event = AIUsageEvent(
+            request_timestamp=timestamp,
+            schema_name=schema_name,
+        )
+        if hasattr(bd, 'ai_usage'):
+            bd.ai_usage.append(ai_event)
+
+    elif event_type == 'response':
+        suggestions = data.get('suggestions', [])
+        # Update the most recent AI event for this schema
+        if hasattr(bd, 'ai_usage'):
+            for ai_event in reversed(bd.ai_usage):
+                event_schema = ai_event.schema_name if hasattr(ai_event, 'schema_name') else ai_event.get('schema_name')
+                event_response = ai_event.response_timestamp if hasattr(ai_event, 'response_timestamp') else ai_event.get('response_timestamp')
+                if event_schema == schema_name and not event_response:
+                    if hasattr(ai_event, 'response_timestamp'):
+                        ai_event.response_timestamp = timestamp
+                        ai_event.suggestions_shown = suggestions
+                    else:
+                        ai_event['response_timestamp'] = timestamp
+                        ai_event['suggestions_shown'] = suggestions
+                    break
+
+    elif event_type in ('accept', 'reject'):
+        accepted_value = data.get('accepted_value') if event_type == 'accept' else None
+        # Update the most recent AI event for this schema
+        if hasattr(bd, 'ai_usage'):
+            for ai_event in reversed(bd.ai_usage):
+                event_schema = ai_event.schema_name if hasattr(ai_event, 'schema_name') else ai_event.get('schema_name')
+                event_response = ai_event.response_timestamp if hasattr(ai_event, 'response_timestamp') else ai_event.get('response_timestamp')
+                if event_schema == schema_name and event_response:
+                    if hasattr(ai_event, 'suggestion_accepted'):
+                        ai_event.suggestion_accepted = accepted_value
+                        ai_event.time_to_decision_ms = int((timestamp - ai_event.response_timestamp) * 1000)
+                    else:
+                        ai_event['suggestion_accepted'] = accepted_value
+                        ai_event['time_to_decision_ms'] = int((timestamp - ai_event['response_timestamp']) * 1000)
+                    break
+
+    return jsonify({"status": "ok", "event_type": event_type})
+
+
+@app.route("/api/track_annotation_change", methods=["POST"])
+def track_annotation_change():
+    """
+    Track annotation changes from the frontend.
+
+    Expected JSON payload:
+    {
+        "instance_id": "...",
+        "schema_name": "...",
+        "label_name": "...",
+        "action": "select" | "deselect" | "update" | "clear",
+        "old_value": ...,
+        "new_value": ...,
+        "source": "user" | "ai_accept" | "keyboard" | "prefill"
+    }
+    """
+    import time as time_module
+    from potato.interaction_tracking import get_or_create_behavioral_data, AnnotationChange
+
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    username = session['username']
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    instance_id = data.get('instance_id')
+    schema_name = data.get('schema_name')
+    action = data.get('action')
+
+    if not instance_id or not schema_name or not action:
+        return jsonify({"error": "Missing required fields"}), 400
+
+    user_state = get_user_state(username)
+    if not user_state:
+        return jsonify({"error": "User state not found"}), 404
+
+    # Get or create behavioral data
+    bd = get_or_create_behavioral_data(
+        user_state.instance_id_to_behavioral_data,
+        instance_id
+    )
+
+    # Create annotation change record
+    change = AnnotationChange(
+        timestamp=time_module.time(),
+        schema_name=schema_name,
+        label_name=data.get('label_name'),
+        action=action,
+        old_value=data.get('old_value'),
+        new_value=data.get('new_value'),
+        source=data.get('source', 'user'),
+    )
+
+    if hasattr(bd, 'annotation_changes'):
+        bd.annotation_changes.append(change)
+
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/behavioral_data/<instance_id>", methods=["GET"])
+def get_behavioral_data(instance_id):
+    """
+    Get behavioral data for a specific instance.
+    Useful for debugging and analysis.
+    """
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    username = session['username']
+    user_state = get_user_state(username)
+
+    if not user_state:
+        return jsonify({"error": "User state not found"}), 404
+
+    bd = user_state.instance_id_to_behavioral_data.get(instance_id)
+
+    if not bd:
+        return jsonify({"error": "No behavioral data for instance"}), 404
+
+    if hasattr(bd, 'to_dict'):
+        return jsonify(bd.to_dict())
+    elif isinstance(bd, dict):
+        return jsonify(bd)
+    else:
+        return jsonify({"error": "Invalid behavioral data format"}), 500
 
 
 @app.route("/api/schemas")
