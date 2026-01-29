@@ -43,7 +43,7 @@
     "devDependencies": {
         "@types/jquery": "^3.5.31",
         "typescript": "^5.5.3",
-        "vite": "^5.4.8"
+        "vite": "^5.4.19"
     },
     "dependencies": {
         "@flatten-js/interval-tree": "^1.1.3",
