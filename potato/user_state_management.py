@@ -1034,24 +1034,33 @@ class UserState:
 
     def total_working_time(self):
         """
-        Calculate the amount of time a user have spend on annotation
+        Calculate the amount of time a user have spend on annotation.
+
+        Handles both legacy dict format (with time_string) and new BehavioralData objects.
         """
+        from potato.interaction_tracking import BehavioralData
+
         total_working_seconds = 0
         for inst_id in self.instance_id_to_behavioral_data:
-            time_string = self.instance_id_to_behavioral_data[inst_id].get("time_string")
-            if time_string:
-                total_working_seconds += (
-                    self.parse_time_string(time_string)["total_seconds"]
-                    if self.parse_time_string(time_string)
-                    else 0
-                )
+            bd = self.instance_id_to_behavioral_data[inst_id]
+
+            # Handle BehavioralData objects (new format)
+            if isinstance(bd, BehavioralData):
+                total_working_seconds += bd.total_time_ms / 1000.0
+            # Handle dict format (legacy)
+            elif isinstance(bd, dict):
+                time_string = bd.get("time_string")
+                if time_string:
+                    parsed = self.parse_time_string(time_string)
+                    if parsed:
+                        total_working_seconds += parsed["total_seconds"]
 
         if total_working_seconds < 60:
-            total_working_time_str = str(total_working_seconds) + " seconds"
+            total_working_time_str = str(int(total_working_seconds)) + " seconds"
         elif total_working_seconds < 3600:
-            total_working_time_str = str(int(total_working_seconds) / 60) + " minutes"
+            total_working_time_str = str(round(total_working_seconds / 60, 1)) + " minutes"
         else:
-            total_working_time_str = str(int(total_working_seconds) / 3600) + " hours"
+            total_working_time_str = str(round(total_working_seconds / 3600, 1)) + " hours"
 
         return (total_working_seconds, total_working_time_str)
 
@@ -1960,24 +1969,33 @@ class InMemoryUserState(UserState):
 
     def total_working_time(self):
         """
-        Calculate the amount of time a user have spend on annotation
+        Calculate the amount of time a user have spend on annotation.
+
+        Handles both legacy dict format (with time_string) and new BehavioralData objects.
         """
+        from potato.interaction_tracking import BehavioralData
+
         total_working_seconds = 0
         for inst_id in self.instance_id_to_behavioral_data:
-            time_string = self.instance_id_to_behavioral_data[inst_id].get("time_string")
-            if time_string:
-                total_working_seconds += (
-                    self.parse_time_string(time_string)["total_seconds"]
-                    if self.parse_time_string(time_string)
-                    else 0
-                )
+            bd = self.instance_id_to_behavioral_data[inst_id]
+
+            # Handle BehavioralData objects (new format)
+            if isinstance(bd, BehavioralData):
+                total_working_seconds += bd.total_time_ms / 1000.0
+            # Handle dict format (legacy)
+            elif isinstance(bd, dict):
+                time_string = bd.get("time_string")
+                if time_string:
+                    parsed = self.parse_time_string(time_string)
+                    if parsed:
+                        total_working_seconds += parsed["total_seconds"]
 
         if total_working_seconds < 60:
-            total_working_time_str = str(total_working_seconds) + " seconds"
+            total_working_time_str = str(int(total_working_seconds)) + " seconds"
         elif total_working_seconds < 3600:
-            total_working_time_str = str(int(total_working_seconds) / 60) + " minutes"
+            total_working_time_str = str(round(total_working_seconds / 60, 1)) + " minutes"
         else:
-            total_working_time_str = str(int(total_working_seconds) / 3600) + " hours"
+            total_working_time_str = str(round(total_working_seconds / 3600, 1)) + " hours"
 
         return (total_working_seconds, total_working_time_str)
 

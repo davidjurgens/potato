@@ -361,3 +361,43 @@ class TestTotalWorkingTime:
 
         total_time, formatted = user_state.total_working_time()
         assert total_time == 0
+
+    def test_total_working_time_with_behavioral_data_objects(self):
+        """Test total_working_time with BehavioralData objects (new format)."""
+        from potato.user_state_management import InMemoryUserState
+        from potato.interaction_tracking import BehavioralData
+
+        user_state = InMemoryUserState("test_user")
+
+        # New format with BehavioralData objects
+        bd1 = BehavioralData(instance_id="instance_1")
+        bd1.total_time_ms = 35000  # 35 seconds
+
+        bd2 = BehavioralData(instance_id="instance_2")
+        bd2.total_time_ms = 90000  # 90 seconds
+
+        user_state.instance_id_to_behavioral_data["instance_1"] = bd1
+        user_state.instance_id_to_behavioral_data["instance_2"] = bd2
+
+        total_time, formatted = user_state.total_working_time()
+        assert total_time == 125  # 35 + 90 seconds
+
+    def test_total_working_time_mixed_formats(self):
+        """Test total_working_time with both old dict format and new BehavioralData."""
+        from potato.user_state_management import InMemoryUserState
+        from potato.interaction_tracking import BehavioralData
+
+        user_state = InMemoryUserState("test_user")
+
+        # Old format with time_string
+        user_state.instance_id_to_behavioral_data["instance_1"] = {
+            "time_string": "Time spent: 0d 0h 0m 35s "  # 35 seconds
+        }
+
+        # New format with BehavioralData
+        bd = BehavioralData(instance_id="instance_2")
+        bd.total_time_ms = 90000  # 90 seconds
+        user_state.instance_id_to_behavioral_data["instance_2"] = bd
+
+        total_time, formatted = user_state.total_working_time()
+        assert total_time == 125  # 35 + 90 seconds
