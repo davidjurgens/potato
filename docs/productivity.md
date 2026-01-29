@@ -35,30 +35,80 @@ For example,
 ]
 ```
 
-## Dynamic highlighting
+## Admin Keyword Highlights
 
-Potato also includes randomized keyword highlights to aid in the
-annotation process. To enable dynamic highlighting, just provide a path
-to a tab-separated values file of keywords. The keywords file should
-have this format:
+Potato supports admin-defined keyword highlights to help annotators identify relevant words and phrases in the text. Keywords are displayed as colored bordered boxes around matching text when an instance loads.
 
-```
-Word Label   Schema
-good*    Negative    Sentiment
-bad* Positive    Sentiment
-terrible Negative    Sentiment
+### Configuration
+
+Add a `keyword_highlights_file` to your configuration pointing to a TSV file:
+
+```yaml
+keyword_highlights_file: data/keywords.tsv
 ```
 
-Where the values in the Word column can be any valid regex, the value in
-the i p Label column corresponds to the selection label and the value in
-the Schema column corresponds to the annotation schema the label is
-listed under. A single keywords file can support multiple schemas.
+The path is relative to the directory where you run the server (task_dir).
 
-Provide the path to the keywords file as the value to the
-`keyword_highlights_file` key in the configuration file.
+### TSV File Format
 
-There is currently no way to specify the colors used through the
-configuration file.
+The keywords file should be tab-separated with three columns:
+
+```
+Word	Label	Schema
+love	positive	sentiment
+hate	negative	sentiment
+excel*	positive	sentiment
+disappoint*	negative	sentiment
+```
+
+| Column | Description |
+|--------|-------------|
+| **Word** | The keyword or phrase to highlight (supports `*` wildcards) |
+| **Label** | The annotation label associated with this keyword |
+| **Schema** | The annotation schema name this keyword is relevant to |
+
+**Note:** Use actual tab characters between columns, not spaces.
+
+### Matching Behavior
+
+- **Case-insensitive**: "Love" matches "love", "LOVE", "Love"
+- **Word boundaries**: "love" matches "love" but not "lovely" (unless using wildcards)
+- **Wildcards**: Use `*` for prefix/suffix matching:
+  - `excel*` matches "excellent", "excels", "excel"
+  - `*happy` matches "unhappy", "happy"
+  - `dis*ed` matches "disappointed", "dismayed"
+
+### Configuring Colors
+
+Colors for keyword highlights are configured in the `ui.spans.span_colors` section, matching the schema and label names:
+
+```yaml
+ui:
+  spans:
+    span_colors:
+      sentiment:
+        positive: "(34, 197, 94)"    # Green
+        negative: "(239, 68, 68)"    # Red
+        neutral: "(156, 163, 175)"   # Gray
+```
+
+If no color is specified, Potato automatically assigns colors from a default palette.
+
+### Multiple Schemas
+
+A single keywords file can support multiple annotation schemas:
+
+```
+Word	Label	Schema
+excellent	positive	sentiment
+terrible	negative	sentiment
+price	economic	topic
+election	political	topic
+```
+
+### Example
+
+See the [keyword-highlights-example](https://github.com/davidjurgens/potato/tree/master/project-hub/simple_examples/keyword-highlights-example) in the project hub for a complete working example.
 
 ## Tooltips
 

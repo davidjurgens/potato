@@ -316,21 +316,56 @@ Returns the color mapping for annotation labels.
 GET /api/keyword_highlights/{instance_id}
 ```
 
-Returns keyword highlighting patterns for an instance (if configured).
+Returns admin-defined keyword matches found in the instance text. Keywords are configured via `keyword_highlights_file` in the config.
+
+**Parameters:**
+- `instance_id` (path): The ID of the instance to get keyword highlights for
 
 **Response:**
 ```json
 {
-  "patterns": [
+  "instance_id": "item_1",
+  "keywords": [
     {
+      "label": "positive",
+      "start": 10,
+      "end": 19,
       "text": "excellent",
-      "color": "#90EE90",
+      "reasoning": "Keyword: excel* → positive",
       "schema": "sentiment",
-      "label": "positive"
+      "color": "rgba(34, 197, 94, 0.8)"
+    },
+    {
+      "label": "negative",
+      "start": 45,
+      "end": 53,
+      "text": "terrible",
+      "reasoning": "Keyword: terrible → negative",
+      "schema": "sentiment",
+      "color": "rgba(239, 68, 68, 0.8)"
     }
   ]
 }
 ```
+
+**Response Fields:**
+| Field | Description |
+|-------|-------------|
+| `instance_id` | The instance ID |
+| `keywords` | Array of keyword matches found in the text |
+| `keywords[].label` | The label associated with this keyword |
+| `keywords[].start` | Character offset where the match starts |
+| `keywords[].end` | Character offset where the match ends |
+| `keywords[].text` | The actual matched text from the instance |
+| `keywords[].reasoning` | Description of the keyword pattern that matched |
+| `keywords[].schema` | The annotation schema this keyword belongs to |
+| `keywords[].color` | RGBA color string for rendering the highlight |
+
+**Notes:**
+- Returns empty `keywords` array if no `keyword_highlights_file` is configured
+- Keywords are sorted by start position
+- Duplicate matches at the same position are deduplicated
+- Colors are taken from `ui.spans.span_colors` config or auto-assigned
 
 ---
 

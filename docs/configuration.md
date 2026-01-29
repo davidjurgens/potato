@@ -628,9 +628,36 @@ list_as_text:
 
 ### Keyword Highlights
 
+Admin-defined keywords that are automatically highlighted in the text to help annotators identify relevant content.
+
 ```yaml
-keyword_highlights_file: frame_keywords.tsv
+# Path to TSV file with keywords (relative to task_dir)
+keyword_highlights_file: data/keywords.tsv
+
+# Configure colors for keyword labels (optional)
+ui:
+  spans:
+    span_colors:
+      sentiment:
+        positive: "(34, 197, 94)"    # Green
+        negative: "(239, 68, 68)"    # Red
 ```
+
+The TSV file format:
+```
+Word	Label	Schema
+love	positive	sentiment
+excel*	positive	sentiment
+terrible	negative	sentiment
+```
+
+Features:
+- **Wildcard support**: Use `*` for prefix/suffix matching (e.g., `excel*` matches "excellent")
+- **Case-insensitive**: Matching ignores case
+- **Word boundaries**: Non-wildcard terms match whole words only
+- **Multiple schemas**: One file can define keywords for multiple annotation schemas
+
+See [Productivity Features](productivity.md#admin-keyword-highlights) for detailed documentation.
 
 ## Complete Example
 

@@ -60,11 +60,24 @@ Keywords support `*` wildcards:
 - `*happy` matches "unhappy", "happy"
 - `disappoint*` matches "disappointing", "disappointed"
 
+## Matching Behavior
+
+- **Case-insensitive**: "Love" matches "love", "LOVE", "Love"
+- **Word boundaries**: "love" matches "love" but not "lovely" (unless using wildcards)
+- **Multiple schemas**: A single TSV file can define keywords for multiple annotation schemas
+
 ## Running the Example
 
+From within this directory:
 ```bash
-cd project-hub/simple_examples/configs/keyword-highlights-example
-python -m potato start config.yaml
+cd project-hub/simple_examples/keyword-highlights-example
+python ../../../potato/flask_server.py start config.yaml -p 8000
 ```
 
 Then open http://localhost:8000 in your browser.
+
+## Troubleshooting
+
+- **Keywords not appearing**: Check that the TSV file path is correct relative to where you run the server
+- **Wrong colors**: Ensure the schema and label names in `ui.spans.span_colors` match exactly (case-sensitive)
+- **No matches**: Verify your keywords exist in the text (matching is case-insensitive)
