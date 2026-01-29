@@ -107,7 +107,7 @@ class TestBehavioralAnalyticsAPI:
         data = response.json()
 
         # Verify top-level structure
-        assert 'aggregate_stats' in data
+        assert 'aggregate' in data
         assert 'ai_usage' in data
         assert 'quality_summary' in data
         assert 'interaction_types' in data
@@ -115,13 +115,10 @@ class TestBehavioralAnalyticsAPI:
         assert 'users' in data
 
         # Verify aggregate stats structure
-        stats = data['aggregate_stats']
-        assert 'total_users' in stats
+        stats = data['aggregate']
         assert 'total_instances' in stats
-        assert 'avg_time_per_instance_sec' in stats
-        assert 'total_interactions' in stats
-        assert 'total_changes' in stats
-        assert 'total_ai_requests' in stats
+        assert 'avg_time_per_instance' in stats
+        assert 'total_time_minutes' in stats
 
         # Verify AI usage structure
         ai = data['ai_usage']
@@ -133,10 +130,9 @@ class TestBehavioralAnalyticsAPI:
 
         # Verify quality summary structure
         quality = data['quality_summary']
-        assert 'high_suspicion_users' in quality
-        assert 'fast_annotation_rate' in quality
-        assert 'low_interaction_rate' in quality
-        assert 'no_change_rate' in quality
+        assert 'flagged_user_ids' in quality
+        assert 'total_flagged' in quality
+        assert 'warning_user_ids' in quality
 
     def test_behavioral_analytics_with_user_activity(self, flask_server):
         """Test behavioral analytics after user activity."""
@@ -169,7 +165,7 @@ class TestBehavioralAnalyticsAPI:
 
         data = response.json()
         # The structure should still be valid even with user activity
-        assert 'aggregate_stats' in data
+        assert 'aggregate' in data
         assert isinstance(data['users'], list)
 
 

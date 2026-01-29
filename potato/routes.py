@@ -4606,6 +4606,15 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/api/icl/trigger", "admin_api_icl_trigger", admin_api_icl_trigger, methods=["POST"])
     app.add_url_rule("/api/icl/record_verification", "api_icl_record_verification", api_icl_record_verification, methods=["POST"])
 
+    # Behavioral tracking and analytics routes
+    app.add_url_rule("/admin/api/agreement", "admin_api_agreement", admin_api_agreement, methods=["GET"])
+    app.add_url_rule("/admin/api/quality_control", "admin_api_quality_control", admin_api_quality_control, methods=["GET"])
+    app.add_url_rule("/admin/api/behavioral_analytics", "admin_api_behavioral_analytics", admin_api_behavioral_analytics, methods=["GET"])
+    app.add_url_rule("/api/track_interactions", "track_interactions", track_interactions, methods=["POST"])
+    app.add_url_rule("/api/track_ai_usage", "track_ai_usage", track_ai_usage, methods=["POST"])
+    app.add_url_rule("/api/track_annotation_change", "track_annotation_change", track_annotation_change, methods=["POST"])
+    app.add_url_rule("/api/behavioral_data/<instance_id>", "get_behavioral_data", get_behavioral_data, methods=["GET"])
+
     app.add_url_rule("/shutdown", "shutdown", shutdown, methods=["POST"])
 
 @app.route('/shutdown', methods=['POST'])
