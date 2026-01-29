@@ -11,6 +11,7 @@ class AIAssistantManager {
         this.activeTooltips = new Set();
         this.keywordHighlightStates = new Map();
         this.highlightedLabels = new Map(); // Track highlighted labels by annotationId
+        this.colors = {}; // Label colors loaded from API
 
         // Add new AI assistant types here
         this.assistantConfig = {
@@ -38,8 +39,24 @@ class AIAssistantManager {
     }
 
     init() {
+        this.loadColors();
         this.setupEventDelegation();
         this.setupClickOutside();
+    }
+
+    /**
+     * Load label colors from the server API
+     */
+    async loadColors() {
+        try {
+            const response = await fetch('/api/colors');
+            if (response.ok) {
+                this.colors = await response.json();
+                console.log('[AIAssistant] Colors loaded:', this.colors);
+            }
+        } catch (error) {
+            console.warn('[AIAssistant] Error loading colors:', error);
+        }
     }
 
     setupClickOutside() {
@@ -74,6 +91,16 @@ class AIAssistantManager {
             node.addEventListener("click", (event) => {
                 const clickedHint = event.target.closest('.hint');
                 const clickKeyword = event.target.closest('.keyword');
+                const clickedRandom = event.target.closest('.random');
+
+                console.log('[AIAssistant] Click detected on ai-help:', {
+                    target: event.target.className,
+                    clickedHint: !!clickedHint,
+                    clickKeyword: !!clickKeyword,
+                    clickedRandom: !!clickedRandom,
+                    annotationId
+                });
+
                 event.stopPropagation();
                 event.preventDefault();
 
@@ -82,6 +109,8 @@ class AIAssistantManager {
                     this.toggleAssistant("hint", annotationId, tooltip);
                 } else if (clickKeyword && node.contains(clickKeyword)) {
                     this.toggleAssistant("keyword", annotationId, tooltip);
+                } else if (clickedRandom && node.contains(clickedRandom)) {
+                    this.toggleAssistant("random", annotationId, tooltip);
                 }
 
             });
@@ -115,7 +144,7 @@ class AIAssistantManager {
                 data.res = await response.json();
                 data.type = "json";
             } else {
-                data.res = await response.json();
+                data.res = await response.text();
                 data.type = "text";
             }
             return data;
@@ -143,7 +172,13 @@ class AIAssistantManager {
     }
 
     toggleAssistant(assistantType, annotationId, tooltip) {
+        console.log('[AIAssistant] toggleAssistant called:', { assistantType, annotationId, hasTooltip: !!tooltip });
+
         if (assistantType == "keyword") {
+            console.log('[AIAssistant] Keyword clicked, checking spanManager:', {
+                spanManagerExists: !!window.spanManager,
+                inAiSpans: window.spanManager?.inAiSpans?.(annotationId)
+            });
             if (window.spanManager.inAiSpans(annotationId)) {
                 window.spanManager.deleteOneAiSpan(annotationId);
                 return;
@@ -168,6 +203,8 @@ class AIAssistantManager {
 
 
     async getAiAssistantDefault(assistantType, annotationId, tooltip) {
+        console.log('[AIAssistant] getAiAssistantDefault called:', { assistantType, annotationId, hasTooltip: !!tooltip });
+
         if (!tooltip) {
             console.error('Tooltip element not found');
             return;
@@ -175,10 +212,10 @@ class AIAssistantManager {
 
         try {
             this.startLoading(tooltip, assistantType);
+            console.log('[AIAssistant] Fetching data for:', assistantType);
             const data = await this.fetchAssistantData(assistantType, annotationId);
-            console.log("2132132114213221")
+            console.log('[AIAssistant] Received data:', data);
             this.renderAssistant(tooltip, assistantType, data, annotationId);
-            console.log("eerrrererrereereerr")
         } catch (error) {
             console.error('Error getting AI assistant:', error);
             this.showError(tooltip, assistantType);
@@ -245,7 +282,124 @@ class AIAssistantManager {
     }
 
     renderKeyword(data, annotationId) {
-        window.spanManager.insertAiSpans(data["keywords"], annotationId);
+        console.log('[AIAssistant] renderKeyword called:', { data, annotationId });
+
+        // Get the text-content element (not instance-text) to match positioning calculations
+        // #instance-text contains both #text-content and #span-overlays, which causes offset mismatches
+        const textContent = document.getElementById('text-content');
+        if (!textContent) {
+            console.error('[AIAssistant] text-content element not found');
+            return;
+        }
+
+        const text = textContent.textContent || textContent.innerText;
+        console.log('[AIAssistant] Text content length:', text.length);
+
+        // Parse the new label_keywords format
+        const labelKeywords = data.label_keywords;
+        if (!labelKeywords || !Array.isArray(labelKeywords)) {
+            console.error('[AIAssistant] Invalid label_keywords format:', data);
+            return;
+        }
+
+        // Get the annotation form to find the schema name
+        // The form's id attribute is the schema name (e.g., "sentiment")
+        const annotationForm = document.querySelector(`.annotation-form[data-annotation-id="${annotationId}"]`);
+        const schemaName = annotationForm?.id || annotationForm?.dataset.schemaName || 'default';
+
+        // Find keywords in text and create highlight data
+        const highlights = [];
+        console.log('[AIAssistant] Processing label_keywords:', labelKeywords);
+
+        labelKeywords.forEach(({ label, keywords }) => {
+            if (!keywords || !Array.isArray(keywords)) {
+                console.log('[AIAssistant] Skipping label with no keywords:', label);
+                return;
+            }
+
+            console.log(`[AIAssistant] Finding keywords for label "${label}":`, keywords);
+
+            keywords.forEach(keyword => {
+                if (!keyword || typeof keyword !== 'string') return;
+
+                // Find all occurrences of this keyword in the text (case-insensitive)
+                const lowerText = text.toLowerCase();
+                const lowerKeyword = keyword.toLowerCase().trim();
+                let startIndex = 0;
+
+                while ((startIndex = lowerText.indexOf(lowerKeyword, startIndex)) !== -1) {
+                    const foundText = text.substring(startIndex, startIndex + keyword.length);
+                    console.log(`[AIAssistant] Found "${foundText}" at position ${startIndex}-${startIndex + keyword.length}`);
+                    highlights.push({
+                        label: label,
+                        start: startIndex,
+                        end: startIndex + keyword.length,
+                        text: foundText,
+                        schema: schemaName
+                    });
+                    startIndex += keyword.length;
+                }
+            });
+        });
+
+        console.log('[AIAssistant] Total highlights found:', highlights.length, highlights);
+
+        if (highlights.length === 0) {
+            console.log('[AIAssistant] No keywords found in text');
+            return;
+        }
+
+        // Always use spanManager for keyword highlighting
+        // This ensures consistent positioning and z-index with other overlays
+        if (window.spanManager && typeof window.spanManager.insertAiKeywordHighlights === 'function') {
+            window.spanManager.insertAiKeywordHighlights(highlights, annotationId);
+        } else {
+            console.error('[AIAssistant] spanManager.insertAiKeywordHighlights not available - cannot display keyword highlights');
+        }
+    }
+
+    /**
+     * Get the color for a label from the loaded colors or schema colors
+     */
+    getLabelColor(label, schemaName) {
+        // Default colors for common labels
+        const defaultColors = {
+            'positive': 'rgba(34, 197, 94, 0.8)',   // green
+            'negative': 'rgba(239, 68, 68, 0.8)',   // red
+            'neutral': 'rgba(156, 163, 175, 0.8)', // gray
+            'yes': 'rgba(34, 197, 94, 0.8)',        // green
+            'no': 'rgba(239, 68, 68, 0.8)',         // red
+            'maybe': 'rgba(245, 158, 11, 0.8)',     // amber
+        };
+
+        // 1. Try to get from AIAssistantManager's loaded colors
+        if (this.colors && schemaName && this.colors[schemaName]) {
+            const schemaColors = this.colors[schemaName];
+            if (schemaColors[label]) {
+                return schemaColors[label];
+            }
+        }
+
+        // 2. Try to get from spanManager colors (if available)
+        if (window.spanManager && window.spanManager.colors) {
+            const schemaColors = window.spanManager.colors[schemaName];
+            if (schemaColors && schemaColors[label]) {
+                const color = schemaColors[label];
+                if (color.startsWith('(')) {
+                    return `rgba${color.replace(')', ', 0.8)')}`;
+                }
+                return color;
+            }
+        }
+
+        // 3. Try named default colors (case-insensitive)
+        const lowerLabel = label.toLowerCase();
+        if (defaultColors[lowerLabel]) {
+            return defaultColors[lowerLabel];
+        }
+
+        // 4. Fallback to amber
+        return 'rgba(245, 158, 11, 0.8)';
     }
 
     renderRandom(data) {
@@ -373,14 +527,37 @@ class AIAssistantManager {
     }
 
     async getAiAssistantName() {
-        document.querySelectorAll('.annotation-form').forEach(async (node) => {
+        console.log('[AIAssistant] getAiAssistantName() called');
+        const forms = document.querySelectorAll('.annotation-form');
+        console.log('[AIAssistant] Found annotation forms:', forms.length);
+
+        forms.forEach(async (node) => {
             const aiHelp = node.querySelector(".ai-help");
+            const annotationId = node.getAttribute("data-annotation-id");
+            aiDebugLog('[AIAssistant] Looking for .ai-help in form:', node.id, 'annotationId:', annotationId, '- Found:', aiHelp !== null);
+
             // Skip if no ai-help element exists (e.g., video/audio annotation forms)
             if (!aiHelp) {
+                aiDebugLog('[AIAssistant] No .ai-help element found, skipping');
                 return;
             }
 
-            const annotationId = node.getAttribute("data-annotation-id");
+            // Skip if AI assistant buttons are already loaded (check for both spellings)
+            const existingButtons = aiHelp.querySelector('.ai-assistant-containter, .ai-assistant-container');
+            if (existingButtons) {
+                aiDebugLog('[AIAssistant] AI buttons already loaded, skipping');
+                return;
+            }
+
+            // Mark as loading to prevent duplicate requests
+            if (aiHelp.dataset.aiLoading === 'true') {
+                aiDebugLog('[AIAssistant] Already loading, skipping duplicate request');
+                return;
+            }
+            aiHelp.dataset.aiLoading = 'true';
+
+            aiDebugLog('[AIAssistant] Fetching AI assistant for annotationId:', annotationId);
+
             const params = new URLSearchParams({
                 annotationId: annotationId
             });
@@ -391,17 +568,38 @@ class AIAssistantManager {
                     headers: { 'Content-Type': 'application/json' }
                 });
                 const data = await response.text();
+                aiDebugLog('[AIAssistant] Response received, data length:', data?.length);
 
                 if (!data || !data.trim()) {
+                    aiDebugLog('[AIAssistant] Empty response, not inserting');
+                    aiHelp.dataset.aiLoading = 'false';
                     return;
                 }
-                aiHelp.classList.remove("none");
-                aiHelp.insertAdjacentHTML('afterbegin', data);
-            } catch (error) {
-                aiDebugLog('[AIAssistant] Error fetching AI assistant:', error);
-                if (aiHelp) {
-                    aiHelp.innerHTML = '<span class="error">Error loading AI assistant</span>';
+
+                // Double-check no buttons were added while we were fetching
+                const buttonsAddedDuringFetch = aiHelp.querySelector('.ai-assistant-containter, .ai-assistant-container');
+                if (buttonsAddedDuringFetch) {
+                    aiDebugLog('[AIAssistant] Buttons were added during fetch, skipping');
+                    aiHelp.dataset.aiLoading = 'false';
+                    return;
                 }
+
+                aiDebugLog('[AIAssistant] Inserting HTML and removing "none" class');
+                aiHelp.classList.remove("none");
+
+                // Clear any existing content before inserting (except tooltip)
+                const tooltip = aiHelp.querySelector('.tooltip');
+                const tooltipHTML = tooltip ? tooltip.outerHTML : '<div class="tooltip"></div>';
+                aiHelp.innerHTML = data + tooltipHTML;
+
+                aiDebugLog('[AIAssistant] HTML inserted successfully');
+            } catch (error) {
+                console.error('[AIAssistant] Error fetching AI assistant:', error);
+                if (aiHelp) {
+                    aiHelp.innerHTML = '<span class="error">Error loading AI assistant</span><div class="tooltip"></div>';
+                }
+            } finally {
+                aiHelp.dataset.aiLoading = 'false';
             }
         });
     }

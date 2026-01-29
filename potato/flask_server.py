@@ -93,8 +93,10 @@ from potato.server_utils.json import easy_json
 # This allows us to create an AI endpoint for the system to interact with as needed (if configured)
 from potato.ai.ai_endpoint import get_ai_endpoint
 
-# AI cache manager for caching AI responses
+# AI support initialization
+from potato.ai.ai_prompt import init_ai_prompt
 from potato.ai.ai_cache import init_ai_cache_manager, get_ai_cache_manager
+from potato.ai.ai_help_wrapper import init_dynamic_ai_help
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -153,6 +155,11 @@ emphasis_corpus_to_schemas = defaultdict(set)
 # Keyword highlight patterns loaded from TSV file
 # List of dicts: {pattern: str, regex: compiled_regex, label: str, schema: str}
 keyword_highlight_patterns = []
+
+def get_keyword_highlight_patterns():
+    """Get the current keyword highlight patterns list."""
+    logger.debug(f"[get_keyword_highlight_patterns] Returning {len(keyword_highlight_patterns)} patterns")
+    return keyword_highlight_patterns
 
 # Response Highlight Class
 @dataclass(frozen=True)
@@ -686,17 +693,29 @@ def load_highlights_data(config: dict) -> None:
     - '*word' matches 'sword', 'keyword', etc.
     - 'word' matches exactly 'word' (case-insensitive, word boundaries)
     """
-    global keyword_highlight_patterns, emphasis_corpus_to_schemas
+    # IMPORTANT: When running as __main__, we need to modify the list in the
+    # package module (potato.flask_server) so that routes.py can see the changes.
+    # This is because Python treats __main__ and potato.flask_server as different modules.
+    import sys
+    if __name__ == '__main__' and 'potato.flask_server' in sys.modules:
+        # Use the package module's list instead of __main__'s list
+        pkg_module = sys.modules['potato.flask_server']
+        patterns_list = pkg_module.keyword_highlight_patterns
+        emphasis_map = pkg_module.emphasis_corpus_to_schemas
+    else:
+        global keyword_highlight_patterns, emphasis_corpus_to_schemas
+        patterns_list = keyword_highlight_patterns
+        emphasis_map = emphasis_corpus_to_schemas
 
     keyword_highlights_file = config.get("keyword_highlights_file")
     if not keyword_highlights_file:
         logger.debug("No keyword_highlights_file specified in config")
         return
 
-    # Resolve the file path relative to task_dir if not absolute
-    task_dir = config.get("task_dir", "")
-    if not os.path.isabs(keyword_highlights_file):
-        keyword_highlights_file = os.path.join(task_dir, keyword_highlights_file)
+    # Note: CWD is already set to task_dir by config_module.py,
+    # so we just need to convert to absolute path from CWD
+    # (don't prepend task_dir again, or we'll double the path)
+    keyword_highlights_file = os.path.realpath(keyword_highlights_file)
 
     if not os.path.exists(keyword_highlights_file):
         logger.warning(f"Keyword highlights file not found: {keyword_highlights_file}")
@@ -704,7 +723,9 @@ def load_highlights_data(config: dict) -> None:
 
     logger.info(f"Loading keyword highlights from: {keyword_highlights_file}")
 
-    keyword_highlight_patterns = []
+    # Clear the existing list in place (don't reassign) so that modules
+    # that imported keyword_highlight_patterns see the updated contents
+    patterns_list.clear()
 
     try:
         with open(keyword_highlights_file, 'r', encoding='utf-8') as f:
@@ -738,7 +759,7 @@ def load_highlights_data(config: dict) -> None:
 
                 try:
                     compiled_regex = re.compile(pattern, re.IGNORECASE)
-                    keyword_highlight_patterns.append({
+                    patterns_list.append({
                         'pattern': word,
                         'regex': compiled_regex,
                         'label': label,
@@ -746,17 +767,17 @@ def load_highlights_data(config: dict) -> None:
                     })
 
                     # Also populate the emphasis corpus for backward compatibility
-                    emphasis_corpus_to_schemas[word].add(HighlightSchema(label=label, schema=schema))
+                    emphasis_map[word].add(HighlightSchema(label=label, schema=schema))
 
                 except re.error as e:
                     logger.warning(f"Invalid regex pattern for keyword '{word}': {e}")
                     continue
 
-        logger.info(f"Loaded {len(keyword_highlight_patterns)} keyword highlight patterns")
+        logger.info(f"Loaded {len(patterns_list)} keyword highlight patterns")
 
     except Exception as e:
         logger.error(f"Error loading keyword highlights file: {e}")
-        keyword_highlight_patterns = []
+        patterns_list.clear()
 
 def load_phase_data(config: dict) -> None:
     # Lazy import - only when this function is called
@@ -2124,7 +2145,22 @@ def run_server(args):
 
     init_user_state_manager(config)
     init_item_state_manager(config)
+
+    # Initialize AI prompt and wrapper BEFORE load_all_data() because
+    # template generation needs get_ai_wrapper() to return the AI help div
+    if config.get("ai_support", {}).get("enabled", False):
+        logger.info("Initializing AI prompt and wrapper...")
+        init_ai_prompt(config)
+        init_dynamic_ai_help()
+
     load_all_data(config)
+
+    # Initialize AI cache manager AFTER load_all_data() because
+    # it needs item_state_manager to be fully initialized for warmup
+    if config.get("ai_support", {}).get("enabled", False):
+        logger.info("Initializing AI cache manager...")
+        init_ai_cache_manager()
+        logger.info("AI support initialized successfully")
 
     # Initialize quality control manager if any QC features are enabled
     qc_enabled = (

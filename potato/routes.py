@@ -48,7 +48,7 @@ from potato.flask_server import (
     get_ai_cache_manager,
     get_users, get_total_annotations, update_annotation_state, ai_hints,
     get_training_instances, get_training_correct_answers, get_training_explanation,
-    get_training_instance_categories, get_prolific_study, keyword_highlight_patterns
+    get_training_instance_categories, get_prolific_study, get_keyword_highlight_patterns
 )
 
 # Import admin dashboard functionality
@@ -3343,145 +3343,161 @@ def test_span_colors():
     """
     return render_template("test_span_colors.html")
 
+def normalize_color(color_value):
+    """
+    Normalize color value to a consistent format for the frontend.
+    Accepts: hex (#rrggbb), rgb/rgba, named colors, or tuple format "(r, g, b)".
+    Returns a CSS-compatible color string.
+    """
+    if not color_value:
+        return None
+
+    color_str = str(color_value).strip()
+
+    # Already a valid CSS color (hex, rgb, rgba, named)
+    if color_str.startswith('#') or color_str.startswith('rgb') or color_str.startswith('hsl'):
+        return color_str
+
+    # Tuple format "(r, g, b)" -> rgba
+    if color_str.startswith("(") and color_str.endswith(")"):
+        try:
+            rgb_parts = color_str.strip("()").split(",")
+            rgb_parts = [p.strip() for p in rgb_parts]
+            if len(rgb_parts) == 3:
+                r, g, b = int(rgb_parts[0]), int(rgb_parts[1]), int(rgb_parts[2])
+                return f"rgba({r}, {g}, {b}, 0.8)"
+            elif len(rgb_parts) == 4:
+                r, g, b, a = int(rgb_parts[0]), int(rgb_parts[1]), int(rgb_parts[2]), float(rgb_parts[3])
+                return f"rgba({r}, {g}, {b}, {a})"
+        except (ValueError, IndexError):
+            pass
+
+    # Named color - return as-is
+    return color_str
+
+
+# Default color palette for labels (used when no custom color is specified)
+DEFAULT_LABEL_COLORS = [
+    'rgba(110, 86, 207, 0.8)',   # Purple (primary)
+    'rgba(34, 197, 94, 0.8)',    # Green
+    'rgba(239, 68, 68, 0.8)',    # Red
+    'rgba(59, 130, 246, 0.8)',   # Blue
+    'rgba(245, 158, 11, 0.8)',   # Amber
+    'rgba(236, 72, 153, 0.8)',   # Pink
+    'rgba(6, 182, 212, 0.8)',    # Cyan
+    'rgba(249, 115, 22, 0.8)',   # Orange
+    'rgba(139, 92, 246, 0.8)',   # Violet
+    'rgba(16, 185, 129, 0.8)',   # Emerald
+]
+
+# Named color mappings for common label names
+NAMED_LABEL_COLORS = {
+    'positive': 'rgba(34, 197, 94, 0.8)',    # Green
+    'negative': 'rgba(239, 68, 68, 0.8)',    # Red
+    'neutral': 'rgba(156, 163, 175, 0.8)',   # Gray
+    'mixed': 'rgba(245, 158, 11, 0.8)',      # Amber
+    'happy': 'rgba(34, 197, 94, 0.8)',       # Green
+    'sad': 'rgba(59, 130, 246, 0.8)',        # Blue
+    'angry': 'rgba(220, 38, 38, 0.8)',       # Dark red
+    'fear': 'rgba(139, 92, 246, 0.8)',       # Violet
+    'surprise': 'rgba(249, 115, 22, 0.8)',   # Orange
+    'disgust': 'rgba(132, 204, 22, 0.8)',    # Lime
+    'yes': 'rgba(34, 197, 94, 0.8)',         # Green
+    'no': 'rgba(239, 68, 68, 0.8)',          # Red
+    'maybe': 'rgba(245, 158, 11, 0.8)',      # Amber
+    'true': 'rgba(34, 197, 94, 0.8)',        # Green
+    'false': 'rgba(239, 68, 68, 0.8)',       # Red
+    'high': 'rgba(239, 68, 68, 0.8)',        # Red
+    'medium': 'rgba(245, 158, 11, 0.8)',     # Amber
+    'low': 'rgba(34, 197, 94, 0.8)',         # Green
+}
+
+
+def get_default_label_color(label_name, index=0):
+    """
+    Get a default color for a label based on its name or index.
+    First checks for named colors, then falls back to palette by index.
+    """
+    # Check for named color match (case-insensitive)
+    lower_name = label_name.lower().strip()
+    if lower_name in NAMED_LABEL_COLORS:
+        return NAMED_LABEL_COLORS[lower_name]
+
+    # Fall back to color from palette based on index
+    return DEFAULT_LABEL_COLORS[index % len(DEFAULT_LABEL_COLORS)]
+
+
 @app.route("/api/colors")
 def get_span_colors():
     """
-    Return the span color mapping for all schemas/labels as JSON.
+    Return the color mapping for all schemas/labels as JSON.
+    Supports colors from:
+    1. ui.label_colors - global color definitions by schema/label
+    2. ui.spans.span_colors - legacy span-specific colors
+    3. Inline 'color' property on labels in annotation_schemes
+    4. Auto-generated colors from SPAN_COLOR_PALETTE
     """
-    logger.debug("=== GET_SPAN_COLORS START ===")
-    logger.debug(f"Config keys: {list(config.keys())}")
-    logger.debug(f"UI config: {config.get('ui', 'NOT_FOUND')}")
+    logger.debug("=== GET_COLORS START ===")
 
-    # First, try to get colors from ui.spans.span_colors (current config format)
     color_map = {}
+
+    # 1. Load colors from ui.label_colors (new unified format)
+    if "ui" in config and "label_colors" in config["ui"]:
+        logger.debug("Found ui.label_colors in config")
+        for schema_name, label_colors in config["ui"]["label_colors"].items():
+            color_map[schema_name] = {}
+            for label_name, color_value in label_colors.items():
+                normalized = normalize_color(color_value)
+                if normalized:
+                    color_map[schema_name][label_name] = normalized
+
+    # 2. Load colors from ui.spans.span_colors (legacy format)
     if "ui" in config and "spans" in config["ui"] and "span_colors" in config["ui"]["spans"]:
         logger.debug("Found ui.spans.span_colors in config")
         span_colors = config["ui"]["spans"]["span_colors"]
-        logger.debug(f"Span colors from config: {span_colors}")
-        # Convert RGB format to hex for frontend compatibility
         for schema_name, label_colors in span_colors.items():
-            color_map[schema_name] = {}
-            for label_name, rgb_color in label_colors.items():
-                # Convert RGB format "(r, g, b)" to hex
-                if isinstance(rgb_color, str) and rgb_color.startswith("(") and rgb_color.endswith(")"):
-                    try:
-                        # Parse RGB values
-                        rgb_parts = rgb_color.strip("()").split(", ")
-                        if len(rgb_parts) == 3:
-                            r, g, b = int(rgb_parts[0]), int(rgb_parts[1]), int(rgb_parts[2])
-                            hex_color = f"#{r:02x}{g:02x}{b:02x}"
-                            color_map[schema_name][label_name] = hex_color
-                            logger.debug(f"Converted {rgb_color} to {hex_color}")
-                        else:
-                            color_map[schema_name][label_name] = "rgba(110, 86, 207, 0.4)"  # Primary purple with transparency
-                    except (ValueError, IndexError):
-                        color_map[schema_name][label_name] = "rgba(110, 86, 207, 0.4)"  # Primary purple with transparency
+            if schema_name not in color_map:
+                color_map[schema_name] = {}
+            for label_name, color_value in label_colors.items():
+                if label_name not in color_map[schema_name]:
+                    normalized = normalize_color(color_value)
+                    if normalized:
+                        color_map[schema_name][label_name] = normalized
+
+    # 3. Extract colors from annotation_schemes (inline label colors)
+    annotation_schemes = config.get('annotation_schemes', [])
+    if isinstance(annotation_schemes, list):
+        for schema in annotation_schemes:
+            schema_name = schema.get('name', f"schema_{schema.get('annotation_id', 'unknown')}")
+            if schema_name not in color_map:
+                color_map[schema_name] = {}
+
+            labels = schema.get('labels', [])
+            for i, label in enumerate(labels):
+                if isinstance(label, dict):
+                    label_name = label.get('name', str(label))
+                    # Check for inline color definition
+                    if 'color' in label and label_name not in color_map[schema_name]:
+                        normalized = normalize_color(label['color'])
+                        if normalized:
+                            color_map[schema_name][label_name] = normalized
                 else:
-                    color_map[schema_name][label_name] = rgb_color
-    else:
-        logger.debug("No ui.spans.span_colors found in config")
+                    label_name = str(label)
 
-    # If no colors found in ui.spans.span_colors, try annotation_scheme format
-    if not color_map:
-        logger.debug("Trying annotation_scheme format")
-        annotation_scheme = config.get('annotation_scheme') or config.get('annotation_schemes')
-        logger.debug(f"Annotation scheme: {annotation_scheme}")
-        if annotation_scheme:
-            # If dict (new style), iterate items
-            if isinstance(annotation_scheme, dict):
-                for schema_name, schema in annotation_scheme.items():
-                    if schema.get('type') == 'span':
-                        label_colors = {}
-                        # Prefer color_scheme, fallback to default
-                        color_scheme = schema.get('color_scheme')
-                        labels = schema.get('labels', [])
-                        for label in labels:
-                            if isinstance(label, dict):
-                                label_name = label.get('name', label)
-                            else:
-                                label_name = label
-                            if color_scheme and label_name in color_scheme:
-                                label_colors[label_name] = color_scheme[label_name]
-                            else:
-                                # Use the color assigned during HTML generation (from SPAN_COLOR_PALETTE)
-                                assigned_color = get_span_color(schema_name, label_name)
-                                if assigned_color:
-                                    # Convert RGB tuple format "(r, g, b)" to rgba
-                                    if assigned_color.startswith("("):
-                                        label_colors[label_name] = f"rgba{assigned_color.replace(')', ', 0.4)')}"
-                                    else:
-                                        label_colors[label_name] = assigned_color
-                                else:
-                                    # Ultimate fallback - use visible purple with transparency
-                                    label_colors[label_name] = 'rgba(110, 86, 207, 0.4)'
-                        color_map[schema_name] = label_colors
-            # If list (legacy style), iterate list
-            elif isinstance(annotation_scheme, list):
-                for schema in annotation_scheme:
-                    if schema.get('type') == 'span' or schema.get('annotation_type') == 'span':
-                        schema_name = schema.get('name', 'span')
-                        label_colors = {}
-                        color_scheme = schema.get('color_scheme') or schema.get('colors')
-                        labels = schema.get('labels', [])
-                        for label in labels:
-                            if isinstance(label, dict):
-                                label_name = label.get('name', label)
-                            else:
-                                label_name = label
-                            if color_scheme and label_name in color_scheme:
-                                label_colors[label_name] = color_scheme[label_name]
-                            else:
-                                # Use the color assigned during HTML generation (from SPAN_COLOR_PALETTE)
-                                assigned_color = get_span_color(schema_name, label_name)
-                                if assigned_color:
-                                    # Convert RGB tuple format "(r, g, b)" to rgba
-                                    if assigned_color.startswith("("):
-                                        label_colors[label_name] = f"rgba{assigned_color.replace(')', ', 0.4)')}"
-                                    else:
-                                        label_colors[label_name] = assigned_color
-                                else:
-                                    # Ultimate fallback - use visible purple with transparency
-                                    label_colors[label_name] = 'rgba(110, 86, 207, 0.4)'
-                        color_map[schema_name] = label_colors
-
-    # Fallback: provide all expected keys with better colors that match the design system
-    if not color_map:
-        logger.debug("Using fallback colors")
-        # Enhanced color palette that matches the design system and provides good contrast
-        enhanced_colors = {
-            # Primary colors (based on the purple theme)
-            'positive': '#6E56CF',  # Primary purple
-            'negative': '#EF4444',  # Destructive red
-            'neutral': '#71717A',   # Gray
-            'mixed': '#F59E0B',     # Amber
-            'happy': '#10B981',     # Success green
-            'sad': '#3B82F6',       # Blue
-            'angry': '#DC2626',     # Red
-            'surprised': '#8B5CF6', # Purple
-            'low': '#9CA3AF',       # Light gray
-            'medium': '#6B7280',    # Medium gray
-            'high': '#374151',      # Dark gray
-            # Additional colors for variety
-            'excited': '#F97316',   # Orange
-            'calm': '#06B6D4',      # Cyan
-            'confused': '#EC4899',  # Pink
-            'confident': '#059669', # Dark green
-            'uncertain': '#7C3AED', # Violet
-            'satisfied': '#16A34A', # Green
-            'dissatisfied': '#EA580C', # Dark orange
-            'optimistic': '#2563EB', # Blue
-            'pessimistic': '#7F1D1D', # Dark red
-        }
-        color_map = {
-            'sentiment': enhanced_colors,
-            'emotion': enhanced_colors,
-            'entity': enhanced_colors,
-            'topic': enhanced_colors,
-            'intensity': enhanced_colors,
-        }
+                # Generate default color if not already set
+                if label_name not in color_map[schema_name]:
+                    # Try to get from SPAN_COLOR_PALETTE
+                    assigned_color = get_span_color(schema_name, label_name)
+                    if assigned_color:
+                        normalized = normalize_color(assigned_color)
+                        if normalized:
+                            color_map[schema_name][label_name] = normalized
+                    else:
+                        # Use hash-based color from default palette
+                        color_map[schema_name][label_name] = get_default_label_color(label_name, i)
 
     logger.debug(f"Final color map: {color_map}")
-    logger.debug("=== GET_SPAN_COLORS END ===")
+    logger.debug("=== GET_COLORS END ===")
     return jsonify(color_map)
 
 
@@ -3526,7 +3542,8 @@ def get_keyword_highlights(instance_id):
         return jsonify({"error": "No active session"}), 401
 
     # Check if keyword highlights are enabled
-    if not keyword_highlight_patterns:
+    keyword_patterns = get_keyword_highlight_patterns()
+    if not keyword_patterns:
         logger.debug("No keyword highlight patterns loaded")
         return jsonify({"keywords": [], "instance_id": instance_id})
 
@@ -3556,7 +3573,7 @@ def get_keyword_highlights(instance_id):
     # Track color assignments for keyword labels (schema -> label -> color)
     keyword_color_counter = 0
 
-    for pattern_info in keyword_highlight_patterns:
+    for pattern_info in keyword_patterns:
         regex = pattern_info['regex']
         label = pattern_info['label']
         schema = pattern_info['schema']
@@ -4039,24 +4056,32 @@ def audio_proxy():
 @app.route("/api/ai_assistant", methods=["GET"])
 def ai_assistant():
     annotation_id_str = request.args.get("annotationId")
+    logger.debug(f"[AI Assistant] Request for annotationId={annotation_id_str}")
+
     # Handle null/None/invalid annotation IDs
     if annotation_id_str is None or annotation_id_str == "null" or annotation_id_str == "":
+        logger.debug("[AI Assistant] Invalid annotation ID - returning empty")
         return jsonify({"html": "", "error": None})
 
     try:
         annotation_id = int(annotation_id_str)
     except (ValueError, TypeError):
+        logger.debug("[AI Assistant] Failed to parse annotation ID")
         return jsonify({"html": "", "error": None})
 
     # Check if annotation_id is valid
     if annotation_id < 0 or annotation_id >= len(config.get("annotation_schemes", [])):
+        logger.debug(f"[AI Assistant] annotation_id {annotation_id} out of range")
         return jsonify({"html": "", "error": None})
 
     username = session['username']
     user_state = get_user_state(username)
     instance = user_state.get_current_instance_index()
     annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
-    return generate_ai_help_html(instance, annotation_id, annotation_type)
+
+    result = generate_ai_help_html(instance, annotation_id, annotation_type)
+    logger.debug(f"[AI Assistant] Result for instance={instance}, annotation_id={annotation_id}, type={annotation_type}: '{result[:100] if result else 'empty'}...'")
+    return result
 
 
 def configure_routes(flask_app, app_config):
