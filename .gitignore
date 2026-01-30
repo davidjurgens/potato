@@ -64,6 +64,12 @@ potato/templates/generated/
 
 # AI assistant files
 CLAUDE.md
+BLOG_INCONSISTENCIES.md
+WEBSITE_CORRECTIONS.md
+CORE_QUALITY_FEATURES_PLAN.md
+FEATURE_PRIORITY_LIST.md
+MERGE_PLAN.md
+social_media_announcement.md
 
 # Node.js
 node_modules/
