@@ -29,7 +29,7 @@ Potato supports annotation across multiple data types:
 | **Text** | Classification, span labeling, pairwise comparison, free-form responses |
 | **Audio** | Waveform visualization, segment labeling, playback controls ([docs](docs/audio_annotation.md)) |
 | **Video** | Frame-by-frame annotation, temporal segments, playback sync ([docs](docs/video_annotation.md)) |
-| **Images** | Region labeling, classification, comparison tasks |
+| **Images** | Region labeling, classification, comparison tasks ([docs](docs/image_annotation.md)) |
 | **Dialogue** | Turn-level annotation, conversation threading |
 
 ### Annotation Schemes
