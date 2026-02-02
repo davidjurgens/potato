@@ -1,37 +1,98 @@
-🥔Potato, the Portable text annotation tool for EVERYONE.
-===================================
+# Potato Documentation
 
-**Potato** is a **fully free** data annotation tool supporting a wide
-range of features throughout your entire annotation pipeline.
+**Potato** (POrtable Text Annotation TOol) is a **fully free** data annotation tool supporting a wide range of features throughout your entire annotation pipeline.
 
+---
 
-# Contents
+## Getting Started
 
-- [Quick Start](quick-start.md)
-- [What's New in v2](new_features_v2.md)
-- [Configuration](configuration.md)
-- [Config File Structure](config_file_structure.md)
-- [AI Support](ai_support.md)
-- [Usage](usage.md)
-- [Data Format](data_format.md)
-- [Schemas and Templates](schemas_and_templates.md)
-- [User and Collaboration](user_and_collaboration.md)
-- [Task Assignment](task_assignment.md)
-- [Training Phase](training_phase.md)
-- [Productivity](productivity.md)
-- [Surveyflow](surveyflow.md)
-- [Crowdsourcing](crowdsourcing.md)
-- [Annotator Stats](annotator_stats.md)
-- [Active Learning Guide](active_learning_guide.md)
-- [Open Sourcing](open-sourcing.md)
+- [Quick Start](quick-start.md) - Get running in 5 minutes
+- [Installation & Usage](usage.md) - Detailed setup guide
+- [Configuration Reference](configuration.md) - Complete config options
+- [What's New in v2](new_features_v2.md) - Latest features and improvements
 
-## Annotation Types
+## Annotation Schemas
 
-- [Image Annotation](image_annotation.md) - Bounding boxes, polygons, and landmarks on images
+- [Schema Gallery](schemas_and_templates.md) - All annotation types with examples
+- [Image Annotation](image_annotation.md) - Bounding boxes, polygons, and landmarks
 - [Audio Annotation](audio_annotation.md) - Audio segmentation with waveform visualization
-- [Video Annotation](video_annotation.md) - Frame-by-frame video labeling with playback controls
+- [Video Annotation](video_annotation.md) - Frame-by-frame video labeling
+- [Span Linking](span_linking.md) - Relationship linking between text spans
 
-## Tools
+## Workflow & Quality
 
-- [Migration CLI](migration_cli.md) - Upgrade configuration files to v2 format
+- [Task Assignment](task_assignment.md) - Assignment strategies and configuration
+- [Training Phase](training_phase.md) - Annotator training and qualification
+- [Quality Control](quality_control.md) - Attention checks and gold standards
+- [Category Assignment](category_assignment.md) - Category-based item assignment
+- [Surveyflow](surveyflow.md) - Pre/post annotation surveys
+
+## AI & Intelligence
+
+- [AI Support](ai_support.md) - AI-powered label suggestions
+- [Active Learning](active_learning_guide.md) - ML-based prioritization
+- [ICL Labeling](icl_labeling.md) - In-context learning for labeling
+
+## User Management
+
+- [Users & Collaboration](user_and_collaboration.md) - User settings and access control
+- [Passwordless Login](passwordless_login.md) - URL-based authentication
+
+## Crowdsourcing
+
+- [Crowdsourcing Guide](crowdsourcing.md) - Prolific and MTurk integration
+- [MTurk Integration](mturk_integration.md) - Detailed Amazon MTurk setup guide
+
+## Administration
+
+- [Admin Dashboard](admin_dashboard.md) - Monitoring and management
+- [Behavioral Tracking](behavioral_tracking.md) - User behavior analytics
+- [Annotation History](annotation_history.md) - Tracking annotation changes
+
+## Data & Output
+
+- [Data Format](data_format.md) - Input and output data formats
+- [UI Configuration](ui_configuration.md) - Interface customization
+
+## Tools & Utilities
+
+- [Preview CLI](preview_cli.md) - Preview configs without running server
+- [Migration CLI](migration_cli.md) - Upgrade v1 configs to v2
 - [Debugging Guide](debugging_guide.md) - Debug flags and troubleshooting
+- [Simulator](simulator.md) - Annotation simulation tool
+
+## Productivity Features
+
+- [Productivity](productivity.md) - Tooltips, shortcuts, and highlights
+
+## Contributing
+
+- [Contributing Guide](open-sourcing.md) - How to contribute to Potato
+
+---
+
+## Quick Links
+
+| Task | Documentation |
+|------|---------------|
+| Set up a basic annotation task | [Quick Start](quick-start.md) |
+| Choose an annotation type | [Schema Gallery](schemas_and_templates.md) |
+| Configure for MTurk | [MTurk Integration](mturk_integration.md) |
+| Configure for Prolific | [Crowdsourcing Guide](crowdsourcing.md#prolific-integration) |
+| Monitor annotation progress | [Admin Dashboard](admin_dashboard.md) |
+| Add AI suggestions | [AI Support](ai_support.md) |
+| Set up quality control | [Quality Control](quality_control.md) |
+| Debug configuration issues | [Debugging Guide](debugging_guide.md) |
+
+---
+
+## Example Projects
+
+Ready-to-use example configurations are available in the `project-hub/simple_examples/` directory:
+
+```bash
+# Run a simple radio button example
+python potato/flask_server.py start project-hub/simple_examples/configs/simple-radio.yaml -p 8000
+```
+
+See the [project-hub](https://github.com/davidjurgens/potato/tree/main/project-hub) for more examples.

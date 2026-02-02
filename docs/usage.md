@@ -1,82 +1,49 @@
 # Usage
 
-Getting started with Potato is easy! Here\'s what you need to do:
+Getting started with Potato is easy! Here's what you need to do:
 
 ## Install Potato to your machine
 
 Potato has a Python-based server architecture that can be run locally or
 hosted on any device. In order to install Potato:
 
--   Make sure you have Python version 3 installed
--   Follow the quickstart instructions
-    [here](https://potato-annotation-tutorial.readthedocs.io/en/latest/quick-start.html).
+- Make sure you have Python version 3.8+ installed
+- Follow the quickstart instructions in our [Quick Start Guide](quick-start.md)
 
 ## Set up the project data
 
-In order to input document and specify:
+In order to input documents and specify annotation preferences:
 
--   [Prepare](https://potato-annotation-tutorial.readthedocs.io/en/latest/data_format.html#prepare-your-input-data)
-    your input data (csv, tsv, or json) and upload it in the `data`
-    folder
--   Specify where and in what format you want the
-    [output](https://potato-annotation-tutorial.readthedocs.io/en/latest/data_format.html#update-output-data-preferences-on-the-yaml-config-file)
-    data
--   Optional: Update the config YAML file with
-    [input](https://potato-annotation-tutorial.readthedocs.io/en/latest/data_format.html#update-input-data-formats-on-the-yaml-config-file)
-    and
-    [output](https://potato-annotation-tutorial.readthedocs.io/en/latest/data_format.html#update-output-data-preferences-on-the-yaml-config-file)
-    data preferences
+- [Prepare your input data](data_format.md#input-data-formats) (CSV, TSV, or JSON) and upload it to your project's `data` folder
+- Specify where and in what format you want the [output data](data_format.md#output-data-formats)
+- Optional: Update the config YAML file with input and output data preferences
 
 ## Create your codebook and schema
 
-Next, you\'ll need to specify what annotators annotate:
+Next, you'll need to specify what annotators annotate:
 
--   Create your annotation codebook and [link
-    it](https://potato-annotation-tutorial.readthedocs.io/en/latest/schemas_and_templates.html#add-the-codebook-to-the-page)
-    to the annotation interface
--   Specify the
-    [schema](https://potato-annotation-tutorial.readthedocs.io/en/latest/schemas_and_templates.html),
-    including:
-    -   Annotation Type: `multiselect` (checkboxes), `radio` (single
-        selection), `likert` (scale with endpoints labeled), or `text`
-        (free-form)
-    -   Questions for annotators
-    -   Answer Choices for multiselect and radio types
-    -   End Labels and Length for likert type questions
-    -   Optional Question Features: `required`, `horizontal` (placement
-        of answers is horizontal not vertical), `has_free_response`
-        (whether to include an open text box at the end of multiselect
-        or radio question, like having an \"other\" option)
-    -   Optional Answer Features:
-        [tooltips](https://potato-annotation-tutorial.readthedocs.io/en/latest/productivity.html#tooltips),
-        [keyboard
-        shortcuts](https://potato-annotation-tutorial.readthedocs.io/en/latest/productivity.html#keyboard-shortcuts),
-        [keywords to
-        highlight](https://potato-annotation-tutorial.readthedocs.io/en/latest/productivity.html#dynamic-highlighting)
--   Optional: Format the schema for the YAML config file ([basic
-    examples](https://potato-annotation-tutorial.readthedocs.io/en/latest/schemas_and_templates.html),
-    [advanced
-    examples](https://potato-annotation-tutorial.readthedocs.io/en/latest/productivity.html))
+- Create your annotation codebook and link it to the annotation interface using the `annotation_codebook_url` config option
+- Specify the [annotation schema](schemas_and_templates.md), including:
+  - Annotation Type: `multiselect` (checkboxes), `radio` (single selection), `likert` (scale with endpoints labeled), `span` (text highlighting), `text` (free-form), `slider`, `number`, or `multirate`
+  - Questions for annotators
+  - Answer Choices for multiselect and radio types
+  - End Labels and Length for likert type questions
+  - Optional Question Features: `required`, `horizontal` (placement of answers is horizontal not vertical), `has_free_response` (whether to include an open text box at the end of multiselect or radio question, like having an "other" option)
+  - Optional Answer Features: [tooltips](productivity.md#tooltips), [keyboard shortcuts](productivity.md#keyboard-shortcuts), [keywords to highlight](productivity.md#dynamic-highlighting)
+- Optional: See [schemas and templates](schemas_and_templates.md) for basic and advanced examples
 
 ## Define annotation settings
 
-There are a few other settings you can play with:
+There are a few other settings you can configure:
 
--   Choose an existing [html
-    template](https://potato-annotation-tutorial.readthedocs.io/en/latest/schemas_and_templates.html#choose-or-create-your-html-template)
-    for the annotation task or create a new one
--   Optional: Specify privacy and access
-    [settings](https://potato-annotation-tutorial.readthedocs.io/en/latest/user_and_collaboration.html)
-    for the task
--   Optional: Update the YAML file with the [look and
-    feel](https://potato-annotation-tutorial.readthedocs.io/en/latest/schemas_and_templates.html#update-yaml-file-with-look-and-feel).
--   Optional: Set up [active
-    learning](active_learning_guide.md)
+- Choose an existing [HTML template](schemas_and_templates.md#available-layout-templates) for the annotation task or create a new one
+- Optional: Specify privacy and access [settings](user_and_collaboration.md) for the task
+- Optional: Update the YAML file with the [UI and layout configuration](configuration.md#ui-and-layout-configuration)
+- Optional: Set up [active learning](active_learning_guide.md)
 
-## Launch potato locally
+## Launch Potato locally
 
-And that's it! You can go ahead and get started labeling data in one of
-two ways:
+And that's it! You can go ahead and get started labeling data in one of two ways:
 
 ### Option 1: Direct Config File (Recommended)
 
@@ -90,7 +57,7 @@ python potato/flask_server.py start my_annotation_task/config.yaml -p 8000
 Your project structure should look like this:
 ```
 my_annotation_task/
-├── config.yaml              # ✅ Config file in task_dir
+├── config.yaml              # Config file in task_dir
 ├── data/
 │   └── my_data.json
 ├── output/
@@ -112,7 +79,7 @@ Your project structure would look like this:
 ```
 my_annotation_task/
 ├── configs/
-│   ├── experiment1.yaml     # ✅ Config files in configs/
+│   ├── experiment1.yaml     # Config files in configs/
 │   └── experiment2.yaml
 ├── data/
 │   └── my_data.json
@@ -122,42 +89,36 @@ my_annotation_task/
 
 ### Option 3: Interactive Setup (Legacy)
 
-Launch potato without a YAML. In this case, the server
-will have you follow a series of prompts about the task and
-automatically generate a YAML file for you.
+Launch Potato without a YAML. In this case, the server will have you follow a series of prompts about the task and automatically generate a YAML file for you.
 
 ```bash
 python3 potato/flask_server.py -p 8000
 ```
 
-This will launch the webserver on port 8000 which can be accessed at
-<http://localhost:8000>. You can [create an
-account](https://potato-annotation-tutorial.readthedocs.io/en/latest/user_and_collaboration.html)
-and start labeling data. Clicking \"Submit\" will autoadvance to the
-next instance and you can navigate between items using the arrow keys.
-Potato currently supports one annotation task per server instance,
-though multiple servers may be run on different posts to concurrently
-annotate different data.
-
+This will launch the webserver on port 8000 which can be accessed at <http://localhost:8000>. You can [create an account](user_and_collaboration.md) and start labeling data. Clicking "Submit" will auto-advance to the next instance and you can navigate between items using the arrow keys. Potato currently supports one annotation task per server instance, though multiple servers may be run on different ports to concurrently annotate different data.
 
 ## Find the right IP address for local usage
-In many cases you might need to use potato within your local network. For example, you have some
-private data that are not allowed to be uploaded to a public server, and you want your annotators to
-access the interface using their own devices, here are the following steps:
--   Deploy potato on the server/computer where the data is hosted
--   Find the local address of your server (this is different from the public id address, it is the address that
-is only accessible within your local network)
 
--   For linux/mac go to the terminal, type `ifconfig en0` and press enter.
-    -   You will see a list of addresses, and please find the one after `inet`, for example, you should find
-    one line looks like this: `inet 192.168.1.218 netmask 0xffffff00 broadcast 192.168.1.255`
-    -  Use the address after inet, which is `192.168.1.218` in this case
+In many cases you might need to use Potato within your local network. For example, you have some private data that are not allowed to be uploaded to a public server, and you want your annotators to access the interface using their own devices. Here are the following steps:
 
--   On the annotator end, use `ip:port` in the browser. For example, if you have potato running on
-port 8000, and in the above case, the final address to access the interface will be `192.168.1.218:8000`
+1. Deploy Potato on the server/computer where the data is hosted
 
--   Please make sure your annotators are either within the local network (e.g. company or school's net), or are
-connected to the vpn if they are outside the local network.
+2. Find the local address of your server (this is different from the public IP address; it is the address that is only accessible within your local network)
 
--   You can also try the above link on your ipad or smartphones as long as they are connected to the
-same wifi as the server (could be your own laptop)
+3. For Linux/Mac, go to the terminal, type `ifconfig en0` and press enter:
+   - You will see a list of addresses, and please find the one after `inet`, for example, you should find one line looks like this: `inet 192.168.1.218 netmask 0xffffff00 broadcast 192.168.1.255`
+   - Use the address after inet, which is `192.168.1.218` in this case
+
+4. On the annotator end, use `ip:port` in the browser. For example, if you have Potato running on port 8000, and in the above case, the final address to access the interface will be `192.168.1.218:8000`
+
+5. Please make sure your annotators are either within the local network (e.g. company or school's network), or are connected to the VPN if they are outside the local network
+
+6. You can also try the above link on your iPad or smartphones as long as they are connected to the same WiFi as the server (could be your own laptop)
+
+## Next Steps
+
+- [Configuration Guide](configuration.md) - Complete configuration reference
+- [Schemas and Templates](schemas_and_templates.md) - All annotation types
+- [Quality Control](quality_control.md) - Attention checks and gold standards
+- [Crowdsourcing](crowdsourcing.md) - MTurk and Prolific integration
+- [Admin Dashboard](admin_dashboard.md) - Monitoring and management
