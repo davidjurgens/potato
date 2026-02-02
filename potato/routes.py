@@ -2974,6 +2974,24 @@ def update_instance():
                         user_state.add_span_annotation(instance_id, span, value)
                         logger.debug(f"Added span annotation: {span_data}")
 
+            # Handle link annotations from frontend format
+            link_annotations = request.json.get("link_annotations", [])
+            for link_data in link_annotations:
+                if isinstance(link_data, dict) and "schema" in link_data and "link_type" in link_data:
+                    from potato.item_state_management import SpanLink
+                    link = SpanLink(
+                        schema=link_data["schema"],
+                        link_type=link_data["link_type"],
+                        span_ids=link_data.get("span_ids", []),
+                        direction=link_data.get("direction", "undirected"),
+                        id=link_data.get("id"),
+                        properties=link_data.get("properties", {})
+                    )
+
+                    # Add or update the link annotation
+                    user_state.add_link_annotation(instance_id, link)
+                    logger.debug(f"Added link annotation: {link}")
+
         # Check if this is the backend format (schema, state, type)
         elif "schema" in request.json and "state" in request.json and "type" in request.json:
             logger.debug("Processing backend format (schema, state, type)")
@@ -4252,6 +4270,112 @@ def clear_span_annotations(instance_id):
         logger.debug(f"=== CLEAR_SPAN_ANNOTATIONS END ===")
 
 
+@app.route("/api/links/<instance_id>")
+def get_link_annotations(instance_id):
+    """
+    Get link annotations (span relationships) for a specific instance.
+
+    Returns:
+        JSON with link annotations for the instance.
+    """
+    logger.debug(f"=== GET_LINK_ANNOTATIONS START ===")
+    logger.debug(f"Instance ID: {instance_id}")
+
+    if 'username' not in session:
+        logger.warning("Get link annotations without active session")
+        return jsonify({"error": "No active session"}), 401
+
+    username = session['username']
+    logger.debug(f"Username: {username}")
+
+    try:
+        user_state = get_user_state(username)
+        if not user_state:
+            logger.error(f"User state not found for user: {username}")
+            return jsonify({"error": "User state not found"}), 404
+
+        # Normalize instance_id to string
+        instance_id = str(instance_id)
+
+        # Get link annotations for this instance
+        links = user_state.get_link_annotations(instance_id)
+
+        # Convert to serializable format
+        links_data = []
+        for link_id, link in links.items():
+            links_data.append(link.to_dict())
+
+        logger.debug(f"Found {len(links_data)} link annotations for instance {instance_id}")
+
+        return jsonify({
+            "status": "success",
+            "instance_id": instance_id,
+            "links": links_data
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting link annotations: {e}")
+        return jsonify({"error": f"Failed to get link annotations: {str(e)}"}), 500
+
+    finally:
+        logger.debug(f"=== GET_LINK_ANNOTATIONS END ===")
+
+
+@app.route("/api/links/<instance_id>/<link_id>", methods=["DELETE"])
+def delete_link_annotation(instance_id, link_id):
+    """
+    Delete a specific link annotation.
+
+    Args:
+        instance_id: The instance ID
+        link_id: The link ID to delete
+
+    Returns:
+        JSON with success/failure status.
+    """
+    logger.debug(f"=== DELETE_LINK_ANNOTATION START ===")
+    logger.debug(f"Instance ID: {instance_id}, Link ID: {link_id}")
+
+    if 'username' not in session:
+        logger.warning("Delete link annotation without active session")
+        return jsonify({"error": "No active session"}), 401
+
+    username = session['username']
+    logger.debug(f"Username: {username}")
+
+    try:
+        user_state = get_user_state(username)
+        if not user_state:
+            logger.error(f"User state not found for user: {username}")
+            return jsonify({"error": "User state not found"}), 404
+
+        # Normalize instance_id to string
+        instance_id = str(instance_id)
+
+        # Try to remove the link
+        success = user_state.remove_link_annotation(instance_id, link_id)
+
+        if success:
+            logger.debug(f"Deleted link annotation: {link_id} from instance {instance_id}")
+            return jsonify({
+                "status": "success",
+                "message": f"Link {link_id} deleted successfully"
+            })
+        else:
+            logger.warning(f"Link not found: {link_id} in instance {instance_id}")
+            return jsonify({
+                "status": "error",
+                "message": f"Link {link_id} not found"
+            }), 404
+
+    except Exception as e:
+        logger.error(f"Error deleting link annotation: {e}")
+        return jsonify({"error": f"Failed to delete link annotation: {str(e)}"}), 500
+
+    finally:
+        logger.debug(f"=== DELETE_LINK_ANNOTATION END ===")
+
+
 @app.route("/api/waveform/<cache_key>")
 def get_waveform_data(cache_key):
     """
@@ -4644,6 +4768,8 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/api/keyword_highlights/<instance_id>", "get_keyword_highlights", get_keyword_highlights, methods=["GET"])
     app.add_url_rule("/test-span-colors", "test_span_colors", test_span_colors, methods=["GET"])
     app.add_url_rule("/api/spans/<instance_id>/clear", "clear_span_annotations", clear_span_annotations, methods=["POST"])
+    app.add_url_rule("/api/links/<instance_id>", "get_link_annotations", get_link_annotations, methods=["GET"])
+    app.add_url_rule("/api/links/<instance_id>/<link_id>", "delete_link_annotation", delete_link_annotation, methods=["DELETE"])
     app.add_url_rule("/api/current_instance", "get_current_instance", get_current_instance, methods=["GET"])
     app.add_url_rule("/api/ai_assistant", "ai_assistant", ai_assistant, methods=["GET"])
     app.add_url_rule("/api/audio/proxy", "audio_proxy", audio_proxy, methods=["GET"])

@@ -160,7 +160,7 @@ keyword_highlight_patterns = []
 # These control randomization and caching behavior for keyword highlights
 keyword_highlight_settings = {
     'keyword_probability': 1.0,        # Probability of showing a matched keyword (0.0-1.0)
-    'random_word_probability': 0.05,   # Probability of highlighting random words
+    'random_word_probability': 0.0,    # Probability of highlighting random words (disabled by default)
     'random_word_label': 'distractor', # Label for random word highlights
     'random_word_schema': 'keyword',   # Schema for random word highlights
 }

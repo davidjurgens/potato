@@ -184,6 +184,7 @@ def _register_builtin_schemas():
     from .number import generate_number_layout
     from .slider import generate_slider_layout
     from .span import generate_span_layout
+    from .span_link import generate_span_link_layout
     from .select import generate_select_layout
     from .pure_display import generate_pure_display_layout
     from .video import generate_video_layout
@@ -303,6 +304,14 @@ def _register_builtin_schemas():
             optional_fields=["mode", "labels", "segment_schemes", "min_segments", "max_segments", "timeline_height", "overview_height", "zoom_enabled", "playback_rate_control", "frame_stepping", "show_timecode", "video_fps"],
             supports_keybindings=True,
             description="Video annotation with temporal segments, frame classification, and keyframes"
+        ),
+        SchemaDefinition(
+            name="span_link",
+            generator=generate_span_link_layout,
+            required_fields=["name", "description", "link_types", "span_schema"],
+            optional_fields=["visual_display"],
+            supports_keybindings=False,
+            description="Create relationships/links between spans (e.g., PERSON works_for ORGANIZATION)"
         ),
     ]
 

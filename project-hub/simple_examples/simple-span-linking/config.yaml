@@ -1,0 +1,83 @@
+# Simple Span Linking Example
+# This example demonstrates how to annotate relationships between named entities
+
+port: 9001
+server_name: potato annotator
+annotation_task_name: Span Linking Example
+task_dir: .
+output_annotation_dir: annotation_output/simple-span-linking/
+output_annotation_format: json
+annotation_codebook_url: ''
+
+data_files:
+  - data.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+user_config:
+  allow_all_users: true
+  users: []
+
+alert_time_each_instance: 10000000
+
+annotation_schemes:
+  # First, define the span schema for named entities
+  - annotation_type: span
+    name: entities
+    description: "Highlight named entities in the text (people, organizations, locations)"
+    labels:
+      - name: "PERSON"
+        tooltip: "Names of people"
+        color: "#3b82f6"
+      - name: "ORGANIZATION"
+        tooltip: "Names of companies, institutions, agencies"
+        color: "#22c55e"
+      - name: "LOCATION"
+        tooltip: "Names of places, cities, countries"
+        color: "#f59e0b"
+    sequential_key_binding: true
+
+  # Then, define the span_link schema for relationships
+  - annotation_type: span_link
+    name: relations
+    description: "Annotate relationships between entities"
+    span_schema: entities  # References the span schema above
+    link_types:
+      - name: "WORKS_FOR"
+        directed: true
+        allowed_source_labels: ["PERSON"]
+        allowed_target_labels: ["ORGANIZATION"]
+        color: "#dc2626"
+      - name: "LOCATED_IN"
+        directed: true
+        allowed_source_labels: ["PERSON", "ORGANIZATION"]
+        allowed_target_labels: ["LOCATION"]
+        color: "#8b5cf6"
+      - name: "COLLABORATES_WITH"
+        directed: false
+        allowed_source_labels: ["PERSON"]
+        allowed_target_labels: ["PERSON"]
+        color: "#06b6d4"
+      - name: "SUPERVISES"
+        directed: true
+        allowed_source_labels: ["PERSON"]
+        allowed_target_labels: ["PERSON"]
+        color: "#ec4899"
+      - name: "FOUNDED"
+        directed: true
+        allowed_source_labels: ["PERSON"]
+        allowed_target_labels: ["ORGANIZATION"]
+        color: "#14b8a6"
+      - name: "ACQUIRED"
+        directed: true
+        allowed_source_labels: ["ORGANIZATION"]
+        allowed_target_labels: ["ORGANIZATION"]
+        color: "#f97316"
+    visual_display:
+      enabled: true
+      arc_position: "above"
+      show_labels: true
+
+site_dir: default

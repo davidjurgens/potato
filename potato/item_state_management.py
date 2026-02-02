@@ -282,6 +282,103 @@ class SpanAnnotation:
         """Generate hash for span annotation (enables use in sets/dicts)"""
         return hash((self.schema, self.name, self.title, self.start, self.end))
 
+
+class SpanLink:
+    """
+    A utility class for representing a link/relationship between spans.
+
+    SpanLinks connect two or more spans to represent relationships like
+    "PERSON works_for ORGANIZATION" or multi-way relationships.
+    """
+    def __init__(self, schema: str, link_type: str, span_ids: List[str],
+                 direction: str = "undirected", id: str = None, properties: dict = None):
+        """
+        Initialize a span link.
+
+        Args:
+            schema: The annotation scheme this link belongs to
+            link_type: The type of relationship (e.g., "WORKS_FOR", "KNOWS")
+            span_ids: Ordered list of span IDs that are connected by this link
+            direction: "directed" or "undirected" - for directed links, order matters
+            id: Optional custom ID for the link
+            properties: Optional dictionary of additional properties
+        """
+        self.schema = schema
+        self.link_type = link_type
+        self.span_ids = span_ids  # Ordered list for directed links
+        self.direction = direction  # "directed", "undirected"
+        self.properties = properties or {}
+        self._id = id if id else f"link_{uuid.uuid4().hex}"
+
+    def get_schema(self) -> str:
+        """Get the schema this link belongs to"""
+        return self.schema
+
+    def get_link_type(self) -> str:
+        """Get the link type/relationship name"""
+        return self.link_type
+
+    def get_span_ids(self) -> List[str]:
+        """Get the ordered list of span IDs connected by this link"""
+        return self.span_ids
+
+    def get_direction(self) -> str:
+        """Get whether this link is directed or undirected"""
+        return self.direction
+
+    def get_id(self) -> str:
+        """Get the link's unique identifier"""
+        return self._id
+
+    def get_properties(self) -> dict:
+        """Get additional properties for this link"""
+        return self.properties
+
+    def is_directed(self) -> bool:
+        """Check if this link is directed"""
+        return self.direction == "directed"
+
+    def to_dict(self) -> dict:
+        """Convert the span link to a dictionary for serialization"""
+        return {
+            "id": self._id,
+            "schema": self.schema,
+            "link_type": self.link_type,
+            "span_ids": self.span_ids,
+            "direction": self.direction,
+            "properties": self.properties
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'SpanLink':
+        """Create a SpanLink from a dictionary"""
+        return cls(
+            schema=data["schema"],
+            link_type=data["link_type"],
+            span_ids=data["span_ids"],
+            direction=data.get("direction", "undirected"),
+            id=data.get("id"),
+            properties=data.get("properties", {})
+        )
+
+    def __str__(self):
+        return f"SpanLink(schema:{self.schema}, type:{self.link_type}, spans:{self.span_ids}, direction:{self.direction}, id:{self._id})"
+
+    def __eq__(self, other):
+        """Check if two span links are equal"""
+        return (
+            isinstance(other, SpanLink)
+            and self.schema == other.schema
+            and self.link_type == other.link_type
+            and self.span_ids == other.span_ids
+            and self.direction == other.direction
+        )
+
+    def __hash__(self):
+        """Generate hash for span link (enables use in sets/dicts)"""
+        return hash((self.schema, self.link_type, tuple(self.span_ids), self.direction))
+
+
 class AssignmentStrategy(Enum):
     """
     Enumeration of strategies for assigning items to users.

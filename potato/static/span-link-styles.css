@@ -1,0 +1,446 @@
+/**
+ * Span Link Styles
+ *
+ * Styles for the span linking/relationship annotation feature.
+ */
+
+/* Container */
+.span-link-container {
+    background-color: var(--card-bg, #fff);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.span-link-container.link-mode-active {
+    border-color: var(--primary-color, #6E56CF);
+    box-shadow: 0 0 0 2px rgba(110, 86, 207, 0.2);
+}
+
+/* Header */
+.span-link-header {
+    margin-bottom: 16px;
+}
+
+.span-link-title {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-color, #1f2937);
+}
+
+/* Section Labels */
+.span-link-section-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted, #6b7280);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Link Type Selector */
+.span-link-type-selector {
+    margin-bottom: 16px;
+}
+
+.span-link-types {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.span-link-type {
+    display: flex;
+    align-items: center;
+}
+
+.span-link-type-radio {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.span-link-type-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.15s ease;
+    background-color: var(--card-bg, #fff);
+}
+
+.span-link-type-label:hover {
+    border-color: var(--link-color, #dc2626);
+    background-color: color-mix(in srgb, var(--link-color, #dc2626) 5%, transparent);
+}
+
+.span-link-type-radio:checked + .span-link-type-label {
+    border-color: var(--link-color, #dc2626);
+    background-color: color-mix(in srgb, var(--link-color, #dc2626) 10%, transparent);
+    font-weight: 500;
+}
+
+.link-color-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.link-type-name {
+    color: var(--text-color, #1f2937);
+}
+
+.link-direction-icon {
+    color: var(--text-muted, #6b7280);
+    font-size: 12px;
+}
+
+/* Selected Spans Display */
+.span-link-selection {
+    margin-bottom: 16px;
+    padding: 12px;
+    background-color: var(--bg-secondary, #f9fafb);
+    border-radius: 6px;
+    min-height: 60px;
+}
+
+.span-link-selected-spans {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.no-selection-message,
+.no-links-message {
+    color: var(--text-muted, #6b7280);
+    font-size: 13px;
+    font-style: italic;
+    margin: 0;
+}
+
+.selected-span-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    background-color: var(--card-bg, #fff);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.selected-span-label {
+    font-weight: 600;
+    color: var(--primary-color, #6E56CF);
+}
+
+.selected-span-text {
+    color: var(--text-color, #1f2937);
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.span-role {
+    color: var(--text-muted, #6b7280);
+    font-size: 11px;
+    font-style: italic;
+}
+
+.remove-span-btn {
+    background: none;
+    border: none;
+    padding: 0 4px;
+    color: var(--text-muted, #6b7280);
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+}
+
+.remove-span-btn:hover {
+    color: var(--danger-color, #dc2626);
+}
+
+/* Constraint Error */
+.constraint-error {
+    margin-top: 8px;
+    padding: 8px 12px;
+    background-color: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 4px;
+    color: #dc2626;
+    font-size: 12px;
+}
+
+/* Action Buttons */
+.span-link-actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.span-link-create-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background-color: var(--primary-color, #6E56CF);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.span-link-create-btn:hover:not(:disabled) {
+    background-color: color-mix(in srgb, var(--primary-color, #6E56CF) 85%, black);
+}
+
+.span-link-create-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.span-link-clear-btn {
+    padding: 8px 16px;
+    background-color: transparent;
+    color: var(--text-muted, #6b7280);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.span-link-clear-btn:hover {
+    border-color: var(--text-muted, #6b7280);
+    color: var(--text-color, #1f2937);
+}
+
+/* Existing Links List */
+.span-link-existing {
+    margin-bottom: 16px;
+}
+
+.span-link-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.link-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background-color: var(--card-bg, #fff);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-left: 3px solid var(--link-color, #dc2626);
+    border-radius: 4px;
+}
+
+.link-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.link-type-badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.link-spans {
+    font-size: 13px;
+    color: var(--text-color, #1f2937);
+}
+
+.link-direction {
+    color: var(--text-muted, #6b7280);
+    margin: 0 4px;
+}
+
+.delete-link-btn {
+    background: none;
+    border: none;
+    padding: 4px;
+    color: var(--text-muted, #6b7280);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.15s ease;
+}
+
+.delete-link-btn:hover {
+    color: var(--danger-color, #dc2626);
+    background-color: #fef2f2;
+}
+
+/* Visual Toggle */
+.span-link-visual-toggle {
+    margin-top: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color, #e5e7eb);
+}
+
+.span-link-visual-toggle label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-muted, #6b7280);
+    cursor: pointer;
+}
+
+.span-link-visual-toggle input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+/* Link Mode Instructions */
+.link-mode-instruction {
+    color: var(--primary-color, #6E56CF);
+    font-size: 13px;
+    font-weight: 500;
+    margin: 0;
+    padding: 8px;
+    background-color: rgba(110, 86, 207, 0.1);
+    border-radius: 4px;
+    border-left: 3px solid var(--primary-color, #6E56CF);
+}
+
+.link-mode-instruction strong {
+    color: var(--primary-color, #6E56CF);
+}
+
+/* Disable text selection when in link mode to prevent span annotation conflicts */
+body.span-link-mode-active #instance-text {
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+/* Span Overlay States for Link Selection */
+/* Support all span overlay class variations */
+.span-overlay-pure.link-selectable,
+.span-overlay.link-selectable,
+.span-overlay-ai.link-selectable,
+.span-highlight.link-selectable {
+    cursor: pointer !important;
+    pointer-events: auto !important;
+    transition: all 0.15s ease;
+}
+
+/* Make the highlight segments inside overlays also clickable */
+.span-overlay-pure.link-selectable .span-highlight-segment,
+.span-overlay.link-selectable .span-highlight-segment {
+    cursor: pointer !important;
+    pointer-events: auto !important;
+}
+
+/* Use the current link type color for hover outline */
+.span-overlay-pure.link-selectable:hover,
+.span-overlay.link-selectable:hover,
+.span-overlay-ai.link-selectable:hover,
+.span-highlight.link-selectable:hover,
+.span-overlay-pure.link-selectable:hover .span-highlight-segment,
+.span-overlay.link-selectable:hover .span-highlight-segment {
+    outline: 2px dashed var(--current-link-color, #6E56CF);
+    outline-offset: 2px;
+}
+
+/* Use the current link type color for selected outline */
+.span-overlay-pure.link-selected,
+.span-overlay.link-selected,
+.span-overlay-ai.link-selected,
+.span-highlight.link-selected,
+.span-overlay-pure.link-selected .span-highlight-segment,
+.span-overlay.link-selected .span-highlight-segment {
+    outline: 3px solid var(--current-link-color, #6E56CF) !important;
+    outline-offset: 2px;
+    box-shadow: 0 0 12px color-mix(in srgb, var(--current-link-color, #6E56CF) 40%, transparent);
+}
+
+/* Arc Visualization */
+.span-link-arcs-container {
+    pointer-events: none;
+}
+
+.span-link-arc {
+    transition: stroke-width 0.15s ease;
+}
+
+.span-link-arc:hover {
+    stroke-width: 3;
+}
+
+.span-link-node {
+    transition: r 0.15s ease;
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    .span-link-container {
+        background-color: var(--card-bg-dark, #1f2937);
+        border-color: var(--border-color-dark, #374151);
+    }
+
+    .span-link-selection {
+        background-color: var(--bg-secondary-dark, #111827);
+    }
+
+    .selected-span-item,
+    .link-item {
+        background-color: var(--card-bg-dark, #1f2937);
+        border-color: var(--border-color-dark, #374151);
+    }
+
+    .constraint-error {
+        background-color: rgba(220, 38, 38, 0.1);
+        border-color: rgba(220, 38, 38, 0.3);
+    }
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+    .span-link-container {
+        padding: 12px;
+    }
+
+    .span-link-types {
+        flex-direction: column;
+    }
+
+    .span-link-type-label {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .span-link-actions {
+        flex-direction: column;
+    }
+
+    .span-link-create-btn,
+    .span-link-clear-btn {
+        width: 100%;
+        justify-content: center;
+    }
+}

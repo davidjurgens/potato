@@ -41,7 +41,7 @@ from typing import Optional, Dict, Any, List, Tuple, Set
 
 from potato.authentication import UserAuthenticator
 from potato.phase import UserPhase
-from potato.item_state_management import get_item_state_manager, Item, SpanAnnotation, Label
+from potato.item_state_management import get_item_state_manager, Item, SpanAnnotation, Label, SpanLink
 from potato.annotation_history import AnnotationAction, AnnotationHistoryManager
 from dataclasses import dataclass
 
@@ -1240,6 +1240,14 @@ class UserState:
         if 'instance_id_to_keyword_highlight_state' in j:
             user_state.instance_id_to_keyword_highlight_state = j['instance_id_to_keyword_highlight_state']
 
+        # Restore span link annotations if present
+        if 'instance_id_to_link_to_value' in j:
+            for instance_id, links_dict in j['instance_id_to_link_to_value'].items():
+                user_state.instance_id_to_link_to_value[instance_id] = {
+                    link_id: SpanLink.from_dict(link_data)
+                    for link_id, link_data in links_dict.items()
+                }
+
         return user_state
 
     def add_annotation(self, instance_id, annotation):
@@ -1542,6 +1550,10 @@ class InMemoryUserState(UserState):
         # This ensures the same user sees the same highlights for an instance across navigation
         self.instance_id_to_keyword_highlight_state: Dict[str, Dict[str, Any]] = {}
 
+        # Span link annotations - stores relationships between spans
+        # Maps instance_id -> {link_id -> SpanLink}
+        self.instance_id_to_link_to_value: Dict[str, Dict[str, SpanLink]] = defaultdict(dict)
+
     def hint_exists(self, instance_id: str) -> bool:
         return instance_id in self.ai_hints
 
@@ -1657,6 +1669,94 @@ class InMemoryUserState(UserState):
                 self.phase_to_page_to_span_to_value[phase][page] = {}
 
             self.phase_to_page_to_span_to_value[phase][page][label] = value
+
+    # =========================================================================
+    # Span Link Annotation Methods
+    # =========================================================================
+
+    def add_link_annotation(self, instance_id: str, link: SpanLink) -> None:
+        """
+        Add a link annotation connecting multiple spans.
+
+        Args:
+            instance_id: The instance ID the link belongs to
+            link: The SpanLink object representing the relationship
+        """
+        if instance_id not in self.instance_id_to_link_to_value:
+            self.instance_id_to_link_to_value[instance_id] = {}
+
+        self.instance_id_to_link_to_value[instance_id][link.get_id()] = link
+
+    def get_link_annotations(self, instance_id: str) -> Dict[str, SpanLink]:
+        """
+        Get all link annotations for an instance.
+
+        Args:
+            instance_id: The instance ID to get links for
+
+        Returns:
+            Dictionary mapping link_id -> SpanLink
+        """
+        return self.instance_id_to_link_to_value.get(instance_id, {})
+
+    def get_link_annotation(self, instance_id: str, link_id: str) -> Optional[SpanLink]:
+        """
+        Get a specific link annotation by ID.
+
+        Args:
+            instance_id: The instance ID
+            link_id: The link ID to retrieve
+
+        Returns:
+            SpanLink if found, None otherwise
+        """
+        links = self.instance_id_to_link_to_value.get(instance_id, {})
+        return links.get(link_id)
+
+    def remove_link_annotation(self, instance_id: str, link_id: str) -> bool:
+        """
+        Remove a link annotation.
+
+        Args:
+            instance_id: The instance ID
+            link_id: The link ID to remove
+
+        Returns:
+            True if the link was removed, False if not found
+        """
+        if instance_id in self.instance_id_to_link_to_value:
+            if link_id in self.instance_id_to_link_to_value[instance_id]:
+                del self.instance_id_to_link_to_value[instance_id][link_id]
+                return True
+        return False
+
+    def get_links_for_span(self, instance_id: str, span_id: str) -> List[SpanLink]:
+        """
+        Get all links that include a specific span.
+
+        Args:
+            instance_id: The instance ID
+            span_id: The span ID to find links for
+
+        Returns:
+            List of SpanLink objects that include the given span
+        """
+        result = []
+        links = self.instance_id_to_link_to_value.get(instance_id, {})
+        for link in links.values():
+            if span_id in link.get_span_ids():
+                result.append(link)
+        return result
+
+    def clear_link_annotations(self, instance_id: str) -> None:
+        """
+        Clear all link annotations for an instance.
+
+        Args:
+            instance_id: The instance ID to clear links for
+        """
+        if instance_id in self.instance_id_to_link_to_value:
+            self.instance_id_to_link_to_value[instance_id] = {}
 
     def get_current_instance_index(self):
         '''Returns the index of the item the user is annotating within the list of items
@@ -2070,6 +2170,13 @@ class InMemoryUserState(UserState):
         # Save keyword highlight state for randomization consistency
         d['instance_id_to_keyword_highlight_state'] = self.instance_id_to_keyword_highlight_state
 
+        # Save span link annotations
+        d['instance_id_to_link_to_value'] = {}
+        for instance_id, links in self.instance_id_to_link_to_value.items():
+            d['instance_id_to_link_to_value'][instance_id] = {
+                link_id: link.to_dict() for link_id, link in links.items()
+            }
+
         return d
 
     def save(self, user_dir: str) -> None:
@@ -2177,6 +2284,14 @@ class InMemoryUserState(UserState):
         # Restore keyword highlight state if present
         if 'instance_id_to_keyword_highlight_state' in j:
             user_state.instance_id_to_keyword_highlight_state = j['instance_id_to_keyword_highlight_state']
+
+        # Restore span link annotations if present
+        if 'instance_id_to_link_to_value' in j:
+            for instance_id, links_dict in j['instance_id_to_link_to_value'].items():
+                user_state.instance_id_to_link_to_value[instance_id] = {
+                    link_id: SpanLink.from_dict(link_data)
+                    for link_id, link_data in links_dict.items()
+                }
 
         return user_state
 
