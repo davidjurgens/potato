@@ -248,6 +248,10 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
     <!-- Image annotation manager -->
     <script src="{{ url_for('static', filename='image-annotation.js') }}?v=2"></script>
+    <!-- Visual AI Assistant for image/video annotation (loaded conditionally) -->
+    {% if ai_enabled %}
+    <script src="{{ url_for('static', filename='visual_ai_assistant.js') }}?v=1"></script>
+    {% endif %}
 
     <!-- Peaks.js for audio/video annotation (stored locally for reliability) -->
     <script src="{{ url_for('static', filename='peaks.min.js') }}"></script>

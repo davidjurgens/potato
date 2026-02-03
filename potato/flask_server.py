@@ -1052,9 +1052,25 @@ def get_displayed_text(text):
             # Apply alternating shading for dialogue readability
             if alternating_shading:
                 shade_class = "dialogue-turn-even" if i % 2 == 0 else "dialogue-turn-odd"
-                formatted_items.append(
-                    f'<div class="dialogue-turn {shade_class}">{prefix}{processed_item}</div>'
-                )
+
+                # Try to extract speaker name (text before first colon)
+                speaker_match = re.match(r'^([^:]+):\s*(.*)$', processed_item, re.DOTALL)
+                if speaker_match:
+                    speaker_name = speaker_match.group(1).strip()
+                    speaker_text = speaker_match.group(2).strip()
+                    # Generate a consistent color index based on speaker name
+                    speaker_hash = sum(ord(c) for c in speaker_name) % 6
+                    # Use span with display:block style (spans are in sanitizer allowlist)
+                    formatted_items.append(
+                        f'<span class="dialogue-turn {shade_class}" style="display:block;">'
+                        f'<b class="dialogue-speaker speaker-color-{speaker_hash}">{speaker_name}:</b> '
+                        f'{prefix}{speaker_text}</span>'
+                    )
+                else:
+                    # No speaker detected, use simple format
+                    formatted_items.append(
+                        f'<span class="dialogue-turn {shade_class}" style="display:block;">{prefix}{processed_item}</span>'
+                    )
             else:
                 formatted_items.append(f"{prefix}{processed_item}")
 
@@ -1063,10 +1079,10 @@ def get_displayed_text(text):
             # Horizontal layout for pairwise comparison
             cell_width = 100 // len(formatted_items) if formatted_items else 100
             cells = [
-                f'<div class="pairwise-cell" style="width:{cell_width}%;display:inline-block;vertical-align:top;padding:10px;box-sizing:border-box;">{item}</div>'
+                f'<span class="pairwise-cell" style="width:{cell_width}%;display:inline-block;vertical-align:top;padding:10px;box-sizing:border-box;">{item}</span>'
                 for item in formatted_items
             ]
-            text = '<div class="pairwise-container" style="display:flex;gap:20px;">' + ''.join(cells) + '</div>'
+            text = '<span class="pairwise-container" style="display:flex;gap:20px;">' + ''.join(cells) + '</span>'
         elif alternating_shading:
             # Already wrapped in divs, join without extra breaks
             text = ''.join(formatted_items)
@@ -1237,7 +1253,11 @@ def render_page_with_annotations(username) -> str:
     # This is needed for the frontend to calculate correct span positions
     # The data-original-text attribute must contain plain text (no HTML span tags)
     # while the DOM content contains the rendered HTML with span highlights
-    original_plain_text = text
+    # Strip HTML tags to get actual plain text for position calculations
+    import re as re_module
+    original_plain_text = re_module.sub(r'<[^>]+>', '', text)
+    # Also normalize whitespace
+    original_plain_text = re_module.sub(r'\s+', ' ', original_plain_text).strip()
 
     var_elems = {
         "instance": { "text": text },
@@ -1355,6 +1375,9 @@ def render_page_with_annotations(username) -> str:
         for scheme in config.get("annotation_schemes", [])
     )
 
+    # Check if AI support is enabled (for conditional loading of visual_ai_assistant.js)
+    ai_enabled = config.get("ai_support", {}).get("enabled", False)
+
     # Get pre-annotation configuration
     pre_annotation_config = {}
     if qc_manager:
@@ -1384,6 +1407,7 @@ def render_page_with_annotations(username) -> str:
         has_video_annotation=has_video_annotation,
         has_audio_annotation=has_audio_annotation,
         has_image_annotation=has_image_annotation,
+        ai_enabled=ai_enabled,
         # Pre-annotation data for model predictions
         pre_annotations=pre_annotation_data,
         pre_annotation_config=pre_annotation_config,

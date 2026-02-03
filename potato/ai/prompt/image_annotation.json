@@ -1,0 +1,44 @@
+{
+  "detect": {
+    "prompt": "TASK: Detect objects in this image that match the specified labels.\n\nDescription: ${description}\nLabels to detect: ${labels}\nMinimum confidence: ${confidence_threshold}\n\nFor each detected object, provide:\n1. The label (must be from the provided labels list)\n2. Bounding box with normalized coordinates (0-1 range)\n3. Confidence score (0-1)\n\nCoordinate system:\n- x,y is the top-left corner of the box\n- x increases left to right (0 = left edge, 1 = right edge)\n- y increases top to bottom (0 = top edge, 1 = bottom edge)\n- width and height are also normalized (0-1)\n\nReturn JSON:\n{\n    \"detections\": [\n        {\n            \"label\": \"object_name\",\n            \"bbox\": {\"x\": 0.1, \"y\": 0.2, \"width\": 0.3, \"height\": 0.4},\n            \"confidence\": 0.95\n        }\n    ]\n}\n\nOnly include objects you can clearly identify with confidence >= ${confidence_threshold}.",
+    "output_format": "visual_detection",
+    "img": "/static/ai_assistant_img/detect.svg",
+    "name": "Detect"
+  },
+  "detection": {
+    "prompt": "TASK: Detect objects in this image that match the specified labels.\n\nDescription: ${description}\nLabels to detect: ${labels}\nMinimum confidence: ${confidence_threshold}\n\nFor each detected object, provide:\n1. The label (must be from the provided labels list)\n2. Bounding box with normalized coordinates (0-1 range)\n3. Confidence score (0-1)\n\nCoordinate system:\n- x,y is the top-left corner of the box\n- x increases left to right (0 = left edge, 1 = right edge)\n- y increases top to bottom (0 = top edge, 1 = bottom edge)\n- width and height are also normalized (0-1)\n\nReturn JSON:\n{\n    \"detections\": [\n        {\n            \"label\": \"object_name\",\n            \"bbox\": {\"x\": 0.1, \"y\": 0.2, \"width\": 0.3, \"height\": 0.4},\n            \"confidence\": 0.95\n        }\n    ]\n}\n\nOnly include objects you can clearly identify with confidence >= ${confidence_threshold}.",
+    "output_format": "visual_detection",
+    "img": "/static/ai_assistant_img/detect.svg",
+    "name": "Detect"
+  },
+  "pre_annotate": {
+    "prompt": "TASK: Pre-annotate this image by detecting all objects that match the available labels.\n\nDescription: ${description}\nAvailable labels: ${labels}\n\nDetect ALL instances of objects matching these labels. Be thorough - it's better to include uncertain detections (the human annotator will review them).\n\nFor each detection provide:\n1. Label from the available list\n2. Bounding box (normalized 0-1 coordinates)\n3. Confidence score\n\nReturn JSON:\n{\n    \"detections\": [\n        {\n            \"label\": \"label_name\",\n            \"bbox\": {\"x\": 0.0, \"y\": 0.0, \"width\": 0.0, \"height\": 0.0},\n            \"confidence\": 0.0\n        }\n    ]\n}\n\nInclude all potential detections, even with lower confidence. The annotator will verify.",
+    "output_format": "visual_detection",
+    "img": "/static/ai_assistant_img/auto.svg",
+    "name": "Auto"
+  },
+  "classification": {
+    "prompt": "TASK: Classify the specified region in this image.\n\nDescription: ${description}\nRegion: ${region}\nAvailable labels: ${labels}\n\nLook at the indicated region and determine which label best describes what you see there.\n\nReturn JSON:\n{\n    \"suggested_label\": \"label_name\",\n    \"confidence\": 0.85,\n    \"reasoning\": \"Brief explanation of why this label fits\"\n}",
+    "output_format": "visual_classification",
+    "img": "/static/ai_assistant_img/classify.svg",
+    "name": "Classify"
+  },
+  "hint": {
+    "prompt": "TASK: Provide a helpful hint for annotating this image WITHOUT revealing exact answers.\n\nAnnotation task: ${description}\nAvailable labels: ${labels}\n\nProvide guidance that helps the annotator without giving away:\n- Exact object locations\n- Specific label assignments\n\nGood hints:\n- Point out relevant visual features\n- Suggest areas that deserve attention\n- Note potential challenges or ambiguities\n- Remind about edge cases\n\nReturn JSON:\n{\n    \"hint\": \"Your helpful guidance here\",\n    \"suggestive_choice\": \"optional_focus_area\"\n}",
+    "output_format": "default_hint",
+    "img": "/static/ai_assistant_img/blub.svg",
+    "name": "Hint"
+  },
+  "keyword": {
+    "prompt": "TASK: Identify visual keywords/features associated with each label in this image.\n\nAnnotation task: ${description}\nAvailable labels: ${labels}\n\nFor each label, identify visual cues or features that would indicate its presence.\n\nReturn JSON:\n{\n    \"label_keywords\": [\n        {\n            \"label\": \"label_name\",\n            \"keywords\": [\"visual_feature_1\", \"visual_feature_2\"]\n        }\n    ]\n}",
+    "output_format": "default_keyword",
+    "img": "/static/ai_assistant_img/highlight.svg",
+    "name": "Keywords"
+  },
+  "rationale": {
+    "prompt": "TASK: Provide rationale for how each label might apply to this image.\n\nAnnotation task: ${description}\nAvailable labels: ${labels}\n\nFor each label, explain what evidence in the image supports or contradicts its application.\n\nReturn JSON:\n{\n    \"rationales\": [\n        {\n            \"label\": \"label_name\",\n            \"reasoning\": \"Explanation of visual evidence for/against this label\"\n        }\n    ]\n}",
+    "output_format": "default_rationale",
+    "img": "/static/ai_assistant_img/question.svg",
+    "name": "Rationale"
+  }
+}

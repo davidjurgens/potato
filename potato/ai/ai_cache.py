@@ -14,7 +14,13 @@ from potato.server_utils.config_module import config
 logger = logging.getLogger(__name__)
 
 from potato.item_state_management import get_item_state_manager
-from potato.ai.ai_endpoint import AIEndpointFactory, Annotation_Type, AnnotationInput
+from potato.ai.ai_endpoint import (
+    AIEndpointFactory,
+    Annotation_Type,
+    AnnotationInput,
+    ImageData,
+    VisualAnnotationInput
+)
 from potato.ai.ollama_endpoint import OllamaEndpoint
 from potato.ai.openrouter_endpoint import OpenRouterEndpoint
 from potato.ai.ai_prompt import ModelManager, get_ai_prompt 
@@ -79,7 +85,45 @@ class AiCacheManager:
         AIEndpointFactory.register_endpoint("ollama", OllamaEndpoint)
         AIEndpointFactory.register_endpoint("open_router", OpenRouterEndpoint)
 
+        # Register visual AI endpoints
+        try:
+            from potato.ai.yolo_endpoint import YOLOEndpoint
+            AIEndpointFactory.register_endpoint("yolo", YOLOEndpoint)
+        except ImportError:
+            logger.debug("YOLO endpoint not available (ultralytics not installed)")
+
+        try:
+            from potato.ai.ollama_vision_endpoint import OllamaVisionEndpoint
+            AIEndpointFactory.register_endpoint("ollama_vision", OllamaVisionEndpoint)
+        except ImportError:
+            logger.debug("Ollama Vision endpoint not available")
+
+        try:
+            from potato.ai.openai_vision_endpoint import OpenAIVisionEndpoint
+            AIEndpointFactory.register_endpoint("openai_vision", OpenAIVisionEndpoint)
+        except ImportError:
+            logger.debug("OpenAI Vision endpoint not available")
+
+        try:
+            from potato.ai.anthropic_vision_endpoint import AnthropicVisionEndpoint
+            AIEndpointFactory.register_endpoint("anthropic_vision", AnthropicVisionEndpoint)
+        except ImportError:
+            logger.debug("Anthropic Vision endpoint not available")
+
         self.ai_endpoint = AIEndpointFactory.create_endpoint(config)
+
+        # Create visual endpoint if different from main endpoint
+        self.visual_endpoint = None
+        visual_endpoint_type = config.get("ai_support", {}).get("visual_endpoint_type")
+        if visual_endpoint_type and visual_endpoint_type != config.get("ai_support", {}).get("endpoint_type"):
+            visual_config = {
+                "ai_support": {
+                    "enabled": True,
+                    "endpoint_type": visual_endpoint_type,
+                    "ai_config": config.get("ai_support", {}).get("visual_ai_config", config.get("ai_support", {}).get("ai_config", {}))
+                }
+            }
+            self.visual_endpoint = AIEndpointFactory.create_endpoint(visual_config)
 
         annotation_scheme = config.get("annotation_schemes")
         self.annotations = []
@@ -336,7 +380,246 @@ class AiCacheManager:
         output_format = self.model_manager.get_model_class_by_name(ai_prompt[annotation_type].get(ai_assistant).get("output_format"))
         res = self.ai_endpoint.get_ai(data, output_format)
         return res
-    
+
+    def generate_image_annotation(self, instance_id: int, annotation_id: int, ai_assistant: str) -> Dict:
+        """Generate AI assistance for image annotation tasks.
+
+        Args:
+            instance_id: The instance/item index
+            annotation_id: The annotation scheme index
+            ai_assistant: Type of assistance ('detection', 'classification', 'hint', 'pre_annotate', etc.)
+
+        Returns:
+            Dict with AI suggestions (detections, classifications, hints, etc.)
+        """
+        logger.debug(f"Generating image annotation for instance={instance_id}, annotation={annotation_id}, assistant={ai_assistant}")
+
+        annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
+        description = config["annotation_schemes"][annotation_id].get("description", "")
+        labels = config["annotation_schemes"][annotation_id].get("labels", [])
+
+        # Extract label names if labels are dicts
+        if labels and isinstance(labels[0], dict):
+            labels = [l.get("name", str(l)) for l in labels]
+
+        # Get image URL from item data
+        item_data = get_item_state_manager().items()[instance_id].get_data()
+        image_url = self._extract_image_url(item_data)
+
+        if not image_url:
+            return {"error": "No image URL found in instance data"}
+
+        # Determine which endpoint to use
+        endpoint = self._get_visual_endpoint()
+        if not endpoint:
+            return {"error": "No visual AI endpoint configured"}
+
+        # Check if endpoint supports visual queries
+        if not hasattr(endpoint, 'query_with_image'):
+            # Fall back to text-based hint
+            return self._generate_text_hint_for_visual(instance_id, annotation_id, ai_assistant)
+
+        # Prepare image data
+        image_data = self._prepare_image_data(image_url)
+
+        # Get confidence threshold from config
+        confidence_threshold = config["annotation_schemes"][annotation_id].get(
+            "ai_support", {}
+        ).get("confidence_threshold", 0.5)
+
+        # Build VisualAnnotationInput
+        data = VisualAnnotationInput(
+            ai_assistant=ai_assistant,
+            annotation_type=annotation_type,
+            task_type=ai_assistant,  # detection, classification, hint, etc.
+            image_data=image_data,
+            description=description,
+            labels=labels,
+            confidence_threshold=confidence_threshold
+        )
+
+        # Get output format from prompt config
+        ai_prompt = get_ai_prompt()
+        prompt_config = ai_prompt.get(annotation_type, {}).get(ai_assistant, {})
+        output_format_name = prompt_config.get("output_format", "visual_detection")
+        output_format = self.model_manager.get_model_class_by_name(output_format_name)
+
+        # Query the visual endpoint
+        result = endpoint.get_visual_ai(data, output_format)
+        return result
+
+    def generate_video_annotation(self, instance_id: int, annotation_id: int, ai_assistant: str) -> Dict:
+        """Generate AI assistance for video annotation tasks.
+
+        Args:
+            instance_id: The instance/item index
+            annotation_id: The annotation scheme index
+            ai_assistant: Type of assistance ('scene_detection', 'frame_classification', etc.)
+
+        Returns:
+            Dict with AI suggestions (segments, keyframes, etc.)
+        """
+        logger.debug(f"Generating video annotation for instance={instance_id}, annotation={annotation_id}, assistant={ai_assistant}")
+
+        annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
+        description = config["annotation_schemes"][annotation_id].get("description", "")
+        labels = config["annotation_schemes"][annotation_id].get("labels", [])
+
+        # Extract label names if labels are dicts
+        if labels and isinstance(labels[0], dict):
+            labels = [l.get("name", str(l)) for l in labels]
+
+        # Get video URL from item data
+        item_data = get_item_state_manager().items()[instance_id].get_data()
+        video_url = self._extract_video_url(item_data)
+
+        if not video_url:
+            return {"error": "No video URL found in instance data"}
+
+        # Determine which endpoint to use
+        endpoint = self._get_visual_endpoint()
+        if not endpoint:
+            return {"error": "No visual AI endpoint configured"}
+
+        # Check if endpoint supports visual queries
+        if not hasattr(endpoint, 'query_with_image'):
+            return self._generate_text_hint_for_visual(instance_id, annotation_id, ai_assistant)
+
+        # Extract video frames
+        try:
+            frames = endpoint.extract_video_frames(video_url)
+            video_metadata = endpoint.get_video_metadata(video_url)
+        except Exception as e:
+            logger.error(f"Failed to extract video frames: {e}")
+            return {"error": f"Failed to process video: {str(e)}"}
+
+        # Build VisualAnnotationInput
+        data = VisualAnnotationInput(
+            ai_assistant=ai_assistant,
+            annotation_type=annotation_type,
+            task_type=ai_assistant,
+            image_data=frames,  # List of frame images
+            description=description,
+            labels=labels,
+            video_metadata=video_metadata
+        )
+
+        # Get output format
+        ai_prompt = get_ai_prompt()
+        prompt_config = ai_prompt.get(annotation_type, {}).get(ai_assistant, {})
+        output_format_name = prompt_config.get("output_format", "video_scene_detection")
+        output_format = self.model_manager.get_model_class_by_name(output_format_name)
+
+        # Query the visual endpoint
+        result = endpoint.get_visual_ai(data, output_format)
+        return result
+
+    def _get_visual_endpoint(self):
+        """Get the appropriate endpoint for visual tasks."""
+        # Use dedicated visual endpoint if configured
+        if self.visual_endpoint:
+            return self.visual_endpoint
+
+        # Check if main endpoint supports vision
+        if hasattr(self.ai_endpoint, 'query_with_image'):
+            return self.ai_endpoint
+
+        # Try to find a visual endpoint from registered types
+        visual_types = ['yolo', 'ollama_vision', 'openai_vision', 'anthropic_vision']
+        for vtype in visual_types:
+            if vtype in AIEndpointFactory._endpoints:
+                try:
+                    visual_config = {
+                        "ai_support": {
+                            "enabled": True,
+                            "endpoint_type": vtype,
+                            "ai_config": config.get("ai_support", {}).get("ai_config", {})
+                        }
+                    }
+                    return AIEndpointFactory.create_endpoint(visual_config)
+                except Exception as e:
+                    logger.debug(f"Could not create {vtype} endpoint: {e}")
+                    continue
+
+        return None
+
+    def _extract_image_url(self, item_data: Dict) -> str:
+        """Extract image URL from item data.
+
+        Looks for common field names that might contain image URLs.
+        """
+        # Common field names for images
+        image_fields = ['image', 'image_url', 'img', 'img_url', 'url', 'path', 'file', 'src']
+
+        for field in image_fields:
+            if field in item_data:
+                value = item_data[field]
+                if isinstance(value, str) and (
+                    value.startswith(('http://', 'https://', '/')) or
+                    value.endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp'))
+                ):
+                    return value
+
+        # Check 'text' field for URL (common in simple configs)
+        if 'text' in item_data:
+            text = item_data['text']
+            if isinstance(text, str) and (
+                text.startswith(('http://', 'https://')) and
+                any(ext in text.lower() for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp'])
+            ):
+                return text
+
+        return None
+
+    def _extract_video_url(self, item_data: Dict) -> str:
+        """Extract video URL from item data."""
+        # Common field names for videos
+        video_fields = ['video', 'video_url', 'url', 'path', 'file', 'src', 'media']
+
+        for field in video_fields:
+            if field in item_data:
+                value = item_data[field]
+                if isinstance(value, str) and (
+                    value.startswith(('http://', 'https://', '/')) or
+                    value.endswith(('.mp4', '.webm', '.ogg', '.avi', '.mov'))
+                ):
+                    return value
+
+        # Check 'text' field for URL
+        if 'text' in item_data:
+            text = item_data['text']
+            if isinstance(text, str) and (
+                text.startswith(('http://', 'https://')) and
+                any(ext in text.lower() for ext in ['.mp4', '.webm', '.ogg', '.avi', '.mov'])
+            ):
+                return text
+
+        return None
+
+    def _prepare_image_data(self, image_url: str) -> ImageData:
+        """Prepare ImageData from URL or path."""
+        if image_url.startswith(('http://', 'https://')):
+            return ImageData(source="url", data=image_url)
+        else:
+            # Local file path - encode as base64
+            from potato.ai.visual_ai_endpoint import BaseVisualAIEndpoint
+            return BaseVisualAIEndpoint.encode_image_to_base64(image_url)
+
+    def _generate_text_hint_for_visual(self, instance_id: int, annotation_id: int, ai_assistant: str) -> Dict:
+        """Generate text-based hint when visual endpoint is not available."""
+        description = config["annotation_schemes"][annotation_id].get("description", "")
+        labels = config["annotation_schemes"][annotation_id].get("labels", [])
+
+        if labels and isinstance(labels[0], dict):
+            labels = [l.get("name", str(l)) for l in labels]
+
+        return {
+            "hint": f"Review the {'image' if 'image' in config['annotation_schemes'][annotation_id]['annotation_type'] else 'video'} carefully. "
+                    f"Look for: {', '.join(labels) if labels else 'relevant content'}. "
+                    f"Task: {description}",
+            "suggestive_choice": ""
+        }
+
     def get_include_all(self): 
         return self.include_all 
     
@@ -516,6 +799,10 @@ class AiCacheManager:
                 return self.generate_span(instance_id, annotation_id, ai_assistant)
             case Annotation_Type.TEXTBOX:
                 return self.generate_textbox(instance_id, annotation_id, ai_assistant)
+            case Annotation_Type.IMAGE_ANNOTATION:
+                return self.generate_image_annotation(instance_id, annotation_id, ai_assistant)
+            case Annotation_Type.VIDEO_ANNOTATION:
+                return self.generate_video_annotation(instance_id, annotation_id, ai_assistant)
             case _:
                 raise ValueError(f"Unknown annotation type: {annotation_type}")
 

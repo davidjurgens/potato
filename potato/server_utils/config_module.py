@@ -1172,6 +1172,14 @@ def load_and_validate_config(config_file: str, project_dir: str) -> Dict[str, An
     # Get the directory containing the config file for relative path resolution
     config_file_dir = os.path.dirname(validated_config_path)
 
+    # Apply default values for common configuration options
+    if 'task_dir' not in config_data:
+        config_data['task_dir'] = '.'
+        logger.debug("task_dir not specified, defaulting to '.'")
+    if 'site_dir' not in config_data:
+        config_data['site_dir'] = 'default'
+        logger.debug("site_dir not specified, defaulting to 'default'")
+
     # Resolve task_dir relative to config file directory if it's '.' or a relative path
     if 'task_dir' in config_data:
         task_dir = config_data['task_dir']
@@ -1521,7 +1529,8 @@ def validate_ai_support_config(config_data: Dict[str, Any]) -> None:
     if not isinstance(endpoint_type, str):
         raise ConfigValidationError("ai_support.endpoint_type must be a string")
 
-    valid_endpoint_types = ["openai", "anthropic", "huggingface", "ollama", "gemini", "vllm"]
+    valid_endpoint_types = ["openai", "anthropic", "huggingface", "ollama", "gemini", "vllm",
+                            "yolo", "ollama_vision", "openai_vision", "anthropic_vision"]
     if endpoint_type not in valid_endpoint_types:
         raise ConfigValidationError(f"ai_support.endpoint_type must be one of: {', '.join(valid_endpoint_types)}")
 

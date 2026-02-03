@@ -2762,7 +2762,16 @@ def get_span_data(instance_id):
             logger.debug(f"Instance found with original ID")
 
         original_text = instance.get_text()
-        logger.debug(f"Original text: {original_text[:100]}...")
+        logger.debug(f"Original text (raw): {original_text[:100]}...")
+
+        # IMPORTANT: Normalize text the same way as flask_server.py template rendering
+        # This ensures span offsets calculated on normalized text match the API response
+        # 1. Strip HTML tags
+        import re as re_module
+        normalized_text = re_module.sub(r'<[^>]+>', '', original_text)
+        # 2. Normalize whitespace (multiple spaces/newlines -> single space)
+        normalized_text = re_module.sub(r'\s+', ' ', normalized_text).strip()
+        logger.debug(f"Normalized text: {normalized_text[:100]}...")
     except Exception as e:
         logger.error(f"Error getting instance text: {e}")
         return jsonify({"error": f"Instance not found: {instance_id}"}), 404
@@ -2803,13 +2812,13 @@ def get_span_data(instance_id):
             'title': span_title,
             'start': span_start,
             'end': span_end,
-            'text': original_text[span_start:span_end] if span_start < len(original_text) and span_end <= len(original_text) else "",
+            'text': normalized_text[span_start:span_end] if span_start < len(normalized_text) and span_end <= len(normalized_text) else "",
             'color': hex_color
         })
-    
+
     response_data = {
         'instance_id': instance_id,
-        'text': original_text,
+        'text': normalized_text,  # Use normalized text matching template rendering
         'spans': span_data
     }
 

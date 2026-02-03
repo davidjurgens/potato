@@ -107,6 +107,10 @@ def _generate_image_annotation_layout_internal(annotation_scheme):
     freeform_brush_size = annotation_scheme.get("freeform_brush_size", 5)
     freeform_simplify = annotation_scheme.get("freeform_simplify", True)
 
+    # AI support configuration
+    ai_support = annotation_scheme.get("ai_support", {})
+    ai_enabled = ai_support.get("enabled", False)
+
     # Build config object for JavaScript
     js_config = {
         "schemaName": schema_name,
@@ -118,10 +122,12 @@ def _generate_image_annotation_layout_internal(annotation_scheme):
         "maxAnnotations": max_annotations,
         "freeformBrushSize": freeform_brush_size,
         "freeformSimplify": freeform_simplify,
+        "aiSupport": ai_enabled,
+        "aiFeatures": ai_support.get("features", {}) if ai_enabled else {},
     }
 
     # Generate HTML
-    html = _generate_html(annotation_scheme, js_config, schema_name, labels, tools)
+    html = _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_enabled, ai_support)
 
     # Generate keybindings
     keybindings = _generate_keybindings(labels, tools)
@@ -161,7 +167,7 @@ def _process_labels(labels_config):
     return processed
 
 
-def _generate_html(annotation_scheme, js_config, schema_name, labels, tools):
+def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_enabled=False, ai_support=None):
     """
     Generate the HTML for the image annotation interface.
     """
@@ -175,13 +181,21 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools):
     # Generate label selector
     label_selector = _generate_label_selector(labels)
 
+    # Generate AI toolbar if enabled
+    ai_toolbar_html = ""
+    ai_init_script = ""
+    if ai_enabled:
+        ai_features = ai_support.get("features", {}) if ai_support else {}
+        ai_toolbar_html = _generate_ai_toolbar(ai_features)
+        ai_init_script = _generate_ai_init_script(escaped_name)
+
     html = f'''
     <form id="{escaped_name}" class="annotation-form image-annotation" action="/action_page.php">
         <fieldset schema="{escaped_name}">
             <legend>{description}</legend>
 
             <!-- Image Annotation Container -->
-            <div class="image-annotation-container" data-schema="{escaped_name}">
+            <div class="image-annotation-container" data-schema="{escaped_name}" data-ai-enabled="{str(ai_enabled).lower()}">
                 <!-- Toolbar -->
                 <div class="image-annotation-toolbar">
                     <!-- Tool buttons -->
@@ -217,6 +231,8 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools):
                     </div>
                 </div>
 
+                {ai_toolbar_html}
+
                 <!-- Canvas wrapper -->
                 <div class="canvas-wrapper">
                     <canvas id="canvas-{escaped_name}" class="annotation-canvas"></canvas>
@@ -247,11 +263,21 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools):
                         var inputId = 'input-{escaped_name}';
 
                         // Get image URL from the instance display
-                        var instanceContainer = document.getElementById('instance_text');
-                        var imgElement = instanceContainer ? instanceContainer.querySelector('img') : null;
-                        var imageUrl = imgElement ? imgElement.src : null;
+                        var instanceContainer = document.getElementById('instance-text');
+                        console.log('Instance container:', instanceContainer);
+                        var textContent = instanceContainer ? instanceContainer.querySelector('#text-content') : null;
+                        console.log('Text content element:', textContent);
+                        var imageUrl = textContent ? textContent.getAttribute('data-image-url') : null;
+                        console.log('Image URL from data-image-url:', imageUrl);
+                        // Fallback to looking for an img element
+                        if (!imageUrl) {{
+                            var imgElement = instanceContainer ? instanceContainer.querySelector('img') : null;
+                            imageUrl = imgElement ? imgElement.src : null;
+                            console.log('Image URL from img element:', imageUrl);
+                        }}
 
                         // Initialize manager
+                        console.log('Initializing ImageAnnotationManager with canvas:', canvasId);
                         var manager = new ImageAnnotationManager(canvasId, inputId, config);
 
                         // Store reference on container
@@ -259,7 +285,10 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools):
 
                         // Load image if available
                         if (imageUrl) {{
+                            console.log('Calling loadImage with:', imageUrl);
                             manager.loadImage(imageUrl);
+                        }} else {{
+                            console.warn('No image URL found for annotation');
                         }}
 
                         // Wire up toolbar buttons
@@ -316,6 +345,8 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools):
                             var countEl = container.querySelector('.count-value');
                             if (countEl) countEl.textContent = count;
                         }};
+
+                        {ai_init_script}
                     }}
 
                     if (document.readyState === 'loading') {{
@@ -330,6 +361,89 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools):
     '''
 
     return html
+
+
+def _generate_ai_toolbar(ai_features):
+    """
+    Generate HTML for the AI assistance toolbar.
+    """
+    # Determine which buttons to show based on features
+    detection_enabled = ai_features.get("detection", True)
+    pre_annotate_enabled = ai_features.get("pre_annotate", True)
+    classification_enabled = ai_features.get("classification", False)
+    hint_enabled = ai_features.get("hint", True)
+
+    buttons = []
+
+    if detection_enabled:
+        buttons.append(
+            '<button type="button" class="ai-btn" data-action="detect" title="Detect objects in the image">'
+            '<span class="ai-btn-icon">🔍</span> Detect</button>'
+        )
+
+    if pre_annotate_enabled:
+        buttons.append(
+            '<button type="button" class="ai-btn" data-action="pre_annotate" title="Auto-detect and pre-annotate all objects">'
+            '<span class="ai-btn-icon">⚡</span> Auto</button>'
+        )
+
+    if classification_enabled:
+        buttons.append(
+            '<button type="button" class="ai-btn" data-action="classification" title="Classify selected region">'
+            '<span class="ai-btn-icon">🏷️</span> Classify</button>'
+        )
+
+    if hint_enabled:
+        buttons.append(
+            '<button type="button" class="ai-btn" data-action="hint" title="Get a hint for annotation">'
+            '<span class="ai-btn-icon">💡</span> Hint</button>'
+        )
+
+    if not buttons:
+        return ""
+
+    return f'''
+                <!-- AI Assistance Toolbar -->
+                <div class="ai-toolbar">
+                    <div class="ai-toolbar-group">
+                        <span class="ai-toolbar-label">AI Assist:</span>
+                        {" ".join(buttons)}
+                    </div>
+                    <div class="ai-suggestion-controls" style="display: none;">
+                        <span class="suggestion-count">0 suggestions</span>
+                        <button type="button" class="ai-btn ai-btn-accept" data-action="accept-all" title="Accept all suggestions">
+                            Accept All
+                        </button>
+                        <button type="button" class="ai-btn ai-btn-clear" data-action="clear" title="Clear all suggestions">
+                            Clear
+                        </button>
+                    </div>
+                    <div class="ai-loading-indicator" style="display: none;">
+                        <span class="spinner"></span> Loading...
+                    </div>
+                </div>
+                <!-- AI Tooltip Container -->
+                <div class="ai-tooltip-container" style="display: none;"></div>
+    '''
+
+
+def _generate_ai_init_script(escaped_name):
+    """
+    Generate JavaScript initialization code for AI assistant.
+    """
+    return f'''
+                        // Initialize AI assistant if enabled and VisualAIAssistantManager is available
+                        if (config.aiSupport && typeof VisualAIAssistantManager !== 'undefined') {{
+                            var annotationId = Array.from(document.querySelectorAll('.annotation-form')).indexOf(
+                                document.getElementById('{escaped_name}')
+                            );
+                            container.aiAssistant = new VisualAIAssistantManager({{
+                                annotationType: 'image_annotation',
+                                annotationId: annotationId >= 0 ? annotationId : 0,
+                                annotationManager: manager
+                            }});
+                        }}
+    '''
 
 
 def _generate_tool_buttons(tools):

@@ -313,11 +313,13 @@ class ImageAnnotationManager {
     loadImage(imageUrl) {
         if (!this.canvas) return;
 
+        console.log('Loading image:', imageUrl);
         fabric.Image.fromURL(imageUrl, (img) => {
             if (!img) {
                 console.error('Failed to load image:', imageUrl);
                 return;
             }
+            console.log('Image loaded successfully:', img.width, 'x', img.height);
 
             this.image = img;
 

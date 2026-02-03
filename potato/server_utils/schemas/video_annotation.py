@@ -121,6 +121,10 @@ def _generate_video_annotation_layout_internal(annotation_scheme: Dict[str, Any]
     show_timecode = annotation_scheme.get('show_timecode', True)
     video_fps = annotation_scheme.get('video_fps', 30)
 
+    # AI support configuration
+    ai_support = annotation_scheme.get("ai_support", {})
+    ai_enabled = ai_support.get("enabled", False)
+
     # Build config object for JavaScript
     js_config = {
         "schemaName": schema_name,
@@ -136,10 +140,12 @@ def _generate_video_annotation_layout_internal(annotation_scheme: Dict[str, Any]
         "frameStepping": frame_stepping,
         "showTimecode": show_timecode,
         "videoFps": video_fps,
+        "aiSupport": ai_enabled,
+        "aiFeatures": ai_support.get("features", {}) if ai_enabled else {},
     }
 
     # Generate HTML
-    html = _generate_html(annotation_scheme, js_config, schema_name, labels, mode)
+    html = _generate_html(annotation_scheme, js_config, schema_name, labels, mode, ai_enabled, ai_support)
 
     # Generate keybindings
     keybindings = _generate_keybindings(labels, mode, frame_stepping)
@@ -184,7 +190,9 @@ def _generate_html(
     js_config: Dict[str, Any],
     schema_name: str,
     labels: List[Dict[str, Any]],
-    mode: str
+    mode: str,
+    ai_enabled: bool = False,
+    ai_support: Dict[str, Any] = None
 ) -> str:
     """
     Generate the HTML for the video annotation interface.
@@ -199,6 +207,14 @@ def _generate_html(
     label_selector = ""
     if labels:
         label_selector = _generate_label_selector(labels)
+
+    # Generate AI toolbar if enabled
+    ai_toolbar_html = ""
+    ai_init_script = ""
+    if ai_enabled:
+        ai_features = ai_support.get("features", {}) if ai_support else {}
+        ai_toolbar_html = _generate_video_ai_toolbar(ai_features, mode)
+        ai_init_script = _generate_video_ai_init_script(escaped_name)
 
     # Generate playback rate control
     playback_rate_html = ""
@@ -330,6 +346,8 @@ def _generate_html(
                         <span class="segment-count">Segments: <span class="count-value">0</span></span>
                     </div>
                 </div>
+
+                {ai_toolbar_html}
 
                 <!-- Timeline (Peaks.js) -->
                 <div class="timeline-wrapper">
@@ -560,6 +578,8 @@ def _generate_html(
                         // Set default label
                         var firstLabelBtn = container.querySelector('.label-btn');
                         if (firstLabelBtn) firstLabelBtn.click();
+
+                        {ai_init_script}
                     }}
 
                     if (document.readyState === 'loading') {{
@@ -574,6 +594,102 @@ def _generate_html(
     '''
 
     return html
+
+
+def _generate_video_ai_toolbar(ai_features: Dict[str, Any], mode: str) -> str:
+    """
+    Generate HTML for the video AI assistance toolbar.
+    """
+    scene_detection_enabled = ai_features.get("scene_detection", True)
+    frame_classification_enabled = ai_features.get("frame_classification", False)
+    keyframe_detection_enabled = ai_features.get("keyframe_detection", False)
+    tracking_enabled = ai_features.get("tracking", False)
+    pre_annotate_enabled = ai_features.get("pre_annotate", True)
+    hint_enabled = ai_features.get("hint", True)
+
+    buttons = []
+
+    if scene_detection_enabled and mode in ['segment', 'combined']:
+        buttons.append(
+            '<button type="button" class="ai-btn" data-action="scene_detection" title="Detect scene boundaries">'
+            '<span class="ai-btn-icon">🎬</span> Scenes</button>'
+        )
+
+    if pre_annotate_enabled:
+        buttons.append(
+            '<button type="button" class="ai-btn" data-action="pre_annotate" title="Auto-segment the entire video">'
+            '<span class="ai-btn-icon">⚡</span> Auto</button>'
+        )
+
+    if frame_classification_enabled and mode in ['frame', 'combined']:
+        buttons.append(
+            '<button type="button" class="ai-btn" data-action="frame_classification" title="Classify current frame">'
+            '<span class="ai-btn-icon">🏷️</span> Classify</button>'
+        )
+
+    if keyframe_detection_enabled and mode in ['keyframe', 'combined']:
+        buttons.append(
+            '<button type="button" class="ai-btn" data-action="keyframe_detection" title="Detect keyframes">'
+            '<span class="ai-btn-icon">📍</span> Keyframes</button>'
+        )
+
+    if tracking_enabled and mode == 'tracking':
+        buttons.append(
+            '<button type="button" class="ai-btn" data-action="tracking_suggestion" title="Get tracking suggestions">'
+            '<span class="ai-btn-icon">👁️</span> Track</button>'
+        )
+
+    if hint_enabled:
+        buttons.append(
+            '<button type="button" class="ai-btn" data-action="hint" title="Get a hint for annotation">'
+            '<span class="ai-btn-icon">💡</span> Hint</button>'
+        )
+
+    if not buttons:
+        return ""
+
+    return f'''
+                <!-- AI Assistance Toolbar -->
+                <div class="ai-toolbar">
+                    <div class="ai-toolbar-group">
+                        <span class="ai-toolbar-label">AI Assist:</span>
+                        {" ".join(buttons)}
+                    </div>
+                    <div class="ai-suggestion-controls" style="display: none;">
+                        <span class="suggestion-count">0 suggestions</span>
+                        <button type="button" class="ai-btn ai-btn-accept" data-action="accept-all" title="Accept all suggestions">
+                            Accept All
+                        </button>
+                        <button type="button" class="ai-btn ai-btn-clear" data-action="clear" title="Clear all suggestions">
+                            Clear
+                        </button>
+                    </div>
+                    <div class="ai-loading-indicator" style="display: none;">
+                        <span class="spinner"></span> Loading...
+                    </div>
+                </div>
+                <!-- AI Tooltip Container -->
+                <div class="ai-tooltip-container" style="display: none;"></div>
+    '''
+
+
+def _generate_video_ai_init_script(escaped_name: str) -> str:
+    """
+    Generate JavaScript initialization code for video AI assistant.
+    """
+    return f'''
+                        // Initialize AI assistant if enabled and VisualAIAssistantManager is available
+                        if (config.aiSupport && typeof VisualAIAssistantManager !== 'undefined') {{
+                            var annotationId = Array.from(document.querySelectorAll('.annotation-form')).indexOf(
+                                document.getElementById('{escaped_name}')
+                            );
+                            container.aiAssistant = new VisualAIAssistantManager({{
+                                annotationType: 'video_annotation',
+                                annotationId: annotationId >= 0 ? annotationId : 0,
+                                annotationManager: manager
+                            }});
+                        }}
+    '''
 
 
 def _generate_label_selector(labels: List[Dict[str, Any]]) -> str:

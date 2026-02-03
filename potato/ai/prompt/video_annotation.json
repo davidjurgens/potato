@@ -1,0 +1,38 @@
+{
+  "scene_detection": {
+    "prompt": "TASK: Detect distinct scenes or segments in this video.\n\nDescription: ${description}\nVideo duration: ${duration} seconds\nNumber of frames analyzed: ${num_frames}\nAvailable labels: ${labels}\n\nAnalyze the provided frames (sampled from the video) and identify distinct scenes or segments. For each segment, provide:\n1. Start and end times (in seconds)\n2. A label from the available list\n3. Confidence score\n4. Brief description of why this segment was identified\n\nReturn JSON:\n{\n    \"segments\": [\n        {\n            \"start_time\": 0.0,\n            \"end_time\": 5.5,\n            \"suggested_label\": \"label_name\",\n            \"confidence\": 0.85,\n            \"description\": \"Brief reason for this segment\"\n        }\n    ]\n}\n\nEnsure segments cover the entire video duration and don't overlap.",
+    "output_format": "video_scene_detection",
+    "img": "/static/ai_assistant_img/scene.svg",
+    "name": "Scenes"
+  },
+  "frame_classification": {
+    "prompt": "TASK: Classify this video frame.\n\nDescription: ${description}\nCurrent time: approximately frame ${num_frames}\nAvailable labels: ${labels}\n\nAnalyze this frame and determine which label best describes the current content.\n\nReturn JSON:\n{\n    \"suggested_label\": \"label_name\",\n    \"confidence\": 0.85,\n    \"reasoning\": \"Brief explanation\"\n}",
+    "output_format": "visual_classification",
+    "img": "/static/ai_assistant_img/classify.svg",
+    "name": "Classify Frame"
+  },
+  "keyframe_detection": {
+    "prompt": "TASK: Identify keyframes (significant moments) in this video.\n\nDescription: ${description}\nVideo duration: ${duration} seconds\nNumber of frames analyzed: ${num_frames}\nAvailable labels: ${labels}\n\nAnalyze the frames and identify significant moments that would make good keyframes for annotation. Keyframes should represent:\n- Scene transitions\n- Important actions or events\n- Representative moments of each segment\n\nReturn JSON:\n{\n    \"keyframes\": [\n        {\n            \"timestamp\": 2.5,\n            \"suggested_label\": \"label_name\",\n            \"confidence\": 0.9,\n            \"reason\": \"Why this is a significant moment\"\n        }\n    ]\n}",
+    "output_format": "video_keyframe_detection",
+    "img": "/static/ai_assistant_img/keyframe.svg",
+    "name": "Keyframes"
+  },
+  "tracking_suggestion": {
+    "prompt": "TASK: Suggest object positions for tracking across frames.\n\nDescription: ${description}\nNumber of frames: ${num_frames}\nLabels to track: ${labels}\n\nAnalyze these sequential frames and identify the position of objects across time. For each object, provide its bounding box in each frame where it's visible.\n\nReturn JSON:\n{\n    \"tracks\": [\n        {\n            \"track_id\": 1,\n            \"label\": \"object_label\",\n            \"positions\": [\n                {\n                    \"frame_index\": 0,\n                    \"bbox\": {\"x\": 0.1, \"y\": 0.2, \"width\": 0.15, \"height\": 0.2},\n                    \"confidence\": 0.9\n                }\n            ]\n        }\n    ]\n}\n\nNote: frame_index corresponds to the order of frames provided (0-indexed).",
+    "output_format": "video_tracking_suggestion",
+    "img": "/static/ai_assistant_img/track.svg",
+    "name": "Track"
+  },
+  "hint": {
+    "prompt": "TASK: Provide a helpful hint for annotating this video WITHOUT revealing exact answers.\n\nAnnotation task: ${description}\nVideo duration: ${duration} seconds\nAvailable labels: ${labels}\n\nProvide guidance that helps the annotator without giving away:\n- Exact segment boundaries\n- Specific label assignments\n\nGood hints:\n- Note patterns or transitions to watch for\n- Suggest areas of the video that need attention\n- Point out potential challenges or ambiguities\n\nReturn JSON:\n{\n    \"hint\": \"Your helpful guidance here\",\n    \"suggestive_choice\": \"optional_focus_area\"\n}",
+    "output_format": "default_hint",
+    "img": "/static/ai_assistant_img/blub.svg",
+    "name": "Hint"
+  },
+  "pre_annotate": {
+    "prompt": "TASK: Pre-annotate this video with scene segments.\n\nDescription: ${description}\nVideo duration: ${duration} seconds\nNumber of frames analyzed: ${num_frames}\nAvailable labels: ${labels}\n\nAutomatically segment the entire video and assign labels. Be thorough - the annotator will review and adjust your suggestions.\n\nReturn JSON:\n{\n    \"segments\": [\n        {\n            \"start_time\": 0.0,\n            \"end_time\": 5.5,\n            \"suggested_label\": \"label_name\",\n            \"confidence\": 0.85,\n            \"description\": \"Brief description of this segment\"\n        }\n    ]\n}\n\nInclude all segments, even uncertain ones. Ensure complete coverage of video duration.",
+    "output_format": "video_scene_detection",
+    "img": "/static/ai_assistant_img/auto.svg",
+    "name": "Auto"
+  }
+}

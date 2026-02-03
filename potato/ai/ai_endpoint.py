@@ -6,12 +6,12 @@ This module provides a common interface for interacting with different LLM provi
 including OpenAI, Anthropic, Hugging Face, Ollama, and VLLM endpoints.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 import logging
 from abc import ABC, abstractmethod
 import os
-from typing import Dict, Any, Optional, List, Type
+from typing import Dict, Any, Optional, List, Type, Union
 import json
 from string import Template
 
@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from .ai_prompt import get_ai_prompt
 
 logger = logging.getLogger(__name__)
+
 
 class Annotation_Type(Enum):
     RADIO = "radio"
@@ -30,6 +31,33 @@ class Annotation_Type(Enum):
     SPAN = "span"
     SELECT = "select"
     SLIDER = "slider"
+    IMAGE_ANNOTATION = "image_annotation"
+    VIDEO_ANNOTATION = "video_annotation"
+
+
+@dataclass
+class ImageData:
+    """Data structure for image input to visual AI endpoints."""
+    source: str  # 'url' | 'base64'
+    data: str    # The URL or base64-encoded image data
+    width: Optional[int] = None
+    height: Optional[int] = None
+    mime_type: Optional[str] = None  # e.g., 'image/jpeg', 'image/png'
+
+
+@dataclass
+class VisualAnnotationInput:
+    """Input data structure for visual annotation AI assistance."""
+    ai_assistant: str           # 'detection', 'classification', 'hint', 'pre_annotate', etc.
+    annotation_type: str        # 'image_annotation' | 'video_annotation'
+    task_type: str              # Specific task: 'detection', 'classification', 'scene_detection', etc.
+    image_data: Union[ImageData, List[ImageData]]  # Single image or list of frames
+    description: str            # Task description from annotation scheme
+    labels: Optional[List[str]] = None  # Available labels for the task
+    video_metadata: Optional[Dict[str, Any]] = field(default_factory=dict)  # fps, duration for video
+    region: Optional[Dict[str, float]] = None  # Selected region for classification (x, y, width, height)
+    confidence_threshold: float = 0.5  # Minimum confidence for detections
+
 
 @dataclass
 class AnnotationInput:
@@ -317,3 +345,27 @@ try:
 except ImportError:
     logger.debug("VLLM endpoint not available")
 
+# Register visual AI endpoints
+try:
+    from .yolo_endpoint import YOLOEndpoint
+    AIEndpointFactory.register_endpoint("yolo", YOLOEndpoint)
+except ImportError:
+    logger.debug("YOLO endpoint not available (ultralytics not installed)")
+
+try:
+    from .ollama_vision_endpoint import OllamaVisionEndpoint
+    AIEndpointFactory.register_endpoint("ollama_vision", OllamaVisionEndpoint)
+except ImportError:
+    logger.debug("Ollama Vision endpoint not available")
+
+try:
+    from .openai_vision_endpoint import OpenAIVisionEndpoint
+    AIEndpointFactory.register_endpoint("openai_vision", OpenAIVisionEndpoint)
+except ImportError:
+    logger.debug("OpenAI Vision endpoint not available")
+
+try:
+    from .anthropic_vision_endpoint import AnthropicVisionEndpoint
+    AIEndpointFactory.register_endpoint("anthropic_vision", AnthropicVisionEndpoint)
+except ImportError:
+    logger.debug("Anthropic Vision endpoint not available")
