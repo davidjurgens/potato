@@ -1,6 +1,6 @@
 # Potato: The Portable Text Annotation Tool
 
-[![Documentation](https://img.shields.io/badge/docs-readthedocs-blue)](https://potato-annotation.readthedocs.io/)
+[![Documentation](https://img.shields.io/badge/docs-readthedocs-blue)](https://potatoannotator.readthedocs.io/)
 [![PyPI](https://img.shields.io/pypi/v/potato-annotation)](https://pypi.org/project/potato-annotation/)
 [![License](https://img.shields.io/badge/license-Polyform%20Shield-green)](LICENSE)
 [![Paper](https://img.shields.io/badge/paper-EMNLP%202022-orange)](https://aclanthology.org/2022.emnlp-demos.33/)
@@ -99,15 +99,15 @@ Then open [http://localhost:8000](http://localhost:8000) in your browser.
 
 | Topic | Description |
 |-------|-------------|
-| [Getting Started](https://potato-annotation.readthedocs.io/en/latest/usage/) | Installation and first project setup |
-| [Configuration Guide](https://potato-annotation.readthedocs.io/en/latest/schemas_and_templates/) | YAML configuration options |
-| [Annotation Schemas](https://potato-annotation.readthedocs.io/en/latest/schemas_and_templates/) | Radio, checkbox, span, likert, and more |
-| [Data Formats](https://potato-annotation.readthedocs.io/en/latest/data_format/) | Input/output data specifications |
+| [Getting Started](https://potatoannotator.readthedocs.io/en/latest/usage/) | Installation and first project setup |
+| [Configuration Guide](https://potatoannotator.readthedocs.io/en/latest/schemas_and_templates/) | YAML configuration options |
+| [Annotation Schemas](https://potatoannotator.readthedocs.io/en/latest/schemas_and_templates/) | Radio, checkbox, span, likert, and more |
+| [Data Formats](https://potatoannotator.readthedocs.io/en/latest/data_format/) | Input/output data specifications |
 | [AI Support](docs/ai_support.md) | LLM integration for label suggestions |
 | [Quality Control](docs/quality_control.md) | Attention checks and gold standards |
 | [Active Learning](docs/active_learning_guide.md) | ML-based instance prioritization |
 | [Admin Dashboard](docs/admin_dashboard.md) | Monitoring and analytics |
-| [Crowdsourcing](https://potato-annotation.readthedocs.io/en/latest/crowdsourcing/) | Prolific and MTurk setup |
+| [Crowdsourcing](https://potatoannotator.readthedocs.io/en/latest/crowdsourcing/) | Prolific and MTurk setup |
 | [User Simulator](docs/simulator.md) | Testing and load simulation |
 
 ---
@@ -124,9 +124,15 @@ Ready-to-use annotation setups in [`project-hub/`](project-hub/):
 | [Question Answering](project-hub/question_answering/) | Extract answer spans | Span + checkbox |
 | [Simple Examples](project-hub/simple_examples/) | Minimal configs for each schema type | Various |
 
-**More examples**: Browse the [Potato Showcase](https://github.com/davidjurgens/potato-showcase/) for a gallery of real-world annotation configurations and interfaces.
+### Annotation Guidelines Showcase
 
-See [all example projects](https://potato-annotation.readthedocs.io/en/latest/example-projects/) in the documentation.
+Looking for real-world examples? The **[Potato Showcase](https://github.com/davidjurgens/potato-showcase/)** contains a curated gallery of annotation guidelines and configurations from published research projects. Browse examples of:
+- Annotation codebooks and instructions
+- Complex multi-schema configurations
+- Quality control setups
+- Custom UI configurations
+
+See [all example projects](https://potatoannotator.readthedocs.io/en/latest/example-projects/) in the documentation.
 
 ---
 
@@ -188,7 +194,7 @@ pytest --cov=potato --cov-report=html
 
 - **Issues**: [GitHub Issues](https://github.com/davidjurgens/potato/issues)
 - **Questions**: pedropei@umich.edu or jurgens@umich.edu
-- **Documentation**: [potato-annotation.readthedocs.io](https://potato-annotation.readthedocs.io/)
+- **Documentation**: [potatoannotator.readthedocs.io](https://potatoannotator.readthedocs.io/)
 
 ---
 
