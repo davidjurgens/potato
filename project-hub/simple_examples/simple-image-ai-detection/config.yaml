@@ -85,19 +85,19 @@ ai_support:
   # - "ollama_vision": Local VLLM (requires ollama with llava)
   # - "openai_vision": Cloud GPT-4o (requires API key)
   # - "anthropic_vision": Cloud Claude (requires API key)
-  endpoint_type: "yolo"
+  endpoint_type: "ollama_vision"
 
   ai_config:
-    # For YOLO endpoint:
-    model: "yolov8n.pt"
-    confidence_threshold: 0.5
-    iou_threshold: 0.45
-
     # For Ollama Vision endpoint:
-    # model: "llava:latest"
-    # base_url: "http://localhost:11434"
-    # max_tokens: 500
-    # temperature: 0.1
+    model: "qwen3-vl:2b"
+    base_url: "http://localhost:11434"
+    max_tokens: 500
+    temperature: 0.1
+
+    # For YOLO endpoint:
+    # model: "yolov8n.pt"
+    # confidence_threshold: 0.5
+    # iou_threshold: 0.45
 
     # For OpenAI Vision endpoint:
     # model: "gpt-4o"

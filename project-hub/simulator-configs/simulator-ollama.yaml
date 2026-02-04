@@ -10,10 +10,10 @@
 #
 # Usage:
 #   1. Start your annotation server:
-#      python potato/flask_server.py start project-hub/simple_examples/configs/simple-radio.yaml -p 8000
+#      python potato/flask_server.py start project-hub/simple_examples/simple-single-choice-selection/config.yaml -p 8000
 #
 #   2. Run the simulator:
-#      python -m potato.simulator --config project-hub/simple_examples/configs/simulator-ollama.yaml --server http://localhost:8000
+#      python -m potato.simulator --config project-hub/simulator-configs/simulator-ollama.yaml --server http://localhost:8000
 
 simulator:
   users:
