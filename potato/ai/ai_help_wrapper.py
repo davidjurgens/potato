@@ -1,8 +1,11 @@
 from flask import render_template_string
-from typing import Optional, Dict, Any
-from potato.ai.ai_cache import get_ai_cache_manager
+from typing import Optional, Dict, Any, List
+from potato.ai.ai_cache import get_ai_cache_manager, _is_image_url, _get_instance_text
 from potato.ai.ai_prompt import get_ai_prompt
 from potato.server_utils.config_module import config
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Global instance
 DYNAMICAIHELP = None
@@ -52,11 +55,37 @@ class DynamicAIHelp:
         str_html += "</div>"
         return str_html
 
+    def _filter_assistants_by_capability(
+        self, ai_cache_manager, assistant_keys: List[str], is_image_content: bool
+    ) -> List[str]:
+        """
+        Filter assistant types based on model capabilities.
+
+        Args:
+            ai_cache_manager: The AI cache manager instance
+            assistant_keys: List of assistant type keys to filter
+            is_image_content: Whether the current content is an image
+
+        Returns:
+            Filtered list of assistant keys that the model supports
+        """
+        # Get capabilities from the cache manager
+        capabilities = ai_cache_manager.get_endpoint_capabilities(for_image=is_image_content)
+
+        filtered_keys = []
+        for key in assistant_keys:
+            if capabilities.supports_assistant(key, is_image_content):
+                filtered_keys.append(key)
+            else:
+                logger.debug(
+                    f"[get_ai_help_data] Skipping '{key}' button - "
+                    f"not supported for {'image' if is_image_content else 'text'} content"
+                )
+
+        return filtered_keys
+
     def get_ai_help_data(self, instance: int, annotation_id: int, annotation_type: str) -> Dict[str, Any]:
         """Get current AI help configuration with the new prompt structure"""
-        import logging
-        logger = logging.getLogger(__name__)
-
         try:
             context = {
                 'ai_assistant': None,
@@ -84,23 +113,41 @@ class DynamicAIHelp:
 
             ai_assistant_html_parts = []
 
-            # Check if user specified specific ones
+            # Determine if content is an image for capability-based filtering
+            is_image_content = False
+            try:
+                text = _get_instance_text(instance)
+                is_image_content = _is_image_url(text)
+                if is_image_content:
+                    logger.debug(f"[get_ai_help_data] Content is an image URL")
+            except Exception as e:
+                logger.debug(f"[get_ai_help_data] Could not determine if content is image: {e}")
+
+            # Check if user specified specific assistant types
             special_include_types = ai_cache_manager.get_special_include(instance, annotation_id)
             logger.debug(f"[get_ai_help_data] special_include_types: {special_include_types}")
 
-            if special_include_types:  # This is now just checking if the list exists and is not empty
+            if special_include_types:
                 # Generate HTML for specific included keys
                 logger.debug(f"[get_ai_help_data] Using special include types: {special_include_types}")
-                for key in special_include_types:
-                    if key in ai_prompts[annotation_type]:
-                        ai_assistant_html_parts.append(self.generate_ai_assistant(ai_prompts, annotation_type, key))
-                    else:
-                        raise Exception(f'{key} does not exist in ai_prompt')
+                # Filter by capability
+                valid_keys = [k for k in special_include_types if k in ai_prompts[annotation_type]]
+                filtered_keys = self._filter_assistants_by_capability(
+                    ai_cache_manager, valid_keys, is_image_content
+                )
+                for key in filtered_keys:
+                    ai_assistant_html_parts.append(self.generate_ai_assistant(ai_prompts, annotation_type, key))
 
             elif ai_cache_manager.get_include_all():
                 # Generate HTML for all keys in the annotation type
-                logger.debug(f"[get_ai_help_data] include_all=True, generating HTML for: {list(ai_prompts[annotation_type].keys())}")
-                for key in ai_prompts[annotation_type]:
+                all_keys = list(ai_prompts[annotation_type].keys())
+                logger.debug(f"[get_ai_help_data] include_all=True, available keys: {all_keys}")
+                # Filter by capability
+                filtered_keys = self._filter_assistants_by_capability(
+                    ai_cache_manager, all_keys, is_image_content
+                )
+                logger.debug(f"[get_ai_help_data] After capability filter: {filtered_keys}")
+                for key in filtered_keys:
                     ai_assistant_html_parts.append(self.generate_ai_assistant(ai_prompts, annotation_type, key))
             else:
                 logger.debug("[get_ai_help_data] No special includes and include_all=False")

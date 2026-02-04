@@ -5,12 +5,24 @@ This module provides integration with OpenAI's API for LLM inference.
 """
 
 from openai import OpenAI
-from .ai_endpoint import BaseAIEndpoint, AIEndpointRequestError
+from .ai_endpoint import BaseAIEndpoint, AIEndpointRequestError, ModelCapabilities
 
 DEFAULT_MODEL = "gpt-4o-mini"
 
+
 class OpenAIEndpoint(BaseAIEndpoint):
     """OpenAI endpoint for cloud-based LLM inference."""
+
+    # Capabilities declaration for text-based OpenAI models
+    CAPABILITIES = ModelCapabilities(
+        text_generation=True,
+        vision_input=False,
+        bounding_box_output=False,
+        text_classification=True,
+        image_classification=False,
+        rationale_generation=True,
+        keyword_extraction=True,
+    )
 
     def _initialize_client(self) -> None:
         """Initialize the OpenAI client."""

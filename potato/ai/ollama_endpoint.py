@@ -8,14 +8,26 @@ import json
 from typing import Type
 import ollama
 from pydantic import BaseModel
-from .ai_endpoint import BaseAIEndpoint, AIEndpointRequestError
+from .ai_endpoint import BaseAIEndpoint, AIEndpointRequestError, ModelCapabilities
 import re
 
 
 DEFAULT_MODEL = "llama3.2"
 
+
 class OllamaEndpoint(BaseAIEndpoint):
     """Ollama endpoint for local LLM inference."""
+
+    # Capabilities declaration for text-based Ollama models
+    CAPABILITIES = ModelCapabilities(
+        text_generation=True,
+        vision_input=False,
+        bounding_box_output=False,
+        text_classification=True,
+        image_classification=False,
+        rationale_generation=True,
+        keyword_extraction=True,
+    )
 
     def _initialize_client(self) -> None:
         """Initialize the Ollama client."""

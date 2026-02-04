@@ -26,6 +26,71 @@ Potato supports multiple LLM providers, allowing you to choose the best option f
 - **Ollama** (Local model inference)
 - **VLLM** (High-performance local inference)
 
+### Vision Providers
+For image annotation tasks, you can use vision-capable models:
+- **Ollama Vision** (LLaVA, Qwen-VL, Moondream, etc.)
+- **OpenAI Vision** (GPT-4o, GPT-4o-mini)
+- **Anthropic Vision** (Claude with vision)
+- **YOLO** (Ultralytics YOLO for object detection)
+
+## Model Capabilities and Compatibility
+
+Different AI models have different capabilities. Potato automatically filters which AI assistant buttons are shown based on what each model can do and the type of content being annotated.
+
+### Capability Matrix
+
+| AI Assistant | Text Input | Image Input (VLLM) | Image Input (YOLO) |
+|--------------|------------|--------------------|--------------------|
+| **Hint** | ✅ Yes | ✅ Yes | ❌ No |
+| **Keyword** | ✅ Yes | ❌ No | ❌ No |
+| **Rationale** | ✅ Yes | ✅ Yes | ❌ No |
+| **Detection** | ❌ No | ⚠️ Limited | ✅ Yes |
+| **Pre-annotate** | ❌ No | ⚠️ Limited | ✅ Yes |
+
+**Notes:**
+- **Keyword highlighting** is disabled for image content because it requires highlighting specific words in text
+- **VLLM detection** is marked as "Limited" because vision language models can describe what they see but their bounding box coordinates are approximate
+- **YOLO** excels at precise object detection but cannot generate text explanations
+
+### Endpoint Capabilities
+
+Each AI endpoint declares its capabilities:
+
+| Endpoint Type | Text Gen | Vision | Bbox Output | Keyword | Rationale |
+|---------------|----------|--------|-------------|---------|-----------|
+| `ollama` | ✅ | ❌ | ❌ | ✅ | ✅ |
+| `ollama_vision` | ✅ | ✅ | ❌ | ❌ | ✅ |
+| `openai` | ✅ | ❌ | ❌ | ✅ | ✅ |
+| `openai_vision` | ✅ | ✅ | ❌ | ❌ | ✅ |
+| `anthropic` | ✅ | ❌ | ❌ | ✅ | ✅ |
+| `anthropic_vision` | ✅ | ✅ | ❌ | ❌ | ✅ |
+| `yolo` | ❌ | ✅ | ✅ | ❌ | ❌ |
+
+### Best Practices for Visual AI
+
+1. **For image classification with explanations**: Use a vision-capable LLM like `ollama_vision` with Qwen-VL or LLaVA
+2. **For precise object detection**: Use `yolo` endpoint
+3. **For combined workflows**: Configure both a text endpoint and a visual endpoint
+
+### Visual Endpoint Configuration
+
+You can configure a separate visual endpoint for image/video tasks:
+
+```yaml
+ai_support:
+  enabled: true
+  endpoint_type: "ollama"  # Main endpoint for text
+  visual_endpoint_type: "ollama_vision"  # Visual endpoint for images
+  ai_config:
+    model: "llama3.2"
+    include:
+      all: true
+  visual_ai_config:
+    model: "qwen2.5-vl:7b"  # Vision model for images
+```
+
+This allows you to use the best model for each type of content.
+
 ## Configuration
 
 AI support is configured in your YAML configuration file under the `ai_support` section. The configuration is optional - if not present, AI features will be disabled.

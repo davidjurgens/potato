@@ -73,6 +73,89 @@ class AnnotationInput:
     max_value: Optional[int] = -1
     step: Optional[int] = -1
 
+
+@dataclass
+class ModelCapabilities:
+    """
+    Declares what operations an AI endpoint can perform.
+
+    This dataclass is used to define the capabilities of different AI endpoints,
+    enabling the system to automatically filter AI assistant buttons and validate
+    requests based on what each model can actually do.
+
+    Attributes:
+        text_generation: Can generate text (hints, rationales, descriptions)
+        vision_input: Can process images as input
+        bounding_box_output: Can output precise coordinate detections
+        text_classification: Can classify text into categories
+        image_classification: Can classify images into categories
+        rationale_generation: Can generate explanations/rationales for labels
+        keyword_extraction: Can extract keywords from text (not applicable to images)
+    """
+    text_generation: bool = False
+    vision_input: bool = False
+    bounding_box_output: bool = False
+    text_classification: bool = False
+    image_classification: bool = False
+    rationale_generation: bool = False
+    keyword_extraction: bool = False
+
+    def supports_assistant(self, assistant_type: str, has_image_input: bool = False) -> bool:
+        """
+        Check if model supports a specific AI assistant type.
+
+        Args:
+            assistant_type: The type of AI assistant ('hint', 'keyword', 'rationale',
+                          'detection', 'pre_annotate', 'classification')
+            has_image_input: Whether the current content is an image
+
+        Returns:
+            True if the model supports this assistant type for the given input type
+        """
+        if assistant_type == "hint":
+            # Hints require text generation; for images, also need vision
+            if has_image_input:
+                return self.text_generation and self.vision_input
+            return self.text_generation
+
+        elif assistant_type == "keyword":
+            # Keywords require keyword extraction AND text input (not images)
+            # Keyword highlighting doesn't make sense for images
+            return self.keyword_extraction and not has_image_input
+
+        elif assistant_type == "rationale":
+            # Rationales require rationale generation; for images, also need vision
+            if has_image_input:
+                return self.rationale_generation and self.vision_input
+            return self.rationale_generation
+
+        elif assistant_type in ("detection", "detect", "pre_annotate"):
+            # Detection requires vision and bounding box output
+            return self.bounding_box_output and self.vision_input
+
+        elif assistant_type == "classification":
+            # Classification depends on input type
+            if has_image_input:
+                return self.image_classification and self.vision_input
+            return self.text_classification
+
+        # Unknown assistant type - default to False for safety
+        return False
+
+    def get_supported_assistants(self, has_image_input: bool = False) -> List[str]:
+        """
+        Get list of assistant types supported for the given input type.
+
+        Args:
+            has_image_input: Whether the current content is an image
+
+        Returns:
+            List of supported assistant type names
+        """
+        all_types = ["hint", "keyword", "rationale", "detection", "pre_annotate", "classification"]
+        return [t for t in all_types if self.supports_assistant(t, has_image_input)]
+
+
 class AIEndpointError(Exception):
     """Base exception for AI endpoint errors."""
     pass

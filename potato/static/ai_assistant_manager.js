@@ -14,24 +14,49 @@ class AIAssistantManager {
         this.colors = {}; // Label colors loaded from API
 
         // Add new AI assistant types here
+        // Capability flags indicate what each assistant requires:
+        // - requiresTextInput: Only works with text content (disabled for images)
+        // - requiresVision: Only works with image/video content (disabled for text)
         this.assistantConfig = {
             hint: {
                 apiEndpoint: '/api/get_ai_suggestion',
                 loadingText: 'Loading hint...',
                 errorText: 'Failed to load hint',
-                className: 'hint-tooltip'
+                className: 'hint-tooltip',
+                requiresTextInput: false,  // Works with both text and images
+                requiresVision: false,
             },
             keyword: {
                 apiEndpoint: '/api/get_ai_suggestion',
                 loadingText: 'Loading keywords...',
                 errorText: 'Failed to load keywords',
-                className: 'keyword-tooltip'
+                className: 'keyword-tooltip',
+                requiresTextInput: true,   // Only works with text (keywords don't apply to images)
+                requiresVision: false,
             },
             rationale: {
                 apiEndpoint: '/api/get_ai_suggestion',
                 loadingText: 'Loading rationales...',
                 errorText: 'Failed to load rationales',
-                className: 'rationale-tooltip'
+                className: 'rationale-tooltip',
+                requiresTextInput: false,  // Works with both text and images
+                requiresVision: false,
+            },
+            detection: {
+                apiEndpoint: '/api/get_ai_suggestion',
+                loadingText: 'Detecting objects...',
+                errorText: 'Failed to detect objects',
+                className: 'detection-tooltip',
+                requiresTextInput: false,
+                requiresVision: true,      // Only works with images
+            },
+            pre_annotate: {
+                apiEndpoint: '/api/get_ai_suggestion',
+                loadingText: 'Pre-annotating...',
+                errorText: 'Failed to pre-annotate',
+                className: 'pre-annotate-tooltip',
+                requiresTextInput: false,
+                requiresVision: true,      // Only works with images
             },
         };
 
@@ -42,6 +67,72 @@ class AIAssistantManager {
         this.loadColors();
         this.setupEventDelegation();
         this.setupClickOutside();
+    }
+
+    /**
+     * Check if the current instance content is an image
+     * @returns {boolean} True if content appears to be an image URL
+     */
+    isImageContent() {
+        const textContent = document.getElementById('text-content');
+        const instanceText = document.getElementById('instance-text');
+
+        // Check for image annotation container
+        const imageAnnotationContainer = document.querySelector('.image-annotation-container');
+        if (imageAnnotationContainer) {
+            return true;
+        }
+
+        // Check text content for image URL patterns
+        const text = textContent?.textContent || instanceText?.textContent || '';
+        const textLower = text.toLowerCase().trim();
+
+        // Check for common image extensions
+        const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
+        if (imageExtensions.some(ext => textLower.includes(ext))) {
+            return true;
+        }
+
+        // Check for image hosting services
+        const imageHosts = ['unsplash.com', 'imgur.com', 'flickr.com', 'picsum.photos'];
+        if (imageHosts.some(host => textLower.includes(host))) {
+            return true;
+        }
+
+        // Check if URL starts with http and contains 'image'
+        if (textLower.startsWith('http') && textLower.includes('image')) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if a specific assistant type should be shown based on content type
+     * @param {string} assistantType - The type of assistant (hint, keyword, rationale, etc.)
+     * @returns {boolean} True if the button should be shown
+     */
+    shouldShowButton(assistantType) {
+        const config = this.assistantConfig[assistantType];
+        if (!config) {
+            return true; // Unknown type, show by default
+        }
+
+        const isImage = this.isImageContent();
+
+        // Check if assistant requires text input but content is an image
+        if (config.requiresTextInput && isImage) {
+            aiDebugLog(`[AIAssistant] Hiding ${assistantType} button - requires text input but content is image`);
+            return false;
+        }
+
+        // Check if assistant requires vision but content is text
+        if (config.requiresVision && !isImage) {
+            aiDebugLog(`[AIAssistant] Hiding ${assistantType} button - requires vision but content is text`);
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -208,19 +299,59 @@ class AIAssistantManager {
         tooltip.classList.add('active');
         tooltip.classList.add(config.className);
         tooltip.innerHTML = `
-            <div class="loading">
-                <span>${config.loadingText}</span>
+            <button class="tooltip-close" title="Close">&times;</button>
+            <div class="assistant-content">
+                <div class="loading">
+                    <span>${config.loadingText}</span>
+                </div>
             </div>
         `;
 
-        this.activeTooltips.add(tooltip);
+        // Add close button event listener
+        const closeBtn = tooltip.querySelector('.tooltip-close');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.hideTooltip(tooltip);
+            });
+        }
 
-        // Position the tooltip after adding content
-        requestAnimationFrame(() => this.positionTooltip(tooltip));
+        this.activeTooltips.add(tooltip);
     }
 
     toggleAssistant(assistantType, annotationId, tooltip) {
         console.log('[AIAssistant] toggleAssistant called:', { assistantType, annotationId, hasTooltip: !!tooltip });
+
+        // Check if this assistant type is supported for the current content
+        if (!this.shouldShowButton(assistantType)) {
+            const isImage = this.isImageContent();
+            const message = isImage
+                ? `${assistantType} is not available for image content`
+                : `${assistantType} requires image content`;
+            console.warn(`[AIAssistant] ${message}`);
+
+            // Show a brief error message in the tooltip
+            if (tooltip) {
+                tooltip.classList.add('active');
+                tooltip.innerHTML = `
+                    <button class="tooltip-close" title="Close">&times;</button>
+                    <div class="assistant-content">
+                        <div class="error">
+                            <span>${message}</span>
+                        </div>
+                    </div>
+                `;
+                const closeBtn = tooltip.querySelector('.tooltip-close');
+                if (closeBtn) {
+                    closeBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.hideTooltip(tooltip);
+                    });
+                }
+                this.activeTooltips.add(tooltip);
+            }
+            return;
+        }
 
         if (assistantType == "keyword") {
             console.log('[AIAssistant] Keyword clicked, checking spanManager:', {
@@ -311,10 +442,22 @@ class AIAssistantManager {
     showError(tooltip, assistantType) {
         const config = this.assistantConfig[assistantType];
         tooltip.innerHTML = `
-            <div class="error">
-                <span>${config.errorText}</span>
+            <button class="tooltip-close" title="Close">&times;</button>
+            <div class="assistant-content">
+                <div class="error">
+                    <span>${config.errorText}</span>
+                </div>
             </div>
         `;
+
+        // Add close button event listener
+        const closeBtn = tooltip.querySelector('.tooltip-close');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.hideTooltip(tooltip);
+            });
+        }
     }
 
     renderAssistant(tooltip, assistantType, data, annotationId) {
@@ -345,17 +488,24 @@ class AIAssistantManager {
 
         console.log('[AIAssistant] Setting tooltip content:', content);
         tooltip.innerHTML = `
+            <button class="tooltip-close" title="Close">&times;</button>
             <div class="assistant-content">
                 ${content}
             </div>
         `;
         console.log('[AIAssistant] Tooltip innerHTML set, tooltip element:', tooltip);
 
+        // Add close button event listener
+        const closeBtn = tooltip.querySelector('.tooltip-close');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.hideTooltip(tooltip);
+            });
+        }
+
         this.activeTooltips.add(tooltip);
         console.log(this.activeTooltips);
-
-        // Position the tooltip after content is set
-        requestAnimationFrame(() => this.positionTooltip(tooltip));
     }
 
     renderHint(data) {

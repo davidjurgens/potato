@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Type, Union
 
 from pydantic import BaseModel
 
-from .ai_endpoint import AIEndpointRequestError, ImageData
+from .ai_endpoint import AIEndpointRequestError, ImageData, ModelCapabilities
 from .visual_ai_endpoint import BaseVisualAIEndpoint
 
 logger = logging.getLogger(__name__)
@@ -32,6 +32,18 @@ class OpenAIVisionEndpoint(BaseVisualAIEndpoint):
     - temperature: Sampling temperature (default: 0.1)
     - detail: Image detail level - 'low', 'high', or 'auto' (default: auto)
     """
+
+    # Capabilities declaration for OpenAI vision models (GPT-4o, GPT-4o-mini)
+    # These models can understand images and generate text but bounding boxes are approximate
+    CAPABILITIES = ModelCapabilities(
+        text_generation=True,
+        vision_input=True,
+        bounding_box_output=False,  # GPT-4V bboxes are approximate, not precise
+        text_classification=True,
+        image_classification=True,
+        rationale_generation=True,
+        keyword_extraction=False,  # Keywords don't apply to images
+    )
 
     def _initialize_client(self) -> None:
         """Initialize the OpenAI client."""

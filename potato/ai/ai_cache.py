@@ -19,7 +19,8 @@ from potato.ai.ai_endpoint import (
     Annotation_Type,
     AnnotationInput,
     ImageData,
-    VisualAnnotationInput
+    VisualAnnotationInput,
+    ModelCapabilities,
 )
 from potato.ai.ollama_endpoint import OllamaEndpoint
 from potato.ai.openrouter_endpoint import OpenRouterEndpoint
@@ -27,6 +28,62 @@ from potato.ai.ai_prompt import ModelManager, get_ai_prompt
 
 
 AICACHEMANAGER = None
+
+def _get_instance_text(instance_id: int) -> str:
+    """Get the text content from an instance using the configured text_key."""
+    item = get_item_state_manager().items()[instance_id]
+    item_data = item.get_data()
+
+    # Get the configured text_key
+    text_key = config.get("item_properties", {}).get("text_key", "text")
+
+    # Try the configured text_key first
+    if text_key in item_data:
+        return item_data[text_key]
+
+    # Fall back to common keys
+    for key in ['text', 'content', 'message']:
+        if key in item_data:
+            return item_data[key]
+
+    # Last resort: return any string value
+    for value in item_data.values():
+        if isinstance(value, str):
+            return value
+
+    return str(item_data)
+
+def _is_image_url(text: str) -> bool:
+    """Check if text appears to be an image URL."""
+    if not isinstance(text, str):
+        return False
+    text_lower = text.lower()
+    # Check for image extensions
+    image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']
+    if any(ext in text_lower for ext in image_extensions):
+        return True
+    # Check for common image hosting services
+    image_hosts = ['unsplash.com', 'imgur.com', 'flickr.com', 'picsum.photos']
+    if any(host in text_lower for host in image_hosts):
+        return True
+    # Check if URL starts with http and might be an image
+    if text_lower.startswith(('http://', 'https://')) and 'image' in text_lower:
+        return True
+    return False
+
+def _get_image_data_from_url(url: str) -> ImageData:
+    """Download image from URL and return as ImageData."""
+    import base64
+    try:
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        b64_data = base64.b64encode(response.content).decode('utf-8')
+        # Determine mime type from content-type header or URL
+        content_type = response.headers.get('content-type', 'image/jpeg')
+        return ImageData(source='base64', data=b64_data, mime_type=content_type)
+    except Exception as e:
+        logger.error(f"Failed to download image from {url}: {e}")
+        return None
 
 def init_ai_cache_manager():
     global AICACHEMANAGER
@@ -130,10 +187,113 @@ class AiCacheManager:
         for scheme in annotation_scheme:
             self.annotations.append(scheme)
 
+        # Check if main endpoint supports vision
+        self.endpoint_supports_vision = hasattr(self.ai_endpoint, 'query_with_image')
+        logger.info(f"AI endpoint supports vision: {self.endpoint_supports_vision}")
+
         # Initialize cache
         if self.disk_cache_enabled:
             self.load_cache_from_disk()
             self.start_warmup()
+
+    def _validate_assistant_compatibility(
+        self, instance_id: int, annotation_id: int, ai_assistant: str
+    ) -> tuple:
+        """
+        Validate that the AI assistant is compatible with the input type and model capabilities.
+
+        Args:
+            instance_id: The instance/item index
+            annotation_id: The annotation scheme index
+            ai_assistant: Type of assistance ('hint', 'keyword', 'rationale', 'detection', etc.)
+
+        Returns:
+            Tuple of (is_valid: bool, error_message: str)
+            If valid, error_message is empty string.
+        """
+        try:
+            text = _get_instance_text(instance_id)
+            is_image = _is_image_url(text)
+
+            # Determine which endpoint to use
+            if is_image and self.visual_endpoint:
+                endpoint = self.visual_endpoint
+            elif is_image and self.endpoint_supports_vision:
+                endpoint = self.ai_endpoint
+            else:
+                endpoint = self.ai_endpoint
+
+            # Get capabilities from endpoint
+            capabilities = getattr(endpoint, 'CAPABILITIES', None)
+
+            if capabilities is None:
+                # No capabilities declared - allow all (backward compatibility)
+                logger.debug(f"Endpoint {type(endpoint).__name__} has no CAPABILITIES, allowing {ai_assistant}")
+                return True, ""
+
+            # Check if the assistant type is supported
+            if not capabilities.supports_assistant(ai_assistant, is_image):
+                input_type = "image" if is_image else "text"
+                return False, (
+                    f"Model {type(endpoint).__name__} does not support '{ai_assistant}' "
+                    f"for {input_type} content"
+                )
+
+            return True, ""
+
+        except Exception as e:
+            logger.warning(f"Error validating assistant compatibility: {e}")
+            # On validation error, allow the request (fail open for now)
+            return True, ""
+
+    def get_endpoint_capabilities(self, for_image: bool = False) -> ModelCapabilities:
+        """
+        Get the capabilities of the appropriate endpoint for the given input type.
+
+        Args:
+            for_image: Whether the input is an image
+
+        Returns:
+            ModelCapabilities instance, or a default permissive one if not declared
+        """
+        if for_image and self.visual_endpoint:
+            endpoint = self.visual_endpoint
+        elif for_image and self.endpoint_supports_vision:
+            endpoint = self.ai_endpoint
+        else:
+            endpoint = self.ai_endpoint
+
+        capabilities = getattr(endpoint, 'CAPABILITIES', None)
+        if capabilities is None:
+            # Return permissive defaults for backward compatibility
+            return ModelCapabilities(
+                text_generation=True,
+                vision_input=for_image,
+                bounding_box_output=False,
+                text_classification=True,
+                image_classification=for_image,
+                rationale_generation=True,
+                keyword_extraction=not for_image,
+            )
+        return capabilities
+
+    def _get_ai_with_vision_support(self, text: str, prompt: str, output_format) -> str:
+        """
+        Get AI response, using vision if text is an image URL and endpoint supports it.
+        """
+        # Check if we should use vision
+        if self.endpoint_supports_vision and _is_image_url(text):
+            logger.debug(f"Using vision query for image URL: {text[:50]}...")
+            image_data = _get_image_data_from_url(text)
+            if image_data:
+                try:
+                    return self.ai_endpoint.query_with_image(prompt, image_data, output_format)
+                except Exception as e:
+                    logger.error(f"Vision query failed: {e}")
+                    # Fall back to text query
+
+        # Fall back to regular text query
+        return self.ai_endpoint.query(prompt, output_format)
     
     def start_warmup(self):
         self.start_prefetch(0, self.warm_up_page_count)
@@ -230,13 +390,56 @@ class AiCacheManager:
             return None
     
     def generate_likert(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
+        from string import Template
         annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
         description = config["annotation_schemes"][annotation_id]["description"]
-        text = get_item_state_manager().items()[instance_id].get_data()["text"]
+        text = _get_instance_text(instance_id)
         min_label = config["annotation_schemes"][annotation_id]["min_label"]
         max_label = config["annotation_schemes"][annotation_id]["max_label"]
         size = config["annotation_schemes"][annotation_id]["size"]
 
+        ai_prompt = get_ai_prompt()
+        output_format = self.model_manager.get_model_class_by_name(ai_prompt[annotation_type].get(ai_assistant).get("output_format"))
+
+        # Check if we should use vision endpoint for image-based content
+        if self.endpoint_supports_vision and _is_image_url(text):
+            logger.debug(f"Using vision for likert {ai_assistant} on image: {text[:50]}...")
+            image_data = _get_image_data_from_url(text)
+            if image_data:
+                # Build vision-specific prompts based on ai_assistant type
+                if ai_assistant == "hint":
+                    prompt = f"""Look at this image and help with the following annotation task:
+
+Task: {description}
+Rating scale: {size} points, from "{min_label}" (1) to "{max_label}" ({size})
+
+Please analyze the image and suggest an appropriate rating with a brief explanation.
+Respond in JSON format: {{"hint": "<explanation>", "suggestive_choice": "<rating label>"}}"""
+                elif ai_assistant == "rationale":
+                    prompt = f"""Look at this image and explain the reasoning for different rating choices:
+
+Task: {description}
+Rating scale: {size} points, from "{min_label}" (1) to "{max_label}" ({size})
+
+For each possible rating, explain what visual evidence in the image would support that rating.
+Respond in JSON format: {{"rationales": [{{"label": "<rating>", "reasoning": "<explanation>"}}]}}"""
+                elif ai_assistant == "keyword":
+                    prompt = f"""Look at this image and identify visual features relevant to the rating task:
+
+Task: {description}
+Rating scale: {size} points, from "{min_label}" (1) to "{max_label}" ({size})
+
+Identify key visual elements that would influence the rating.
+Respond in JSON format: {{"keywords": ["<visual_feature_1>", "<visual_feature_2>"]}}"""
+                else:
+                    prompt = f"Analyze this image for: {description}"
+
+                try:
+                    return self.ai_endpoint.query_with_image(prompt, image_data, output_format)
+                except Exception as e:
+                    logger.error(f"Vision query failed for likert {ai_assistant}: {e}")
+
+        # Fall back to standard text-based generation
         data = AnnotationInput(
             ai_assistant=ai_assistant,
             annotation_type=annotation_type,
@@ -246,8 +449,6 @@ class AiCacheManager:
             max_label=max_label,
             size=size
         )
-        ai_prompt = get_ai_prompt()
-        output_format = self.model_manager.get_model_class_by_name(ai_prompt[annotation_type].get(ai_assistant).get("output_format"))
         res = self.ai_endpoint.get_ai(data, output_format)
         return res
     
@@ -255,8 +456,54 @@ class AiCacheManager:
         annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
         description = config["annotation_schemes"][annotation_id]["description"]
         labels = config["annotation_schemes"][annotation_id]["labels"]
-        text = get_item_state_manager().items()[instance_id].get_data()["text"]
+        text = _get_instance_text(instance_id)
 
+        ai_prompt = get_ai_prompt()
+        output_format = self.model_manager.get_model_class_by_name(ai_prompt[annotation_type].get(ai_assistant).get("output_format"))
+
+        # Check if we should use vision endpoint for image-based content
+        if self.endpoint_supports_vision and _is_image_url(text):
+            logger.debug(f"Using vision for multiselect {ai_assistant} on image: {text[:50]}...")
+            image_data = _get_image_data_from_url(text)
+            if image_data:
+                # Format labels for the prompt
+                label_names = [l.get('name', l) if isinstance(l, dict) else l for l in labels]
+                labels_str = ', '.join(f'"{name}"' for name in label_names)
+
+                # Build vision-specific prompts based on ai_assistant type
+                if ai_assistant == "hint":
+                    prompt = f"""Look at this image and help with the following annotation task:
+
+Task: {description}
+Available options (select all that apply): {labels_str}
+
+Please analyze the image and suggest which options apply.
+Respond in JSON format: {{"hint": "<explanation>", "suggestive_choices": ["<option1>", "<option2>"]}}"""
+                elif ai_assistant == "rationale":
+                    prompt = f"""Look at this image and explain the reasoning for each option:
+
+Task: {description}
+Available options: {labels_str}
+
+For each option, explain what visual evidence supports or contradicts it.
+Respond in JSON format: {{"rationales": [{{"label": "<option>", "reasoning": "<explanation>"}}]}}"""
+                elif ai_assistant == "keyword":
+                    prompt = f"""Look at this image and identify visual features for each option:
+
+Task: {description}
+Available options: {labels_str}
+
+For each option, identify visual cues that indicate its presence.
+Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": ["<feature1>", "<feature2>"]}}]}}"""
+                else:
+                    prompt = f"Analyze this image for: {description}. Options: {labels_str}"
+
+                try:
+                    return self.ai_endpoint.query_with_image(prompt, image_data, output_format)
+                except Exception as e:
+                    logger.error(f"Vision query failed for multiselect {ai_assistant}: {e}")
+
+        # Fall back to standard text-based generation
         data = AnnotationInput(
             ai_assistant=ai_assistant,
             annotation_type=annotation_type,
@@ -264,33 +511,75 @@ class AiCacheManager:
             description=description,
             labels=labels
         )
-        ai_prompt = get_ai_prompt();
-        output_format = self.model_manager.get_model_class_by_name(ai_prompt[annotation_type].get(ai_assistant).get("output_format"))
         res = self.ai_endpoint.get_ai(data, output_format)
         return res
     
     def generate_radio(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
         annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
         description = config["annotation_schemes"][annotation_id]["description"]
-        text = get_item_state_manager().items()[instance_id].get_text()
+        text = _get_instance_text(instance_id)
         labels = config["annotation_schemes"][annotation_id]["labels"]
-        
+
+        ai_prompt = get_ai_prompt()
+        output_format = self.model_manager.get_model_class_by_name(ai_prompt[annotation_type].get(ai_assistant).get("output_format"))
+
+        # Check if we should use vision endpoint for image-based content
+        if self.endpoint_supports_vision and _is_image_url(text):
+            logger.debug(f"Using vision for radio {ai_assistant} on image: {text[:50]}...")
+            image_data = _get_image_data_from_url(text)
+            if image_data:
+                # Format labels for the prompt
+                label_names = [l.get('name', l) if isinstance(l, dict) else l for l in labels]
+                labels_str = ', '.join(f'"{name}"' for name in label_names)
+
+                # Build vision-specific prompts based on ai_assistant type
+                if ai_assistant == "hint":
+                    prompt = f"""Look at this image and help with the following annotation task:
+
+Task: {description}
+Available options: {labels_str}
+
+Please analyze the image and suggest the most appropriate option.
+Respond in JSON format: {{"hint": "<explanation>", "suggestive_choice": "<selected option>"}}"""
+                elif ai_assistant == "rationale":
+                    prompt = f"""Look at this image and explain the reasoning for each option:
+
+Task: {description}
+Available options: {labels_str}
+
+For each option, explain what visual evidence in the image supports or contradicts it.
+Respond in JSON format: {{"rationales": [{{"label": "<option>", "reasoning": "<explanation>"}}]}}"""
+                elif ai_assistant == "keyword":
+                    prompt = f"""Look at this image and identify visual features for each option:
+
+Task: {description}
+Available options: {labels_str}
+
+For each option, identify visual cues that would indicate its presence.
+Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": ["<feature1>", "<feature2>"]}}]}}"""
+                else:
+                    prompt = f"Analyze this image for: {description}. Options: {labels_str}"
+
+                try:
+                    return self.ai_endpoint.query_with_image(prompt, image_data, output_format)
+                except Exception as e:
+                    logger.error(f"Vision query failed for radio {ai_assistant}: {e}")
+
+        # Fall back to standard text-based generation
         data = AnnotationInput(
             ai_assistant=ai_assistant,
             annotation_type=annotation_type,
             text=text,
-            description=description, 
+            description=description,
             labels=labels
         )
-        ai_prompt = get_ai_prompt();
-        output_format = self.model_manager.get_model_class_by_name(ai_prompt[annotation_type].get(ai_assistant).get("output_format"))
         res = self.ai_endpoint.get_ai(data, output_format)
         return res
     
     def generate_number(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
         annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
         description = config["annotation_schemes"][annotation_id]["description"]
-        text = get_item_state_manager().items()[instance_id].get_data()["text"]
+        text = _get_instance_text(instance_id)
 
         data = AnnotationInput(
             ai_assistant=ai_assistant,
@@ -307,7 +596,7 @@ class AiCacheManager:
         annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
         description = config["annotation_schemes"][annotation_id]["description"]
         labels = config["annotation_schemes"][annotation_id]["labels"]
-        text = get_item_state_manager().items()[instance_id].get_data()["text"]
+        text = _get_instance_text(instance_id)
 
 
         data = AnnotationInput(
@@ -328,7 +617,7 @@ class AiCacheManager:
         min_value = config["annotation_schemes"][annotation_id]["min_value"]
         max_value = config["annotation_schemes"][annotation_id]["max_value"]
         step = config["annotation_schemes"][annotation_id]["step"]
-        text = get_item_state_manager().items()[instance_id].get_data()["text"]
+        text = _get_instance_text(instance_id)
 
         data = AnnotationInput(
             ai_assistant=ai_assistant,
@@ -349,7 +638,7 @@ class AiCacheManager:
         annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
         description = config["annotation_schemes"][annotation_id]["description"]
         labels = config["annotation_schemes"][annotation_id]["labels"]
-        text = get_item_state_manager().items()[instance_id].get_data()["text"]
+        text = _get_instance_text(instance_id)
 
         data = AnnotationInput(
             ai_assistant=ai_assistant,
@@ -368,7 +657,7 @@ class AiCacheManager:
         logger.debug(f"Generating textbox for annotation_id: {annotation_id}")
         annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
         description = config["annotation_schemes"][annotation_id]["description"]
-        text = get_item_state_manager().items()[instance_id].get_data()["text"]
+        text = _get_instance_text(instance_id)
 
         data = AnnotationInput(
             ai_assistant=ai_assistant,
@@ -780,6 +1069,14 @@ class AiCacheManager:
             return f"Error: {str(e)}"
 
     def compute_help(self, instance_id: int, annotation_id: int, ai_assistant: str):
+        # Validate that the assistant type is compatible with the model and input
+        is_valid, error_message = self._validate_assistant_compatibility(
+            instance_id, annotation_id, ai_assistant
+        )
+        if not is_valid:
+            logger.warning(f"Assistant compatibility check failed: {error_message}")
+            return {"error": error_message}
+
         annotation_type_str = config["annotation_schemes"][annotation_id]["annotation_type"]
         annotation_type = Annotation_Type(annotation_type_str)
         match annotation_type:

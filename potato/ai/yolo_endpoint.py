@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Type, Union
 
 from pydantic import BaseModel
 
-from .ai_endpoint import AIEndpointRequestError, ImageData, VisualAnnotationInput
+from .ai_endpoint import AIEndpointRequestError, ImageData, VisualAnnotationInput, ModelCapabilities
 from .visual_ai_endpoint import BaseVisualAIEndpoint
 
 logger = logging.getLogger(__name__)
@@ -37,6 +37,18 @@ class YOLOEndpoint(BaseVisualAIEndpoint):
     - device: Device to run on (default: auto - uses GPU if available)
     - classes: List of class indices to detect (optional)
     """
+
+    # Capabilities declaration for YOLO detection models
+    # YOLO excels at object detection with precise bounding boxes but cannot generate text
+    CAPABILITIES = ModelCapabilities(
+        text_generation=False,  # YOLO doesn't generate text
+        vision_input=True,
+        bounding_box_output=True,  # YOLO's primary strength
+        text_classification=False,
+        image_classification=True,  # Can classify detected objects
+        rationale_generation=False,  # Cannot explain reasoning
+        keyword_extraction=False,  # Not applicable
+    )
 
     def _initialize_client(self) -> None:
         """Initialize the YOLO model."""

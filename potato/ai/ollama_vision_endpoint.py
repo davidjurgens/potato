@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Type, Union
 
 from pydantic import BaseModel
 
-from .ai_endpoint import AIEndpointRequestError, ImageData
+from .ai_endpoint import AIEndpointRequestError, ImageData, ModelCapabilities
 from .visual_ai_endpoint import BaseVisualAIEndpoint
 
 logger = logging.getLogger(__name__)
@@ -20,22 +20,25 @@ logger = logging.getLogger(__name__)
 # Default vision model
 DEFAULT_MODEL = "llava:latest"
 
-# Models known to support vision
+# Models known to support vision (used only for warning suppression, not to restrict usage)
+# Any Ollama model can be used - this list just prevents "may not support vision" warnings
+# for models we know are vision-capable
 VISION_MODELS = [
+    # LLaVA family
     "llava",
-    "llava:7b",
-    "llava:13b",
-    "llava:34b",
     "llava-llama3",
     "llava-phi3",
     "bakllava",
+    # Llama Vision
     "llama3.2-vision",
-    "llama3.2-vision:11b",
-    "llama3.2-vision:90b",
-    "moondream",
+    # Qwen Vision-Language
     "qwen2.5-vl",
     "qwen2-vl",
+    "qwen3-vl",
+    # Other vision models
+    "moondream",
     "minicpm-v",
+    "gemma3",  # Gemma 3 has vision capabilities
 ]
 
 
@@ -53,6 +56,19 @@ class OllamaVisionEndpoint(BaseVisualAIEndpoint):
     - max_tokens: Maximum response tokens (default: 500)
     - temperature: Sampling temperature (default: 0.1)
     """
+
+    # Capabilities declaration for vision-capable Ollama models (LLaVA, Qwen-VL, etc.)
+    # Note: VLLMs can generate text about images but cannot do precise bounding box detection
+    # Keyword extraction is disabled because it doesn't apply to image content
+    CAPABILITIES = ModelCapabilities(
+        text_generation=True,
+        vision_input=True,
+        bounding_box_output=False,  # VLLMs are not reliable for precise bbox coordinates
+        text_classification=True,
+        image_classification=True,
+        rationale_generation=True,
+        keyword_extraction=False,  # Keywords don't apply to images
+    )
 
     def _initialize_client(self) -> None:
         """Initialize the Ollama client."""
@@ -73,13 +89,14 @@ class OllamaVisionEndpoint(BaseVisualAIEndpoint):
             models = self.client.list()
             logger.info(f"Connected to Ollama at {host}")
 
-            # Check if the specified model supports vision
+            # Check if the specified model is a known vision model
+            # This is just informational - any model can be used
             model_lower = self.model.lower()
-            is_vision_model = any(vm in model_lower for vm in VISION_MODELS)
-            if not is_vision_model:
-                logger.warning(
-                    f"Model '{self.model}' may not support vision. "
-                    f"Consider using one of: {', '.join(VISION_MODELS[:5])}"
+            is_known_vision_model = any(vm in model_lower for vm in VISION_MODELS)
+            if not is_known_vision_model:
+                logger.info(
+                    f"Model '{self.model}' not in known vision models list. "
+                    f"This is fine if it supports vision - proceeding anyway."
                 )
 
         except Exception as e:

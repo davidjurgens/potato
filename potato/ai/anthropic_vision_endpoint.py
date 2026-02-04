@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Type, Union
 
 from pydantic import BaseModel
 
-from .ai_endpoint import AIEndpointRequestError, ImageData
+from .ai_endpoint import AIEndpointRequestError, ImageData, ModelCapabilities
 from .visual_ai_endpoint import BaseVisualAIEndpoint
 
 logger = logging.getLogger(__name__)
@@ -39,6 +39,18 @@ class AnthropicVisionEndpoint(BaseVisualAIEndpoint):
     - max_tokens: Maximum response tokens (default: 1024)
     - temperature: Sampling temperature (default: 0.1)
     """
+
+    # Capabilities declaration for Anthropic Claude vision models
+    # Claude models can understand images and generate detailed reasoning but bboxes are approximate
+    CAPABILITIES = ModelCapabilities(
+        text_generation=True,
+        vision_input=True,
+        bounding_box_output=False,  # Claude bboxes are approximate, not precise
+        text_classification=True,
+        image_classification=True,
+        rationale_generation=True,
+        keyword_extraction=False,  # Keywords don't apply to images
+    )
 
     def _initialize_client(self) -> None:
         """Initialize the Anthropic client."""

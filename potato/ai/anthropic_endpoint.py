@@ -5,7 +5,7 @@ This module provides integration with Anthropic's Claude API for LLM inference.
 """
 
 import anthropic
-from .ai_endpoint import BaseAIEndpoint, AIEndpointRequestError
+from .ai_endpoint import BaseAIEndpoint, AIEndpointRequestError, ModelCapabilities
 
 DEFAULT_MODEL = "claude-3-5-sonnet-20241022"
 DEFAULT_HINT_PROMPT = '''
@@ -32,6 +32,17 @@ DEFAULT_KEYWORD_PROMPT = '''
 
 class AnthropicEndpoint(BaseAIEndpoint):
     """Anthropic Claude endpoint for cloud-based LLM inference."""
+
+    # Capabilities declaration for text-based Anthropic Claude models
+    CAPABILITIES = ModelCapabilities(
+        text_generation=True,
+        vision_input=False,
+        bounding_box_output=False,
+        text_classification=True,
+        image_classification=False,
+        rationale_generation=True,
+        keyword_extraction=True,
+    )
 
     def _initialize_client(self) -> None:
         """Initialize the Anthropic client."""
