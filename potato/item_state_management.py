@@ -214,7 +214,7 @@ class SpanAnnotation:
 
     Spans are represented by a start and end index, as well as a label.
     """
-    def __init__(self, schema: str, name: str, title: str, start: int, end: int, id: str = None, annotation_id: str = None):
+    def __init__(self, schema: str, name: str, title: str, start: int, end: int, id: str = None, annotation_id: str = None, target_field: str = None):
         """
         Initialize a span annotation.
 
@@ -226,12 +226,14 @@ class SpanAnnotation:
             end: End character index (exclusive)
             id: Optional custom ID for the span
             annotation_id: Alternative parameter name for ID (for compatibility)
+            target_field: The display field this span targets (for multi-span mode)
         """
         self.schema = schema
         self.start = start
         self.title = title
         self.end = end
         self.name = name
+        self.target_field = target_field  # For multi-span support
         # Accept both id and annotation_id for compatibility
         _id = id if id is not None else annotation_id
         if _id is not None:
@@ -264,8 +266,13 @@ class SpanAnnotation:
         """Get the span's unique identifier"""
         return self._id
 
+    def get_target_field(self):
+        """Get the target field key (for multi-span mode)"""
+        return self.target_field
+
     def __str__(self):
-        return f"SpanAnnotation(schema:{self.schema}, name:{self.name}, start:{self.start}, end:{self.end}, id:{self._id})"
+        field_str = f", target_field:{self.target_field}" if self.target_field else ""
+        return f"SpanAnnotation(schema:{self.schema}, name:{self.name}, start:{self.start}, end:{self.end}, id:{self._id}{field_str})"
 
     def __eq__(self, other):
         """Check if two span annotations are equal"""
@@ -276,11 +283,12 @@ class SpanAnnotation:
             and self.title == other.title
             and self.start == other.start
             and self.end == other.end
+            and self.target_field == other.target_field
         )
 
     def __hash__(self):
         """Generate hash for span annotation (enables use in sets/dicts)"""
-        return hash((self.schema, self.name, self.title, self.start, self.end))
+        return hash((self.schema, self.name, self.title, self.start, self.end, self.target_field))
 
 
 class SpanLink:

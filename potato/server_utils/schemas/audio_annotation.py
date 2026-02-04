@@ -110,6 +110,9 @@ def _generate_audio_annotation_layout_internal(annotation_scheme: Dict[str, Any]
     zoom_enabled = annotation_scheme.get('zoom_enabled', True)
     playback_rate_control = annotation_scheme.get('playback_rate_control', False)
 
+    # source_field: Links this annotation schema to a display field from instance_display
+    source_field = annotation_scheme.get("source_field", "")
+
     # Build config object for JavaScript
     js_config = {
         "schemaName": schema_name,
@@ -120,6 +123,7 @@ def _generate_audio_annotation_layout_internal(annotation_scheme: Dict[str, Any]
         "maxSegments": max_segments,
         "zoomEnabled": zoom_enabled,
         "playbackRateControl": playback_rate_control,
+        "sourceField": source_field,
     }
 
     # Generate HTML
@@ -199,8 +203,12 @@ def _generate_html(
             </div>
         '''
 
+    # source_field attribute for linking to display fields
+    source_field = annotation_scheme.get("source_field", "")
+    source_field_attr = f' data-source-field="{escape_html_content(source_field)}"' if source_field else ""
+
     html = f'''
-    <form id="{escaped_name}" class="annotation-form audio-annotation" action="/action_page.php">
+    <form id="{escaped_name}" class="annotation-form audio-annotation" action="/action_page.php"{source_field_attr}>
         <fieldset schema="{escaped_name}">
             <legend>{description}</legend>
 
@@ -374,29 +382,64 @@ def _generate_html(
                         var segmentListId = 'segment-list-{escaped_name}';
                         var questionsId = 'segment-questions-{escaped_name}';
 
-                        // Get audio URL from the instance display
-                        // Try both instance-text (hyphen) and text-content
-                        var instanceContainer = document.getElementById('instance-text') || document.getElementById('text-content');
-                        console.log('[AudioAnnotation] Instance container:', instanceContainer);
+                        // Get audio URL from various sources
                         var audioUrl = null;
 
-                        // Try to find audio URL in instance text
-                        if (instanceContainer) {{
-                            var text = instanceContainer.textContent || instanceContainer.innerText;
-                            console.log('[AudioAnnotation] Instance text content:', JSON.stringify(text));
-                            // Check if it's a URL
-                            if (text && (text.trim().startsWith('http') || text.trim().endsWith('.mp3') || text.trim().endsWith('.wav'))) {{
-                                audioUrl = text.trim();
-                                console.log('[AudioAnnotation] Found audio URL in text:', audioUrl);
+                        // 1. First try to find from source_field in instance_display field
+                        if (config.sourceField) {{
+                            var displayField = document.querySelector('[data-field-key="' + config.sourceField + '"]');
+                            console.log('[AudioAnnotation] Looking for display field:', config.sourceField, displayField);
+                            if (displayField) {{
+                                // Check for data-source-url attribute
+                                var sourceUrl = displayField.dataset.sourceUrl;
+                                if (sourceUrl) {{
+                                    audioUrl = sourceUrl;
+                                    console.log('[AudioAnnotation] Found audio URL from display field data-source-url:', audioUrl);
+                                }}
+                                // Check for audio element inside display field
+                                var audioEl = displayField.querySelector('audio');
+                                if (!audioUrl && audioEl) {{
+                                    var source = audioEl.querySelector('source');
+                                    audioUrl = source ? source.src : audioEl.src;
+                                    console.log('[AudioAnnotation] Found audio URL from display field audio element:', audioUrl);
+                                }}
                             }}
-                            // Check for audio element
-                            var audioEl = instanceContainer.querySelector('audio');
-                            if (audioEl && audioEl.src) {{
-                                audioUrl = audioEl.src;
-                                console.log('[AudioAnnotation] Found audio URL in audio element:', audioUrl);
+                        }}
+
+                        // 2. Try instance-display container's data-instance-fields attribute
+                        if (!audioUrl && config.sourceField) {{
+                            var instanceDisplayContainer = document.querySelector('.instance-display-container[data-instance-fields]');
+                            if (instanceDisplayContainer) {{
+                                try {{
+                                    var instanceFields = JSON.parse(instanceDisplayContainer.dataset.instanceFields);
+                                    if (instanceFields[config.sourceField]) {{
+                                        audioUrl = instanceFields[config.sourceField];
+                                        console.log('[AudioAnnotation] Found audio URL from instance fields:', audioUrl);
+                                    }}
+                                }} catch (e) {{
+                                    console.warn('[AudioAnnotation] Failed to parse instance fields:', e);
+                                }}
                             }}
-                        }} else {{
-                            console.warn('[AudioAnnotation] No instance container found');
+                        }}
+
+                        // 3. Fallback: Try instance-text or text-content containers
+                        if (!audioUrl) {{
+                            var instanceContainer = document.getElementById('instance-text') || document.getElementById('text-content');
+                            console.log('[AudioAnnotation] Fallback - Instance container:', instanceContainer);
+                            if (instanceContainer) {{
+                                var text = instanceContainer.textContent || instanceContainer.innerText;
+                                // Check if it's a URL
+                                if (text && (text.trim().startsWith('http') || text.trim().endsWith('.mp3') || text.trim().endsWith('.wav'))) {{
+                                    audioUrl = text.trim();
+                                    console.log('[AudioAnnotation] Found audio URL in text:', audioUrl);
+                                }}
+                                // Check for audio element
+                                var audioEl = instanceContainer.querySelector('audio');
+                                if (audioEl && audioEl.src) {{
+                                    audioUrl = audioEl.src;
+                                    console.log('[AudioAnnotation] Found audio URL in audio element:', audioUrl);
+                                }}
+                            }}
                         }}
 
                         // Initialize manager

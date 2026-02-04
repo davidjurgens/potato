@@ -111,6 +111,9 @@ def _generate_image_annotation_layout_internal(annotation_scheme):
     ai_support = annotation_scheme.get("ai_support", {})
     ai_enabled = ai_support.get("enabled", False)
 
+    # source_field: Links this annotation schema to a display field from instance_display
+    source_field = annotation_scheme.get("source_field", "")
+
     # Build config object for JavaScript
     js_config = {
         "schemaName": schema_name,
@@ -124,6 +127,7 @@ def _generate_image_annotation_layout_internal(annotation_scheme):
         "freeformSimplify": freeform_simplify,
         "aiSupport": ai_enabled,
         "aiFeatures": ai_support.get("features", {}) if ai_enabled else {},
+        "sourceField": source_field,
     }
 
     # Generate HTML
@@ -175,6 +179,10 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
     description = escape_html_content(annotation_scheme.get('description', ''))
     config_json = json.dumps(js_config)
 
+    # source_field attribute for linking to display fields
+    source_field = annotation_scheme.get("source_field", "")
+    source_field_attr = f' data-source-field="{escape_html_content(source_field)}"' if source_field else ""
+
     # Generate tool buttons
     tool_buttons = _generate_tool_buttons(tools)
 
@@ -190,7 +198,7 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
         ai_init_script = _generate_ai_init_script(escaped_name)
 
     html = f'''
-    <form id="{escaped_name}" class="annotation-form image-annotation" action="/action_page.php">
+    <form id="{escaped_name}" class="annotation-form image-annotation" action="/action_page.php"{source_field_attr}>
         <fieldset schema="{escaped_name}">
             <legend>{description}</legend>
 

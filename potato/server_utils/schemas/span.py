@@ -111,8 +111,13 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
     """
     # Initialize form wrapper
     scheme_name = annotation_scheme["name"]
+
+    # Get target_field for multi-span support (optional)
+    target_field = annotation_scheme.get("target_field", "")
+    target_field_attr = f' data-target-field="{escape_html_content(target_field)}"' if target_field else ""
+
     schematic = f"""
-    <form id="{escape_html_content(scheme_name)}" class="annotation-form span shadcn-span-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" >
+    <form id="{escape_html_content(scheme_name)}" class="annotation-form span shadcn-span-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}"{target_field_attr} >
             {get_ai_wrapper()}
         <fieldset schema="{escape_html_content(scheme_name)}">
             <legend class="shadcn-span-title">{escape_html_content(annotation_scheme["description"])}</legend>
@@ -279,21 +284,37 @@ def generate_span_layout(annotation_scheme, horizontal=False):
     return safe_generate_layout(annotation_scheme, _generate_span_layout_internal, horizontal)
 
 
-def render_span_annotations(text, span_annotations):
+def render_span_annotations(text, span_annotations, target_field=None):
     """
     Render span annotations into HTML with boundary-based algorithm.
     Args:
         text (str): The original text to annotate
-        span_annotations: Dictionary of span_id -> span data, or list of SpanAnnotation objects
+        span_annotations: Dictionary of span_id -> span data, or list of SpanAnnotation objects,
+                         or field-keyed dict: {field_key: [span_list]}
+        target_field (str, optional): Filter spans to only those targeting this field
     Returns:
         str: HTML with span annotations rendered
     """
     if not span_annotations:
         return text
 
-    # Handle both dict and list inputs
+    # Handle field-keyed format for multi-span mode: {field_key: [spans]}
     if isinstance(span_annotations, dict):
-        # Convert dictionary to list of tuples (span_id, span_data)
+        # Check if this is a field-keyed dict (values are lists)
+        first_value = next(iter(span_annotations.values()), None)
+        if isinstance(first_value, list):
+            # Field-keyed format - extract spans for target_field
+            if target_field:
+                field_spans = span_annotations.get(target_field, [])
+                return render_span_annotations(text, field_spans, target_field=None)
+            else:
+                # No target field specified, flatten all spans
+                all_spans = []
+                for field_spans in span_annotations.values():
+                    all_spans.extend(field_spans)
+                return render_span_annotations(text, all_spans, target_field=None)
+
+        # Regular dict format: span_id -> span_data
         sorted_spans = sorted(
             span_annotations.items(),
             key=lambda x: x[1].get('start', 0)
@@ -304,6 +325,11 @@ def render_span_annotations(text, span_annotations):
         for span in span_annotations:
             if hasattr(span, 'get_id'):
                 # SpanAnnotation object with methods
+                # Filter by target_field if specified
+                span_target = span.get_target_field() if hasattr(span, 'get_target_field') else None
+                if target_field and span_target and span_target != target_field:
+                    continue  # Skip spans not targeting this field
+
                 span_id = span.get_id()
                 span_data = {
                     'schema': span.get_schema() if hasattr(span, 'get_schema') else getattr(span, 'schema', ''),
@@ -311,34 +337,40 @@ def render_span_annotations(text, span_annotations):
                     'title': span.get_title() if hasattr(span, 'get_title') else getattr(span, 'title', ''),
                     'start': span.get_start() if hasattr(span, 'get_start') else getattr(span, 'start', 0),
                     'end': span.get_end() if hasattr(span, 'get_end') else getattr(span, 'end', 0),
+                    'target_field': span_target,
                 }
             elif isinstance(span, dict):
+                # Filter by target_field if specified
+                span_target = span.get('target_field')
+                if target_field and span_target and span_target != target_field:
+                    continue  # Skip spans not targeting this field
+
                 span_id = span.get('id', f"span_{span.get('start', 0)}_{span.get('end', 0)}")
                 span_data = span
             else:
                 continue
             spans_as_tuples.append((span_id, span_data))
         sorted_spans = sorted(spans_as_tuples, key=lambda x: x[1].get('start', 0))
-    
+
     # Create boundary points
     boundaries = []
     for span_id, span_data in sorted_spans:
         boundaries.append((span_data['start'], 'start', span_id, span_data))
         boundaries.append((span_data['end'], 'end', span_id, span_data))
-    
+
     # Sort boundaries by position
     boundaries.sort(key=lambda x: x[0])
-    
+
     # Build the rendered text
     result = ""
     current_pos = 0
     active_spans = []
-    
+
     for pos, boundary_type, span_id, span_data in boundaries:
         # Add text before this boundary
         if pos > current_pos:
             result += text[current_pos:pos]
-        
+
         if boundary_type == 'start':
             # Start a new span
             active_spans.append(span_id)
@@ -350,17 +382,53 @@ def render_span_annotations(text, span_annotations):
             color_parts = color.strip("()").split(", ")
             r, g, b = int(color_parts[0]), int(color_parts[1]), int(color_parts[2])
             hex_color = f"#{r:02x}{g:02x}{b:02x}66"  # 66 = 40% alpha to match label background
-            result += f'<span class="span-highlight" data-annotation-id="{span_id}" data-label="{span_data["name"]}" schema="{span_data["schema"]}" style="background-color: {hex_color};">'
+
+            # Add target_field attribute if present
+            target_attr = f' data-target-field="{span_data.get("target_field", "")}"' if span_data.get("target_field") else ""
+            result += f'<span class="span-highlight" data-annotation-id="{span_id}" data-label="{span_data["name"]}" schema="{span_data["schema"]}"{target_attr} style="background-color: {hex_color};">'
         elif boundary_type == 'end':
             # End the span
             result += "</span>"
             # Remove from active spans
             active_spans = [s for s in active_spans if s != span_id]
-        
+
         current_pos = pos
-    
+
     # Add remaining text
     if current_pos < len(text):
         result += text[current_pos:]
-    
+
+    return result
+
+
+def get_spans_for_field(span_annotations, target_field):
+    """
+    Extract spans for a specific target field from span annotations.
+
+    Args:
+        span_annotations: Span annotations in any format
+        target_field: The field key to filter by
+
+    Returns:
+        List of spans targeting the specified field
+    """
+    if not span_annotations:
+        return []
+
+    # Handle field-keyed format
+    if isinstance(span_annotations, dict):
+        first_value = next(iter(span_annotations.values()), None)
+        if isinstance(first_value, list):
+            return span_annotations.get(target_field, [])
+
+    # Handle list of SpanAnnotation objects
+    result = []
+    if isinstance(span_annotations, (list, tuple)):
+        for span in span_annotations:
+            if hasattr(span, 'get_target_field'):
+                if span.get_target_field() == target_field:
+                    result.append(span)
+            elif isinstance(span, dict) and span.get('target_field') == target_field:
+                result.append(span)
+
     return result

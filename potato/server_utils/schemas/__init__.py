@@ -5,7 +5,7 @@ from .number import generate_number_layout
 from .pure_display import generate_pure_display_layout
 from .radio import generate_radio_layout
 from .select import generate_select_layout
-from .span import generate_span_layout
+from .span import generate_span_layout, render_span_annotations, get_spans_for_field
 from .span_link import generate_span_link_layout
 from .textbox import generate_textbox_layout
 from .slider import generate_slider_layout

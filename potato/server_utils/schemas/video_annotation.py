@@ -125,6 +125,9 @@ def _generate_video_annotation_layout_internal(annotation_scheme: Dict[str, Any]
     ai_support = annotation_scheme.get("ai_support", {})
     ai_enabled = ai_support.get("enabled", False)
 
+    # source_field: Links this annotation schema to a display field from instance_display
+    source_field = annotation_scheme.get("source_field", "")
+
     # Build config object for JavaScript
     js_config = {
         "schemaName": schema_name,
@@ -142,6 +145,7 @@ def _generate_video_annotation_layout_internal(annotation_scheme: Dict[str, Any]
         "videoFps": video_fps,
         "aiSupport": ai_enabled,
         "aiFeatures": ai_support.get("features", {}) if ai_enabled else {},
+        "sourceField": source_field,
     }
 
     # Generate HTML
@@ -270,8 +274,12 @@ def _generate_html(
             </div>
         '''
 
+    # source_field attribute for linking to display fields
+    source_field = annotation_scheme.get("source_field", "")
+    source_field_attr = f' data-source-field="{escape_html_content(source_field)}"' if source_field else ""
+
     html = f'''
-    <form id="{escaped_name}" class="annotation-form video-annotation" action="/action_page.php">
+    <form id="{escaped_name}" class="annotation-form video-annotation" action="/action_page.php"{source_field_attr}>
         <fieldset schema="{escaped_name}">
             <legend>{description}</legend>
 
