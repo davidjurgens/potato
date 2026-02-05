@@ -31,6 +31,8 @@ ALLOWED_ELEMENTS: Set[str] = {
     'b', 'i', 'u', 'strong', 'em', 'mark',
     # Line breaks
     'br',
+    # Dialogue/conversation layout elements
+    'div',
 }
 
 # Attributes allowed per element
@@ -42,6 +44,12 @@ ALLOWED_ATTRIBUTES: Dict[str, Set[str]] = {
         'data-label',
         'schema',
         'title',
+    },
+    'div': {
+        'class',
+        'style',
+        'data-speaker',
+        'data-speaker-index',
     },
     'mark': {'class', 'style'},
     # Most elements get no attributes
@@ -55,6 +63,14 @@ ALLOWED_CSS_PROPERTIES: Set[str] = {
     'font-weight',
     'font-style',
     'text-decoration',
+    # Layout properties for dialogue/pairwise display
+    'display',
+    'width',
+    'padding',
+    'margin',
+    'box-sizing',
+    'vertical-align',
+    'gap',
 }
 
 # Dangerous patterns to block

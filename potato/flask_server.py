@@ -89,6 +89,7 @@ from potato.server_utils.cli_utlis import get_project_from_hub, show_project_hub
 from potato.server_utils.prolific_apis import ProlificStudy
 from potato.server_utils.mturk_apis import init_mturk_hit, get_mturk_hit
 from potato.server_utils.json import easy_json
+from potato.server_utils.instance_display import InstanceDisplayRenderer, get_instance_display_renderer
 
 # This allows us to create an AI endpoint for the system to interact with as needed (if configured)
 from potato.ai.ai_endpoint import get_ai_endpoint
@@ -1383,6 +1384,21 @@ def render_page_with_annotations(username) -> str:
     if qc_manager:
         pre_annotation_config = qc_manager.get_pre_annotation_config()
 
+    # Check if instance_display is configured (new explicit display mode)
+    has_instance_display = "instance_display" in config
+    display_html = ""
+    display_template_vars = {}
+
+    if has_instance_display:
+        try:
+            display_renderer = get_instance_display_renderer(config)
+            display_template_vars = display_renderer.get_template_variables(item.get_data())
+            display_html = display_template_vars.get("display_html", "")
+            logger.debug(f"Instance display rendered: {len(display_html)} chars")
+        except Exception as e:
+            logger.error(f"Error rendering instance display: {e}")
+            has_instance_display = False  # Fall back to legacy mode
+
     rendered_html = render_template(
         html_file,
         username=username,
@@ -1411,6 +1427,13 @@ def render_page_with_annotations(username) -> str:
         # Pre-annotation data for model predictions
         pre_annotations=pre_annotation_data,
         pre_annotation_config=pre_annotation_config,
+        # Instance display (new explicit display mode)
+        has_instance_display=has_instance_display,
+        display_html=display_html,
+        display_fields=display_template_vars.get("display_fields", {}),
+        display_raw=display_template_vars.get("display_raw", {}),
+        span_targets=display_template_vars.get("span_targets", []),
+        multi_span_mode=display_template_vars.get("multi_span_mode", False),
         # ai=ai_hints,
         **kwargs
     )

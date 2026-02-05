@@ -35,7 +35,7 @@
 
 <body>
     <!-- Header navigation bar -->
-    <nav class="navbar sticky-top shadow-sm" style="background-color: var(--primary-color); padding: 0.75rem 1rem; margin-bottom: 1.5rem;">
+    <nav class="navbar sticky-top shadow-sm" style="background-color: var(--primary-color); padding: 0.75rem 1rem; margin-bottom: 0.75rem;">
         <div class="container-fluid d-flex align-items-center">
             <!-- Task name (left aligned) -->
             <div class="navbar-brand">
@@ -82,7 +82,7 @@
 
     <div class="container-fluid">
         <!-- Main annotation area -->
-        <div id="task_layout" class="shadcn-card mb-4">
+        <div id="task_layout" class="shadcn-card mb-2 {% if has_image_annotation or has_video_annotation or has_audio_annotation %}media-annotation{% else %}text-annotation{% endif %}">
             <div class="shadcn-card-content">
                 <!-- Loading state -->
                 <div id="loading-state" class="text-center py-5">
@@ -101,9 +101,16 @@
 
                 <!-- Main content area -->
                 <div id="main-content" style="display: none;">
-                    <!-- Instance text/video -->
+                    <!-- Instance display area -->
                     <div class="mb-4">
-                        {% if has_video_annotation | default(false) %}
+                        {% if has_instance_display | default(false) %}
+                        <!-- New instance_display mode: explicit content display configuration -->
+                        {{ display_html | safe }}
+                        <!-- Hidden element for legacy JS compatibility -->
+                        <div id="instance-text" style="display: none;">
+                            <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}">{{instance | sanitize_html}}</div>
+                        </div>
+                        {% elif has_video_annotation | default(false) %}
                         <h5 class="mb-3">Video to Annotate:</h5>
                         <!-- For video annotation, keep the text-content element accessible for JS but visually hidden -->
                         <div id="instance-text" class="instance-text-container" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0);">
@@ -153,7 +160,7 @@
         </div>
 
         <!-- Navigation buttons -->
-        <div class="my-4">
+        <div class="my-2">
             <div class="d-flex justify-content-between align-items-center">
                 <!-- Previous button -->
                 <div>
@@ -242,6 +249,10 @@
     <script src="{{ url_for('static', filename='interaction_tracker.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='span-core.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='ai_assistant_manager.js') }}?v=1"></script>
+    <!-- Instance display manager (for new instance_display configuration) -->
+    {% if has_instance_display | default(false) %}
+    <script src="{{ url_for('static', filename='instance-display.js') }}?v=1"></script>
+    {% endif %}
     <script src="{{ url_for('static', filename='annotation.js') }}?v=14"></script>
 
     <!-- Fabric.js for image annotation (loaded from CDN) -->

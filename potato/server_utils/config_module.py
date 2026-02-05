@@ -175,6 +175,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Validate quality control configuration if present
     validate_quality_control_config(config_data)
 
+    # Validate instance display configuration if present
+    validate_instance_display_config(config_data)
+
 
 def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
     """
@@ -255,6 +258,66 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
                     validate_single_annotation_scheme(scheme, f"phases.{phase_name}.annotation_schemes[{j}]")
     else:
         raise ConfigValidationError("Config must have either 'annotation_schemes' (top-level) or 'phases' with annotation_schemes")
+
+    # Validate keyword_highlight is not enabled for image-based tasks
+    _validate_keyword_highlight_for_images(config_data)
+
+
+def _validate_keyword_highlight_for_images(config_data: Dict[str, Any]) -> None:
+    """
+    Validate that keyword_highlight is not enabled for image-based tasks.
+
+    Keyword highlighting highlights text in the instance content, which doesn't
+    make sense for images. This validation catches configuration errors early.
+
+    Args:
+        config_data: The configuration data
+
+    Raises:
+        ConfigValidationError: If keyword_highlight is enabled for an image task
+    """
+    # Check if the text_key suggests this is an image-based task
+    text_key = config_data.get('item_properties', {}).get('text_key', 'text')
+    image_indicators = ['image', 'img', 'photo', 'picture', 'url']
+    is_likely_image_task = any(indicator in text_key.lower() for indicator in image_indicators)
+
+    if not is_likely_image_task:
+        return  # Not an image task, no need to check
+
+    # Get all annotation schemes
+    schemes = []
+    if 'annotation_schemes' in config_data:
+        schemes = config_data['annotation_schemes']
+    elif 'phases' in config_data:
+        phases = config_data['phases']
+        if isinstance(phases, list):
+            for phase in phases:
+                schemes.extend(phase.get('annotation_schemes', []))
+        elif isinstance(phases, dict):
+            for phase_name, phase in phases.items():
+                if phase_name != 'order' and isinstance(phase, dict):
+                    schemes.extend(phase.get('annotation_schemes', []))
+
+    # Check each scheme for keyword_highlight
+    for i, scheme in enumerate(schemes):
+        if not isinstance(scheme, dict):
+            continue
+        ai_support = scheme.get('ai_support', {})
+        if not isinstance(ai_support, dict):
+            continue
+        features = ai_support.get('features', {})
+        if not isinstance(features, dict):
+            continue
+
+        keyword_highlight = features.get('keyword_highlight', False)
+        if keyword_highlight:
+            scheme_name = scheme.get('name', f'scheme[{i}]')
+            raise ConfigValidationError(
+                f"annotation_schemes.{scheme_name}.ai_support.features.keyword_highlight is enabled, "
+                f"but item_properties.text_key='{text_key}' suggests this is an image-based task. "
+                f"Keyword highlighting only works with text content, not images. "
+                f"Set keyword_highlight: false or remove it from the ai_support features."
+            )
 
 
 def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None:
@@ -1683,3 +1746,234 @@ def parse_active_learning_config(config_data: Dict[str, Any]) -> 'ActiveLearning
         llm_enabled=llm_enabled,
         llm_config=llm_config
     )
+
+
+def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
+    """
+    Validate instance_display configuration.
+
+    The instance_display section defines what content to show annotators,
+    separate from what annotations to collect. This allows displaying
+    images/videos/audio alongside any annotation type.
+
+    Args:
+        config_data: The configuration data
+
+    Raises:
+        ConfigValidationError: If the instance_display configuration is invalid
+    """
+    if "instance_display" not in config_data:
+        return  # instance_display is optional (backwards compatible)
+
+    display_config = config_data["instance_display"]
+
+    if not isinstance(display_config, dict):
+        raise ConfigValidationError("instance_display must be a dictionary")
+
+    # Validate fields
+    if "fields" not in display_config:
+        raise ConfigValidationError("instance_display must contain 'fields' list")
+
+    fields = display_config["fields"]
+    if not isinstance(fields, list):
+        raise ConfigValidationError("instance_display.fields must be a list")
+
+    if not fields:
+        raise ConfigValidationError("instance_display.fields cannot be empty")
+
+    # Track span targets for validation
+    span_targets = []
+
+    # Valid display types - keep in sync with display registry
+    valid_display_types = ["text", "html", "image", "video", "audio", "dialogue", "pairwise"]
+
+    for i, field in enumerate(fields):
+        if not isinstance(field, dict):
+            raise ConfigValidationError(f"instance_display.fields[{i}] must be a dictionary")
+
+        # Validate required field properties
+        if "key" not in field:
+            raise ConfigValidationError(f"instance_display.fields[{i}] missing required 'key' property")
+
+        key = field["key"]
+        if not isinstance(key, str) or not key.strip():
+            raise ConfigValidationError(f"instance_display.fields[{i}].key must be a non-empty string")
+
+        if "type" not in field:
+            raise ConfigValidationError(f"instance_display.fields[{i}] missing required 'type' property")
+
+        field_type = field["type"]
+        if field_type not in valid_display_types:
+            raise ConfigValidationError(
+                f"instance_display.fields[{i}].type '{field_type}' is invalid. "
+                f"Valid types are: {', '.join(valid_display_types)}"
+            )
+
+        # Validate label if present
+        if "label" in field:
+            if not isinstance(field["label"], str):
+                raise ConfigValidationError(f"instance_display.fields[{i}].label must be a string")
+
+        # Validate span_target
+        if field.get("span_target"):
+            # Only text-based types can be span targets
+            if field_type not in ["text", "dialogue"]:
+                raise ConfigValidationError(
+                    f"instance_display.fields[{i}].span_target is set but type '{field_type}' "
+                    f"does not support span annotation. Only 'text' and 'dialogue' types support span_target."
+                )
+            span_targets.append(key)
+
+        # Validate display_options if present
+        if "display_options" in field:
+            options = field["display_options"]
+            if not isinstance(options, dict):
+                raise ConfigValidationError(f"instance_display.fields[{i}].display_options must be a dictionary")
+
+            # Type-specific option validation
+            _validate_display_options(field_type, options, f"instance_display.fields[{i}]")
+
+    # Validate layout if present
+    if "layout" in display_config:
+        layout = display_config["layout"]
+        if not isinstance(layout, dict):
+            raise ConfigValidationError("instance_display.layout must be a dictionary")
+
+        if "direction" in layout:
+            valid_directions = ["vertical", "horizontal"]
+            if layout["direction"] not in valid_directions:
+                raise ConfigValidationError(
+                    f"instance_display.layout.direction must be one of: {', '.join(valid_directions)}"
+                )
+
+        if "gap" in layout:
+            gap = layout["gap"]
+            if not isinstance(gap, str):
+                raise ConfigValidationError("instance_display.layout.gap must be a string (e.g., '20px', '1rem')")
+
+    # Check for deprecation warning: using annotation schemas for display-only
+    _check_display_only_deprecation(config_data)
+
+
+def _validate_display_options(field_type: str, options: Dict[str, Any], path: str) -> None:
+    """
+    Validate display options for a specific field type.
+
+    Args:
+        field_type: The display type
+        options: The display options dictionary
+        path: The config path for error messages
+
+    Raises:
+        ConfigValidationError: If options are invalid
+    """
+    # Common option validation
+    if "max_width" in options:
+        max_width = options["max_width"]
+        if not isinstance(max_width, (int, str)):
+            raise ConfigValidationError(f"{path}.display_options.max_width must be an integer or string")
+        if isinstance(max_width, int) and max_width < 1:
+            raise ConfigValidationError(f"{path}.display_options.max_width must be positive")
+
+    if "max_height" in options:
+        max_height = options["max_height"]
+        if not isinstance(max_height, (int, str)):
+            raise ConfigValidationError(f"{path}.display_options.max_height must be an integer or string")
+        if isinstance(max_height, int) and max_height < 1:
+            raise ConfigValidationError(f"{path}.display_options.max_height must be positive")
+
+    # Text-specific options
+    if field_type in ["text", "html"]:
+        if "collapsible" in options:
+            if not isinstance(options["collapsible"], bool):
+                raise ConfigValidationError(f"{path}.display_options.collapsible must be a boolean")
+
+        if "preserve_whitespace" in options:
+            if not isinstance(options["preserve_whitespace"], bool):
+                raise ConfigValidationError(f"{path}.display_options.preserve_whitespace must be a boolean")
+
+    # Image-specific options
+    if field_type == "image":
+        if "zoomable" in options:
+            if not isinstance(options["zoomable"], bool):
+                raise ConfigValidationError(f"{path}.display_options.zoomable must be a boolean")
+
+        if "object_fit" in options:
+            valid_fits = ["contain", "cover", "fill", "none", "scale-down"]
+            if options["object_fit"] not in valid_fits:
+                raise ConfigValidationError(
+                    f"{path}.display_options.object_fit must be one of: {', '.join(valid_fits)}"
+                )
+
+    # Video-specific options
+    if field_type == "video":
+        for bool_opt in ["controls", "autoplay", "loop", "muted"]:
+            if bool_opt in options:
+                if not isinstance(options[bool_opt], bool):
+                    raise ConfigValidationError(f"{path}.display_options.{bool_opt} must be a boolean")
+
+    # Audio-specific options
+    if field_type == "audio":
+        if "controls" in options:
+            if not isinstance(options["controls"], bool):
+                raise ConfigValidationError(f"{path}.display_options.controls must be a boolean")
+
+        if "show_waveform" in options:
+            if not isinstance(options["show_waveform"], bool):
+                raise ConfigValidationError(f"{path}.display_options.show_waveform must be a boolean")
+
+    # Dialogue-specific options
+    if field_type == "dialogue":
+        if "alternating_shading" in options:
+            if not isinstance(options["alternating_shading"], bool):
+                raise ConfigValidationError(f"{path}.display_options.alternating_shading must be a boolean")
+
+        if "speaker_extraction" in options:
+            if not isinstance(options["speaker_extraction"], bool):
+                raise ConfigValidationError(f"{path}.display_options.speaker_extraction must be a boolean")
+
+    # Pairwise-specific options
+    if field_type == "pairwise":
+        if "cell_width" in options:
+            cell_width = options["cell_width"]
+            if not isinstance(cell_width, str):
+                raise ConfigValidationError(f"{path}.display_options.cell_width must be a string (e.g., '50%')")
+
+
+def _check_display_only_deprecation(config_data: Dict[str, Any]) -> None:
+    """
+    Check for deprecated display-only pattern and log warning.
+
+    Detects when image_annotation, video_annotation, or audio_annotation
+    is used with min_annotations: 0 just to display content.
+
+    Args:
+        config_data: The configuration data
+    """
+    # Get annotation schemes
+    schemes = []
+    if "annotation_schemes" in config_data:
+        schemes = config_data["annotation_schemes"]
+    elif "phases" in config_data:
+        phases = config_data["phases"]
+        if isinstance(phases, list):
+            for phase in phases:
+                schemes.extend(phase.get("annotation_schemes", []))
+        elif isinstance(phases, dict):
+            for phase_name, phase in phases.items():
+                if phase_name != "order" and isinstance(phase, dict):
+                    schemes.extend(phase.get("annotation_schemes", []))
+
+    for scheme in schemes:
+        if not isinstance(scheme, dict):
+            continue
+
+        annotation_type = scheme.get("annotation_type")
+        if annotation_type in ["image_annotation", "video_annotation", "audio_annotation"]:
+            min_annotations = scheme.get("min_annotations", 1)
+            if min_annotations == 0:
+                logger.warning(
+                    f"Deprecation warning: Using {annotation_type} with min_annotations=0 "
+                    f"for display-only is deprecated. Use instance_display instead. "
+                    f"See docs/instance_display.md for migration guide."
+                )
