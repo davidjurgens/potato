@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ annotation_task_name }} - Adjudication</title>
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+
+    <!-- Adjudication Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='adjudication.css') }}?v=1">
+</head>
+
+<body>
+    <!-- Header navigation bar -->
+    <nav class="navbar sticky-top shadow-sm" style="background-color: var(--primary-color); padding: 0.75rem 1rem; margin-bottom: 0;">
+        <div class="container-fluid d-flex align-items-center">
+            <div class="navbar-brand">
+                <span class="fw-bold" style="color: var(--light-color); font-size: 1.25rem">
+                    {{ annotation_task_name }} — Adjudication
+                </span>
+            </div>
+
+            <div class="d-flex align-items-center gap-3">
+                <a href="/annotate" class="btn btn-sm" style="background: rgba(255,255,255,0.15); color: white; border: none;">
+                    <i class="fas fa-edit"></i> Annotate
+                </a>
+                <div style="background-color: rgba(255, 255, 255, 0.15); padding: 0.5rem 1rem; border-radius: var(--radius);">
+                    <span style="color: var(--light-color)">
+                        <i class="fas fa-gavel"></i>
+                        <span class="fw-medium">{{ username }}</span>
+                    </span>
+                    <a href="/logout" class="btn btn-sm ms-2" style="background: var(--light-color); color: var(--primary-color);">
+                        Logout
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="adjudication-container">
+        <!-- Sidebar: Queue -->
+        <div class="adj-sidebar">
+            <div class="adj-sidebar-header">
+                <h5><i class="fas fa-list-check"></i> Queue</h5>
+                <div class="adj-progress-bar">
+                    <div class="adj-progress-fill" id="adj-progress-fill" style="width: 0%"></div>
+                </div>
+                <div class="adj-progress-text" id="adj-progress-text">Loading...</div>
+            </div>
+            <div class="adj-queue-filters">
+                <button class="adj-filter-btn active" data-filter="pending">Pending</button>
+                <button class="adj-filter-btn" data-filter="all">All</button>
+                <button class="adj-filter-btn" data-filter="completed">Done</button>
+            </div>
+            <div class="adj-queue-list" id="adj-queue-list">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="adj-main">
+            <div class="adj-content" id="adj-content">
+                <!-- Empty state -->
+                <div class="adj-empty-state" id="adj-empty-state">
+                    <i class="fas fa-gavel"></i>
+                    <h5>Adjudication Mode</h5>
+                    <p>Select an item from the queue to begin adjudicating.</p>
+                </div>
+
+                <!-- Item view (hidden initially) -->
+                <div id="adj-item-view" style="display: none;">
+                    <!-- Item header -->
+                    <div class="adj-item-header">
+                        <h4 id="adj-item-id"></h4>
+                        <div>
+                            <span class="adj-agreement-badge" id="adj-item-agreement"></span>
+                            <span class="text-muted" style="font-size: 0.8rem; margin-left: 8px;" id="adj-item-annotators"></span>
+                        </div>
+                    </div>
+
+                    <!-- Item text -->
+                    <div class="adj-item-text" id="adj-item-text"></div>
+
+                    <!-- Annotator Responses -->
+                    <div class="adj-responses-section">
+                        <div class="adj-responses-header">
+                            <h5><i class="fas fa-users"></i> Annotator Responses</h5>
+                        </div>
+                        <div id="adj-responses-container">
+                            <!-- Populated by JS per schema -->
+                        </div>
+                    </div>
+
+                    <!-- Decision Section -->
+                    <div class="adj-decision-section">
+                        <div class="adj-decision-header">
+                            <h5><i class="fas fa-check-circle"></i> Your Decision</h5>
+                        </div>
+                        <div id="adj-decision-forms">
+                            <!-- Populated by JS per schema -->
+                        </div>
+
+                        <!-- Metadata: Confidence, Error Taxonomy, Notes -->
+                        <div class="adj-metadata-section">
+                            <h6>Decision Metadata</h6>
+                            <div class="adj-metadata-row">
+                                {% if adj_config.require_confidence %}
+                                <div class="adj-metadata-field">
+                                    <label for="adj-confidence">Confidence</label>
+                                    <select id="adj-confidence">
+                                        <option value="high">High</option>
+                                        <option value="medium" selected>Medium</option>
+                                        <option value="low">Low</option>
+                                    </select>
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <div class="adj-metadata-row">
+                                <div class="adj-metadata-field" style="flex: 2;">
+                                    <label>Error Type</label>
+                                    <div class="adj-error-taxonomy" id="adj-error-taxonomy">
+                                        {% for tag in adj_config.error_taxonomy %}
+                                        <label class="adj-error-tag" data-tag="{{ tag }}">
+                                            <input type="checkbox" value="{{ tag }}">
+                                            {{ tag | replace("_", " ") | title }}
+                                        </label>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="adj-metadata-row">
+                                <div class="adj-metadata-field" style="flex: 1;">
+                                    <label for="adj-notes">Notes</label>
+                                    <textarea id="adj-notes" placeholder="Optional notes about this decision..."></textarea>
+                                </div>
+                            </div>
+
+                            <!-- Guideline update flag -->
+                            <div class="adj-guideline-section">
+                                <label class="adj-guideline-check">
+                                    <input type="checkbox" id="adj-guideline-flag">
+                                    Flag for guideline update
+                                </label>
+                                <div class="adj-guideline-notes" id="adj-guideline-notes">
+                                    <div class="adj-metadata-field">
+                                        <label for="adj-guideline-text">What needs updating?</label>
+                                        <textarea id="adj-guideline-text" placeholder="Describe the guideline issue..."></textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Navigation -->
+            <div class="adj-nav-bar" id="adj-nav-bar" style="display: none;">
+                <button class="btn btn-outline-secondary" id="adj-btn-prev">
+                    <i class="fas fa-arrow-left"></i> Previous
+                </button>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-secondary" id="adj-btn-skip">
+                        Skip
+                    </button>
+                    <button class="btn btn-primary" id="adj-btn-submit">
+                        Submit & Next <i class="fas fa-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pass config to JS -->
+    <script>
+        window.ADJ_CONFIG = {{ adj_config | tojson }};
+        window.ANNOTATION_SCHEMES = {{ annotation_schemes | tojson }};
+    </script>
+
+    <!-- Adjudication JS -->
+    <script src="{{ url_for('static', filename='adjudication-forms.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='adjudication.js') }}?v=1"></script>
+</body>
+</html>

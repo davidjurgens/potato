@@ -67,6 +67,9 @@ from potato.logging_config import is_ui_debug_enabled, get_debug_log_settings
 # Import quality control
 from potato.quality_control import get_quality_control_manager
 
+# Import adjudication
+from potato.adjudication import get_adjudication_manager, AdjudicationDecision
+
 import os
 
 
@@ -4834,7 +4837,219 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/api/track_annotation_change", "track_annotation_change", track_annotation_change, methods=["POST"])
     app.add_url_rule("/api/behavioral_data/<instance_id>", "get_behavioral_data", get_behavioral_data, methods=["GET"])
 
+    # Adjudication routes
+    app.add_url_rule("/adjudicate", "adjudicate", adjudicate, methods=["GET"])
+    app.add_url_rule("/adjudicate/api/queue", "adjudicate_api_queue", adjudicate_api_queue, methods=["GET"])
+    app.add_url_rule("/adjudicate/api/item/<instance_id>", "adjudicate_api_item", adjudicate_api_item, methods=["GET"])
+    app.add_url_rule("/adjudicate/api/submit", "adjudicate_api_submit", adjudicate_api_submit, methods=["POST"])
+    app.add_url_rule("/adjudicate/api/stats", "adjudicate_api_stats", adjudicate_api_stats, methods=["GET"])
+    app.add_url_rule("/adjudicate/api/skip/<instance_id>", "adjudicate_api_skip", adjudicate_api_skip, methods=["POST"])
+    app.add_url_rule("/adjudicate/api/next", "adjudicate_api_next", adjudicate_api_next, methods=["GET"])
+
     app.add_url_rule("/shutdown", "shutdown", shutdown, methods=["POST"])
+
+# ============================================================================
+# Adjudication Routes
+# ============================================================================
+
+def _check_adjudicator_auth():
+    """Check if current user is an authorized adjudicator.
+
+    Returns:
+        tuple: (is_authorized: bool, username: str, error_response)
+    """
+    username = session.get('username')
+    if not username:
+        return False, None, (jsonify({"error": "Not authenticated"}), 401)
+
+    adj_mgr = get_adjudication_manager()
+    if not adj_mgr or not adj_mgr.adj_config.enabled:
+        return False, username, (jsonify({"error": "Adjudication not enabled"}), 404)
+
+    if not adj_mgr.is_adjudicator(username):
+        return False, username, (jsonify({"error": "Not authorized as adjudicator"}), 403)
+
+    return True, username, None
+
+
+@app.route('/adjudicate', methods=['GET'])
+def adjudicate():
+    """Main adjudication page."""
+    username = session.get('username')
+    if not username:
+        return redirect(url_for('home'))
+
+    adj_mgr = get_adjudication_manager()
+    if not adj_mgr or not adj_mgr.adj_config.enabled:
+        return redirect(url_for('home'))
+
+    if not adj_mgr.is_adjudicator(username):
+        return redirect(url_for('home'))
+
+    # Get annotation schemes for form rendering
+    annotation_schemes = config.get('annotation_schemes', [])
+
+    return render_template(
+        'adjudication.html',
+        annotation_task_name=config.get('annotation_task_name', 'Annotation Task'),
+        username=username,
+        annotation_schemes=annotation_schemes,
+        adj_config={
+            'show_annotator_names': adj_mgr.adj_config.show_annotator_names,
+            'show_timing_data': adj_mgr.adj_config.show_timing_data,
+            'show_agreement_scores': adj_mgr.adj_config.show_agreement_scores,
+            'fast_decision_warning_ms': adj_mgr.adj_config.fast_decision_warning_ms,
+            'require_confidence': adj_mgr.adj_config.require_confidence,
+            'require_notes_on_override': adj_mgr.adj_config.require_notes_on_override,
+            'error_taxonomy': adj_mgr.adj_config.error_taxonomy,
+            'similarity_enabled': adj_mgr.adj_config.similarity_enabled,
+        },
+    )
+
+
+@app.route('/adjudicate/api/queue', methods=['GET'])
+def adjudicate_api_queue():
+    """Get the adjudication queue."""
+    authorized, username, error = _check_adjudicator_auth()
+    if not authorized:
+        return error
+
+    adj_mgr = get_adjudication_manager()
+    filter_status = request.args.get('status', None)
+
+    items = adj_mgr.get_queue(
+        adjudicator_id=username,
+        filter_status=filter_status,
+    )
+
+    return jsonify({
+        "items": [item.to_dict() for item in items],
+        "total": len(items),
+    })
+
+
+@app.route('/adjudicate/api/item/<instance_id>', methods=['GET'])
+def adjudicate_api_item(instance_id):
+    """Get full item detail for adjudication."""
+    authorized, username, error = _check_adjudicator_auth()
+    if not authorized:
+        return error
+
+    adj_mgr = get_adjudication_manager()
+    item = adj_mgr.get_item(instance_id)
+
+    if not item:
+        return jsonify({"error": "Item not found in adjudication queue"}), 404
+
+    # Get item text and data
+    item_text = adj_mgr.get_item_text(instance_id)
+    item_data = adj_mgr.get_item_data(instance_id)
+
+    # Get existing decision if any
+    decision = adj_mgr.get_decision(instance_id)
+
+    return jsonify({
+        "item": item.to_dict(),
+        "item_text": item_text,
+        "item_data": item_data,
+        "decision": decision.to_dict() if decision else None,
+    })
+
+
+@app.route('/adjudicate/api/submit', methods=['POST'])
+def adjudicate_api_submit():
+    """Submit an adjudication decision."""
+    authorized, username, error = _check_adjudicator_auth()
+    if not authorized:
+        return error
+
+    adj_mgr = get_adjudication_manager()
+
+    try:
+        data = request.get_json(silent=True)
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+
+        instance_id = data.get('instance_id')
+        if not instance_id:
+            return jsonify({"error": "instance_id is required"}), 400
+
+        decision = AdjudicationDecision(
+            instance_id=str(instance_id),
+            adjudicator_id=username,
+            timestamp=datetime.datetime.now().isoformat(),
+            label_decisions=data.get('label_decisions', {}),
+            span_decisions=data.get('span_decisions', []),
+            source=data.get('source', {}),
+            confidence=data.get('confidence', 'medium'),
+            notes=data.get('notes', ''),
+            error_taxonomy=data.get('error_taxonomy', []),
+            guideline_update_flag=data.get('guideline_update_flag', False),
+            guideline_update_notes=data.get('guideline_update_notes', ''),
+            time_spent_ms=data.get('time_spent_ms', 0),
+        )
+
+        success = adj_mgr.submit_decision(decision)
+        if success:
+            return jsonify({"status": "ok", "instance_id": instance_id})
+        else:
+            return jsonify({"error": "Failed to save decision"}), 500
+
+    except Exception as e:
+        logger.error(f"Error submitting adjudication decision: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/adjudicate/api/stats', methods=['GET'])
+def adjudicate_api_stats():
+    """Get adjudication progress statistics."""
+    authorized, username, error = _check_adjudicator_auth()
+    if not authorized:
+        return error
+
+    adj_mgr = get_adjudication_manager()
+    stats = adj_mgr.get_stats()
+    return jsonify(stats)
+
+
+@app.route('/adjudicate/api/skip/<instance_id>', methods=['POST'])
+def adjudicate_api_skip(instance_id):
+    """Skip an adjudication item."""
+    authorized, username, error = _check_adjudicator_auth()
+    if not authorized:
+        return error
+
+    adj_mgr = get_adjudication_manager()
+    success = adj_mgr.skip_item(instance_id, username)
+
+    if success:
+        return jsonify({"status": "ok", "instance_id": instance_id})
+    else:
+        return jsonify({"error": "Item not found"}), 404
+
+
+@app.route('/adjudicate/api/next', methods=['GET'])
+def adjudicate_api_next():
+    """Get the next item to adjudicate."""
+    authorized, username, error = _check_adjudicator_auth()
+    if not authorized:
+        return error
+
+    adj_mgr = get_adjudication_manager()
+    item = adj_mgr.get_next_item(username)
+
+    if not item:
+        return jsonify({"item": None, "message": "No more items to adjudicate"})
+
+    item_text = adj_mgr.get_item_text(item.instance_id)
+    item_data = adj_mgr.get_item_data(item.instance_id)
+
+    return jsonify({
+        "item": item.to_dict(),
+        "item_text": item_text,
+        "item_data": item_data,
+    })
+
 
 @app.route('/shutdown', methods=['POST'])
 def shutdown():

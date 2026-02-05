@@ -80,6 +80,9 @@ from potato.expertise_manager import init_expertise_manager, get_expertise_manag
 from potato.quality_control import (
     init_quality_control_manager, get_quality_control_manager, clear_quality_control_manager
 )
+from potato.adjudication import (
+    init_adjudication_manager, get_adjudication_manager, clear_adjudication_manager
+)
 
 from potato.create_task_cli import create_task_cli, yes_or_no
 from potato.server_utils.arg_utils import arguments
@@ -1239,6 +1242,14 @@ def get_current_page_html(config, username):
     }
     return render_template(html_fname, **context)
 
+def _is_user_adjudicator(username: str) -> bool:
+    """Check if a user is an authorized adjudicator."""
+    adj_mgr = get_adjudication_manager()
+    if adj_mgr and adj_mgr.adj_config.enabled:
+        return adj_mgr.is_adjudicator(username)
+    return False
+
+
 def render_page_with_annotations(username) -> str:
     '''
     When annotating, shows the current instance to the user with any annotations
@@ -1456,6 +1467,8 @@ def render_page_with_annotations(username) -> str:
         display_raw=display_template_vars.get("display_raw", {}),
         span_targets=display_template_vars.get("span_targets", []),
         multi_span_mode=display_template_vars.get("multi_span_mode", False),
+        # Adjudication: show link for adjudicators
+        is_adjudicator=_is_user_adjudicator(username),
         # ai=ai_hints,
         **kwargs
     )
@@ -2274,6 +2287,11 @@ def run_server(args):
         task_dir = config.get('task_dir', os.path.dirname(config.get('config_file', '')))
         init_quality_control_manager(config, task_dir)
         logger.info("Quality control manager initialized")
+
+    # Initialize adjudication manager if configured
+    if config.get('adjudication', {}).get('enabled', False):
+        init_adjudication_manager(config)
+        logger.info("Adjudication manager initialized")
 
     # Initialize ExpertiseManager for dynamic category assignment
     category_assignment = config.get('category_assignment', {})

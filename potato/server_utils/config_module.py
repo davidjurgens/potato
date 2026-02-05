@@ -172,6 +172,10 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Validate category assignment configuration if present
     validate_category_assignment_config(config_data)
 
+    # Validate adjudication configuration if present
+    if 'adjudication' in config_data:
+        validate_adjudication_config(config_data)
+
     # Validate quality control configuration if present
     validate_quality_control_config(config_data)
 
@@ -1938,6 +1942,72 @@ def _validate_display_options(field_type: str, options: Dict[str, Any], path: st
             cell_width = options["cell_width"]
             if not isinstance(cell_width, str):
                 raise ConfigValidationError(f"{path}.display_options.cell_width must be a string (e.g., '50%')")
+
+
+def validate_adjudication_config(config_data: Dict[str, Any]) -> None:
+    """
+    Validate adjudication configuration.
+
+    Args:
+        config_data: The full configuration data
+
+    Raises:
+        ConfigValidationError: If the adjudication configuration is invalid
+    """
+    adj_config = config_data.get('adjudication', {})
+    if not isinstance(adj_config, dict):
+        raise ConfigValidationError("adjudication must be a dictionary")
+
+    if not adj_config.get('enabled', False):
+        return
+
+    # Require adjudicator_users
+    users = adj_config.get('adjudicator_users', [])
+    if not isinstance(users, list) or len(users) == 0:
+        raise ConfigValidationError(
+            "adjudication.adjudicator_users must be a non-empty list of usernames"
+        )
+
+    # Validate numeric fields
+    min_ann = adj_config.get('min_annotations', 2)
+    if not isinstance(min_ann, int) or min_ann < 1:
+        raise ConfigValidationError(
+            "adjudication.min_annotations must be a positive integer"
+        )
+
+    threshold = adj_config.get('agreement_threshold', 0.75)
+    if not isinstance(threshold, (int, float)) or threshold < 0 or threshold > 1:
+        raise ConfigValidationError(
+            "adjudication.agreement_threshold must be a number between 0 and 1"
+        )
+
+    fast_warn = adj_config.get('fast_decision_warning_ms', 2000)
+    if not isinstance(fast_warn, (int, float)) or fast_warn < 0:
+        raise ConfigValidationError(
+            "adjudication.fast_decision_warning_ms must be a non-negative number"
+        )
+
+    # Validate error_taxonomy
+    taxonomy = adj_config.get('error_taxonomy')
+    if taxonomy is not None:
+        if not isinstance(taxonomy, list):
+            raise ConfigValidationError(
+                "adjudication.error_taxonomy must be a list of strings"
+            )
+        for item in taxonomy:
+            if not isinstance(item, str):
+                raise ConfigValidationError(
+                    "adjudication.error_taxonomy entries must be strings"
+                )
+
+    # Validate similarity config
+    sim_config = adj_config.get('similarity', {})
+    if isinstance(sim_config, dict) and sim_config.get('enabled', False):
+        top_k = sim_config.get('top_k', 5)
+        if not isinstance(top_k, int) or top_k < 1:
+            raise ConfigValidationError(
+                "adjudication.similarity.top_k must be a positive integer"
+            )
 
 
 def _check_display_only_deprecation(config_data: Dict[str, Any]) -> None:

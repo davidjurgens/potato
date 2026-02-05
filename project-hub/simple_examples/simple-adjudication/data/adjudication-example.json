@@ -1,0 +1,34 @@
+[
+  {
+    "id": "item_001",
+    "text": "The restaurant had amazing food but terrible service. I waited 45 minutes for my appetizer."
+  },
+  {
+    "id": "item_002",
+    "text": "This product exceeded my expectations in every way. Highly recommend!"
+  },
+  {
+    "id": "item_003",
+    "text": "The movie was okay. Some parts were good but it felt too long overall."
+  },
+  {
+    "id": "item_004",
+    "text": "I'm not sure how I feel about this restaurant. The pasta was decent but overpriced."
+  },
+  {
+    "id": "item_005",
+    "text": "Absolutely terrible experience. The staff was rude and the food was cold. Never going back."
+  },
+  {
+    "id": "item_006",
+    "text": "The hotel room was clean and the bed was comfortable. Location was perfect for sightseeing."
+  },
+  {
+    "id": "item_007",
+    "text": "It works as described. Nothing special but gets the job done."
+  },
+  {
+    "id": "item_008",
+    "text": "The customer service team was incredibly helpful when I had issues with my order."
+  }
+]

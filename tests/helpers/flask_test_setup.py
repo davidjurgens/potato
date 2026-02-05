@@ -319,6 +319,11 @@ class FlaskTestServer:
                     clear_item_state_manager()
                     clear_config()
                     reset_span_counter()
+                    try:
+                        from potato.adjudication import clear_adjudication_manager
+                        clear_adjudication_manager()
+                    except ImportError:
+                        pass
                 except Exception as e:
                     print(f"[DEBUG] Error clearing state managers at startup: {e}")
 
@@ -476,6 +481,15 @@ class FlaskTestServer:
                         icl_labeler.start_background_worker()
                     except Exception as e:
                         print(f"Warning: Failed to initialize ICL labeler: {e}")
+
+                # Initialize adjudication manager if configured
+                if config.get('adjudication', {}).get('enabled', False):
+                    try:
+                        from potato.adjudication import init_adjudication_manager
+                        init_adjudication_manager(config)
+                        print("[DEBUG] Adjudication manager initialized successfully")
+                    except Exception as e:
+                        print(f"[DEBUG] Error initializing adjudication manager: {e}")
 
                 # Create a fresh Flask app instance with explicit static folder
                 static_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../potato/static'))

@@ -1,0 +1,87 @@
+# Adjudication Example Configuration
+#
+# This example demonstrates the adjudication workflow where designated
+# reviewers resolve disagreements between annotators.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start project-hub/simple_examples/simple-adjudication/config.yaml -p 8000
+#
+# Then:
+# 1. Login as user_1, user_2, or user_3 to annotate items
+# 2. Login as "adjudicator" to review and adjudicate disagreements
+
+annotation_task_name: "Sentiment Adjudication Demo"
+
+data_files:
+  - "data/adjudication-example.json"
+
+item_properties:
+  id_key: "id"
+  text_key: "text"
+
+task_dir: "."
+output_annotation_dir: "annotation_output"
+
+# Allow multiple annotators per item
+max_annotations_per_item: 3
+
+# Simple password-free login for demo
+login:
+  type: "standard"
+
+annotation_schemes:
+  - annotation_type: "radio"
+    name: "sentiment"
+    description: "What is the overall sentiment of this text?"
+    labels:
+      - "positive"
+      - "negative"
+      - "neutral"
+      - "mixed"
+
+  - annotation_type: "multiselect"
+    name: "topics"
+    description: "What topics are discussed? (Select all that apply)"
+    labels:
+      - "food"
+      - "service"
+      - "price"
+      - "ambiance"
+      - "recommendation"
+
+# Adjudication configuration
+adjudication:
+  enabled: true
+  adjudicator_users:
+    - "adjudicator"
+
+  # Items become eligible after 2 annotations
+  min_annotations: 2
+
+  # Show items with agreement below 75%
+  agreement_threshold: 0.75
+
+  # Show all items including unanimous ones (for demo purposes)
+  show_all_items: true
+
+  # Display options
+  show_annotator_names: true
+  show_timing_data: true
+  show_agreement_scores: true
+  fast_decision_warning_ms: 2000
+
+  # Require confidence rating
+  require_confidence: true
+
+  # Error categories for classification
+  error_taxonomy:
+    - "ambiguous_text"
+    - "guideline_gap"
+    - "annotator_error"
+    - "edge_case"
+    - "subjective_disagreement"
+
+  output_subdir: "adjudication"
+
+# Debug mode for easy testing
+debug: true

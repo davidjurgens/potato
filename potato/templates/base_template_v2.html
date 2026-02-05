@@ -70,6 +70,15 @@
                 <div class="me-3" style="color: var(--light-color)">
                     <span>Logged in as <span class="fw-medium" id="username-display">{{username}}</span></span>
                 </div>
+                {% if is_adjudicator %}
+                <div class="border-start me-2" style="padding-left: 20px; height: 24px; display: flex; align-items: center;">
+                    <a href="/adjudicate" class="shadcn-button"
+                       style="background-color: rgba(255,255,255,0.25); color: var(--light-color); height: auto; padding: 0.25rem 0.75rem !important; font-size: 0.875rem; min-width: 60px; text-align: center; border: none; text-decoration: none;"
+                       title="Adjudication Mode">
+                        <i class="fas fa-gavel"></i> Adjudicate
+                    </a>
+                </div>
+                {% endif %}
                 <div class="border-start" style="padding-left: 20px; height: 24px; display: flex; align-items: center;">
                     <a href="/logout" class="shadcn-button"
                        style="background-color: var(--light-color); color: var(--primary-color); height: auto; padding: 0.25rem 0.75rem !important; font-size: 0.875rem; min-width: 60px; text-align: center; border: none; text-decoration: none;">
