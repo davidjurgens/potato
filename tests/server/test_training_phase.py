@@ -20,6 +20,7 @@ from tests.helpers.test_utils import (
     create_test_directory,
     cleanup_test_directory
 )
+from tests.helpers.port_manager import find_free_port
 
 
 def create_training_config(test_dir: str, port: int, include_training: bool = True,
@@ -77,7 +78,7 @@ def create_training_config(test_dir: str, port: int, include_training: bool = Tr
         }
         training_config = {
             "enabled": True,
-            "data_file": "training_data.json",
+            "data_file": training_data_file,
             "annotation_schemes": ["sentiment"],
             "passing_criteria": {
                 "min_correct": 2,
@@ -106,7 +107,7 @@ def create_training_config(test_dir: str, port: int, include_training: bool = Tr
         "annotation_task_name": f"Training Test {port}",
         "require_password": False,
         "authentication": {"method": "in_memory"},
-        "data_files": ["test_data.json"],
+        "data_files": [data_file],
         "item_properties": {"text_key": "text", "id_key": "id"},
         "annotation_schemes": [
             {
@@ -328,8 +329,8 @@ class TestTrainingPhaseIntegration:
     @pytest.fixture
     def test_server(self, request):
         """Create a test server for training tests."""
-        # Use a unique port based on test name to avoid conflicts
-        port = 9100 + abs(hash(request.node.name)) % 100
+        # Use a free port to avoid conflicts
+        port = find_free_port(preferred_port=9100)
 
         # Create test directory
         test_dir = create_test_directory(f"training_test_{port}")
@@ -406,7 +407,7 @@ class TestTrainingMaxMistakes:
     @pytest.fixture
     def max_mistakes_server(self, request):
         """Create a test server with max_mistakes configured."""
-        port = 9200 + abs(hash(request.node.name)) % 100
+        port = find_free_port(preferred_port=9200)
         test_dir = create_test_directory(f"max_mistakes_test_{port}")
 
         # Create config with max_mistakes = 3

@@ -20,6 +20,7 @@ from tests.helpers.test_utils import (
     create_test_directory,
     cleanup_test_directory
 )
+from tests.helpers.port_manager import find_free_port
 
 
 def create_prolific_test_config(test_dir: str, port: int,
@@ -64,7 +65,7 @@ def create_prolific_test_config(test_dir: str, port: int,
         "require_password": False,
 
         # Data settings
-        "data_files": ["test_data.json"],
+        "data_files": [data_file],
         "item_properties": {"text_key": "text", "id_key": "id"},
 
         # Simple annotation scheme
@@ -294,7 +295,7 @@ class TestProlificURLDirectLogin:
     @pytest.fixture
     def prolific_server(self, request):
         """Create a test server with Prolific URL-direct login."""
-        port = 9300 + abs(hash(request.node.name)) % 100
+        port = find_free_port(preferred_port=9300)
         test_dir = create_test_directory(f"prolific_test_{port}")
 
         config_file = create_prolific_test_config(
@@ -505,7 +506,7 @@ class TestProlificMissingParameters:
     @pytest.fixture
     def prolific_server(self, request):
         """Create a test server with Prolific URL-direct login."""
-        port = 9400 + abs(hash(request.node.name)) % 100
+        port = find_free_port(preferred_port=9400)
         test_dir = create_test_directory(f"prolific_missing_test_{port}")
 
         config_file = create_prolific_test_config(test_dir, port)
@@ -540,7 +541,7 @@ class TestCustomURLArgument:
     @pytest.fixture
     def mturk_server(self, request):
         """Create a test server with custom URL argument (MTurk style)."""
-        port = 9500 + abs(hash(request.node.name)) % 100
+        port = find_free_port(preferred_port=9500)
         test_dir = create_test_directory(f"mturk_test_{port}")
 
         # Create test data
@@ -563,7 +564,7 @@ class TestCustomURLArgument:
             "completion_code": "MTURK-CODE-XYZ",
             "authentication": {"method": "in_memory"},
             "require_password": False,
-            "data_files": ["test_data.json"],
+            "data_files": [data_file],
             "item_properties": {"text_key": "text", "id_key": "id"},
             "annotation_schemes": [
                 {
@@ -632,7 +633,7 @@ class TestProlificCompletionFlow:
     @pytest.fixture
     def completion_server(self, request):
         """Create a server for testing completion flow."""
-        port = 9600 + abs(hash(request.node.name)) % 100
+        port = find_free_port(preferred_port=9600)
         test_dir = create_test_directory(f"completion_test_{port}")
 
         config_file = create_prolific_test_config(

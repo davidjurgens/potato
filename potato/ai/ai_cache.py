@@ -922,7 +922,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
 
     def start_prefetch(self, page_id, prefetch_amount):
         """Prefetches a fixed number of upcoming items to warm the cache."""
-        if not config["ai_support"]["enabled"] or not self.disk_cache_enabled:
+        if not config.get("ai_support", {}).get("enabled") or not self.disk_cache_enabled:
             return
         
         ism = get_item_state_manager()
