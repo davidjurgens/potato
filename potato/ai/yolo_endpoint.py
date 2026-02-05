@@ -272,9 +272,8 @@ class YOLOEndpoint(BaseVisualAIEndpoint):
         # Look for explicit label specifications
         import re
 
-        # Pattern: "Labels to detect: label1, label2" or "Available labels: label1, label2"
-        # Must match the full phrase to avoid matching "Detect objects..."
-        match = re.search(r"(?:labels to detect|available labels|labels)[:\s]+([^\n]+)", prompt, re.IGNORECASE)
+        # Pattern: "Labels to detect: label1, label2" or "detect: label1, label2"
+        match = re.search(r"(?:labels to detect|available labels|detect|labels)[:\s]+([^\n]+)", prompt, re.IGNORECASE)
         if match:
             labels_str = match.group(1)
             # Clean up and split - handle comma-separated, possibly with "..."
@@ -286,6 +285,17 @@ class YOLOEndpoint(BaseVisualAIEndpoint):
             labels = [l for l in labels if l.lower() not in stop_words and l]
             logger.debug(f"Parsed labels from prompt: {labels}")
             return labels
+
+        # Pattern: "find person and car" - extract nouns around "and"
+        match = re.search(r"(?:find|detect|identify)\s+(.+)", prompt, re.IGNORECASE)
+        if match:
+            labels_str = match.group(1)
+            # Split by "and" and commas
+            labels = re.split(r'\s+and\s+|,\s*', labels_str)
+            labels = [l.strip() for l in labels if l.strip()]
+            if labels:
+                logger.debug(f"Parsed labels from natural language prompt: {labels}")
+                return labels
 
         return []
 
