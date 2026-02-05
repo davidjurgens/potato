@@ -151,7 +151,9 @@
 .canvas-wrapper {
     position: relative;
     width: 100%;
-    min-height: 400px;
+    min-height: 300px;
+    max-height: calc(100vh - 280px);
+    height: auto;
     background: #f0f0f0;
     border: 2px solid #dee2e6;
     border-radius: 6px;

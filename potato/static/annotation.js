@@ -558,6 +558,11 @@ async function loadCurrentInstance() {
 
         updateProgressDisplay();
         updateInstanceDisplay();
+
+        // Clear browser-preserved form state before loading new annotations
+        // This prevents image/audio/video annotations from persisting across instances
+        clearAllFormInputs();
+
         restoreSpanAnnotationsFromHTML();
         loadAnnotations();
         generateAnnotationForms();
@@ -664,6 +669,40 @@ function clearAllFormInputs() {
     const numberInputs = document.querySelectorAll('input[type="number"].annotation-input');
     numberInputs.forEach(input => {
         input.value = '';
+    });
+
+    // Clear hidden annotation data inputs (image/audio/video annotations)
+    // BUT only if they don't have server-provided data (data-server-set="true")
+    // This prevents browser form restoration from persisting annotations across instances
+    // while preserving server-provided annotations when returning to an already-annotated instance
+    const annotationDataInputs = document.querySelectorAll('input.annotation-data-input');
+    annotationDataInputs.forEach(input => {
+        // Only clear if NOT set by the server (prevents clearing restored annotations)
+        if (input.getAttribute('data-server-set') !== 'true') {
+            input.value = '';
+            debugLog('🔍 Cleared annotation data input (browser-cached):', input.id);
+        } else {
+            debugLog('🔍 Preserving server-provided annotation data:', input.id);
+        }
+    });
+
+    // Reset image annotation managers if they exist
+    // BUT only if there's no server-provided annotation data to load
+    const imageContainers = document.querySelectorAll('.image-annotation-container');
+    imageContainers.forEach(container => {
+        if (container.annotationManager && typeof container.annotationManager.clearAnnotations === 'function') {
+            // Find the associated hidden input
+            const schemaName = container.getAttribute('data-schema');
+            const hiddenInput = schemaName ? document.getElementById('input-' + schemaName) : null;
+
+            // Only clear if there's no server-provided data
+            if (!hiddenInput || hiddenInput.getAttribute('data-server-set') !== 'true') {
+                container.annotationManager.clearAnnotations();
+                debugLog('🔍 Cleared image annotation manager for container (no server data)');
+            } else {
+                debugLog('🔍 Preserving image annotation manager (has server data)');
+            }
+        }
     });
 
     debugLog('✅ All form inputs cleared');

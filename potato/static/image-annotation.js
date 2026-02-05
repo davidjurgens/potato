@@ -997,9 +997,13 @@ class ImageAnnotationManager {
             try {
                 this._deserializeAnnotations(input.value);
                 this._saveState();
+                this._updateAnnotationData();  // Update count display after loading
             } catch (e) {
                 console.warn('Failed to load existing annotations:', e);
             }
+        } else {
+            // No existing annotations - still update count to show 0
+            this._updateAnnotationData();
         }
     }
 
@@ -1020,6 +1024,27 @@ class ImageAnnotationManager {
         return this.canvas.getObjects().filter(
             obj => obj !== this.image && obj.annotationData
         ).length;
+    }
+
+    /**
+     * Clear all annotations from the canvas.
+     * Used when switching to a new instance.
+     */
+    clearAnnotations() {
+        const objects = this.canvas.getObjects();
+        objects.forEach(obj => {
+            if (obj !== this.image && obj.annotationData) {
+                this.canvas.remove(obj);
+            }
+        });
+        this.canvas.renderAll();
+
+        // Reset history
+        this.history = [];
+        this.historyIndex = -1;
+
+        // Update the hidden input and count display
+        this._updateAnnotationData();
     }
 
     /**
