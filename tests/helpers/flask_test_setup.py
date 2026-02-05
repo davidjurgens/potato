@@ -88,6 +88,13 @@ def clear_all_global_state():
     except ImportError:
         pass
 
+    # MACE manager
+    try:
+        from potato.mace_manager import clear_mace_manager
+        clear_mace_manager()
+    except ImportError:
+        pass
+
 class FlaskTestServer:
     """A test server that can be started and stopped for integration tests."""
 
@@ -490,6 +497,15 @@ class FlaskTestServer:
                         print("[DEBUG] Adjudication manager initialized successfully")
                     except Exception as e:
                         print(f"[DEBUG] Error initializing adjudication manager: {e}")
+
+                # Initialize MACE manager if configured
+                if config.get('mace', {}).get('enabled', False):
+                    try:
+                        from potato.mace_manager import init_mace_manager
+                        init_mace_manager(config)
+                        print("[DEBUG] MACE manager initialized successfully")
+                    except Exception as e:
+                        print(f"[DEBUG] Error initializing MACE manager: {e}")
 
                 # Create a fresh Flask app instance with explicit static folder
                 static_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../potato/static'))

@@ -2307,6 +2307,12 @@ def run_server(args):
         init_adjudication_manager(config)
         logger.info("Adjudication manager initialized")
 
+    # Initialize MACE competence estimation if configured
+    if config.get('mace', {}).get('enabled', False):
+        from potato.mace_manager import init_mace_manager
+        init_mace_manager(config)
+        logger.info("MACE manager initialized")
+
     # Initialize ExpertiseManager for dynamic category assignment
     category_assignment = config.get('category_assignment', {})
     dynamic_config = category_assignment.get('dynamic', {})

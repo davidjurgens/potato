@@ -612,12 +612,26 @@ class AdminDashboard:
                             # Get label annotations for this user and item
                             label_annotations = user_state.get_label_annotations(item_id)
                             for label, value in label_annotations.items():
-                                if hasattr(label, 'schema_name') and label.schema_name == scheme_name:
-                                    all_annotations.append(value)
-                                    item_annotations[item_id].append(value)
-                                elif isinstance(label, str) and label == scheme_name:
-                                    all_annotations.append(value)
-                                    item_annotations[item_id].append(value)
+                                # Label object has .schema and .name attributes (or .get_schema()/.get_name() methods)
+                                label_schema = None
+                                label_name = None
+                                if hasattr(label, 'get_schema'):
+                                    label_schema = label.get_schema()
+                                    label_name = label.get_name()
+                                elif hasattr(label, 'schema'):
+                                    label_schema = label.schema
+                                    label_name = getattr(label, 'name', None)
+                                elif isinstance(label, str):
+                                    label_schema = label
+
+                                if label_schema == scheme_name:
+                                    # For radio/select, the actual selected label is the Label's name
+                                    if label_name:
+                                        all_annotations.append(label_name)
+                                        item_annotations[item_id].append(label_name)
+                                    else:
+                                        all_annotations.append(value)
+                                        item_annotations[item_id].append(value)
 
                 # Generate analysis based on annotation type
                 analysis = self._analyze_annotation_scheme(
@@ -880,13 +894,23 @@ class AdminDashboard:
             instance_times = []
 
             for instance_id, behavioral_data in user_state.instance_id_to_behavioral_data.items():
-                time_string = behavioral_data.get("time_string")
-                if time_string:
-                    parsed_time = user_state.parse_time_string(time_string)
-                    if parsed_time:
-                        instance_seconds = parsed_time["total_seconds"]
-                        total_seconds += instance_seconds
-                        instance_times.append(instance_seconds)
+                instance_seconds = None
+                # Handle both BehavioralData objects and plain dicts
+                if hasattr(behavioral_data, 'total_time_ms'):
+                    # BehavioralData object (loaded from JSON)
+                    if behavioral_data.total_time_ms:
+                        instance_seconds = behavioral_data.total_time_ms / 1000.0
+                elif isinstance(behavioral_data, dict):
+                    # Plain dict (runtime data)
+                    if behavioral_data.get("total_time_ms"):
+                        instance_seconds = behavioral_data["total_time_ms"] / 1000.0
+                    elif behavioral_data.get("time_string"):
+                        parsed_time = user_state.parse_time_string(behavioral_data["time_string"])
+                        if parsed_time:
+                            instance_seconds = parsed_time["total_seconds"]
+                if instance_seconds is not None:
+                    total_seconds += instance_seconds
+                    instance_times.append(instance_seconds)
 
             # Calculate averages
             average_seconds_per_annotation = total_seconds / total_annotations if total_annotations > 0 else 0
@@ -897,12 +921,18 @@ class AdminDashboard:
             current_instance = user_state.get_current_instance()
             if current_instance:
                 current_instance_id = current_instance.get_id()
-                current_behavioral = user_state.instance_id_to_behavioral_data.get(current_instance_id, {})
-                current_time_string = current_behavioral.get("time_string")
-                if current_time_string:
-                    parsed_current = user_state.parse_time_string(current_time_string)
-                    if parsed_current:
-                        current_instance_time = parsed_current["total_seconds"]
+                current_behavioral = user_state.instance_id_to_behavioral_data.get(current_instance_id)
+                if current_behavioral:
+                    if hasattr(current_behavioral, 'total_time_ms'):
+                        if current_behavioral.total_time_ms:
+                            current_instance_time = current_behavioral.total_time_ms / 1000.0
+                    elif isinstance(current_behavioral, dict):
+                        if current_behavioral.get("total_time_ms"):
+                            current_instance_time = current_behavioral["total_time_ms"] / 1000.0
+                        elif current_behavioral.get("time_string"):
+                            parsed_current = user_state.parse_time_string(current_behavioral["time_string"])
+                            if parsed_current:
+                                current_instance_time = parsed_current["total_seconds"]
 
             # Estimate last activity (for now, use current time - this could be enhanced)
             last_activity = datetime.datetime.now()
@@ -1817,6 +1847,44 @@ class AdminDashboard:
 
         patterns.sort(key=lambda x: x["avg_agreement"])
         return patterns
+
+    # ========================================================================
+    # MACE Competence Estimation
+    # ========================================================================
+
+    def get_mace_overview(self) -> Dict[str, Any]:
+        """Get MACE competence estimation overview for admin dashboard.
+
+        Returns:
+            Dict with competence scores, schema summaries, and config.
+        """
+        from potato.mace_manager import get_mace_manager
+
+        mace_mgr = get_mace_manager()
+        if not mace_mgr or not mace_mgr.mace_config.enabled:
+            return {"enabled": False, "message": "MACE not configured"}
+
+        return mace_mgr.get_results_summary()
+
+    def get_mace_predictions(
+        self, schema: str, instance_id: str = None
+    ) -> Dict[str, Any]:
+        """Get MACE predicted labels for a schema, optionally filtered by instance.
+
+        Args:
+            schema: Schema name to get predictions for.
+            instance_id: Optional specific instance to filter.
+
+        Returns:
+            Dict with predictions and entropy data.
+        """
+        from potato.mace_manager import get_mace_manager
+
+        mace_mgr = get_mace_manager()
+        if not mace_mgr or not mace_mgr.mace_config.enabled:
+            return {"error": "MACE not configured"}
+
+        return mace_mgr.get_predictions_for_schema(schema, instance_id)
 
 
 # Global instance

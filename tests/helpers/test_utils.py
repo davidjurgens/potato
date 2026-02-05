@@ -118,7 +118,7 @@ def create_test_config(
     optional_fields = [
         "max_annotations_per_user", "assignment_strategy", "output_annotation_format",
         "random_seed", "admin_api_key", "max_annotations_per_item",
-        "icl_labeling", "adjudication"
+        "icl_labeling", "adjudication", "mace"
     ]
     for field in optional_fields:
         if field in kwargs:

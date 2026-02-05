@@ -182,6 +182,10 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Validate instance display configuration if present
     validate_instance_display_config(config_data)
 
+    # Validate MACE configuration if present
+    if 'mace' in config_data:
+        _validate_mace_config(config_data)
+
 
 def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
     """
@@ -322,6 +326,57 @@ def _validate_keyword_highlight_for_images(config_data: Dict[str, Any]) -> None:
                 f"Keyword highlighting only works with text content, not images. "
                 f"Set keyword_highlight: false or remove it from the ai_support features."
             )
+
+
+def _validate_mace_config(config_data: Dict[str, Any]) -> None:
+    """
+    Validate MACE competence estimation configuration.
+
+    Args:
+        config_data: The configuration data
+
+    Raises:
+        ConfigValidationError: If the MACE config is invalid
+    """
+    mace = config_data.get('mace', {})
+    if not isinstance(mace, dict):
+        raise ConfigValidationError("mace must be a dictionary")
+
+    if not mace.get('enabled', False):
+        return  # Not enabled, skip validation
+
+    # Validate numeric parameters
+    min_annots = mace.get('min_annotations_per_item', 3)
+    if not isinstance(min_annots, int) or min_annots < 2:
+        raise ConfigValidationError(
+            "mace.min_annotations_per_item must be an integer >= 2"
+        )
+
+    trigger_n = mace.get('trigger_every_n', 10)
+    if not isinstance(trigger_n, int) or trigger_n < 1:
+        raise ConfigValidationError(
+            "mace.trigger_every_n must be an integer >= 1"
+        )
+
+    num_restarts = mace.get('num_restarts', 10)
+    if not isinstance(num_restarts, int) or num_restarts < 1:
+        raise ConfigValidationError(
+            "mace.num_restarts must be an integer >= 1"
+        )
+
+    # Warn if no categorical schemas are defined
+    categorical_types = {'radio', 'likert', 'select', 'multiselect'}
+    schemes = config_data.get('annotation_schemes', [])
+    has_categorical = any(
+        s.get('annotation_type', '') in categorical_types
+        for s in schemes if isinstance(s, dict)
+    )
+    if not has_categorical:
+        logger.warning(
+            "MACE is enabled but no categorical annotation schemes "
+            "(radio, likert, select, multiselect) are defined. "
+            "MACE will have no data to process."
+        )
 
 
 def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None:

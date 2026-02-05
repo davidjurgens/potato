@@ -1,0 +1,42 @@
+[
+  {
+    "id": "review_01",
+    "text": "This product is absolutely fantastic! Best purchase I've made all year. The quality is superb and it arrived ahead of schedule."
+  },
+  {
+    "id": "review_02",
+    "text": "Terrible experience. The item arrived broken and customer service was unhelpful. Total waste of money."
+  },
+  {
+    "id": "review_03",
+    "text": "I love everything about this! The design is beautiful, it works perfectly, and the price was very reasonable."
+  },
+  {
+    "id": "review_04",
+    "text": "It's fine. Does what it says on the box. Nothing remarkable but nothing wrong with it either."
+  },
+  {
+    "id": "review_05",
+    "text": "Do not buy this product. It stopped working after two days and the company refused to issue a refund."
+  },
+  {
+    "id": "review_06",
+    "text": "Really happy with my purchase. The build quality is excellent and it exceeded my expectations."
+  },
+  {
+    "id": "review_07",
+    "text": "Complete disappointment. The product looks nothing like the pictures and feels cheap."
+  },
+  {
+    "id": "review_08",
+    "text": "Average product. It works as intended but the instructions were confusing and setup took a while."
+  },
+  {
+    "id": "review_09",
+    "text": "Five stars! This is exactly what I was looking for. Fast shipping and great packaging too."
+  },
+  {
+    "id": "review_10",
+    "text": "Avoid at all costs. The worst product I have ever bought. Returning immediately."
+  }
+]

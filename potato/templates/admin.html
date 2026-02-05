@@ -578,6 +578,9 @@
           <div class="admin-tab" data-tab="questions">Questions</div>
           <div class="admin-tab" data-tab="behavioral">Behavioral</div>
           <div class="admin-tab" data-tab="crowdsourcing">Crowdsourcing</div>
+          {% if mace_enabled %}
+          <div class="admin-tab" data-tab="mace">MACE</div>
+          {% endif %}
           <div class="admin-tab" data-tab="config">Configuration</div>
         </div>
 
@@ -790,6 +793,50 @@
         </div>
 
         <!-- Configuration Tab -->
+        {% if mace_enabled %}
+        <div class="admin-tab-content" id="mace">
+          <div class="dashboard-grid" id="maceGrid">
+            <p style="color: var(--muted-foreground);">Loading MACE data...</p>
+          </div>
+
+          <div class="dashboard-card" style="margin-bottom: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <h3 style="margin: 0;">Annotator Competence</h3>
+              <button class="shadcn-button shadcn-button-primary" onclick="triggerMace()">
+                Run MACE
+              </button>
+            </div>
+            <p style="color: var(--muted-foreground); margin-bottom: 1rem;">
+              MACE estimates each annotator's reliability (0 = random guessing, 1 = always correct).
+            </p>
+            <div class="admin-table-container">
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>Annotator</th>
+                    <th>Competence</th>
+                    <th>Reliability</th>
+                  </tr>
+                </thead>
+                <tbody id="maceCompetenceBody">
+                  <tr><td colspan="3" style="color: var(--muted-foreground);">Click "Run MACE" to compute scores</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="dashboard-card" style="margin-bottom: 1.5rem;">
+            <h3>Predicted Labels</h3>
+            <p style="color: var(--muted-foreground); margin-bottom: 1rem;">
+              MACE's best estimate of the true label for each item, weighted by annotator competence.
+            </p>
+            <div id="macePredictionsContainer">
+              <p style="color: var(--muted-foreground);">Run MACE to see predictions.</p>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
         <div class="admin-tab-content" id="config">
           <div class="config-form">
             <h3>System Configuration</h3>
@@ -919,6 +966,9 @@
           case "crowdsourcing":
             loadCrowdsourcing();
             break;
+          case "mace":
+            loadMace();
+            break;
           case "config":
             loadConfig();
             break;
@@ -930,7 +980,7 @@
         const defaultOptions = {
           headers: {
             "Content-Type": "application/json",
-            "X-API-Key": "admin_api_key",
+            "X-API-Key": "{{ admin_api_key }}",
           },
         };
 
@@ -1835,6 +1885,175 @@
             showError("Failed to update configuration");
           }
         });
+
+      // MACE functions
+      async function loadMace() {
+        try {
+          const data = await makeApiRequest("/admin/api/mace/overview");
+          displayMace(data);
+        } catch (error) {
+          console.error("Error loading MACE data:", error);
+          showError("Failed to load MACE data");
+        }
+      }
+
+      async function triggerMace() {
+        try {
+          const btn = document.querySelector('#mace .shadcn-button-primary');
+          if (btn) { btn.textContent = 'Running...'; btn.disabled = true; }
+          const result = await makeApiRequest("/admin/api/mace/trigger", { method: "POST" });
+          if (result.status === "success") {
+            loadMace();
+          } else {
+            showError(result.error || "MACE trigger failed");
+          }
+          if (btn) { btn.textContent = 'Run MACE'; btn.disabled = false; }
+        } catch (error) {
+          console.error("Error triggering MACE:", error);
+          showError("Failed to trigger MACE");
+          const btn = document.querySelector('#mace .shadcn-button-primary');
+          if (btn) { btn.textContent = 'Run MACE'; btn.disabled = false; }
+        }
+      }
+
+      function displayMace(data) {
+        const grid = document.getElementById("maceGrid");
+        const tbody = document.getElementById("maceCompetenceBody");
+        const predsContainer = document.getElementById("macePredictionsContainer");
+
+        if (!data.enabled) {
+          grid.innerHTML = '<p style="color: var(--muted-foreground);">MACE is not enabled in the configuration.</p>';
+          return;
+        }
+
+        // Summary cards
+        const hasResults = data.has_results;
+        const numSchemas = data.schemas ? data.schemas.length : 0;
+        const numAnnotators = Object.keys(data.annotator_competence || {}).length;
+
+        grid.innerHTML = `
+          <div class="dashboard-card">
+            <h3>Status</h3>
+            <div class="value" style="color: ${hasResults ? 'var(--success-color)' : 'var(--muted-foreground)'}">
+              ${hasResults ? 'Results Available' : 'Not Run Yet'}
+            </div>
+            <div class="description">MACE estimation status</div>
+          </div>
+          <div class="dashboard-card">
+            <h3>Schemas</h3>
+            <div class="value">${numSchemas}</div>
+            <div class="description">Schemas processed</div>
+          </div>
+          <div class="dashboard-card">
+            <h3>Annotators</h3>
+            <div class="value">${numAnnotators}</div>
+            <div class="description">With competence scores</div>
+          </div>
+          <div class="dashboard-card">
+            <h3>Configuration</h3>
+            <div class="value">${data.config ? data.config.trigger_every_n : '?'}</div>
+            <div class="description">Trigger every N annotations</div>
+          </div>
+        `;
+
+        // Competence table
+        if (hasResults && data.annotator_competence) {
+          const sorted = Object.entries(data.annotator_competence)
+            .sort((a, b) => b[1].average - a[1].average);
+
+          tbody.innerHTML = sorted.map(([uid, info]) => {
+            const score = info.average;
+            const pct = (score * 100).toFixed(1);
+            let color = 'var(--success-color)';
+            let label = 'High';
+            if (score < 0.5) { color = 'var(--error-color)'; label = 'Low'; }
+            else if (score < 0.7) { color = 'orange'; label = 'Moderate'; }
+
+            return `
+              <tr>
+                <td>${uid}</td>
+                <td>
+                  <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <div style="flex: 1; background: var(--muted); border-radius: 4px; height: 8px; overflow: hidden;">
+                      <div style="width: ${pct}%; background: ${color}; height: 100%; border-radius: 4px;"></div>
+                    </div>
+                    <span style="font-weight: 600; min-width: 50px;">${pct}%</span>
+                  </div>
+                </td>
+                <td><span style="color: ${color}; font-weight: 500;">${label}</span></td>
+              </tr>
+            `;
+          }).join('');
+        } else {
+          tbody.innerHTML = '<tr><td colspan="3" style="color: var(--muted-foreground);">Click "Run MACE" to compute scores</td></tr>';
+        }
+
+        // Predictions - load for each schema
+        if (hasResults && data.schemas && data.schemas.length > 0) {
+          loadMacePredictions(data.schemas);
+        } else {
+          predsContainer.innerHTML = '<p style="color: var(--muted-foreground);">Run MACE to see predictions.</p>';
+        }
+      }
+
+      async function loadMacePredictions(schemas) {
+        const container = document.getElementById("macePredictionsContainer");
+        let html = '';
+
+        for (const schema of schemas) {
+          try {
+            const data = await makeApiRequest(`/admin/api/mace/predictions?schema=${encodeURIComponent(schema.schema_name)}`);
+            if (data.error) continue;
+
+            const preds = data.predicted_labels || {};
+            const entropy = data.label_entropy || {};
+            const items = Object.keys(preds).sort();
+
+            html += `
+              <h4 style="margin-top: 1rem;">${schema.schema_name}${schema.option_name ? ' :: ' + schema.option_name : ''}</h4>
+              <div class="admin-table-container">
+                <table class="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Instance</th>
+                      <th>Predicted Label</th>
+                      <th>Uncertainty</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${items.map(id => {
+                      const ent = entropy[id] || 0;
+                      const entPct = (ent * 100).toFixed(1);
+                      let entColor = 'var(--success-color)';
+                      if (ent > 0.5) entColor = 'var(--error-color)';
+                      else if (ent > 0.1) entColor = 'orange';
+
+                      return `
+                        <tr>
+                          <td>${id}</td>
+                          <td><strong>${preds[id]}</strong></td>
+                          <td>
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                              <div style="flex: 1; max-width: 100px; background: var(--muted); border-radius: 4px; height: 6px; overflow: hidden;">
+                                <div style="width: ${Math.min(entPct, 100)}%; background: ${entColor}; height: 100%; border-radius: 4px;"></div>
+                              </div>
+                              <span style="color: ${entColor}; font-size: 0.85em;">${entPct}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                </table>
+              </div>
+            `;
+          } catch (e) {
+            console.error(`Error loading predictions for ${schema.schema_name}:`, e);
+          }
+        }
+
+        container.innerHTML = html || '<p style="color: var(--muted-foreground);">No predictions available.</p>';
+      }
 
       // Utility functions
       function showError(message) {

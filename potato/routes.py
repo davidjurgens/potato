@@ -3233,6 +3233,13 @@ def update_instance():
         get_user_state_manager().save_user_state(user_state)
         logger.debug(f"User state saved for {username}")
 
+        # Trigger MACE competence estimation check
+        from potato.mace_manager import get_mace_manager
+        mace_mgr = get_mace_manager()
+        if mace_mgr and mace_mgr.mace_config.enabled:
+            total = mace_mgr.count_total_annotations()
+            mace_mgr.check_and_run(total)
+
         # Get performance metrics for response
         performance_metrics = user_state.get_performance_metrics()
 
@@ -3379,7 +3386,9 @@ def admin():
     # Get basic context for the dashboard
     context = {
         "annotation_task_name": config.get("annotation_task_name", "Annotation Platform"),
-        "debug_mode": config.get("debug", False)
+        "debug_mode": config.get("debug", False),
+        "admin_api_key": get_admin_api_key() or "",
+        "mace_enabled": config.get("mace", {}).get("enabled", False),
     }
 
     return render_template("admin.html", **context)
@@ -4859,6 +4868,11 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/adjudicate/api/similar/<instance_id>", "adjudicate_api_similar", adjudicate_api_similar, methods=["GET"])
     app.add_url_rule("/admin/api/adjudication", "admin_api_adjudication", admin_api_adjudication, methods=["GET"])
 
+    # MACE admin API routes
+    app.add_url_rule("/admin/api/mace/overview", "admin_api_mace_overview", admin_api_mace_overview, methods=["GET"])
+    app.add_url_rule("/admin/api/mace/predictions", "admin_api_mace_predictions", admin_api_mace_predictions, methods=["GET"])
+    app.add_url_rule("/admin/api/mace/trigger", "admin_api_mace_trigger", admin_api_mace_trigger, methods=["POST"])
+
     app.add_url_rule("/shutdown", "shutdown", shutdown, methods=["POST"])
 
 # ============================================================================
@@ -5014,6 +5028,56 @@ def admin_api_adjudication():
 
     overview = admin_dashboard.get_adjudication_overview()
     return jsonify(overview)
+
+
+# ============================================================================
+# MACE Admin API Routes
+# ============================================================================
+
+@app.route('/admin/api/mace/overview', methods=['GET'])
+def admin_api_mace_overview():
+    """Admin dashboard overview of MACE competence estimation results."""
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    return jsonify(admin_dashboard.get_mace_overview())
+
+
+@app.route('/admin/api/mace/predictions', methods=['GET'])
+def admin_api_mace_predictions():
+    """Get MACE predicted labels, optionally filtered by schema and instance."""
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    schema = request.args.get('schema')
+    instance_id = request.args.get('instance_id')
+
+    if not schema:
+        return jsonify({"error": "schema parameter required"}), 400
+
+    return jsonify(admin_dashboard.get_mace_predictions(schema, instance_id))
+
+
+@app.route('/admin/api/mace/trigger', methods=['POST'])
+def admin_api_mace_trigger():
+    """Manually trigger a MACE recomputation."""
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.mace_manager import get_mace_manager
+    mace_mgr = get_mace_manager()
+    if not mace_mgr or not mace_mgr.mace_config.enabled:
+        return jsonify({"error": "MACE not enabled"}), 400
+
+    results = mace_mgr.run_all_schemas()
+    return jsonify({
+        "status": "success",
+        "schemas_processed": len(results),
+        "schemas": list(results.keys()),
+    })
 
 
 @app.route('/adjudicate/api/submit', methods=['POST'])
