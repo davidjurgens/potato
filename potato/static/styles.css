@@ -2190,6 +2190,12 @@ fieldset[schema] {
   position: relative;
 }
 
+.span-target-field .text-display-content.span-target-text {
+  /* Padding-top provides room for span labels that appear above highlighted text */
+  padding-top: 24px;
+  position: relative;
+}
+
 .span-target-field .text-content {
   position: relative;
   z-index: 1;

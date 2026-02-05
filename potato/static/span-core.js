@@ -149,17 +149,22 @@ class UnifiedPositioningStrategy {
 
         let canonicalText = this.getCanonicalText();
 
-        const textElement = document.getElementById('text-content');
-        if (textElement) {
-            const storedText = textElement.getAttribute('data-original-text');
-            if (storedText) {
-                canonicalText = storedText;
+        // Only fall back to #text-content if our own container lacks data-original-text
+        if (!this.container.hasAttribute('data-original-text')) {
+            const textElement = document.getElementById('text-content');
+            if (textElement) {
+                const storedText = textElement.getAttribute('data-original-text');
+                if (storedText) {
+                    canonicalText = storedText;
+                }
             }
         }
 
+        console.log('[SpanCore] createSpanFromSelection: container=' + (this.container ? this.container.id : 'NULL') + ' canonical="' + String(canonicalText).substring(0, 60) + '" selected="' + selectedText + '"');
+
         const start = canonicalText.indexOf(selectedText);
         if (start === -1) {
-            console.warn('[SpanCore] Selected text not found in canonical text');
+            console.warn('[SpanCore] Selected text not found in canonical text. canonical=' + String(canonicalText).substring(0, 80));
             return null;
         }
 
@@ -211,7 +216,9 @@ class UnifiedPositioningStrategy {
     }
 
     getTextPositions(start, end, text) {
-        const textElement = document.getElementById('text-content');
+        // Use this.container (the element passed to the strategy constructor)
+        // instead of hardcoded #text-content, so multi-field mode works
+        const textElement = this.container || document.getElementById('text-content');
         if (!textElement) {
             return null;
         }
@@ -285,10 +292,12 @@ class UnifiedPositioningStrategy {
             return null;
         }
 
-        // Use #instance-text rect for correct positioning
-        // Overlays are positioned relative to #instance-text, not #text-content
-        const instanceText = document.getElementById('instance-text');
-        const containerRect = instanceText ? instanceText.getBoundingClientRect() : textElement.getBoundingClientRect();
+        // Use the parent element for positioning reference
+        // In legacy mode: text-content's parent is #instance-text
+        // In multi-field mode: text-content-{field}'s parent is .text-display-content
+        // Both are the container that holds overlay elements with position: relative
+        const positioningParent = textElement.parentElement || document.getElementById('instance-text');
+        const containerRect = positioningParent ? positioningParent.getBoundingClientRect() : textElement.getBoundingClientRect();
 
         const positions = Array.from(rects).map((rect) => ({
             x: rect.left - containerRect.left,
@@ -310,7 +319,8 @@ class UnifiedPositioningStrategy {
      * @returns {Array<{x, y, width, height}>|null} Screen positions relative to container, or null on error
      */
     getPositionsFromOffsets(start, end) {
-        const textElement = document.getElementById('text-content');
+        // Use this.container instead of hardcoded #text-content
+        const textElement = this.container || document.getElementById('text-content');
         if (!textElement) {
             console.warn('[SpanCore] getPositionsFromOffsets: text-content element not found');
             return null;
@@ -379,9 +389,9 @@ class UnifiedPositioningStrategy {
             return null;
         }
 
-        // Convert to positions relative to #instance-text container
-        const instanceText = document.getElementById('instance-text');
-        const containerRect = instanceText ? instanceText.getBoundingClientRect() : textElement.getBoundingClientRect();
+        // Convert to positions relative to the positioning parent container
+        const positioningParent = textElement.parentElement || document.getElementById('instance-text');
+        const containerRect = positioningParent ? positioningParent.getBoundingClientRect() : textElement.getBoundingClientRect();
 
         return Array.from(rects).map(rect => ({
             x: rect.left - containerRect.left,
@@ -406,6 +416,12 @@ class UnifiedPositioningStrategy {
         overlay.dataset.start = span.start;
         overlay.dataset.end = span.end;
         overlay.dataset.label = span.label;
+        if (span.schema) {
+            overlay.dataset.schema = span.schema;
+        }
+        if (span.target_field) {
+            overlay.dataset.targetField = span.target_field;
+        }
         if (isAiSpan) {
             overlay.dataset.isAiSpan = 'true';
         }
@@ -539,12 +555,16 @@ class SpanManager {
         this.annotations = { spans: [] };
         this.colors = {};
         this.selectedLabel = null;
+        this.selectedTargetField = '';
         this.currentSchema = null;
         this.isInitialized = false;
         this.currentInstanceId = null;
         this.lastKnownInstanceId = null;
         this.positioningStrategy = null;
         this.schemas = {};
+
+        // Multi-span support: per-field positioning strategies
+        this.fieldStrategies = {}; // { fieldKey: UnifiedPositioningStrategy }
 
         // AI span state tracking
         this.aiSpans = new Map(); // Map<annotationId, Array<overlayElement>>
@@ -860,15 +880,57 @@ class SpanManager {
                 return false;
             }
 
-            const textContent = document.getElementById('text-content');
-            if (textContent) {
-                this.positioningStrategy = new UnifiedPositioningStrategy(textContent);
-                await this.positioningStrategy.initialize();
+            // Set up event listeners early (before async strategy init that might block)
+            this.setupEventListeners();
+
+            // Check for instance_display span target fields first
+            const spanTargetFields = document.querySelectorAll('.display-field[data-span-target="true"]');
+            console.log('[SpanManager] init: found', spanTargetFields.length, 'span target fields');
+            if (spanTargetFields.length > 0) {
+                // Multi-span / instance_display mode
+                for (const field of spanTargetFields) {
+                    const fieldKey = field.dataset.fieldKey;
+                    const textContent = field.querySelector('.text-content');
+                    console.log('[SpanManager] init: field', fieldKey, 'textContent=', textContent?.id);
+                    if (textContent && fieldKey) {
+                        // Wrap text content in a relative container for overlay positioning
+                        const contentWrapper = textContent.closest('.text-display-content') || textContent.parentElement;
+                        if (contentWrapper && !contentWrapper.style.position) {
+                            contentWrapper.style.position = 'relative';
+                        }
+
+                        // Create span-overlays container for this field if not present
+                        let overlaysEl = field.querySelector('.span-overlays-field');
+                        if (!overlaysEl) {
+                            overlaysEl = document.createElement('div');
+                            overlaysEl.className = 'span-overlays-field';
+                            overlaysEl.id = `span-overlays-${fieldKey}`;
+                            overlaysEl.style.cssText = 'position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;';
+                            contentWrapper.appendChild(overlaysEl);
+                        }
+
+                        const strategy = new UnifiedPositioningStrategy(textContent);
+                        await strategy.initialize();
+                        this.fieldStrategies[fieldKey] = strategy;
+                        console.log('[SpanManager] init: strategy ready for', fieldKey);
+                    }
+                }
+                // Use the first field as the default positioning strategy
+                const firstKey = Object.keys(this.fieldStrategies)[0];
+                if (firstKey) {
+                    this.positioningStrategy = this.fieldStrategies[firstKey];
+                }
+            } else {
+                // Legacy single-field mode
+                const textContent = document.getElementById('text-content');
+                if (textContent) {
+                    this.positioningStrategy = new UnifiedPositioningStrategy(textContent);
+                    await this.positioningStrategy.initialize();
+                }
             }
 
             await this.loadSchemas();
             await this.loadColors();
-            this.setupEventListeners();
             this.setupResizeHandler();
             this.setupOverlayInteractions();
             await this.loadAnnotations(serverInstanceId);
@@ -953,6 +1015,13 @@ class SpanManager {
             textContent.addEventListener('keyup', () => this.handleTextSelection());
         }
 
+        // Also listen on instance_display span target fields
+        const spanTargetFields = document.querySelectorAll('.display-field[data-span-target="true"]');
+        for (const field of spanTargetFields) {
+            field.addEventListener('mouseup', () => this.handleTextSelection());
+            field.addEventListener('keyup', () => this.handleTextSelection());
+        }
+
         document.addEventListener('click', (e) => {
             if (e.target.classList.contains('span-delete')) {
                 e.stopPropagation();
@@ -962,8 +1031,9 @@ class SpanManager {
         });
     }
 
-    selectLabel(label, schema = null) {
+    selectLabel(label, schema = null, targetField = null) {
         this.selectedLabel = label;
+        this.selectedTargetField = targetField || '';
         if (schema) {
             this.setCurrentSchema(schema, 'selectLabel');
         }
@@ -1010,7 +1080,15 @@ class SpanManager {
                 instanceId = serverInstanceId;
             }
 
-            const textContent = document.getElementById('text-content');
+            // Find the text content element - may be legacy #text-content or instance_display fields
+            let textContent = document.getElementById('text-content');
+            if (!textContent || textContent.closest('[style*="display: none"]')) {
+                // Try instance_display span target fields
+                const firstField = Object.keys(this.fieldStrategies)[0];
+                if (firstField) {
+                    textContent = document.getElementById(`text-content-${firstField}`);
+                }
+            }
             const existingSpans = textContent ? textContent.querySelectorAll('.span-highlight') : [];
             const hasServerRenderedSpans = existingSpans.length > 0;
 
@@ -1040,9 +1118,14 @@ class SpanManager {
             }
             this.annotations = responseData;
 
+            // Only update data-original-text on legacy #text-content, not on per-field elements
+            // Per-field elements already have correct data-original-text from server rendering
             if (this.annotations && this.annotations.text && textContent) {
-                const plainText = this.annotations.text.replace(/<[^>]*>/g, '').trim();
-                textContent.setAttribute('data-original-text', plainText);
+                const hasFieldStrategies = Object.keys(this.fieldStrategies).length > 0;
+                if (!hasFieldStrategies) {
+                    const plainText = this.annotations.text.replace(/<[^>]*>/g, '').trim();
+                    textContent.setAttribute('data-original-text', plainText);
+                }
             }
 
             if (this.annotations.spans && this.annotations.spans.length > 0) {
@@ -1098,11 +1181,20 @@ class SpanManager {
     }
 
     clearAllStateAndOverlays() {
+        // Clear legacy overlay container
         const spanOverlays = document.getElementById('span-overlays');
         if (spanOverlays) {
-            // Clear regular overlays but preserve AI spans
             const regularOverlays = spanOverlays.querySelectorAll('.span-overlay-pure:not(.span-overlay-ai)');
             regularOverlays.forEach(overlay => overlay.remove());
+        }
+
+        // Clear per-field overlay containers (multi-span mode)
+        for (const fieldKey of Object.keys(this.fieldStrategies)) {
+            const fieldOverlays = document.getElementById(`span-overlays-${fieldKey}`);
+            if (fieldOverlays) {
+                const regularOverlays = fieldOverlays.querySelectorAll('.span-overlay-pure:not(.span-overlay-ai)');
+                regularOverlays.forEach(overlay => overlay.remove());
+            }
         }
 
         this.annotations = { spans: [] };
@@ -1110,40 +1202,70 @@ class SpanManager {
     }
 
     renderSpans() {
-        const textContent = document.getElementById('text-content');
-        const spanOverlays = document.getElementById('span-overlays');
+        const hasFieldStrategies = Object.keys(this.fieldStrategies).length > 0;
 
-        if (!textContent || !spanOverlays) {
-            return;
+        if (hasFieldStrategies) {
+            // Multi-field mode: clear and render per-field
+            for (const fieldKey of Object.keys(this.fieldStrategies)) {
+                const overlaysEl = document.getElementById(`span-overlays-${fieldKey}`);
+                if (overlaysEl) {
+                    const regularOverlays = overlaysEl.querySelectorAll('.span-overlay-pure:not(.span-overlay-ai)');
+                    regularOverlays.forEach(overlay => overlay.remove());
+                }
+            }
+
+            const spans = this.getSpans();
+            if (!spans || spans.length === 0) return;
+
+            const sortedSpans = [...spans].sort((a, b) => a.start - b.start);
+            sortedSpans.forEach((span, index) => {
+                const fieldKey = span.target_field || '';
+                const strategy = this.fieldStrategies[fieldKey] || this.positioningStrategy;
+                const overlaysEl = document.getElementById(`span-overlays-${fieldKey}`) || document.getElementById('span-overlays');
+                if (strategy && overlaysEl) {
+                    this.renderSpanOverlay(span, index, null, overlaysEl, strategy);
+                }
+            });
+        } else {
+            // Legacy single-field mode
+            const textContent = document.getElementById('text-content');
+            const spanOverlays = document.getElementById('span-overlays');
+
+            if (!textContent || !spanOverlays) {
+                return;
+            }
+
+            // Clear existing regular overlays (preserve AI spans)
+            const regularOverlays = spanOverlays.querySelectorAll('.span-overlay-pure:not(.span-overlay-ai)');
+            regularOverlays.forEach(overlay => overlay.remove());
+
+            const spans = this.getSpans();
+            if (!spans || spans.length === 0) {
+                return;
+            }
+
+            const sortedSpans = [...spans].sort((a, b) => a.start - b.start);
+            sortedSpans.forEach((span, index) => {
+                this.renderSpanOverlay(span, index, textContent, spanOverlays);
+            });
         }
-
-        // Clear existing regular overlays (preserve AI spans)
-        const regularOverlays = spanOverlays.querySelectorAll('.span-overlay-pure:not(.span-overlay-ai)');
-        regularOverlays.forEach(overlay => overlay.remove());
-
-        const spans = this.getSpans();
-        if (!spans || spans.length === 0) {
-            return;
-        }
-
-        const sortedSpans = [...spans].sort((a, b) => a.start - b.start);
-        sortedSpans.forEach((span, index) => {
-            this.renderSpanOverlay(span, index, textContent, spanOverlays);
-        });
     }
 
-    renderSpanOverlay(span, layerIndex, textContent, spanOverlays) {
-        if (!this.positioningStrategy || !this.positioningStrategy.isInitialized) {
+    renderSpanOverlay(span, layerIndex, textContent, spanOverlays, strategy = null) {
+        const activeStrategy = strategy || this.positioningStrategy;
+        if (!activeStrategy || !activeStrategy.isInitialized) {
             return;
         }
 
-        const positions = this.positioningStrategy.getTextPositions(span.start, span.end, span.text);
+        // Use getPositionsFromOffsets (offset-based) instead of getTextPositions (text-search-based)
+        // This is critical for multi-field mode where the API might return text from the wrong field
+        const positions = activeStrategy.getPositionsFromOffsets(span.start, span.end);
         if (!positions || positions.length === 0) {
             return;
         }
 
         const color = this.getSpanColor(span.label);
-        const overlay = this.positioningStrategy.createOverlay(span, positions, {
+        const overlay = activeStrategy.createOverlay(span, positions, {
             isAiSpan: false,
             color: color
         });
@@ -1156,33 +1278,64 @@ class SpanManager {
     handleTextSelection() {
         const selection = window.getSelection();
 
+        console.warn('[SpanManager] handleTextSelection ENTRY: rangeCount=' + selection.rangeCount + ' isCollapsed=' + selection.isCollapsed + ' selectedLabel=' + this.selectedLabel + ' currentSchema=' + this.currentSchema);
+
         if (!selection.rangeCount || selection.isCollapsed) {
             return;
         }
 
         const selectedLabel = this.getSelectedLabel();
         if (!selectedLabel) {
+            console.warn('[SpanManager] handleTextSelection: no selectedLabel, returning');
             return;
         }
 
-        if (!this.positioningStrategy || !this.positioningStrategy.isInitialized) {
+        // Detect which field the selection is in and pick the right positioning strategy
+        let targetField = this.selectedTargetField || '';
+        let strategy = this.positioningStrategy;
+        let overlaysContainer = document.getElementById('span-overlays');
+
+        const hasFieldStrategies = Object.keys(this.fieldStrategies).length > 0;
+        console.warn('[SpanManager] handleTextSelection: fieldStrategies=', Object.keys(this.fieldStrategies), 'selectedLabel=', selectedLabel);
+
+        if (selection.rangeCount > 0) {
+            const startNode = selection.getRangeAt(0).startContainer;
+            const el = startNode.nodeType === Node.TEXT_NODE ? startNode.parentElement : startNode;
+            const textContentEl = el ? el.closest('[id^="text-content-"]') : null;
+            console.warn('[SpanManager] handleTextSelection: textContentEl=', textContentEl?.id, 'el=', el?.id || el?.className);
+            if (textContentEl) {
+                const fieldKey = textContentEl.id.replace('text-content-', '');
+                if (fieldKey && this.fieldStrategies[fieldKey]) {
+                    targetField = fieldKey;
+                    strategy = this.fieldStrategies[fieldKey];
+                    overlaysContainer = document.getElementById(`span-overlays-${fieldKey}`);
+                }
+            }
+        }
+
+        if (!strategy || !strategy.isInitialized) {
+            console.warn('[SpanManager] handleTextSelection: strategy not ready, targetField=' + targetField);
             return;
         }
+
+        console.warn('[SpanManager] handleTextSelection: using strategy for field=' + targetField + ' container=' + (strategy.container ? strategy.container.id : 'NULL') + ' overlays=' + (overlaysContainer ? overlaysContainer.id : 'NULL'));
 
         // Get color BEFORE creating the overlay so it's created with the correct color
         const color = this.getSpanColor(selectedLabel);
 
         // Pass color to createSpanFromSelection so overlay is created with correct color
-        const result = this.positioningStrategy.createSpanFromSelection(selection, {
+        const result = strategy.createSpanFromSelection(selection, {
             color: color
         });
         if (!result) {
+            console.warn('[SpanManager] handleTextSelection: createSpanFromSelection returned null for field=' + targetField);
             return;
         }
 
         const { span, overlay } = result;
         span.label = selectedLabel;
         span.schema = this.currentSchema;
+        span.target_field = targetField;
 
         if (overlay) {
             // Update the label text to match the selected label
@@ -1191,10 +1344,12 @@ class SpanManager {
                 label.textContent = selectedLabel;
             }
 
-            // Append the overlay to the DOM so it's visible immediately
-            const spanOverlays = document.getElementById('span-overlays');
-            if (spanOverlays) {
-                spanOverlays.appendChild(overlay);
+            // Append the overlay to the correct container
+            if (overlaysContainer) {
+                overlaysContainer.appendChild(overlay);
+                console.warn('[SpanManager] handleTextSelection: overlay appended to ' + overlaysContainer.id + ' for field=' + targetField);
+            } else {
+                console.warn('[SpanManager] handleTextSelection: no overlaysContainer for field=' + targetField);
             }
         }
 
@@ -1218,7 +1373,8 @@ class SpanManager {
                     start: span.start,
                     end: span.end,
                     title: span.label,
-                    value: 1
+                    value: 1,
+                    target_field: span.target_field || ''
                 }],
                 instance_id: this.currentInstanceId
             };

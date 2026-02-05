@@ -1,0 +1,54 @@
+# Simple Multi-Span Example
+# Demonstrates span annotation across multiple text fields.
+# Each field tracks spans independently using target_field.
+
+port: 9001
+server_name: potato annotator
+annotation_task_name: Multi-Span Annotation Example
+task_dir: .
+output_annotation_dir: annotation_output/simple-multi-span/
+output_annotation_format: json
+annotation_codebook_url: ''
+
+data_files:
+  - data/multi-span-example.json
+
+item_properties:
+  id_key: id
+  text_key: premise
+
+user_config:
+  allow_all_users: true
+  users: []
+
+alert_time_each_instance: 10000000
+
+# Instance display with two text fields, both span-annotatable
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+  fields:
+    - key: premise
+      type: text
+      label: "Premise"
+      span_target: true
+    - key: hypothesis
+      type: text
+      label: "Hypothesis"
+      span_target: true
+
+annotation_schemes:
+  - annotation_type: span
+    name: alignment
+    description: "Highlight aligned phrases between premise and hypothesis"
+    labels:
+      - name: "MATCH"
+        tooltip: "Phrases that convey the same meaning"
+      - name: "MISMATCH"
+        tooltip: "Phrases where the meaning differs"
+      - name: "NEW_INFO"
+        tooltip: "Information present in one field but not the other"
+    sequential_key_binding: true
+
+site_dir: default

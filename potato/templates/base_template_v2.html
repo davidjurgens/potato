@@ -247,13 +247,13 @@
 
     <!-- Load annotation JavaScript -->
     <script src="{{ url_for('static', filename='interaction_tracker.js') }}?v=1"></script>
-    <script src="{{ url_for('static', filename='span-core.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='span-core.js') }}?v=7"></script>
     <script src="{{ url_for('static', filename='ai_assistant_manager.js') }}?v=1"></script>
     <!-- Instance display manager (for new instance_display configuration) -->
     {% if has_instance_display | default(false) %}
-    <script src="{{ url_for('static', filename='instance-display.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='instance-display.js') }}?v=2"></script>
     {% endif %}
-    <script src="{{ url_for('static', filename='annotation.js') }}?v=14"></script>
+    <script src="{{ url_for('static', filename='annotation.js') }}?v=15"></script>
 
     <!-- Fabric.js for image annotation (loaded from CDN) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>

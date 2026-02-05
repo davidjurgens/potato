@@ -1,0 +1,7 @@
+[
+  {"id": "pair_001", "premise": "The cat sat on the mat while the dog slept nearby.", "hypothesis": "An animal was resting on a surface."},
+  {"id": "pair_002", "premise": "Scientists discovered a new species of frog in the Amazon rainforest.", "hypothesis": "Researchers found an unknown animal in South America."},
+  {"id": "pair_003", "premise": "The company announced record profits for the third quarter.", "hypothesis": "The business performed well financially."},
+  {"id": "pair_004", "premise": "Heavy rainfall caused flooding in several coastal towns yesterday.", "hypothesis": "Weather events led to water damage in some areas."},
+  {"id": "pair_005", "premise": "The teacher explained the concept of gravity to the students using a ball.", "hypothesis": "An educator demonstrated a physics principle with a prop."}
+]

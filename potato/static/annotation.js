@@ -1733,13 +1733,16 @@ function extractSpanAnnotationsFromDOM() {
             }
         }
 
+        const targetField = overlay.getAttribute('data-target-field') || '';
+
         spanAnnotations.push({
             schema: schema,
             name: label,
             start: start,
             end: end,
             title: title,
-            value: coveredText
+            value: coveredText,
+            target_field: targetField
         });
     }
 
@@ -1855,7 +1858,7 @@ function getSelectionIndicesOverlay() {
 }
 
 // Use overlay system for all span operations
-function changeSpanLabel(checkbox, schema, spanLabel, spanTitle, spanColor) {
+function changeSpanLabel(checkbox, schema, spanLabel, spanTitle, spanColor, targetField) {
     /*
      * Set up span annotation mode using the new span manager.
      *
@@ -1865,15 +1868,16 @@ function changeSpanLabel(checkbox, schema, spanLabel, spanTitle, spanColor) {
      *     spanLabel: The span label
      *     spanTitle: The span title
      *     spanColor: The span color
+     *     targetField: The target field key for multi-span mode (optional)
      */
-    debugLog('[DEBUG] changeSpanLabel called:', { schema, spanLabel, spanTitle, spanColor, checked: checkbox.checked });
+    debugLog('[DEBUG] changeSpanLabel called:', { schema, spanLabel, spanTitle, spanColor, targetField, checked: checkbox.checked });
 
     // Use the new span manager if available
     if (window.spanManager && window.spanManager.isInitialized) {
         debugLog('[DEBUG] changeSpanLabel: Using new span manager');
 
-        // Select the label and schema in the span manager
-        window.spanManager.selectLabel(spanLabel, schema);
+        // Select the label, schema, and target field in the span manager
+        window.spanManager.selectLabel(spanLabel, schema, targetField);
 
         // Set up text selection handler
         const textContainer = document.getElementById('instance-text');
@@ -1900,7 +1904,7 @@ function changeSpanLabel(checkbox, schema, spanLabel, spanTitle, spanColor) {
         debugLog('[DEBUG] changeSpanLabel: Span manager not ready; deferring selection to manager');
         const waitAndSelect = () => {
             if (window.spanManager && window.spanManager.isInitialized) {
-                window.spanManager.selectLabel(spanLabel, schema);
+                window.spanManager.selectLabel(spanLabel, schema, targetField);
                 return true;
             }
             return false;
@@ -2305,7 +2309,7 @@ function handleRobustTextSelection() {
     const selection = window.getSelection();
     if (!selection.rangeCount || selection.isCollapsed) return;
 
-    // Check if any span label is selected
+    // Check if any span label is selected (returns object with label, schema, targetField)
     const activeSpanLabel = getActiveSpanLabel();
     if (!activeSpanLabel) {
         debugLog('[ROBUST SPAN] No active span label selected');
@@ -2316,6 +2320,16 @@ function handleRobustTextSelection() {
     const selectedText = selection.toString().trim();
     if (!selectedText) return;
 
+    // Detect target field from selection container if not set on the label
+    if (!activeSpanLabel.targetField) {
+        const container = range.startContainer.parentElement;
+        const spanTargetEl = container ? container.closest('[id^="text-content-"]') : null;
+        if (spanTargetEl) {
+            const fieldKey = spanTargetEl.id.replace('text-content-', '');
+            if (fieldKey) activeSpanLabel.targetField = fieldKey;
+        }
+    }
+
     // Calculate positions using original text
     const start = getRobustTextPosition(selectedText, range);
     const end = start + selectedText.length;
@@ -2324,7 +2338,9 @@ function handleRobustTextSelection() {
         text: selectedText,
         start: start,
         end: end,
-        label: activeSpanLabel
+        label: activeSpanLabel.label,
+        schema: activeSpanLabel.schema,
+        targetField: activeSpanLabel.targetField
     });
 
     // Create the span annotation
@@ -2343,11 +2359,17 @@ function getActiveSpanLabel() {
 
     // Get the label from the first checked span checkbox
     const checkbox = spanCheckboxes[0];
-    const labelMatch = checkbox.name.match(/span_label:::(.+):::(.+)/);
-    if (labelMatch) {
-        return labelMatch[2]; // Return the label name
-    }
-    return null;
+    // Name format is "span_label:::schemaName", extract schema
+    const nameMatch = checkbox.name.match(/span_label:::(.+)/);
+    if (!nameMatch) return null;
+
+    const schema = nameMatch[1];
+    // Extract label from the checkbox ID (format: "schemaName_labelName")
+    const idParts = checkbox.id.split('_');
+    const label = idParts.length >= 2 ? idParts.slice(1).join('_') : checkbox.value;
+    const targetField = checkbox.getAttribute('data-target-field') || '';
+
+    return { label, schema, targetField };
 }
 
 /**
@@ -2390,19 +2412,25 @@ function getRobustTextPosition(selectedText, range) {
  */
 async function createRobustSpanAnnotation(spanText, start, end, label) {
     try {
-        debugLog('[ROBUST SPAN] Creating annotation:', { spanText, start, end, label });
+        // label can be a string (legacy) or object { label, schema, targetField }
+        const labelName = typeof label === 'object' ? label.label : label;
+        const schema = typeof label === 'object' ? label.schema : 'emotion';
+        const targetField = typeof label === 'object' ? (label.targetField || '') : '';
+
+        debugLog('[ROBUST SPAN] Creating annotation:', { spanText, start, end, label: labelName, schema, targetField });
 
         // Use the existing /updateinstance endpoint
         const postData = {
             type: "span",
-            schema: "emotion", // This should come from the config
+            schema: schema,
             state: [
                 {
-                    name: label,
+                    name: labelName,
                     start: start,
                     end: end,
-                    title: label,
-                    value: spanText
+                    title: labelName,
+                    value: spanText,
+                    target_field: targetField
                 }
             ],
             instance_id: currentInstance.id

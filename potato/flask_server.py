@@ -284,33 +284,55 @@ def load_instance_data(config: dict):
 
         if fmt in ["json", "jsonl"]:
             # Handle JSON and JSONL formats
+            # Try parsing as a JSON array first, fall back to JSON Lines
             with open(data_fname, "rt") as f:
-                for line_no, line in enumerate(f):
+                raw = f.read()
+
+            items = None
+            if fmt == "json":
+                try:
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, list):
+                        items = parsed
+                        logger.debug(f"Parsed {data_fname} as JSON array with {len(items)} items")
+                except json.JSONDecodeError:
+                    pass  # Fall through to JSON Lines parsing
+
+            if items is None:
+                # Parse as JSON Lines (one JSON object per line)
+                items = []
+                for line_no, line in enumerate(raw.splitlines()):
                     line = line.strip()
-                    if not line:  # Skip empty lines
+                    if not line:
                         continue
                     try:
-                        item = json.loads(line)
+                        items.append(json.loads(line))
                     except json.JSONDecodeError as e:
                         raise ValueError(
                             f"Invalid JSON at line {line_no+1} in {data_fname}: {e}"
                         ) from e
 
-                    # Validate that the ID key exists in the item
-                    if id_key not in item:
-                        raise KeyError(f"ID key '{id_key}' not found in item at line {line_no+1}")
+            for item_no, item in enumerate(items):
+                if not isinstance(item, dict):
+                    raise ValueError(f"Expected JSON object at item {item_no+1} in {data_fname}, got {type(item).__name__}")
 
-                    instance_id = str(item[id_key]) # Ensure ID is string
+                # Validate that the ID key exists in the item
+                if id_key not in item:
+                    raise KeyError(f"ID key '{id_key}' not found in item {item_no+1}")
 
-                    # Check for duplicate IDs
-                    if ism.has_item(instance_id):
-                        raise ValueError(f"Duplicate instance ID '{instance_id}' found at line {line_no+1}")
+                instance_id = str(item[id_key]) # Ensure ID is string
 
-                    # Validate text key exists if required
-                    if text_key not in item:
-                        logger.warning(f"Text key '{text_key}' not found in item with ID '{instance_id}'")
+                # Check for duplicate IDs
+                if ism.has_item(instance_id):
+                    raise ValueError(f"Duplicate instance ID '{instance_id}' found at item {item_no+1}")
 
-                    ism.add_item(instance_id, item)
+                # Validate text key exists if required
+                if text_key not in item:
+                    logger.warning(f"Text key '{text_key}' not found in item with ID '{instance_id}'")
+
+                ism.add_item(instance_id, item)
+
+            line_no = len(items)
         else:
             sep = "," if fmt == "csv" else "\t"
 

@@ -2761,13 +2761,17 @@ def get_span_data(instance_id):
         else:
             logger.debug(f"Instance found with original ID")
 
-        original_text = instance.get_text()
-        logger.debug(f"Original text (raw): {original_text[:100]}...")
+        # Use configured text_key to get the right field, not generic get_text()
+        text_key = config.get("item_properties", {}).get("text_key", "text")
+        item_data = instance.get_data()
+        original_text = item_data.get(text_key, instance.get_text()) if isinstance(item_data, dict) else instance.get_text()
+        logger.debug(f"Original text (raw, text_key={text_key}): {str(original_text)[:100]}...")
 
         # IMPORTANT: Normalize text the same way as flask_server.py template rendering
         # This ensures span offsets calculated on normalized text match the API response
         # 1. Strip HTML tags
         import re as re_module
+        original_text = str(original_text)
         normalized_text = re_module.sub(r'<[^>]+>', '', original_text)
         # 2. Normalize whitespace (multiple spaces/newlines -> single space)
         normalized_text = re_module.sub(r'\s+', ' ', normalized_text).strip()
@@ -2805,16 +2809,29 @@ def get_span_data(instance_id):
             else:
                 hex_color = color
 
-        span_data.append({
+        span_target_field = span.get_target_field() if hasattr(span, 'get_target_field') else getattr(span, 'target_field', None)
+
+        # Use the correct field text for extracting span text
+        # In multi-field mode, each span's offsets are relative to its target field's text
+        span_source_text = normalized_text  # default: text_key field
+        if span_target_field and isinstance(item_data, dict) and span_target_field in item_data:
+            field_text = str(item_data[span_target_field])
+            field_text = re_module.sub(r'<[^>]+>', '', field_text)
+            span_source_text = re_module.sub(r'\s+', ' ', field_text).strip()
+
+        span_entry = {
             'id': span_id,
             'schema': span_schema,
             'label': span_name,
             'title': span_title,
             'start': span_start,
             'end': span_end,
-            'text': normalized_text[span_start:span_end] if span_start < len(normalized_text) and span_end <= len(normalized_text) else "",
+            'text': span_source_text[span_start:span_end] if span_start < len(span_source_text) and span_end <= len(span_source_text) else "",
             'color': hex_color
-        })
+        }
+        if span_target_field:
+            span_entry['target_field'] = span_target_field
+        span_data.append(span_entry)
 
     response_data = {
         'instance_id': instance_id,
@@ -2944,7 +2961,8 @@ def update_instance():
                         span_data["name"],
                         span_data.get("title", span_data["name"]),
                         int(span_data["start"]),
-                        int(span_data["end"])
+                        int(span_data["end"]),
+                        target_field=span_data.get("target_field")
                     )
                     value = span_data.get("value")
 
@@ -3031,7 +3049,7 @@ def update_instance():
 
                     # Get span_id or generate one if not provided
                     span_id = sv.get("span_id") or sv.get("id") or f"{schema_name}_{sv['name']}_{start_offset}_{end_offset}"
-                    span = SpanAnnotation(schema_name, sv["name"], sv.get("title", sv["name"]), start_offset, end_offset, span_id)
+                    span = SpanAnnotation(schema_name, sv["name"], sv.get("title", sv["name"]), start_offset, end_offset, span_id, target_field=sv.get("target_field"))
                     
                     value = sv.get("value")
 

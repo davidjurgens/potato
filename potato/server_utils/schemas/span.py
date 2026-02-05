@@ -201,7 +201,8 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
                        id="{escape_html_content(scheme_name)}_{escape_html_content(label)}"
                        name="{escape_html_content(name_with_span)}"
                        value="{escape_html_content(key_value)}"
-                       onclick="onlyOne(this); changeSpanLabel(this, '{escape_html_content(scheme_name)}', '{escape_html_content(label)}', '{escape_html_content(effective_title)}', '{escape_html_content(span_color)}');"
+                       onclick="onlyOne(this); changeSpanLabel(this, '{escape_html_content(scheme_name)}', '{escape_html_content(label)}', '{escape_html_content(effective_title)}', '{escape_html_content(span_color)}', '{escape_html_content(target_field)}');"
+                       data-target-field="{escape_html_content(target_field)}"
                        validation="{validation}">
                 <label for="{escape_html_content(scheme_name)}_{escape_html_content(label)}" class="shadcn-span-label" {tooltip}>
                     <span style="background-color:rgb{span_color.replace(')', ',0.4)')};">{escape_html_content(label_content)}</span>
