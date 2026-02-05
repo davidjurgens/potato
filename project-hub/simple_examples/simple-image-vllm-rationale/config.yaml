@@ -1,0 +1,135 @@
+# Image Classification with VLLM Rationales
+#
+# This example demonstrates using Vision Language Models (VLLMs) like Qwen-VL
+# to provide hints and rationales for image classification tasks.
+#
+# Unlike YOLO which does object detection with bounding boxes, VLLMs can:
+# - Generate natural language hints about image content
+# - Provide rationales explaining why each label might apply
+# - Suggest classification labels with explanations
+#
+# Note: VLLMs do NOT support keyword highlighting (it doesn't apply to images)
+#
+# To run this example:
+#   python potato/flask_server.py start project-hub/simple_examples/simple-image-vllm-rationale/config.yaml -p 8000
+#
+# Requirements:
+#   - Install ollama and pull a vision model:
+#     ollama pull qwen2.5-vl:7b     (recommended for best quality)
+#     ollama pull llava:latest      (good quality, widely supported)
+#     ollama pull moondream:latest  (smallest, fastest, good for testing)
+
+port: 8000
+server_name: Image Classification with AI Rationales
+annotation_task_name: "Image Classification with AI Rationales"
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+# Data files
+data_files:
+  - "data/image-classification-example.json"
+
+# Item display settings
+item_properties:
+  id_key: "id"
+  text_key: "image_url"
+  context_key: "context"
+
+# Authentication (disabled for demo)
+user_config:
+  allow_all_users: true
+  users: []
+
+# Annotation schemes - radio for single-choice classification
+annotation_schemes:
+  # Image display (required to show the image with non-image annotation types)
+  - annotation_type: image_annotation
+    name: image_display
+    description: "View the image and answer the questions below."
+    tools:
+      - bbox
+    labels:
+      - name: "region_of_interest"
+        color: "#FFD700"
+        key_value: "r"
+    min_annotations: 0  # No annotations required - just displays the image
+    zoom_enabled: true
+    pan_enabled: true
+
+  - annotation_type: radio
+    name: image_category
+    description: "What type of scene is shown in this image?"
+    labels:
+      - name: "indoor"
+        key_value: "1"
+        tooltip: "Interior spaces like rooms, buildings, stores"
+      - name: "outdoor_urban"
+        key_value: "2"
+        tooltip: "City streets, buildings, urban environments"
+      - name: "outdoor_nature"
+        key_value: "3"
+        tooltip: "Parks, forests, mountains, natural landscapes"
+      - name: "outdoor_water"
+        key_value: "4"
+        tooltip: "Beaches, lakes, oceans, rivers"
+
+  - annotation_type: multiselect
+    name: image_content
+    description: "What objects or elements are visible in this image? (select all that apply)"
+    labels:
+      - name: "people"
+        key_value: "p"
+      - name: "animals"
+        key_value: "a"
+      - name: "vehicles"
+        key_value: "v"
+      - name: "buildings"
+        key_value: "b"
+      - name: "vegetation"
+        key_value: "g"
+      - name: "water"
+        key_value: "w"
+
+# Global AI configuration using VLLM
+ai_support:
+  enabled: true
+
+  # Use Ollama Vision for VLLM-based image understanding
+  endpoint_type: "ollama_vision"
+
+  ai_config:
+    # Vision model options (uncomment your choice):
+
+    # Qwen-VL - excellent quality, good JSON adherence
+    model: "qwen3-vl:2b"
+
+    # LLaVA - good quality, widely tested
+    # model: "llava:latest"
+
+    # Moondream - very small and fast, good for testing
+    # model: "moondream:latest"
+
+    # Ollama server URL
+    base_url: "http://localhost:11434"
+
+    # Generation settings
+    max_tokens: 500
+    temperature: 0.1
+
+    # Enable AI for all annotation schemes
+    include:
+      all: true
+
+  # Cache configuration (recommended for production)
+  cache_config:
+    disk_cache:
+      enabled: true
+      path: "annotation_output/vllm_cache.json"
+    prefetch:
+      warm_up_page_count: 5   # Pre-generate for first 5 images
+      on_next: 3              # Prefetch 3 ahead
+      on_prev: 1              # Prefetch 1 behind
+
+# Debug mode for development
+debug: true

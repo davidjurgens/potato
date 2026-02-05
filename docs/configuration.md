@@ -8,13 +8,14 @@ This document provides a comprehensive guide to configuring Potato annotation ta
 2. [Basic Configuration](#basic-configuration)
 3. [Server Configuration](#server-configuration)
 4. [Data Configuration](#data-configuration)
-5. [Annotation Schemes](#annotation-schemes)
-6. [User Management](#user-management)
-7. [Assignment Strategies](#assignment-strategies)
-8. [UI and Layout Configuration](#ui-and-layout-configuration)
-9. [AI Support](#ai-support)
-10. [Advanced Features](#advanced-features)
-11. [Complete Example](#complete-example)
+5. [Instance Display](#instance-display)
+6. [Annotation Schemes](#annotation-schemes)
+7. [User Management](#user-management)
+8. [Assignment Strategies](#assignment-strategies)
+9. [UI and Layout Configuration](#ui-and-layout-configuration)
+10. [AI Support](#ai-support)
+11. [Advanced Features](#advanced-features)
+12. [Complete Example](#complete-example)
 
 ## Config File Structure and Validation
 
@@ -247,6 +248,58 @@ output_annotation_dir: your_task_dir/annotations/
 output_annotation_format: json  # Options: json, jsonl, csv, tsv
 annotation_codebook_url: https://docs.google.com/document/d/...
 ```
+
+## Instance Display
+
+Instance display separates **what content to show annotators** from **what annotations to collect**. This allows you to display any combination of content types (images, videos, audio, text) alongside any annotation schemes.
+
+### Basic Configuration
+
+```yaml
+instance_display:
+  fields:
+    - key: "image_url"           # Field name in your data JSON
+      type: "image"              # Content type
+      label: "Image to classify" # Optional header
+      display_options:
+        max_width: 600
+        zoomable: true
+
+  layout:
+    direction: "vertical"        # vertical or horizontal
+    gap: "20px"
+```
+
+### Supported Display Types
+
+| Type | Description |
+|------|-------------|
+| `text` | Plain text content |
+| `html` | Sanitized HTML content |
+| `image` | Image display with zoom |
+| `video` | Video player |
+| `audio` | Audio player |
+| `dialogue` | Conversation turns |
+| `pairwise` | Side-by-side comparison |
+
+### Example: Image Classification
+
+Previously, to show an image with radio buttons, you had to use a workaround with `image_annotation` schema. Now you can use `instance_display`:
+
+```yaml
+# Clean approach with instance_display
+instance_display:
+  fields:
+    - key: image_url
+      type: image
+
+annotation_schemes:
+  - annotation_type: radio
+    name: category
+    labels: [A, B, C]
+```
+
+For comprehensive documentation including all display options, span annotation support, and multi-modal examples, see [Instance Display Configuration](instance_display.md).
 
 ## Annotation Schemes
 

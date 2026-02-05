@@ -1,0 +1,73 @@
+# Multi-Modal Annotation Example
+#
+# This example demonstrates displaying multiple content types side-by-side:
+# - Video player on the left
+# - Transcript on the right (with span annotation support)
+#
+# Run from repository root:
+#   python potato/flask_server.py start project-hub/simple_examples/simple-multi-modal/config.yaml -p 8000
+
+annotation_task_name: "Video + Transcript Analysis"
+
+# Data configuration
+data_files:
+  - data/videos.json
+
+item_properties:
+  id_key: id
+  text_key: transcript
+
+# Task directory
+task_dir: .
+output_annotation_dir: annotation_output
+
+# Instance Display Configuration
+instance_display:
+  layout:
+    direction: horizontal
+    gap: 24px
+
+  fields:
+    - key: video_url
+      type: video
+      label: "Video Clip"
+      display_options:
+        max_width: "45%"
+        controls: true
+        autoplay: false
+
+    - key: transcript
+      type: text
+      label: "Transcript"
+      span_target: true  # Enable span annotation on transcript
+      display_options:
+        max_height: 400
+        preserve_whitespace: true
+
+# Annotation schemes
+annotation_schemes:
+  # Classify the overall sentiment
+  - annotation_type: radio
+    name: sentiment
+    description: "What is the overall sentiment of the video?"
+    labels:
+      - positive
+      - neutral
+      - negative
+
+  # Highlight important spans in the transcript
+  - annotation_type: span
+    name: key_points
+    description: "Highlight key points or important statements"
+    labels:
+      - name: main_point
+        tooltip: "The main argument or point being made"
+      - name: supporting_evidence
+        tooltip: "Evidence or examples supporting the main point"
+      - name: question
+        tooltip: "Questions raised in the transcript"
+
+# User configuration
+user_config:
+  allow_all_users: true
+  require_password: false

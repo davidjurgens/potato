@@ -1,0 +1,77 @@
+# Dialogue Classification Example
+#
+# This example demonstrates using instance_display with the dialogue type
+# to show conversation turns with alternating shading and speaker extraction.
+#
+# Run from repository root:
+#   python potato/flask_server.py start project-hub/simple_examples/simple-dialogue-classification/config.yaml -p 8000
+
+annotation_task_name: "Dialogue Classification"
+
+# Data configuration
+data_files:
+  - data/dialogues.json
+
+item_properties:
+  id_key: id
+  text_key: context
+
+# Task directory
+task_dir: .
+output_annotation_dir: annotation_output
+
+# Instance Display Configuration
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    - key: context
+      type: text
+      label: "Context"
+      display_options:
+        collapsible: true
+
+    - key: conversation
+      type: dialogue
+      label: "Conversation"
+      display_options:
+        alternating_shading: true
+        speaker_extraction: true
+        show_turn_numbers: true
+
+# Annotation schemes
+annotation_schemes:
+  - annotation_type: radio
+    name: domain
+    description: "What domain does this conversation belong to?"
+    labels:
+      - customer_service
+      - casual
+      - medical
+      - business
+      - other
+
+  - annotation_type: radio
+    name: sentiment
+    description: "What is the overall sentiment of this conversation?"
+    labels:
+      - positive
+      - neutral
+      - negative
+
+  - annotation_type: multiselect
+    name: characteristics
+    description: "What characteristics are present? (Select all that apply)"
+    labels:
+      - polite
+      - informative
+      - emotional
+      - professional
+      - friendly
+
+# User configuration
+user_config:
+  allow_all_users: true
+  require_password: false

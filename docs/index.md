@@ -14,6 +14,7 @@
 ## Annotation Schemas
 
 - [Schema Gallery](schemas_and_templates.md) - All annotation types with examples
+- [Instance Display](instance_display.md) - Display images, video, audio, and text separately from annotation collection
 - [Image Annotation](image_annotation.md) - Bounding boxes, polygons, and landmarks
 - [Audio Annotation](audio_annotation.md) - Audio segmentation with waveform visualization
 - [Video Annotation](video_annotation.md) - Frame-by-frame video labeling
@@ -53,6 +54,7 @@
 
 - [Data Format](data_format.md) - Input and output data formats
 - [UI Configuration](ui_configuration.md) - Interface customization
+- [Layout Customization](layout_customization.md) - Custom CSS layouts and styling
 
 ## Tools & Utilities
 
@@ -77,22 +79,30 @@
 |------|---------------|
 | Set up a basic annotation task | [Quick Start](quick-start.md) |
 | Choose an annotation type | [Schema Gallery](schemas_and_templates.md) |
+| Display images/video with radio buttons | [Instance Display](instance_display.md) |
 | Configure for MTurk | [MTurk Integration](mturk_integration.md) |
 | Configure for Prolific | [Crowdsourcing Guide](crowdsourcing.md#prolific-integration) |
 | Monitor annotation progress | [Admin Dashboard](admin_dashboard.md) |
 | Add AI suggestions | [AI Support](ai_support.md) |
 | Set up quality control | [Quality Control](quality_control.md) |
 | Debug configuration issues | [Debugging Guide](debugging_guide.md) |
+| Create custom visual layouts | [Layout Customization](layout_customization.md) |
 
 ---
 
 ## Example Projects
 
-Ready-to-use example configurations are available in the `project-hub/simple_examples/` directory:
+Ready-to-use example configurations are available in the `project-hub/` directory:
 
 ```bash
 # Run a simple radio button example
-python potato/flask_server.py start project-hub/simple_examples/configs/simple-radio.yaml -p 8000
+python potato/flask_server.py start project-hub/simple_examples/simple-single-choice-selection/config.yaml -p 8000
+
+# Run a sophisticated layout example (content moderation, dialogue QA, medical review)
+python potato/flask_server.py start project-hub/layout-examples/content-moderation/config.yaml -p 8000
 ```
 
-See the [project-hub](https://github.com/davidjurgens/potato/tree/main/project-hub) for more examples.
+See the [project-hub](https://github.com/davidjurgens/potato/tree/main/project-hub) for more examples, including:
+
+- `simple_examples/` - Basic annotation type examples
+- `layout-examples/` - Sophisticated custom layout examples

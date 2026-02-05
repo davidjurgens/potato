@@ -1,0 +1,64 @@
+# Audio Classification Example
+#
+# This example demonstrates using instance_display to show audio
+# alongside radio buttons for classification.
+#
+# Run from repository root:
+#   python potato/flask_server.py start project-hub/simple_examples/simple-audio-classification/config.yaml -p 8000
+
+annotation_task_name: "Audio Classification"
+
+# Data configuration
+data_files:
+  - data/audio.json
+
+item_properties:
+  id_key: id
+  text_key: audio_url
+
+# Task directory
+task_dir: .
+output_annotation_dir: annotation_output
+
+# Instance Display Configuration
+instance_display:
+  fields:
+    - key: audio_url
+      type: audio
+      label: "Audio Sample"
+      display_options:
+        controls: true
+
+    - key: description
+      type: text
+      label: "Description"
+      display_options:
+        collapsible: true
+
+  layout:
+    direction: vertical
+    gap: 20px
+
+# Annotation schemes
+annotation_schemes:
+  - annotation_type: radio
+    name: genre
+    description: "What genre best describes this audio?"
+    labels:
+      - electronic
+      - ambient
+      - dance
+      - other
+
+  - annotation_type: radio
+    name: mood
+    description: "What is the overall mood?"
+    labels:
+      - energetic
+      - calm
+      - neutral
+
+# User configuration
+user_config:
+  allow_all_users: true
+  require_password: false
