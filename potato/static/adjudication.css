@@ -663,3 +663,454 @@
 .adj-color-5 { background: #fed7aa; color: #c2410c; }
 .adj-color-6 { background: #d1fae5; color: #047857; }
 .adj-color-7 { background: #e9d5ff; color: #7e22ce; }
+
+/* ===== Phase 2: Span Adjudication ===== */
+
+/* Span text container with overlay support */
+.adj-span-text-container {
+    position: relative;
+    padding-top: 24px;
+}
+
+.adj-span-overlays {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.adj-span-text-content {
+    position: relative;
+    z-index: 0;
+    line-height: 1.8;
+}
+
+/* Dashed span overlay for annotator spans */
+.adj-span-overlay {
+    position: absolute;
+    border: 2px dashed #3b82f6;
+    border-radius: 3px;
+    pointer-events: auto;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.15s;
+    z-index: 1;
+}
+
+.adj-span-overlay:hover {
+    opacity: 1;
+}
+
+.adj-span-overlay-label {
+    position: absolute;
+    top: -18px;
+    left: 0;
+    font-size: 0.6rem;
+    font-weight: 600;
+    color: white;
+    padding: 1px 5px;
+    border-radius: 3px;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+/* Span form styles */
+.adj-span-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.adj-span-instructions {
+    font-size: 0.8rem;
+    color: #6b7280;
+    padding: 8px 12px;
+    background: #f9fafb;
+    border-radius: 6px;
+    border-left: 3px solid #3b82f6;
+}
+
+.adj-complex-instructions {
+    font-size: 0.8rem;
+    color: #6b7280;
+    padding: 8px 12px;
+    background: #f9fafb;
+    border-radius: 6px;
+    border-left: 3px solid #f59e0b;
+    margin-bottom: 8px;
+}
+
+.adj-span-annotator-group {
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 10px;
+}
+
+.adj-span-annotator-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.adj-span-adopt-all-btn,
+.adj-complex-adopt-all-btn {
+    padding: 2px 8px;
+    font-size: 0.7rem;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    background: white;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.adj-span-adopt-all-btn:hover,
+.adj-complex-adopt-all-btn:hover {
+    background: #eff6ff;
+    border-color: #93c5fd;
+}
+
+.adj-span-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: background 0.1s;
+}
+
+.adj-span-item:hover {
+    background: #f9fafb;
+}
+
+.adj-span-label-badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    background: #e5e7eb;
+    color: #374151;
+}
+
+.adj-span-text {
+    flex: 1;
+    font-size: 0.8rem;
+    color: #6b7280;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.adj-span-adopt-btn {
+    padding: 2px 8px;
+    font-size: 0.7rem;
+    border: 1px solid #22c55e;
+    border-radius: 4px;
+    background: #f0fdf4;
+    color: #15803d;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+
+.adj-span-adopt-btn:hover {
+    background: #dcfce7;
+}
+
+.adj-span-summary {
+    margin-top: 2px;
+}
+
+/* Adopted spans section */
+.adj-adopted-spans {
+    border: 2px solid #22c55e;
+    border-radius: 6px;
+    padding: 10px;
+    background: #f0fdf4;
+}
+
+.adj-adopted-header {
+    font-size: 0.85rem;
+    margin-bottom: 6px;
+}
+
+.adj-adopted-span-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    background: white;
+    border: 1px solid #dcfce7;
+    border-radius: 4px;
+    margin-bottom: 4px;
+}
+
+.adj-span-remove-btn {
+    padding: 0 4px;
+    border: none;
+    background: none;
+    color: #dc2626;
+    cursor: pointer;
+    font-size: 0.8rem;
+    margin-left: auto;
+}
+
+.adj-span-remove-btn:hover {
+    color: #b91c1c;
+}
+
+/* ===== Phase 2: Text Merge UI ===== */
+
+.adj-text-select-label {
+    margin-right: 4px;
+    display: inline-flex;
+    align-items: center;
+}
+
+.adj-text-select-label input[type="checkbox"] {
+    margin: 0;
+}
+
+.adj-text-merge-bar {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    margin-bottom: 4px;
+}
+
+.adj-text-merge-btn {
+    padding: 4px 12px;
+    font-size: 0.8rem;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    background: white;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.adj-text-merge-btn:hover {
+    background: #eff6ff;
+    border-color: #93c5fd;
+}
+
+/* ===== Phase 2: Complex Type Forms (Image/Audio/Video) ===== */
+
+.adj-image-form,
+.adj-media-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.adj-complex-annotator-group {
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 8px;
+}
+
+.adj-complex-annotator-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.adj-complex-item {
+    padding: 3px 8px;
+    border-radius: 4px;
+}
+
+.adj-complex-item:hover {
+    background: #f9fafb;
+}
+
+.adj-complex-item label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.adj-complex-item input[type="checkbox"] {
+    margin: 0;
+}
+
+.adj-complex-detail {
+    font-size: 0.75rem;
+    color: #9ca3af;
+}
+
+.adj-complex-sub-section {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #6b7280;
+    margin-top: 8px;
+    margin-bottom: 4px;
+    padding-top: 6px;
+    border-top: 1px dashed #e5e7eb;
+}
+
+/* ===== Phase 3: Similar Items Panel ===== */
+
+#adj-similar-items-panel {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 24px;
+}
+
+.adj-similar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.adj-similar-header h5 {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.adj-similar-items-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.adj-similar-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.adj-similar-item:hover {
+    border-color: var(--primary-color, #4f46e5);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    background: #fafafa;
+}
+
+.adj-similarity-score {
+    flex-shrink: 0;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.adj-similarity-high {
+    background: #f0fdf4;
+    color: #16a34a;
+    border: 2px solid #86efac;
+}
+
+.adj-similarity-medium {
+    background: #fffbeb;
+    color: #d97706;
+    border: 2px solid #fde68a;
+}
+
+.adj-similarity-low {
+    background: #fef2f2;
+    color: #dc2626;
+    border: 2px solid #fca5a5;
+}
+
+.adj-similar-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.adj-similar-info-id {
+    font-weight: 600;
+    font-size: 0.8rem;
+    color: #374151;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.adj-similar-preview {
+    font-size: 0.8rem;
+    color: #6b7280;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 2px;
+}
+
+.adj-similar-meta {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+/* ===== Phase 3: Signal Badges ===== */
+
+.adj-signal-flags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+.adj-signal-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    cursor: help;
+}
+
+.adj-signal-high {
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fca5a5;
+}
+
+.adj-signal-medium {
+    background: #fffbeb;
+    color: #d97706;
+    border: 1px solid #fde68a;
+}
+
+/* ===== Phase 3: Generic Badges ===== */
+
+.adj-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.adj-badge-success {
+    background: #f0fdf4;
+    color: #16a34a;
+}
+
+.adj-badge-info {
+    background: #eff6ff;
+    color: #3b82f6;
+}

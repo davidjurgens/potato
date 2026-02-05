@@ -411,6 +411,20 @@ def load_user_data(config: dict):
             logger.warning("Skipping invalid user directory %s: %s" % (user_dir, str(e)))
             continue
 
+    # Rebuild instance_annotators from loaded user state so that
+    # adjudication build_queue() (and other code that relies on
+    # ism.instance_annotators) works with pre-loaded annotation data.
+    ism = get_item_state_manager()
+    for user_id in usm.get_user_ids():
+        user_state = usm.get_user_state(user_id)
+        if user_state:
+            for instance_id in user_state.instance_id_to_label_to_value:
+                if instance_id in ism.instance_id_to_instance:
+                    ism.register_annotator(instance_id, user_id)
+            for instance_id in user_state.instance_id_to_span_to_value:
+                if instance_id in ism.instance_id_to_instance:
+                    ism.register_annotator(instance_id, user_id)
+
     logger.info("Loaded user data for %d users" % len(usm.get_user_ids()))
 
 def load_training_data(config: dict) -> None:

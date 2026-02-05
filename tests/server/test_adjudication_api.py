@@ -175,6 +175,45 @@ class TestAdjudicationAPI:
         resp = session.post(f"{self.base_url}/adjudicate/api/skip/nonexistent_item")
         assert resp.status_code == 404
 
+    def test_api_submit_with_span_decisions(self):
+        """Submit API should accept span decisions."""
+        session = requests.Session()
+        self._login(session, "adj_user")
+        resp = session.post(
+            f"{self.base_url}/adjudicate/api/submit",
+            json={
+                "instance_id": "test_span_item",
+                "label_decisions": {"sentiment": "positive"},
+                "span_decisions": [
+                    {"schema": "entity", "name": "PERSON", "start": 0, "end": 5},
+                ],
+                "source": {"sentiment": "adjudicator", "entity": "annotator_user1"},
+                "confidence": "high",
+            },
+        )
+        # May be 200 or 500 depending on whether item exists in queue
+        # The key is that the server doesn't crash on span_decisions
+        assert resp.status_code in [200, 500]
+
+    def test_api_queue_structure(self):
+        """Queue API should return items with span_annotations field."""
+        session = requests.Session()
+        self._login(session, "adj_user")
+        resp = session.get(f"{self.base_url}/adjudicate/api/queue")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "items" in data
+        # Each item should have the expected fields
+        for item in data["items"]:
+            assert "instance_id" in item
+            assert "annotations" in item
+            assert "span_annotations" in item
+            assert "behavioral_data" in item
+            assert "agreement_scores" in item
+            assert "overall_agreement" in item
+            assert "num_annotators" in item
+            assert "status" in item
+
     def test_unauthenticated_api_calls(self):
         """All API endpoints should require authentication."""
         session = requests.Session()

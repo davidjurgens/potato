@@ -25,9 +25,10 @@ The workflow:
 
 import json
 import logging
+import math
 import os
 import threading
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Set
@@ -184,6 +185,15 @@ class AdjudicationManager:
 
         # Load any previously saved decisions
         self._load_decisions()
+
+        # Initialize similarity engine (Phase 3)
+        self.similarity_engine = None
+        if self.adj_config.similarity_enabled:
+            from potato.similarity import init_similarity_engine
+            self.similarity_engine = init_similarity_engine(config, self.adj_config)
+            if (self.similarity_engine and self.similarity_engine.enabled
+                    and self.adj_config.similarity_precompute):
+                self._precompute_similarities()
 
         self.logger.info(
             f"AdjudicationManager initialized: enabled={self.adj_config.enabled}, "
@@ -611,6 +621,339 @@ class AdjudicationManager:
     def get_decision(self, instance_id: str) -> Optional[AdjudicationDecision]:
         """Get the decision for an item, if one exists."""
         return self.decisions.get(str(instance_id))
+
+    # ------------------------------------------------------------------
+    # Phase 3: Similarity integration
+    # ------------------------------------------------------------------
+
+    def _precompute_similarities(self) -> None:
+        """Precompute embeddings for all items in the item state manager."""
+        if not self.similarity_engine or not self.similarity_engine.enabled:
+            return
+
+        from potato.item_state_management import get_item_state_manager
+
+        try:
+            ism = get_item_state_manager()
+            item_texts = {}
+            for instance_id, item in ism.instance_id_to_instance.items():
+                text = self.get_item_text(str(instance_id))
+                if text:
+                    item_texts[str(instance_id)] = text
+
+            if item_texts:
+                count = self.similarity_engine.precompute_embeddings(item_texts)
+                self.logger.info(f"Precomputed {count} similarity embeddings")
+        except Exception as e:
+            self.logger.error(f"Error precomputing similarities: {e}")
+
+    def get_similar_items(
+        self, instance_id: str, include_metadata: bool = True
+    ) -> List[Dict[str, Any]]:
+        """
+        Get similar items for a given instance, enriched with queue metadata.
+
+        Args:
+            instance_id: The reference instance ID
+            include_metadata: Whether to include decision/consensus data
+
+        Returns:
+            List of dicts with instance_id, similarity, and optional metadata
+        """
+        if not self.similarity_engine or not self.similarity_engine.enabled:
+            return []
+
+        similar = self.similarity_engine.find_similar(instance_id)
+        results = []
+
+        for other_id, score in similar:
+            entry = {
+                "instance_id": other_id,
+                "similarity": round(score, 4),
+                "text_preview": self.similarity_engine.text_cache.get(
+                    other_id, ""
+                ),
+            }
+
+            if include_metadata:
+                queue_item = self.queue.get(other_id)
+                decision = self.decisions.get(other_id)
+
+                entry["in_queue"] = queue_item is not None
+                entry["status"] = queue_item.status if queue_item else None
+                entry["overall_agreement"] = (
+                    queue_item.overall_agreement if queue_item else None
+                )
+
+                if decision:
+                    entry["decision"] = "completed"
+                    entry["consensus_label"] = None
+                else:
+                    entry["decision"] = None
+                    if queue_item:
+                        entry["consensus_label"] = self._get_consensus_label(
+                            queue_item
+                        )
+                    else:
+                        entry["consensus_label"] = None
+
+            results.append(entry)
+
+        return results
+
+    def _get_consensus_label(self, item: AdjudicationItem) -> Optional[str]:
+        """
+        Get the majority/consensus label for an item across the first schema.
+
+        Args:
+            item: The AdjudicationItem
+
+        Returns:
+            The most common label value as a string, or None
+        """
+        if not item.annotations:
+            return None
+
+        # Use the first schema that has values
+        for user_annots in item.annotations.values():
+            for schema_name in user_annots:
+                # Collect all values for this schema
+                values = []
+                for ua in item.annotations.values():
+                    val = ua.get(schema_name)
+                    if val is not None:
+                        if isinstance(val, dict):
+                            # Multiselect: use frozenset representation
+                            selected = sorted(
+                                k for k, v in val.items()
+                                if v is True or v == "true" or v == 1
+                            )
+                            values.append(", ".join(selected) if selected else str(val))
+                        else:
+                            values.append(str(val))
+
+                if values:
+                    counter = Counter(values)
+                    return counter.most_common(1)[0][0]
+
+        return None
+
+    # ------------------------------------------------------------------
+    # Phase 3: Behavioral signal analysis
+    # ------------------------------------------------------------------
+
+    def get_annotator_signals(
+        self, user_id: str, instance_id: str
+    ) -> Dict[str, Any]:
+        """
+        Compute per-annotator quality signals for a specific item.
+
+        Returns:
+            Dict with user_id, instance_id, flags list, and metrics dict
+        """
+        flags = []
+        metrics = {}
+
+        instance_id = str(instance_id)
+        item = self.queue.get(instance_id)
+        if not item:
+            return {"user_id": user_id, "instance_id": instance_id,
+                    "flags": [], "metrics": {}}
+
+        # Get behavioral data for this user on this item
+        bd = item.behavioral_data.get(user_id, {})
+        if hasattr(bd, 'to_dict'):
+            bd = bd.to_dict()
+
+        total_time = bd.get("total_time_ms", 0)
+        metrics["total_time_ms"] = total_time
+
+        # 1. Speed z-score vs user's typical time
+        user_times = self._get_user_times(user_id)
+        if len(user_times) >= 3 and total_time > 0:
+            mean_time = sum(user_times) / len(user_times)
+            std_time = math.sqrt(
+                sum((t - mean_time) ** 2 for t in user_times) / len(user_times)
+            )
+            if std_time > 0:
+                z_score = (total_time - mean_time) / std_time
+                metrics["speed_z_score"] = round(z_score, 2)
+                if z_score < -2.0:
+                    flags.append({
+                        "type": "unusually_fast",
+                        "severity": "high",
+                        "message": f"Annotation time ({total_time}ms) is {abs(z_score):.1f} std devs below average"
+                    })
+
+        # 2. Fast decision warning
+        fast_threshold = self.adj_config.fast_decision_warning_ms
+        if fast_threshold > 0 and 0 < total_time < fast_threshold:
+            flags.append({
+                "type": "fast_decision",
+                "severity": "medium",
+                "message": f"Decision made in {total_time}ms (below {fast_threshold}ms threshold)"
+            })
+
+        # 3. Annotation change count
+        raw_changes = bd.get("annotation_changes", [])
+        change_count = len(raw_changes) if isinstance(raw_changes, list) else int(raw_changes or 0)
+        metrics["annotation_changes"] = change_count
+        if change_count > 5:
+            flags.append({
+                "type": "excessive_changes",
+                "severity": "medium",
+                "message": f"Made {change_count} annotation changes on this item"
+            })
+
+        # 4. Historical agreement rate with consensus
+        agreement_rate = self._compute_user_agreement_rate(user_id)
+        if agreement_rate is not None:
+            metrics["agreement_rate"] = round(agreement_rate, 3)
+            if agreement_rate < 0.4:
+                flags.append({
+                    "type": "low_agreement",
+                    "severity": "high",
+                    "message": f"Agreement rate with consensus: {agreement_rate:.0%}"
+                })
+
+        # 5. Similar item consistency
+        if self.similarity_engine and self.similarity_engine.enabled:
+            inconsistencies = self._check_similar_item_consistency(
+                user_id, instance_id
+            )
+            metrics["similar_item_inconsistencies"] = inconsistencies
+            if inconsistencies > 0:
+                flags.append({
+                    "type": "similar_item_inconsistency",
+                    "severity": "medium",
+                    "message": f"Different label on {inconsistencies} similar item(s)"
+                })
+
+        return {
+            "user_id": user_id,
+            "instance_id": instance_id,
+            "flags": flags,
+            "metrics": metrics,
+        }
+
+    def _get_user_times(self, user_id: str) -> List[float]:
+        """Collect all annotation times for a user across queue items."""
+        times = []
+        for item in self.queue.values():
+            bd = item.behavioral_data.get(user_id, {})
+            if hasattr(bd, 'to_dict'):
+                bd = bd.to_dict()
+            t = bd.get("total_time_ms", 0)
+            if t > 0:
+                times.append(t)
+        return times
+
+    def _compute_user_agreement_rate(self, user_id: str) -> Optional[float]:
+        """
+        Compute how often a user agrees with the consensus across all items.
+
+        Returns:
+            Float 0-1 or None if insufficient data (needs >= 3 items)
+        """
+        agree_count = 0
+        total_count = 0
+
+        for item in self.queue.values():
+            if user_id not in item.annotations:
+                continue
+
+            consensus = self._get_consensus_label(item)
+            if consensus is None:
+                continue
+
+            user_annots = item.annotations[user_id]
+            # Check the first schema
+            for schema_name, val in user_annots.items():
+                if isinstance(val, dict):
+                    selected = sorted(
+                        k for k, v in val.items()
+                        if v is True or v == "true" or v == 1
+                    )
+                    user_label = ", ".join(selected) if selected else str(val)
+                else:
+                    user_label = str(val)
+
+                if user_label == consensus:
+                    agree_count += 1
+                total_count += 1
+                break  # Only check first schema
+
+        if total_count < 3:
+            return None
+
+        return agree_count / total_count
+
+    def _check_similar_item_consistency(
+        self, user_id: str, instance_id: str
+    ) -> int:
+        """
+        Check if user's label on similar items (>0.8 similarity) is consistent.
+
+        Returns:
+            Count of similar items where user's label differs
+        """
+        if not self.similarity_engine:
+            return 0
+
+        similar = self.similarity_engine.find_similar(instance_id)
+        if not similar:
+            return 0
+
+        # Get user's label on the current item
+        item = self.queue.get(instance_id)
+        if not item or user_id not in item.annotations:
+            return 0
+
+        user_annots = item.annotations[user_id]
+        current_label = None
+        current_schema = None
+        for schema_name, val in user_annots.items():
+            current_schema = schema_name
+            if isinstance(val, dict):
+                selected = sorted(
+                    k for k, v in val.items()
+                    if v is True or v == "true" or v == 1
+                )
+                current_label = ", ".join(selected) if selected else str(val)
+            else:
+                current_label = str(val)
+            break
+
+        if current_label is None:
+            return 0
+
+        inconsistencies = 0
+        for other_id, score in similar:
+            if score < 0.8:
+                break  # Results are sorted by score desc
+
+            other_item = self.queue.get(other_id)
+            if not other_item or user_id not in other_item.annotations:
+                continue
+
+            other_annots = other_item.annotations[user_id]
+            other_val = other_annots.get(current_schema)
+            if other_val is None:
+                continue
+
+            if isinstance(other_val, dict):
+                selected = sorted(
+                    k for k, v in other_val.items()
+                    if v is True or v == "true" or v == 1
+                )
+                other_label = ", ".join(selected) if selected else str(other_val)
+            else:
+                other_label = str(other_val)
+
+            if other_label != current_label:
+                inconsistencies += 1
+
+        return inconsistencies
 
     def _get_output_dir(self) -> str:
         """Get the adjudication output directory."""

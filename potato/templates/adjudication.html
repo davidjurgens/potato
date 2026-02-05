@@ -15,7 +15,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 
     <!-- Adjudication Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='adjudication.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='adjudication.css') }}?v=3">
 </head>
 
 <body>
@@ -98,6 +98,9 @@
                             <!-- Populated by JS per schema -->
                         </div>
                     </div>
+
+                    <!-- Similar Items (Phase 3) -->
+                    <div id="adj-similar-items-panel" style="display: none;"></div>
 
                     <!-- Decision Section -->
                     <div class="adj-decision-section">
@@ -187,7 +190,7 @@
     </script>
 
     <!-- Adjudication JS -->
-    <script src="{{ url_for('static', filename='adjudication-forms.js') }}?v=1"></script>
-    <script src="{{ url_for('static', filename='adjudication.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='adjudication-forms.js') }}?v=3"></script>
+    <script src="{{ url_for('static', filename='adjudication.js') }}?v=3"></script>
 </body>
 </html>

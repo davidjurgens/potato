@@ -1728,6 +1728,96 @@ class AdminDashboard:
             traceback.print_exc()
             return {"error": f"Failed to get behavioral analytics data: {str(e)}"}, 500
 
+    def get_adjudication_overview(self) -> Dict[str, Any]:
+        """
+        Get an overview of adjudication status for the admin dashboard.
+
+        Returns:
+            Dict with queue stats, adjudicator stats, error taxonomy,
+            guideline flags, disagreement patterns, and similarity stats.
+        """
+        from potato.adjudication import get_adjudication_manager
+
+        adj_mgr = get_adjudication_manager()
+        if not adj_mgr or not adj_mgr.adj_config.enabled:
+            return {"enabled": False, "message": "Adjudication not configured"}
+
+        try:
+            # Queue stats
+            queue_stats = adj_mgr.get_stats()
+
+            # Error taxonomy frequency
+            error_counts = Counter()
+            guideline_flag_count = 0
+            for decision in adj_mgr.decisions.values():
+                for tag in decision.error_taxonomy:
+                    error_counts[tag] += 1
+                if decision.guideline_update_flag:
+                    guideline_flag_count += 1
+
+            # Per-adjudicator stats with avg time
+            adjudicator_details = {}
+            for adj_id, stats in queue_stats.get("adjudicator_stats", {}).items():
+                completed = stats.get("completed", 0)
+                total_time = stats.get("total_time_ms", 0)
+                adjudicator_details[adj_id] = {
+                    "completed": completed,
+                    "total_time_ms": total_time,
+                    "avg_time_ms": (
+                        round(total_time / completed) if completed > 0 else 0
+                    ),
+                }
+
+            # Disagreement patterns
+            disagreement_patterns = self._analyze_disagreement_patterns(adj_mgr)
+
+            # Similarity engine stats
+            similarity_stats = {}
+            if adj_mgr.similarity_engine:
+                similarity_stats = adj_mgr.similarity_engine.get_stats()
+
+            return {
+                "enabled": True,
+                "queue_stats": queue_stats,
+                "adjudicator_details": adjudicator_details,
+                "error_taxonomy_counts": dict(error_counts.most_common()),
+                "guideline_flag_count": guideline_flag_count,
+                "disagreement_patterns": disagreement_patterns,
+                "similarity_stats": similarity_stats,
+            }
+
+        except Exception as e:
+            self.logger.error(f"Error getting adjudication overview: {e}")
+            return {"enabled": True, "error": str(e)}
+
+    def _analyze_disagreement_patterns(self, adj_mgr) -> List[Dict[str, Any]]:
+        """
+        Analyze per-schema disagreement patterns across the queue.
+
+        Returns:
+            List of dicts sorted by worst agreement first, with schema name
+            and average agreement score.
+        """
+        from collections import defaultdict
+
+        schema_scores = defaultdict(list)
+
+        for item in adj_mgr.queue.values():
+            for schema_name, score in item.agreement_scores.items():
+                schema_scores[schema_name].append(score)
+
+        patterns = []
+        for schema_name, scores in schema_scores.items():
+            avg = sum(scores) / len(scores) if scores else 1.0
+            patterns.append({
+                "schema": schema_name,
+                "avg_agreement": round(avg, 3),
+                "num_items": len(scores),
+            })
+
+        patterns.sort(key=lambda x: x["avg_agreement"])
+        return patterns
+
 
 # Global instance
 admin_dashboard = AdminDashboard()

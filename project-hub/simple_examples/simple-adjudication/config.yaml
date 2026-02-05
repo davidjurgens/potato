@@ -3,12 +3,13 @@
 # This example demonstrates the adjudication workflow where designated
 # reviewers resolve disagreements between annotators.
 #
+# Pre-loaded annotations from user_1, user_2, and user_3 are included
+# so the adjudication queue is populated immediately on startup.
+#
 # Run from the repository root:
 #   python potato/flask_server.py start project-hub/simple_examples/simple-adjudication/config.yaml -p 8000
 #
-# Then:
-# 1. Login as user_1, user_2, or user_3 to annotate items
-# 2. Login as "adjudicator" to review and adjudicate disagreements
+# Then login as "adjudicator" and navigate to /adjudicate to review items.
 
 annotation_task_name: "Sentiment Adjudication Demo"
 
@@ -26,8 +27,11 @@ output_annotation_dir: "annotation_output"
 max_annotations_per_item: 3
 
 # Simple password-free login for demo
-login:
-  type: "standard"
+user_config:
+  allow_anonymous: true
+
+# Admin API key for the admin overview endpoint
+admin_api_key: "demo-admin-key"
 
 annotation_schemes:
   - annotation_type: "radio"
@@ -82,6 +86,13 @@ adjudication:
     - "subjective_disagreement"
 
   output_subdir: "adjudication"
+
+  # Uncomment to enable semantic similarity (requires sentence-transformers):
+  # similarity:
+  #   enabled: true
+  #   model: "all-MiniLM-L6-v2"
+  #   top_k: 5
+  #   precompute_on_start: true
 
 # Debug mode for easy testing
 debug: true

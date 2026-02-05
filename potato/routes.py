@@ -1425,6 +1425,14 @@ def annotate():
         get_item_state_manager().assign_instances_to_user(user_state)
         logger.debug(f"User has assignments after assignment: {user_state.has_assignments()}")
 
+        # If assignment produced nothing and user is an adjudicator,
+        # redirect them to the adjudication page
+        if not user_state.has_assignments():
+            adj_mgr = get_adjudication_manager()
+            if adj_mgr and adj_mgr.is_adjudicator(username):
+                logger.info(f"Adjudicator {username} has no annotation items, redirecting to /adjudicate")
+                return redirect(url_for("adjudicate"))
+
     # See if this user has finished annotating all of their assigned instances
     if not user_state.has_remaining_assignments():
         logger.debug(f"User {username} has no remaining assignments, advancing phase")
@@ -3218,6 +3226,9 @@ def update_instance():
         if user_state.annotation_history:
             user_state.annotation_history[-1].server_processing_time_ms = processing_time_ms
 
+        # Register annotator with item state manager for tracking
+        get_item_state_manager().register_annotator(instance_id, username)
+
         # Save state
         get_user_state_manager().save_user_state(user_state)
         logger.debug(f"User state saved for {username}")
@@ -4845,6 +4856,8 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/adjudicate/api/stats", "adjudicate_api_stats", adjudicate_api_stats, methods=["GET"])
     app.add_url_rule("/adjudicate/api/skip/<instance_id>", "adjudicate_api_skip", adjudicate_api_skip, methods=["POST"])
     app.add_url_rule("/adjudicate/api/next", "adjudicate_api_next", adjudicate_api_next, methods=["GET"])
+    app.add_url_rule("/adjudicate/api/similar/<instance_id>", "adjudicate_api_similar", adjudicate_api_similar, methods=["GET"])
+    app.add_url_rule("/admin/api/adjudication", "admin_api_adjudication", admin_api_adjudication, methods=["GET"])
 
     app.add_url_rule("/shutdown", "shutdown", shutdown, methods=["POST"])
 
@@ -4948,12 +4961,59 @@ def adjudicate_api_item(instance_id):
     # Get existing decision if any
     decision = adj_mgr.get_decision(instance_id)
 
+    # Phase 3: annotator signals and similar items
+    annotator_signals = {}
+    for user_id in item.annotations:
+        annotator_signals[user_id] = adj_mgr.get_annotator_signals(
+            user_id, instance_id
+        )
+
+    similar_items = []
+    if adj_mgr.adj_config.similarity_enabled:
+        similar_items = adj_mgr.get_similar_items(instance_id)
+
     return jsonify({
         "item": item.to_dict(),
         "item_text": item_text,
         "item_data": item_data,
         "decision": decision.to_dict() if decision else None,
+        "annotator_signals": annotator_signals,
+        "similar_items": similar_items,
     })
+
+
+@app.route('/adjudicate/api/similar/<instance_id>', methods=['GET'])
+def adjudicate_api_similar(instance_id):
+    """Get similar items for a specific instance (lazy-loading endpoint)."""
+    authorized, username, error = _check_adjudicator_auth()
+    if not authorized:
+        return error
+
+    adj_mgr = get_adjudication_manager()
+    enabled = adj_mgr.adj_config.similarity_enabled
+    similar_items = adj_mgr.get_similar_items(instance_id) if enabled else []
+
+    return jsonify({
+        "enabled": enabled,
+        "instance_id": instance_id,
+        "similar_items": similar_items,
+        "count": len(similar_items),
+    })
+
+
+@app.route('/admin/api/adjudication', methods=['GET'])
+def admin_api_adjudication():
+    """Admin dashboard overview of adjudication status."""
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    adj_mgr = get_adjudication_manager()
+    if not adj_mgr or not adj_mgr.adj_config.enabled:
+        return jsonify({"enabled": False, "message": "Adjudication not configured"})
+
+    overview = admin_dashboard.get_adjudication_overview()
+    return jsonify(overview)
 
 
 @app.route('/adjudicate/api/submit', methods=['POST'])

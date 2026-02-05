@@ -2004,9 +2004,15 @@ def validate_adjudication_config(config_data: Dict[str, Any]) -> None:
     sim_config = adj_config.get('similarity', {})
     if isinstance(sim_config, dict) and sim_config.get('enabled', False):
         top_k = sim_config.get('top_k', 5)
-        if not isinstance(top_k, int) or top_k < 1:
+        if not isinstance(top_k, int) or top_k < 1 or top_k > 20:
             raise ConfigValidationError(
-                "adjudication.similarity.top_k must be a positive integer"
+                "adjudication.similarity.top_k must be an integer between 1 and 20"
+            )
+
+        model = sim_config.get('model', 'all-MiniLM-L6-v2')
+        if not isinstance(model, str) or not model.strip():
+            raise ConfigValidationError(
+                "adjudication.similarity.model must be a non-empty string"
             )
 
 
