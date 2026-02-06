@@ -408,8 +408,9 @@ class TestFormAttributeCorrectness:
 
         html_layout, _ = generate_schematic(schema)
 
-        # Extract all name attributes from radio inputs
-        names = re.findall(r'name="([^"]+)"', html_layout)
+        # Extract all standalone name attributes (not data-schema-name, label_name, etc.)
+        # Use positive lookbehind for whitespace to match only standalone 'name' attributes
+        names = re.findall(r'(?<=\s)name="([^"]+)"', html_layout)
         radio_names = [n for n in names if "sentiment" in n]
 
         # All radio buttons should have the SAME name for mutual exclusivity
@@ -439,8 +440,9 @@ class TestFormAttributeCorrectness:
 
         html_layout, _ = generate_schematic(schema)
 
-        # Extract all name attributes from checkbox inputs
-        names = re.findall(r'name="([^"]+)"', html_layout)
+        # Extract all standalone name attributes (not data-schema-name, label_name, etc.)
+        # Use positive lookbehind for whitespace to match only standalone 'name' attributes
+        names = re.findall(r'(?<=\s)name="([^"]+)"', html_layout)
         checkbox_names = [n for n in names if "colors" in n]
 
         # Each checkbox should have a UNIQUE name
@@ -473,8 +475,9 @@ class TestFormAttributeCorrectness:
 
         html_layout, _ = generate_schematic(schema)
 
-        # Extract all name attributes
-        names = re.findall(r'name="([^"]+)"', html_layout)
+        # Extract all standalone name attributes (not data-schema-name, label_name, etc.)
+        # Use positive lookbehind for whitespace to match only standalone 'name' attributes
+        names = re.findall(r'(?<=\s)name="([^"]+)"', html_layout)
         likert_names = [n for n in names if "quality" in n]
 
         # All scale points should have the SAME name

@@ -1,0 +1,31 @@
+[
+  {"id": "sports1", "text": "The championship game went into overtime last night when the home team scored a dramatic equalizer in the final minute. Fans erupted as the underdog team secured their first title in decades."},
+  {"id": "sports2", "text": "The basketball playoffs are heating up with several exciting matchups scheduled for this weekend. Star players are expected to deliver memorable performances in the crucial elimination games."},
+  {"id": "sports3", "text": "Tennis sensation claims her third consecutive Grand Slam title, cementing her status as the dominant force in women's tennis. Her powerful serve and strategic gameplay proved unstoppable."},
+  {"id": "sports4", "text": "The marathon runner broke the course record by nearly two minutes, crossing the finish line to thunderous applause from the crowd of thousands gathered along the route."},
+
+  {"id": "tech1", "text": "The new smartphone features an advanced AI chip that enables real-time language translation and enhanced photography capabilities. Early reviews praise its revolutionary voice assistant."},
+  {"id": "tech2", "text": "Cloud computing adoption continues to accelerate as enterprises migrate their infrastructure to distributed platforms. Cost savings and scalability drive the transition."},
+  {"id": "tech3", "text": "Cybersecurity researchers discovered a critical vulnerability affecting millions of devices worldwide. Users are urged to update their software immediately to protect against potential attacks."},
+  {"id": "tech4", "text": "The virtual reality headset launch exceeded expectations with pre-orders selling out within hours. The device promises immersive experiences for gaming, education, and remote collaboration."},
+
+  {"id": "food1", "text": "The new Italian restaurant downtown serves authentic handmade pasta using recipes passed down through generations. Diners rave about the truffle risotto and tiramisu."},
+  {"id": "food2", "text": "Fresh sushi prepared by master chefs draws crowds to the waterfront establishment. The omakase experience features fish flown in daily from Tokyo's famous Tsukiji market."},
+  {"id": "food3", "text": "Farm-to-table dining emphasizes locally sourced ingredients and sustainable practices. The seasonal menu changes weekly to showcase the freshest produce from nearby farms."},
+  {"id": "food4", "text": "The bakery's artisan sourdough bread has developed a cult following, with customers lining up before dawn. The slow fermentation process creates a distinctive tangy flavor and crispy crust."},
+
+  {"id": "travel1", "text": "Paris remains Europe's most visited destination, with the Eiffel Tower and Louvre attracting millions of tourists annually. Spring brings beautiful gardens and outdoor cafe culture."},
+  {"id": "travel2", "text": "Beach resorts in the Caribbean offer crystal-clear waters and white sandy shores perfect for relaxation. Water sports including snorkeling and kayaking provide adventure seekers with excitement."},
+  {"id": "travel3", "text": "Mountain hiking trails in the Alps provide breathtaking panoramic views and challenging terrain for outdoor enthusiasts. Alpine meadows bloom with wildflowers during summer months."},
+  {"id": "travel4", "text": "The ancient temples of Southeast Asia draw visitors seeking spiritual enlightenment and architectural wonders. Sunrise at Angkor Wat remains an unforgettable experience for travelers."},
+
+  {"id": "health1", "text": "New research reveals the benefits of Mediterranean diet for heart health and longevity. Olive oil, fish, and vegetables form the foundation of this well-studied eating pattern."},
+  {"id": "health2", "text": "Exercise routines combining strength training and cardio show optimal results for fitness and weight management. Experts recommend at least 150 minutes of moderate activity weekly."},
+  {"id": "health3", "text": "Mental health awareness initiatives gain momentum as organizations prioritize employee wellbeing. Meditation apps and therapy services see significant increases in adoption rates."},
+  {"id": "health4", "text": "Vaccine development accelerates with new mRNA technology showing promising results against various diseases. Clinical trials proceed with unprecedented speed and rigorous safety protocols."},
+
+  {"id": "finance1", "text": "Stock markets reached record highs as investors responded positively to economic recovery signals. Technology and healthcare sectors led the gains with double-digit growth."},
+  {"id": "finance2", "text": "Cryptocurrency adoption increases among institutional investors seeking portfolio diversification. Regulatory frameworks continue to evolve as digital assets gain mainstream acceptance."},
+  {"id": "finance3", "text": "Personal finance experts recommend building an emergency fund covering three to six months of expenses. Automatic savings transfers help establish consistent financial habits."},
+  {"id": "finance4", "text": "Real estate prices surge in suburban areas as remote work enables employees to live farther from urban centers. First-time homebuyers face increased competition and rising mortgage rates."}
+]

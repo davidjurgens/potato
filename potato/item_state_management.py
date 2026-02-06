@@ -399,6 +399,7 @@ class AssignmentStrategy(Enum):
     - MAX_DIVERSITY: Prioritizes items with high disagreement
     - LEAST_ANNOTATED: Prioritizes items with fewest annotations
     - CATEGORY_BASED: Assigns items matching user's qualified categories
+    - DIVERSITY_CLUSTERING: Samples items round-robin from embedding clusters
     """
     RANDOM = 'random'
     FIXED_ORDER = 'fixed_order'
@@ -407,6 +408,7 @@ class AssignmentStrategy(Enum):
     MAX_DIVERSITY = 'max_diversity'
     LEAST_ANNOTATED = 'least_annotated'
     CATEGORY_BASED = 'category_based'
+    DIVERSITY_CLUSTERING = 'diversity_clustering'
 
     def fromstr(phase: str) -> AssignmentStrategy:
         """
@@ -436,6 +438,8 @@ class AssignmentStrategy(Enum):
             return AssignmentStrategy.LEAST_ANNOTATED
         elif phase == "category_based":
             return AssignmentStrategy.CATEGORY_BASED
+        elif phase == "diversity_clustering":
+            return AssignmentStrategy.DIVERSITY_CLUSTERING
         else:
             raise ValueError(f"Unknown phase: {phase}")
 
@@ -942,6 +946,48 @@ class ItemStateManager:
                 user_state.assign_instance(self.instance_id_to_instance[item_id])
 
             return len(to_assign)
+        elif self.assignment_strategy == AssignmentStrategy.DIVERSITY_CLUSTERING:
+            # Diversity clustering assignment strategy
+            from potato.diversity_manager import get_diversity_manager
+            dm = get_diversity_manager()
+
+            if dm and dm.enabled:
+                # Get user's annotated items for preservation
+                annotated_ids = set(user_state.get_annotated_instance_ids()) if hasattr(user_state, 'get_annotated_instance_ids') else set()
+
+                # Get available items (respecting max_annotations_per_item)
+                available_ids = []
+                for iid in self.remaining_instance_ids:
+                    # Skip if item has reached annotation limit
+                    if self.max_annotations_per_item >= 0 and len(self.instance_annotators[iid]) >= self.max_annotations_per_item:
+                        continue
+                    # Skip if user already annotated
+                    if user_state.has_annotated(iid):
+                        continue
+                    available_ids.append(iid)
+
+                if not available_ids:
+                    return 0
+
+                # Get user_id for diversity manager
+                user_id = getattr(user_state, 'user_id', 'anonymous')
+
+                # Generate diverse ordering with preserved positions
+                diverse_order = dm.apply_to_user_ordering(
+                    user_id, available_ids, annotated_ids
+                )
+
+                # Assign items from diverse order
+                assigned = 0
+                for item_id in diverse_order[:instances_to_assign]:
+                    user_state.assign_instance(self.instance_id_to_instance[item_id])
+                    assigned += 1
+
+                return assigned
+            else:
+                # Fallback to random if diversity manager unavailable
+                self.logger.debug("Diversity manager not available, falling back to random")
+                return self._assign_random_fallback(user_state, instances_to_assign)
         else:
             # Default fallback to fixed order
             self.logger.warning(f"Unknown assignment strategy: {self.assignment_strategy}, falling back to fixed order")

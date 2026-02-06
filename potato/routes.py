@@ -70,6 +70,9 @@ from potato.quality_control import get_quality_control_manager
 # Import adjudication
 from potato.adjudication import get_adjudication_manager, AdjudicationDecision
 
+# Import diversity manager
+from potato.diversity_manager import get_diversity_manager
+
 import os
 
 
@@ -772,6 +775,9 @@ def submit_annotation():
 
         # Check if this was an ICL verification task and record the result
         _maybe_record_icl_verification(user_state, instance_id, annotations)
+
+        # Notify diversity manager of annotation completion (for async embedding)
+        _notify_diversity_manager_annotation(user_state, instance_id)
 
         # Log the saved annotations
         all_annotations = user_state.get_all_annotations()
@@ -2441,6 +2447,76 @@ def _maybe_record_icl_verification(user_state, instance_id: str, annotations: di
         return False
 
 
+# === Diversity Manager Helper ===
+
+def _notify_diversity_manager_annotation(user_state, instance_id: str) -> None:
+    """
+    Notify the diversity manager that an annotation was completed.
+
+    This triggers async embedding computation if needed and checks if
+    reclustering should occur. Also triggers AI prefetch after reordering.
+
+    Args:
+        user_state: The user's state object
+        instance_id: The annotated instance ID
+    """
+    dm = get_diversity_manager()
+    if not dm or not dm.enabled:
+        return
+
+    try:
+        user_id = getattr(user_state, 'user_id', 'anonymous')
+
+        # Get the item text for embedding
+        ism = get_item_state_manager()
+        item = ism.get_item(instance_id)
+        if not item:
+            return
+
+        text_key = config.get("item_properties", {}).get("text_key", "text")
+        item_data = item.get_data()
+        text = item_data.get(text_key, item.get_text())
+
+        # Notify diversity manager (triggers async embedding if needed)
+        dm.on_annotation_complete(user_id, instance_id, text)
+
+        # Check if reclustering is needed
+        if dm.should_recluster(user_id):
+            dm.trigger_recluster(user_id)
+
+            # Trigger AI prefetch for reordered items
+            if dm.config.trigger_ai_prefetch:
+                _trigger_ai_prefetch_after_reorder(user_state)
+
+    except Exception as e:
+        logger.warning(f"Error notifying diversity manager: {e}")
+
+
+def _trigger_ai_prefetch_after_reorder(user_state) -> None:
+    """
+    Trigger AI cache prefetch after diversity reordering.
+
+    Args:
+        user_state: The user's state object
+    """
+    try:
+        acm = get_ai_cache_manager()
+        if acm is None:
+            return
+
+        # Get current instance index
+        current_index = getattr(user_state, 'current_instance_index', 0)
+
+        # Prefetch count from AI cache config
+        prefetch_count = getattr(acm, 'prefetch_page_count_on_next', 5)
+
+        acm.start_prefetch(current_index, prefetch_count)
+        logger.debug(f"Triggered AI prefetch after diversity reorder from index {current_index}")
+
+    except Exception as e:
+        logger.warning(f"Error triggering AI prefetch after reorder: {e}")
+
+
 # === ICL Labeling Admin API ===
 
 @app.route("/admin/api/icl/status", methods=["GET"])
@@ -3776,7 +3852,7 @@ def get_keyword_highlights(instance_id):
 
     The endpoint supports randomization for research purposes:
     - keyword_probability: Probability of showing each matched keyword (default: 1.0)
-    - random_word_probability: Probability of highlighting random words as distractors (default: 0.05)
+    - random_word_probability: Probability of highlighting random words as distractors (default: 0.0)
 
     Highlights are cached per user+instance to ensure consistency across navigation.
 
@@ -3838,7 +3914,7 @@ def get_keyword_highlights(instance_id):
     # Get settings for randomization
     settings = get_keyword_highlight_settings()
     keyword_prob = settings.get('keyword_probability', 1.0)
-    random_word_prob = settings.get('random_word_probability', 0.05)
+    random_word_prob = settings.get('random_word_probability', 0.0)
     random_word_label = settings.get('random_word_label', 'distractor')
     random_word_schema = settings.get('random_word_schema', 'keyword')
 

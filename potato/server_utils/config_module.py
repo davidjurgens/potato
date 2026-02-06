@@ -172,6 +172,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Validate category assignment configuration if present
     validate_category_assignment_config(config_data)
 
+    # Validate diversity ordering configuration if present
+    validate_diversity_config(config_data)
+
     # Validate adjudication configuration if present
     if 'adjudication' in config_data:
         validate_adjudication_config(config_data)
@@ -1327,6 +1330,96 @@ def validate_category_assignment_config(config_data: Dict[str, Any]) -> None:
                 raise ConfigValidationError(
                     "category_assignment.dynamic.base_probability must be a number between 0.0 and 1.0"
                 )
+
+
+def validate_diversity_config(config_data: Dict[str, Any]) -> None:
+    """
+    Validate diversity ordering configuration.
+
+    This function validates the diversity_ordering section which controls
+    embedding-based clustering for diverse item ordering.
+
+    Args:
+        config_data: The configuration data
+
+    Raises:
+        ConfigValidationError: If diversity ordering configuration is invalid
+    """
+    if 'diversity_ordering' not in config_data:
+        return  # Diversity ordering is optional
+
+    dc = config_data['diversity_ordering']
+    if not isinstance(dc, dict):
+        raise ConfigValidationError("diversity_ordering must be a dictionary")
+
+    # Validate enabled flag
+    if 'enabled' in dc:
+        if not isinstance(dc['enabled'], bool):
+            raise ConfigValidationError("diversity_ordering.enabled must be a boolean")
+
+    # If not enabled, skip further validation
+    if not dc.get('enabled', False):
+        return
+
+    # Validate model_name
+    if 'model_name' in dc:
+        if not isinstance(dc['model_name'], str) or not dc['model_name'].strip():
+            raise ConfigValidationError("diversity_ordering.model_name must be a non-empty string")
+
+    # Validate num_clusters
+    if 'num_clusters' in dc:
+        num_clusters = dc['num_clusters']
+        if not isinstance(num_clusters, int) or num_clusters < 2:
+            raise ConfigValidationError("diversity_ordering.num_clusters must be an integer >= 2")
+
+    # Validate items_per_cluster
+    if 'items_per_cluster' in dc:
+        items_per_cluster = dc['items_per_cluster']
+        if not isinstance(items_per_cluster, int) or items_per_cluster < 1:
+            raise ConfigValidationError("diversity_ordering.items_per_cluster must be a positive integer")
+
+    # Validate auto_clusters
+    if 'auto_clusters' in dc:
+        if not isinstance(dc['auto_clusters'], bool):
+            raise ConfigValidationError("diversity_ordering.auto_clusters must be a boolean")
+
+    # Validate prefill_count
+    if 'prefill_count' in dc:
+        prefill_count = dc['prefill_count']
+        if not isinstance(prefill_count, int) or prefill_count < 0:
+            raise ConfigValidationError("diversity_ordering.prefill_count must be a non-negative integer")
+
+    # Validate batch_size
+    if 'batch_size' in dc:
+        batch_size = dc['batch_size']
+        if not isinstance(batch_size, int) or batch_size < 1:
+            raise ConfigValidationError("diversity_ordering.batch_size must be a positive integer")
+
+    # Validate recluster_threshold
+    if 'recluster_threshold' in dc:
+        recluster_threshold = dc['recluster_threshold']
+        if not isinstance(recluster_threshold, (int, float)) or recluster_threshold < 0 or recluster_threshold > 1:
+            raise ConfigValidationError(
+                "diversity_ordering.recluster_threshold must be a number between 0 and 1"
+            )
+
+    # Validate preserve_visited
+    if 'preserve_visited' in dc:
+        if not isinstance(dc['preserve_visited'], bool):
+            raise ConfigValidationError("diversity_ordering.preserve_visited must be a boolean")
+
+    # Validate trigger_ai_prefetch
+    if 'trigger_ai_prefetch' in dc:
+        if not isinstance(dc['trigger_ai_prefetch'], bool):
+            raise ConfigValidationError("diversity_ordering.trigger_ai_prefetch must be a boolean")
+
+    # Validate cache_dir
+    if 'cache_dir' in dc:
+        cache_dir = dc['cache_dir']
+        if cache_dir is not None and (not isinstance(cache_dir, str) or not cache_dir.strip()):
+            raise ConfigValidationError(
+                "diversity_ordering.cache_dir must be a non-empty string or null"
+            )
 
 
 def load_and_validate_config(config_file: str, project_dir: str) -> Dict[str, Any]:

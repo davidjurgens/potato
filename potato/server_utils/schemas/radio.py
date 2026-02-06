@@ -128,8 +128,10 @@ def _generate_radio_layout_internal(annotation_scheme, horizontal=False):
 
         # Format label content with optional keyboard shortcut display
         label_content = label
+        data_key_attr = ""
         if label in label2key:
             label_content = f"{label_content} [{label2key[label].upper()}]"
+            data_key_attr = f'data-key="{label2key[label]}"'
 
         # Generate radio input
         schematic += f"""
@@ -143,7 +145,8 @@ def _generate_radio_layout_internal(annotation_scheme, horizontal=False):
                        schema="{identifiers['schema']}"
                        label_name="{identifiers['label_name']}"
                        onclick="onlyOne(this);registerAnnotation(this);"
-                       validation="{validation}">
+                       validation="{validation}"
+                       {data_key_attr}>
                 <label for="{identifiers['id']}" class="shadcn-radio-label" {tooltip}>{escape_html_content(label_content)}</label>
             </div>
         """

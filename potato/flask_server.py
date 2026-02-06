@@ -83,6 +83,9 @@ from potato.quality_control import (
 from potato.adjudication import (
     init_adjudication_manager, get_adjudication_manager, clear_adjudication_manager
 )
+from potato.diversity_manager import (
+    init_diversity_manager, get_diversity_manager, clear_diversity_manager
+)
 
 from potato.create_task_cli import create_task_cli, yes_or_no
 from potato.server_utils.arg_utils import arguments
@@ -691,6 +694,59 @@ def get_prolific_study() -> 'ProlificStudy':
     return PROLIFIC_STUDY_INSTANCE
 
 
+def _prefill_diversity_embeddings(dm, config: dict) -> None:
+    """
+    Prefill embeddings for diversity ordering with progress bar.
+
+    Args:
+        dm: DiversityManager instance
+        config: Application configuration
+    """
+    from tqdm import tqdm
+
+    ism = get_item_state_manager()
+    text_key = config.get("item_properties", {}).get("text_key", "text")
+
+    # Collect texts for prefill
+    items = list(ism.items())[:dm.config.prefill_count]
+    texts = {}
+
+    for item in items:
+        item_data = item.get_data()
+        text = item_data.get(text_key, item.get_text())
+        texts[item.get_id()] = text
+
+    if not texts:
+        return
+
+    print(f"Prefilling {len(texts)} embeddings for diversity ordering...")
+
+    # Track progress with tqdm
+    completed = [0]
+
+    def on_complete(iid, emb):
+        completed[0] += 1
+
+    with tqdm(total=len(texts), desc="Computing embeddings", unit="item") as pbar:
+        # Compute in batches
+        batch_size = dm.config.batch_size
+        ids = list(texts.keys())
+
+        for i in range(0, len(ids), batch_size):
+            batch_ids = ids[i:i + batch_size]
+            batch_texts = {iid: texts[iid] for iid in batch_ids}
+            dm.compute_embeddings_batch(batch_texts, callback=on_complete)
+            pbar.update(len(batch_ids))
+
+    # Run clustering after prefill
+    if dm.cluster_items():
+        stats = dm.get_stats()
+        logger.info(
+            f"Clustered {stats['embedding_count']} items into "
+            f"{stats['cluster_count']} clusters"
+        )
+
+
 def load_all_data(config: dict):
     '''Loads instance and annotation data from the files specified in the config.'''
     load_annotation_schematic_data(config)
@@ -748,7 +804,7 @@ def load_highlights_data(config: dict) -> None:
 
     Also loads keyword_highlight_settings from config:
     - keyword_probability: Probability of showing matched keywords (default: 1.0)
-    - random_word_probability: Probability of highlighting random words (default: 0.05)
+    - random_word_probability: Probability of highlighting random words (default: 0.0)
     - random_word_label: Label for random highlights (default: 'distractor')
     - random_word_schema: Schema for random highlights (default: 'keyword')
     """
@@ -771,7 +827,7 @@ def load_highlights_data(config: dict) -> None:
     # Load keyword highlight settings from config (with defaults)
     config_settings = config.get('keyword_highlight_settings', {})
     settings_dict['keyword_probability'] = config_settings.get('keyword_probability', 1.0)
-    settings_dict['random_word_probability'] = config_settings.get('random_word_probability', 0.05)
+    settings_dict['random_word_probability'] = config_settings.get('random_word_probability', 0.0)
     settings_dict['random_word_label'] = config_settings.get('random_word_label', 'distractor')
     settings_dict['random_word_schema'] = config_settings.get('random_word_schema', 'keyword')
     logger.debug(f"Loaded keyword highlight settings: {settings_dict}")
@@ -2317,6 +2373,29 @@ def run_server(args):
         logger.info("Initializing AI cache manager...")
         init_ai_cache_manager()
         logger.info("AI support initialized successfully")
+
+    # Initialize diversity manager if diversity_clustering strategy is used
+    # or if diversity_ordering is explicitly enabled
+    assignment_strategy = config.get("assignment_strategy", "")
+    if isinstance(assignment_strategy, dict):
+        assignment_strategy = assignment_strategy.get("name", "")
+    diversity_enabled = (
+        assignment_strategy == "diversity_clustering" or
+        config.get("diversity_ordering", {}).get("enabled", False)
+    )
+    if diversity_enabled:
+        logger.info("Initializing diversity manager...")
+        dm = init_diversity_manager(config)
+        if dm and dm.enabled:
+            # Prefill embeddings for first N items
+            _prefill_diversity_embeddings(dm, config)
+            logger.info("Diversity manager initialized successfully")
+        else:
+            logger.warning(
+                "Diversity ordering requested but manager not enabled. "
+                "Install sentence-transformers and scikit-learn: "
+                "pip install sentence-transformers scikit-learn"
+            )
 
     # Initialize quality control manager if any QC features are enabled
     qc_enabled = (

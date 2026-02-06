@@ -236,8 +236,13 @@ function setupEventListeners() {
 
     // Keyboard navigation and shortcuts
     document.addEventListener('keydown', function (e) {
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
-            return; // Don't handle navigation when typing
+        // Only block navigation when in text input fields (not radio/checkbox)
+        const inputType = e.target.getAttribute('type');
+        const isTextInput = e.target.tagName === 'TEXTAREA' ||
+            (e.target.tagName === 'INPUT' && inputType !== 'radio' && inputType !== 'checkbox');
+
+        if (isTextInput) {
+            return; // Don't handle navigation when typing in text fields
         }
 
         switch (e.key) {
@@ -254,12 +259,15 @@ function setupEventListeners() {
 
     // Keyboard shortcuts for checkboxes and radio buttons (matches base_template.html behavior)
     document.addEventListener('keyup', function (e) {
-        // Don't handle when in input fields
+        // Don't handle when in text input fields (but allow radio/checkbox)
         const activeElement = document.activeElement;
         const activeId = activeElement.id;
         const activeType = activeElement.getAttribute('type');
-        if (activeId === 'go_to' || activeType === 'text' ||
-            activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA') {
+        const isTextInput = activeElement.tagName === 'TEXTAREA' ||
+            activeId === 'go_to' ||
+            (activeElement.tagName === 'INPUT' && activeType !== 'radio' && activeType !== 'checkbox');
+
+        if (isTextInput) {
             return;
         }
 
@@ -282,7 +290,8 @@ function setupEventListeners() {
         // Check radio buttons
         const radios = document.querySelectorAll('input[type="radio"]');
         for (const radio of radios) {
-            if (key === radio.value.toLowerCase()) {
+            const dataKey = radio.getAttribute('data-key');
+            if (key === radio.value.toLowerCase() || (dataKey && key === dataKey)) {
                 radio.checked = true;
                 // Trigger change event so annotation state gets updated
                 radio.dispatchEvent(new Event('change', { bubbles: true }));
