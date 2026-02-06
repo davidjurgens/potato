@@ -1,0 +1,154 @@
+{
+  "id": "pss-10",
+  "name": "Perceived Stress Scale",
+  "short_name": "PSS-10",
+  "description": "A 10-item psychological instrument for measuring the perception of stress. Items ask about feelings and thoughts during the last month.",
+  "url": "https://www.mindgarden.com/132-perceived-stress-scale",
+  "reference": "Cohen, S., Kamarck, T., & Mermelstein, R. (1983). A global measure of perceived stress. Journal of Health and Social Behavior, 24, 385-396.",
+  "reference_url": "https://doi.org/10.2307/2136404",
+  "items_count": 10,
+  "domains": ["mental_health", "stress"],
+  "scoring": {
+    "method": "sum",
+    "reverse_items": [4, 5, 7, 8],
+    "range": [0, 40],
+    "interpretation": {
+      "0-13": "Low stress",
+      "14-26": "Moderate stress",
+      "27-40": "High stress"
+    }
+  },
+  "instructions": "The questions in this scale ask you about your feelings and thoughts during the last month. In each case, please indicate how often you felt or thought a certain way.",
+  "questions": [
+    {
+      "name": "pss_1",
+      "description": "In the last month, how often have you been upset because of something that happened unexpectedly?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "never", "label": "Never"},
+        {"name": "almost_never", "label": "Almost never"},
+        {"name": "sometimes", "label": "Sometimes"},
+        {"name": "fairly_often", "label": "Fairly often"},
+        {"name": "very_often", "label": "Very often"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "pss_2",
+      "description": "In the last month, how often have you felt that you were unable to control the important things in your life?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "never", "label": "Never"},
+        {"name": "almost_never", "label": "Almost never"},
+        {"name": "sometimes", "label": "Sometimes"},
+        {"name": "fairly_often", "label": "Fairly often"},
+        {"name": "very_often", "label": "Very often"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "pss_3",
+      "description": "In the last month, how often have you felt nervous and stressed?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "never", "label": "Never"},
+        {"name": "almost_never", "label": "Almost never"},
+        {"name": "sometimes", "label": "Sometimes"},
+        {"name": "fairly_often", "label": "Fairly often"},
+        {"name": "very_often", "label": "Very often"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "pss_4",
+      "description": "In the last month, how often have you felt confident about your ability to handle your personal problems?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "never", "label": "Never"},
+        {"name": "almost_never", "label": "Almost never"},
+        {"name": "sometimes", "label": "Sometimes"},
+        {"name": "fairly_often", "label": "Fairly often"},
+        {"name": "very_often", "label": "Very often"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "pss_5",
+      "description": "In the last month, how often have you felt that things were going your way?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "never", "label": "Never"},
+        {"name": "almost_never", "label": "Almost never"},
+        {"name": "sometimes", "label": "Sometimes"},
+        {"name": "fairly_often", "label": "Fairly often"},
+        {"name": "very_often", "label": "Very often"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "pss_6",
+      "description": "In the last month, how often have you found that you could not cope with all the things that you had to do?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "never", "label": "Never"},
+        {"name": "almost_never", "label": "Almost never"},
+        {"name": "sometimes", "label": "Sometimes"},
+        {"name": "fairly_often", "label": "Fairly often"},
+        {"name": "very_often", "label": "Very often"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "pss_7",
+      "description": "In the last month, how often have you been able to control irritations in your life?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "never", "label": "Never"},
+        {"name": "almost_never", "label": "Almost never"},
+        {"name": "sometimes", "label": "Sometimes"},
+        {"name": "fairly_often", "label": "Fairly often"},
+        {"name": "very_often", "label": "Very often"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "pss_8",
+      "description": "In the last month, how often have you felt that you were on top of things?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "never", "label": "Never"},
+        {"name": "almost_never", "label": "Almost never"},
+        {"name": "sometimes", "label": "Sometimes"},
+        {"name": "fairly_often", "label": "Fairly often"},
+        {"name": "very_often", "label": "Very often"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "pss_9",
+      "description": "In the last month, how often have you been angered because of things that happened that were outside of your control?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "never", "label": "Never"},
+        {"name": "almost_never", "label": "Almost never"},
+        {"name": "sometimes", "label": "Sometimes"},
+        {"name": "fairly_often", "label": "Fairly often"},
+        {"name": "very_often", "label": "Very often"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "pss_10",
+      "description": "In the last month, how often have you felt difficulties were piling up so high that you could not overcome them?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "never", "label": "Never"},
+        {"name": "almost_never", "label": "Almost never"},
+        {"name": "sometimes", "label": "Sometimes"},
+        {"name": "fairly_often", "label": "Fairly often"},
+        {"name": "very_often", "label": "Very often"}
+      ],
+      "label_requirement": {"required": true}
+    }
+  ]
+}

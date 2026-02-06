@@ -1,0 +1,94 @@
+{
+  "id": "who-5",
+  "name": "WHO Well-Being Index",
+  "short_name": "WHO-5",
+  "description": "A 5-item short self-report measure of current positive psychological well-being. Developed by the World Health Organization and widely used in clinical and research settings.",
+  "url": "https://www.psykiatri-regionh.dk/who-5/Pages/default.aspx",
+  "reference": "Topp, C. W., Ostergaard, S. D., Sondergaard, S., & Bech, P. (2015). The WHO-5 Well-Being Index: A systematic review of the literature. Psychotherapy and Psychosomatics, 84(3), 167-176.",
+  "reference_url": "https://doi.org/10.1159/000376585",
+  "items_count": 5,
+  "domains": ["well_being", "mental_health"],
+  "scoring": {
+    "method": "sum_multiply",
+    "multiplier": 4,
+    "range": [0, 100],
+    "interpretation": {
+      "0-28": "Low well-being (suggests depression screening)",
+      "29-50": "Below average well-being",
+      "51-100": "Good well-being"
+    }
+  },
+  "instructions": "Please indicate for each of the five statements which is closest to how you have been feeling over the last two weeks.",
+  "questions": [
+    {
+      "name": "who5_1",
+      "description": "I have felt cheerful and in good spirits",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "all_time", "label": "All of the time"},
+        {"name": "most_time", "label": "Most of the time"},
+        {"name": "more_than_half", "label": "More than half of the time"},
+        {"name": "less_than_half", "label": "Less than half of the time"},
+        {"name": "some_time", "label": "Some of the time"},
+        {"name": "no_time", "label": "At no time"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "who5_2",
+      "description": "I have felt calm and relaxed",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "all_time", "label": "All of the time"},
+        {"name": "most_time", "label": "Most of the time"},
+        {"name": "more_than_half", "label": "More than half of the time"},
+        {"name": "less_than_half", "label": "Less than half of the time"},
+        {"name": "some_time", "label": "Some of the time"},
+        {"name": "no_time", "label": "At no time"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "who5_3",
+      "description": "I have felt active and vigorous",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "all_time", "label": "All of the time"},
+        {"name": "most_time", "label": "Most of the time"},
+        {"name": "more_than_half", "label": "More than half of the time"},
+        {"name": "less_than_half", "label": "Less than half of the time"},
+        {"name": "some_time", "label": "Some of the time"},
+        {"name": "no_time", "label": "At no time"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "who5_4",
+      "description": "I woke up feeling fresh and rested",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "all_time", "label": "All of the time"},
+        {"name": "most_time", "label": "Most of the time"},
+        {"name": "more_than_half", "label": "More than half of the time"},
+        {"name": "less_than_half", "label": "Less than half of the time"},
+        {"name": "some_time", "label": "Some of the time"},
+        {"name": "no_time", "label": "At no time"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "who5_5",
+      "description": "My daily life has been filled with things that interest me",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "all_time", "label": "All of the time"},
+        {"name": "most_time", "label": "Most of the time"},
+        {"name": "more_than_half", "label": "More than half of the time"},
+        {"name": "less_than_half", "label": "Less than half of the time"},
+        {"name": "some_time", "label": "Some of the time"},
+        {"name": "no_time", "label": "At no time"}
+      ],
+      "label_requirement": {"required": true}
+    }
+  ]
+}

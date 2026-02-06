@@ -1,0 +1,57 @@
+# Simple Survey Demo Configuration
+# This example demonstrates using standard survey instruments in prestudy/poststudy phases
+
+title: Survey Instruments Demo
+task_dir: .
+
+# Data files
+data_files:
+  - data/texts.json
+
+# Item properties
+item_properties:
+  id_key: id
+  text_key: text
+
+# Main annotation phase - simple sentiment rating
+annotation_schemes:
+  - name: sentiment
+    description: "Rate the sentiment of this text"
+    annotation_type: likert
+    size: 5
+    min_label: "Very Negative"
+    max_label: "Very Positive"
+    label_requirement:
+      required: true
+
+# Phases with survey instruments
+phases:
+  order: [consent, prestudy, annotation, poststudy]
+
+  consent:
+    type: consent
+    file: surveys/consent.json
+
+  prestudy:
+    type: prestudy
+    # TIPI: 10-item personality inventory (brief Big Five measure)
+    instrument: "tipi"
+
+  annotation:
+    type: annotation
+
+  poststudy:
+    type: poststudy
+    # Multiple instruments can be combined
+    instruments:
+      - "swls"   # 5-item Satisfaction With Life Scale
+      - "pss-10" # 10-item Perceived Stress Scale
+
+# Server configuration
+server:
+  host: localhost
+  port: 8000
+
+# User configuration
+user_config:
+  allow_duplicate_annotations: false

@@ -1,0 +1,56 @@
+{
+  "id": "ucla-loneliness-3",
+  "name": "UCLA Loneliness Scale (3-item)",
+  "short_name": "UCLA-3",
+  "description": "A 3-item short form of the UCLA Loneliness Scale suitable for telephone surveys and brief assessments. Measures feelings of social isolation and loneliness.",
+  "url": "https://sparqtools.org/mobility-measure/ucla-loneliness-scale-version-3/",
+  "reference": "Hughes, M. E., Waite, L. J., Hawkley, L. C., & Cacioppo, J. T. (2004). A short scale for measuring loneliness in large surveys: Results from two population-based studies. Research on Aging, 26(6), 655-672.",
+  "reference_url": "https://doi.org/10.1093/geronb/59.6.S331",
+  "items_count": 3,
+  "domains": ["social", "loneliness"],
+  "scoring": {
+    "method": "sum",
+    "range": [3, 9],
+    "interpretation": {
+      "3-4": "Low loneliness",
+      "5-6": "Moderate loneliness",
+      "7-9": "High loneliness"
+    }
+  },
+  "instructions": "How often do you feel...",
+  "questions": [
+    {
+      "name": "ucla3_1",
+      "description": "How often do you feel that you lack companionship?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "hardly_ever", "label": "Hardly ever"},
+        {"name": "some_of_time", "label": "Some of the time"},
+        {"name": "often", "label": "Often"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "ucla3_2",
+      "description": "How often do you feel left out?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "hardly_ever", "label": "Hardly ever"},
+        {"name": "some_of_time", "label": "Some of the time"},
+        {"name": "often", "label": "Often"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "ucla3_3",
+      "description": "How often do you feel isolated from others?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "hardly_ever", "label": "Hardly ever"},
+        {"name": "some_of_time", "label": "Some of the time"},
+        {"name": "often", "label": "Often"}
+      ],
+      "label_requirement": {"required": true}
+    }
+  ]
+}

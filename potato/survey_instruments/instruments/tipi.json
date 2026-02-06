@@ -1,0 +1,114 @@
+{
+  "id": "tipi",
+  "name": "Ten-Item Personality Inventory",
+  "short_name": "TIPI",
+  "description": "A very brief measure of the Big Five personality dimensions: Extraversion, Agreeableness, Conscientiousness, Emotional Stability, and Openness to Experience. Designed for situations where time is limited.",
+  "url": "https://gosling.psy.utexas.edu/scales-weve-developed/ten-item-personality-measure-tipi/",
+  "reference": "Gosling, S. D., Rentfrow, P. J., & Swann, W. B., Jr. (2003). A very brief measure of the Big Five personality domains. Journal of Research in Personality, 37, 504-528.",
+  "reference_url": "https://doi.org/10.1016/S0092-6566(03)00046-1",
+  "items_count": 10,
+  "domains": ["personality", "big_five"],
+  "scoring": {
+    "method": "subscales",
+    "subscales": {
+      "extraversion": {"items": [1, 6], "reverse": [6]},
+      "agreeableness": {"items": [2, 7], "reverse": [2]},
+      "conscientiousness": {"items": [3, 8], "reverse": [8]},
+      "emotional_stability": {"items": [4, 9], "reverse": [9]},
+      "openness": {"items": [5, 10], "reverse": [10]}
+    }
+  },
+  "instructions": "Here are a number of personality traits that may or may not apply to you. Please indicate the extent to which you agree or disagree with each statement. You should rate the extent to which the pair of traits applies to you, even if one characteristic applies more strongly than the other.",
+  "questions": [
+    {
+      "name": "tipi_1",
+      "description": "I see myself as: Extraverted, enthusiastic",
+      "annotation_type": "likert",
+      "size": 7,
+      "min_label": "Disagree strongly",
+      "max_label": "Agree strongly",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "tipi_2",
+      "description": "I see myself as: Critical, quarrelsome",
+      "annotation_type": "likert",
+      "size": 7,
+      "min_label": "Disagree strongly",
+      "max_label": "Agree strongly",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "tipi_3",
+      "description": "I see myself as: Dependable, self-disciplined",
+      "annotation_type": "likert",
+      "size": 7,
+      "min_label": "Disagree strongly",
+      "max_label": "Agree strongly",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "tipi_4",
+      "description": "I see myself as: Anxious, easily upset",
+      "annotation_type": "likert",
+      "size": 7,
+      "min_label": "Disagree strongly",
+      "max_label": "Agree strongly",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "tipi_5",
+      "description": "I see myself as: Open to new experiences, complex",
+      "annotation_type": "likert",
+      "size": 7,
+      "min_label": "Disagree strongly",
+      "max_label": "Agree strongly",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "tipi_6",
+      "description": "I see myself as: Reserved, quiet",
+      "annotation_type": "likert",
+      "size": 7,
+      "min_label": "Disagree strongly",
+      "max_label": "Agree strongly",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "tipi_7",
+      "description": "I see myself as: Sympathetic, warm",
+      "annotation_type": "likert",
+      "size": 7,
+      "min_label": "Disagree strongly",
+      "max_label": "Agree strongly",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "tipi_8",
+      "description": "I see myself as: Disorganized, careless",
+      "annotation_type": "likert",
+      "size": 7,
+      "min_label": "Disagree strongly",
+      "max_label": "Agree strongly",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "tipi_9",
+      "description": "I see myself as: Calm, emotionally stable",
+      "annotation_type": "likert",
+      "size": 7,
+      "min_label": "Disagree strongly",
+      "max_label": "Agree strongly",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "tipi_10",
+      "description": "I see myself as: Conventional, uncreative",
+      "annotation_type": "likert",
+      "size": 7,
+      "min_label": "Disagree strongly",
+      "max_label": "Agree strongly",
+      "label_requirement": {"required": true}
+    }
+  ]
+}

@@ -1,0 +1,168 @@
+{
+  "id": "wvs-demographics",
+  "name": "World Values Survey Demographics",
+  "short_name": "WVS-Demo",
+  "description": "Core demographic questions from the World Values Survey (WVS), a global research project that explores people's values and beliefs across nearly 100 countries since 1981.",
+  "url": "https://www.worldvaluessurvey.org",
+  "reference": "Inglehart, R., Haerpfer, C., Moreno, A., Welzel, C., et al. (2022). World Values Survey: All Rounds - Country-Pooled Datafile. Madrid & Vienna: JD Systems Institute & WVSA Secretariat.",
+  "reference_url": "https://doi.org/10.14281/18241.17",
+  "items_count": 12,
+  "domains": ["demographics"],
+  "instructions": "Please answer the following questions about yourself.",
+  "questions": [
+    {
+      "name": "wvs_age",
+      "description": "What is your age?",
+      "annotation_type": "textbox",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "wvs_sex",
+      "description": "What is your sex?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "male", "label": "Male"},
+        {"name": "female", "label": "Female"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "wvs_education",
+      "description": "What is the highest educational level that you have attained?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "no_formal", "label": "No formal education"},
+        {"name": "incomplete_primary", "label": "Incomplete primary school"},
+        {"name": "complete_primary", "label": "Complete primary school"},
+        {"name": "incomplete_secondary_tech", "label": "Incomplete secondary school: technical/vocational"},
+        {"name": "complete_secondary_tech", "label": "Complete secondary school: technical/vocational"},
+        {"name": "incomplete_secondary_prep", "label": "Incomplete secondary school: university-preparatory"},
+        {"name": "complete_secondary_prep", "label": "Complete secondary school: university-preparatory"},
+        {"name": "some_university", "label": "Some university-level education, without degree"},
+        {"name": "university_degree", "label": "University-level education, with degree"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "wvs_marital",
+      "description": "What is your current legal marital status?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "married", "label": "Married"},
+        {"name": "living_together", "label": "Living together as married"},
+        {"name": "divorced", "label": "Divorced"},
+        {"name": "separated", "label": "Separated"},
+        {"name": "widowed", "label": "Widowed"},
+        {"name": "single", "label": "Single/Never married"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "wvs_children",
+      "description": "Have you had any children?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "no", "label": "No children"},
+        {"name": "1", "label": "1 child"},
+        {"name": "2", "label": "2 children"},
+        {"name": "3", "label": "3 children"},
+        {"name": "4plus", "label": "4 or more children"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "wvs_employment",
+      "description": "Are you employed now or not?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "full_time", "label": "Full time employee (30 hours a week or more)"},
+        {"name": "part_time", "label": "Part time employee (less than 30 hours a week)"},
+        {"name": "self_employed", "label": "Self employed"},
+        {"name": "retired", "label": "Retired/pensioned"},
+        {"name": "housewife", "label": "Housewife not otherwise employed"},
+        {"name": "student", "label": "Student"},
+        {"name": "unemployed", "label": "Unemployed"},
+        {"name": "other", "label": "Other"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "wvs_income_scale",
+      "description": "On this card is an income scale on which 1 indicates the lowest income group and 10 the highest income group in your country. We would like to know in what group your household is.",
+      "annotation_type": "slider",
+      "min": 1,
+      "max": 10,
+      "min_label": "Lowest group",
+      "max_label": "Highest group",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "wvs_social_class",
+      "description": "People sometimes describe themselves as belonging to the working class, the middle class, or the upper or lower class. Would you describe yourself as belonging to the:",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "upper", "label": "Upper class"},
+        {"name": "upper_middle", "label": "Upper middle class"},
+        {"name": "lower_middle", "label": "Lower middle class"},
+        {"name": "working", "label": "Working class"},
+        {"name": "lower", "label": "Lower class"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "wvs_religion",
+      "description": "Do you belong to a religion or religious denomination?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "no_religion", "label": "No, do not belong to a denomination"},
+        {"name": "catholic", "label": "Roman Catholic"},
+        {"name": "protestant", "label": "Protestant"},
+        {"name": "orthodox", "label": "Orthodox (Russian/Greek/etc.)"},
+        {"name": "jewish", "label": "Jew"},
+        {"name": "muslim", "label": "Muslim"},
+        {"name": "hindu", "label": "Hindu"},
+        {"name": "buddhist", "label": "Buddhist"},
+        {"name": "other", "label": "Other"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "wvs_religious_importance",
+      "description": "How important is religion in your life?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "very", "label": "Very important"},
+        {"name": "rather", "label": "Rather important"},
+        {"name": "not_very", "label": "Not very important"},
+        {"name": "not_at_all", "label": "Not at all important"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "wvs_political_scale",
+      "description": "In political matters, people talk of 'the left' and 'the right.' How would you place your views on this scale, generally speaking?",
+      "annotation_type": "slider",
+      "min": 1,
+      "max": 10,
+      "min_label": "Left",
+      "max_label": "Right",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "wvs_town_size",
+      "description": "What is the size of the town where you live?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "under_2k", "label": "Under 2,000"},
+        {"name": "2k_5k", "label": "2,000 - 5,000"},
+        {"name": "5k_10k", "label": "5,000 - 10,000"},
+        {"name": "10k_20k", "label": "10,000 - 20,000"},
+        {"name": "20k_50k", "label": "20,000 - 50,000"},
+        {"name": "50k_100k", "label": "50,000 - 100,000"},
+        {"name": "100k_500k", "label": "100,000 - 500,000"},
+        {"name": "500k_plus", "label": "500,000 and more"}
+      ],
+      "label_requirement": {"required": true}
+    }
+  ]
+}

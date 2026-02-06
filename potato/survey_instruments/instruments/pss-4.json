@@ -1,0 +1,76 @@
+{
+  "id": "pss-4",
+  "name": "Perceived Stress Scale-4",
+  "short_name": "PSS-4",
+  "description": "A 4-item short form of the Perceived Stress Scale measuring the degree to which situations in one's life are appraised as stressful. Suitable for telephone interviews and brief assessments.",
+  "url": "https://www.mindgarden.com/132-perceived-stress-scale",
+  "reference": "Cohen, S., Kamarck, T., & Mermelstein, R. (1983). A global measure of perceived stress. Journal of Health and Social Behavior, 24, 385-396.",
+  "reference_url": "https://doi.org/10.2307/2136404",
+  "items_count": 4,
+  "domains": ["mental_health", "stress"],
+  "scoring": {
+    "method": "sum",
+    "reverse_items": [2, 3],
+    "range": [0, 16],
+    "interpretation": {
+      "0-5": "Low stress",
+      "6-10": "Moderate stress",
+      "11-16": "High stress"
+    }
+  },
+  "instructions": "The questions in this scale ask you about your feelings and thoughts during the last month. In each case, please indicate how often you felt or thought a certain way.",
+  "questions": [
+    {
+      "name": "pss4_1",
+      "description": "In the last month, how often have you felt that you were unable to control the important things in your life?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "never", "label": "Never"},
+        {"name": "almost_never", "label": "Almost never"},
+        {"name": "sometimes", "label": "Sometimes"},
+        {"name": "fairly_often", "label": "Fairly often"},
+        {"name": "very_often", "label": "Very often"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "pss4_2",
+      "description": "In the last month, how often have you felt confident about your ability to handle your personal problems?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "never", "label": "Never"},
+        {"name": "almost_never", "label": "Almost never"},
+        {"name": "sometimes", "label": "Sometimes"},
+        {"name": "fairly_often", "label": "Fairly often"},
+        {"name": "very_often", "label": "Very often"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "pss4_3",
+      "description": "In the last month, how often have you felt that things were going your way?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "never", "label": "Never"},
+        {"name": "almost_never", "label": "Almost never"},
+        {"name": "sometimes", "label": "Sometimes"},
+        {"name": "fairly_often", "label": "Fairly often"},
+        {"name": "very_often", "label": "Very often"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "pss4_4",
+      "description": "In the last month, how often have you felt difficulties were piling up so high that you could not overcome them?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "never", "label": "Never"},
+        {"name": "almost_never", "label": "Almost never"},
+        {"name": "sometimes", "label": "Sometimes"},
+        {"name": "fairly_often", "label": "Fairly often"},
+        {"name": "very_often", "label": "Very often"}
+      ],
+      "label_requirement": {"required": true}
+    }
+  ]
+}

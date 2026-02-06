@@ -1,0 +1,205 @@
+{
+  "id": "panas",
+  "name": "Positive and Negative Affect Schedule",
+  "short_name": "PANAS",
+  "description": "A 20-item self-report measure of positive and negative affect. Includes 10 positive affect items (e.g., enthusiastic, interested) and 10 negative affect items (e.g., distressed, upset).",
+  "url": "https://www.sjdm.org/dmidi/PANAS.html",
+  "reference": "Watson, D., Clark, L. A., & Tellegen, A. (1988). Development and validation of brief measures of positive and negative affect: The PANAS scales. Journal of Personality and Social Psychology, 54(6), 1063-1070.",
+  "reference_url": "https://doi.org/10.1037/0022-3514.54.6.1063",
+  "items_count": 20,
+  "domains": ["affect", "emotion"],
+  "scoring": {
+    "method": "subscales",
+    "subscales": {
+      "positive_affect": {"items": [1, 3, 5, 9, 10, 12, 14, 16, 17, 19]},
+      "negative_affect": {"items": [2, 4, 6, 7, 8, 11, 13, 15, 18, 20]}
+    },
+    "range": {
+      "positive_affect": [10, 50],
+      "negative_affect": [10, 50]
+    }
+  },
+  "instructions": "This scale consists of a number of words that describe different feelings and emotions. Read each item and then indicate to what extent you feel this way right now, that is, at the present moment.",
+  "questions": [
+    {
+      "name": "panas_1",
+      "description": "Interested",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Very slightly or not at all",
+      "max_label": "Extremely",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "panas_2",
+      "description": "Distressed",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Very slightly or not at all",
+      "max_label": "Extremely",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "panas_3",
+      "description": "Excited",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Very slightly or not at all",
+      "max_label": "Extremely",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "panas_4",
+      "description": "Upset",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Very slightly or not at all",
+      "max_label": "Extremely",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "panas_5",
+      "description": "Strong",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Very slightly or not at all",
+      "max_label": "Extremely",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "panas_6",
+      "description": "Guilty",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Very slightly or not at all",
+      "max_label": "Extremely",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "panas_7",
+      "description": "Scared",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Very slightly or not at all",
+      "max_label": "Extremely",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "panas_8",
+      "description": "Hostile",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Very slightly or not at all",
+      "max_label": "Extremely",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "panas_9",
+      "description": "Enthusiastic",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Very slightly or not at all",
+      "max_label": "Extremely",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "panas_10",
+      "description": "Proud",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Very slightly or not at all",
+      "max_label": "Extremely",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "panas_11",
+      "description": "Irritable",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Very slightly or not at all",
+      "max_label": "Extremely",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "panas_12",
+      "description": "Alert",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Very slightly or not at all",
+      "max_label": "Extremely",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "panas_13",
+      "description": "Ashamed",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Very slightly or not at all",
+      "max_label": "Extremely",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "panas_14",
+      "description": "Inspired",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Very slightly or not at all",
+      "max_label": "Extremely",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "panas_15",
+      "description": "Nervous",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Very slightly or not at all",
+      "max_label": "Extremely",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "panas_16",
+      "description": "Determined",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Very slightly or not at all",
+      "max_label": "Extremely",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "panas_17",
+      "description": "Attentive",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Very slightly or not at all",
+      "max_label": "Extremely",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "panas_18",
+      "description": "Jittery",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Very slightly or not at all",
+      "max_label": "Extremely",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "panas_19",
+      "description": "Active",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Very slightly or not at all",
+      "max_label": "Extremely",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "panas_20",
+      "description": "Afraid",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Very slightly or not at all",
+      "max_label": "Extremely",
+      "label_requirement": {"required": true}
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "id": "shs",
+  "name": "Subjective Happiness Scale",
+  "short_name": "SHS",
+  "description": "A 4-item global measure of subjective happiness. It assesses global subjective happiness through self-evaluation and comparison with others.",
+  "url": "https://eddiener.com/scales",
+  "reference": "Lyubomirsky, S., & Lepper, H. (1999). A measure of subjective happiness: Preliminary reliability and construct validation. Social Indicators Research, 46, 137-155.",
+  "reference_url": "https://doi.org/10.1023/A:1006824100041",
+  "items_count": 4,
+  "domains": ["well_being", "happiness"],
+  "scoring": {
+    "method": "mean",
+    "reverse_items": [4],
+    "range": [1, 7],
+    "interpretation": {
+      "1.0-3.5": "Below average happiness",
+      "3.5-4.5": "Average happiness",
+      "4.5-7.0": "Above average happiness"
+    }
+  },
+  "instructions": "For each of the following statements and/or questions, please select the point on the scale that you feel is most appropriate in describing you.",
+  "questions": [
+    {
+      "name": "shs_1",
+      "description": "In general, I consider myself:",
+      "annotation_type": "likert",
+      "size": 7,
+      "min_label": "Not a very happy person",
+      "max_label": "A very happy person",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "shs_2",
+      "description": "Compared to most of my peers, I consider myself:",
+      "annotation_type": "likert",
+      "size": 7,
+      "min_label": "Less happy",
+      "max_label": "More happy",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "shs_3",
+      "description": "Some people are generally very happy. They enjoy life regardless of what is going on, getting the most out of everything. To what extent does this characterization describe you?",
+      "annotation_type": "likert",
+      "size": 7,
+      "min_label": "Not at all",
+      "max_label": "A great deal",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "shs_4",
+      "description": "Some people are generally not very happy. Although they are not depressed, they never seem as happy as they might be. To what extent does this characterization describe you?",
+      "annotation_type": "likert",
+      "size": 7,
+      "min_label": "Not at all",
+      "max_label": "A great deal",
+      "label_requirement": {"required": true}
+    }
+  ]
+}

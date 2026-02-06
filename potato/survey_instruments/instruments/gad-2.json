@@ -1,0 +1,46 @@
+{
+  "id": "gad-2",
+  "name": "Generalized Anxiety Disorder-2",
+  "short_name": "GAD-2",
+  "description": "A 2-item ultra-brief anxiety screening tool consisting of the first two items of the GAD-7. Highly sensitive for detecting generalized anxiety, panic, social anxiety, and PTSD.",
+  "url": "https://www.phqscreeners.com/select-screener",
+  "reference": "Kroenke, K., Spitzer, R. L., Williams, J. B., Monahan, P. O., & Löwe, B. (2007). Anxiety disorders in primary care: Prevalence, impairment, comorbidity, and detection. Annals of Internal Medicine, 146(5), 317-325.",
+  "reference_url": "https://jamanetwork.com/journals/jamainternalmedicine/fullarticle/410326",
+  "items_count": 2,
+  "domains": ["mental_health", "anxiety"],
+  "scoring": {
+    "method": "sum",
+    "range": [0, 6],
+    "interpretation": {
+      "0-2": "Negative screen",
+      "3-6": "Positive screen (consider GAD-7)"
+    }
+  },
+  "instructions": "Over the last 2 weeks, how often have you been bothered by the following problems?",
+  "questions": [
+    {
+      "name": "gad2_1",
+      "description": "Feeling nervous, anxious, or on edge",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_at_all", "label": "Not at all"},
+        {"name": "several_days", "label": "Several days"},
+        {"name": "more_than_half", "label": "More than half the days"},
+        {"name": "nearly_every_day", "label": "Nearly every day"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gad2_2",
+      "description": "Not being able to stop or control worrying",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_at_all", "label": "Not at all"},
+        {"name": "several_days", "label": "Several days"},
+        {"name": "more_than_half", "label": "More than half the days"},
+        {"name": "nearly_every_day", "label": "Nearly every day"}
+      ],
+      "label_requirement": {"required": true}
+    }
+  ]
+}

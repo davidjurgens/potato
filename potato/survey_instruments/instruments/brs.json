@@ -1,0 +1,78 @@
+{
+  "id": "brs",
+  "name": "Brief Resilience Scale",
+  "short_name": "BRS",
+  "description": "A 6-item measure assessing the ability to bounce back or recover from stress. It is one of the few resilience measures that focuses specifically on the core concept of resilience.",
+  "url": "https://positivepsychology.com/brief-resilience-scale/",
+  "reference": "Smith, B. W., Dalen, J., Wiggins, K., Steger, M., & Lohr, J. M. (2008). The Brief Resilience Scale: Assessing the ability to bounce back. International Journal of Behavioral Medicine, 15, 194-200.",
+  "reference_url": "https://doi.org/10.1080/10705500802222972",
+  "items_count": 6,
+  "domains": ["mental_health", "resilience"],
+  "scoring": {
+    "method": "mean",
+    "reverse_items": [2, 4, 6],
+    "range": [1, 5],
+    "interpretation": {
+      "1.00-2.99": "Low resilience",
+      "3.00-4.30": "Normal resilience",
+      "4.31-5.00": "High resilience"
+    }
+  },
+  "instructions": "Please indicate the extent to which you agree with each of the following statements.",
+  "questions": [
+    {
+      "name": "brs_1",
+      "description": "I tend to bounce back quickly after hard times.",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Strongly disagree",
+      "max_label": "Strongly agree",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "brs_2",
+      "description": "I have a hard time making it through stressful events.",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Strongly disagree",
+      "max_label": "Strongly agree",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "brs_3",
+      "description": "It does not take me long to recover from a stressful event.",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Strongly disagree",
+      "max_label": "Strongly agree",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "brs_4",
+      "description": "It is hard for me to snap back when something bad happens.",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Strongly disagree",
+      "max_label": "Strongly agree",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "brs_5",
+      "description": "I usually come through difficult times with little trouble.",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Strongly disagree",
+      "max_label": "Strongly agree",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "brs_6",
+      "description": "I tend to take a long time to get over set-backs in my life.",
+      "annotation_type": "likert",
+      "size": 5,
+      "min_label": "Strongly disagree",
+      "max_label": "Strongly agree",
+      "label_requirement": {"required": true}
+    }
+  ]
+}

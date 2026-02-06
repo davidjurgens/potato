@@ -1,0 +1,264 @@
+{
+  "id": "ces-d",
+  "name": "Center for Epidemiologic Studies Depression Scale",
+  "short_name": "CES-D",
+  "description": "A 20-item self-report measure designed to measure depressive symptomatology in the general population. Emphasizes the affective component of depressive symptoms.",
+  "url": "https://cesd-r.com/",
+  "reference": "Radloff, L. S. (1977). The CES-D Scale: A self-report depression scale for research in the general population. Applied Psychological Measurement, 1(3), 385-401.",
+  "reference_url": "https://doi.org/10.1177/014662167700100306",
+  "items_count": 20,
+  "domains": ["mental_health", "depression"],
+  "scoring": {
+    "method": "sum",
+    "reverse_items": [4, 8, 12, 16],
+    "range": [0, 60],
+    "interpretation": {
+      "0-15": "No/minimal depressive symptoms",
+      "16-23": "Mild to moderate depressive symptoms",
+      "24-60": "Significant depressive symptoms"
+    }
+  },
+  "instructions": "Below is a list of the ways you might have felt or behaved. Please tell me how often you have felt this way during the past week.",
+  "questions": [
+    {
+      "name": "cesd_1",
+      "description": "I was bothered by things that usually don't bother me.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "rarely", "label": "Rarely or none of the time (less than 1 day)"},
+        {"name": "some", "label": "Some or a little of the time (1-2 days)"},
+        {"name": "occasionally", "label": "Occasionally or a moderate amount of time (3-4 days)"},
+        {"name": "most", "label": "Most or all of the time (5-7 days)"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "cesd_2",
+      "description": "I did not feel like eating; my appetite was poor.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "rarely", "label": "Rarely or none of the time (less than 1 day)"},
+        {"name": "some", "label": "Some or a little of the time (1-2 days)"},
+        {"name": "occasionally", "label": "Occasionally or a moderate amount of time (3-4 days)"},
+        {"name": "most", "label": "Most or all of the time (5-7 days)"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "cesd_3",
+      "description": "I felt that I could not shake off the blues even with help from my family or friends.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "rarely", "label": "Rarely or none of the time (less than 1 day)"},
+        {"name": "some", "label": "Some or a little of the time (1-2 days)"},
+        {"name": "occasionally", "label": "Occasionally or a moderate amount of time (3-4 days)"},
+        {"name": "most", "label": "Most or all of the time (5-7 days)"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "cesd_4",
+      "description": "I felt I was just as good as other people.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "rarely", "label": "Rarely or none of the time (less than 1 day)"},
+        {"name": "some", "label": "Some or a little of the time (1-2 days)"},
+        {"name": "occasionally", "label": "Occasionally or a moderate amount of time (3-4 days)"},
+        {"name": "most", "label": "Most or all of the time (5-7 days)"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "cesd_5",
+      "description": "I had trouble keeping my mind on what I was doing.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "rarely", "label": "Rarely or none of the time (less than 1 day)"},
+        {"name": "some", "label": "Some or a little of the time (1-2 days)"},
+        {"name": "occasionally", "label": "Occasionally or a moderate amount of time (3-4 days)"},
+        {"name": "most", "label": "Most or all of the time (5-7 days)"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "cesd_6",
+      "description": "I felt depressed.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "rarely", "label": "Rarely or none of the time (less than 1 day)"},
+        {"name": "some", "label": "Some or a little of the time (1-2 days)"},
+        {"name": "occasionally", "label": "Occasionally or a moderate amount of time (3-4 days)"},
+        {"name": "most", "label": "Most or all of the time (5-7 days)"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "cesd_7",
+      "description": "I felt that everything I did was an effort.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "rarely", "label": "Rarely or none of the time (less than 1 day)"},
+        {"name": "some", "label": "Some or a little of the time (1-2 days)"},
+        {"name": "occasionally", "label": "Occasionally or a moderate amount of time (3-4 days)"},
+        {"name": "most", "label": "Most or all of the time (5-7 days)"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "cesd_8",
+      "description": "I felt hopeful about the future.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "rarely", "label": "Rarely or none of the time (less than 1 day)"},
+        {"name": "some", "label": "Some or a little of the time (1-2 days)"},
+        {"name": "occasionally", "label": "Occasionally or a moderate amount of time (3-4 days)"},
+        {"name": "most", "label": "Most or all of the time (5-7 days)"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "cesd_9",
+      "description": "I thought my life had been a failure.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "rarely", "label": "Rarely or none of the time (less than 1 day)"},
+        {"name": "some", "label": "Some or a little of the time (1-2 days)"},
+        {"name": "occasionally", "label": "Occasionally or a moderate amount of time (3-4 days)"},
+        {"name": "most", "label": "Most or all of the time (5-7 days)"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "cesd_10",
+      "description": "I felt fearful.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "rarely", "label": "Rarely or none of the time (less than 1 day)"},
+        {"name": "some", "label": "Some or a little of the time (1-2 days)"},
+        {"name": "occasionally", "label": "Occasionally or a moderate amount of time (3-4 days)"},
+        {"name": "most", "label": "Most or all of the time (5-7 days)"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "cesd_11",
+      "description": "My sleep was restless.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "rarely", "label": "Rarely or none of the time (less than 1 day)"},
+        {"name": "some", "label": "Some or a little of the time (1-2 days)"},
+        {"name": "occasionally", "label": "Occasionally or a moderate amount of time (3-4 days)"},
+        {"name": "most", "label": "Most or all of the time (5-7 days)"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "cesd_12",
+      "description": "I was happy.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "rarely", "label": "Rarely or none of the time (less than 1 day)"},
+        {"name": "some", "label": "Some or a little of the time (1-2 days)"},
+        {"name": "occasionally", "label": "Occasionally or a moderate amount of time (3-4 days)"},
+        {"name": "most", "label": "Most or all of the time (5-7 days)"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "cesd_13",
+      "description": "I talked less than usual.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "rarely", "label": "Rarely or none of the time (less than 1 day)"},
+        {"name": "some", "label": "Some or a little of the time (1-2 days)"},
+        {"name": "occasionally", "label": "Occasionally or a moderate amount of time (3-4 days)"},
+        {"name": "most", "label": "Most or all of the time (5-7 days)"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "cesd_14",
+      "description": "I felt lonely.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "rarely", "label": "Rarely or none of the time (less than 1 day)"},
+        {"name": "some", "label": "Some or a little of the time (1-2 days)"},
+        {"name": "occasionally", "label": "Occasionally or a moderate amount of time (3-4 days)"},
+        {"name": "most", "label": "Most or all of the time (5-7 days)"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "cesd_15",
+      "description": "People were unfriendly.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "rarely", "label": "Rarely or none of the time (less than 1 day)"},
+        {"name": "some", "label": "Some or a little of the time (1-2 days)"},
+        {"name": "occasionally", "label": "Occasionally or a moderate amount of time (3-4 days)"},
+        {"name": "most", "label": "Most or all of the time (5-7 days)"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "cesd_16",
+      "description": "I enjoyed life.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "rarely", "label": "Rarely or none of the time (less than 1 day)"},
+        {"name": "some", "label": "Some or a little of the time (1-2 days)"},
+        {"name": "occasionally", "label": "Occasionally or a moderate amount of time (3-4 days)"},
+        {"name": "most", "label": "Most or all of the time (5-7 days)"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "cesd_17",
+      "description": "I had crying spells.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "rarely", "label": "Rarely or none of the time (less than 1 day)"},
+        {"name": "some", "label": "Some or a little of the time (1-2 days)"},
+        {"name": "occasionally", "label": "Occasionally or a moderate amount of time (3-4 days)"},
+        {"name": "most", "label": "Most or all of the time (5-7 days)"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "cesd_18",
+      "description": "I felt sad.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "rarely", "label": "Rarely or none of the time (less than 1 day)"},
+        {"name": "some", "label": "Some or a little of the time (1-2 days)"},
+        {"name": "occasionally", "label": "Occasionally or a moderate amount of time (3-4 days)"},
+        {"name": "most", "label": "Most or all of the time (5-7 days)"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "cesd_19",
+      "description": "I felt that people dislike me.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "rarely", "label": "Rarely or none of the time (less than 1 day)"},
+        {"name": "some", "label": "Some or a little of the time (1-2 days)"},
+        {"name": "occasionally", "label": "Occasionally or a moderate amount of time (3-4 days)"},
+        {"name": "most", "label": "Most or all of the time (5-7 days)"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "cesd_20",
+      "description": "I could not get going.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "rarely", "label": "Rarely or none of the time (less than 1 day)"},
+        {"name": "some", "label": "Some or a little of the time (1-2 days)"},
+        {"name": "occasionally", "label": "Occasionally or a moderate amount of time (3-4 days)"},
+        {"name": "most", "label": "Most or all of the time (5-7 days)"}
+      ],
+      "label_requirement": {"required": true}
+    }
+  ]
+}

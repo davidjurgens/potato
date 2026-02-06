@@ -1,0 +1,33 @@
+{
+  "id": "macarthur-ladder",
+  "name": "MacArthur Scale of Subjective Social Status",
+  "short_name": "MacArthur Ladder",
+  "description": "A single-item pictorial measure of subjective social status. Respondents place themselves on a ladder representing social hierarchy in society or their community.",
+  "url": "https://sparqtools.org/mobility-measure/macarthur-scale-of-subjective-social-status/",
+  "reference": "Adler, N. E., Epel, E. S., Castellazzo, G., & Ickovics, J. R. (2000). Relationship of subjective and objective social status with psychological and physiological functioning: Preliminary data in healthy, White women. Health Psychology, 19(6), 586-592.",
+  "reference_url": "https://doi.org/10.1037/0278-6133.19.6.586",
+  "items_count": 1,
+  "domains": ["social", "status"],
+  "scoring": {
+    "method": "single_item",
+    "range": [1, 10],
+    "interpretation": {
+      "1-3": "Low subjective social status",
+      "4-7": "Middle subjective social status",
+      "8-10": "High subjective social status"
+    }
+  },
+  "instructions": "Think of this ladder as representing where people stand in society. At the top of the ladder are the people who are the best off - those who have the most money, most education, and best jobs. At the bottom are the people who are the worst off - those who have the least money, least education, and worst jobs or no job.",
+  "questions": [
+    {
+      "name": "macarthur_ladder",
+      "description": "Where would you put yourself on this ladder? Please select the rung where you think you stand at this time in your life, relative to other people in the United States.",
+      "annotation_type": "slider",
+      "min": 1,
+      "max": 10,
+      "min_label": "Bottom (worst off)",
+      "max_label": "Top (best off)",
+      "label_requirement": {"required": true}
+    }
+  ]
+}

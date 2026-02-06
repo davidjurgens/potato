@@ -1,0 +1,143 @@
+{
+  "id": "gse",
+  "name": "General Self-Efficacy Scale",
+  "short_name": "GSE",
+  "description": "A 10-item psychometric scale designed to assess optimistic self-beliefs used to cope with a variety of demands in life. It is a measure of general perceived self-efficacy.",
+  "url": "https://userpage.fu-berlin.de/~health/engscal.htm",
+  "reference": "Schwarzer, R., & Jerusalem, M. (1995). Generalized Self-Efficacy scale. In J. Weinman, S. Wright, & M. Johnston, Measures in health psychology: A user's portfolio. Causal and control beliefs (pp. 35-37). Windsor, UK: NFER-NELSON.",
+  "reference_url": "https://doi.org/10.1037/t00393-000",
+  "items_count": 10,
+  "domains": ["personality", "self_efficacy"],
+  "scoring": {
+    "method": "sum",
+    "range": [10, 40],
+    "interpretation": {
+      "10-20": "Low self-efficacy",
+      "21-30": "Moderate self-efficacy",
+      "31-40": "High self-efficacy"
+    }
+  },
+  "instructions": "Please indicate how true each of the following statements is for you.",
+  "questions": [
+    {
+      "name": "gse_1",
+      "description": "I can always manage to solve difficult problems if I try hard enough.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_true", "label": "Not at all true"},
+        {"name": "hardly_true", "label": "Hardly true"},
+        {"name": "moderately_true", "label": "Moderately true"},
+        {"name": "exactly_true", "label": "Exactly true"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gse_2",
+      "description": "If someone opposes me, I can find the means and ways to get what I want.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_true", "label": "Not at all true"},
+        {"name": "hardly_true", "label": "Hardly true"},
+        {"name": "moderately_true", "label": "Moderately true"},
+        {"name": "exactly_true", "label": "Exactly true"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gse_3",
+      "description": "It is easy for me to stick to my aims and accomplish my goals.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_true", "label": "Not at all true"},
+        {"name": "hardly_true", "label": "Hardly true"},
+        {"name": "moderately_true", "label": "Moderately true"},
+        {"name": "exactly_true", "label": "Exactly true"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gse_4",
+      "description": "I am confident that I could deal efficiently with unexpected events.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_true", "label": "Not at all true"},
+        {"name": "hardly_true", "label": "Hardly true"},
+        {"name": "moderately_true", "label": "Moderately true"},
+        {"name": "exactly_true", "label": "Exactly true"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gse_5",
+      "description": "Thanks to my resourcefulness, I know how to handle unforeseen situations.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_true", "label": "Not at all true"},
+        {"name": "hardly_true", "label": "Hardly true"},
+        {"name": "moderately_true", "label": "Moderately true"},
+        {"name": "exactly_true", "label": "Exactly true"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gse_6",
+      "description": "I can solve most problems if I invest the necessary effort.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_true", "label": "Not at all true"},
+        {"name": "hardly_true", "label": "Hardly true"},
+        {"name": "moderately_true", "label": "Moderately true"},
+        {"name": "exactly_true", "label": "Exactly true"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gse_7",
+      "description": "I can remain calm when facing difficulties because I can rely on my coping abilities.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_true", "label": "Not at all true"},
+        {"name": "hardly_true", "label": "Hardly true"},
+        {"name": "moderately_true", "label": "Moderately true"},
+        {"name": "exactly_true", "label": "Exactly true"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gse_8",
+      "description": "When I am confronted with a problem, I can usually find several solutions.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_true", "label": "Not at all true"},
+        {"name": "hardly_true", "label": "Hardly true"},
+        {"name": "moderately_true", "label": "Moderately true"},
+        {"name": "exactly_true", "label": "Exactly true"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gse_9",
+      "description": "If I am in trouble, I can usually think of a solution.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_true", "label": "Not at all true"},
+        {"name": "hardly_true", "label": "Hardly true"},
+        {"name": "moderately_true", "label": "Moderately true"},
+        {"name": "exactly_true", "label": "Exactly true"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gse_10",
+      "description": "I can usually handle whatever comes my way.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_true", "label": "Not at all true"},
+        {"name": "hardly_true", "label": "Hardly true"},
+        {"name": "moderately_true", "label": "Moderately true"},
+        {"name": "exactly_true", "label": "Exactly true"}
+      ],
+      "label_requirement": {"required": true}
+    }
+  ]
+}

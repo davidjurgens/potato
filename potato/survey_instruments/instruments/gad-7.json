@@ -1,0 +1,108 @@
+{
+  "id": "gad-7",
+  "name": "Generalized Anxiety Disorder-7",
+  "short_name": "GAD-7",
+  "description": "A 7-item self-report measure for screening and monitoring generalized anxiety disorder severity. Each item is rated on a 4-point scale from 0 (not at all) to 3 (nearly every day).",
+  "url": "https://www.phqscreeners.com/select-screener",
+  "reference": "Spitzer, R. L., Kroenke, K., Williams, J. B., & Lowe, B. (2006). A brief measure for assessing generalized anxiety disorder: the GAD-7. Archives of Internal Medicine, 166(10), 1092-1097.",
+  "reference_url": "https://doi.org/10.1001/archinte.166.10.1092",
+  "items_count": 7,
+  "domains": ["mental_health", "anxiety"],
+  "scoring": {
+    "method": "sum",
+    "range": [0, 21],
+    "interpretation": {
+      "0-4": "Minimal anxiety",
+      "5-9": "Mild anxiety",
+      "10-14": "Moderate anxiety",
+      "15-21": "Severe anxiety"
+    }
+  },
+  "instructions": "Over the last 2 weeks, how often have you been bothered by the following problems?",
+  "questions": [
+    {
+      "name": "gad7_1",
+      "description": "Feeling nervous, anxious, or on edge",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_at_all", "label": "Not at all"},
+        {"name": "several_days", "label": "Several days"},
+        {"name": "more_than_half", "label": "More than half the days"},
+        {"name": "nearly_every_day", "label": "Nearly every day"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gad7_2",
+      "description": "Not being able to stop or control worrying",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_at_all", "label": "Not at all"},
+        {"name": "several_days", "label": "Several days"},
+        {"name": "more_than_half", "label": "More than half the days"},
+        {"name": "nearly_every_day", "label": "Nearly every day"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gad7_3",
+      "description": "Worrying too much about different things",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_at_all", "label": "Not at all"},
+        {"name": "several_days", "label": "Several days"},
+        {"name": "more_than_half", "label": "More than half the days"},
+        {"name": "nearly_every_day", "label": "Nearly every day"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gad7_4",
+      "description": "Trouble relaxing",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_at_all", "label": "Not at all"},
+        {"name": "several_days", "label": "Several days"},
+        {"name": "more_than_half", "label": "More than half the days"},
+        {"name": "nearly_every_day", "label": "Nearly every day"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gad7_5",
+      "description": "Being so restless that it is hard to sit still",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_at_all", "label": "Not at all"},
+        {"name": "several_days", "label": "Several days"},
+        {"name": "more_than_half", "label": "More than half the days"},
+        {"name": "nearly_every_day", "label": "Nearly every day"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gad7_6",
+      "description": "Becoming easily annoyed or irritable",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_at_all", "label": "Not at all"},
+        {"name": "several_days", "label": "Several days"},
+        {"name": "more_than_half", "label": "More than half the days"},
+        {"name": "nearly_every_day", "label": "Nearly every day"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gad7_7",
+      "description": "Feeling afraid, as if something awful might happen",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_at_all", "label": "Not at all"},
+        {"name": "several_days", "label": "Several days"},
+        {"name": "more_than_half", "label": "More than half the days"},
+        {"name": "nearly_every_day", "label": "Nearly every day"}
+      ],
+      "label_requirement": {"required": true}
+    }
+  ]
+}

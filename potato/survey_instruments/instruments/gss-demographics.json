@@ -1,0 +1,195 @@
+{
+  "id": "gss-demographics",
+  "name": "GSS Core Demographics",
+  "short_name": "GSS-Demo",
+  "description": "Core demographic questions from the General Social Survey (GSS), the leading source of data on social trends in the United States since 1972.",
+  "url": "https://gss.norc.org",
+  "reference": "Smith, T. W., Davern, M., Freese, J., & Morgan, S. L. (2019). General Social Surveys, 1972-2018. Chicago: NORC.",
+  "reference_url": "https://gss.norc.org/get-the-data",
+  "items_count": 14,
+  "domains": ["demographics"],
+  "instructions": "Please answer the following questions about yourself and your background.",
+  "questions": [
+    {
+      "name": "gss_age",
+      "description": "What is your age?",
+      "annotation_type": "textbox",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gss_sex",
+      "description": "What is your sex?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "male", "label": "Male"},
+        {"name": "female", "label": "Female"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gss_race",
+      "description": "What race do you consider yourself?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "white", "label": "White"},
+        {"name": "black", "label": "Black"},
+        {"name": "other", "label": "Other"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gss_hispanic",
+      "description": "Are you Spanish, Hispanic, or Latino/Latina?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "yes", "label": "Yes"},
+        {"name": "no", "label": "No"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gss_educ",
+      "description": "What is the highest grade in school or year of college you completed?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "less_than_hs", "label": "Less than high school"},
+        {"name": "hs", "label": "High school diploma or GED"},
+        {"name": "some_college", "label": "Some college"},
+        {"name": "junior_college", "label": "Junior college / Associate degree"},
+        {"name": "bachelors", "label": "Bachelor's degree"},
+        {"name": "graduate", "label": "Graduate degree"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gss_marital",
+      "description": "Are you currently married, widowed, divorced, separated, or have you never been married?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "married", "label": "Married"},
+        {"name": "widowed", "label": "Widowed"},
+        {"name": "divorced", "label": "Divorced"},
+        {"name": "separated", "label": "Separated"},
+        {"name": "never_married", "label": "Never married"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gss_childs",
+      "description": "How many children have you ever had?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "0", "label": "None"},
+        {"name": "1", "label": "1"},
+        {"name": "2", "label": "2"},
+        {"name": "3", "label": "3"},
+        {"name": "4", "label": "4"},
+        {"name": "5plus", "label": "5 or more"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gss_wrkstat",
+      "description": "Last week were you working full time, part time, going to school, keeping house, or what?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "full_time", "label": "Working full time"},
+        {"name": "part_time", "label": "Working part time"},
+        {"name": "temp_not_working", "label": "Temporarily not working"},
+        {"name": "unemployed", "label": "Unemployed, laid off"},
+        {"name": "retired", "label": "Retired"},
+        {"name": "school", "label": "In school"},
+        {"name": "keeping_house", "label": "Keeping house"},
+        {"name": "other", "label": "Other"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gss_income",
+      "description": "In which of these groups did your total family income fall last year before taxes?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "under_15k", "label": "Under $15,000"},
+        {"name": "15k_25k", "label": "$15,000 - $24,999"},
+        {"name": "25k_50k", "label": "$25,000 - $49,999"},
+        {"name": "50k_75k", "label": "$50,000 - $74,999"},
+        {"name": "75k_100k", "label": "$75,000 - $99,999"},
+        {"name": "100k_150k", "label": "$100,000 - $149,999"},
+        {"name": "150k_plus", "label": "$150,000 or more"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gss_class",
+      "description": "If you were asked to use one of four names for your social class, which would you say you belong in?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "lower", "label": "Lower class"},
+        {"name": "working", "label": "Working class"},
+        {"name": "middle", "label": "Middle class"},
+        {"name": "upper", "label": "Upper class"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gss_relig",
+      "description": "What is your religious preference? Is it Protestant, Catholic, Jewish, some other religion, or no religion?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "protestant", "label": "Protestant"},
+        {"name": "catholic", "label": "Catholic"},
+        {"name": "jewish", "label": "Jewish"},
+        {"name": "none", "label": "None"},
+        {"name": "other", "label": "Other"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gss_attend",
+      "description": "How often do you attend religious services?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "never", "label": "Never"},
+        {"name": "lt_yearly", "label": "Less than once a year"},
+        {"name": "yearly", "label": "Once a year"},
+        {"name": "several_year", "label": "Several times a year"},
+        {"name": "monthly", "label": "Once a month"},
+        {"name": "2_3_month", "label": "2-3 times a month"},
+        {"name": "weekly", "label": "Nearly every week"},
+        {"name": "weekly_plus", "label": "Every week or more"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gss_polviews",
+      "description": "We hear a lot of talk these days about liberals and conservatives. Where would you place yourself on this scale?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "extremely_liberal", "label": "Extremely liberal"},
+        {"name": "liberal", "label": "Liberal"},
+        {"name": "slightly_liberal", "label": "Slightly liberal"},
+        {"name": "moderate", "label": "Moderate, middle of the road"},
+        {"name": "slightly_conservative", "label": "Slightly conservative"},
+        {"name": "conservative", "label": "Conservative"},
+        {"name": "extremely_conservative", "label": "Extremely conservative"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "gss_partyid",
+      "description": "Generally speaking, do you usually think of yourself as a Republican, Democrat, Independent, or what?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "strong_dem", "label": "Strong Democrat"},
+        {"name": "not_strong_dem", "label": "Not very strong Democrat"},
+        {"name": "ind_dem", "label": "Independent, near Democrat"},
+        {"name": "independent", "label": "Independent"},
+        {"name": "ind_rep", "label": "Independent, near Republican"},
+        {"name": "not_strong_rep", "label": "Not very strong Republican"},
+        {"name": "strong_rep", "label": "Strong Republican"},
+        {"name": "other", "label": "Other party"}
+      ],
+      "label_requirement": {"required": true}
+    }
+  ]
+}

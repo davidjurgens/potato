@@ -1,0 +1,133 @@
+{
+  "id": "phq-9",
+  "name": "Patient Health Questionnaire-9",
+  "short_name": "PHQ-9",
+  "description": "A 9-item self-report measure for screening, diagnosing, monitoring, and measuring the severity of depression. Each item is rated on a 4-point scale from 0 (not at all) to 3 (nearly every day).",
+  "url": "https://www.phqscreeners.com/select-screener",
+  "reference": "Kroenke, K., Spitzer, R. L., & Williams, J. B. (2001). The PHQ-9: Validity of a brief depression severity measure. Journal of General Internal Medicine, 16(9), 606-613.",
+  "reference_url": "https://doi.org/10.1046/j.1525-1497.2001.016009606.x",
+  "items_count": 9,
+  "domains": ["mental_health", "depression"],
+  "scoring": {
+    "method": "sum",
+    "range": [0, 27],
+    "interpretation": {
+      "0-4": "Minimal depression",
+      "5-9": "Mild depression",
+      "10-14": "Moderate depression",
+      "15-19": "Moderately severe depression",
+      "20-27": "Severe depression"
+    }
+  },
+  "instructions": "Over the last 2 weeks, how often have you been bothered by any of the following problems?",
+  "questions": [
+    {
+      "name": "phq9_1",
+      "description": "Little interest or pleasure in doing things",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_at_all", "label": "Not at all", "tooltip": "0 points"},
+        {"name": "several_days", "label": "Several days", "tooltip": "1 point"},
+        {"name": "more_than_half", "label": "More than half the days", "tooltip": "2 points"},
+        {"name": "nearly_every_day", "label": "Nearly every day", "tooltip": "3 points"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "phq9_2",
+      "description": "Feeling down, depressed, or hopeless",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_at_all", "label": "Not at all", "tooltip": "0 points"},
+        {"name": "several_days", "label": "Several days", "tooltip": "1 point"},
+        {"name": "more_than_half", "label": "More than half the days", "tooltip": "2 points"},
+        {"name": "nearly_every_day", "label": "Nearly every day", "tooltip": "3 points"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "phq9_3",
+      "description": "Trouble falling or staying asleep, or sleeping too much",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_at_all", "label": "Not at all", "tooltip": "0 points"},
+        {"name": "several_days", "label": "Several days", "tooltip": "1 point"},
+        {"name": "more_than_half", "label": "More than half the days", "tooltip": "2 points"},
+        {"name": "nearly_every_day", "label": "Nearly every day", "tooltip": "3 points"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "phq9_4",
+      "description": "Feeling tired or having little energy",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_at_all", "label": "Not at all", "tooltip": "0 points"},
+        {"name": "several_days", "label": "Several days", "tooltip": "1 point"},
+        {"name": "more_than_half", "label": "More than half the days", "tooltip": "2 points"},
+        {"name": "nearly_every_day", "label": "Nearly every day", "tooltip": "3 points"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "phq9_5",
+      "description": "Poor appetite or overeating",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_at_all", "label": "Not at all", "tooltip": "0 points"},
+        {"name": "several_days", "label": "Several days", "tooltip": "1 point"},
+        {"name": "more_than_half", "label": "More than half the days", "tooltip": "2 points"},
+        {"name": "nearly_every_day", "label": "Nearly every day", "tooltip": "3 points"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "phq9_6",
+      "description": "Feeling bad about yourself - or that you are a failure or have let yourself or your family down",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_at_all", "label": "Not at all", "tooltip": "0 points"},
+        {"name": "several_days", "label": "Several days", "tooltip": "1 point"},
+        {"name": "more_than_half", "label": "More than half the days", "tooltip": "2 points"},
+        {"name": "nearly_every_day", "label": "Nearly every day", "tooltip": "3 points"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "phq9_7",
+      "description": "Trouble concentrating on things, such as reading the newspaper or watching television",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_at_all", "label": "Not at all", "tooltip": "0 points"},
+        {"name": "several_days", "label": "Several days", "tooltip": "1 point"},
+        {"name": "more_than_half", "label": "More than half the days", "tooltip": "2 points"},
+        {"name": "nearly_every_day", "label": "Nearly every day", "tooltip": "3 points"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "phq9_8",
+      "description": "Moving or speaking so slowly that other people could have noticed. Or the opposite - being so fidgety or restless that you have been moving around a lot more than usual",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_at_all", "label": "Not at all", "tooltip": "0 points"},
+        {"name": "several_days", "label": "Several days", "tooltip": "1 point"},
+        {"name": "more_than_half", "label": "More than half the days", "tooltip": "2 points"},
+        {"name": "nearly_every_day", "label": "Nearly every day", "tooltip": "3 points"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "phq9_9",
+      "description": "Thoughts that you would be better off dead, or of hurting yourself in some way",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_at_all", "label": "Not at all", "tooltip": "0 points"},
+        {"name": "several_days", "label": "Several days", "tooltip": "1 point"},
+        {"name": "more_than_half", "label": "More than half the days", "tooltip": "2 points"},
+        {"name": "nearly_every_day", "label": "Nearly every day", "tooltip": "3 points"}
+      ],
+      "label_requirement": {"required": true}
+    }
+  ]
+}

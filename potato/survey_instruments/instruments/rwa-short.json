@@ -1,0 +1,31 @@
+{
+  "id": "rwa-short",
+  "name": "Right-Wing Authoritarianism Scale (Short Form)",
+  "short_name": "RWA-12",
+  "description": "A 12-item short form of the Right-Wing Authoritarianism Scale measuring authoritarian submission, authoritarian aggression, and conventionalism.",
+  "url": "https://doi.org/10.1177/0022022193442002",
+  "reference": "Altemeyer, B. (1996). The Authoritarian Specter. Cambridge, MA: Harvard University Press.",
+  "reference_url": "https://doi.org/10.4159/harvard.9780674061651",
+  "items_count": 12,
+  "domains": ["attitudes", "authoritarianism"],
+  "scoring": {
+    "method": "sum",
+    "reverse_items": [2, 4, 6, 8, 10, 12],
+    "range": [12, 108]
+  },
+  "instructions": "Please indicate how much you agree or disagree with each statement.",
+  "questions": [
+    {"name": "rwas_1", "description": "Our country desperately needs a mighty leader who will do what has to be done to destroy the radical new ways and sinfulness that are ruining us.", "annotation_type": "likert", "size": 9, "min_label": "Very strongly disagree", "max_label": "Very strongly agree", "label_requirement": {"required": true}},
+    {"name": "rwas_2", "description": "Gays and lesbians are just as healthy and moral as anybody else.", "annotation_type": "likert", "size": 9, "min_label": "Very strongly disagree", "max_label": "Very strongly agree", "label_requirement": {"required": true}},
+    {"name": "rwas_3", "description": "It is always better to trust the judgment of the proper authorities in government and religion than to listen to the noisy rabble-rousers in our society.", "annotation_type": "likert", "size": 9, "min_label": "Very strongly disagree", "max_label": "Very strongly agree", "label_requirement": {"required": true}},
+    {"name": "rwas_4", "description": "Atheists and others who have rebelled against established religions are no doubt every bit as good and virtuous as those who attend church regularly.", "annotation_type": "likert", "size": 9, "min_label": "Very strongly disagree", "max_label": "Very strongly agree", "label_requirement": {"required": true}},
+    {"name": "rwas_5", "description": "The only way our country can get through the crisis ahead is to get back to our traditional values, put some tough leaders in power, and silence the troublemakers.", "annotation_type": "likert", "size": 9, "min_label": "Very strongly disagree", "max_label": "Very strongly agree", "label_requirement": {"required": true}},
+    {"name": "rwas_6", "description": "There is absolutely nothing wrong with nudist camps.", "annotation_type": "likert", "size": 9, "min_label": "Very strongly disagree", "max_label": "Very strongly agree", "label_requirement": {"required": true}},
+    {"name": "rwas_7", "description": "Our country will be destroyed someday if we do not smash the perversions eating away at our moral fiber and traditional beliefs.", "annotation_type": "likert", "size": 9, "min_label": "Very strongly disagree", "max_label": "Very strongly agree", "label_requirement": {"required": true}},
+    {"name": "rwas_8", "description": "Everyone should have their own lifestyle, religious beliefs, and sexual preferences, even if it makes them different from everyone else.", "annotation_type": "likert", "size": 9, "min_label": "Very strongly disagree", "max_label": "Very strongly agree", "label_requirement": {"required": true}},
+    {"name": "rwas_9", "description": "The 'old-fashioned ways' and 'old-fashioned values' still show the best way to live.", "annotation_type": "likert", "size": 9, "min_label": "Very strongly disagree", "max_label": "Very strongly agree", "label_requirement": {"required": true}},
+    {"name": "rwas_10", "description": "You have to admire those who challenged the law and the majority's view by protesting for civil rights.", "annotation_type": "likert", "size": 9, "min_label": "Very strongly disagree", "max_label": "Very strongly agree", "label_requirement": {"required": true}},
+    {"name": "rwas_11", "description": "What our country really needs is a strong, determined leader who will crush evil, and take us back to our true path.", "annotation_type": "likert", "size": 9, "min_label": "Very strongly disagree", "max_label": "Very strongly agree", "label_requirement": {"required": true}},
+    {"name": "rwas_12", "description": "Some of the best people in our country are those who are challenging our government, criticizing religion, and ignoring the 'normal way things are supposed to be done.'", "annotation_type": "likert", "size": 9, "min_label": "Very strongly disagree", "max_label": "Very strongly agree", "label_requirement": {"required": true}}
+  ]
+}

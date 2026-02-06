@@ -1,0 +1,53 @@
+{
+  "id": "trust-ess",
+  "name": "Social Trust Scale (ESS)",
+  "short_name": "Trust-ESS",
+  "description": "A 3-item measure of generalized social trust from the European Social Survey. Assesses trust in others, perceived fairness, and helpfulness of people in general.",
+  "url": "https://www.europeansocialsurvey.org/",
+  "reference": "European Social Survey. (2018). ESS Round 9 Source Questionnaire. London: ESS ERIC Headquarters c/o City, University of London.",
+  "reference_url": "https://www.europeansocialsurvey.org/methodology/",
+  "items_count": 3,
+  "domains": ["attitudes", "trust"],
+  "scoring": {
+    "method": "mean",
+    "range": [0, 10],
+    "interpretation": {
+      "0-3": "Low social trust",
+      "4-6": "Moderate social trust",
+      "7-10": "High social trust"
+    }
+  },
+  "instructions": "Using this card, please tell me how you feel about each statement.",
+  "questions": [
+    {
+      "name": "trust_ess_1",
+      "description": "Generally speaking, would you say that most people can be trusted, or that you can't be too careful in dealing with people?",
+      "annotation_type": "slider",
+      "min": 0,
+      "max": 10,
+      "min_label": "You can't be too careful",
+      "max_label": "Most people can be trusted",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "trust_ess_2",
+      "description": "Do you think that most people would try to take advantage of you if they got the chance, or would they try to be fair?",
+      "annotation_type": "slider",
+      "min": 0,
+      "max": 10,
+      "min_label": "Most people would try to take advantage of me",
+      "max_label": "Most people would try to be fair",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "trust_ess_3",
+      "description": "Would you say that most of the time people try to be helpful or that they are mostly looking out for themselves?",
+      "annotation_type": "slider",
+      "min": 0,
+      "max": 10,
+      "min_label": "People mostly look out for themselves",
+      "max_label": "People mostly try to be helpful",
+      "label_requirement": {"required": true}
+    }
+  ]
+}

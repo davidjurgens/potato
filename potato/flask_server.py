@@ -927,15 +927,42 @@ def load_phase_data(config: dict) -> None:
                         logger.debug(f"Resolved phase file for {phase_name}: {phase_scheme_fname}")
                         phase_labeling_schemes = get_phase_annotation_schemes(phase_scheme_fname)
                 else:
-                    # Other phases require a file
-                    if not "file" in phase or not phase['file']:
-                        logger.error(f"Phase {phase_name} is specified but does not have a file")
-                        raise Exception("Phase %s is specified but does not have a file" % phase_name)
+                    # Other phases (prestudy, poststudy, etc.)
+                    # Support instrument/instruments keys for standard survey instruments
+                    phase_labeling_schemes = []
 
-                    # Get the phase labeling schemes, being robust to relative or absolute paths
-                    phase_scheme_fname = get_abs_or_rel_path(phase['file'], config)
-                    logger.debug(f"Resolved phase file for {phase_name}: {phase_scheme_fname}")
-                    phase_labeling_schemes = get_phase_annotation_schemes(phase_scheme_fname)
+                    # Handle single instrument reference
+                    if "instrument" in phase:
+                        from potato.survey_instruments import get_instrument_questions
+                        inst_id = phase["instrument"]
+                        logger.debug(f"Phase {phase_name} loading instrument: {inst_id}")
+                        phase_labeling_schemes = get_instrument_questions(inst_id)
+
+                    # Handle multiple instruments
+                    elif "instruments" in phase:
+                        from potato.survey_instruments import get_instrument_questions
+                        for inst_id in phase["instruments"]:
+                            logger.debug(f"Phase {phase_name} loading instrument: {inst_id}")
+                            phase_labeling_schemes.extend(get_instrument_questions(inst_id))
+
+                    # Handle file reference (can be combined with instrument)
+                    if "file" in phase and phase['file']:
+                        phase_scheme_fname = get_abs_or_rel_path(phase['file'], config)
+                        logger.debug(f"Resolved phase file for {phase_name}: {phase_scheme_fname}")
+                        file_schemes = get_phase_annotation_schemes(phase_scheme_fname)
+                        if phase_labeling_schemes:
+                            # Append file schemes after instrument schemes
+                            phase_labeling_schemes.extend(file_schemes)
+                        else:
+                            phase_labeling_schemes = file_schemes
+
+                    # Require at least one source of questions
+                    if not phase_labeling_schemes:
+                        logger.error(f"Phase {phase_name} requires 'instrument', 'instruments', or 'file'")
+                        raise Exception(
+                            f"Phase {phase_name} requires 'instrument', 'instruments', or 'file' "
+                            "to specify its annotation schemes"
+                        )
 
             # Use the default templates unless specified in the phase config
             # Note: Template paths are now hardcoded in front_end.py

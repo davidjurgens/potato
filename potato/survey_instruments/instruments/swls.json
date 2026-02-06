@@ -1,0 +1,72 @@
+{
+  "id": "swls",
+  "name": "Satisfaction With Life Scale",
+  "short_name": "SWLS",
+  "description": "A 5-item scale designed to measure global cognitive judgments of one's life satisfaction. It assesses overall life satisfaction rather than satisfaction with specific domains.",
+  "url": "https://eddiener.com/scales/7",
+  "reference": "Diener, E., Emmons, R. A., Larsen, R. J., & Griffin, S. (1985). The Satisfaction with Life Scale. Journal of Personality Assessment, 49, 71-75.",
+  "reference_url": "https://doi.org/10.1207/s15327752jpa4901_13",
+  "items_count": 5,
+  "domains": ["well_being", "life_satisfaction"],
+  "scoring": {
+    "method": "sum",
+    "range": [5, 35],
+    "interpretation": {
+      "5-9": "Extremely dissatisfied",
+      "10-14": "Dissatisfied",
+      "15-19": "Slightly dissatisfied",
+      "20": "Neutral",
+      "21-25": "Slightly satisfied",
+      "26-30": "Satisfied",
+      "31-35": "Extremely satisfied"
+    }
+  },
+  "instructions": "Below are five statements that you may agree or disagree with. Using the 1-7 scale below, indicate your agreement with each item by selecting the appropriate response.",
+  "questions": [
+    {
+      "name": "swls_1",
+      "description": "In most ways my life is close to my ideal.",
+      "annotation_type": "likert",
+      "size": 7,
+      "min_label": "Strongly disagree",
+      "max_label": "Strongly agree",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "swls_2",
+      "description": "The conditions of my life are excellent.",
+      "annotation_type": "likert",
+      "size": 7,
+      "min_label": "Strongly disagree",
+      "max_label": "Strongly agree",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "swls_3",
+      "description": "I am satisfied with my life.",
+      "annotation_type": "likert",
+      "size": 7,
+      "min_label": "Strongly disagree",
+      "max_label": "Strongly agree",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "swls_4",
+      "description": "So far I have gotten the important things I want in life.",
+      "annotation_type": "likert",
+      "size": 7,
+      "min_label": "Strongly disagree",
+      "max_label": "Strongly agree",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "swls_5",
+      "description": "If I could live my life over, I would change almost nothing.",
+      "annotation_type": "likert",
+      "size": 7,
+      "min_label": "Strongly disagree",
+      "max_label": "Strongly agree",
+      "label_requirement": {"required": true}
+    }
+  ]
+}

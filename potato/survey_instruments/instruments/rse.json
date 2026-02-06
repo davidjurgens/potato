@@ -1,0 +1,144 @@
+{
+  "id": "rse",
+  "name": "Rosenberg Self-Esteem Scale",
+  "short_name": "RSE",
+  "description": "A 10-item scale that measures global self-worth by measuring both positive and negative feelings about the self. It is the most widely used self-esteem measure in social science research.",
+  "url": "https://socy.umd.edu/about-us/rosenberg-self-esteem-scale",
+  "reference": "Rosenberg, M. (1965). Society and the adolescent self-image. Princeton, NJ: Princeton University Press.",
+  "reference_url": "https://doi.org/10.1515/9781400876136",
+  "items_count": 10,
+  "domains": ["self_concept", "self_esteem"],
+  "scoring": {
+    "method": "sum",
+    "reverse_items": [2, 5, 6, 8, 9],
+    "range": [0, 30],
+    "interpretation": {
+      "0-15": "Low self-esteem",
+      "15-25": "Normal self-esteem",
+      "25-30": "High self-esteem"
+    }
+  },
+  "instructions": "Below is a list of statements dealing with your general feelings about yourself. Please indicate how strongly you agree or disagree with each statement.",
+  "questions": [
+    {
+      "name": "rse_1",
+      "description": "On the whole, I am satisfied with myself.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "strongly_agree", "label": "Strongly Agree"},
+        {"name": "agree", "label": "Agree"},
+        {"name": "disagree", "label": "Disagree"},
+        {"name": "strongly_disagree", "label": "Strongly Disagree"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "rse_2",
+      "description": "At times I think I am no good at all.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "strongly_agree", "label": "Strongly Agree"},
+        {"name": "agree", "label": "Agree"},
+        {"name": "disagree", "label": "Disagree"},
+        {"name": "strongly_disagree", "label": "Strongly Disagree"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "rse_3",
+      "description": "I feel that I have a number of good qualities.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "strongly_agree", "label": "Strongly Agree"},
+        {"name": "agree", "label": "Agree"},
+        {"name": "disagree", "label": "Disagree"},
+        {"name": "strongly_disagree", "label": "Strongly Disagree"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "rse_4",
+      "description": "I am able to do things as well as most other people.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "strongly_agree", "label": "Strongly Agree"},
+        {"name": "agree", "label": "Agree"},
+        {"name": "disagree", "label": "Disagree"},
+        {"name": "strongly_disagree", "label": "Strongly Disagree"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "rse_5",
+      "description": "I feel I do not have much to be proud of.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "strongly_agree", "label": "Strongly Agree"},
+        {"name": "agree", "label": "Agree"},
+        {"name": "disagree", "label": "Disagree"},
+        {"name": "strongly_disagree", "label": "Strongly Disagree"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "rse_6",
+      "description": "I certainly feel useless at times.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "strongly_agree", "label": "Strongly Agree"},
+        {"name": "agree", "label": "Agree"},
+        {"name": "disagree", "label": "Disagree"},
+        {"name": "strongly_disagree", "label": "Strongly Disagree"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "rse_7",
+      "description": "I feel that I'm a person of worth, at least on an equal plane with others.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "strongly_agree", "label": "Strongly Agree"},
+        {"name": "agree", "label": "Agree"},
+        {"name": "disagree", "label": "Disagree"},
+        {"name": "strongly_disagree", "label": "Strongly Disagree"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "rse_8",
+      "description": "I wish I could have more respect for myself.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "strongly_agree", "label": "Strongly Agree"},
+        {"name": "agree", "label": "Agree"},
+        {"name": "disagree", "label": "Disagree"},
+        {"name": "strongly_disagree", "label": "Strongly Disagree"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "rse_9",
+      "description": "All in all, I am inclined to feel that I am a failure.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "strongly_agree", "label": "Strongly Agree"},
+        {"name": "agree", "label": "Agree"},
+        {"name": "disagree", "label": "Disagree"},
+        {"name": "strongly_disagree", "label": "Strongly Disagree"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "rse_10",
+      "description": "I take a positive attitude toward myself.",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "strongly_agree", "label": "Strongly Agree"},
+        {"name": "agree", "label": "Agree"},
+        {"name": "disagree", "label": "Disagree"},
+        {"name": "strongly_disagree", "label": "Strongly Disagree"}
+      ],
+      "label_requirement": {"required": true}
+    }
+  ]
+}

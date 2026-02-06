@@ -1,0 +1,32 @@
+{
+  "id": "eds",
+  "name": "Everyday Discrimination Scale",
+  "short_name": "EDS",
+  "description": "A 9-item measure assessing chronic experiences of day-to-day discrimination. Measures how often respondents experience different types of unfair treatment in daily life.",
+  "url": "https://sparqtools.org/mobility-measure/everyday-discrimination-scale/",
+  "reference": "Williams, D. R., Yu, Y., Jackson, J. S., & Anderson, N. B. (1997). Racial differences in physical and mental health: Socioeconomic status, stress, and discrimination. Journal of Health Psychology, 2(3), 335-351.",
+  "reference_url": "https://doi.org/10.1177/135910539700200305",
+  "items_count": 9,
+  "domains": ["attitudes", "discrimination"],
+  "scoring": {
+    "method": "sum",
+    "range": [9, 54],
+    "interpretation": {
+      "9-18": "Low frequency of discrimination experiences",
+      "19-36": "Moderate frequency of discrimination experiences",
+      "37-54": "High frequency of discrimination experiences"
+    }
+  },
+  "instructions": "In your day-to-day life, how often do any of the following things happen to you?",
+  "questions": [
+    {"name": "eds_1", "description": "You are treated with less courtesy than other people are.", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Less than once a year"}, {"name": "sometimes", "label": "A few times a year"}, {"name": "often", "label": "A few times a month"}, {"name": "frequently", "label": "At least once a week"}, {"name": "daily", "label": "Almost every day"}], "label_requirement": {"required": true}},
+    {"name": "eds_2", "description": "You are treated with less respect than other people are.", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Less than once a year"}, {"name": "sometimes", "label": "A few times a year"}, {"name": "often", "label": "A few times a month"}, {"name": "frequently", "label": "At least once a week"}, {"name": "daily", "label": "Almost every day"}], "label_requirement": {"required": true}},
+    {"name": "eds_3", "description": "You receive poorer service than other people at restaurants or stores.", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Less than once a year"}, {"name": "sometimes", "label": "A few times a year"}, {"name": "often", "label": "A few times a month"}, {"name": "frequently", "label": "At least once a week"}, {"name": "daily", "label": "Almost every day"}], "label_requirement": {"required": true}},
+    {"name": "eds_4", "description": "People act as if they think you are not smart.", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Less than once a year"}, {"name": "sometimes", "label": "A few times a year"}, {"name": "often", "label": "A few times a month"}, {"name": "frequently", "label": "At least once a week"}, {"name": "daily", "label": "Almost every day"}], "label_requirement": {"required": true}},
+    {"name": "eds_5", "description": "People act as if they are afraid of you.", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Less than once a year"}, {"name": "sometimes", "label": "A few times a year"}, {"name": "often", "label": "A few times a month"}, {"name": "frequently", "label": "At least once a week"}, {"name": "daily", "label": "Almost every day"}], "label_requirement": {"required": true}},
+    {"name": "eds_6", "description": "People act as if they think you are dishonest.", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Less than once a year"}, {"name": "sometimes", "label": "A few times a year"}, {"name": "often", "label": "A few times a month"}, {"name": "frequently", "label": "At least once a week"}, {"name": "daily", "label": "Almost every day"}], "label_requirement": {"required": true}},
+    {"name": "eds_7", "description": "People act as if they're better than you are.", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Less than once a year"}, {"name": "sometimes", "label": "A few times a year"}, {"name": "often", "label": "A few times a month"}, {"name": "frequently", "label": "At least once a week"}, {"name": "daily", "label": "Almost every day"}], "label_requirement": {"required": true}},
+    {"name": "eds_8", "description": "You are called names or insulted.", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Less than once a year"}, {"name": "sometimes", "label": "A few times a year"}, {"name": "often", "label": "A few times a month"}, {"name": "frequently", "label": "At least once a week"}, {"name": "daily", "label": "Almost every day"}], "label_requirement": {"required": true}},
+    {"name": "eds_9", "description": "You are threatened or harassed.", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Less than once a year"}, {"name": "sometimes", "label": "A few times a year"}, {"name": "often", "label": "A few times a month"}, {"name": "frequently", "label": "At least once a week"}, {"name": "daily", "label": "Almost every day"}], "label_requirement": {"required": true}}
+  ]
+}

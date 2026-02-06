@@ -1,0 +1,44 @@
+{
+  "id": "mini-ipip",
+  "name": "Mini-IPIP",
+  "short_name": "Mini-IPIP",
+  "description": "A 20-item short form of the 50-item International Personality Item Pool-Five-Factor Model measure (IPIP-FFM). Measures the Big Five personality traits with 4 items per trait.",
+  "url": "https://ipip.ori.org/newMiniIPIPKey.htm",
+  "reference": "Donnellan, M. B., Oswald, F. L., Baird, B. M., & Lucas, R. E. (2006). The Mini-IPIP scales: Tiny-yet-effective measures of the Big Five factors of personality. Psychological Assessment, 18(2), 192-203.",
+  "reference_url": "https://doi.org/10.1016/j.jrp.2005.10.003",
+  "items_count": 20,
+  "domains": ["personality", "big_five"],
+  "scoring": {
+    "method": "subscales",
+    "subscales": {
+      "extraversion": {"items": [1, 6, 11, 16], "reverse": [6, 16]},
+      "agreeableness": {"items": [2, 7, 12, 17], "reverse": [2, 12]},
+      "conscientiousness": {"items": [3, 8, 13, 18], "reverse": [8, 18]},
+      "neuroticism": {"items": [4, 9, 14, 19], "reverse": [9, 19]},
+      "openness": {"items": [5, 10, 15, 20], "reverse": [15, 20]}
+    }
+  },
+  "instructions": "Describe yourself as you generally are now, not as you wish to be in the future. Describe yourself as you honestly see yourself, in relation to other people you know of the same sex as you are, and roughly your same age.",
+  "questions": [
+    {"name": "ipip_1", "description": "Am the life of the party.", "annotation_type": "likert", "size": 5, "min_label": "Very inaccurate", "max_label": "Very accurate", "label_requirement": {"required": true}},
+    {"name": "ipip_2", "description": "Sympathize with others' feelings.", "annotation_type": "likert", "size": 5, "min_label": "Very inaccurate", "max_label": "Very accurate", "label_requirement": {"required": true}},
+    {"name": "ipip_3", "description": "Get chores done right away.", "annotation_type": "likert", "size": 5, "min_label": "Very inaccurate", "max_label": "Very accurate", "label_requirement": {"required": true}},
+    {"name": "ipip_4", "description": "Have frequent mood swings.", "annotation_type": "likert", "size": 5, "min_label": "Very inaccurate", "max_label": "Very accurate", "label_requirement": {"required": true}},
+    {"name": "ipip_5", "description": "Have a vivid imagination.", "annotation_type": "likert", "size": 5, "min_label": "Very inaccurate", "max_label": "Very accurate", "label_requirement": {"required": true}},
+    {"name": "ipip_6", "description": "Don't talk a lot.", "annotation_type": "likert", "size": 5, "min_label": "Very inaccurate", "max_label": "Very accurate", "label_requirement": {"required": true}},
+    {"name": "ipip_7", "description": "Am not interested in other people's problems.", "annotation_type": "likert", "size": 5, "min_label": "Very inaccurate", "max_label": "Very accurate", "label_requirement": {"required": true}},
+    {"name": "ipip_8", "description": "Often forget to put things back in their proper place.", "annotation_type": "likert", "size": 5, "min_label": "Very inaccurate", "max_label": "Very accurate", "label_requirement": {"required": true}},
+    {"name": "ipip_9", "description": "Am relaxed most of the time.", "annotation_type": "likert", "size": 5, "min_label": "Very inaccurate", "max_label": "Very accurate", "label_requirement": {"required": true}},
+    {"name": "ipip_10", "description": "Am not interested in abstract ideas.", "annotation_type": "likert", "size": 5, "min_label": "Very inaccurate", "max_label": "Very accurate", "label_requirement": {"required": true}},
+    {"name": "ipip_11", "description": "Talk to a lot of different people at parties.", "annotation_type": "likert", "size": 5, "min_label": "Very inaccurate", "max_label": "Very accurate", "label_requirement": {"required": true}},
+    {"name": "ipip_12", "description": "Feel others' emotions.", "annotation_type": "likert", "size": 5, "min_label": "Very inaccurate", "max_label": "Very accurate", "label_requirement": {"required": true}},
+    {"name": "ipip_13", "description": "Like order.", "annotation_type": "likert", "size": 5, "min_label": "Very inaccurate", "max_label": "Very accurate", "label_requirement": {"required": true}},
+    {"name": "ipip_14", "description": "Get upset easily.", "annotation_type": "likert", "size": 5, "min_label": "Very inaccurate", "max_label": "Very accurate", "label_requirement": {"required": true}},
+    {"name": "ipip_15", "description": "Have difficulty understanding abstract ideas.", "annotation_type": "likert", "size": 5, "min_label": "Very inaccurate", "max_label": "Very accurate", "label_requirement": {"required": true}},
+    {"name": "ipip_16", "description": "Keep in the background.", "annotation_type": "likert", "size": 5, "min_label": "Very inaccurate", "max_label": "Very accurate", "label_requirement": {"required": true}},
+    {"name": "ipip_17", "description": "Am not really interested in others.", "annotation_type": "likert", "size": 5, "min_label": "Very inaccurate", "max_label": "Very accurate", "label_requirement": {"required": true}},
+    {"name": "ipip_18", "description": "Make a mess of things.", "annotation_type": "likert", "size": 5, "min_label": "Very inaccurate", "max_label": "Very accurate", "label_requirement": {"required": true}},
+    {"name": "ipip_19", "description": "Seldom feel blue.", "annotation_type": "likert", "size": 5, "min_label": "Very inaccurate", "max_label": "Very accurate", "label_requirement": {"required": true}},
+    {"name": "ipip_20", "description": "Do not have a good imagination.", "annotation_type": "likert", "size": 5, "min_label": "Very inaccurate", "max_label": "Very accurate", "label_requirement": {"required": true}}
+  ]
+}

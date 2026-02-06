@@ -1,0 +1,31 @@
+{
+  "id": "grips",
+  "name": "General Risk Propensity Scale",
+  "short_name": "GRiPS",
+  "description": "An 8-item measure of general risk propensity assessing individuals' tendency to take risks across different life domains. Provides a domain-general measure of risk-taking tendency.",
+  "url": "https://doi.org/10.1016/j.joep.2014.09.003",
+  "reference": "Zhang, D. C., Highhouse, S., & Nye, C. D. (2019). Development and validation of the General Risk Propensity Scale (GRiPS). Journal of Behavioral Decision Making, 32(2), 152-167.",
+  "reference_url": "https://doi.org/10.1016/j.joep.2014.09.003",
+  "items_count": 8,
+  "domains": ["personality", "risk"],
+  "scoring": {
+    "method": "mean",
+    "range": [1, 5],
+    "interpretation": {
+      "1.0-2.5": "Low risk propensity",
+      "2.5-3.5": "Moderate risk propensity",
+      "3.5-5.0": "High risk propensity"
+    }
+  },
+  "instructions": "Please indicate how much you agree or disagree with each of the following statements.",
+  "questions": [
+    {"name": "grips_1", "description": "Taking risks makes life more fun.", "annotation_type": "likert", "size": 5, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}},
+    {"name": "grips_2", "description": "My friends would say that I'm a risk taker.", "annotation_type": "likert", "size": 5, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}},
+    {"name": "grips_3", "description": "I enjoy taking risks in most aspects of my life.", "annotation_type": "likert", "size": 5, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}},
+    {"name": "grips_4", "description": "I would take a risk even if it meant I might get hurt.", "annotation_type": "likert", "size": 5, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}},
+    {"name": "grips_5", "description": "Taking risks is an important part of my life.", "annotation_type": "likert", "size": 5, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}},
+    {"name": "grips_6", "description": "I commonly make risky decisions.", "annotation_type": "likert", "size": 5, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}},
+    {"name": "grips_7", "description": "I am a believer in taking chances.", "annotation_type": "likert", "size": 5, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}},
+    {"name": "grips_8", "description": "I would never take risks.", "annotation_type": "likert", "size": 5, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}}
+  ]
+}

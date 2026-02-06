@@ -1,0 +1,166 @@
+{
+  "id": "ghq-12",
+  "name": "General Health Questionnaire-12",
+  "short_name": "GHQ-12",
+  "description": "A 12-item screening instrument for detecting minor psychiatric disorders and assessing subjective quality of life. Widely used in clinical and research settings.",
+  "url": "https://www.gl-assessment.co.uk/products/general-health-questionnaire-ghq/",
+  "reference": "Goldberg, D. P., & Williams, P. (1988). A user's guide to the General Health Questionnaire. Windsor: NFER-Nelson.",
+  "reference_url": "https://doi.org/10.1017/S0033291700048017",
+  "items_count": 12,
+  "domains": ["mental_health", "general_health"],
+  "scoring": {
+    "method": "sum",
+    "range": [0, 12],
+    "interpretation": {
+      "0-3": "No psychological distress",
+      "4-12": "Possible psychological distress"
+    }
+  },
+  "instructions": "We would like to know if you have had any medical complaints, and how your health has been in general, over the last few weeks. Please answer ALL the questions simply by selecting the answer which you think most nearly applies to you.",
+  "questions": [
+    {
+      "name": "ghq12_1",
+      "description": "Been able to concentrate on whatever you're doing?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "better_usual", "label": "Better than usual"},
+        {"name": "same_usual", "label": "Same as usual"},
+        {"name": "less_usual", "label": "Less than usual"},
+        {"name": "much_less", "label": "Much less than usual"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "ghq12_2",
+      "description": "Lost much sleep over worry?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_at_all", "label": "Not at all"},
+        {"name": "no_more_usual", "label": "No more than usual"},
+        {"name": "rather_more", "label": "Rather more than usual"},
+        {"name": "much_more", "label": "Much more than usual"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "ghq12_3",
+      "description": "Felt that you are playing a useful part in things?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "more_usual", "label": "More so than usual"},
+        {"name": "same_usual", "label": "Same as usual"},
+        {"name": "less_useful", "label": "Less useful than usual"},
+        {"name": "much_less", "label": "Much less useful"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "ghq12_4",
+      "description": "Felt capable of making decisions about things?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "more_usual", "label": "More so than usual"},
+        {"name": "same_usual", "label": "Same as usual"},
+        {"name": "less_usual", "label": "Less so than usual"},
+        {"name": "much_less", "label": "Much less capable"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "ghq12_5",
+      "description": "Felt constantly under strain?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_at_all", "label": "Not at all"},
+        {"name": "no_more_usual", "label": "No more than usual"},
+        {"name": "rather_more", "label": "Rather more than usual"},
+        {"name": "much_more", "label": "Much more than usual"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "ghq12_6",
+      "description": "Felt you couldn't overcome your difficulties?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_at_all", "label": "Not at all"},
+        {"name": "no_more_usual", "label": "No more than usual"},
+        {"name": "rather_more", "label": "Rather more than usual"},
+        {"name": "much_more", "label": "Much more than usual"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "ghq12_7",
+      "description": "Been able to enjoy your normal day-to-day activities?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "more_usual", "label": "More so than usual"},
+        {"name": "same_usual", "label": "Same as usual"},
+        {"name": "less_usual", "label": "Less so than usual"},
+        {"name": "much_less", "label": "Much less than usual"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "ghq12_8",
+      "description": "Been able to face up to your problems?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "more_usual", "label": "More so than usual"},
+        {"name": "same_usual", "label": "Same as usual"},
+        {"name": "less_able", "label": "Less able than usual"},
+        {"name": "much_less", "label": "Much less able"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "ghq12_9",
+      "description": "Been feeling unhappy and depressed?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_at_all", "label": "Not at all"},
+        {"name": "no_more_usual", "label": "No more than usual"},
+        {"name": "rather_more", "label": "Rather more than usual"},
+        {"name": "much_more", "label": "Much more than usual"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "ghq12_10",
+      "description": "Been losing confidence in yourself?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_at_all", "label": "Not at all"},
+        {"name": "no_more_usual", "label": "No more than usual"},
+        {"name": "rather_more", "label": "Rather more than usual"},
+        {"name": "much_more", "label": "Much more than usual"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "ghq12_11",
+      "description": "Been thinking of yourself as a worthless person?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "not_at_all", "label": "Not at all"},
+        {"name": "no_more_usual", "label": "No more than usual"},
+        {"name": "rather_more", "label": "Rather more than usual"},
+        {"name": "much_more", "label": "Much more than usual"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "ghq12_12",
+      "description": "Been feeling reasonably happy, all things considered?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "more_usual", "label": "More so than usual"},
+        {"name": "same_usual", "label": "About same as usual"},
+        {"name": "less_usual", "label": "Less so than usual"},
+        {"name": "much_less", "label": "Much less than usual"}
+      ],
+      "label_requirement": {"required": true}
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "id": "nfc",
+  "name": "Need for Cognition Scale",
+  "short_name": "NFC",
+  "description": "An 18-item scale measuring the tendency for an individual to engage in and enjoy thinking. People high in need for cognition are more likely to form attitudes based on careful assessment of relevant information.",
+  "url": "https://www.richardepetty.com/research",
+  "reference": "Cacioppo, J. T., Petty, R. E., & Kao, C. F. (1984). The efficient assessment of need for cognition. Journal of Personality Assessment, 48(3), 306-307.",
+  "reference_url": "https://doi.org/10.1207/s15327752jpa4803_13",
+  "items_count": 18,
+  "domains": ["personality", "cognition"],
+  "scoring": {
+    "method": "sum",
+    "reverse_items": [3, 4, 5, 7, 8, 9, 12, 16, 17],
+    "range": [18, 90]
+  },
+  "instructions": "For each of the statements below, please indicate to what extent the statement is characteristic of you.",
+  "questions": [
+    {"name": "nfc_1", "description": "I would prefer complex to simple problems.", "annotation_type": "likert", "size": 5, "min_label": "Extremely uncharacteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "nfc_2", "description": "I like to have the responsibility of handling a situation that requires a lot of thinking.", "annotation_type": "likert", "size": 5, "min_label": "Extremely uncharacteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "nfc_3", "description": "Thinking is not my idea of fun.", "annotation_type": "likert", "size": 5, "min_label": "Extremely uncharacteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "nfc_4", "description": "I would rather do something that requires little thought than something that is sure to challenge my thinking abilities.", "annotation_type": "likert", "size": 5, "min_label": "Extremely uncharacteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "nfc_5", "description": "I try to anticipate and avoid situations where there is likely a chance I will have to think in depth about something.", "annotation_type": "likert", "size": 5, "min_label": "Extremely uncharacteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "nfc_6", "description": "I find satisfaction in deliberating hard and for long hours.", "annotation_type": "likert", "size": 5, "min_label": "Extremely uncharacteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "nfc_7", "description": "I only think as hard as I have to.", "annotation_type": "likert", "size": 5, "min_label": "Extremely uncharacteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "nfc_8", "description": "I prefer to think about small, daily projects to long-term ones.", "annotation_type": "likert", "size": 5, "min_label": "Extremely uncharacteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "nfc_9", "description": "I like tasks that require little thought once I've learned them.", "annotation_type": "likert", "size": 5, "min_label": "Extremely uncharacteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "nfc_10", "description": "The idea of relying on thought to make my way to the top appeals to me.", "annotation_type": "likert", "size": 5, "min_label": "Extremely uncharacteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "nfc_11", "description": "I really enjoy a task that involves coming up with new solutions to problems.", "annotation_type": "likert", "size": 5, "min_label": "Extremely uncharacteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "nfc_12", "description": "Learning new ways to think doesn't excite me very much.", "annotation_type": "likert", "size": 5, "min_label": "Extremely uncharacteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "nfc_13", "description": "I prefer my life to be filled with puzzles that I must solve.", "annotation_type": "likert", "size": 5, "min_label": "Extremely uncharacteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "nfc_14", "description": "The notion of thinking abstractly is appealing to me.", "annotation_type": "likert", "size": 5, "min_label": "Extremely uncharacteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "nfc_15", "description": "I would prefer a task that is intellectual, difficult, and important to one that is somewhat important but does not require much thought.", "annotation_type": "likert", "size": 5, "min_label": "Extremely uncharacteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "nfc_16", "description": "I feel relief rather than satisfaction after completing a task that required a lot of mental effort.", "annotation_type": "likert", "size": 5, "min_label": "Extremely uncharacteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "nfc_17", "description": "It's enough for me that something gets the job done; I don't care how or why it works.", "annotation_type": "likert", "size": 5, "min_label": "Extremely uncharacteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "nfc_18", "description": "I usually end up deliberating about issues even when they do not affect me personally.", "annotation_type": "likert", "size": 5, "min_label": "Extremely uncharacteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}}
+  ]
+}

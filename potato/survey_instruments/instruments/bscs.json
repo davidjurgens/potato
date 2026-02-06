@@ -1,0 +1,37 @@
+{
+  "id": "bscs",
+  "name": "Brief Self-Control Scale",
+  "short_name": "BSCS",
+  "description": "A 13-item measure of dispositional self-control assessing the ability to override or change one's inner responses, as well as to interrupt undesired behavioral tendencies and refrain from acting on them.",
+  "url": "https://doi.org/10.1037/0022-3514.84.2.272",
+  "reference": "Tangney, J. P., Baumeister, R. F., & Boone, A. L. (2004). High self-control predicts good adjustment, less pathology, better grades, and interpersonal success. Journal of Personality, 72(2), 271-324.",
+  "reference_url": "https://doi.org/10.1111/j.0022-3506.2004.00263.x",
+  "items_count": 13,
+  "domains": ["personality", "self_control"],
+  "scoring": {
+    "method": "sum",
+    "reverse_items": [2, 3, 4, 5, 7, 9, 10, 12, 13],
+    "range": [13, 65],
+    "interpretation": {
+      "13-30": "Low self-control",
+      "31-47": "Moderate self-control",
+      "48-65": "High self-control"
+    }
+  },
+  "instructions": "Using the scale provided, please indicate how much each of the following statements reflects how you typically are.",
+  "questions": [
+    {"name": "bscs_1", "description": "I am good at resisting temptation.", "annotation_type": "likert", "size": 5, "min_label": "Not at all like me", "max_label": "Very much like me", "label_requirement": {"required": true}},
+    {"name": "bscs_2", "description": "I have a hard time breaking bad habits.", "annotation_type": "likert", "size": 5, "min_label": "Not at all like me", "max_label": "Very much like me", "label_requirement": {"required": true}},
+    {"name": "bscs_3", "description": "I am lazy.", "annotation_type": "likert", "size": 5, "min_label": "Not at all like me", "max_label": "Very much like me", "label_requirement": {"required": true}},
+    {"name": "bscs_4", "description": "I say inappropriate things.", "annotation_type": "likert", "size": 5, "min_label": "Not at all like me", "max_label": "Very much like me", "label_requirement": {"required": true}},
+    {"name": "bscs_5", "description": "I do certain things that are bad for me, if they are fun.", "annotation_type": "likert", "size": 5, "min_label": "Not at all like me", "max_label": "Very much like me", "label_requirement": {"required": true}},
+    {"name": "bscs_6", "description": "I refuse things that are bad for me.", "annotation_type": "likert", "size": 5, "min_label": "Not at all like me", "max_label": "Very much like me", "label_requirement": {"required": true}},
+    {"name": "bscs_7", "description": "I wish I had more self-discipline.", "annotation_type": "likert", "size": 5, "min_label": "Not at all like me", "max_label": "Very much like me", "label_requirement": {"required": true}},
+    {"name": "bscs_8", "description": "People would say that I have iron self-discipline.", "annotation_type": "likert", "size": 5, "min_label": "Not at all like me", "max_label": "Very much like me", "label_requirement": {"required": true}},
+    {"name": "bscs_9", "description": "Pleasure and fun sometimes keep me from getting work done.", "annotation_type": "likert", "size": 5, "min_label": "Not at all like me", "max_label": "Very much like me", "label_requirement": {"required": true}},
+    {"name": "bscs_10", "description": "I have trouble concentrating.", "annotation_type": "likert", "size": 5, "min_label": "Not at all like me", "max_label": "Very much like me", "label_requirement": {"required": true}},
+    {"name": "bscs_11", "description": "I am able to work effectively toward long-term goals.", "annotation_type": "likert", "size": 5, "min_label": "Not at all like me", "max_label": "Very much like me", "label_requirement": {"required": true}},
+    {"name": "bscs_12", "description": "Sometimes I can't stop myself from doing something, even if I know it is wrong.", "annotation_type": "likert", "size": 5, "min_label": "Not at all like me", "max_label": "Very much like me", "label_requirement": {"required": true}},
+    {"name": "bscs_13", "description": "I often act without thinking through all the alternatives.", "annotation_type": "likert", "size": 5, "min_label": "Not at all like me", "max_label": "Very much like me", "label_requirement": {"required": true}}
+  ]
+}

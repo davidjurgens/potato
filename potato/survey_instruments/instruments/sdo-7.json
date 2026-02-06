@@ -1,0 +1,37 @@
+{
+  "id": "sdo-7",
+  "name": "Social Dominance Orientation Scale",
+  "short_name": "SDO-7",
+  "description": "A 16-item measure of individual differences in preference for group-based hierarchy and inequality. Includes two subdimensions: Dominance (active subjugation) and Anti-Egalitarianism (opposition to equality).",
+  "url": "https://osf.io/7w4uy/",
+  "reference": "Ho, A. K., Sidanius, J., Kteily, N., Sheehy-Skeffington, J., Pratto, F., Henkel, K. E., Foels, R., & Stewart, A. L. (2015). The nature of social dominance orientation: Theorizing and measuring preferences for intergroup inequality using the new SDO7 scale. Journal of Personality and Social Psychology, 109(6), 1003-1028.",
+  "reference_url": "https://doi.org/10.1037/pspi0000033",
+  "items_count": 16,
+  "domains": ["attitudes", "social_dominance"],
+  "scoring": {
+    "method": "subscales",
+    "subscales": {
+      "dominance": {"items": [1, 2, 3, 4, 5, 6, 7, 8], "reverse": [3, 4, 7, 8]},
+      "anti_egalitarianism": {"items": [9, 10, 11, 12, 13, 14, 15, 16], "reverse": [11, 12, 15, 16]}
+    }
+  },
+  "instructions": "Show how much you favor or oppose each idea below. You can work quickly; your first feeling is generally best.",
+  "questions": [
+    {"name": "sdo7_1", "description": "An ideal society requires some groups to be on top and others to be on the bottom.", "annotation_type": "likert", "size": 7, "min_label": "Strongly oppose", "max_label": "Strongly favor", "label_requirement": {"required": true}},
+    {"name": "sdo7_2", "description": "Some groups of people are simply inferior to other groups.", "annotation_type": "likert", "size": 7, "min_label": "Strongly oppose", "max_label": "Strongly favor", "label_requirement": {"required": true}},
+    {"name": "sdo7_3", "description": "No one group should dominate in society.", "annotation_type": "likert", "size": 7, "min_label": "Strongly oppose", "max_label": "Strongly favor", "label_requirement": {"required": true}},
+    {"name": "sdo7_4", "description": "Groups at the bottom are just as deserving as groups at the top.", "annotation_type": "likert", "size": 7, "min_label": "Strongly oppose", "max_label": "Strongly favor", "label_requirement": {"required": true}},
+    {"name": "sdo7_5", "description": "Group dominance is a poor principle.", "annotation_type": "likert", "size": 7, "min_label": "Strongly oppose", "max_label": "Strongly favor", "label_requirement": {"required": true}},
+    {"name": "sdo7_6", "description": "We should not push for group equality.", "annotation_type": "likert", "size": 7, "min_label": "Strongly oppose", "max_label": "Strongly favor", "label_requirement": {"required": true}},
+    {"name": "sdo7_7", "description": "We shouldn't try to guarantee that every group has the same quality of life.", "annotation_type": "likert", "size": 7, "min_label": "Strongly oppose", "max_label": "Strongly favor", "label_requirement": {"required": true}},
+    {"name": "sdo7_8", "description": "It is unjust to try to make groups equal.", "annotation_type": "likert", "size": 7, "min_label": "Strongly oppose", "max_label": "Strongly favor", "label_requirement": {"required": true}},
+    {"name": "sdo7_9", "description": "We should work to give all groups an equal chance to succeed.", "annotation_type": "likert", "size": 7, "min_label": "Strongly oppose", "max_label": "Strongly favor", "label_requirement": {"required": true}},
+    {"name": "sdo7_10", "description": "Increasing social equality.", "annotation_type": "likert", "size": 7, "min_label": "Strongly oppose", "max_label": "Strongly favor", "label_requirement": {"required": true}},
+    {"name": "sdo7_11", "description": "Having some groups on top really benefits everybody.", "annotation_type": "likert", "size": 7, "min_label": "Strongly oppose", "max_label": "Strongly favor", "label_requirement": {"required": true}},
+    {"name": "sdo7_12", "description": "It's probably a good thing that certain groups are at the top and others are at the bottom.", "annotation_type": "likert", "size": 7, "min_label": "Strongly oppose", "max_label": "Strongly favor", "label_requirement": {"required": true}},
+    {"name": "sdo7_13", "description": "All groups should be given an equal chance in life.", "annotation_type": "likert", "size": 7, "min_label": "Strongly oppose", "max_label": "Strongly favor", "label_requirement": {"required": true}},
+    {"name": "sdo7_14", "description": "We would have fewer problems if groups were treated more equally.", "annotation_type": "likert", "size": 7, "min_label": "Strongly oppose", "max_label": "Strongly favor", "label_requirement": {"required": true}},
+    {"name": "sdo7_15", "description": "Superior groups should dominate inferior groups.", "annotation_type": "likert", "size": 7, "min_label": "Strongly oppose", "max_label": "Strongly favor", "label_requirement": {"required": true}},
+    {"name": "sdo7_16", "description": "Inferior groups should stay in their place.", "annotation_type": "likert", "size": 7, "min_label": "Strongly oppose", "max_label": "Strongly favor", "label_requirement": {"required": true}}
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "id": "sias",
+  "name": "Social Interaction Anxiety Scale",
+  "short_name": "SIAS",
+  "description": "A 20-item self-report scale measuring anxiety in social interaction situations. Assesses fears of being inarticulate, boring, or being ignored in social situations.",
+  "url": "https://www.psy.unsw.edu.au/research/clinical-research-unit-anxiety-and-depression",
+  "reference": "Mattick, R. P., & Clarke, J. C. (1998). Development and validation of measures of social phobia scrutiny fear and social interaction anxiety. Behaviour Research and Therapy, 36(4), 455-470.",
+  "reference_url": "https://doi.org/10.1016/S0005-7967(97)10031-6",
+  "items_count": 20,
+  "domains": ["mental_health", "social_anxiety"],
+  "scoring": {
+    "method": "sum",
+    "reverse_items": [5, 9, 11],
+    "range": [0, 80],
+    "interpretation": {
+      "0-33": "Low social interaction anxiety",
+      "34-42": "Moderate social interaction anxiety",
+      "43-80": "High social interaction anxiety"
+    }
+  },
+  "instructions": "For each item, please indicate the degree to which you feel the statement is characteristic or true for you.",
+  "questions": [
+    {"name": "sias_1", "description": "I get nervous if I have to speak with someone in authority (teacher, boss, etc.).", "annotation_type": "likert", "size": 5, "min_label": "Not at all characteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "sias_2", "description": "I have difficulty making eye contact with others.", "annotation_type": "likert", "size": 5, "min_label": "Not at all characteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "sias_3", "description": "I become tense if I have to talk about myself or my feelings.", "annotation_type": "likert", "size": 5, "min_label": "Not at all characteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "sias_4", "description": "I find it difficult to mix comfortably with the people I work with.", "annotation_type": "likert", "size": 5, "min_label": "Not at all characteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "sias_5", "description": "I find it easy to make friends my own age.", "annotation_type": "likert", "size": 5, "min_label": "Not at all characteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "sias_6", "description": "I tense up if I meet an acquaintance on the street.", "annotation_type": "likert", "size": 5, "min_label": "Not at all characteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "sias_7", "description": "When mixing socially, I am uncomfortable.", "annotation_type": "likert", "size": 5, "min_label": "Not at all characteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "sias_8", "description": "I feel tense if I am alone with just one other person.", "annotation_type": "likert", "size": 5, "min_label": "Not at all characteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "sias_9", "description": "I am at ease meeting people at parties, etc.", "annotation_type": "likert", "size": 5, "min_label": "Not at all characteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "sias_10", "description": "I have difficulty talking with other people.", "annotation_type": "likert", "size": 5, "min_label": "Not at all characteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "sias_11", "description": "I find it easy to think of things to talk about.", "annotation_type": "likert", "size": 5, "min_label": "Not at all characteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "sias_12", "description": "I worry about expressing myself in case I appear awkward.", "annotation_type": "likert", "size": 5, "min_label": "Not at all characteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "sias_13", "description": "I find it difficult to disagree with another's point of view.", "annotation_type": "likert", "size": 5, "min_label": "Not at all characteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "sias_14", "description": "I have difficulty talking to attractive persons of the opposite sex.", "annotation_type": "likert", "size": 5, "min_label": "Not at all characteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "sias_15", "description": "I find myself worrying that I won't know what to say in social situations.", "annotation_type": "likert", "size": 5, "min_label": "Not at all characteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "sias_16", "description": "I am nervous mixing with people I don't know well.", "annotation_type": "likert", "size": 5, "min_label": "Not at all characteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "sias_17", "description": "I feel I'll say something embarrassing when talking.", "annotation_type": "likert", "size": 5, "min_label": "Not at all characteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "sias_18", "description": "When mixing in a group, I find myself worrying I will be ignored.", "annotation_type": "likert", "size": 5, "min_label": "Not at all characteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "sias_19", "description": "I am tense mixing in a group.", "annotation_type": "likert", "size": 5, "min_label": "Not at all characteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}},
+    {"name": "sias_20", "description": "I am unsure whether to greet someone I know only slightly.", "annotation_type": "likert", "size": 5, "min_label": "Not at all characteristic", "max_label": "Extremely characteristic", "label_requirement": {"required": true}}
+  ]
+}

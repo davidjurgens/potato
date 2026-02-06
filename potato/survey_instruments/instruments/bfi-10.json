@@ -1,0 +1,34 @@
+{
+  "id": "bfi-10",
+  "name": "Big Five Inventory-10",
+  "short_name": "BFI-10",
+  "description": "A 10-item short version of the Big Five Inventory measuring the five major personality dimensions: Extraversion, Agreeableness, Conscientiousness, Neuroticism, and Openness to Experience.",
+  "url": "https://www.jeremyfreese.com/wp-content/uploads/2014/06/BFI-10.pdf",
+  "reference": "Rammstedt, B., & John, O. P. (2007). Measuring personality in one minute or less: A 10-item short version of the Big Five Inventory in English and German. Journal of Research in Personality, 41(1), 203-212.",
+  "reference_url": "https://doi.org/10.1080/00223890701858058",
+  "items_count": 10,
+  "domains": ["personality", "big_five"],
+  "scoring": {
+    "method": "subscales",
+    "subscales": {
+      "extraversion": {"items": [1, 6], "reverse": [6]},
+      "agreeableness": {"items": [2, 7], "reverse": [2]},
+      "conscientiousness": {"items": [3, 8], "reverse": [8]},
+      "neuroticism": {"items": [4, 9], "reverse": [9]},
+      "openness": {"items": [5, 10], "reverse": [10]}
+    }
+  },
+  "instructions": "How well do the following statements describe your personality? I see myself as someone who...",
+  "questions": [
+    {"name": "bfi10_1", "description": "...is reserved", "annotation_type": "likert", "size": 5, "min_label": "Disagree strongly", "max_label": "Agree strongly", "label_requirement": {"required": true}},
+    {"name": "bfi10_2", "description": "...is generally trusting", "annotation_type": "likert", "size": 5, "min_label": "Disagree strongly", "max_label": "Agree strongly", "label_requirement": {"required": true}},
+    {"name": "bfi10_3", "description": "...tends to be lazy", "annotation_type": "likert", "size": 5, "min_label": "Disagree strongly", "max_label": "Agree strongly", "label_requirement": {"required": true}},
+    {"name": "bfi10_4", "description": "...is relaxed, handles stress well", "annotation_type": "likert", "size": 5, "min_label": "Disagree strongly", "max_label": "Agree strongly", "label_requirement": {"required": true}},
+    {"name": "bfi10_5", "description": "...has few artistic interests", "annotation_type": "likert", "size": 5, "min_label": "Disagree strongly", "max_label": "Agree strongly", "label_requirement": {"required": true}},
+    {"name": "bfi10_6", "description": "...is outgoing, sociable", "annotation_type": "likert", "size": 5, "min_label": "Disagree strongly", "max_label": "Agree strongly", "label_requirement": {"required": true}},
+    {"name": "bfi10_7", "description": "...tends to find fault with others", "annotation_type": "likert", "size": 5, "min_label": "Disagree strongly", "max_label": "Agree strongly", "label_requirement": {"required": true}},
+    {"name": "bfi10_8", "description": "...does a thorough job", "annotation_type": "likert", "size": 5, "min_label": "Disagree strongly", "max_label": "Agree strongly", "label_requirement": {"required": true}},
+    {"name": "bfi10_9", "description": "...gets nervous easily", "annotation_type": "likert", "size": 5, "min_label": "Disagree strongly", "max_label": "Agree strongly", "label_requirement": {"required": true}},
+    {"name": "bfi10_10", "description": "...has an active imagination", "annotation_type": "likert", "size": 5, "min_label": "Disagree strongly", "max_label": "Agree strongly", "label_requirement": {"required": true}}
+  ]
+}

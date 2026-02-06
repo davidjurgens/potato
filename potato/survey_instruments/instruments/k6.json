@@ -1,0 +1,101 @@
+{
+  "id": "k6",
+  "name": "Kessler Psychological Distress Scale (K6)",
+  "short_name": "K6",
+  "description": "A 6-item self-report measure of psychological distress designed to identify persons with serious mental illness. Used in epidemiological surveys worldwide.",
+  "url": "https://www.hcp.med.harvard.edu/ncs/k6_scales.php",
+  "reference": "Kessler, R. C., Andrews, G., Colpe, L. J., Hiripi, E., Mroczek, D. K., Normand, S. L., ... & Zaslavsky, A. M. (2002). Short screening scales to monitor population prevalences and trends in non-specific psychological distress. Psychological Medicine, 32(6), 959-976.",
+  "reference_url": "https://doi.org/10.1017/S0033291702006074",
+  "items_count": 6,
+  "domains": ["mental_health", "distress"],
+  "scoring": {
+    "method": "sum",
+    "range": [0, 24],
+    "interpretation": {
+      "0-4": "Low distress",
+      "5-12": "Moderate distress",
+      "13-24": "High distress (possible serious mental illness)"
+    }
+  },
+  "instructions": "During the past 30 days, about how often did you feel...",
+  "questions": [
+    {
+      "name": "k6_1",
+      "description": "...nervous?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "none", "label": "None of the time"},
+        {"name": "little", "label": "A little of the time"},
+        {"name": "some", "label": "Some of the time"},
+        {"name": "most", "label": "Most of the time"},
+        {"name": "all", "label": "All of the time"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "k6_2",
+      "description": "...hopeless?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "none", "label": "None of the time"},
+        {"name": "little", "label": "A little of the time"},
+        {"name": "some", "label": "Some of the time"},
+        {"name": "most", "label": "Most of the time"},
+        {"name": "all", "label": "All of the time"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "k6_3",
+      "description": "...restless or fidgety?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "none", "label": "None of the time"},
+        {"name": "little", "label": "A little of the time"},
+        {"name": "some", "label": "Some of the time"},
+        {"name": "most", "label": "Most of the time"},
+        {"name": "all", "label": "All of the time"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "k6_4",
+      "description": "...so depressed that nothing could cheer you up?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "none", "label": "None of the time"},
+        {"name": "little", "label": "A little of the time"},
+        {"name": "some", "label": "Some of the time"},
+        {"name": "most", "label": "Most of the time"},
+        {"name": "all", "label": "All of the time"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "k6_5",
+      "description": "...that everything was an effort?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "none", "label": "None of the time"},
+        {"name": "little", "label": "A little of the time"},
+        {"name": "some", "label": "Some of the time"},
+        {"name": "most", "label": "Most of the time"},
+        {"name": "all", "label": "All of the time"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "k6_6",
+      "description": "...worthless?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "none", "label": "None of the time"},
+        {"name": "little", "label": "A little of the time"},
+        {"name": "some", "label": "Some of the time"},
+        {"name": "most", "label": "Most of the time"},
+        {"name": "all", "label": "All of the time"}
+      ],
+      "label_requirement": {"required": true}
+    }
+  ]
+}

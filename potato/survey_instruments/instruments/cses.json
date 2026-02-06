@@ -1,0 +1,39 @@
+{
+  "id": "cses",
+  "name": "Collective Self-Esteem Scale",
+  "short_name": "CSES",
+  "description": "A 16-item measure of self-esteem derived from group memberships. Includes four subscales: membership esteem, private collective self-esteem, public collective self-esteem, and importance to identity.",
+  "url": "https://fetzer.org/sites/default/files/images/stories/pdf/selfmeasures/SELFESTEEM-CollectiveSelf-Esteem.pdf",
+  "reference": "Luhtanen, R., & Crocker, J. (1992). A Collective Self-Esteem Scale: Self-evaluation of one's social identity. Personality and Social Psychology Bulletin, 18(3), 302-318.",
+  "reference_url": "https://doi.org/10.1177/0146167292183006",
+  "items_count": 16,
+  "domains": ["social", "self_esteem"],
+  "scoring": {
+    "method": "subscales",
+    "subscales": {
+      "membership": {"items": [1, 5, 9, 13], "reverse": [1, 9]},
+      "private": {"items": [2, 6, 10, 14], "reverse": [2, 10]},
+      "public": {"items": [3, 7, 11, 15], "reverse": [3, 11]},
+      "identity": {"items": [4, 8, 12, 16], "reverse": [4, 12]}
+    }
+  },
+  "instructions": "We are all members of different social groups or social categories. Some of such social groups or categories pertain to gender, race, religion, nationality, ethnicity, and socioeconomic class. We would like you to consider your memberships in those particular groups or categories, and respond to the following statements on the basis of how you feel about those groups and your membership in them.",
+  "questions": [
+    {"name": "cses_1", "description": "I am a worthy member of the social groups I belong to.", "annotation_type": "likert", "size": 7, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}},
+    {"name": "cses_2", "description": "I often regret that I belong to some of the social groups I do.", "annotation_type": "likert", "size": 7, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}},
+    {"name": "cses_3", "description": "Overall, my social groups are considered good by others.", "annotation_type": "likert", "size": 7, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}},
+    {"name": "cses_4", "description": "Overall, my group memberships have very little to do with how I feel about myself.", "annotation_type": "likert", "size": 7, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}},
+    {"name": "cses_5", "description": "I feel I don't have much to offer to the social groups I belong to.", "annotation_type": "likert", "size": 7, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}},
+    {"name": "cses_6", "description": "In general, I'm glad to be a member of the social groups I belong to.", "annotation_type": "likert", "size": 7, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}},
+    {"name": "cses_7", "description": "Most people consider my social groups, on the average, to be more ineffective than other social groups.", "annotation_type": "likert", "size": 7, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}},
+    {"name": "cses_8", "description": "The social groups I belong to are an important reflection of who I am.", "annotation_type": "likert", "size": 7, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}},
+    {"name": "cses_9", "description": "I am a cooperative participant in the social groups I belong to.", "annotation_type": "likert", "size": 7, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}},
+    {"name": "cses_10", "description": "Overall, I often feel that the social groups of which I am a member are not worthwhile.", "annotation_type": "likert", "size": 7, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}},
+    {"name": "cses_11", "description": "In general, others respect the social groups that I am a member of.", "annotation_type": "likert", "size": 7, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}},
+    {"name": "cses_12", "description": "The social groups I belong to are unimportant to my sense of what kind of a person I am.", "annotation_type": "likert", "size": 7, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}},
+    {"name": "cses_13", "description": "I often feel I'm a useless member of my social groups.", "annotation_type": "likert", "size": 7, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}},
+    {"name": "cses_14", "description": "I feel good about the social groups I belong to.", "annotation_type": "likert", "size": 7, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}},
+    {"name": "cses_15", "description": "In general, others think that the social groups I am a member of are unworthy.", "annotation_type": "likert", "size": 7, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}},
+    {"name": "cses_16", "description": "In general, belonging to social groups is an important part of my self-image.", "annotation_type": "likert", "size": 7, "min_label": "Strongly disagree", "max_label": "Strongly agree", "label_requirement": {"required": true}}
+  ]
+}

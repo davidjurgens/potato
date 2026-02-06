@@ -239,31 +239,48 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
         phases = config_data['phases']
         if isinstance(phases, list):
             for i, phase in enumerate(phases):
-                if 'annotation_schemes' not in phase:
-                    raise ConfigValidationError(f"Phase {phase.get('name', f'[{i}]')} missing annotation_schemes")
-                schemes = phase['annotation_schemes']
-                if not isinstance(schemes, list):
-                    raise ConfigValidationError(f"Phase {phase.get('name', f'[{i}]')} annotation_schemes must be a list")
-                if not schemes:
-                    raise ConfigValidationError(f"Phase {phase.get('name', f'[{i}]')} annotation_schemes cannot be empty")
+                phase_id = phase.get('name', f'phase[{i}]')
+                # Phases can have annotation_schemes, file, type, instrument, or instruments
+                if 'annotation_schemes' in phase:
+                    schemes = phase['annotation_schemes']
+                    if not isinstance(schemes, list):
+                        raise ConfigValidationError(f"Phase {phase_id} annotation_schemes must be a list")
+                    if not schemes:
+                        raise ConfigValidationError(f"Phase {phase_id} annotation_schemes cannot be empty")
 
-                for j, scheme in enumerate(schemes):
-                    validate_single_annotation_scheme(scheme, f"phases[{i}].annotation_schemes[{j}]")
+                    for j, scheme in enumerate(schemes):
+                        validate_single_annotation_scheme(scheme, f"phases[{i}].annotation_schemes[{j}]")
+                elif 'file' in phase or 'type' in phase or 'instrument' in phase or 'instruments' in phase:
+                    # Legacy format or instrument-based - validated at runtime
+                    _validate_phase_instruments(phase, phase_id)
+                else:
+                    raise ConfigValidationError(
+                        f"Phase {phase_id} requires 'annotation_schemes', 'file', 'type', "
+                        f"'instrument', or 'instruments'"
+                    )
         else:
             # Dictionary format
             for phase_name, phase in phases.items():
                 if phase_name == 'order':
                     continue
-                if 'annotation_schemes' not in phase:
-                    raise ConfigValidationError(f"Phase {phase_name} missing annotation_schemes")
-                schemes = phase['annotation_schemes']
-                if not isinstance(schemes, list):
-                    raise ConfigValidationError(f"Phase {phase_name} annotation_schemes must be a list")
-                if not schemes:
-                    raise ConfigValidationError(f"Phase {phase_name} annotation_schemes cannot be empty")
+                # Phases can have annotation_schemes, file, type, instrument, or instruments
+                if 'annotation_schemes' in phase:
+                    schemes = phase['annotation_schemes']
+                    if not isinstance(schemes, list):
+                        raise ConfigValidationError(f"Phase {phase_name} annotation_schemes must be a list")
+                    if not schemes:
+                        raise ConfigValidationError(f"Phase {phase_name} annotation_schemes cannot be empty")
 
-                for j, scheme in enumerate(schemes):
-                    validate_single_annotation_scheme(scheme, f"phases.{phase_name}.annotation_schemes[{j}]")
+                    for j, scheme in enumerate(schemes):
+                        validate_single_annotation_scheme(scheme, f"phases.{phase_name}.annotation_schemes[{j}]")
+                elif 'file' in phase or 'type' in phase or 'instrument' in phase or 'instruments' in phase:
+                    # Legacy format or instrument-based - validated at runtime
+                    _validate_phase_instruments(phase, phase_name)
+                else:
+                    raise ConfigValidationError(
+                        f"Phase {phase_name} requires 'annotation_schemes', 'file', 'type', "
+                        f"'instrument', or 'instruments'"
+                    )
     else:
         raise ConfigValidationError("Config must have either 'annotation_schemes' (top-level) or 'phases' with annotation_schemes")
 
@@ -377,6 +394,63 @@ def _validate_mace_config(config_data: Dict[str, Any]) -> None:
             "(radio, likert, select, multiselect) are defined. "
             "MACE will have no data to process."
         )
+
+
+def _validate_phase_instruments(phase: Dict[str, Any], phase_name: str) -> None:
+    """
+    Validate instrument references in a phase configuration.
+
+    Args:
+        phase: The phase configuration
+        phase_name: Name of the phase for error messages
+
+    Raises:
+        ConfigValidationError: If instrument references are invalid
+    """
+    # Validate single instrument reference
+    if 'instrument' in phase:
+        inst_id = phase['instrument']
+        if not isinstance(inst_id, str):
+            raise ConfigValidationError(
+                f"Phase {phase_name}: 'instrument' must be a string"
+            )
+        try:
+            from potato.survey_instruments import get_registry
+            registry = get_registry()
+            if inst_id not in registry['instruments']:
+                available = sorted(registry['instruments'].keys())[:10]
+                raise ConfigValidationError(
+                    f"Phase {phase_name}: Unknown instrument '{inst_id}'. "
+                    f"Available instruments: {available}..."
+                )
+        except ImportError:
+            # survey_instruments module not available - skip validation
+            pass
+
+    # Validate multiple instruments
+    if 'instruments' in phase:
+        inst_list = phase['instruments']
+        if not isinstance(inst_list, list):
+            raise ConfigValidationError(
+                f"Phase {phase_name}: 'instruments' must be a list"
+            )
+        try:
+            from potato.survey_instruments import get_registry
+            registry = get_registry()
+            for inst_id in inst_list:
+                if not isinstance(inst_id, str):
+                    raise ConfigValidationError(
+                        f"Phase {phase_name}: All items in 'instruments' must be strings"
+                    )
+                if inst_id not in registry['instruments']:
+                    available = sorted(registry['instruments'].keys())[:10]
+                    raise ConfigValidationError(
+                        f"Phase {phase_name}: Unknown instrument '{inst_id}'. "
+                        f"Available instruments: {available}..."
+                    )
+        except ImportError:
+            # survey_instruments module not available - skip validation
+            pass
 
 
 def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None:

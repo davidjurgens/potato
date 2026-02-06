@@ -1,0 +1,45 @@
+{
+  "id": "ucla-loneliness",
+  "name": "UCLA Loneliness Scale (Version 3)",
+  "short_name": "UCLA-LS3",
+  "description": "A 20-item measure designed to assess subjective feelings of loneliness and social isolation. The most widely used loneliness measure in research.",
+  "url": "https://sparqtools.org/mobility-measure/ucla-loneliness-scale-version-3/",
+  "reference": "Russell, D. W. (1996). UCLA Loneliness Scale (Version 3): Reliability, validity, and factor structure. Journal of Personality Assessment, 66(1), 20-40.",
+  "reference_url": "https://doi.org/10.1207/s15327752jpa6601_2",
+  "items_count": 20,
+  "domains": ["social", "loneliness"],
+  "scoring": {
+    "method": "sum",
+    "reverse_items": [1, 5, 6, 9, 10, 15, 16, 19, 20],
+    "range": [20, 80],
+    "interpretation": {
+      "20-34": "Low loneliness",
+      "35-49": "Moderate loneliness",
+      "50-64": "Moderately high loneliness",
+      "65-80": "High loneliness"
+    }
+  },
+  "instructions": "Indicate how often you feel the way described in each of the following statements.",
+  "questions": [
+    {"name": "ucla_1", "description": "How often do you feel that you are 'in tune' with the people around you?", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Rarely"}, {"name": "sometimes", "label": "Sometimes"}, {"name": "always", "label": "Always"}], "label_requirement": {"required": true}},
+    {"name": "ucla_2", "description": "How often do you feel that you lack companionship?", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Rarely"}, {"name": "sometimes", "label": "Sometimes"}, {"name": "always", "label": "Always"}], "label_requirement": {"required": true}},
+    {"name": "ucla_3", "description": "How often do you feel that there is no one you can turn to?", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Rarely"}, {"name": "sometimes", "label": "Sometimes"}, {"name": "always", "label": "Always"}], "label_requirement": {"required": true}},
+    {"name": "ucla_4", "description": "How often do you feel alone?", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Rarely"}, {"name": "sometimes", "label": "Sometimes"}, {"name": "always", "label": "Always"}], "label_requirement": {"required": true}},
+    {"name": "ucla_5", "description": "How often do you feel part of a group of friends?", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Rarely"}, {"name": "sometimes", "label": "Sometimes"}, {"name": "always", "label": "Always"}], "label_requirement": {"required": true}},
+    {"name": "ucla_6", "description": "How often do you feel that you have a lot in common with the people around you?", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Rarely"}, {"name": "sometimes", "label": "Sometimes"}, {"name": "always", "label": "Always"}], "label_requirement": {"required": true}},
+    {"name": "ucla_7", "description": "How often do you feel that you are no longer close to anyone?", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Rarely"}, {"name": "sometimes", "label": "Sometimes"}, {"name": "always", "label": "Always"}], "label_requirement": {"required": true}},
+    {"name": "ucla_8", "description": "How often do you feel that your interests and ideas are not shared by those around you?", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Rarely"}, {"name": "sometimes", "label": "Sometimes"}, {"name": "always", "label": "Always"}], "label_requirement": {"required": true}},
+    {"name": "ucla_9", "description": "How often do you feel outgoing and friendly?", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Rarely"}, {"name": "sometimes", "label": "Sometimes"}, {"name": "always", "label": "Always"}], "label_requirement": {"required": true}},
+    {"name": "ucla_10", "description": "How often do you feel close to people?", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Rarely"}, {"name": "sometimes", "label": "Sometimes"}, {"name": "always", "label": "Always"}], "label_requirement": {"required": true}},
+    {"name": "ucla_11", "description": "How often do you feel left out?", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Rarely"}, {"name": "sometimes", "label": "Sometimes"}, {"name": "always", "label": "Always"}], "label_requirement": {"required": true}},
+    {"name": "ucla_12", "description": "How often do you feel that your relationships with others are not meaningful?", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Rarely"}, {"name": "sometimes", "label": "Sometimes"}, {"name": "always", "label": "Always"}], "label_requirement": {"required": true}},
+    {"name": "ucla_13", "description": "How often do you feel that no one really knows you well?", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Rarely"}, {"name": "sometimes", "label": "Sometimes"}, {"name": "always", "label": "Always"}], "label_requirement": {"required": true}},
+    {"name": "ucla_14", "description": "How often do you feel isolated from others?", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Rarely"}, {"name": "sometimes", "label": "Sometimes"}, {"name": "always", "label": "Always"}], "label_requirement": {"required": true}},
+    {"name": "ucla_15", "description": "How often do you feel you can find companionship when you want it?", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Rarely"}, {"name": "sometimes", "label": "Sometimes"}, {"name": "always", "label": "Always"}], "label_requirement": {"required": true}},
+    {"name": "ucla_16", "description": "How often do you feel that there are people who really understand you?", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Rarely"}, {"name": "sometimes", "label": "Sometimes"}, {"name": "always", "label": "Always"}], "label_requirement": {"required": true}},
+    {"name": "ucla_17", "description": "How often do you feel shy?", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Rarely"}, {"name": "sometimes", "label": "Sometimes"}, {"name": "always", "label": "Always"}], "label_requirement": {"required": true}},
+    {"name": "ucla_18", "description": "How often do you feel that people are around you but not with you?", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Rarely"}, {"name": "sometimes", "label": "Sometimes"}, {"name": "always", "label": "Always"}], "label_requirement": {"required": true}},
+    {"name": "ucla_19", "description": "How often do you feel that there are people you can talk to?", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Rarely"}, {"name": "sometimes", "label": "Sometimes"}, {"name": "always", "label": "Always"}], "label_requirement": {"required": true}},
+    {"name": "ucla_20", "description": "How often do you feel that there are people you can turn to?", "annotation_type": "radio", "labels": [{"name": "never", "label": "Never"}, {"name": "rarely", "label": "Rarely"}, {"name": "sometimes", "label": "Sometimes"}, {"name": "always", "label": "Always"}], "label_requirement": {"required": true}}
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "id": "political-efficacy",
+  "name": "Political Efficacy Scale (ANES)",
+  "short_name": "PES",
+  "description": "A 4-item measure from the American National Election Studies assessing both internal efficacy (belief in one's ability to understand and participate in politics) and external efficacy (belief that the government is responsive to citizens).",
+  "url": "https://electionstudies.org/",
+  "reference": "American National Election Studies. (2020). ANES 2020 Time Series Study. Ann Arbor, MI: University of Michigan, Center for Political Studies.",
+  "reference_url": "https://electionstudies.org/data-center/",
+  "items_count": 4,
+  "domains": ["attitudes", "political"],
+  "scoring": {
+    "method": "subscales",
+    "subscales": {
+      "internal_efficacy": {"items": [1, 3]},
+      "external_efficacy": {"items": [2, 4]}
+    }
+  },
+  "instructions": "Please indicate how much you agree or disagree with each of the following statements.",
+  "questions": [
+    {"name": "poleff_1", "description": "Sometimes politics and government seem so complicated that a person like me can't really understand what's going on.", "annotation_type": "likert", "size": 5, "min_label": "Strongly agree", "max_label": "Strongly disagree", "label_requirement": {"required": true}},
+    {"name": "poleff_2", "description": "I don't think public officials care much what people like me think.", "annotation_type": "likert", "size": 5, "min_label": "Strongly agree", "max_label": "Strongly disagree", "label_requirement": {"required": true}},
+    {"name": "poleff_3", "description": "People like me don't have any say about what the government does.", "annotation_type": "likert", "size": 5, "min_label": "Strongly agree", "max_label": "Strongly disagree", "label_requirement": {"required": true}},
+    {"name": "poleff_4", "description": "Public officials don't care much what people like me think.", "annotation_type": "likert", "size": 5, "min_label": "Strongly agree", "max_label": "Strongly disagree", "label_requirement": {"required": true}}
+  ]
+}

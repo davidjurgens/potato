@@ -1,0 +1,155 @@
+{
+  "id": "ess-demographics",
+  "name": "ESS Core Demographics Module",
+  "short_name": "ESS-Demo",
+  "description": "Core demographic questions from the European Social Survey (ESS), a cross-national survey conducted across Europe since 2001 measuring attitudes, beliefs, and behavior patterns.",
+  "url": "https://www.europeansocialsurvey.org",
+  "reference": "European Social Survey ERIC. (2020). ESS Round 10 Source Questionnaire. London: ESS ERIC Headquarters.",
+  "reference_url": "https://doi.org/10.21338/NSD-ESS-CUMULATIVE",
+  "items_count": 12,
+  "domains": ["demographics"],
+  "instructions": "Please answer the following questions about yourself.",
+  "questions": [
+    {
+      "name": "ess_agea",
+      "description": "What is your age?",
+      "annotation_type": "textbox",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "ess_gndr",
+      "description": "What is your gender?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "male", "label": "Male"},
+        {"name": "female", "label": "Female"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "ess_educlvl",
+      "description": "What is the highest level of education you have completed?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "less_lower_secondary", "label": "Less than lower secondary"},
+        {"name": "lower_secondary", "label": "Lower secondary completed"},
+        {"name": "upper_secondary", "label": "Upper secondary completed"},
+        {"name": "post_secondary", "label": "Post-secondary non-tertiary"},
+        {"name": "tertiary", "label": "Tertiary (university) completed"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "ess_marital",
+      "description": "Which of these descriptions best describes your current situation?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "married", "label": "Legally married"},
+        {"name": "civil_union", "label": "In a legally registered civil union"},
+        {"name": "separated_married", "label": "Legally separated (still legally married)"},
+        {"name": "divorced", "label": "Legally divorced/civil union dissolved"},
+        {"name": "widowed", "label": "Widowed/civil partner died"},
+        {"name": "never_married", "label": "Never married/never in civil union"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "ess_partner",
+      "description": "Are you currently living with a husband/wife/civil partner?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "yes", "label": "Yes, living with husband/wife/partner"},
+        {"name": "no", "label": "No"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "ess_hhmmb",
+      "description": "Including yourself, how many people live regularly as members of your household?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "1", "label": "1 (just me)"},
+        {"name": "2", "label": "2"},
+        {"name": "3", "label": "3"},
+        {"name": "4", "label": "4"},
+        {"name": "5plus", "label": "5 or more"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "ess_mainact",
+      "description": "Which of these descriptions best describes your main activity in the last 7 days?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "paid_work", "label": "In paid work"},
+        {"name": "education", "label": "In education"},
+        {"name": "unemployed_looking", "label": "Unemployed and actively looking for job"},
+        {"name": "unemployed_not_looking", "label": "Unemployed, not actively looking"},
+        {"name": "disabled", "label": "Permanently sick or disabled"},
+        {"name": "retired", "label": "Retired"},
+        {"name": "community_service", "label": "In community/military service"},
+        {"name": "housework", "label": "Doing housework, looking after children"},
+        {"name": "other", "label": "Other"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "ess_hinctnta",
+      "description": "Which letter best describes your household's total income, after tax and compulsory deductions?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "decile_1", "label": "1st decile (lowest 10%)"},
+        {"name": "decile_2", "label": "2nd decile"},
+        {"name": "decile_3", "label": "3rd decile"},
+        {"name": "decile_4", "label": "4th decile"},
+        {"name": "decile_5", "label": "5th decile"},
+        {"name": "decile_6", "label": "6th decile"},
+        {"name": "decile_7", "label": "7th decile"},
+        {"name": "decile_8", "label": "8th decile"},
+        {"name": "decile_9", "label": "9th decile"},
+        {"name": "decile_10", "label": "10th decile (highest 10%)"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "ess_rlgdgr",
+      "description": "Regardless of whether you belong to a particular religion, how religious would you say you are?",
+      "annotation_type": "slider",
+      "min": 0,
+      "max": 10,
+      "min_label": "Not at all religious",
+      "max_label": "Very religious",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "ess_lrscale",
+      "description": "In politics people sometimes talk of 'left' and 'right'. Where would you place yourself on this scale?",
+      "annotation_type": "slider",
+      "min": 0,
+      "max": 10,
+      "min_label": "Left",
+      "max_label": "Right",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "ess_brncntr",
+      "description": "Were you born in this country?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "yes", "label": "Yes"},
+        {"name": "no", "label": "No"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "ess_ctzcntr",
+      "description": "Are you a citizen of this country?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "yes", "label": "Yes"},
+        {"name": "no", "label": "No"}
+      ],
+      "label_requirement": {"required": true}
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "id": "ios",
+  "name": "Inclusion of Other in Self Scale",
+  "short_name": "IOS",
+  "description": "A single-item pictorial measure of interpersonal closeness. Uses overlapping circles to represent the degree of interconnection between self and another person or group.",
+  "url": "https://fetzer.org/sites/default/files/images/stories/pdf/selfmeasures/RELATIONSHIPS-InclusionofOther.pdf",
+  "reference": "Aron, A., Aron, E. N., & Smollan, D. (1992). Inclusion of Other in the Self Scale and the structure of interpersonal closeness. Journal of Personality and Social Psychology, 63(4), 596-612.",
+  "reference_url": "https://doi.org/10.1037/0022-3514.63.4.596",
+  "items_count": 1,
+  "domains": ["social", "relationships"],
+  "scoring": {
+    "method": "single_item",
+    "range": [1, 7],
+    "interpretation": {
+      "1-2": "Low closeness (little overlap)",
+      "3-5": "Moderate closeness",
+      "6-7": "High closeness (strong interconnection)"
+    }
+  },
+  "instructions": "Please select the picture below which best describes your relationship with the person or group specified. The circles represent you and the other person/group, with more overlap indicating closer connection.",
+  "questions": [
+    {
+      "name": "ios_closeness",
+      "description": "Which picture best describes your relationship? (1 = separate circles, no overlap; 7 = almost completely overlapping circles)",
+      "annotation_type": "likert",
+      "size": 7,
+      "min_label": "No overlap (distant)",
+      "max_label": "Near complete overlap (very close)",
+      "label_requirement": {"required": true}
+    }
+  ]
+}

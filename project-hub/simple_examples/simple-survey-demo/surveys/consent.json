@@ -1,0 +1,16 @@
+[
+  {
+    "name": "consent_info",
+    "description": "<h3>Survey Instruments Demo</h3><p>This demo shows how Potato can use standard validated survey instruments for prestudy and poststudy phases.</p><p>You will complete:</p><ul><li><strong>Prestudy:</strong> TIPI (Ten-Item Personality Inventory) - a brief personality measure</li><li><strong>Annotation:</strong> Rate the sentiment of 5 short texts</li><li><strong>Poststudy:</strong> SWLS (Satisfaction With Life) and PSS (Perceived Stress Scale)</li></ul><p>Click 'I agree' to continue.</p>",
+    "annotation_type": "pure_display"
+  },
+  {
+    "name": "consent_agree",
+    "description": "I understand this is a demo and agree to proceed.",
+    "annotation_type": "radio",
+    "labels": [
+      {"name": "agree", "label": "I agree"}
+    ],
+    "label_requirement": {"required": true}
+  }
+]

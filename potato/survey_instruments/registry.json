@@ -1,0 +1,454 @@
+{
+  "instruments": {
+    "bfi-2": {
+      "name": "Big Five Inventory-2",
+      "file": "bfi-2.json",
+      "category": "personality",
+      "items": 60,
+      "description": "Comprehensive Big Five personality assessment",
+      "url": "https://www.ocf.berkeley.edu/~johnlab/bfi.html"
+    },
+    "tipi": {
+      "name": "Ten-Item Personality Inventory",
+      "file": "tipi.json",
+      "category": "personality",
+      "items": 10,
+      "description": "Ultra-brief Big Five personality measure",
+      "url": "https://gosling.psy.utexas.edu/scales-weve-developed/ten-item-personality-measure-tipi/"
+    },
+    "pvq-ess": {
+      "name": "Portrait Values Questionnaire (ESS)",
+      "file": "pvq-ess.json",
+      "category": "personality",
+      "items": 21,
+      "description": "Human values assessment from European Social Survey",
+      "url": "https://www.europeansocialsurvey.org/methodology/ess-methodology/source-questionnaire/human-values-scale"
+    },
+    "nfc": {
+      "name": "Need for Cognition Scale",
+      "file": "nfc.json",
+      "category": "personality",
+      "items": 18,
+      "description": "Tendency to engage in and enjoy thinking",
+      "url": "https://www.richardepetty.com/research"
+    },
+    "ztpi": {
+      "name": "Zimbardo Time Perspective Inventory",
+      "file": "ztpi.json",
+      "category": "personality",
+      "items": 56,
+      "description": "Time perspective and temporal orientation",
+      "url": "https://www.thetimeparadox.com/zimbardo-time-perspective-inventory/"
+    },
+    "gse": {
+      "name": "General Self-Efficacy Scale",
+      "file": "gse.json",
+      "category": "personality",
+      "items": 10,
+      "description": "Perceived self-efficacy in coping with daily hassles",
+      "url": "https://userpage.fu-berlin.de/~health/engscal.htm"
+    },
+    "phq-9": {
+      "name": "Patient Health Questionnaire-9",
+      "file": "phq-9.json",
+      "category": "mental_health",
+      "items": 9,
+      "description": "Depression screening and severity measure",
+      "url": "https://www.phqscreeners.com/select-screener"
+    },
+    "gad-7": {
+      "name": "Generalized Anxiety Disorder-7",
+      "file": "gad-7.json",
+      "category": "mental_health",
+      "items": 7,
+      "description": "Anxiety screening and severity measure",
+      "url": "https://www.phqscreeners.com/select-screener"
+    },
+    "k6": {
+      "name": "Kessler Psychological Distress Scale (K6)",
+      "file": "k6.json",
+      "category": "mental_health",
+      "items": 6,
+      "description": "Brief psychological distress screening",
+      "url": "https://www.hcp.med.harvard.edu/ncs/k6_scales.php"
+    },
+    "k10": {
+      "name": "Kessler Psychological Distress Scale (K10)",
+      "file": "k10.json",
+      "category": "mental_health",
+      "items": 10,
+      "description": "Psychological distress screening",
+      "url": "https://www.hcp.med.harvard.edu/ncs/k6_scales.php"
+    },
+    "ces-d": {
+      "name": "Center for Epidemiologic Studies Depression Scale",
+      "file": "ces-d.json",
+      "category": "mental_health",
+      "items": 20,
+      "description": "Depression symptom assessment for general population",
+      "url": "https://cesd-r.com/"
+    },
+    "pss-10": {
+      "name": "Perceived Stress Scale",
+      "file": "pss-10.json",
+      "category": "mental_health",
+      "items": 10,
+      "description": "Perception of stress in the last month",
+      "url": "https://www.mindgarden.com/132-perceived-stress-scale"
+    },
+    "brs": {
+      "name": "Brief Resilience Scale",
+      "file": "brs.json",
+      "category": "mental_health",
+      "items": 6,
+      "description": "Ability to bounce back from stress",
+      "url": "https://positivepsychology.com/brief-resilience-scale/"
+    },
+    "swls": {
+      "name": "Satisfaction With Life Scale",
+      "file": "swls.json",
+      "category": "mental_health",
+      "items": 5,
+      "description": "Global cognitive judgments of life satisfaction",
+      "url": "https://eddiener.com/scales/7"
+    },
+    "shs": {
+      "name": "Subjective Happiness Scale",
+      "file": "shs.json",
+      "category": "mental_health",
+      "items": 4,
+      "description": "Global subjective happiness assessment",
+      "url": "https://eddiener.com/scales"
+    },
+    "who-5": {
+      "name": "WHO Well-Being Index",
+      "file": "who-5.json",
+      "category": "mental_health",
+      "items": 5,
+      "description": "Positive psychological well-being measure",
+      "url": "https://www.psykiatri-regionh.dk/who-5/Pages/default.aspx"
+    },
+    "ghq-12": {
+      "name": "General Health Questionnaire-12",
+      "file": "ghq-12.json",
+      "category": "mental_health",
+      "items": 12,
+      "description": "Psychiatric morbidity screening",
+      "url": "https://www.gl-assessment.co.uk/products/general-health-questionnaire-ghq/"
+    },
+    "sias": {
+      "name": "Social Interaction Anxiety Scale",
+      "file": "sias.json",
+      "category": "mental_health",
+      "items": 20,
+      "description": "Anxiety in social interaction situations",
+      "url": "https://www.psy.unsw.edu.au/research/clinical-research-unit-anxiety-and-depression"
+    },
+    "panas": {
+      "name": "Positive and Negative Affect Schedule",
+      "file": "panas.json",
+      "category": "affect",
+      "items": 20,
+      "description": "Positive and negative emotional states",
+      "url": "https://www.sjdm.org/dmidi/PANAS.html"
+    },
+    "iri": {
+      "name": "Interpersonal Reactivity Index",
+      "file": "iri.json",
+      "category": "affect",
+      "items": 28,
+      "description": "Multidimensional empathy measure",
+      "url": "https://fetzer.org/sites/default/files/images/stories/pdf/selfmeasures/EMPATHY-InterpersonalReactivityIndex.pdf"
+    },
+    "rse": {
+      "name": "Rosenberg Self-Esteem Scale",
+      "file": "rse.json",
+      "category": "social",
+      "items": 10,
+      "description": "Global self-esteem measure",
+      "url": "https://socy.umd.edu/about-us/rosenberg-self-esteem-scale"
+    },
+    "ucla-loneliness": {
+      "name": "UCLA Loneliness Scale (Version 3)",
+      "file": "ucla-loneliness.json",
+      "category": "social",
+      "items": 20,
+      "description": "Subjective feelings of loneliness",
+      "url": "https://sparqtools.org/mobility-measure/ucla-loneliness-scale-version-3/"
+    },
+    "mos-ss": {
+      "name": "MOS Social Support Survey",
+      "file": "mos-ss.json",
+      "category": "social",
+      "items": 19,
+      "description": "Perceived social support availability",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/1593914/"
+    },
+    "macarthur-ladder": {
+      "name": "MacArthur Scale of Subjective Social Status",
+      "file": "macarthur-ladder.json",
+      "category": "social",
+      "items": 1,
+      "description": "Perceived social status relative to others",
+      "url": "https://sparqtools.org/mobility-measure/macarthur-scale-of-subjective-social-status/"
+    },
+    "ios": {
+      "name": "Inclusion of Other in Self Scale",
+      "file": "ios.json",
+      "category": "social",
+      "items": 1,
+      "description": "Interpersonal closeness and connectedness",
+      "url": "https://fetzer.org/sites/default/files/images/stories/pdf/selfmeasures/RELATIONSHIPS-InclusionofOther.pdf"
+    },
+    "cses": {
+      "name": "Collective Self-Esteem Scale",
+      "file": "cses.json",
+      "category": "social",
+      "items": 16,
+      "description": "Self-esteem derived from group memberships",
+      "url": "https://fetzer.org/sites/default/files/images/stories/pdf/selfmeasures/SELFESTEEM-CollectiveSelf-Esteem.pdf"
+    },
+    "sdo-7": {
+      "name": "Social Dominance Orientation Scale",
+      "file": "sdo-7.json",
+      "category": "attitudes",
+      "items": 16,
+      "description": "Preference for group-based hierarchy",
+      "url": "https://osf.io/7w4uy/"
+    },
+    "rwa": {
+      "name": "Right-Wing Authoritarianism Scale",
+      "file": "rwa.json",
+      "category": "attitudes",
+      "items": 22,
+      "description": "Authoritarian submission, aggression, and conventionalism",
+      "url": "https://theauthoritarians.org/"
+    },
+    "mfq": {
+      "name": "Moral Foundations Questionnaire",
+      "file": "mfq.json",
+      "category": "attitudes",
+      "items": 30,
+      "description": "Moral reasoning across five foundations",
+      "url": "https://moralfoundations.org/questionnaires/"
+    },
+    "trust-ess": {
+      "name": "Social Trust Scale (ESS)",
+      "file": "trust-ess.json",
+      "category": "attitudes",
+      "items": 3,
+      "description": "Generalized social trust from European Social Survey",
+      "url": "https://www.europeansocialsurvey.org/"
+    },
+    "rotter-trust": {
+      "name": "Interpersonal Trust Scale",
+      "file": "rotter-trust.json",
+      "category": "attitudes",
+      "items": 25,
+      "description": "Generalized expectancy of trust in others",
+      "url": "https://fetzer.org/sites/default/files/images/stories/pdf/selfmeasures/TRUST-Rotter.pdf"
+    },
+    "eds": {
+      "name": "Everyday Discrimination Scale",
+      "file": "eds.json",
+      "category": "attitudes",
+      "items": 9,
+      "description": "Day-to-day experiences of discrimination",
+      "url": "https://sparqtools.org/mobility-measure/everyday-discrimination-scale/"
+    },
+    "political-efficacy": {
+      "name": "Political Efficacy Scale (ANES)",
+      "file": "political-efficacy.json",
+      "category": "attitudes",
+      "items": 4,
+      "description": "Belief in ability to influence political process",
+      "url": "https://electionstudies.org/"
+    },
+    "rci-10": {
+      "name": "Religious Commitment Inventory-10",
+      "file": "rci-10.json",
+      "category": "attitudes",
+      "items": 10,
+      "description": "Intrapersonal and interpersonal religious commitment",
+      "url": "https://fetzer.org/sites/default/files/images/stories/pdf/selfmeasures/RELIGIOUS-COMMITMENT-ReligiousCommitmentInventory.pdf"
+    },
+    "mc-sds": {
+      "name": "Marlowe-Crowne Social Desirability Scale",
+      "file": "mc-sds.json",
+      "category": "response_style",
+      "items": 33,
+      "description": "Tendency to give socially desirable responses",
+      "url": "https://www.sjdm.org/dmidi/Marlowe_Crowne_Social_Desirability.html"
+    },
+    "bfi-10": {
+      "name": "Big Five Inventory-10",
+      "file": "bfi-10.json",
+      "category": "short_forms",
+      "items": 10,
+      "description": "Ultra-brief 10-item Big Five personality measure",
+      "url": "https://www.ocf.berkeley.edu/~johnlab/bfi.htm"
+    },
+    "mini-ipip": {
+      "name": "Mini-IPIP",
+      "file": "mini-ipip.json",
+      "category": "short_forms",
+      "items": 20,
+      "description": "20-item short form of the 50-item IPIP-FFM",
+      "url": "https://ipip.ori.org/New_IPIP-50-item-scale.htm"
+    },
+    "phq-2": {
+      "name": "Patient Health Questionnaire-2",
+      "file": "phq-2.json",
+      "category": "short_forms",
+      "items": 2,
+      "description": "Ultra-brief depression screening",
+      "url": "https://www.phqscreeners.com/select-screener"
+    },
+    "gad-2": {
+      "name": "Generalized Anxiety Disorder-2",
+      "file": "gad-2.json",
+      "category": "short_forms",
+      "items": 2,
+      "description": "Ultra-brief anxiety screening",
+      "url": "https://www.phqscreeners.com/select-screener"
+    },
+    "pss-4": {
+      "name": "Perceived Stress Scale-4",
+      "file": "pss-4.json",
+      "category": "short_forms",
+      "items": 4,
+      "description": "Ultra-brief perceived stress measure",
+      "url": "https://www.mindgarden.com/132-perceived-stress-scale"
+    },
+    "ucla-loneliness-3": {
+      "name": "UCLA Loneliness Scale-3",
+      "file": "ucla-loneliness-3.json",
+      "category": "short_forms",
+      "items": 3,
+      "description": "Ultra-brief loneliness screening",
+      "url": "https://sparqtools.org/mobility-measure/three-item-loneliness-scale/"
+    },
+    "grips": {
+      "name": "Gratitude Resentment and Appreciation Test (GRAT-Short)",
+      "file": "grips.json",
+      "category": "short_forms",
+      "items": 8,
+      "description": "Short-form gratitude measure",
+      "url": "https://doi.org/10.1016/j.jrp.2019.103886"
+    },
+    "mfq-20": {
+      "name": "Moral Foundations Questionnaire-20",
+      "file": "mfq-20.json",
+      "category": "short_forms",
+      "items": 20,
+      "description": "Short form of the Moral Foundations Questionnaire",
+      "url": "https://moralfoundations.org/questionnaires/"
+    },
+    "sdo-7-short": {
+      "name": "SDO7(s) Short Form",
+      "file": "sdo-7-short.json",
+      "category": "short_forms",
+      "items": 8,
+      "description": "Brief measure of social dominance orientation",
+      "url": "https://osf.io/7w4uy/"
+    },
+    "rwa-short": {
+      "name": "RWA Short Scale",
+      "file": "rwa-short.json",
+      "category": "short_forms",
+      "items": 12,
+      "description": "Short form of Right-Wing Authoritarianism",
+      "url": "https://theauthoritarians.org/"
+    },
+    "bscs": {
+      "name": "Brief Self-Control Scale",
+      "file": "bscs.json",
+      "category": "short_forms",
+      "items": 13,
+      "description": "Brief measure of dispositional self-control",
+      "url": "https://doi.org/10.1037/0022-3514.84.2.272"
+    },
+    "srh": {
+      "name": "Single-Item Self-Rated Health",
+      "file": "srh.json",
+      "category": "short_forms",
+      "items": 1,
+      "description": "Single-item global health status measure",
+      "url": "https://www.cdc.gov/hrqol/methods.htm"
+    },
+    "anes-demographics": {
+      "name": "ANES Demographic Battery",
+      "file": "anes-demographics.json",
+      "category": "demographics",
+      "items": 12,
+      "description": "Core demographics from American National Election Studies",
+      "url": "https://electionstudies.org/"
+    },
+    "gss-demographics": {
+      "name": "GSS Core Demographics",
+      "file": "gss-demographics.json",
+      "category": "demographics",
+      "items": 14,
+      "description": "Core demographics from General Social Survey",
+      "url": "https://gss.norc.org/"
+    },
+    "ess-demographics": {
+      "name": "ESS Core Demographics Module",
+      "file": "ess-demographics.json",
+      "category": "demographics",
+      "items": 12,
+      "description": "Core demographics from European Social Survey",
+      "url": "https://www.europeansocialsurvey.org/"
+    },
+    "wvs-demographics": {
+      "name": "World Values Survey Demographics",
+      "file": "wvs-demographics.json",
+      "category": "demographics",
+      "items": 12,
+      "description": "Core demographics from World Values Survey",
+      "url": "https://www.worldvaluessurvey.org/"
+    },
+    "hrs-ses": {
+      "name": "Health and Retirement Study SES Module",
+      "file": "hrs-ses.json",
+      "category": "demographics",
+      "items": 14,
+      "description": "Socioeconomic demographics from Health and Retirement Study",
+      "url": "https://hrs.isr.umich.edu/"
+    },
+    "midus-demographics": {
+      "name": "MIDUS Core Demographics",
+      "file": "midus-demographics.json",
+      "category": "demographics",
+      "items": 13,
+      "description": "Core demographics from Midlife in the United States Study",
+      "url": "https://midus.wisc.edu/"
+    },
+    "ipums-demographics": {
+      "name": "IPUMS Harmonized Demographics",
+      "file": "ipums-demographics.json",
+      "category": "demographics",
+      "items": 12,
+      "description": "Harmonized demographics for cross-survey comparability",
+      "url": "https://ipums.org/"
+    },
+    "acs-demographics": {
+      "name": "American Community Survey Demographics",
+      "file": "acs-demographics.json",
+      "category": "demographics",
+      "items": 14,
+      "description": "Core demographics from U.S. Census ACS",
+      "url": "https://www.census.gov/programs-surveys/acs"
+    }
+  },
+  "categories": {
+    "personality": ["bfi-2", "tipi", "pvq-ess", "nfc", "ztpi", "gse"],
+    "mental_health": ["phq-9", "gad-7", "k6", "k10", "ces-d", "pss-10", "brs", "swls", "shs", "who-5", "ghq-12", "sias"],
+    "affect": ["panas", "iri"],
+    "social": ["rse", "ucla-loneliness", "mos-ss", "macarthur-ladder", "ios", "cses"],
+    "attitudes": ["sdo-7", "rwa", "mfq", "trust-ess", "rotter-trust", "eds", "political-efficacy", "rci-10"],
+    "response_style": ["mc-sds"],
+    "short_forms": ["bfi-10", "mini-ipip", "phq-2", "gad-2", "pss-4", "ucla-loneliness-3", "grips", "mfq-20", "sdo-7-short", "rwa-short", "bscs", "srh"],
+    "demographics": ["anes-demographics", "gss-demographics", "ess-demographics", "wvs-demographics", "hrs-ses", "midus-demographics", "ipums-demographics", "acs-demographics"]
+  }
+}

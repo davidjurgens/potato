@@ -1,0 +1,51 @@
+{
+  "id": "iri",
+  "name": "Interpersonal Reactivity Index",
+  "short_name": "IRI",
+  "description": "A 28-item measure of dispositional empathy with four subscales: Perspective Taking, Fantasy, Empathic Concern, and Personal Distress. One of the most widely used empathy measures in psychology.",
+  "url": "https://fetzer.org/sites/default/files/images/stories/pdf/selfmeasures/EMPATHY-InterpersonalReactivityIndex.pdf",
+  "reference": "Davis, M. H. (1983). Measuring individual differences in empathy: Evidence for a multidimensional approach. Journal of Personality and Social Psychology, 44(1), 113-126.",
+  "reference_url": "https://doi.org/10.1037/0022-3514.44.1.113",
+  "items_count": 28,
+  "domains": ["empathy", "affect"],
+  "scoring": {
+    "method": "subscales",
+    "subscales": {
+      "perspective_taking": {"items": [3, 8, 11, 15, 21, 25, 28], "reverse": [3, 15]},
+      "fantasy": {"items": [1, 5, 7, 12, 16, 23, 26], "reverse": [7, 12]},
+      "empathic_concern": {"items": [2, 4, 9, 14, 18, 20, 22], "reverse": [4, 14, 18]},
+      "personal_distress": {"items": [6, 10, 13, 17, 19, 24, 27], "reverse": [13, 19]}
+    }
+  },
+  "instructions": "The following statements inquire about your thoughts and feelings in a variety of situations. For each item, indicate how well it describes you.",
+  "questions": [
+    {"name": "iri_1", "description": "I daydream and fantasize, with some regularity, about things that might happen to me.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_2", "description": "I often have tender, concerned feelings for people less fortunate than me.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_3", "description": "I sometimes find it difficult to see things from the 'other guy's' point of view.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_4", "description": "Sometimes I don't feel very sorry for other people when they are having problems.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_5", "description": "I really get involved with the feelings of the characters in a novel.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_6", "description": "In emergency situations, I feel apprehensive and ill-at-ease.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_7", "description": "I am usually objective when I watch a movie or play, and I don't often get completely caught up in it.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_8", "description": "I try to look at everybody's side of a disagreement before I make a decision.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_9", "description": "When I see someone being taken advantage of, I feel kind of protective towards them.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_10", "description": "I sometimes feel helpless when I am in the middle of a very emotional situation.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_11", "description": "I sometimes try to understand my friends better by imagining how things look from their perspective.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_12", "description": "Becoming extremely involved in a good book or movie is somewhat rare for me.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_13", "description": "When I see someone get hurt, I tend to remain calm.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_14", "description": "Other people's misfortunes do not usually disturb me a great deal.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_15", "description": "If I'm sure I'm right about something, I don't waste much time listening to other people's arguments.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_16", "description": "After seeing a play or movie, I have felt as though I were one of the characters.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_17", "description": "Being in a tense emotional situation scares me.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_18", "description": "When I see someone being treated unfairly, I sometimes don't feel very much pity for them.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_19", "description": "I am usually pretty effective in dealing with emergencies.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_20", "description": "I am often quite touched by things that I see happen.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_21", "description": "I believe that there are two sides to every question and try to look at them both.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_22", "description": "I would describe myself as a pretty soft-hearted person.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_23", "description": "When I watch a good movie, I can very easily put myself in the place of a leading character.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_24", "description": "I tend to lose control during emergencies.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_25", "description": "When I'm upset at someone, I usually try to 'put myself in his shoes' for a while.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_26", "description": "When I am reading an interesting story or novel, I imagine how I would feel if the events in the story were happening to me.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_27", "description": "When I see someone who badly needs help in an emergency, I go to pieces.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}},
+    {"name": "iri_28", "description": "Before criticizing somebody, I try to imagine how I would feel if I were in their place.", "annotation_type": "likert", "size": 5, "min_label": "Does not describe me well", "max_label": "Describes me very well", "label_requirement": {"required": true}}
+  ]
+}

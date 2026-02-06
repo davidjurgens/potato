@@ -1,0 +1,193 @@
+{
+  "id": "acs-demographics",
+  "name": "American Community Survey Demographics",
+  "short_name": "ACS-Demo",
+  "description": "Core demographic questions based on the American Community Survey (ACS), conducted by the U.S. Census Bureau to provide detailed demographic, social, economic, and housing information.",
+  "url": "https://www.census.gov/programs-surveys/acs",
+  "reference": "U.S. Census Bureau. (2023). American Community Survey Information Guide. Washington, DC: U.S. Government Printing Office.",
+  "reference_url": "https://www.census.gov/programs-surveys/acs/about.html",
+  "items_count": 14,
+  "domains": ["demographics"],
+  "instructions": "Please answer the following questions about yourself.",
+  "questions": [
+    {
+      "name": "acs_age",
+      "description": "What is your age?",
+      "annotation_type": "textbox",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "acs_sex",
+      "description": "What is your sex?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "male", "label": "Male"},
+        {"name": "female", "label": "Female"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "acs_hispanic",
+      "description": "Are you of Hispanic, Latino, or Spanish origin?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "no", "label": "No, not of Hispanic, Latino, or Spanish origin"},
+        {"name": "mexican", "label": "Yes, Mexican, Mexican Am., Chicano"},
+        {"name": "puerto_rican", "label": "Yes, Puerto Rican"},
+        {"name": "cuban", "label": "Yes, Cuban"},
+        {"name": "other", "label": "Yes, another Hispanic, Latino, or Spanish origin"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "acs_race",
+      "description": "What is your race? (Select all that apply)",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "white", "label": "White"},
+        {"name": "black", "label": "Black or African American"},
+        {"name": "american_indian", "label": "American Indian or Alaska Native"},
+        {"name": "asian_indian", "label": "Asian Indian"},
+        {"name": "chinese", "label": "Chinese"},
+        {"name": "filipino", "label": "Filipino"},
+        {"name": "other_asian", "label": "Other Asian"},
+        {"name": "pacific_islander", "label": "Native Hawaiian or Pacific Islander"},
+        {"name": "some_other", "label": "Some other race"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "acs_marital",
+      "description": "What is your marital status?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "now_married", "label": "Now married"},
+        {"name": "widowed", "label": "Widowed"},
+        {"name": "divorced", "label": "Divorced"},
+        {"name": "separated", "label": "Separated"},
+        {"name": "never_married", "label": "Never married"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "acs_education",
+      "description": "What is the highest degree or level of school you have completed?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "no_schooling", "label": "No schooling completed"},
+        {"name": "nursery_8th", "label": "Nursery school to 8th grade"},
+        {"name": "9th_12th_no_diploma", "label": "9th to 12th grade, no diploma"},
+        {"name": "hs_diploma", "label": "High school graduate (diploma or GED)"},
+        {"name": "some_college", "label": "Some college, no degree"},
+        {"name": "associates", "label": "Associate's degree"},
+        {"name": "bachelors", "label": "Bachelor's degree"},
+        {"name": "masters", "label": "Master's degree"},
+        {"name": "professional", "label": "Professional school degree (e.g., MD, JD)"},
+        {"name": "doctorate", "label": "Doctorate degree (e.g., PhD, EdD)"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "acs_work_status",
+      "description": "During the past 12 months, did you work?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "yes", "label": "Yes"},
+        {"name": "no", "label": "No"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "acs_hours_worked",
+      "description": "During the past 12 months, in the weeks worked, how many hours did you usually work each week?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "1_14", "label": "1-14 hours"},
+        {"name": "15_34", "label": "15-34 hours"},
+        {"name": "35_39", "label": "35-39 hours"},
+        {"name": "40", "label": "40 hours"},
+        {"name": "41_49", "label": "41-49 hours"},
+        {"name": "50_59", "label": "50-59 hours"},
+        {"name": "60_plus", "label": "60 or more hours"},
+        {"name": "did_not_work", "label": "Did not work"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "acs_income",
+      "description": "What was your total income during the past 12 months?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "under_10k", "label": "Less than $10,000"},
+        {"name": "10k_15k", "label": "$10,000 to $14,999"},
+        {"name": "15k_25k", "label": "$15,000 to $24,999"},
+        {"name": "25k_35k", "label": "$25,000 to $34,999"},
+        {"name": "35k_50k", "label": "$35,000 to $49,999"},
+        {"name": "50k_75k", "label": "$50,000 to $74,999"},
+        {"name": "75k_100k", "label": "$75,000 to $99,999"},
+        {"name": "100k_150k", "label": "$100,000 to $149,999"},
+        {"name": "150k_200k", "label": "$150,000 to $199,999"},
+        {"name": "200k_plus", "label": "$200,000 or more"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "acs_health_insurance",
+      "description": "Are you currently covered by any type of health insurance or health coverage plan?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "yes", "label": "Yes"},
+        {"name": "no", "label": "No"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "acs_citizenship",
+      "description": "Are you a citizen of the United States?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "yes_born_us", "label": "Yes, born in the United States"},
+        {"name": "yes_born_territory", "label": "Yes, born in Puerto Rico, Guam, the U.S. Virgin Islands, or Northern Marianas"},
+        {"name": "yes_born_abroad", "label": "Yes, born abroad of U.S. citizen parent(s)"},
+        {"name": "yes_naturalized", "label": "Yes, U.S. citizen by naturalization"},
+        {"name": "no", "label": "No, not a U.S. citizen"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "acs_english_ability",
+      "description": "How well do you speak English?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "only_english", "label": "Only speak English"},
+        {"name": "very_well", "label": "Very well"},
+        {"name": "well", "label": "Well"},
+        {"name": "not_well", "label": "Not well"},
+        {"name": "not_at_all", "label": "Not at all"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "acs_disability",
+      "description": "Do you have serious difficulty with any of the following: hearing, vision, cognitive, ambulatory, self-care, or independent living?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "yes", "label": "Yes, have one or more difficulties"},
+        {"name": "no", "label": "No"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "acs_housing_tenure",
+      "description": "Do you own or rent your housing unit?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "own_mortgage", "label": "Owned with mortgage or loan"},
+        {"name": "own_free", "label": "Owned free and clear"},
+        {"name": "rent", "label": "Rented"},
+        {"name": "occupied_no_rent", "label": "Occupied without payment of rent"}
+      ],
+      "label_requirement": {"required": true}
+    }
+  ]
+}

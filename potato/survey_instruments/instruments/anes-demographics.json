@@ -1,0 +1,177 @@
+{
+  "id": "anes-demographics",
+  "name": "ANES Demographic Battery",
+  "short_name": "ANES-Demo",
+  "description": "Core demographic questions from the American National Election Studies (ANES), a leading academic survey of voters in the United States used to measure political attitudes and participation.",
+  "url": "https://electionstudies.org",
+  "reference": "American National Election Studies. (2020). ANES 2020 Time Series Study. Ann Arbor, MI: University of Michigan, Center for Political Studies.",
+  "reference_url": "https://doi.org/10.1177/1532673X09335682",
+  "items_count": 12,
+  "domains": ["demographics"],
+  "instructions": "Please answer the following questions about yourself.",
+  "questions": [
+    {
+      "name": "anes_age",
+      "description": "What is your age?",
+      "annotation_type": "textbox",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "anes_gender",
+      "description": "What is your gender?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "male", "label": "Male"},
+        {"name": "female", "label": "Female"},
+        {"name": "other", "label": "Other"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "anes_race",
+      "description": "What racial or ethnic group best describes you?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "white", "label": "White"},
+        {"name": "black", "label": "Black or African-American"},
+        {"name": "hispanic", "label": "Hispanic or Latino"},
+        {"name": "asian", "label": "Asian or Asian-American"},
+        {"name": "native", "label": "Native American or Alaska Native"},
+        {"name": "mixed", "label": "Two or more races"},
+        {"name": "other", "label": "Other"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "anes_education",
+      "description": "What is the highest level of education you have completed?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "less_hs", "label": "Less than high school"},
+        {"name": "hs", "label": "High school graduate"},
+        {"name": "some_college", "label": "Some college, no degree"},
+        {"name": "associates", "label": "Associate's degree"},
+        {"name": "bachelors", "label": "Bachelor's degree"},
+        {"name": "graduate", "label": "Graduate or professional degree"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "anes_income",
+      "description": "What is your total annual household income before taxes?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "under_25k", "label": "Under $25,000"},
+        {"name": "25k_50k", "label": "$25,000 - $49,999"},
+        {"name": "50k_75k", "label": "$50,000 - $74,999"},
+        {"name": "75k_100k", "label": "$75,000 - $99,999"},
+        {"name": "100k_150k", "label": "$100,000 - $149,999"},
+        {"name": "150k_plus", "label": "$150,000 or more"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "anes_marital",
+      "description": "What is your current marital status?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "married", "label": "Married"},
+        {"name": "widowed", "label": "Widowed"},
+        {"name": "divorced", "label": "Divorced"},
+        {"name": "separated", "label": "Separated"},
+        {"name": "never_married", "label": "Never married"},
+        {"name": "domestic", "label": "Domestic partnership"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "anes_employment",
+      "description": "Which of the following best describes your current employment status?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "full_time", "label": "Working full-time"},
+        {"name": "part_time", "label": "Working part-time"},
+        {"name": "temp_layoff", "label": "Temporarily laid off"},
+        {"name": "unemployed", "label": "Unemployed"},
+        {"name": "retired", "label": "Retired"},
+        {"name": "disabled", "label": "Permanently disabled"},
+        {"name": "homemaker", "label": "Homemaker"},
+        {"name": "student", "label": "Student"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "anes_party",
+      "description": "Generally speaking, do you usually think of yourself as a Republican, a Democrat, an Independent, or what?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "strong_dem", "label": "Strong Democrat"},
+        {"name": "not_strong_dem", "label": "Not very strong Democrat"},
+        {"name": "lean_dem", "label": "Independent, lean Democrat"},
+        {"name": "independent", "label": "Independent"},
+        {"name": "lean_rep", "label": "Independent, lean Republican"},
+        {"name": "not_strong_rep", "label": "Not very strong Republican"},
+        {"name": "strong_rep", "label": "Strong Republican"},
+        {"name": "other", "label": "Other party"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "anes_ideology",
+      "description": "When it comes to politics, do you usually think of yourself as liberal, conservative, moderate, or what?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "very_liberal", "label": "Very liberal"},
+        {"name": "liberal", "label": "Liberal"},
+        {"name": "slightly_liberal", "label": "Slightly liberal"},
+        {"name": "moderate", "label": "Moderate"},
+        {"name": "slightly_conservative", "label": "Slightly conservative"},
+        {"name": "conservative", "label": "Conservative"},
+        {"name": "very_conservative", "label": "Very conservative"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "anes_religion",
+      "description": "What is your religious preference?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "protestant", "label": "Protestant"},
+        {"name": "catholic", "label": "Catholic"},
+        {"name": "jewish", "label": "Jewish"},
+        {"name": "muslim", "label": "Muslim"},
+        {"name": "buddhist", "label": "Buddhist"},
+        {"name": "hindu", "label": "Hindu"},
+        {"name": "other", "label": "Other religion"},
+        {"name": "none", "label": "No religion / Atheist / Agnostic"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "anes_attendance",
+      "description": "How often do you attend religious services?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "never", "label": "Never"},
+        {"name": "few_year", "label": "A few times a year"},
+        {"name": "once_twice_month", "label": "Once or twice a month"},
+        {"name": "almost_weekly", "label": "Almost every week"},
+        {"name": "weekly", "label": "Every week"},
+        {"name": "more_weekly", "label": "More than once a week"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "anes_region",
+      "description": "In which region of the United States do you currently live?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "northeast", "label": "Northeast"},
+        {"name": "midwest", "label": "Midwest"},
+        {"name": "south", "label": "South"},
+        {"name": "west", "label": "West"}
+      ],
+      "label_requirement": {"required": true}
+    }
+  ]
+}

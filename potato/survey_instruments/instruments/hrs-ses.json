@@ -1,0 +1,180 @@
+{
+  "id": "hrs-ses",
+  "name": "Health and Retirement Study SES Module",
+  "short_name": "HRS-SES",
+  "description": "Core socioeconomic and demographic questions from the Health and Retirement Study (HRS), a longitudinal study of Americans over age 50 conducted by the University of Michigan since 1992.",
+  "url": "https://hrs.isr.umich.edu",
+  "reference": "Sonnega, A., Faul, J. D., Ofstedal, M. B., Langa, K. M., Phillips, J. W., & Weir, D. R. (2014). Cohort Profile: the Health and Retirement Study (HRS). International Journal of Epidemiology, 43(2), 576-585.",
+  "reference_url": "https://doi.org/10.1093/ije/dyu067",
+  "items_count": 14,
+  "domains": ["demographics", "socioeconomic"],
+  "instructions": "Please answer the following questions about yourself and your household.",
+  "questions": [
+    {
+      "name": "hrs_age",
+      "description": "What is your age?",
+      "annotation_type": "textbox",
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "hrs_sex",
+      "description": "What is your sex?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "male", "label": "Male"},
+        {"name": "female", "label": "Female"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "hrs_race",
+      "description": "What race do you consider yourself to be?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "white", "label": "White/Caucasian"},
+        {"name": "black", "label": "Black/African American"},
+        {"name": "other", "label": "Other"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "hrs_hispanic",
+      "description": "Do you consider yourself Hispanic or Latino?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "yes", "label": "Yes"},
+        {"name": "no", "label": "No"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "hrs_education",
+      "description": "What is the highest grade of school or year of college you completed?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "less_than_hs", "label": "Less than high school"},
+        {"name": "ged", "label": "GED"},
+        {"name": "hs", "label": "High school diploma"},
+        {"name": "some_college", "label": "Some college"},
+        {"name": "college", "label": "College degree"},
+        {"name": "graduate", "label": "Graduate/Professional degree"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "hrs_marital",
+      "description": "What is your current marital status?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "married", "label": "Married"},
+        {"name": "partnered", "label": "Married, spouse absent / Partnered"},
+        {"name": "separated", "label": "Separated"},
+        {"name": "divorced", "label": "Divorced"},
+        {"name": "widowed", "label": "Widowed"},
+        {"name": "never_married", "label": "Never married"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "hrs_children",
+      "description": "How many living children do you have?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "0", "label": "None"},
+        {"name": "1", "label": "1"},
+        {"name": "2", "label": "2"},
+        {"name": "3", "label": "3"},
+        {"name": "4", "label": "4"},
+        {"name": "5plus", "label": "5 or more"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "hrs_labor_force",
+      "description": "Are you currently working for pay, unemployed or temporarily laid off, disabled, retired, or not in the labor force?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "working", "label": "Working for pay"},
+        {"name": "unemployed", "label": "Unemployed or temporarily laid off"},
+        {"name": "disabled", "label": "Disabled"},
+        {"name": "retired", "label": "Retired"},
+        {"name": "not_in_lf", "label": "Not in the labor force (homemaker, etc.)"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "hrs_income_category",
+      "description": "What is your total household income before taxes in the last year?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "under_10k", "label": "Less than $10,000"},
+        {"name": "10k_25k", "label": "$10,000 - $24,999"},
+        {"name": "25k_50k", "label": "$25,000 - $49,999"},
+        {"name": "50k_75k", "label": "$50,000 - $74,999"},
+        {"name": "75k_100k", "label": "$75,000 - $99,999"},
+        {"name": "100k_150k", "label": "$100,000 - $149,999"},
+        {"name": "150k_plus", "label": "$150,000 or more"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "hrs_wealth_category",
+      "description": "Approximately what is your total household wealth (assets minus debts)?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "negative", "label": "Negative (debts exceed assets)"},
+        {"name": "0_50k", "label": "$0 - $49,999"},
+        {"name": "50k_100k", "label": "$50,000 - $99,999"},
+        {"name": "100k_250k", "label": "$100,000 - $249,999"},
+        {"name": "250k_500k", "label": "$250,000 - $499,999"},
+        {"name": "500k_1m", "label": "$500,000 - $999,999"},
+        {"name": "1m_plus", "label": "$1,000,000 or more"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "hrs_homeowner",
+      "description": "Do you (or your spouse/partner) own your home, or do you rent?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "own", "label": "Own"},
+        {"name": "rent", "label": "Rent"},
+        {"name": "other", "label": "Other arrangement"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "hrs_health_insurance",
+      "description": "Are you currently covered by any type of health insurance?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "yes_employer", "label": "Yes, employer-provided"},
+        {"name": "yes_medicare", "label": "Yes, Medicare"},
+        {"name": "yes_medicaid", "label": "Yes, Medicaid"},
+        {"name": "yes_other", "label": "Yes, other coverage"},
+        {"name": "no", "label": "No coverage"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "hrs_veteran",
+      "description": "Have you ever served on active duty in the U.S. Armed Forces?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "yes", "label": "Yes"},
+        {"name": "no", "label": "No"}
+      ],
+      "label_requirement": {"required": true}
+    },
+    {
+      "name": "hrs_born_us",
+      "description": "Were you born in the United States?",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "yes", "label": "Yes"},
+        {"name": "no", "label": "No"}
+      ],
+      "label_requirement": {"required": true}
+    }
+  ]
+}

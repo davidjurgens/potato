@@ -1,0 +1,38 @@
+{
+  "id": "srh",
+  "name": "Single-Item Self-Rated Health",
+  "short_name": "SRH",
+  "description": "A single-item measure of global self-rated health status. Widely used in epidemiological research and shown to predict mortality, morbidity, and healthcare utilization.",
+  "url": "https://www.cdc.gov/hrqol/methods.htm",
+  "reference": "Idler, E. L., & Benyamini, Y. (1997). Self-rated health and mortality: A review of twenty-seven community studies. Journal of Health and Social Behavior, 38(1), 21-37.",
+  "reference_url": "https://doi.org/10.2307/2955359",
+  "items_count": 1,
+  "domains": ["health", "self_report"],
+  "scoring": {
+    "method": "single_item",
+    "range": [1, 5],
+    "interpretation": {
+      "1": "Excellent health",
+      "2": "Very good health",
+      "3": "Good health",
+      "4": "Fair health",
+      "5": "Poor health"
+    }
+  },
+  "instructions": "Please answer the following question about your health.",
+  "questions": [
+    {
+      "name": "srh_1",
+      "description": "In general, would you say your health is:",
+      "annotation_type": "radio",
+      "labels": [
+        {"name": "excellent", "label": "Excellent"},
+        {"name": "very_good", "label": "Very good"},
+        {"name": "good", "label": "Good"},
+        {"name": "fair", "label": "Fair"},
+        {"name": "poor", "label": "Poor"}
+      ],
+      "label_requirement": {"required": true}
+    }
+  ]
+}
