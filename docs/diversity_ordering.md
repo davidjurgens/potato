@@ -182,9 +182,98 @@ pip install sentence-transformers scikit-learn
 2. Increase `batch_size` slightly for better GPU utilization
 3. Use a smaller embedding model
 
-## Example Projects
+## Example Project
 
-See `project-hub/simple_examples/simple-diversity/` for a complete working example.
+A complete working example is available at `project-hub/simple_examples/simple-diversity-test/`.
+
+### Running the Example
+
+```bash
+# From the repository root
+python potato/flask_server.py start project-hub/simple_examples/simple-diversity-test/config.yaml -p 8000
+```
+
+### Example Configuration
+
+The example includes:
+- 100 items across 5 themes (Sports, Technology, Food, Travel, Health)
+- 20 items per theme
+- 5 clusters (matching the 5 themes)
+- Radio button annotation with keyboard shortcuts (1-5)
+
+```yaml
+annotation_task_name: "Diversity Ordering Test (100 items, 5 themes)"
+
+assignment_strategy: diversity_clustering
+
+diversity_ordering:
+  enabled: true
+  model_name: "all-MiniLM-L6-v2"
+  num_clusters: 5
+  auto_clusters: false
+  prefill_count: 100
+  batch_size: 16
+  recluster_threshold: 1.0
+  preserve_visited: true
+
+annotation_schemes:
+  - annotation_type: radio
+    name: topic
+    description: "What is the main topic of this text?"
+    labels:
+      - name: Sports
+        tooltip: "Content about athletic competitions, teams, or players"
+      - name: Technology
+        tooltip: "Content about computers, software, gadgets, or tech companies"
+      - name: Food
+        tooltip: "Content about cooking, restaurants, or culinary topics"
+      - name: Travel
+        tooltip: "Content about destinations, tourism, or journeys"
+      - name: Health
+        tooltip: "Content about medicine, fitness, or wellness"
+```
+
+### Verifying Diversity Ordering
+
+When testing the example:
+
+1. **Startup logs**: Look for embedding computation progress:
+   ```
+   Prefilling 100 embeddings for diversity ordering...
+   Computing embeddings: 100%|████████| 100/100
+   Clustered 100 items into 5 clusters
+   ```
+
+2. **Item variety**: As you annotate, items should come from different clusters:
+   - First item might be about Sports
+   - Second item about Technology
+   - Third item about Food
+   - And so on, rotating through clusters
+
+3. **Order preservation**: Navigate back to previous items - they should stay in their original positions
+
+4. **Re-clustering**: After sampling from all 5 clusters, the server logs will show:
+   ```
+   Reclustering for user: <username>
+   ```
+
+## Keyboard Shortcuts
+
+The annotation interface supports keyboard shortcuts for efficient annotation:
+
+### Navigation
+- **Left Arrow** or **A**: Go to previous item
+- **Right Arrow** or **D**: Go to next item
+
+### Radio Button Selection
+- **Number keys 1-9**: Select the corresponding radio option
+  - For a schema with 5 labels, keys 1-5 select each option
+  - The shortcut is shown in brackets: `Sports [1]`, `Technology [2]`, etc.
+
+### Tips for Fast Annotation
+1. Use number keys to select options (no mouse needed)
+2. Press Right Arrow to advance to the next item
+3. The system automatically saves annotations when you navigate
 
 ## API Reference
 
@@ -211,3 +300,40 @@ if dm and dm.enabled:
 ### Admin Dashboard
 
 The diversity manager statistics are included in the admin dashboard under the "System" section when enabled.
+
+## Testing
+
+### Unit Tests
+
+```bash
+# Run diversity manager unit tests
+pytest tests/unit/test_diversity_manager.py -v
+```
+
+### Integration Tests
+
+```bash
+# Run diversity ordering integration tests
+pytest tests/server/test_diversity_ordering.py -v
+```
+
+### Selenium Tests
+
+```bash
+# Run browser-based UI tests
+pytest tests/selenium/test_diversity_ordering_ui.py -v
+```
+
+The test suite covers:
+- Configuration loading and validation
+- Embedding computation and caching
+- Cluster formation and round-robin sampling
+- Order preservation for annotated items
+- Multi-user concurrent access
+- UI navigation and annotation flow
+
+## Related Documentation
+
+- [Task Assignment Strategies](task_assignment.md) - Other assignment strategies
+- [AI Support](ai_support.md) - AI label suggestions that integrate with diversity ordering
+- [Active Learning Guide](active_learning_guide.md) - ML-based prioritization

@@ -23,6 +23,7 @@
 ## Workflow & Quality
 
 - [Task Assignment](task_assignment.md) - Assignment strategies and configuration
+- [Diversity Ordering](diversity_ordering.md) - Embedding-based clustering for diverse item presentation
 - [Training Phase](training_phase.md) - Annotator training and qualification
 - [Quality Control](quality_control.md) - Attention checks and gold standards
 - [Category Assignment](category_assignment.md) - Category-based item assignment
@@ -85,6 +86,7 @@
 | Monitor annotation progress | [Admin Dashboard](admin_dashboard.md) |
 | Add AI suggestions | [AI Support](ai_support.md) |
 | Set up quality control | [Quality Control](quality_control.md) |
+| Present items diversely | [Diversity Ordering](diversity_ordering.md) |
 | Debug configuration issues | [Debugging Guide](debugging_guide.md) |
 | Create custom visual layouts | [Layout Customization](layout_customization.md) |
 

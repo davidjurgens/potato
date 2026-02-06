@@ -33,7 +33,7 @@ Task assignment controls:
 
 ## Assignment Strategies
 
-Potato supports six assignment strategies, four fully implemented and two placeholders for future development.
+Potato supports seven assignment strategies.
 
 ### Fully Implemented Strategies
 
@@ -83,9 +83,34 @@ max_annotations_per_item: 4
 
 **Best for**: Quality control and resolving ambiguous items.
 
-### Placeholder Strategies
+#### 5. Diversity Clustering Assignment (`diversity_clustering`)
 
-#### 5. Active Learning Assignment (`active_learning`)
+Uses sentence-transformer embeddings to cluster similar items, then presents items round-robin from different clusters to maximize variety.
+
+```yaml
+assignment_strategy: diversity_clustering
+
+diversity_ordering:
+  enabled: true
+  model_name: "all-MiniLM-L6-v2"
+  num_clusters: 10
+  prefill_count: 100
+  recluster_threshold: 1.0
+```
+
+**How it works**:
+1. Items are embedded using a sentence-transformer model
+2. K-means clustering groups similar items together
+3. Items are sampled round-robin from different clusters
+4. When all clusters are sampled, reclustering occurs
+
+**Best for**: Tasks where annotator fatigue from similar content is a concern, or when early coverage of the full topic space is important.
+
+See [Diversity Ordering](diversity_ordering.md) for full configuration.
+
+### ML-Based Strategies
+
+#### 6. Active Learning Assignment (`active_learning`)
 
 Uses machine learning to prioritize uncertain instances. Integrates with `ActiveLearningManager` for intelligent reordering.
 
@@ -102,7 +127,7 @@ active_learning:
 
 See [Active Learning Guide](active_learning_guide.md) for full configuration.
 
-#### 6. LLM Confidence Assignment (`llm_confidence`)
+#### 7. LLM Confidence Assignment (`llm_confidence`)
 
 Uses LLM confidence scores to prioritize items. Currently falls back to random assignment.
 
@@ -135,7 +160,7 @@ assignment:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `assignment_strategy` | string | One of: `random`, `fixed_order`, `least_annotated`, `max_diversity`, `active_learning`, `llm_confidence` |
+| `assignment_strategy` | string | One of: `random`, `fixed_order`, `least_annotated`, `max_diversity`, `diversity_clustering`, `active_learning`, `llm_confidence` |
 | `max_annotations_per_user` | integer | Maximum annotations per user (-1 = unlimited) |
 | `max_annotations_per_item` | integer | Target annotations per item (-1 = unlimited) |
 | `assignment.random_seed` | integer | Seed for reproducible random assignment |
@@ -294,6 +319,7 @@ See [Admin Dashboard](admin_dashboard.md) for more details.
 
 ## Related Documentation
 
+- [Diversity Ordering](diversity_ordering.md) - Embedding-based diverse item presentation
 - [Active Learning Guide](active_learning_guide.md) - ML-based assignment prioritization
 - [Quality Control](quality_control.md) - Attention checks and gold standards
 - [Admin Dashboard](admin_dashboard.md) - Real-time configuration management
