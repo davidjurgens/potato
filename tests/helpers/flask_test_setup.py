@@ -331,6 +331,11 @@ class FlaskTestServer:
                         clear_adjudication_manager()
                     except ImportError:
                         pass
+                    try:
+                        from potato.ai.ai_cache import clear_ai_cache_manager
+                        clear_ai_cache_manager()
+                    except ImportError:
+                        pass
                 except Exception as e:
                     print(f"[DEBUG] Error clearing state managers at startup: {e}")
 

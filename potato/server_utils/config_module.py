@@ -1775,6 +1775,62 @@ def validate_ai_support_config(config_data: Dict[str, Any]) -> None:
                 if not prompt.strip():
                     raise ConfigValidationError(f"ai_support.ai_config.{prompt_key} cannot be empty")
 
+    # Validate option_highlighting configuration
+    if "option_highlighting" in ai_config:
+        _validate_option_highlighting_config(ai_config["option_highlighting"])
+
+
+def _validate_option_highlighting_config(oh_config: Dict[str, Any]) -> None:
+    """
+    Validate option highlighting configuration.
+
+    Args:
+        oh_config: The option_highlighting configuration section
+
+    Raises:
+        ConfigValidationError: If the configuration is invalid
+    """
+    if not isinstance(oh_config, dict):
+        raise ConfigValidationError("ai_support.option_highlighting must be a dictionary")
+
+    # Validate enabled flag
+    if "enabled" in oh_config:
+        if not isinstance(oh_config["enabled"], bool):
+            raise ConfigValidationError("ai_support.option_highlighting.enabled must be a boolean")
+
+    # Validate top_k (number of options to highlight)
+    if "top_k" in oh_config:
+        top_k = oh_config["top_k"]
+        if not isinstance(top_k, int) or top_k < 1 or top_k > 10:
+            raise ConfigValidationError("ai_support.option_highlighting.top_k must be an integer between 1 and 10")
+
+    # Validate dim_opacity (opacity for non-highlighted options)
+    if "dim_opacity" in oh_config:
+        dim_opacity = oh_config["dim_opacity"]
+        if not isinstance(dim_opacity, (int, float)) or dim_opacity < 0.1 or dim_opacity > 0.9:
+            raise ConfigValidationError("ai_support.option_highlighting.dim_opacity must be a number between 0.1 and 0.9")
+
+    # Validate auto_apply flag
+    if "auto_apply" in oh_config:
+        if not isinstance(oh_config["auto_apply"], bool):
+            raise ConfigValidationError("ai_support.option_highlighting.auto_apply must be a boolean")
+
+    # Validate schemas filter (list of schema names or null)
+    if "schemas" in oh_config:
+        schemas = oh_config["schemas"]
+        if schemas is not None:
+            if not isinstance(schemas, list):
+                raise ConfigValidationError("ai_support.option_highlighting.schemas must be a list or null")
+            for schema in schemas:
+                if not isinstance(schema, str):
+                    raise ConfigValidationError("ai_support.option_highlighting.schemas must contain only strings")
+
+    # Validate prefetch_count
+    if "prefetch_count" in oh_config:
+        prefetch_count = oh_config["prefetch_count"]
+        if not isinstance(prefetch_count, int) or prefetch_count < 0 or prefetch_count > 100:
+            raise ConfigValidationError("ai_support.option_highlighting.prefetch_count must be an integer between 0 and 100")
+
 
 def parse_active_learning_config(config_data: Dict[str, Any]) -> 'ActiveLearningConfig':
     """

@@ -97,6 +97,11 @@ def get_ai_cache_manager():
     global AICACHEMANAGER
     return AICACHEMANAGER
 
+def clear_ai_cache_manager():
+    """Clear the AI cache manager singleton. Used for testing."""
+    global AICACHEMANAGER
+    AICACHEMANAGER = None
+
 class AiCacheManager:
     def __init__(self):
         ai_support = config["ai_support"]
@@ -133,6 +138,16 @@ class AiCacheManager:
         self.warm_up_page_count = cache_config["prefetch"]["warm_up_page_count"]
         self.prefetch_page_count_on_next = cache_config["prefetch"]["on_next"]
         self.prefetch_page_count_on_prev = cache_config["prefetch"]["on_prev"]
+
+        # Option highlighting configuration
+        option_highlighting = ai_support.get("option_highlighting", {})
+        self.option_highlighting_enabled = option_highlighting.get("enabled", False)
+        self.option_highlighting_top_k = option_highlighting.get("top_k", 3)
+        self.option_highlighting_dim_opacity = option_highlighting.get("dim_opacity", 0.4)
+        self.option_highlighting_auto_apply = option_highlighting.get("auto_apply", True)
+        self.option_highlighting_schemas = option_highlighting.get("schemas", None)  # None means all
+        # Prefetch count for option highlighting (default 20 for LLM latency)
+        self.option_highlighting_prefetch_count = option_highlighting.get("prefetch_count", 20)
         
         # Threading
         self.in_progress = {}
@@ -297,6 +312,10 @@ class AiCacheManager:
     
     def start_warmup(self):
         self.start_prefetch(0, self.warm_up_page_count)
+
+        # Also prefetch option highlights if enabled
+        if self.option_highlighting_enabled:
+            self.start_option_highlight_prefetch(0, self.warm_up_page_count)
 
         total = len(self.in_progress)
         desc = "Preloading the AI"
@@ -909,7 +928,223 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
             "suggestive_choice": ""
         }
 
-    def get_include_all(self): 
+    def is_option_highlighting_enabled_for_scheme(self, annotation_id: int) -> bool:
+        """Check if option highlighting is enabled for a specific annotation scheme."""
+        if not self.option_highlighting_enabled:
+            return False
+
+        scheme = config["annotation_schemes"][annotation_id]
+        annotation_type = scheme.get("annotation_type", "")
+        scheme_name = scheme.get("name", "")
+
+        # Only applicable to discrete option types
+        discrete_types = ["radio", "multiselect", "likert", "select"]
+        if annotation_type not in discrete_types:
+            return False
+
+        # Check if schemas filter is set
+        if self.option_highlighting_schemas is not None:
+            if scheme_name not in self.option_highlighting_schemas:
+                return False
+
+        return True
+
+    def get_option_highlighting_config(self) -> Dict:
+        """Get the option highlighting configuration for the frontend."""
+        return {
+            "enabled": self.option_highlighting_enabled,
+            "top_k": self.option_highlighting_top_k,
+            "dim_opacity": self.option_highlighting_dim_opacity,
+            "auto_apply": self.option_highlighting_auto_apply,
+            "schemas": self.option_highlighting_schemas,
+            "prefetch_count": self.option_highlighting_prefetch_count,
+        }
+
+    def generate_option_highlights(self, instance_id: int, annotation_id: int) -> Dict:
+        """Generate option highlighting suggestions for an annotation.
+
+        Args:
+            instance_id: The instance/item index
+            annotation_id: The annotation scheme index
+
+        Returns:
+            Dict with highlighted options and configuration:
+            {
+                "highlighted": ["option1", "option2"],
+                "top_k": 3,
+                "confidence": 0.85
+            }
+        """
+        from string import Template
+
+        if not self.is_option_highlighting_enabled_for_scheme(annotation_id):
+            return {"error": "Option highlighting not enabled for this scheme"}
+
+        scheme = config["annotation_schemes"][annotation_id]
+        annotation_type = scheme.get("annotation_type", "")
+        description = scheme.get("description", "")
+        labels = scheme.get("labels", [])
+
+        # Extract label names
+        if labels and isinstance(labels[0], dict):
+            label_names = [l.get("name", str(l)) for l in labels]
+        else:
+            label_names = [str(l) for l in labels]
+
+        # For likert scales, generate label names from min/max labels
+        if annotation_type == "likert":
+            size = scheme.get("size", 5)
+            min_label = scheme.get("min_label", "1")
+            max_label = scheme.get("max_label", str(size))
+            label_names = [f"{i+1} ({min_label if i == 0 else max_label if i == size-1 else ''})" for i in range(size)]
+            # Clean up empty parentheses
+            label_names = [l.replace(" ()", "") for l in label_names]
+
+        text = _get_instance_text(instance_id)
+        top_k = min(self.option_highlighting_top_k, len(label_names))
+
+        # Get prompt template
+        ai_prompt = get_ai_prompt()
+        prompt_config = ai_prompt.get("option_highlight", {}).get("option_highlight", {})
+
+        if not prompt_config:
+            return {"error": "Option highlight prompt not configured"}
+
+        prompt_template = prompt_config.get("prompt", "")
+        output_format_name = prompt_config.get("output_format", "option_highlight")
+        output_format = self.model_manager.get_model_class_by_name(output_format_name)
+
+        # Build the prompt
+        template = Template(prompt_template)
+        prompt = template.safe_substitute(
+            text=text,
+            description=description,
+            labels=", ".join(label_names),
+            top_k=top_k
+        )
+
+        # Query the AI endpoint
+        try:
+            result = self.ai_endpoint.query(prompt, output_format)
+            logger.debug(f"Option highlight raw result: {result}")
+
+            # Parse the result
+            if isinstance(result, str):
+                import json as json_module
+                try:
+                    # Try to parse JSON from the response
+                    result = json_module.loads(result)
+                except json_module.JSONDecodeError:
+                    # Try to extract JSON from markdown code block
+                    if "```json" in result:
+                        json_start = result.find("```json") + 7
+                        json_end = result.find("```", json_start)
+                        result = json_module.loads(result[json_start:json_end].strip())
+                    elif "```" in result:
+                        json_start = result.find("```") + 3
+                        json_end = result.find("```", json_start)
+                        result = json_module.loads(result[json_start:json_end].strip())
+                    else:
+                        return {"error": f"Could not parse response: {result[:100]}"}
+
+            highlighted = result.get("highlighted_options", [])
+            confidence = result.get("confidence", None)
+
+            # Validate highlighted options against available labels
+            valid_highlighted = [opt for opt in highlighted if opt in label_names]
+
+            return {
+                "highlighted": valid_highlighted[:top_k],
+                "top_k": top_k,
+                "confidence": confidence
+            }
+
+        except Exception as e:
+            logger.error(f"Error generating option highlights: {e}")
+            return {"error": str(e)}
+
+    def get_option_highlights(self, instance_id: int, annotation_id: int) -> Dict:
+        """Get option highlights from cache or generate them.
+
+        Args:
+            instance_id: The instance/item index
+            annotation_id: The annotation scheme index
+
+        Returns:
+            Dict with highlighted options
+        """
+        key = (instance_id, annotation_id, "option_highlight")
+
+        # Try cache first
+        if self.disk_cache_enabled:
+            cached = self.get_from_cache(key)
+            if cached is not None:
+                logger.debug(f"Option highlight cache hit for {key}")
+                return cached
+
+        # Generate
+        result = self.generate_option_highlights(instance_id, annotation_id)
+
+        # Cache if successful
+        if "error" not in result and self.disk_cache_enabled:
+            self.add_to_cache(key, result)
+
+        return result
+
+    def start_option_highlight_prefetch(self, page_id: int, prefetch_amount: int = None):
+        """Prefetch option highlights for upcoming items.
+
+        Args:
+            page_id: Current page/instance index
+            prefetch_amount: Number of items to prefetch (uses config default if None)
+        """
+        if not self.option_highlighting_enabled or not self.disk_cache_enabled:
+            return
+
+        if prefetch_amount is None:
+            prefetch_amount = self.option_highlighting_prefetch_count
+
+        ism = get_item_state_manager()
+        with self.lock:
+            # Calculate range
+            if prefetch_amount >= 0:
+                start_idx = page_id
+                end_idx = min(start_idx + prefetch_amount, len(ism.items()))
+            else:
+                start_idx = max(page_id + prefetch_amount, 0)
+                end_idx = page_id
+
+            keys = []
+            for i in range(start_idx, end_idx):
+                for annotation_id, scheme in enumerate(config["annotation_schemes"]):
+                    if self.is_option_highlighting_enabled_for_scheme(annotation_id):
+                        key = (i, annotation_id, "option_highlight")
+                        # Check if not already cached or in progress
+                        if self.get_from_cache(key) is None and key not in self.in_progress:
+                            keys.append(key)
+
+            # Submit prefetch jobs
+            for key in keys:
+                instance_id, annotation_id, _ = key
+                future = self.executor.submit(self.generate_option_highlights, instance_id, annotation_id)
+                self.in_progress[key] = future
+
+                def callback(fut, cache_key=key):
+                    with self.lock:
+                        try:
+                            result = fut.result()
+                            if "error" not in result:
+                                self.add_to_cache(cache_key, result)
+                        except Exception as e:
+                            logger.error(f"Option highlight prefetch failed for {cache_key}: {e}")
+                        self.in_progress.pop(cache_key, None)
+
+                future.add_done_callback(callback)
+
+            if keys:
+                logger.debug(f"Started option highlight prefetch for {len(keys)} items")
+
+    def get_include_all(self):
         return self.include_all 
     
     def get_special_include(self, page_number_int, annotation_id_int):

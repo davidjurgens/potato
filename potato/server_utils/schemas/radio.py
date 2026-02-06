@@ -14,6 +14,7 @@ import logging
 from collections.abc import Mapping
 
 from potato.ai.ai_help_wrapper import get_ai_wrapper, get_dynamic_ai_help
+from potato.server_utils.config_module import config
 from .identifier_utils import (
     safe_generate_layout,
     generate_element_identifier,
@@ -69,7 +70,7 @@ def _generate_radio_layout_internal(annotation_scheme, horizontal=False):
     # Initialize form wrapper
     schema_name = annotation_scheme["name"]
     schematic = f"""
-    <form id="{escape_html_content(schema_name)}" class="annotation-form radio shadcn-radio-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}">
+    <form id="{escape_html_content(schema_name)}" class="annotation-form radio shadcn-radio-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" data-annotation-type="radio" data-schema-name="{escape_html_content(schema_name)}">
         {get_ai_wrapper()}
         <fieldset schema="{escape_html_content(schema_name)}">
             <legend class="shadcn-radio-title">{escape_html_content(annotation_scheme['description'])}</legend>
@@ -112,13 +113,18 @@ def _generate_radio_layout_internal(annotation_scheme, horizontal=False):
                 logger.debug(f"Added key binding '{key_value}' for label '{label}'")
 
         # Handle sequential key bindings
-        if (annotation_scheme.get("sequential_key_binding")
-            and len(annotation_scheme["labels"]) <= 10):
-            key_value = str(i % 10)
-            key2label[key_value] = label
-            label2key[label] = key_value
-            key_bindings.append((key_value, f"{identifiers['schema']}: {label}"))
-            logger.debug(f"Added sequential key binding '{key_value}' for label '{label}'")
+        # Auto-enable for single schema with ≤10 options, or when explicitly set
+        num_schemas = len(config.get("annotation_schemes", []))
+        num_labels = len(annotation_scheme["labels"])
+        auto_sequential = (num_schemas == 1 and num_labels <= 10)
+        explicit_sequential = annotation_scheme.get("sequential_key_binding", False)
+
+        if (auto_sequential or explicit_sequential) and num_labels <= 10:
+            shortcut_key = str(i % 10)  # Use separate variable for shortcut
+            key2label[shortcut_key] = label
+            label2key[label] = shortcut_key
+            key_bindings.append((shortcut_key, f"{identifiers['schema']}: {label}"))
+            logger.debug(f"Added sequential key binding '{shortcut_key}' for label '{label}'")
 
         # Format label content with optional keyboard shortcut display
         label_content = label

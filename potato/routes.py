@@ -1554,6 +1554,114 @@ def get_ai_suggestion():
         return jsonify(res)
 
 
+@app.route('/api/option_highlights/<int:annotation_id>', methods=['GET'])
+def get_option_highlights(annotation_id):
+    """Get AI-suggested option highlights for a specific annotation.
+
+    Returns the top-k most likely correct options for dimming non-highlighted options.
+
+    Args:
+        annotation_id: The annotation scheme index
+
+    Returns:
+        JSON with highlighted options and configuration:
+        {
+            "highlighted": ["option1", "option2"],
+            "top_k": 3,
+            "confidence": 0.85,
+            "config": {...}
+        }
+    """
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    username = session['username']
+    user_state = get_user_state(username)
+    ais = get_ai_cache_manager()
+
+    if ais is None:
+        return jsonify({"error": "AI support not enabled"}), 400
+
+    instance_id = user_state.get_current_instance_index()
+
+    # Get option highlights
+    result = ais.get_option_highlights(instance_id, annotation_id)
+
+    # Add configuration info for frontend
+    result["config"] = ais.get_option_highlighting_config()
+
+    return jsonify(result)
+
+
+@app.route('/api/option_highlights/config', methods=['GET'])
+def get_option_highlighting_config():
+    """Get the option highlighting configuration.
+
+    Returns:
+        JSON with option highlighting configuration:
+        {
+            "enabled": true,
+            "top_k": 3,
+            "dim_opacity": 0.4,
+            "auto_apply": true,
+            "schemas": null,
+            "prefetch_count": 20
+        }
+    """
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    ais = get_ai_cache_manager()
+
+    if ais is None:
+        return jsonify({
+            "enabled": False,
+            "top_k": 3,
+            "dim_opacity": 0.4,
+            "auto_apply": True,
+            "schemas": None,
+            "prefetch_count": 20
+        })
+
+    return jsonify(ais.get_option_highlighting_config())
+
+
+@app.route('/api/option_highlights/prefetch', methods=['POST'])
+def trigger_option_highlight_prefetch():
+    """Trigger prefetching of option highlights for upcoming items.
+
+    Request body (optional):
+        {
+            "count": 20  // Number of items to prefetch (uses config default if not provided)
+        }
+
+    Returns:
+        JSON with prefetch status
+    """
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    username = session['username']
+    user_state = get_user_state(username)
+    ais = get_ai_cache_manager()
+
+    if ais is None:
+        return jsonify({"error": "AI support not enabled"}), 400
+
+    if not ais.option_highlighting_enabled:
+        return jsonify({"error": "Option highlighting not enabled"}), 400
+
+    # Get prefetch count from request or use default
+    prefetch_count = None
+    if request.is_json and request.json:
+        prefetch_count = request.json.get("count")
+
+    instance_id = user_state.get_current_instance_index()
+    ais.start_option_highlight_prefetch(instance_id, prefetch_count)
+
+    return jsonify({"status": "prefetch_started", "from_instance": instance_id})
+
+
 # Admin routes for system inspection (read-only)
 @app.route("/admin/health", methods=["GET"])
 def admin_health():
@@ -4809,7 +4917,12 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin", "admin", admin, methods=["GET"])
 
     app.add_url_rule("/api/get_ai_suggestion", "get_ai_suggestion", get_ai_suggestion, methods=["GET"])
-    
+
+    # Option highlighting API routes
+    app.add_url_rule("/api/option_highlights/config", "get_option_highlighting_config", get_option_highlighting_config, methods=["GET"])
+    app.add_url_rule("/api/option_highlights/prefetch", "trigger_option_highlight_prefetch", trigger_option_highlight_prefetch, methods=["POST"])
+    app.add_url_rule("/api/option_highlights/<int:annotation_id>", "get_option_highlights", get_option_highlights, methods=["GET"])
+
     app.add_url_rule("/api-frontend", "api_frontend", api_frontend, methods=["GET"])
     app.add_url_rule("/span-api-frontend", "span_api_frontend", span_api_frontend, methods=["GET"])
     app.add_url_rule("/api/spans/<instance_id>", "get_span_data", get_span_data, methods=["GET"])

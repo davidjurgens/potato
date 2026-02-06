@@ -216,12 +216,35 @@ class MultiFrameDetectionFormat(BaseModel):
 # Class Registry
 # ============================================================================
 
+# ============================================================================
+# Option Highlighting Output Format
+# ============================================================================
+
+class OptionHighlightFormat(BaseModel):
+    """LLM response for option highlighting.
+
+    Used to identify the most likely correct options for a discrete annotation task.
+    The highlighted options are shown at full opacity while others are dimmed.
+
+    Example output:
+    {
+        "highlighted_options": ["positive", "neutral"],
+        "confidence": 0.85
+    }
+    """
+    highlighted_options: List[str]  # Top-k most likely option names/values
+    confidence: Optional[float] = None  # Optional overall confidence score (0-1)
+
+
 CLASS_REGISTRY = {
     # Text annotation formats
     "default_hint": GeneralHintFormat,
     "default_keyword": GeneralKeywordFormat,
     "default_random": GeneralRandomFormat,  # Keep for backwards compatibility
     "default_rationale": GeneralRationaleFormat,
+
+    # Option highlighting format
+    "option_highlight": OptionHighlightFormat,
 
     # Visual annotation formats - Image
     "visual_detection": VisualDetectionFormat,

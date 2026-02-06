@@ -271,6 +271,8 @@
     <!-- Visual AI Assistant for image/video annotation (loaded conditionally) -->
     {% if ai_enabled %}
     <script src="{{ url_for('static', filename='visual_ai_assistant.js') }}?v=1"></script>
+    <!-- Option Highlight Manager for dimming less-likely options -->
+    <script src="{{ url_for('static', filename='option_highlight_manager.js') }}?v=2"></script>
     {% endif %}
 
     <!-- Peaks.js for audio/video annotation (stored locally for reliability) -->

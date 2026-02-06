@@ -1,0 +1,8 @@
+{
+  "option_highlight": {
+    "prompt": "TASK: Identify the most likely correct options for an annotation task.\n\nINPUT DETAILS:\n- Content to annotate: \"${text}\"\n- Annotation task: ${description}\n- Available options: ${labels}\n- Number of options to highlight: ${top_k}\n\nINSTRUCTIONS:\n1. Analyze the content carefully in the context of the annotation task\n2. Consider which ${top_k} options are most likely to be correct based on:\n   - Direct evidence in the content\n   - Contextual clues and tone\n   - Domain knowledge relevant to the task\n3. Select exactly ${top_k} options (or fewer if fewer options exist)\n\nIMPORTANT:\n- Return ONLY the option names/values exactly as they appear in the available options list\n- Do not modify, paraphrase, or abbreviate the option names\n- If you're uncertain, choose options that seem most plausible given the content\n\nOUTPUT FORMAT:\nReturn a JSON object with:\n- \"highlighted_options\": array of ${top_k} option names from the available options\n- \"confidence\": your confidence score from 0.0 to 1.0\n\nEXAMPLE (if options are: positive, negative, neutral):\n{\"highlighted_options\": [\"positive\", \"neutral\"], \"confidence\": 0.75}",
+    "output_format": "option_highlight",
+    "img": "/static/ai_assistant_img/highlight.svg",
+    "name": "Option Highlight"
+  }
+}
