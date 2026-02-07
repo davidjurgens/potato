@@ -1,0 +1,111 @@
+{% extends "solo/base_solo.html" %}
+
+{% block title %}Final Validation - Solo Mode{% endblock %}
+
+{% block content %}
+<h1>Final Validation</h1>
+
+<p>Validate a sample of LLM-only labeled instances to ensure quality. This is the final step before completion.</p>
+
+{% if current_sample %}
+<form method="POST" action="{{ url_for('solo_mode.validation') }}">
+    <input type="hidden" name="instance_id" value="{{ current_sample.instance_id }}">
+    <input type="hidden" name="human_label" id="selected-label" value="">
+
+    <div class="instance-text">
+        {{ current_sample.text }}
+    </div>
+
+    <div class="llm-reasoning">
+        <div class="llm-reasoning-header">
+            <strong>LLM Label: {{ current_sample.llm_label }}</strong>
+            <span>▼</span>
+        </div>
+        <div class="llm-reasoning-content">
+            <div class="confidence-bar">
+                {% set conf = current_sample.llm_confidence or 0.5 %}
+                {% set conf_class = 'confidence-low' if conf < 0.5 else ('confidence-mid' if conf < 0.8 else 'confidence-high') %}
+                <div class="confidence-fill {{ conf_class }}" style="width: {{ (conf * 100)|int }}%"></div>
+            </div>
+            <p style="font-size: 12px; color: #666;">
+                Confidence: {{ (conf * 100)|int }}%
+            </p>
+        </div>
+    </div>
+
+    <h3>What is the correct label?</h3>
+    <div class="label-buttons">
+        {% for label in labels %}
+        <button type="button" class="label-btn" data-label="{{ label }}">{{ label }}</button>
+        {% endfor %}
+    </div>
+
+    <div class="form-group">
+        <label for="notes">Notes (optional)</label>
+        <textarea
+            id="notes"
+            name="notes"
+            placeholder="Any notes about this instance..."
+            rows="2"
+        ></textarea>
+    </div>
+
+    <div class="solo-nav">
+        <span></span>
+        <button type="submit" class="btn btn-primary" id="submit-btn" disabled>Submit Validation</button>
+    </div>
+</form>
+{% else %}
+<div class="alert alert-success">
+    <p><strong>Validation Complete!</strong></p>
+    <p>All validation samples have been reviewed.</p>
+</div>
+<div class="solo-nav">
+    <span></span>
+    <a href="{{ url_for('solo_mode.status') }}" class="btn btn-primary">View Final Results</a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block stats %}
+{{ super() }}
+{% if progress %}
+<div class="stat-item">
+    <span class="stat-label">Validated</span>
+    <span class="stat-value">{{ progress.validated }} / {{ progress.total_samples }}</span>
+</div>
+<div class="stat-item">
+    <span class="stat-label">Accuracy</span>
+    <span class="stat-value">{{ (progress.validation_accuracy * 100)|int }}%</span>
+</div>
+<div class="stat-item">
+    <span class="stat-label">Progress</span>
+    <span class="stat-value">{{ progress.percent_complete|int }}%</span>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block sidebar_extra %}
+<h3>Validation Progress</h3>
+{% if progress %}
+<div style="margin-bottom: 20px;">
+    <div style="background: #eee; height: 20px; border-radius: 10px; overflow: hidden;">
+        <div style="background: #28a745; height: 100%; width: {{ progress.percent_complete }}%;"></div>
+    </div>
+    <p style="text-align: center; font-size: 14px; color: #666; margin-top: 5px;">
+        {{ progress.validated }} of {{ progress.total_samples }} validated
+    </p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Enable submit when label is selected
+    document.querySelectorAll('.label-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.getElementById('submit-btn').disabled = false;
+        });
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,131 @@
+{% extends "solo/base_solo.html" %}
+
+{% block title %}Annotate - Solo Mode{% endblock %}
+
+{% block content %}
+<h1>Annotation</h1>
+
+{% if instance %}
+<form method="POST" action="{{ url_for('solo_mode.annotate') }}">
+    <input type="hidden" name="instance_id" value="{{ instance.id }}">
+    <input type="hidden" name="annotation" id="selected-label" value="">
+
+    <div class="instance-text" id="instance-text">
+        {{ instance.text }}
+    </div>
+
+    {% if llm_prediction %}
+    <div class="llm-reasoning">
+        <div class="llm-reasoning-header">
+            <strong>LLM Suggestion: {{ llm_prediction.label }}</strong>
+            <span>▼</span>
+        </div>
+        <div class="llm-reasoning-content">
+            {% if llm_prediction.reasoning %}
+            <p>{{ llm_prediction.reasoning }}</p>
+            {% endif %}
+
+            <div class="confidence-bar">
+                {% set conf_class = 'confidence-low' if llm_prediction.confidence < 0.5 else ('confidence-mid' if llm_prediction.confidence < 0.8 else 'confidence-high') %}
+                <div class="confidence-fill {{ conf_class }}" style="width: {{ (llm_prediction.confidence * 100)|int }}%"></div>
+            </div>
+            <p style="font-size: 12px; color: #666;">
+                Confidence: {{ (llm_prediction.confidence * 100)|int }}%
+            </p>
+        </div>
+    </div>
+    {% endif %}
+
+    <h3>Select a label:</h3>
+    <div class="label-buttons">
+        {% for label in labels %}
+        <button type="button" class="label-btn" data-label="{{ label }}">{{ label }}</button>
+        {% endfor %}
+    </div>
+
+    <div class="solo-nav">
+        <span></span>
+        <button type="submit" class="btn btn-primary" id="submit-btn" disabled>Submit &rarr;</button>
+    </div>
+</form>
+{% elif message %}
+<div class="alert alert-info">
+    {{ message }}
+</div>
+<div class="solo-nav">
+    <span></span>
+    <a href="{{ url_for('solo_mode.status') }}" class="btn btn-primary">View Status</a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block stats %}
+{{ super() }}
+{% if stats %}
+<div class="stat-item">
+    <span class="stat-label">Human Labels</span>
+    <span class="stat-value">{{ stats.human_labeled }}</span>
+</div>
+<div class="stat-item">
+    <span class="stat-label">LLM Labels</span>
+    <span class="stat-value">{{ stats.llm_labeled }}</span>
+</div>
+<div class="stat-item">
+    <span class="stat-label">Agreement</span>
+    <span class="stat-value">{{ (stats.agreement_rate * 100)|int }}%</span>
+</div>
+<div class="stat-item">
+    <span class="stat-label">Remaining</span>
+    <span class="stat-value">{{ stats.remaining }}</span>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block sidebar_extra %}
+<h3>Keyboard Shortcuts</h3>
+<div style="font-size: 14px; color: #666;">
+    {% for label in labels[:9] %}
+    <div style="margin-bottom: 5px;">
+        <kbd style="background: #eee; padding: 2px 6px; border-radius: 3px;">{{ loop.index }}</kbd>
+        {{ label }}
+    </div>
+    {% endfor %}
+    <div style="margin-top: 10px;">
+        <kbd style="background: #eee; padding: 2px 6px; border-radius: 3px;">Enter</kbd>
+        Submit
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const labels = {{ labels|tojson|safe }};
+
+    // Enable submit when label is selected
+    document.querySelectorAll('.label-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.getElementById('submit-btn').disabled = false;
+        });
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+        // Number keys 1-9 for labels
+        if (e.key >= '1' && e.key <= '9') {
+            const index = parseInt(e.key) - 1;
+            if (index < labels.length) {
+                const btns = document.querySelectorAll('.label-btn');
+                btns.forEach(b => b.classList.remove('selected'));
+                btns[index].classList.add('selected');
+                document.getElementById('selected-label').value = labels[index];
+                document.getElementById('submit-btn').disabled = false;
+            }
+        }
+        // Enter to submit
+        if (e.key === 'Enter' && !document.getElementById('submit-btn').disabled) {
+            e.preventDefault();
+            document.querySelector('form').submit();
+        }
+    });
+</script>
+{% endblock %}

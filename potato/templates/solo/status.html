@@ -1,0 +1,247 @@
+{% extends "solo/base_solo.html" %}
+
+{% block title %}Status - Solo Mode{% endblock %}
+
+{% block extra_head %}
+<style>
+    .status-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+        margin-top: 20px;
+    }
+
+    .status-card {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .status-card h3 {
+        margin-top: 0;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #eee;
+    }
+
+    .big-number {
+        font-size: 48px;
+        font-weight: bold;
+        text-align: center;
+        margin: 20px 0;
+    }
+
+    .big-number.success { color: #28a745; }
+    .big-number.warning { color: #ffc107; }
+    .big-number.danger { color: #dc3545; }
+    .big-number.primary { color: #007bff; }
+
+    .metric-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px 0;
+        border-bottom: 1px solid #eee;
+    }
+
+    .metric-row:last-child {
+        border-bottom: none;
+    }
+
+    .progress-bar {
+        background: #eee;
+        height: 24px;
+        border-radius: 12px;
+        overflow: hidden;
+        margin: 15px 0;
+    }
+
+    .progress-fill {
+        height: 100%;
+        border-radius: 12px;
+        text-align: center;
+        color: white;
+        line-height: 24px;
+        font-size: 12px;
+        font-weight: bold;
+    }
+
+    .phase-badge {
+        display: inline-block;
+        padding: 8px 16px;
+        background: #007bff;
+        color: white;
+        border-radius: 20px;
+        font-size: 14px;
+        font-weight: bold;
+    }
+
+    .phase-badge.completed {
+        background: #28a745;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+        margin-top: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Solo Mode Status</h1>
+
+<div style="text-align: center; margin-bottom: 30px;">
+    <span class="phase-badge {% if phase == 'completed' %}completed{% endif %}">
+        {{ phase_name|replace('_', ' ')|title }}
+    </span>
+</div>
+
+<div class="status-grid">
+    <!-- Annotation Progress -->
+    <div class="status-card">
+        <h3>Annotation Progress</h3>
+        {% if annotation_stats %}
+        <div class="progress-bar">
+            {% set total = annotation_stats.human_labeled + annotation_stats.llm_labeled + annotation_stats.remaining %}
+            {% set progress = ((annotation_stats.human_labeled + annotation_stats.llm_labeled) / total * 100) if total > 0 else 0 %}
+            <div class="progress-fill" style="width: {{ progress }}%; background: #28a745;">
+                {{ progress|int }}%
+            </div>
+        </div>
+
+        <div class="metric-row">
+            <span>Human Labeled</span>
+            <strong>{{ annotation_stats.human_labeled }}</strong>
+        </div>
+        <div class="metric-row">
+            <span>LLM Labeled</span>
+            <strong>{{ annotation_stats.llm_labeled }}</strong>
+        </div>
+        <div class="metric-row">
+            <span>Remaining</span>
+            <strong>{{ annotation_stats.remaining }}</strong>
+        </div>
+        <div class="metric-row">
+            <span>Total</span>
+            <strong>{{ total }}</strong>
+        </div>
+        {% else %}
+        <p style="color: #666;">No annotation data yet</p>
+        {% endif %}
+    </div>
+
+    <!-- Agreement Metrics -->
+    <div class="status-card">
+        <h3>Agreement</h3>
+        {% if agreement_metrics %}
+        {% set rate = agreement_metrics.agreement_rate or 0 %}
+        <div class="big-number {% if rate >= 0.9 %}success{% elif rate >= 0.7 %}warning{% else %}danger{% endif %}">
+            {{ (rate * 100)|int }}%
+        </div>
+
+        <div class="metric-row">
+            <span>Comparisons</span>
+            <strong>{{ agreement_metrics.total_compared }}</strong>
+        </div>
+        <div class="metric-row">
+            <span>Agreements</span>
+            <strong>{{ agreement_metrics.agreements }}</strong>
+        </div>
+        <div class="metric-row">
+            <span>Disagreements</span>
+            <strong>{{ agreement_metrics.disagreements }}</strong>
+        </div>
+        <div class="metric-row">
+            <span>Trend</span>
+            <strong>{{ agreement_metrics.trend|title }}</strong>
+        </div>
+        {% else %}
+        <p style="color: #666;">No agreement data yet</p>
+        {% endif %}
+    </div>
+
+    <!-- LLM Labeling Stats -->
+    <div class="status-card">
+        <h3>LLM Labeling</h3>
+        {% if llm_stats %}
+        <div class="metric-row">
+            <span>Total Labeled</span>
+            <strong>{{ llm_stats.labeled_count }}</strong>
+        </div>
+        <div class="metric-row">
+            <span>Queue Size</span>
+            <strong>{{ llm_stats.queue_size }}</strong>
+        </div>
+        <div class="metric-row">
+            <span>Errors</span>
+            <strong>{{ llm_stats.error_count }}</strong>
+        </div>
+        <div class="metric-row">
+            <span>Status</span>
+            <strong>
+                {% if llm_stats.is_paused %}
+                    Paused
+                {% elif llm_stats.is_running %}
+                    Running
+                {% else %}
+                    Stopped
+                {% endif %}
+            </strong>
+        </div>
+        {% else %}
+        <p style="color: #666;">LLM labeling not started</p>
+        {% endif %}
+    </div>
+
+    <!-- Validation Progress -->
+    {% if validation_progress and validation_progress.total_samples > 0 %}
+    <div class="status-card">
+        <h3>Final Validation</h3>
+        <div class="progress-bar">
+            <div class="progress-fill" style="width: {{ validation_progress.percent_complete }}%; background: #007bff;">
+                {{ validation_progress.percent_complete|int }}%
+            </div>
+        </div>
+
+        <div class="metric-row">
+            <span>Validated</span>
+            <strong>{{ validation_progress.validated }} / {{ validation_progress.total_samples }}</strong>
+        </div>
+        <div class="metric-row">
+            <span>Agreements</span>
+            <strong>{{ validation_progress.agreements }}</strong>
+        </div>
+        <div class="metric-row">
+            <span>Accuracy</span>
+            <strong>{{ (validation_progress.validation_accuracy * 100)|int }}%</strong>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<div class="action-buttons">
+    {% if phase == 'setup' %}
+        <a href="{{ url_for('solo_mode.setup') }}" class="btn btn-primary">Start Setup</a>
+    {% elif phase == 'prompt_review' %}
+        <a href="{{ url_for('solo_mode.prompt_editor') }}" class="btn btn-primary">Edit Prompt</a>
+    {% elif phase in ['edge_case_synthesis', 'edge_case_labeling'] %}
+        <a href="{{ url_for('solo_mode.edge_cases') }}" class="btn btn-primary">Continue Edge Cases</a>
+    {% elif phase in ['parallel_annotation', 'active_annotation'] %}
+        <a href="{{ url_for('solo_mode.annotate') }}" class="btn btn-primary">Continue Annotating</a>
+    {% elif phase == 'disagreement_resolution' %}
+        <a href="{{ url_for('solo_mode.disagreements') }}" class="btn btn-primary">Resolve Disagreements</a>
+    {% elif phase == 'periodic_review' %}
+        <a href="{{ url_for('solo_mode.review') }}" class="btn btn-primary">Continue Review</a>
+    {% elif phase == 'final_validation' %}
+        <a href="{{ url_for('solo_mode.validation') }}" class="btn btn-primary">Continue Validation</a>
+    {% elif phase == 'completed' %}
+        <a href="{{ url_for('solo_mode.api_export') }}" class="btn btn-success">Export Data</a>
+    {% endif %}
+
+    <a href="{{ url_for('solo_mode.api_status') }}" class="btn btn-secondary">View API Status</a>
+</div>
+{% endblock %}
+
+{% block sidebar %}
+<!-- No sidebar on status page - use full width -->
+{% endblock %}
