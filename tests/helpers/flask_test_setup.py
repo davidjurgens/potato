@@ -336,6 +336,11 @@ class FlaskTestServer:
                         clear_ai_cache_manager()
                     except ImportError:
                         pass
+                    try:
+                        from potato.solo_mode import clear_solo_mode_manager
+                        clear_solo_mode_manager()
+                    except ImportError:
+                        pass
                 except Exception as e:
                     print(f"[DEBUG] Error clearing state managers at startup: {e}")
 
@@ -511,6 +516,21 @@ class FlaskTestServer:
                         print("[DEBUG] MACE manager initialized successfully")
                     except Exception as e:
                         print(f"[DEBUG] Error initializing MACE manager: {e}")
+
+                # Initialize Solo Mode manager if configured
+                if config.get('solo_mode', {}).get('enabled', False):
+                    try:
+                        from potato.solo_mode import init_solo_mode_manager, clear_solo_mode_manager
+                        clear_solo_mode_manager()
+                        solo_manager = init_solo_mode_manager(config)
+                        if solo_manager:
+                            print("[DEBUG] Solo Mode manager initialized successfully")
+                        else:
+                            print("[DEBUG] Solo Mode manager returned None")
+                    except Exception as e:
+                        print(f"[DEBUG] Error initializing Solo Mode manager: {e}")
+                        import traceback
+                        traceback.print_exc()
 
                 # Create a fresh Flask app instance with explicit static folder
                 static_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../potato/static'))

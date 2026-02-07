@@ -1,0 +1,55 @@
+{% extends "solo/base_solo.html" %}
+
+{% block title %}Setup - Solo Mode{% endblock %}
+
+{% block content %}
+<h1>Solo Mode Setup</h1>
+
+<p>Welcome to Solo Mode! This mode enables you to efficiently label a dataset with LLM assistance.</p>
+
+{% if error %}
+<div class="alert alert-error">{{ error }}</div>
+{% endif %}
+
+<form method="POST" action="{{ url_for('solo_mode.setup') }}">
+    <div class="form-group">
+        <label for="task_description">Task Description</label>
+        <p style="color: #666; font-size: 14px;">
+            Describe your annotation task in detail. What should be labeled? What are the categories?
+            What makes something belong to one category vs another?
+        </p>
+        <textarea
+            id="task_description"
+            name="task_description"
+            placeholder="Example: I want to classify customer reviews as positive, negative, or neutral. A positive review expresses satisfaction with the product or service. A negative review expresses dissatisfaction or complaints. A neutral review is factual without strong sentiment."
+            rows="8"
+        >{{ request.form.get('task_description', '') }}</textarea>
+    </div>
+
+    <div class="form-group">
+        <h3>What happens next?</h3>
+        <ol style="color: #666; line-height: 1.8;">
+            <li><strong>Prompt Generation:</strong> An LLM will generate an annotation prompt based on your description</li>
+            <li><strong>Prompt Review:</strong> You can review and edit the generated prompt</li>
+            <li><strong>Edge Cases:</strong> The LLM will generate difficult examples for you to label</li>
+            <li><strong>Parallel Annotation:</strong> You and the LLM will annotate in parallel</li>
+            <li><strong>Disagreement Resolution:</strong> You'll resolve any disagreements</li>
+            <li><strong>Autonomous Labeling:</strong> Once agreement is high, the LLM completes the dataset</li>
+            <li><strong>Validation:</strong> You'll validate a sample of LLM-only labels</li>
+        </ol>
+    </div>
+
+    <div class="solo-nav">
+        <span></span>
+        <button type="submit" class="btn btn-primary">Generate Prompt &rarr;</button>
+    </div>
+</form>
+{% endblock %}
+
+{% block stats %}
+{{ super() }}
+<div class="stat-item">
+    <span class="stat-label">Step</span>
+    <span class="stat-value">1 of 7</span>
+</div>
+{% endblock %}

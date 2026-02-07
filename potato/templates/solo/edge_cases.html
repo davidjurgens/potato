@@ -1,0 +1,94 @@
+{% extends "solo/base_solo.html" %}
+
+{% block title %}Edge Cases - Solo Mode{% endblock %}
+
+{% block content %}
+<h1>Label Edge Cases</h1>
+
+<p>These are synthetically generated examples that test the boundaries of your annotation guidelines.
+   Labeling these will help refine the prompt before full annotation begins.</p>
+
+{% if current_case %}
+<form method="POST" action="{{ url_for('solo_mode.edge_cases') }}">
+    <input type="hidden" name="case_id" value="{{ current_case.id }}">
+    <input type="hidden" name="label" id="selected-label" value="">
+
+    <div class="instance-text">
+        {{ current_case.text }}
+    </div>
+
+    <div class="llm-reasoning">
+        <div class="llm-reasoning-header">
+            <strong>Why is this a difficult case?</strong>
+            <span>▼</span>
+        </div>
+        <div class="llm-reasoning-content">
+            <p><strong>Difficulty:</strong> {{ current_case.difficulty_reason }}</p>
+            <p><strong>Tests aspect:</strong> {{ current_case.which_aspect }}</p>
+            <p><strong>Boundary between:</strong> {{ current_case.boundary_labels|join(' and ') }}</p>
+        </div>
+    </div>
+
+    <h3>Select a label:</h3>
+    <div class="label-buttons">
+        {% for label in labels %}
+        <button type="button" class="label-btn" data-label="{{ label }}">{{ label }}</button>
+        {% endfor %}
+    </div>
+
+    <div class="form-group">
+        <label for="notes">Notes (optional)</label>
+        <textarea
+            id="notes"
+            name="notes"
+            placeholder="Any notes about why you chose this label..."
+            rows="3"
+        ></textarea>
+    </div>
+
+    <div class="solo-nav">
+        <a href="{{ url_for('solo_mode.prompt_editor') }}" class="btn btn-secondary">&larr; Back to Prompt</a>
+        <button type="submit" class="btn btn-primary" id="submit-btn" disabled>Submit Label</button>
+    </div>
+</form>
+{% else %}
+<div class="alert alert-info">
+    <p>No more edge cases to label!</p>
+    <p>Your labels will be used to validate and refine the annotation prompt.</p>
+</div>
+
+<div class="solo-nav">
+    <a href="{{ url_for('solo_mode.prompt_editor') }}" class="btn btn-secondary">&larr; Back to Prompt</a>
+    <a href="{{ url_for('solo_mode.annotate') }}" class="btn btn-primary">Start Annotation &rarr;</a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block stats %}
+{{ super() }}
+<div class="stat-item">
+    <span class="stat-label">Remaining</span>
+    <span class="stat-value">{{ remaining_count }}</span>
+</div>
+{% endblock %}
+
+{% block sidebar_extra %}
+<h3>Edge Case Tips</h3>
+<ul style="font-size: 14px; color: #666; padding-left: 20px;">
+    <li>Consider the boundary carefully</li>
+    <li>Think about what the prompt says</li>
+    <li>If unsure, choose the most likely</li>
+    <li>Add notes for ambiguous cases</li>
+</ul>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Enable submit when label is selected
+    document.querySelectorAll('.label-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.getElementById('submit-btn').disabled = false;
+        });
+    });
+</script>
+{% endblock %}

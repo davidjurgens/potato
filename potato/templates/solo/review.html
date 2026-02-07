@@ -1,0 +1,107 @@
+{% extends "solo/base_solo.html" %}
+
+{% block title %}Periodic Review - Solo Mode{% endblock %}
+
+{% block content %}
+<h1>Periodic Review</h1>
+
+<p>Review these low-confidence LLM labels to ensure quality. You can approve or correct each one.</p>
+
+{% if current_instance %}
+<form method="POST" action="{{ url_for('solo_mode.review') }}">
+    <input type="hidden" name="instance_id" value="{{ current_instance.id }}">
+    <input type="hidden" name="decision" id="decision-value" value="">
+    <input type="hidden" name="corrected_label" id="corrected-label" value="">
+
+    <div class="instance-text">
+        {{ current_instance.text }}
+    </div>
+
+    <div class="llm-reasoning">
+        <div class="llm-reasoning-header">
+            <strong>LLM Label: {{ current_instance.llm_label }}</strong>
+            <span>▼</span>
+        </div>
+        <div class="llm-reasoning-content">
+            {% if current_instance.reasoning %}
+            <p>{{ current_instance.reasoning }}</p>
+            {% endif %}
+
+            <div class="confidence-bar">
+                {% set conf = current_instance.confidence or 0.5 %}
+                {% set conf_class = 'confidence-low' if conf < 0.5 else ('confidence-mid' if conf < 0.8 else 'confidence-high') %}
+                <div class="confidence-fill {{ conf_class }}" style="width: {{ (conf * 100)|int }}%"></div>
+            </div>
+            <p style="font-size: 12px; color: #666;">
+                Confidence: {{ (conf * 100)|int }}%
+            </p>
+        </div>
+    </div>
+
+    <h3>Is this label correct?</h3>
+    <div style="display: flex; gap: 15px; margin: 20px 0;">
+        <button type="button" class="btn btn-success" onclick="approve()" style="flex: 1; padding: 15px;">
+            ✓ Approve Label
+        </button>
+        <button type="button" class="btn btn-danger" onclick="showCorrection()" style="flex: 1; padding: 15px;">
+            ✗ Correct Label
+        </button>
+    </div>
+
+    <div id="correction-panel" style="display: none; margin: 20px 0;">
+        <h4>Select the correct label:</h4>
+        <div class="label-buttons">
+            {% for label in labels %}
+            <button type="button" class="label-btn" data-label="{{ label }}" onclick="selectCorrection('{{ label }}')">{{ label }}</button>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="solo-nav">
+        <a href="{{ url_for('solo_mode.annotate') }}" class="btn btn-secondary">&larr; Back to Annotation</a>
+        <button type="submit" class="btn btn-primary" id="submit-btn" disabled>Submit</button>
+    </div>
+</form>
+{% else %}
+<div class="alert alert-success">
+    <p>Review complete! Returning to annotation.</p>
+</div>
+<div class="solo-nav">
+    <span></span>
+    <a href="{{ url_for('solo_mode.annotate') }}" class="btn btn-primary">Continue Annotating &rarr;</a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block stats %}
+{{ super() }}
+<div class="stat-item">
+    <span class="stat-label">To Review</span>
+    <span class="stat-value">{{ instances|length if instances else 0 }}</span>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function approve() {
+        document.getElementById('decision-value').value = 'approve';
+        document.getElementById('submit-btn').disabled = false;
+        document.getElementById('correction-panel').style.display = 'none';
+    }
+
+    function showCorrection() {
+        document.getElementById('decision-value').value = 'correct';
+        document.getElementById('correction-panel').style.display = 'block';
+        document.getElementById('submit-btn').disabled = true;
+    }
+
+    function selectCorrection(label) {
+        document.querySelectorAll('.label-btn').forEach(btn => {
+            btn.classList.remove('selected');
+        });
+        event.target.classList.add('selected');
+        document.getElementById('corrected-label').value = label;
+        document.getElementById('submit-btn').disabled = false;
+    }
+</script>
+{% endblock %}

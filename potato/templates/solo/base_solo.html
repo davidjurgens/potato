@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Solo Mode{% endblock %} - Potato</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        /* Solo Mode specific styles */
+        .solo-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Phase progress bar */
+        .phase-progress {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            padding: 15px;
+            background: #f5f5f5;
+            border-radius: 8px;
+        }
+
+        .phase-step {
+            text-align: center;
+            flex: 1;
+            padding: 10px 5px;
+            position: relative;
+        }
+
+        .phase-step::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            right: 0;
+            width: 100%;
+            height: 2px;
+            background: #ddd;
+            z-index: 0;
+        }
+
+        .phase-step:last-child::after {
+            display: none;
+        }
+
+        .phase-step .step-number {
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            line-height: 30px;
+            border-radius: 50%;
+            background: #ddd;
+            color: #666;
+            font-weight: bold;
+            position: relative;
+            z-index: 1;
+        }
+
+        .phase-step.active .step-number {
+            background: #007bff;
+            color: white;
+        }
+
+        .phase-step.completed .step-number {
+            background: #28a745;
+            color: white;
+        }
+
+        .phase-step .step-label {
+            display: block;
+            font-size: 12px;
+            margin-top: 5px;
+            color: #666;
+        }
+
+        .phase-step.active .step-label {
+            color: #007bff;
+            font-weight: bold;
+        }
+
+        /* Main content area */
+        .solo-main {
+            display: flex;
+            gap: 20px;
+        }
+
+        .solo-content {
+            flex: 1;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .solo-sidebar {
+            width: 300px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        /* Confidence indicator */
+        .confidence-bar {
+            height: 8px;
+            background: #eee;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        .confidence-low { background: #dc3545; }
+        .confidence-mid { background: #ffc107; }
+        .confidence-high { background: #28a745; }
+
+        /* LLM reasoning panel */
+        .llm-reasoning {
+            background: #f8f9fa;
+            border-left: 3px solid #007bff;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 0 4px 4px 0;
+        }
+
+        .llm-reasoning-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .llm-reasoning-content {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #555;
+        }
+
+        /* Stats panel */
+        .stats-panel {
+            margin-bottom: 20px;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .stat-item:last-child {
+            border-bottom: none;
+        }
+
+        .stat-label {
+            color: #666;
+        }
+
+        .stat-value {
+            font-weight: bold;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s ease;
+        }
+
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #1e7e34;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #bd2130;
+        }
+
+        /* Forms */
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        .form-group textarea,
+        .form-group input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .form-group textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        /* Alert messages */
+        .alert {
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        /* Label buttons */
+        .label-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .label-btn {
+            padding: 12px 24px;
+            border: 2px solid #007bff;
+            background: white;
+            color: #007bff;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+
+        .label-btn:hover {
+            background: #007bff;
+            color: white;
+        }
+
+        .label-btn.selected {
+            background: #007bff;
+            color: white;
+        }
+
+        /* Instance display */
+        .instance-text {
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            font-size: 16px;
+            line-height: 1.6;
+            margin: 15px 0;
+        }
+
+        /* Navigation */
+        .solo-nav {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .solo-main {
+                flex-direction: column;
+            }
+
+            .solo-sidebar {
+                width: 100%;
+            }
+
+            .phase-progress {
+                flex-wrap: wrap;
+            }
+
+            .phase-step {
+                flex-basis: 50%;
+            }
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <div class="solo-container">
+        <!-- Phase Progress Bar -->
+        <div class="phase-progress">
+            {% set phases = [
+                ('setup', 'Setup'),
+                ('prompt_review', 'Prompt'),
+                ('edge_case_labeling', 'Edge Cases'),
+                ('parallel_annotation', 'Annotation'),
+                ('autonomous_labeling', 'Auto Label'),
+                ('final_validation', 'Validation'),
+                ('completed', 'Complete')
+            ] %}
+            {% set phase_order = ['setup', 'prompt_review', 'edge_case_synthesis', 'edge_case_labeling', 'prompt_validation', 'parallel_annotation', 'active_annotation', 'periodic_review', 'disagreement_resolution', 'autonomous_labeling', 'final_validation', 'completed'] %}
+            {% set current_index = phase_order.index(phase) if phase in phase_order else 0 %}
+
+            {% for phase_id, phase_label in phases %}
+                {% set step_index = phase_order.index(phase_id) if phase_id in phase_order else 0 %}
+                <div class="phase-step {% if phase == phase_id %}active{% elif step_index < current_index %}completed{% endif %}">
+                    <span class="step-number">{{ loop.index }}</span>
+                    <span class="step-label">{{ phase_label }}</span>
+                </div>
+            {% endfor %}
+        </div>
+
+        <!-- Main Content -->
+        <div class="solo-main">
+            <div class="solo-content">
+                {% block content %}{% endblock %}
+            </div>
+
+            {% block sidebar %}
+            <div class="solo-sidebar">
+                <h3>Status</h3>
+                <div class="stats-panel">
+                    {% block stats %}
+                    <div class="stat-item">
+                        <span class="stat-label">Phase</span>
+                        <span class="stat-value">{{ phase|replace('_', ' ')|title }}</span>
+                    </div>
+                    {% endblock %}
+                </div>
+
+                {% block sidebar_extra %}{% endblock %}
+            </div>
+            {% endblock %}
+        </div>
+    </div>
+
+    <script>
+        // Toggle LLM reasoning panel
+        document.querySelectorAll('.llm-reasoning-header').forEach(header => {
+            header.addEventListener('click', () => {
+                const content = header.nextElementSibling;
+                content.style.display = content.style.display === 'none' ? 'block' : 'none';
+            });
+        });
+
+        // Label button selection
+        document.querySelectorAll('.label-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Remove selected from all
+                btn.parentElement.querySelectorAll('.label-btn').forEach(b => {
+                    b.classList.remove('selected');
+                });
+                // Add selected to clicked
+                btn.classList.add('selected');
+                // Update hidden input if exists
+                const input = document.getElementById('selected-label');
+                if (input) {
+                    input.value = btn.dataset.label;
+                }
+            });
+        });
+    </script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
