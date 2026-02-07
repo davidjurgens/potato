@@ -5269,6 +5269,142 @@ def admin_api_mace_trigger():
     })
 
 
+# =============================================================================
+# Data Sources API Endpoints
+# =============================================================================
+
+@app.route('/admin/api/data_sources', methods=['GET'])
+def admin_api_data_sources():
+    """
+    List all data sources with their status.
+
+    Returns:
+        JSON with list of sources and their status
+    """
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.data_sources import get_data_source_manager
+
+    manager = get_data_source_manager()
+    if not manager:
+        return jsonify({
+            "enabled": False,
+            "message": "Data sources not configured"
+        })
+
+    return jsonify({
+        "enabled": True,
+        "sources": manager.list_sources(),
+        "stats": manager.get_stats()
+    })
+
+
+@app.route('/admin/api/data_sources/<source_id>/load_more', methods=['POST'])
+def admin_api_data_sources_load_more(source_id):
+    """
+    Load more items from a specific data source.
+
+    Args:
+        source_id: The source identifier
+
+    Query params:
+        count: Number of items to load (optional, uses batch_size default)
+
+    Returns:
+        JSON with number of items loaded
+    """
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.data_sources import get_data_source_manager
+
+    manager = get_data_source_manager()
+    if not manager:
+        return jsonify({"error": "Data sources not configured"}), 400
+
+    try:
+        # Get optional count parameter
+        count = request.args.get('count', type=int)
+
+        loaded = manager.load_more(source_id, count=count)
+        return jsonify({
+            "status": "success",
+            "source_id": source_id,
+            "items_loaded": loaded
+        })
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.error(f"Error loading more from {source_id}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/admin/api/data_sources/<source_id>/refresh', methods=['POST'])
+def admin_api_data_sources_refresh(source_id):
+    """
+    Refresh a data source (re-fetch from remote).
+
+    Args:
+        source_id: The source identifier
+
+    Returns:
+        JSON with refresh status
+    """
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.data_sources import get_data_source_manager
+
+    manager = get_data_source_manager()
+    if not manager:
+        return jsonify({"error": "Data sources not configured"}), 400
+
+    try:
+        success = manager.refresh_source(source_id)
+        return jsonify({
+            "status": "success" if success else "failed",
+            "source_id": source_id
+        })
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.error(f"Error refreshing source {source_id}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/admin/api/cache/clear', methods=['POST'])
+def admin_api_cache_clear():
+    """
+    Clear the data source cache.
+
+    Returns:
+        JSON with number of entries cleared
+    """
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.data_sources import get_data_source_manager
+
+    manager = get_data_source_manager()
+    if not manager:
+        return jsonify({"error": "Data sources not configured"}), 400
+
+    try:
+        entries_cleared = manager.clear_cache()
+        return jsonify({
+            "status": "success",
+            "entries_cleared": entries_cleared
+        })
+    except Exception as e:
+        logger.error(f"Error clearing cache: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/adjudicate/api/submit', methods=['POST'])
 def adjudicate_api_submit():
     """Submit an adjudication decision."""

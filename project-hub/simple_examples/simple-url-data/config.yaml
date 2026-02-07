@@ -1,0 +1,86 @@
+# Simple URL Data Source Example
+#
+# This example demonstrates using the data_sources configuration
+# to load annotation data from various sources.
+#
+# Run with:
+#   python potato/flask_server.py start project-hub/simple_examples/simple-url-data/config.yaml -p 8000
+
+# Task metadata
+annotation_task_name: "URL Data Source Demo"
+task_dir: .
+output_annotation_dir: ./output
+
+# Item properties
+item_properties:
+  id_key: id
+  text_key: text
+
+# Data sources - demonstrating the new extended loading
+# This example uses a local file source (the simplest case)
+# For URL, S3, or other remote sources, see the comments below
+data_sources:
+  # Local file source (equivalent to data_files)
+  - type: file
+    path: "data/example-items.json"
+    id: "local_data"
+
+  # Example: URL source (uncomment to try)
+  # - type: url
+  #   url: "https://example.com/data.jsonl"
+  #   headers:
+  #     Authorization: "Bearer ${API_TOKEN}"
+
+  # Example: S3 source (uncomment to try)
+  # - type: s3
+  #   bucket: "my-bucket"
+  #   key: "data/items.jsonl"
+  #   region: "us-east-1"
+
+  # Example: Google Drive (uncomment to try)
+  # - type: google_drive
+  #   url: "https://drive.google.com/file/d/xxx/view?usp=sharing"
+
+  # Example: Hugging Face dataset (uncomment to try)
+  # - type: huggingface
+  #   dataset: "squad"
+  #   split: "train[:100]"
+  #   id_field: "id"
+  #   text_field: "context"
+
+# Partial loading configuration (optional)
+# Enable this for large datasets to load data incrementally
+# partial_loading:
+#   enabled: true
+#   initial_count: 1000
+#   batch_size: 500
+#   auto_load_threshold: 0.8
+
+# Cache configuration for remote sources
+data_cache:
+  enabled: true
+  cache_dir: ".potato_cache"
+  ttl_seconds: 3600
+
+# Annotation scheme - simple sentiment classification
+annotation_schemes:
+  - annotation_type: radio
+    name: sentiment
+    description: "Classify the sentiment of this text"
+    labels:
+      - name: positive
+        key_value: p
+        tooltip: "The text expresses a positive sentiment"
+      - name: negative
+        key_value: n
+        tooltip: "The text expresses a negative sentiment"
+      - name: neutral
+        key_value: u
+        tooltip: "The text is neutral or factual"
+
+# User configuration
+user_config:
+  allow_all_users: true
+
+# Server configuration
+require_password: false

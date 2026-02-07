@@ -261,6 +261,11 @@ def load_instance_data(config: dict):
     and populates the ItemStateManager with the data. It handles different data structures
     and validates that required fields are present.
 
+    Supports multiple data loading modes:
+    1. data_files: List of local file paths (traditional mode)
+    2. data_sources: Extended sources including URLs, cloud storage, databases
+    3. data_directory: Watch a directory for files (handled separately)
+
     Args:
         config: Configuration dictionary containing data file paths and item properties
 
@@ -278,7 +283,17 @@ def load_instance_data(config: dict):
     text_key = config["item_properties"]["text_key"]
     id_key = config["item_properties"]["id_key"]
 
-    data_files = config["data_files"]
+    # Check if data_sources is configured (new extended data loading)
+    if config.get("data_sources"):
+        _load_from_data_sources(config, ism, id_key, text_key)
+        return
+
+    data_files = config.get("data_files", [])
+    if not data_files:
+        # No data_files, might use data_directory which is handled elsewhere
+        logger.debug("No data_files configured, skipping file-based loading")
+        return
+
     logger.debug("Loading data from %d files" % (len(data_files)))
 
     for data_fname in data_files:
@@ -382,6 +397,19 @@ def load_instance_data(config: dict):
         logger.debug("Loaded %d instances from %s" % (line_no, data_fname))
 
     # For each item, render the text to display in the UI ahead of time.
+    _render_displayed_text(text_key)
+
+
+def _render_displayed_text(text_key: str) -> None:
+    """
+    Render the displayed text for all items.
+
+    This processes the text_key field to generate the displayed_text
+    that will be shown in the annotation UI.
+
+    Args:
+        text_key: The key in item data containing the text to display
+    """
     for item in get_item_state_manager().items():
         item_data = item.get_data()
 
@@ -391,6 +419,46 @@ def load_instance_data(config: dict):
         else:
             item_data["displayed_text"] = ""
             logger.warning(f"No text found for item {item.get_id()}, using empty string")
+
+
+def _load_from_data_sources(config: dict, ism, id_key: str, text_key: str) -> None:
+    """
+    Load data using the extended DataSourceManager.
+
+    This function initializes the DataSourceManager and loads data from
+    configured sources (URLs, cloud storage, databases, etc.).
+
+    Args:
+        config: Application configuration
+        ism: ItemStateManager instance
+        id_key: Key for item IDs
+        text_key: Key for text content
+    """
+    # Import and register source implementations
+    from potato.data_sources import init_data_source_manager, get_data_source_manager
+    import potato.data_sources.sources  # This registers all source types
+
+    # Initialize the data source manager
+    manager = init_data_source_manager(config)
+
+    if not manager:
+        logger.warning("DataSourceManager initialization failed")
+        return
+
+    # Load initial data from all sources
+    total_loaded = manager.load_initial_data()
+    logger.info(f"Loaded {total_loaded} items from data sources")
+
+    # Set max annotations per user
+    max_annotations_per_user = config.get(
+        "max_annotations_per_user",
+        len(ism.get_instance_ids())
+    )
+    get_user_state_manager().set_max_annotations_per_user(max_annotations_per_user)
+
+    # Render displayed text for all loaded items
+    _render_displayed_text(text_key)
+
 
 def load_user_data(config: dict):
 

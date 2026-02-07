@@ -136,16 +136,24 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
         if not isinstance(category_key, str) or not category_key.strip():
             raise ConfigValidationError("item_properties.category_key must be a non-empty string")
 
-    # Validate data_files (required unless data_directory is provided)
+    # Validate data_files (required unless data_directory or data_sources is provided)
     data_files = config_data.get('data_files', [])
     data_directory = config_data.get('data_directory')
+    data_sources = config_data.get('data_sources')
 
     if not isinstance(data_files, list):
         raise ConfigValidationError("data_files must be a list")
 
-    # data_files can be empty if data_directory is configured
-    if not data_files and not data_directory:
-        raise ConfigValidationError("Either data_files or data_directory must be configured")
+    # data_files can be empty if data_directory or data_sources is configured
+    if not data_files and not data_directory and not data_sources:
+        raise ConfigValidationError(
+            "At least one data source must be configured: "
+            "'data_files', 'data_directory', or 'data_sources'"
+        )
+
+    # Validate data_sources configuration if present
+    if data_sources:
+        validate_data_sources_config(config_data)
 
     # Validate server config if present
     validate_server_config(config_data)
@@ -887,6 +895,201 @@ def validate_data_directory_config(config_data: Dict[str, Any]) -> None:
             raise ConfigValidationError("watch_poll_interval must be at least 1.0 seconds")
         if interval > 3600:
             raise ConfigValidationError("watch_poll_interval cannot exceed 3600 seconds (1 hour)")
+
+
+def validate_data_sources_config(config_data: Dict[str, Any]) -> None:
+    """
+    Validate data_sources configuration for extended data loading.
+
+    This function validates the configuration for loading data from
+    various sources including URLs, cloud storage, and databases.
+
+    Args:
+        config_data: The configuration data
+
+    Raises:
+        ConfigValidationError: If the configuration is invalid
+    """
+    data_sources = config_data.get("data_sources")
+    if not data_sources:
+        return  # Empty or missing is fine - data_files can be used instead
+
+    if not isinstance(data_sources, list):
+        raise ConfigValidationError("data_sources must be a list")
+
+    # Valid source types
+    valid_types = [
+        "file", "url", "google_drive", "dropbox",
+        "s3", "huggingface", "google_sheets", "database"
+    ]
+
+    for i, source in enumerate(data_sources):
+        if not isinstance(source, dict):
+            raise ConfigValidationError(
+                f"data_sources[{i}] must be a dictionary"
+            )
+
+        source_type = source.get("type")
+        if not source_type:
+            raise ConfigValidationError(
+                f"data_sources[{i}] is missing required 'type' field"
+            )
+
+        if source_type not in valid_types:
+            raise ConfigValidationError(
+                f"data_sources[{i}] has invalid type '{source_type}'. "
+                f"Valid types: {', '.join(valid_types)}"
+            )
+
+        # Type-specific validation
+        _validate_data_source_by_type(source, source_type, i)
+
+    # Validate partial_loading configuration if present
+    _validate_partial_loading_config(config_data)
+
+    # Validate data_cache configuration if present
+    _validate_data_cache_config(config_data)
+
+
+def _validate_data_source_by_type(source: Dict, source_type: str, index: int) -> None:
+    """Validate source-specific configuration."""
+    prefix = f"data_sources[{index}]"
+
+    if source_type == "file":
+        if not source.get("path"):
+            raise ConfigValidationError(f"{prefix} (type=file) requires 'path'")
+
+    elif source_type == "url":
+        url = source.get("url")
+        if not url:
+            raise ConfigValidationError(f"{prefix} (type=url) requires 'url'")
+        if not isinstance(url, str):
+            raise ConfigValidationError(f"{prefix}.url must be a string")
+        # Basic URL format check
+        if not (url.startswith("http://") or url.startswith("https://")):
+            raise ConfigValidationError(
+                f"{prefix}.url must start with http:// or https://"
+            )
+
+    elif source_type == "google_drive":
+        if not source.get("url") and not source.get("file_id"):
+            raise ConfigValidationError(
+                f"{prefix} (type=google_drive) requires 'url' or 'file_id'"
+            )
+
+    elif source_type == "dropbox":
+        if not source.get("url") and not source.get("path"):
+            raise ConfigValidationError(
+                f"{prefix} (type=dropbox) requires 'url' or 'path'"
+            )
+        # If path is provided, access_token is required
+        if source.get("path") and not source.get("access_token"):
+            raise ConfigValidationError(
+                f"{prefix} (type=dropbox) requires 'access_token' when using 'path'"
+            )
+
+    elif source_type == "s3":
+        if not source.get("bucket"):
+            raise ConfigValidationError(f"{prefix} (type=s3) requires 'bucket'")
+        if not source.get("key"):
+            raise ConfigValidationError(f"{prefix} (type=s3) requires 'key'")
+
+    elif source_type == "huggingface":
+        if not source.get("dataset"):
+            raise ConfigValidationError(
+                f"{prefix} (type=huggingface) requires 'dataset'"
+            )
+
+    elif source_type == "google_sheets":
+        if not source.get("spreadsheet_id"):
+            raise ConfigValidationError(
+                f"{prefix} (type=google_sheets) requires 'spreadsheet_id'"
+            )
+        if not source.get("credentials_file"):
+            raise ConfigValidationError(
+                f"{prefix} (type=google_sheets) requires 'credentials_file'"
+            )
+
+    elif source_type == "database":
+        # Must have connection_string OR dialect+database
+        if not source.get("connection_string"):
+            if not source.get("dialect"):
+                raise ConfigValidationError(
+                    f"{prefix} (type=database) requires 'connection_string' or 'dialect'"
+                )
+            if not source.get("database") and source.get("dialect") != "sqlite":
+                raise ConfigValidationError(
+                    f"{prefix} (type=database) requires 'database' when not using sqlite"
+                )
+        # Must have query OR table
+        if not source.get("query") and not source.get("table"):
+            raise ConfigValidationError(
+                f"{prefix} (type=database) requires 'query' or 'table'"
+            )
+
+
+def _validate_partial_loading_config(config_data: Dict[str, Any]) -> None:
+    """Validate partial_loading configuration."""
+    partial = config_data.get("partial_loading")
+    if not partial:
+        return
+
+    if not isinstance(partial, dict):
+        raise ConfigValidationError("partial_loading must be a dictionary")
+
+    # Validate enabled
+    if "enabled" in partial and not isinstance(partial["enabled"], bool):
+        raise ConfigValidationError("partial_loading.enabled must be a boolean")
+
+    # Validate initial_count
+    if "initial_count" in partial:
+        count = partial["initial_count"]
+        if not isinstance(count, int) or count < 1:
+            raise ConfigValidationError(
+                "partial_loading.initial_count must be a positive integer"
+            )
+
+    # Validate batch_size
+    if "batch_size" in partial:
+        size = partial["batch_size"]
+        if not isinstance(size, int) or size < 1:
+            raise ConfigValidationError(
+                "partial_loading.batch_size must be a positive integer"
+            )
+
+    # Validate auto_load_threshold
+    if "auto_load_threshold" in partial:
+        threshold = partial["auto_load_threshold"]
+        if not isinstance(threshold, (int, float)) or not (0 <= threshold <= 1):
+            raise ConfigValidationError(
+                "partial_loading.auto_load_threshold must be between 0.0 and 1.0"
+            )
+
+
+def _validate_data_cache_config(config_data: Dict[str, Any]) -> None:
+    """Validate data_cache configuration."""
+    cache = config_data.get("data_cache")
+    if not cache:
+        return
+
+    if not isinstance(cache, dict):
+        raise ConfigValidationError("data_cache must be a dictionary")
+
+    # Validate ttl_seconds
+    if "ttl_seconds" in cache:
+        ttl = cache["ttl_seconds"]
+        if not isinstance(ttl, int) or ttl < 0:
+            raise ConfigValidationError(
+                "data_cache.ttl_seconds must be a non-negative integer"
+            )
+
+    # Validate max_size_mb
+    if "max_size_mb" in cache:
+        size = cache["max_size_mb"]
+        if not isinstance(size, int) or size < 1:
+            raise ConfigValidationError(
+                "data_cache.max_size_mb must be a positive integer"
+            )
 
 
 def validate_database_config(db_config: Dict[str, Any]) -> None:

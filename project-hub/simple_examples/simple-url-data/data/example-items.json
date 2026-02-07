@@ -1,0 +1,27 @@
+[
+  {
+    "id": "item_001",
+    "text": "The weather today is absolutely beautiful, with clear blue skies and a gentle breeze.",
+    "metadata": {"source": "local"}
+  },
+  {
+    "id": "item_002",
+    "text": "I'm disappointed with the service at this restaurant. The food took forever and was cold when it arrived.",
+    "metadata": {"source": "local"}
+  },
+  {
+    "id": "item_003",
+    "text": "The new software update includes several bug fixes and performance improvements.",
+    "metadata": {"source": "local"}
+  },
+  {
+    "id": "item_004",
+    "text": "This movie was a complete waste of time. The plot made no sense and the acting was terrible.",
+    "metadata": {"source": "local"}
+  },
+  {
+    "id": "item_005",
+    "text": "I love spending time with my family during the holidays. It's the best time of year.",
+    "metadata": {"source": "local"}
+  }
+]
