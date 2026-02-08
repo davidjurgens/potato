@@ -1,0 +1,88 @@
+# Simple Solo Mode Example
+# Demonstrates human-LLM collaborative annotation for sentiment classification
+
+task_dir: .
+port: 8000
+verbose: true
+
+# Enable Solo Mode
+solo_mode:
+  enabled: true
+
+  # Labeling models - using Ollama with Qwen3-4B
+  # Make sure Ollama is running: ollama serve
+  # Pull the model first: ollama pull qwen3:4b
+  labeling_models:
+    - endpoint_type: "ollama"
+      model: "qwen3:4b"
+      endpoint_url: "http://localhost:11434"
+      max_tokens: 256
+      temperature: 0.1
+
+  # Revision models for prompt optimization
+  revision_models:
+    - endpoint_type: "ollama"
+      model: "qwen3:4b"
+      endpoint_url: "http://localhost:11434"
+
+  # Uncertainty estimation
+  uncertainty:
+    strategy: "direct_confidence"
+
+  # Thresholds
+  thresholds:
+    end_human_annotation_agreement: 0.90
+    minimum_validation_sample: 20
+    confidence_low: 0.5
+    periodic_review_interval: 50
+
+  # Instance selection
+  instance_selection:
+    low_confidence_weight: 0.4
+    diversity_weight: 0.3
+    random_weight: 0.2
+    disagreement_weight: 0.1
+
+  # Batch sizes
+  batches:
+    llm_labeling_batch: 10
+    max_parallel_labels: 50
+
+  # State directory for persistence
+  state_dir: "solo_state"
+
+# Data configuration
+data_files:
+  - path: "data/sentiment-examples.json"
+
+item_properties:
+  id_key: "id"
+  text_key: "text"
+
+# Annotation scheme
+annotation_schemes:
+  - name: "sentiment"
+    annotation_type: "radio"
+    description: "Classify the sentiment of the text"
+    labels:
+      - name: "positive"
+        description: "Text expresses positive sentiment, satisfaction, or happiness"
+        key_value: "1"
+      - name: "negative"
+        description: "Text expresses negative sentiment, dissatisfaction, or complaints"
+        key_value: "2"
+      - name: "neutral"
+        description: "Text is factual or objective without clear sentiment"
+        key_value: "3"
+
+# User configuration
+user_config:
+  allow_no_password: true
+
+# Output
+output:
+  annotation_output_format: "json"
+  annotation_output_dir: "annotations"
+
+# Session settings
+session_lifetime_days: 7
