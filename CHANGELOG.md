@@ -2,6 +2,83 @@
 
 All notable changes to the Potato annotation platform are documented in this file.
 
+## [2.1.0] - Adjudication & Multi-Modal Annotation
+
+This release adds a complete adjudication workflow for resolving inter-annotator disagreements, a flexible instance display system, span linking for relation extraction, and expanded AI support for visual annotation tasks.
+
+### New Features
+
+#### Adjudication System
+- Dedicated adjudication interface (`/adjudicate`) for designated reviewers to resolve annotator disagreements and produce gold-standard labels
+- Queue-based workflow with items sorted by agreement level, showing all annotators' responses, timing data, and agreement scores side by side
+- Per-annotator behavioral signal analysis detecting fast decisions, excessive label changes, and low agreement patterns
+- Configurable error taxonomy for classifying disagreement sources (ambiguous text, guideline gaps, annotator errors, edge cases)
+- Decision metadata including confidence ratings, free-text notes, and guideline update flags
+- Optional semantic similarity engine for surfacing related items during review (requires `sentence-transformers`)
+- Export CLI for merging unanimous agreements and adjudicated decisions into a final dataset with provenance tracking
+- Admin API endpoint for monitoring adjudication progress across adjudicators
+- Browser-style navigation history so Previous button works across filter changes
+- Pre-loaded annotation demo with `setup_demo.py` for immediate hands-on testing
+- See [Adjudication Guide](docs/adjudication.md) for full documentation
+
+#### Instance Display System
+- New `instance_display` configuration to separate content display from annotation schemes
+- Display any combination of media (text, images, video, audio, dialogues) alongside any annotation type
+- Text display fields can be marked as `span_target: true` to enable span annotation on that field
+- Replaces the previous workaround of using annotation schemas with `min_annotations: 0` for content display
+- See [Instance Display Guide](docs/instance_display.md) for configuration details
+
+#### Multi-Field Span Annotation
+- Span annotation across multiple text fields within a single instance, with each field tracking spans independently
+- Per-field overlay containers and field-aware span storage with `target_field` metadata
+- Useful for tasks like aligning phrases between premise and hypothesis, or annotating both source text and summary
+
+#### Span Linking
+- Relation extraction via typed relationships between previously annotated spans
+- Supports directed (e.g., "works_for"), undirected (e.g., "collaborates_with"), and n-ary links
+- Label constraints restrict which span types can participate in each link type
+- Relationships visualized as colored arcs above the text
+- See [Span Linking Guide](docs/span_linking.md) for configuration details
+
+#### Visual AI Support
+- AI-powered assistance for image and video annotation using YOLO object detection and Vision-Language Models (GPT-4o, Claude, Ollama vision models)
+- Automatic object detection with bounding boxes and pre-annotation for human review
+- Image classification with AI-generated rationales
+- Video scene detection and keyframe identification
+- Configurable visual endpoints that can run alongside text-based LLM endpoints
+- See [Visual AI Guide](docs/visual_ai_support.md) for setup instructions
+
+#### AI Rationale
+- AI-generated explanations for each possible label, helping annotators understand the reasoning behind different classifications
+- Works with both text and vision-capable models, displayed as tooltips on label options
+- Provides balanced reasoning across all labels, useful for training annotators or difficult edge cases
+
+### Improvements
+
+#### Frontend
+- Improved responsive layout and form state isolation between annotation instances
+- Capability-based filtering for AI assistant endpoints
+
+#### Project Organization
+- Project-hub examples reorganized into self-contained directories, each with its own `config.yaml` and `data/` folder
+- All examples runnable from the repository root without directory changes
+
+#### Bug Fixes
+- Fixed span text normalization for multi-field annotation
+- Fixed YOLO prompt label parsing for detect and natural language patterns
+- Fixed label button styling overlap in image annotation toolbar
+- Fixed `total_working_time()` to handle `BehavioralData` objects
+- Fixed skipped server tests with absolute paths and free ports
+- Fixed `task_dir` resolution for project-hub examples
+- Registered behavioral tracking routes in `configure_routes()`
+- Fixed pre-existing test failures
+
+### Documentation
+- New guides: Adjudication, Instance Display, Span Linking, Visual AI Support
+- Updated README with Potato Showcase link and corrected readthedocs URL
+
+---
+
 ## [2.0.0] - Backend Refactor
 
 This release represents a major architectural overhaul of the Potato annotation platform, introducing new features, improved state management, and enhanced security.

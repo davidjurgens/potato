@@ -94,5 +94,14 @@ adjudication:
   #   top_k: 5
   #   precompute_on_start: true
 
+# MACE competence estimation (optional)
+# Estimates annotator reliability and predicts true labels using EM algorithm.
+# Results are available via /admin/api/mace/overview and surfaced in adjudication UI.
+# mace:
+#   enabled: true
+#   trigger_every_n: 10        # Run after every N new annotations
+#   min_annotations_per_item: 3  # Need >= this many annotators per item
+#   min_items: 5               # Need >= this many eligible items
+
 # Debug mode for easy testing
 debug: true

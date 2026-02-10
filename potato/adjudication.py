@@ -88,10 +88,11 @@ class AdjudicationItem:
     num_annotators: int
     status: str = "pending"  # pending, in_progress, completed, skipped
     assigned_adjudicator: Optional[str] = None
+    mace_predictions: Dict[str, Any] = field(default_factory=dict)  # schema -> predicted label
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dictionary for JSON output."""
-        return {
+        result = {
             "instance_id": self.instance_id,
             "annotations": self.annotations,
             "span_annotations": self.span_annotations,
@@ -102,6 +103,9 @@ class AdjudicationItem:
             "status": self.status,
             "assigned_adjudicator": self.assigned_adjudicator,
         }
+        if self.mace_predictions:
+            result["mace_predictions"] = self.mace_predictions
+        return result
 
 
 @dataclass
@@ -342,6 +346,19 @@ class AdjudicationManager:
                 status = existing.status if existing else "pending"
                 assigned = existing.assigned_adjudicator if existing else None
 
+                # Enrich with MACE predictions if available
+                mace_preds = {}
+                try:
+                    from potato.mace_manager import get_mace_manager
+                    mace_mgr = get_mace_manager()
+                    if mace_mgr and mace_mgr.results:
+                        for sname in scheme_names:
+                            pred = mace_mgr.get_prediction(instance_id_str, sname)
+                            if pred is not None:
+                                mace_preds[sname] = pred
+                except Exception:
+                    pass  # MACE is optional
+
                 self.queue[instance_id_str] = AdjudicationItem(
                     instance_id=instance_id_str,
                     annotations=item_annotations,
@@ -352,6 +369,7 @@ class AdjudicationManager:
                     num_annotators=len(annotators),
                     status=status,
                     assigned_adjudicator=assigned,
+                    mace_predictions=mace_preds,
                 )
 
             self._queue_built = True

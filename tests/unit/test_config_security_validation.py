@@ -261,7 +261,7 @@ class TestYAMLStructureValidation:
             "annotation_schemes": []
         }
 
-        with pytest.raises(ConfigValidationError, match="Either data_files or data_directory must be configured"):
+        with pytest.raises(ConfigValidationError, match="At least one data source must be configured"):
             validate_yaml_structure(config)
 
     def test_empty_data_files_with_data_directory(self):
