@@ -130,6 +130,17 @@ class UnifiedPositioningStrategy {
     }
 
     normalizeText(text) {
+        // For code displays (pre/code elements), preserve newlines for accurate positioning
+        // Check if we're inside a code display
+        if (this.container && (
+            this.container.closest('.code-display') ||
+            this.container.closest('.code-simple') ||
+            this.container.querySelector('pre')
+        )) {
+            // Only normalize multiple spaces to single space, keep newlines
+            return text.replace(/[ \t]+/g, ' ').trim();
+        }
+        // For regular text, normalize all whitespace
         return text.replace(/\s+/g, ' ').trim();
     }
 
@@ -147,29 +158,102 @@ class UnifiedPositioningStrategy {
             return null;
         }
 
-        let canonicalText = this.getCanonicalText();
+        // Calculate offset directly from the selection range by walking the DOM
+        // This avoids text normalization mismatches between indexOf and DOM text
+        const offsets = this.getOffsetsFromSelection(selection);
+        if (!offsets) {
+            console.warn('[SpanCore] Could not calculate offsets from selection');
+            return null;
+        }
 
-        // Only fall back to #text-content if our own container lacks data-original-text
-        if (!this.container.hasAttribute('data-original-text')) {
-            const textElement = document.getElementById('text-content');
-            if (textElement) {
-                const storedText = textElement.getAttribute('data-original-text');
-                if (storedText) {
-                    canonicalText = storedText;
+        console.log('[SpanCore] createSpanFromSelection: container=' + (this.container ? this.container.id : 'NULL') + ' start=' + offsets.start + ' end=' + offsets.end + ' selected="' + selectedText + '"');
+
+        return this.createSpanWithAlgorithm(offsets.start, offsets.end, selectedText, options);
+    }
+
+    /**
+     * Calculate character offsets from a selection by walking the DOM tree.
+     * This gives us the exact position in the raw DOM text, avoiding normalization issues.
+     */
+    getOffsetsFromSelection(selection) {
+        if (!selection.rangeCount) return null;
+
+        const range = selection.getRangeAt(0);
+        const startContainer = range.startContainer;
+        const endContainer = range.endContainer;
+        const startOffset = range.startOffset;
+        const endOffset = range.endOffset;
+
+        // Walk through text nodes to find cumulative offset
+        const textNodes = [];
+        let cumulativeOffset = 0;
+
+        const collectTextNodes = (node) => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                textNodes.push({
+                    node: node,
+                    start: cumulativeOffset,
+                    end: cumulativeOffset + node.textContent.length
+                });
+                cumulativeOffset += node.textContent.length;
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+                for (const child of node.childNodes) {
+                    collectTextNodes(child);
+                }
+            }
+        };
+        collectTextNodes(this.container);
+
+        // Find the offset for start and end
+        let absoluteStart = null;
+        let absoluteEnd = null;
+
+        for (const tn of textNodes) {
+            if (tn.node === startContainer) {
+                absoluteStart = tn.start + startOffset;
+            }
+            if (tn.node === endContainer) {
+                absoluteEnd = tn.start + endOffset;
+            }
+        }
+
+        // Handle case where start/end containers are element nodes
+        if (absoluteStart === null && startContainer.nodeType === Node.ELEMENT_NODE) {
+            // startOffset is the index of the child node
+            if (startOffset < startContainer.childNodes.length) {
+                const childNode = startContainer.childNodes[startOffset];
+                for (const tn of textNodes) {
+                    if (tn.node === childNode || tn.node.parentNode === childNode) {
+                        absoluteStart = tn.start;
+                        break;
+                    }
                 }
             }
         }
 
-        console.log('[SpanCore] createSpanFromSelection: container=' + (this.container ? this.container.id : 'NULL') + ' canonical="' + String(canonicalText).substring(0, 60) + '" selected="' + selectedText + '"');
+        if (absoluteEnd === null && endContainer.nodeType === Node.ELEMENT_NODE) {
+            if (endOffset > 0 && endOffset <= endContainer.childNodes.length) {
+                const childNode = endContainer.childNodes[endOffset - 1];
+                for (const tn of textNodes) {
+                    if (tn.node === childNode || tn.node.parentNode === childNode) {
+                        absoluteEnd = tn.end;
+                        break;
+                    }
+                }
+            }
+        }
 
-        const start = canonicalText.indexOf(selectedText);
-        if (start === -1) {
-            console.warn('[SpanCore] Selected text not found in canonical text. canonical=' + String(canonicalText).substring(0, 80));
+        if (absoluteStart === null || absoluteEnd === null) {
+            console.warn('[SpanCore] Could not find absolute offsets for selection', {
+                startContainer: startContainer.nodeName,
+                endContainer: endContainer.nodeName,
+                startOffset,
+                endOffset
+            });
             return null;
         }
 
-        const end = start + selectedText.length;
-        return this.createSpanWithAlgorithm(start, end, selectedText, options);
+        return { start: absoluteStart, end: absoluteEnd };
     }
 
     createSpanWithAlgorithm(start, end, text, options = {}) {
@@ -292,12 +376,9 @@ class UnifiedPositioningStrategy {
             return null;
         }
 
-        // Use the parent element for positioning reference
-        // In legacy mode: text-content's parent is #instance-text
-        // In multi-field mode: text-content-{field}'s parent is .text-display-content
-        // Both are the container that holds overlay elements with position: relative
-        const positioningParent = textElement.parentElement || document.getElementById('instance-text');
-        const containerRect = positioningParent ? positioningParent.getBoundingClientRect() : textElement.getBoundingClientRect();
+        // Use the text element itself for positioning reference
+        // This ensures consistency with overlay positioning which is inside the text element
+        const containerRect = textElement.getBoundingClientRect();
 
         const positions = Array.from(rects).map((rect) => ({
             x: rect.left - containerRect.left,
@@ -389,9 +470,9 @@ class UnifiedPositioningStrategy {
             return null;
         }
 
-        // Convert to positions relative to the positioning parent container
-        const positioningParent = textElement.parentElement || document.getElementById('instance-text');
-        const containerRect = positioningParent ? positioningParent.getBoundingClientRect() : textElement.getBoundingClientRect();
+        // Convert to positions relative to the text element container itself
+        // This ensures consistency with overlay positioning which is also relative to text-content
+        const containerRect = textElement.getBoundingClientRect();
 
         return Array.from(rects).map(rect => ({
             x: rect.left - containerRect.left,
@@ -893,20 +974,21 @@ class SpanManager {
                     const textContent = field.querySelector('.text-content');
                     console.log('[SpanManager] init: field', fieldKey, 'textContent=', textContent?.id);
                     if (textContent && fieldKey) {
-                        // Wrap text content in a relative container for overlay positioning
-                        const contentWrapper = textContent.closest('.text-display-content') || textContent.parentElement;
-                        if (contentWrapper && !contentWrapper.style.position) {
-                            contentWrapper.style.position = 'relative';
+                        // Ensure text content has position: relative for overlay positioning
+                        // This is critical: overlays are positioned relative to textContent itself
+                        if (!textContent.style.position || textContent.style.position === 'static') {
+                            textContent.style.position = 'relative';
                         }
 
                         // Create span-overlays container for this field if not present
-                        let overlaysEl = field.querySelector('.span-overlays-field');
+                        // Append INSIDE textContent so positions are relative to the same container
+                        let overlaysEl = textContent.querySelector('.span-overlays-field');
                         if (!overlaysEl) {
                             overlaysEl = document.createElement('div');
                             overlaysEl.className = 'span-overlays-field';
                             overlaysEl.id = `span-overlays-${fieldKey}`;
                             overlaysEl.style.cssText = 'position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;';
-                            contentWrapper.appendChild(overlaysEl);
+                            textContent.appendChild(overlaysEl);
                         }
 
                         const strategy = new UnifiedPositioningStrategy(textContent);
