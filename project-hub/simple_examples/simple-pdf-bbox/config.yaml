@@ -1,0 +1,72 @@
+# PDF Bounding Box Annotation Example
+# Demonstrates drawing bounding boxes on PDF pages to mark regions
+# Run: python potato/flask_server.py start project-hub/simple_examples/simple-pdf-bbox/config.yaml -p 8000
+
+annotation_task_name: "PDF Layout Annotation"
+
+task_dir: .
+
+data_files:
+  - data/pdf-layout-examples.jsonl
+
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+item_properties:
+  id_key: id
+  text_key: description
+
+# Instance display with PDF bounding box mode
+instance_display:
+  # Enable resizable viewport (default: true)
+  # Users can drag the bottom edge of display fields to resize them
+  resizable: true
+
+  fields:
+    - key: pdf_content
+      type: pdf
+      label: "Document"
+      display_options:
+        annotation_mode: bounding_box
+        view_mode: paginated
+        max_height: 450
+        show_page_controls: true
+        bbox_min_size: 10
+        show_bbox_labels: true
+    - key: description
+      type: text
+      label: "Task"
+
+# Annotation schemes - select label type for bounding boxes
+annotation_schemes:
+  - annotation_type: radio
+    name: region_type
+    description: "Select the type of region you are annotating"
+    horizontal: true
+    labels:
+      - name: FIGURE
+        tooltip: "A figure, image, or diagram"
+        key_binding: f
+      - name: TABLE
+        tooltip: "A data table"
+        key_binding: t
+      - name: HEADER
+        tooltip: "A header or title section"
+        key_binding: h
+      - name: PARAGRAPH
+        tooltip: "A text paragraph"
+        key_binding: p
+      - name: FOOTER
+        tooltip: "A footer section"
+        key_binding: o
+
+  - annotation_type: text
+    name: notes
+    description: "Optional notes about this annotation"
+    single_line: true
+
+user_config:
+  allow_all_users: true
+
+debug: true
+debug_phase: annotation

@@ -193,6 +193,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Validate instance display configuration if present
     validate_instance_display_config(config_data)
 
+    # Validate format_handling configuration if present
+    validate_format_handling_config(config_data)
+
     # Validate MACE configuration if present
     if 'mace' in config_data:
         _validate_mace_config(config_data)
@@ -2270,7 +2273,10 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
     span_targets = []
 
     # Valid display types - keep in sync with display registry
-    valid_display_types = ["text", "html", "image", "video", "audio", "dialogue", "pairwise"]
+    valid_display_types = [
+        "text", "html", "image", "video", "audio", "dialogue", "pairwise",
+        "pdf", "document", "spreadsheet", "code"
+    ]
 
     for i, field in enumerate(fields):
         if not isinstance(field, dict):
@@ -2301,11 +2307,12 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
 
         # Validate span_target
         if field.get("span_target"):
-            # Only text-based types can be span targets
-            if field_type not in ["text", "dialogue"]:
+            # Types that support span annotation targets
+            span_target_types = ["text", "dialogue", "pdf", "document", "spreadsheet", "code"]
+            if field_type not in span_target_types:
                 raise ConfigValidationError(
                     f"instance_display.fields[{i}].span_target is set but type '{field_type}' "
-                    f"does not support span annotation. Only 'text' and 'dialogue' types support span_target."
+                    f"does not support span annotation. Types that support span_target: {', '.join(span_target_types)}."
                 )
             span_targets.append(key)
 
@@ -2335,6 +2342,11 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
             gap = layout["gap"]
             if not isinstance(gap, str):
                 raise ConfigValidationError("instance_display.layout.gap must be a string (e.g., '20px', '1rem')")
+
+    # Validate resizable option (defaults to True)
+    if "resizable" in display_config:
+        if not isinstance(display_config["resizable"], bool):
+            raise ConfigValidationError("instance_display.resizable must be a boolean (true/false)")
 
     # Check for deprecation warning: using annotation schemas for display-only
     _check_display_only_deprecation(config_data)
@@ -2366,6 +2378,17 @@ def _validate_display_options(field_type: str, options: Dict[str, Any], path: st
             raise ConfigValidationError(f"{path}.display_options.max_height must be an integer or string")
         if isinstance(max_height, int) and max_height < 1:
             raise ConfigValidationError(f"{path}.display_options.max_height must be positive")
+
+    if "min_height" in options:
+        min_height = options["min_height"]
+        if not isinstance(min_height, (int, str)):
+            raise ConfigValidationError(f"{path}.display_options.min_height must be an integer or string")
+        if isinstance(min_height, int) and min_height < 1:
+            raise ConfigValidationError(f"{path}.display_options.min_height must be positive")
+
+    if "resizable" in options:
+        if not isinstance(options["resizable"], bool):
+            raise ConfigValidationError(f"{path}.display_options.resizable must be a boolean")
 
     # Text-specific options
     if field_type in ["text", "html"]:
@@ -2423,6 +2446,154 @@ def _validate_display_options(field_type: str, options: Dict[str, Any], path: st
             cell_width = options["cell_width"]
             if not isinstance(cell_width, str):
                 raise ConfigValidationError(f"{path}.display_options.cell_width must be a string (e.g., '50%')")
+
+    # PDF-specific options
+    if field_type == "pdf":
+        if "view_mode" in options:
+            valid_modes = ["scroll", "paginated", "side-by-side"]
+            if options["view_mode"] not in valid_modes:
+                raise ConfigValidationError(
+                    f"{path}.display_options.view_mode must be one of: {', '.join(valid_modes)}"
+                )
+
+        if "text_layer" in options:
+            if not isinstance(options["text_layer"], bool):
+                raise ConfigValidationError(f"{path}.display_options.text_layer must be a boolean")
+
+        if "zoom" in options:
+            zoom = options["zoom"]
+            valid_zoom_modes = ["auto", "page-fit", "page-width"]
+            if zoom not in valid_zoom_modes:
+                try:
+                    float(zoom)
+                except (TypeError, ValueError):
+                    raise ConfigValidationError(
+                        f"{path}.display_options.zoom must be one of {valid_zoom_modes} or a number"
+                    )
+
+    # Document-specific options
+    if field_type == "document":
+        if "collapsible" in options:
+            if not isinstance(options["collapsible"], bool):
+                raise ConfigValidationError(f"{path}.display_options.collapsible must be a boolean")
+
+        if "show_outline" in options:
+            if not isinstance(options["show_outline"], bool):
+                raise ConfigValidationError(f"{path}.display_options.show_outline must be a boolean")
+
+        if "style_theme" in options:
+            valid_themes = ["default", "minimal", "print"]
+            if options["style_theme"] not in valid_themes:
+                raise ConfigValidationError(
+                    f"{path}.display_options.style_theme must be one of: {', '.join(valid_themes)}"
+                )
+
+    # Spreadsheet-specific options
+    if field_type == "spreadsheet":
+        if "annotation_mode" in options:
+            valid_modes = ["row", "cell", "range"]
+            if options["annotation_mode"] not in valid_modes:
+                raise ConfigValidationError(
+                    f"{path}.display_options.annotation_mode must be one of: {', '.join(valid_modes)}"
+                )
+
+        for bool_opt in ["show_headers", "striped", "hoverable", "sortable", "selectable", "compact"]:
+            if bool_opt in options:
+                if not isinstance(options[bool_opt], bool):
+                    raise ConfigValidationError(f"{path}.display_options.{bool_opt} must be a boolean")
+
+    # Code-specific options
+    if field_type == "code":
+        if "language" in options:
+            if not isinstance(options["language"], (str, type(None))):
+                raise ConfigValidationError(f"{path}.display_options.language must be a string or null")
+
+        if "show_line_numbers" in options:
+            if not isinstance(options["show_line_numbers"], bool):
+                raise ConfigValidationError(f"{path}.display_options.show_line_numbers must be a boolean")
+
+        if "wrap_lines" in options:
+            if not isinstance(options["wrap_lines"], bool):
+                raise ConfigValidationError(f"{path}.display_options.wrap_lines must be a boolean")
+
+        if "highlight_lines" in options:
+            hl = options["highlight_lines"]
+            if hl is not None and not isinstance(hl, list):
+                raise ConfigValidationError(f"{path}.display_options.highlight_lines must be a list of line numbers or null")
+
+        if "theme" in options:
+            valid_themes = ["default", "dark"]
+            if options["theme"] not in valid_themes:
+                raise ConfigValidationError(
+                    f"{path}.display_options.theme must be one of: {', '.join(valid_themes)}"
+                )
+
+
+def validate_format_handling_config(config_data: Dict[str, Any]) -> None:
+    """
+    Validate format_handling configuration for extended format support.
+
+    Args:
+        config_data: The full configuration data
+
+    Raises:
+        ConfigValidationError: If the format_handling configuration is invalid
+    """
+    format_config = config_data.get('format_handling')
+    if format_config is None:
+        return
+
+    if not isinstance(format_config, dict):
+        raise ConfigValidationError("format_handling must be a dictionary")
+
+    # Validate enabled flag
+    if "enabled" in format_config:
+        if not isinstance(format_config["enabled"], bool):
+            raise ConfigValidationError("format_handling.enabled must be a boolean")
+
+    # Validate default_format
+    if "default_format" in format_config:
+        default = format_config["default_format"]
+        valid_defaults = ["auto", "pdf", "docx", "markdown", "spreadsheet", "code"]
+        if default not in valid_defaults:
+            raise ConfigValidationError(
+                f"format_handling.default_format must be one of: {', '.join(valid_defaults)}"
+            )
+
+    # Validate PDF-specific options
+    if "pdf" in format_config:
+        pdf_opts = format_config["pdf"]
+        if not isinstance(pdf_opts, dict):
+            raise ConfigValidationError("format_handling.pdf must be a dictionary")
+
+        if "extraction_mode" in pdf_opts:
+            valid_modes = ["text", "ocr", "hybrid"]
+            if pdf_opts["extraction_mode"] not in valid_modes:
+                raise ConfigValidationError(
+                    f"format_handling.pdf.extraction_mode must be one of: {', '.join(valid_modes)}"
+                )
+
+        if "cache_extracted" in pdf_opts:
+            if not isinstance(pdf_opts["cache_extracted"], bool):
+                raise ConfigValidationError("format_handling.pdf.cache_extracted must be a boolean")
+
+    # Validate spreadsheet-specific options
+    if "spreadsheet" in format_config:
+        ss_opts = format_config["spreadsheet"]
+        if not isinstance(ss_opts, dict):
+            raise ConfigValidationError("format_handling.spreadsheet must be a dictionary")
+
+        if "annotation_mode" in ss_opts:
+            valid_modes = ["row", "cell", "range"]
+            if ss_opts["annotation_mode"] not in valid_modes:
+                raise ConfigValidationError(
+                    f"format_handling.spreadsheet.annotation_mode must be one of: {', '.join(valid_modes)}"
+                )
+
+        if "max_rows" in ss_opts:
+            max_rows = ss_opts["max_rows"]
+            if not isinstance(max_rows, int) or max_rows < 1:
+                raise ConfigValidationError("format_handling.spreadsheet.max_rows must be a positive integer")
 
 
 def validate_adjudication_config(config_data: Dict[str, Any]) -> None:

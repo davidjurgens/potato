@@ -49,10 +49,11 @@ class InstanceDisplayRenderer:
         self.fields = self.display_config.get("fields", [])
         self.layout = self.display_config.get("layout", {})
 
-        # Extract span targets
+        # Extract span targets - types that support span annotation
+        span_target_types = ["text", "dialogue", "pdf", "document", "spreadsheet", "code"]
         self.span_targets = [
             f["key"] for f in self.fields
-            if f.get("span_target") and f.get("type") in ["text", "dialogue"]
+            if f.get("span_target") and f.get("type") in span_target_types
         ]
 
         # Track if we have instance_display configured
@@ -151,11 +152,109 @@ class InstanceDisplayRenderer:
         field_type = field["type"]
         data = instance_data.get(key)
 
+        # For format-based display types, process the file if data is a file path
+        format_display_types = ["pdf", "document", "spreadsheet", "code"]
+        if field_type in format_display_types and isinstance(data, str):
+            data = self._process_format_file(data, field_type, field)
+
         try:
-            return display_registry.render(field_type, field, data)
+            rendered = display_registry.render(field_type, field, data)
+
+            # Check if resizable is enabled (global setting or per-field override)
+            global_resizable = self.display_config.get("resizable", True)
+            field_resizable = field.get("display_options", {}).get("resizable", global_resizable)
+
+            # Wrap with resizable container if enabled
+            if field_resizable:
+                rendered = self._wrap_resizable(rendered, field)
+
+            return rendered
         except ValueError as e:
             logger.error(f"Error rendering field '{key}': {e}")
             return f'<div class="display-error">Error rendering field "{key}": {e}</div>'
+
+    def _wrap_resizable(self, inner_html: str, field: Dict[str, Any]) -> str:
+        """
+        Wrap rendered content in a resizable container.
+
+        Args:
+            inner_html: The rendered field HTML
+            field: The field configuration
+
+        Returns:
+            HTML wrapped in resizable container
+        """
+        display_options = field.get("display_options", {})
+        max_height = display_options.get("max_height", 500)
+        min_height = display_options.get("min_height", 100)
+
+        style = f"max-height: {max_height}px; min-height: {min_height}px; position: relative;"
+
+        return f'''<div class="display-field-resizable" style="{style}">
+            {inner_html}
+        </div>'''
+
+    def _process_format_file(
+        self,
+        file_path: str,
+        display_type: str,
+        field: Dict[str, Any]
+    ) -> Any:
+        """
+        Process a file using the format handler system.
+
+        If the data is a file path and a format handler is available,
+        extract the content and return FormatOutput data.
+
+        Args:
+            file_path: Path to the file to process
+            display_type: The display type (pdf, document, etc.)
+            field: The field configuration
+
+        Returns:
+            Either the original file_path (for client-side rendering like PDF.js)
+            or extracted content dict for server-side rendering
+        """
+        try:
+            from potato.format_handlers import format_handler_registry
+        except ImportError:
+            # Format handlers not available, return original data
+            logger.debug("Format handlers not available, using raw file path")
+            return file_path
+
+        # Check if the file path should be processed
+        # For PDFs, we typically use client-side rendering with PDF.js
+        # unless explicitly configured for server-side extraction
+        display_options = field.get("display_options", {})
+
+        if display_type == "pdf":
+            # By default, PDFs use client-side rendering (return path as-is)
+            # If server_extract is set, use the format handler
+            if not display_options.get("server_extract", False):
+                return file_path
+
+        # Check if format handler can handle this file
+        if not format_handler_registry.can_handle(file_path):
+            logger.debug(f"No format handler for {file_path}, using raw data")
+            return file_path
+
+        try:
+            # Extract content using format handler
+            extraction_options = display_options.get("extraction_options", {})
+            output = format_handler_registry.extract(file_path, options=extraction_options)
+
+            # Return as dict for the display renderer
+            return {
+                "text": output.text,
+                "rendered_html": output.rendered_html,
+                "coordinate_map": output.coordinate_map,
+                "metadata": output.metadata,
+                "format_name": output.format_name,
+                "source_path": output.source_path,
+            }
+        except Exception as e:
+            logger.warning(f"Format handler extraction failed for {file_path}: {e}")
+            return file_path
 
     def get_template_variables(self, instance_data: Dict[str, Any]) -> Dict[str, Any]:
         """

@@ -2233,6 +2233,20 @@ fieldset[schema] {
   position: relative;
 }
 
+/* Visual indicator for span-target fields */
+.display-field[data-span-target="true"] {
+  border-left: 3px solid var(--primary, #6e56cf);
+  padding-left: 12px;
+}
+
+.display-field[data-span-target="true"] .display-field-label::after {
+  content: " (click label, then highlight text)";
+  font-size: 0.75rem;
+  font-weight: normal;
+  color: var(--muted-foreground, #71717a);
+  font-style: italic;
+}
+
 .span-target-field .text-display-content.span-target-text {
   /* Padding-top provides room for span labels that appear above highlighted text */
   padding-top: 24px;
@@ -2252,6 +2266,48 @@ fieldset[schema] {
   bottom: 0;
   pointer-events: none;
   z-index: 2;
+}
+
+/* Resizable display field container */
+.display-field-resizable {
+  resize: vertical;
+  overflow: auto;
+  min-height: 100px;
+  max-height: 80vh;
+}
+
+.display-field-resizable .display-field-content {
+  height: 100%;
+  overflow: auto;
+}
+
+/* Resize handle indicator */
+.display-field-resizable::after {
+  content: "";
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 12px;
+  height: 12px;
+  background: linear-gradient(135deg, transparent 50%, var(--border, #e4e4e7) 50%);
+  pointer-events: none;
+  opacity: 0.7;
+  border-radius: 0 0 4px 0;
+}
+
+/* Resizable PDF and document displays */
+.display-field-resizable .pdf-display,
+.display-field-resizable .document-display {
+  height: 100%;
+  max-height: none;
+  overflow: auto;
+}
+
+/* Ensure canvas containers adapt to resize */
+.display-field-resizable .pdf-canvas-container,
+.display-field-resizable .pdf-pages-container {
+  height: calc(100% - 80px); /* Account for controls */
+  overflow: auto;
 }
 
 /* Collapsible text container */
