@@ -193,14 +193,14 @@ pytest --cov=potato --cov-report=html
 ## Support
 
 - **Issues**: [GitHub Issues](https://github.com/davidjurgens/potato/issues)
-- **Questions**: pedropei@umich.edu or jurgens@umich.edu
+- **Questions**: jurgens@umich.edu
 - **Documentation**: [potatoannotator.readthedocs.io](https://potatoannotator.readthedocs.io/)
 
 ---
 
 ## License
 
-Potato is dual-licensed under [Polyform Shield](LICENSE) for non-commercial use. Commercial licensing is available—contact jurgens@umich.edu for details.
+Potato is licensed under [Polyform Shield](LICENSE). Short-summary: Non-commercial applications can use Potato however they want. Commercial applications can use Potato to annotate all they want, but cannot integrate Potato into a commecial product. 
 
 <details>
 <summary>License FAQ</summary>
@@ -208,7 +208,7 @@ Potato is dual-licensed under [Polyform Shield](LICENSE) for non-commercial use.
 | Use Case | Allowed? |
 |----------|----------|
 | Academic research | Yes |
-| Internal company annotation | Yes |
+| Company annotation | Yes |
 | Fork for personal development | Yes |
 | Integration in open-source pipelines | Yes |
 | Commercial annotation service | Contact us |
