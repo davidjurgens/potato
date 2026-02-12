@@ -109,60 +109,36 @@ class TestImageAnnotationSelenium(unittest.TestCase):
             self.driver.quit()
 
     def _register_user(self):
-        """Register a test user."""
-        self.driver.get(f"{self.server.base_url}/")
-
-        WebDriverWait(self.driver, 10).until(
-            EC.presence_of_element_located((By.ID, "login-tab"))
-        )
-
-        # Switch to registration tab
-        register_tab = self.driver.find_element(By.ID, "register-tab")
-        register_tab.click()
-
-        WebDriverWait(self.driver, 10).until(
-            EC.visibility_of_element_located((By.ID, "register-content"))
-        )
-
-        # Fill registration form
-        username_field = self.driver.find_element(By.ID, "register-email")
-        password_field = self.driver.find_element(By.ID, "register-pass")
-        username_field.clear()
-        password_field.clear()
-        username_field.send_keys(self.test_user)
-        password_field.send_keys(self.test_password)
-
-        # Submit
-        register_form = self.driver.find_element(By.CSS_SELECTOR, "#register-content form")
-        register_form.submit()
-        time.sleep(0.05)
+        """Register a test user (no-op with simple login)."""
+        # With require_password=False, registration happens automatically on first login
+        pass
 
     def _login_user(self):
         """Login the test user."""
         if "/annotate" not in self.driver.current_url:
             self.driver.get(f"{self.server.base_url}/")
 
-            WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.ID, "login-tab"))
-            )
-
-            login_tab = self.driver.find_element(By.ID, "login-tab")
-            login_tab.click()
-
-            WebDriverWait(self.driver, 10).until(
-                EC.visibility_of_element_located((By.ID, "login-content"))
-            )
-
-            username_field = self.driver.find_element(By.ID, "login-email")
-            password_field = self.driver.find_element(By.ID, "login-pass")
-            username_field.clear()
-            password_field.clear()
-            username_field.send_keys(self.test_user)
-            password_field.send_keys(self.test_password)
-
-            login_form = self.driver.find_element(By.CSS_SELECTOR, "#login-content form")
-            login_form.submit()
-            time.sleep(0.05)
+            # Wait for login form with login-email input
+            try:
+                email_input = WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.ID, "login-email"))
+                )
+                email_input.clear()
+                email_input.send_keys(self.test_user)
+                submit_btn = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+                submit_btn.click()
+                time.sleep(0.5)
+            except (NoSuchElementException, TimeoutException):
+                # Try alternative selector
+                try:
+                    email_input = self.driver.find_element(By.NAME, "email")
+                    email_input.clear()
+                    email_input.send_keys(self.test_user)
+                    submit_btn = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+                    submit_btn.click()
+                    time.sleep(0.5)
+                except NoSuchElementException:
+                    pass  # May already be logged in
 
     def test_image_annotation_container_loads(self):
         """Test that the image annotation container loads properly."""
@@ -438,26 +414,27 @@ class TestImageAnnotationInteraction(unittest.TestCase):
         """Register and login a test user."""
         self.driver.get(f"{self.server.base_url}/")
 
-        WebDriverWait(self.driver, 10).until(
-            EC.presence_of_element_located((By.ID, "login-tab"))
-        )
-
-        # Register
-        register_tab = self.driver.find_element(By.ID, "register-tab")
-        register_tab.click()
-
-        WebDriverWait(self.driver, 10).until(
-            EC.visibility_of_element_located((By.ID, "register-content"))
-        )
-
-        username_field = self.driver.find_element(By.ID, "register-email")
-        password_field = self.driver.find_element(By.ID, "register-pass")
-        username_field.send_keys(self.test_user)
-        password_field.send_keys(self.test_password)
-
-        register_form = self.driver.find_element(By.CSS_SELECTOR, "#register-content form")
-        register_form.submit()
-        time.sleep(0.05)
+        # Wait for login form with login-email input
+        try:
+            email_input = WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.ID, "login-email"))
+            )
+            email_input.clear()
+            email_input.send_keys(self.test_user)
+            submit_btn = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+            submit_btn.click()
+            time.sleep(0.5)
+        except (NoSuchElementException, TimeoutException):
+            # Try alternative selector
+            try:
+                email_input = self.driver.find_element(By.NAME, "email")
+                email_input.clear()
+                email_input.send_keys(self.test_user)
+                submit_btn = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+                submit_btn.click()
+                time.sleep(0.5)
+            except NoSuchElementException:
+                pass  # May already be logged in
 
     def test_zoom_in_button_click(self):
         """Test clicking the zoom in button."""
