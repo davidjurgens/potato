@@ -31,12 +31,16 @@ Potato supports annotation across multiple data types:
 | **Video** | Frame-by-frame annotation, temporal segments, playback sync ([docs](docs/video_annotation.md)) |
 | **Images** | Region labeling, classification, comparison tasks ([docs](docs/image_annotation.md)) |
 | **Dialogue** | Turn-level annotation, conversation threading |
+| **Documents** | PDF, Word, Markdown with coordinate mapping ([docs](docs/format_support.md)) |
+| **Code** | Syntax-highlighted source code annotation ([docs](docs/format_support.md)) |
+| **Spreadsheets** | Row/cell-level tabular data annotation ([docs](docs/format_support.md)) |
 
 ### Annotation Schemes
 - **Classification**: Radio buttons, checkboxes, Likert scales
 - **Span Annotation**: Highlight and label text spans with keyboard shortcuts
 - **Pairwise Comparison**: Side-by-side comparisons, best-worst scaling
 - **Free Text**: Text boxes with validation and character limits
+- **Conditional Logic**: Show/hide questions based on prior answers ([docs](docs/conditional_logic.md))
 
 ### AI-Powered Assistance
 - **Label Suggestions**: LLM-powered pre-annotations to speed up work
@@ -102,6 +106,8 @@ Then open [http://localhost:8000](http://localhost:8000) in your browser.
 | [Getting Started](https://potatoannotator.readthedocs.io/en/latest/usage/) | Installation and first project setup |
 | [Configuration Guide](https://potatoannotator.readthedocs.io/en/latest/schemas_and_templates/) | YAML configuration options |
 | [Annotation Schemas](https://potatoannotator.readthedocs.io/en/latest/schemas_and_templates/) | Radio, checkbox, span, likert, and more |
+| [Conditional Logic](docs/conditional_logic.md) | Show/hide questions based on answers |
+| [Format Support](docs/format_support.md) | PDF, Word, code, spreadsheet annotation |
 | [Data Formats](https://potatoannotator.readthedocs.io/en/latest/data_format/) | Input/output data specifications |
 | [AI Support](docs/ai_support.md) | LLM integration for label suggestions |
 | [Quality Control](docs/quality_control.md) | Attention checks and gold standards |
@@ -135,6 +141,14 @@ Looking for real-world examples? The **[Potato Showcase](https://github.com/davi
 See [all example projects](https://potatoannotator.readthedocs.io/en/latest/example-projects/) in the documentation.
 
 ---
+
+## What's New in v2.1
+
+- **Conditional Logic**: Show/hide annotation questions based on prior answers
+- **Document Formats**: PDF, Word, Markdown annotation with coordinate mapping
+- **Code Annotation**: Syntax-highlighted source code with line-level spans
+- **Spreadsheet Support**: Row and cell-level tabular data annotation
+- **Bounding Box Annotation**: Draw boxes on PDFs and documents
 
 ## What's New in v2.0
 

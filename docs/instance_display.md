@@ -62,6 +62,12 @@ instance_display:
 | `audio` | Audio player | No |
 | `dialogue` | Conversation turns | Yes |
 | `pairwise` | Side-by-side comparison | No |
+| `code` | Syntax-highlighted source code | Yes |
+| `spreadsheet` | Tabular data (Excel/CSV) | Yes (row/cell) |
+| `document` | Rich documents (Word, Markdown, HTML) | Yes |
+| `pdf` | PDF documents with page controls | Yes |
+
+For detailed configuration of document formats (`code`, `spreadsheet`, `document`, `pdf`), see the [Extended Format Support](format_support.md) guide.
 
 ## Display Type Options
 

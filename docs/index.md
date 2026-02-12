@@ -15,9 +15,11 @@
 
 - [Schema Gallery](schemas_and_templates.md) - All annotation types with examples
 - [Instance Display](instance_display.md) - Display images, video, audio, and text separately from annotation collection
+- [Conditional Logic](conditional_logic.md) - Show/hide questions based on prior answers
 - [Image Annotation](image_annotation.md) - Bounding boxes, polygons, and landmarks
 - [Audio Annotation](audio_annotation.md) - Audio segmentation with waveform visualization
 - [Video Annotation](video_annotation.md) - Frame-by-frame video labeling
+- [Format Support](format_support.md) - PDF, Word, code, and spreadsheet annotation
 - [Span Linking](span_linking.md) - Relationship linking between text spans
 
 ## Workflow & Quality
@@ -81,6 +83,8 @@
 | Set up a basic annotation task | [Quick Start](quick-start.md) |
 | Choose an annotation type | [Schema Gallery](schemas_and_templates.md) |
 | Display images/video with radio buttons | [Instance Display](instance_display.md) |
+| Show/hide questions based on answers | [Conditional Logic](conditional_logic.md) |
+| Annotate PDFs, Word docs, or code | [Format Support](format_support.md) |
 | Configure for MTurk | [MTurk Integration](mturk_integration.md) |
 | Configure for Prolific | [Crowdsourcing Guide](crowdsourcing.md#prolific-integration) |
 | Monitor annotation progress | [Admin Dashboard](admin_dashboard.md) |
