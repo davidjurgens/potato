@@ -1,0 +1,47 @@
+port: 9002
+server_name: potato annotator
+annotation_task_name: Pairwise Scale Comparison Example
+task_dir: .
+output_annotation_dir: annotation_output/simple-pairwise-scale/
+output_annotation_format: tsv
+annotation_codebook_url: ''
+data_files:
+- data/pairwise-example.json
+item_properties:
+  id_key: id
+  text_key: text
+list_as_text:
+  text_list_prefix_type: alphabet
+user_config:
+  allow_all_users: true
+  users: []
+jumping_to_id_disabled: true
+surveyflow:
+  'on': false
+automatic_assignment:
+  'on': false
+alert_time_each_instance: 10000000
+horizontal_key_bindings: true
+annotation_schemes:
+# Scale mode pairwise comparison with slider
+- annotation_type: pairwise
+  name: preference_scale
+  description: Rate how much more intimate one tweet is compared to the other
+  mode: scale
+  items_key: text
+  show_labels: true
+  labels:
+    - "Tweet A"
+    - "Tweet B"
+  scale:
+    min: -3
+    max: 3
+    step: 1
+    default: 0
+    labels:
+      min: "A is much more intimate"
+      max: "B is much more intimate"
+      center: "Equal / Hard to tell"
+  label_requirement:
+    required: true
+site_dir: default

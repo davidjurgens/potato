@@ -21,7 +21,8 @@ class TestSchemaRegistryCompleteness:
         config_valid_types = [
             'radio', 'multiselect', 'likert', 'text', 'slider', 'span',
             'select', 'number', 'multirate', 'pure_display', 'video',
-            'image_annotation', 'audio_annotation', 'video_annotation', 'span_link'
+            'image_annotation', 'audio_annotation', 'video_annotation', 'span_link',
+            'pairwise'
         ]
 
         registry_types = schema_registry.get_supported_types()
@@ -37,7 +38,8 @@ class TestSchemaRegistryCompleteness:
         config_valid_types = [
             'radio', 'multiselect', 'likert', 'text', 'slider', 'span',
             'select', 'number', 'multirate', 'pure_display', 'video',
-            'image_annotation', 'audio_annotation', 'video_annotation', 'span_link'
+            'image_annotation', 'audio_annotation', 'video_annotation', 'span_link',
+            'pairwise'
         ]
 
         registry_types = schema_registry.get_supported_types()

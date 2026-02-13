@@ -2718,3 +2718,281 @@ fieldset[schema] {
   font-style: italic;
 }
 
+/* ========================================
+   PAIRWISE ANNOTATION SCHEMA STYLES
+   ======================================== */
+
+/* Pairwise annotation form container */
+.annotation-form.pairwise {
+  margin-bottom: 1.5rem;
+}
+
+.annotation-form.pairwise fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.pairwise-title {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--foreground);
+  margin-bottom: 1rem;
+  padding: 0;
+}
+
+/* Binary mode: Clickable tiles */
+.pairwise-selection-container {
+  display: flex;
+  gap: 16px;
+  margin: 16px 0;
+}
+
+.pairwise-tile {
+  flex: 1;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  background-color: var(--card);
+  min-height: 100px;
+}
+
+.pairwise-tile:hover {
+  border-color: var(--primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.pairwise-tile:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.2);
+}
+
+.pairwise-tile.selected {
+  border-color: var(--primary);
+  background-color: rgba(110, 86, 207, 0.05);
+  box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.15);
+}
+
+.pairwise-tile.selected::after {
+  content: '\2713';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  background-color: var(--primary);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.pairwise-tile-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.pairwise-tile-label {
+  font-weight: 700;
+  font-size: 1.25rem;
+  color: var(--primary);
+}
+
+.pairwise-tile-shortcut {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  background-color: var(--muted);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.pairwise-tile-content {
+  line-height: 1.6;
+  color: var(--foreground);
+  font-size: 0.95rem;
+}
+
+/* Extra options (tie/neither buttons) */
+.pairwise-extra-options {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.pairwise-tie-btn,
+.pairwise-neither-btn {
+  padding: 10px 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--background);
+  cursor: pointer;
+  color: var(--foreground);
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+
+.pairwise-tie-btn:hover,
+.pairwise-neither-btn:hover {
+  background: var(--muted);
+  border-color: var(--primary);
+}
+
+.pairwise-tie-btn:focus,
+.pairwise-neither-btn:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.2);
+}
+
+.pairwise-tie-btn.selected,
+.pairwise-neither-btn.selected {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+/* Scale mode: Slider between items */
+.pairwise-scale-container {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  margin: 16px 0;
+}
+
+.pairwise-scale-item {
+  flex: 1;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background-color: var(--card);
+}
+
+.pairwise-scale-item .pairwise-tile-label {
+  margin-bottom: 8px;
+  font-size: 1rem;
+}
+
+.pairwise-scale-item .pairwise-tile-content {
+  font-size: 0.9rem;
+}
+
+.pairwise-scale-slider-container {
+  flex: 0 0 200px;
+  padding: 16px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.pairwise-scale-labels {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  margin-bottom: 8px;
+}
+
+.pairwise-scale-label-min {
+  text-align: left;
+}
+
+.pairwise-scale-label-center {
+  text-align: center;
+}
+
+.pairwise-scale-label-max {
+  text-align: right;
+}
+
+.pairwise-scale-slider {
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--muted);
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.pairwise-scale-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--primary);
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: transform 0.1s ease;
+}
+
+.pairwise-scale-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+
+.pairwise-scale-slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--primary);
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.pairwise-scale-value-display {
+  margin-top: 8px;
+  font-weight: 600;
+  font-size: 1.25rem;
+  color: var(--primary);
+}
+
+.pairwise-scale-ticks {
+  position: relative;
+  width: 100%;
+  height: 20px;
+  margin-top: 4px;
+}
+
+.pairwise-scale-tick {
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: 0.7rem;
+  color: var(--muted-foreground);
+}
+
+.pairwise-scale-tick.center {
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+/* Responsive: Stack tiles vertically on mobile */
+@media (max-width: 768px) {
+  .pairwise-selection-container {
+    flex-direction: column;
+  }
+
+  .pairwise-scale-container {
+    flex-direction: column;
+  }
+
+  .pairwise-scale-slider-container {
+    flex: 1;
+    width: 100%;
+    order: -1; /* Put slider at top on mobile */
+  }
+}
+

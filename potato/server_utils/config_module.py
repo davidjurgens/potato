@@ -183,6 +183,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Validate diversity ordering configuration if present
     validate_diversity_config(config_data)
 
+    # Validate embedding visualization configuration if present
+    validate_embedding_visualization_config(config_data)
+
     # Validate adjudication configuration if present
     if 'adjudication' in config_data:
         validate_adjudication_config(config_data)
@@ -300,6 +303,40 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
 
     # Validate keyword_highlight is not enabled for image-based tasks
     _validate_keyword_highlight_for_images(config_data)
+
+    # Validate display_logic cross-references (schema references and circular dependencies)
+    all_schemes = _collect_all_annotation_schemes(config_data)
+    if all_schemes:
+        validate_display_logic_references(all_schemes)
+
+
+def _collect_all_annotation_schemes(config_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Collect all annotation schemes from config, whether top-level or in phases.
+
+    Args:
+        config_data: The configuration data
+
+    Returns:
+        List of all annotation scheme dictionaries
+    """
+    schemes = []
+
+    if 'annotation_schemes' in config_data:
+        schemes.extend(config_data['annotation_schemes'])
+    elif 'phases' in config_data:
+        phases = config_data['phases']
+        if isinstance(phases, list):
+            for phase in phases:
+                if 'annotation_schemes' in phase:
+                    schemes.extend(phase['annotation_schemes'])
+        elif isinstance(phases, dict):
+            for phase_name, phase in phases.items():
+                if phase_name != 'order' and isinstance(phase, dict):
+                    if 'annotation_schemes' in phase:
+                        schemes.extend(phase['annotation_schemes'])
+
+    return schemes
 
 
 def _validate_keyword_highlight_for_images(config_data: Dict[str, Any]) -> None:
@@ -488,7 +525,7 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
 
     # Validate annotation_type
     # Note: Keep in sync with potato.server_utils.schemas.registry
-    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'span_link', 'select', 'number', 'multirate', 'pure_display', 'video', 'image_annotation', 'audio_annotation', 'video_annotation']
+    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'span_link', 'select', 'number', 'multirate', 'pure_display', 'video', 'image_annotation', 'audio_annotation', 'video_annotation', 'pairwise']
     if scheme['annotation_type'] not in valid_types:
         raise ConfigValidationError(f"{path}.annotation_type must be one of: {', '.join(valid_types)}")
 
@@ -647,6 +684,180 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
         if 'video_fps' in scheme:
             if not isinstance(scheme['video_fps'], (int, float)) or scheme['video_fps'] <= 0:
                 raise ConfigValidationError(f"{path}.video_fps must be a positive number")
+
+    elif annotation_type == 'pairwise':
+        # Validate mode
+        valid_modes = ['binary', 'scale']
+        mode = scheme.get('mode', 'binary')
+        if mode not in valid_modes:
+            raise ConfigValidationError(f"{path}.mode must be one of: {valid_modes}")
+
+        # Validate labels if provided
+        if 'labels' in scheme:
+            if not isinstance(scheme['labels'], list):
+                raise ConfigValidationError(f"{path}.labels must be a list")
+            if len(scheme['labels']) < 2:
+                raise ConfigValidationError(f"{path}.labels must have at least 2 items (for A and B)")
+
+        # Validate scale configuration for scale mode
+        if mode == 'scale':
+            scale = scheme.get('scale', {})
+            if not isinstance(scale, dict):
+                raise ConfigValidationError(f"{path}.scale must be a dictionary")
+
+            # Validate min/max values
+            min_val = scale.get('min', -3)
+            max_val = scale.get('max', 3)
+            if not isinstance(min_val, (int, float)) or not isinstance(max_val, (int, float)):
+                raise ConfigValidationError(f"{path}.scale.min and scale.max must be numbers")
+            if min_val >= max_val:
+                raise ConfigValidationError(f"{path}.scale.min must be less than scale.max")
+
+            # Validate step
+            step = scale.get('step', 1)
+            if not isinstance(step, (int, float)) or step <= 0:
+                raise ConfigValidationError(f"{path}.scale.step must be a positive number")
+
+            # Validate scale labels if provided
+            if 'labels' in scale:
+                scale_labels = scale['labels']
+                if not isinstance(scale_labels, dict):
+                    raise ConfigValidationError(f"{path}.scale.labels must be a dictionary")
+
+    # Validate display_logic if present
+    if 'display_logic' in scheme:
+        validate_display_logic_structure(scheme['display_logic'], path)
+
+
+def validate_display_logic_structure(display_logic: Dict[str, Any], path: str) -> None:
+    """
+    Validate the structure of a display_logic configuration block.
+
+    This validates the syntax and structure of a single display_logic block.
+    Cross-schema validation (checking referenced schemas exist) is done separately
+    in validate_display_logic_references().
+
+    Args:
+        display_logic: The display_logic configuration
+        path: Path in the config for error reporting
+
+    Raises:
+        ConfigValidationError: If the display_logic is invalid
+    """
+    from potato.server_utils.display_logic import SUPPORTED_OPERATORS
+
+    if not isinstance(display_logic, dict):
+        raise ConfigValidationError(f"{path}.display_logic must be a dictionary")
+
+    # Must have show_when
+    if 'show_when' not in display_logic:
+        raise ConfigValidationError(f"{path}.display_logic must have 'show_when' field")
+
+    show_when = display_logic['show_when']
+    if not isinstance(show_when, list):
+        raise ConfigValidationError(f"{path}.display_logic.show_when must be a list of conditions")
+
+    if len(show_when) == 0:
+        raise ConfigValidationError(f"{path}.display_logic.show_when must have at least one condition")
+
+    # Validate each condition
+    for i, condition in enumerate(show_when):
+        cond_path = f"{path}.display_logic.show_when[{i}]"
+
+        if not isinstance(condition, dict):
+            raise ConfigValidationError(f"{cond_path} must be a dictionary")
+
+        # Required fields
+        if 'schema' not in condition:
+            raise ConfigValidationError(f"{cond_path} missing required 'schema' field")
+
+        if 'operator' not in condition:
+            raise ConfigValidationError(f"{cond_path} missing required 'operator' field")
+
+        operator = condition['operator']
+        if operator not in SUPPORTED_OPERATORS:
+            raise ConfigValidationError(
+                f"{cond_path}.operator '{operator}' is not supported. "
+                f"Valid operators: {list(SUPPORTED_OPERATORS.keys())}"
+            )
+
+        # Validate operator-specific value requirements
+        value = condition.get('value')
+
+        # Operators that don't need a value
+        if operator in ('empty', 'not_empty'):
+            pass  # No value required
+        # Range operators need [min, max]
+        elif operator in ('in_range', 'not_in_range', 'length_in_range'):
+            if not isinstance(value, (list, tuple)):
+                raise ConfigValidationError(
+                    f"{cond_path}: operator '{operator}' requires a range value as [min, max]"
+                )
+            if len(value) != 2:
+                raise ConfigValidationError(
+                    f"{cond_path}: range value must have exactly 2 elements [min, max]"
+                )
+            try:
+                min_val, max_val = float(value[0]), float(value[1])
+                if min_val > max_val:
+                    raise ConfigValidationError(
+                        f"{cond_path}: range min ({min_val}) is greater than max ({max_val})"
+                    )
+            except (ValueError, TypeError):
+                raise ConfigValidationError(f"{cond_path}: range values must be numeric")
+        # Numeric operators need numeric values
+        elif operator in ('gt', 'gte', 'lt', 'lte', 'length_gt', 'length_lt'):
+            if value is None:
+                raise ConfigValidationError(f"{cond_path}: operator '{operator}' requires a value")
+            try:
+                float(value)
+            except (ValueError, TypeError):
+                raise ConfigValidationError(
+                    f"{cond_path}: operator '{operator}' requires a numeric value"
+                )
+        # Regex operator needs a valid pattern
+        elif operator == 'matches':
+            if value is None:
+                raise ConfigValidationError(f"{cond_path}: operator 'matches' requires a regex pattern")
+            try:
+                import re
+                re.compile(value)
+            except re.error as e:
+                raise ConfigValidationError(f"{cond_path}: invalid regex pattern '{value}': {e}")
+        # Other operators just need a non-None value
+        elif value is None:
+            raise ConfigValidationError(f"{cond_path}: operator '{operator}' requires a value")
+
+    # Validate logic field if present
+    logic = display_logic.get('logic', 'all')
+    if logic not in ('all', 'any'):
+        raise ConfigValidationError(
+            f"{path}.display_logic.logic must be 'all' or 'any', got '{logic}'"
+        )
+
+
+def validate_display_logic_references(annotation_schemes: List[Dict[str, Any]]) -> None:
+    """
+    Validate that all display_logic references point to existing schemas
+    and check for circular dependencies.
+
+    This is called after all annotation schemes have been validated individually.
+
+    Args:
+        annotation_schemes: List of annotation scheme configurations
+
+    Raises:
+        ConfigValidationError: If there are invalid references or circular dependencies
+    """
+    from potato.server_utils.display_logic import validate_display_logic_config
+
+    # Use the DisplayLogicValidator for comprehensive validation
+    is_valid, errors = validate_display_logic_config(annotation_schemes)
+
+    if not is_valid:
+        # Format errors nicely
+        error_msg = "Display logic validation errors:\n" + "\n".join(f"  - {e}" for e in errors)
+        raise ConfigValidationError(error_msg)
 
 
 def validate_server_config(config_data: Dict[str, Any]) -> None:
@@ -1625,6 +1836,103 @@ def validate_diversity_config(config_data: Dict[str, Any]) -> None:
         if cache_dir is not None and (not isinstance(cache_dir, str) or not cache_dir.strip()):
             raise ConfigValidationError(
                 "diversity_ordering.cache_dir must be a non-empty string or null"
+            )
+
+
+def validate_embedding_visualization_config(config_data: Dict[str, Any]) -> None:
+    """
+    Validate embedding visualization configuration.
+
+    This function validates the embedding_visualization section which controls
+    the admin dashboard 2D visualization of embeddings.
+
+    Args:
+        config_data: The configuration data
+
+    Raises:
+        ConfigValidationError: If embedding visualization configuration is invalid
+    """
+    if 'embedding_visualization' not in config_data:
+        return  # Embedding visualization is optional
+
+    ev = config_data['embedding_visualization']
+    if not isinstance(ev, dict):
+        raise ConfigValidationError("embedding_visualization must be a dictionary")
+
+    # Validate enabled flag
+    if 'enabled' in ev:
+        if not isinstance(ev['enabled'], bool):
+            raise ConfigValidationError("embedding_visualization.enabled must be a boolean")
+
+    # If not enabled, skip further validation
+    if not ev.get('enabled', True):
+        return
+
+    # Validate sample_size
+    if 'sample_size' in ev:
+        sample_size = ev['sample_size']
+        if not isinstance(sample_size, int) or sample_size < 1:
+            raise ConfigValidationError(
+                "embedding_visualization.sample_size must be a positive integer"
+            )
+
+    # Validate include_all_annotated
+    if 'include_all_annotated' in ev:
+        if not isinstance(ev['include_all_annotated'], bool):
+            raise ConfigValidationError(
+                "embedding_visualization.include_all_annotated must be a boolean"
+            )
+
+    # Validate embedding_model
+    if 'embedding_model' in ev:
+        if not isinstance(ev['embedding_model'], str) or not ev['embedding_model'].strip():
+            raise ConfigValidationError(
+                "embedding_visualization.embedding_model must be a non-empty string"
+            )
+
+    # Validate image_embedding_model
+    if 'image_embedding_model' in ev:
+        if not isinstance(ev['image_embedding_model'], str) or not ev['image_embedding_model'].strip():
+            raise ConfigValidationError(
+                "embedding_visualization.image_embedding_model must be a non-empty string"
+            )
+
+    # Validate UMAP configuration
+    if 'umap' in ev:
+        umap_config = ev['umap']
+        if not isinstance(umap_config, dict):
+            raise ConfigValidationError("embedding_visualization.umap must be a dictionary")
+
+        # Validate n_neighbors
+        if 'n_neighbors' in umap_config:
+            n_neighbors = umap_config['n_neighbors']
+            if not isinstance(n_neighbors, int) or n_neighbors < 2:
+                raise ConfigValidationError(
+                    "embedding_visualization.umap.n_neighbors must be an integer >= 2"
+                )
+
+        # Validate min_dist
+        if 'min_dist' in umap_config:
+            min_dist = umap_config['min_dist']
+            if not isinstance(min_dist, (int, float)) or min_dist < 0 or min_dist > 1:
+                raise ConfigValidationError(
+                    "embedding_visualization.umap.min_dist must be a number between 0 and 1"
+                )
+
+        # Validate metric
+        if 'metric' in umap_config:
+            valid_metrics = ['cosine', 'euclidean', 'manhattan', 'correlation']
+            if umap_config['metric'] not in valid_metrics:
+                raise ConfigValidationError(
+                    f"embedding_visualization.umap.metric must be one of: {valid_metrics}"
+                )
+
+    # Validate label_source
+    if 'label_source' in ev:
+        valid_sources = ['mace', 'majority']
+        if ev['label_source'] not in valid_sources:
+            raise ConfigValidationError(
+                f"embedding_visualization.label_source must be one of: {valid_sources}"
             )
 
 

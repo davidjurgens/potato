@@ -37,15 +37,19 @@ automatic_assignment:
 alert_time_each_instance: 10000000
 horizontal_key_bindings: true
 annotation_schemes:
-- annotation_type: radio
-  name: pairwise_comparison
-  description: Which tweet is more intimate
-  horizontal: false
+# Binary mode pairwise comparison with clickable tiles
+- annotation_type: pairwise
+  name: preference
+  description: Which tweet is more intimate?
+  mode: binary
+  items_key: text
+  show_labels: true
   labels:
-  - A is more intimate
-  - B is more intimate
-  - Hard to tell
+    - "Option A"
+    - "Option B"
+  allow_tie: true
+  tie_label: "Hard to tell"
+  sequential_key_binding: true
   label_requirement:
     required: true
-  sequential_key_binding: true
 site_dir: default

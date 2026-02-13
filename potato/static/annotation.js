@@ -133,6 +133,12 @@ document.addEventListener('DOMContentLoaded', function () {
     validateRequiredFields();
     // Initialize span manager integration
     initializeSpanManagerIntegration();
+    // Initialize display logic for conditional schemas
+    if (typeof initDisplayLogic === 'function') {
+        initDisplayLogic();
+    }
+    // Initialize pairwise annotation
+    initPairwiseAnnotation();
 });
 
 /**
@@ -298,6 +304,26 @@ function setupEventListeners() {
                 if (radio.onclick) {
                     radio.onclick.apply(radio);
                 }
+                return;
+            }
+        }
+
+        // Check pairwise tiles (binary mode)
+        const pairwiseTiles = document.querySelectorAll('.pairwise-tile');
+        for (const tile of pairwiseTiles) {
+            const dataKey = tile.getAttribute('data-key');
+            if (dataKey && key === dataKey) {
+                selectPairwiseTile(tile);
+                return;
+            }
+        }
+
+        // Check pairwise tie/neither buttons
+        const pairwiseButtons = document.querySelectorAll('.pairwise-tie-btn, .pairwise-neither-btn');
+        for (const btn of pairwiseButtons) {
+            const dataKey = btn.getAttribute('data-key');
+            if (dataKey && key === dataKey) {
+                selectPairwiseOption(btn);
                 return;
             }
         }
@@ -1564,6 +1590,11 @@ function handleInputChange(element) {
     updateAnnotation(schema, labelName, value);
     debugLog(`Updated annotation: ${schema}.${labelName} = ${value}`);
 
+    // Evaluate display logic for conditional schemas
+    if (displayLogicManager) {
+        displayLogicManager.evaluateForSchema(schema);
+    }
+
     // Auto-save
     clearTimeout(textSaveTimer);
     textSaveTimer = setTimeout(() => {
@@ -1663,6 +1694,9 @@ function populateInputValues() {
             debugLog(`Populated number ${input.id} with value:`, currentAnnotations[schema][labelName]);
         }
     });
+
+    // Populate pairwise annotations
+    restorePairwiseAnnotations();
 
     validateRequiredFields();
 }
@@ -3160,3 +3194,237 @@ window.testAggressiveFirefoxFix = testAggressiveFirefoxFix;
 window.navigateToNext = navigateToNext;
 window.navigateToPrevious = navigateToPrevious;
 window.loadCurrentInstance = loadCurrentInstance;
+
+// ========================================
+// PAIRWISE ANNOTATION HANDLERS
+// ========================================
+
+/**
+ * Initialize pairwise annotation interface.
+ * Called after DOMContentLoaded and after forms are generated.
+ */
+function initPairwiseAnnotation() {
+    debugLog('[PAIRWISE] Initializing pairwise annotation');
+
+    // Setup tile click handlers for binary mode
+    document.querySelectorAll('.pairwise-tile').forEach(tile => {
+        tile.addEventListener('click', function() {
+            selectPairwiseTile(this);
+        });
+
+        // Keyboard support (Enter/Space)
+        tile.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                selectPairwiseTile(this);
+            }
+        });
+    });
+
+    // Setup tie/neither button handlers
+    document.querySelectorAll('.pairwise-tie-btn, .pairwise-neither-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            selectPairwiseOption(this);
+        });
+    });
+
+    // Populate pairwise tile content from instance data
+    populatePairwiseTileContent();
+
+    debugLog('[PAIRWISE] Initialization complete');
+}
+
+/**
+ * Populate pairwise tile content from the current instance data.
+ */
+function populatePairwiseTileContent() {
+    const pairwiseForms = document.querySelectorAll('.annotation-form.pairwise');
+
+    pairwiseForms.forEach(form => {
+        const itemsKey = form.getAttribute('data-items-key') || 'text';
+
+        // Get items from current instance
+        let items = null;
+
+        // First check if items are in the rendered instance text (list format)
+        const instanceText = document.getElementById('instance-text');
+        if (instanceText) {
+            // Check if the text contains list_as_text rendered items
+            const listItems = instanceText.querySelectorAll('[data-item-index]');
+            if (listItems.length >= 2) {
+                items = Array.from(listItems).map(el => el.textContent || el.innerHTML);
+            }
+        }
+
+        // If not found in rendered HTML, try to get from window.currentInstanceData if available
+        if (!items && window.currentInstanceData && window.currentInstanceData[itemsKey]) {
+            const data = window.currentInstanceData[itemsKey];
+            if (Array.isArray(data) && data.length >= 2) {
+                items = data;
+            }
+        }
+
+        // Populate tile content
+        if (items && items.length >= 2) {
+            const tileContents = form.querySelectorAll('.pairwise-tile-content');
+            tileContents.forEach((content, index) => {
+                if (index < items.length) {
+                    content.textContent = items[index];
+                }
+            });
+
+            // Also populate scale mode items
+            const scaleContents = form.querySelectorAll('.pairwise-scale-item .pairwise-tile-content');
+            scaleContents.forEach((content, index) => {
+                if (index < items.length) {
+                    content.textContent = items[index];
+                }
+            });
+        }
+    });
+}
+
+/**
+ * Select a pairwise tile (binary mode).
+ * @param {HTMLElement} tile - The tile element clicked
+ */
+function selectPairwiseTile(tile) {
+    const schema = tile.getAttribute('data-schema');
+    const value = tile.getAttribute('data-value');
+    const form = tile.closest('form');
+
+    if (!form) return;
+
+    debugLog(`[PAIRWISE] Selecting tile: schema=${schema}, value=${value}`);
+
+    // Deselect all tiles and buttons in this form
+    form.querySelectorAll('.pairwise-tile').forEach(t => t.classList.remove('selected'));
+    form.querySelectorAll('.pairwise-tie-btn, .pairwise-neither-btn').forEach(b => b.classList.remove('selected'));
+
+    // Select this tile
+    tile.classList.add('selected');
+
+    // Update hidden input
+    const hiddenInput = form.querySelector('.pairwise-value');
+    if (hiddenInput) {
+        hiddenInput.value = value;
+        // Trigger annotation save
+        registerAnnotation(hiddenInput);
+        // Trigger change event for validation
+        hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    // Update validation
+    validateRequiredFields();
+}
+
+/**
+ * Select a pairwise option button (tie/neither).
+ * @param {HTMLElement} btn - The button element clicked
+ */
+function selectPairwiseOption(btn) {
+    const schema = btn.getAttribute('data-schema');
+    const value = btn.getAttribute('data-value');
+    const form = btn.closest('form');
+
+    if (!form) return;
+
+    debugLog(`[PAIRWISE] Selecting option: schema=${schema}, value=${value}`);
+
+    // Deselect all tiles and buttons in this form
+    form.querySelectorAll('.pairwise-tile').forEach(t => t.classList.remove('selected'));
+    form.querySelectorAll('.pairwise-tie-btn, .pairwise-neither-btn').forEach(b => b.classList.remove('selected'));
+
+    // Select this button
+    btn.classList.add('selected');
+
+    // Update hidden input
+    const hiddenInput = form.querySelector('.pairwise-value');
+    if (hiddenInput) {
+        hiddenInput.value = value;
+        // Trigger annotation save
+        registerAnnotation(hiddenInput);
+        // Trigger change event for validation
+        hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    // Update validation
+    validateRequiredFields();
+}
+
+/**
+ * Update the pairwise scale display when slider value changes.
+ * @param {HTMLElement} slider - The slider input element
+ */
+function updatePairwiseScaleDisplay(slider) {
+    const form = slider.closest('form');
+    if (!form) return;
+
+    const valueDisplay = form.querySelector('.pairwise-scale-current-value');
+    if (valueDisplay) {
+        valueDisplay.textContent = slider.value;
+    }
+}
+
+/**
+ * Restore pairwise annotation state from saved annotations.
+ * Called during populateInputValues.
+ */
+function restorePairwiseAnnotations() {
+    if (!currentAnnotations) return;
+
+    debugLog('[PAIRWISE] Restoring pairwise annotations');
+
+    // Restore binary mode selections
+    document.querySelectorAll('.annotation-form.pairwise-binary').forEach(form => {
+        const hiddenInput = form.querySelector('.pairwise-value');
+        if (!hiddenInput) return;
+
+        const schema = hiddenInput.getAttribute('schema');
+        const labelName = hiddenInput.getAttribute('label_name');
+
+        if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
+            const savedValue = currentAnnotations[schema][labelName];
+            hiddenInput.value = savedValue;
+
+            // Select the appropriate tile or button
+            if (savedValue === 'tie' || savedValue === 'neither') {
+                const optionBtn = form.querySelector(`.pairwise-tie-btn[data-value="${savedValue}"], .pairwise-neither-btn[data-value="${savedValue}"]`);
+                if (optionBtn) {
+                    optionBtn.classList.add('selected');
+                }
+            } else {
+                const tile = form.querySelector(`.pairwise-tile[data-value="${savedValue}"]`);
+                if (tile) {
+                    tile.classList.add('selected');
+                }
+            }
+
+            debugLog(`[PAIRWISE] Restored binary selection: ${schema}/${labelName} = ${savedValue}`);
+        }
+    });
+
+    // Restore scale mode values
+    document.querySelectorAll('.annotation-form.pairwise-scale').forEach(form => {
+        const slider = form.querySelector('.pairwise-scale-slider');
+        if (!slider) return;
+
+        const schema = slider.getAttribute('schema');
+        const labelName = slider.getAttribute('label_name');
+
+        if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
+            const savedValue = currentAnnotations[schema][labelName];
+            slider.value = savedValue;
+            updatePairwiseScaleDisplay(slider);
+
+            debugLog(`[PAIRWISE] Restored scale value: ${schema}/${labelName} = ${savedValue}`);
+        }
+    });
+}
+
+// Export pairwise functions globally
+window.initPairwiseAnnotation = initPairwiseAnnotation;
+window.selectPairwiseTile = selectPairwiseTile;
+window.selectPairwiseOption = selectPairwiseOption;
+window.updatePairwiseScaleDisplay = updatePairwiseScaleDisplay;
+window.restorePairwiseAnnotations = restorePairwiseAnnotations;
