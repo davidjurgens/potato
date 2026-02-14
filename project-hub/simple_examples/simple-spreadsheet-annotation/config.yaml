@@ -1,0 +1,61 @@
+# Spreadsheet Row Annotation Example
+# Demonstrates annotating tabular data with row-based classification
+
+annotation_task_name: "Data Quality Annotation"
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+# Data files
+data_files:
+  - data/spreadsheet-example.json
+
+# Item properties
+item_properties:
+  id_key: id
+  text_key: description
+
+# Instance display with spreadsheet viewer
+instance_display:
+  fields:
+    - key: table_data
+      type: spreadsheet
+      label: "Data Table"
+      display_options:
+        annotation_mode: row
+        show_headers: true
+        max_height: 400
+        striped: true
+        hoverable: true
+        sortable: true
+    - key: description
+      type: text
+      label: "Task Description"
+      display_options:
+        max_height: 100
+
+# Annotation schemes
+annotation_schemes:
+  - annotation_type: multiselect
+    name: data_quality
+    description: "Select all data quality issues present in this table"
+    labels:
+      - name: missing_values
+        tooltip: "Table has missing or null values"
+      - name: inconsistent_formatting
+        tooltip: "Values have inconsistent formats (e.g., dates, numbers)"
+      - name: duplicate_rows
+        tooltip: "Table contains duplicate entries"
+      - name: outliers
+        tooltip: "Data contains obvious outliers or errors"
+      - name: no_issues
+        tooltip: "No data quality issues found"
+
+  - annotation_type: textbox
+    name: notes
+    description: "Additional notes about data quality"
+    text_box_single_line: false
+
+# User configuration
+user_config:
+  allow_all_users: true

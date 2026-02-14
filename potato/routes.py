@@ -3567,12 +3567,18 @@ def admin():
     # Store API key in session for future requests
     session['admin_api_key'] = api_key
 
+    # Check if embedding visualization is available
+    from potato.embedding_visualization import get_embedding_viz_manager
+    viz_manager = get_embedding_viz_manager()
+    embedding_viz_enabled = viz_manager is not None and viz_manager.enabled
+
     # Get basic context for the dashboard
     context = {
         "annotation_task_name": config.get("annotation_task_name", "Annotation Platform"),
         "debug_mode": config.get("debug", False),
         "admin_api_key": get_admin_api_key() or "",
         "mace_enabled": config.get("mace", {}).get("enabled", False),
+        "embedding_viz_enabled": embedding_viz_enabled,
     }
 
     return render_template("admin.html", **context)
@@ -5062,6 +5068,12 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/api/mace/predictions", "admin_api_mace_predictions", admin_api_mace_predictions, methods=["GET"])
     app.add_url_rule("/admin/api/mace/trigger", "admin_api_mace_trigger", admin_api_mace_trigger, methods=["POST"])
 
+    # Embedding visualization admin API routes
+    app.add_url_rule("/admin/api/embedding_viz/data", "admin_api_embedding_viz_data", admin_api_embedding_viz_data, methods=["GET"])
+    app.add_url_rule("/admin/api/embedding_viz/reorder", "admin_api_embedding_viz_reorder", admin_api_embedding_viz_reorder, methods=["POST"])
+    app.add_url_rule("/admin/api/embedding_viz/refresh", "admin_api_embedding_viz_refresh", admin_api_embedding_viz_refresh, methods=["POST"])
+    app.add_url_rule("/admin/api/embedding_viz/stats", "admin_api_embedding_viz_stats", admin_api_embedding_viz_stats, methods=["GET"])
+
     app.add_url_rule("/shutdown", "shutdown", shutdown, methods=["POST"])
 
 # ============================================================================
@@ -5267,6 +5279,183 @@ def admin_api_mace_trigger():
         "schemas_processed": len(results),
         "schemas": list(results.keys()),
     })
+
+
+# =============================================================================
+# Embedding Visualization API Endpoints
+# =============================================================================
+
+@app.route('/admin/api/embedding_viz/data', methods=['GET'])
+def admin_api_embedding_viz_data():
+    """
+    Get visualization data for the embedding scatter plot.
+    Admin-only endpoint requiring API key.
+
+    Query Parameters:
+        force_refresh: If "true", force recomputation of UMAP projection
+
+    Returns:
+        JSON with points, labels, label_colors, and stats
+    """
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.embedding_visualization import get_embedding_viz_manager
+
+    viz_manager = get_embedding_viz_manager()
+    if not viz_manager:
+        return jsonify({
+            "error": "Embedding visualization not initialized. "
+                     "Ensure diversity_ordering is enabled in config."
+        }), 400
+
+    if not viz_manager.enabled:
+        return jsonify({
+            "error": "Embedding visualization disabled. "
+                     "Install umap-learn: pip install umap-learn"
+        }), 400
+
+    try:
+        force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
+        data = viz_manager.get_visualization_data(force_refresh=force_refresh)
+
+        # Convert to JSON-serializable format
+        points_json = []
+        for p in data.points:
+            points_json.append({
+                "instance_id": p.instance_id,
+                "x": p.x,
+                "y": p.y,
+                "label": p.label,
+                "label_source": p.label_source,
+                "preview": p.preview,
+                "preview_type": p.preview_type,
+                "annotated": p.annotated,
+                "annotation_count": p.annotation_count
+            })
+
+        return jsonify({
+            "points": points_json,
+            "labels": data.labels,
+            "label_colors": data.label_colors,
+            "stats": data.stats
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting embedding visualization data: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/admin/api/embedding_viz/reorder', methods=['POST'])
+def admin_api_embedding_viz_reorder():
+    """
+    Reorder the annotation queue based on selected instances.
+    Admin-only endpoint requiring API key.
+
+    JSON Body:
+        selections: List of selection groups, each with:
+            - instance_ids: List of selected instance IDs
+            - priority: Priority number (lower = higher priority)
+        interleave: Whether to interleave selections (default: true)
+
+    Returns:
+        JSON with success status, reordered_count, and new_order_preview
+    """
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.embedding_visualization import get_embedding_viz_manager
+
+    viz_manager = get_embedding_viz_manager()
+    if not viz_manager or not viz_manager.enabled:
+        return jsonify({"error": "Embedding visualization not available"}), 400
+
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+
+        selections = data.get("selections", [])
+        interleave = data.get("interleave", True)
+
+        if not selections:
+            return jsonify({"error": "No selections provided"}), 400
+
+        result = viz_manager.reorder_instances(selections, interleave=interleave)
+        return jsonify(result)
+
+    except Exception as e:
+        logger.error(f"Error reordering instances: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/admin/api/embedding_viz/refresh', methods=['POST'])
+def admin_api_embedding_viz_refresh():
+    """
+    Force re-computation of embeddings and UMAP projection.
+    Admin-only endpoint requiring API key.
+
+    JSON Body (optional):
+        force_recompute: If true, invalidate cache and recompute (default: true)
+
+    Returns:
+        JSON with status and statistics
+    """
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.embedding_visualization import get_embedding_viz_manager
+
+    viz_manager = get_embedding_viz_manager()
+    if not viz_manager or not viz_manager.enabled:
+        return jsonify({"error": "Embedding visualization not available"}), 400
+
+    try:
+        data = request.get_json() or {}
+        force_recompute = data.get("force_recompute", True)
+
+        if force_recompute:
+            viz_manager.invalidate_cache()
+
+        # Trigger recomputation by fetching data
+        viz_data = viz_manager.get_visualization_data(force_refresh=True)
+
+        return jsonify({
+            "status": "success",
+            "stats": viz_data.stats
+        })
+
+    except Exception as e:
+        logger.error(f"Error refreshing embedding visualization: {e}")
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route('/admin/api/embedding_viz/stats', methods=['GET'])
+def admin_api_embedding_viz_stats():
+    """
+    Get embedding visualization statistics.
+    Admin-only endpoint requiring API key.
+
+    Returns:
+        JSON with visualization manager statistics
+    """
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.embedding_visualization import get_embedding_viz_manager
+
+    viz_manager = get_embedding_viz_manager()
+    if not viz_manager:
+        return jsonify({
+            "enabled": False,
+            "error": "Embedding visualization not initialized"
+        })
+
+    return jsonify(viz_manager.get_stats())
 
 
 # =============================================================================

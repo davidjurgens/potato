@@ -1,0 +1,52 @@
+# PDF Annotation Example
+# Demonstrates annotating PDF documents with entity recognition
+
+annotation_task_name: "PDF Entity Annotation"
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+# Data files
+data_files:
+  - data/pdf-example.json
+
+# Item properties
+item_properties:
+  id_key: id
+  text_key: text
+
+# Instance display with PDF viewer
+instance_display:
+  fields:
+    - key: pdf_url
+      type: pdf
+      label: "Document"
+      span_target: true
+      display_options:
+        view_mode: scroll
+        max_height: 600
+        text_layer: true
+        show_page_controls: true
+    - key: text
+      type: text
+      label: "Extracted Text"
+      display_options:
+        collapsible: true
+        max_height: 200
+
+# Annotation schemes
+annotation_schemes:
+  - annotation_type: span
+    name: entities
+    description: "Highlight and label named entities in the document"
+    label_names:
+      - PERSON
+      - ORGANIZATION
+      - LOCATION
+      - DATE
+    span_mode: single  # Annotate on one field
+    source_field: text
+
+# User configuration
+user_config:
+  allow_all_users: true

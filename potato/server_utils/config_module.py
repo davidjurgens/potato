@@ -199,6 +199,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Validate format_handling configuration if present
     validate_format_handling_config(config_data)
 
+    # Validate layout configuration if present
+    validate_layout_config(config_data)
+
     # Validate MACE configuration if present
     if 'mace' in config_data:
         _validate_mace_config(config_data)
@@ -525,7 +528,7 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
 
     # Validate annotation_type
     # Note: Keep in sync with potato.server_utils.schemas.registry
-    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'span_link', 'select', 'number', 'multirate', 'pure_display', 'video', 'image_annotation', 'audio_annotation', 'video_annotation', 'pairwise']
+    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'span_link', 'select', 'number', 'multirate', 'pure_display', 'video', 'image_annotation', 'audio_annotation', 'video_annotation', 'pairwise', 'coreference', 'tree_annotation']
     if scheme['annotation_type'] not in valid_types:
         raise ConfigValidationError(f"{path}.annotation_type must be one of: {', '.join(valid_types)}")
 
@@ -597,7 +600,7 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
             raise ConfigValidationError(f"{path}.tools cannot be empty")
 
         # Validate tools
-        valid_tools = ['bbox', 'polygon', 'freeform', 'landmark']
+        valid_tools = ['bbox', 'polygon', 'freeform', 'landmark', 'fill', 'eraser']
         invalid_tools = [t for t in scheme['tools'] if t not in valid_tools]
         if invalid_tools:
             raise ConfigValidationError(f"{path}.tools contains invalid values: {invalid_tools}. Valid tools are: {valid_tools}")
@@ -2902,6 +2905,155 @@ def validate_format_handling_config(config_data: Dict[str, Any]) -> None:
             max_rows = ss_opts["max_rows"]
             if not isinstance(max_rows, int) or max_rows < 1:
                 raise ConfigValidationError("format_handling.spreadsheet.max_rows must be a positive integer")
+
+
+def validate_layout_config(config_data: Dict[str, Any]) -> None:
+    """
+    Validate layout configuration for annotation form grid arrangement.
+
+    The layout section configures how annotation forms are arranged in a grid,
+    supports grouping schemas with collapsible headers, and provides responsive
+    breakpoints for mobile/tablet displays.
+
+    Args:
+        config_data: The full configuration data
+
+    Raises:
+        ConfigValidationError: If the layout configuration is invalid
+    """
+    layout = config_data.get('layout')
+    if layout is None:
+        return  # layout is optional
+
+    if not isinstance(layout, dict):
+        raise ConfigValidationError("layout must be a dictionary")
+
+    # Validate grid configuration
+    if 'grid' in layout:
+        grid = layout['grid']
+        if not isinstance(grid, dict):
+            raise ConfigValidationError("layout.grid must be a dictionary")
+
+        # Validate columns (1-6)
+        if 'columns' in grid:
+            columns = grid['columns']
+            if not isinstance(columns, int) or columns < 1 or columns > 6:
+                raise ConfigValidationError("layout.grid.columns must be an integer between 1 and 6")
+
+        # Validate gap (CSS value)
+        if 'gap' in grid:
+            gap = grid['gap']
+            if not isinstance(gap, str) or not gap.strip():
+                raise ConfigValidationError("layout.grid.gap must be a non-empty CSS value string (e.g., '1rem', '16px')")
+
+        # Validate row_gap (CSS value)
+        if 'row_gap' in grid:
+            row_gap = grid['row_gap']
+            if not isinstance(row_gap, str) or not row_gap.strip():
+                raise ConfigValidationError("layout.grid.row_gap must be a non-empty CSS value string")
+
+        # Validate align_items
+        if 'align_items' in grid:
+            valid_alignments = ['start', 'center', 'end', 'stretch']
+            if grid['align_items'] not in valid_alignments:
+                raise ConfigValidationError(
+                    f"layout.grid.align_items must be one of: {', '.join(valid_alignments)}"
+                )
+
+    # Validate breakpoints
+    if 'breakpoints' in layout:
+        breakpoints = layout['breakpoints']
+        if not isinstance(breakpoints, dict):
+            raise ConfigValidationError("layout.breakpoints must be a dictionary")
+
+        for bp_name in ['mobile', 'tablet']:
+            if bp_name in breakpoints:
+                bp_value = breakpoints[bp_name]
+                if not isinstance(bp_value, int) or bp_value < 0:
+                    raise ConfigValidationError(
+                        f"layout.breakpoints.{bp_name} must be a non-negative integer (pixel value)"
+                    )
+
+    # Validate groups
+    if 'groups' in layout:
+        groups = layout['groups']
+        if not isinstance(groups, list):
+            raise ConfigValidationError("layout.groups must be a list")
+
+        # Collect all schema names for validation
+        all_schemas = set()
+        schemes = config_data.get('annotation_schemes', [])
+        for scheme in schemes:
+            if isinstance(scheme, dict) and 'name' in scheme:
+                all_schemas.add(scheme['name'])
+
+        group_ids = set()
+        for i, group in enumerate(groups):
+            if not isinstance(group, dict):
+                raise ConfigValidationError(f"layout.groups[{i}] must be a dictionary")
+
+            # Validate required group fields
+            if 'id' not in group:
+                raise ConfigValidationError(f"layout.groups[{i}] missing required 'id' field")
+
+            group_id = group['id']
+            if not isinstance(group_id, str) or not group_id.strip():
+                raise ConfigValidationError(f"layout.groups[{i}].id must be a non-empty string")
+
+            if group_id in group_ids:
+                raise ConfigValidationError(f"layout.groups[{i}].id '{group_id}' is duplicate")
+            group_ids.add(group_id)
+
+            # Validate schemas list
+            if 'schemas' not in group:
+                raise ConfigValidationError(f"layout.groups[{i}] missing required 'schemas' field")
+
+            group_schemas = group['schemas']
+            if not isinstance(group_schemas, list):
+                raise ConfigValidationError(f"layout.groups[{i}].schemas must be a list")
+
+            if not group_schemas:
+                raise ConfigValidationError(f"layout.groups[{i}].schemas cannot be empty")
+
+            # Validate each schema reference exists
+            for j, schema_name in enumerate(group_schemas):
+                if not isinstance(schema_name, str):
+                    raise ConfigValidationError(
+                        f"layout.groups[{i}].schemas[{j}] must be a string"
+                    )
+                if schema_name not in all_schemas:
+                    raise ConfigValidationError(
+                        f"layout.groups[{i}].schemas references unknown schema: '{schema_name}'"
+                    )
+
+            # Validate optional boolean fields
+            if 'collapsible' in group:
+                if not isinstance(group['collapsible'], bool):
+                    raise ConfigValidationError(f"layout.groups[{i}].collapsible must be a boolean")
+
+            if 'collapsed_default' in group:
+                if not isinstance(group['collapsed_default'], bool):
+                    raise ConfigValidationError(f"layout.groups[{i}].collapsed_default must be a boolean")
+
+            # Validate optional title
+            if 'title' in group:
+                if not isinstance(group['title'], str):
+                    raise ConfigValidationError(f"layout.groups[{i}].title must be a string")
+
+            # Validate optional description
+            if 'description' in group:
+                if not isinstance(group['description'], str):
+                    raise ConfigValidationError(f"layout.groups[{i}].description must be a string")
+
+    # Validate order
+    if 'order' in layout:
+        order = layout['order']
+        if not isinstance(order, list):
+            raise ConfigValidationError("layout.order must be a list")
+
+        for i, schema_name in enumerate(order):
+            if not isinstance(schema_name, str):
+                raise ConfigValidationError(f"layout.order[{i}] must be a string")
 
 
 def validate_adjudication_config(config_data: Dict[str, Any]) -> None:

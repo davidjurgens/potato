@@ -15,7 +15,8 @@ from .identifier_utils import (
     safe_generate_layout,
     generate_element_identifier,
     generate_validation_attribute,
-    escape_html_content
+    escape_html_content,
+    generate_layout_attributes
 )
 
 
@@ -57,9 +58,12 @@ def _generate_number_layout_internal(annotation_scheme):
     css = annotation_scheme.get("custom_css", {})
     width = css.get("width", "60px")
 
+    # Get layout attributes for grid positioning
+    layout_attrs = generate_layout_attributes(annotation_scheme)
+
     # Initialize form wrapper
     schematic = f"""
-    <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form number shadcn-number-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" >
+    <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form number shadcn-number-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" {layout_attrs}>
         {get_ai_wrapper()}
         <fieldset schema="{escape_html_content(annotation_scheme['name'])}">
             <legend class="shadcn-number-title">{escape_html_content(annotation_scheme['description'])}</legend>

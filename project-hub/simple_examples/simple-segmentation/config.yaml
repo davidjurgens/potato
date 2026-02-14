@@ -1,0 +1,42 @@
+# Simple Segmentation Annotation Example
+# Run: python potato/flask_server.py start project-hub/simple_examples/simple-segmentation/config.yaml -p 8000
+
+annotation_task_name: "Image Segmentation Demo"
+task_dir: .
+
+data_files:
+  - data/segmentation-example.json
+
+item_properties:
+  id_key: id
+  text_key: image
+
+user_config:
+  allow_all_users: true
+
+instance_display:
+  fields:
+    - key: image
+      type: image
+
+annotation_schemes:
+  - annotation_type: image_annotation
+    name: segmentation
+    description: "Segment regions in the image using fill and polygon tools"
+    tools:
+      - polygon
+      - fill
+      - eraser
+      - bbox
+    labels:
+      - name: foreground
+        color: "#FF6B6B"
+      - name: background
+        color: "#4ECDC4"
+      - name: object
+        color: "#45B7D1"
+    zoom_enabled: true
+    pan_enabled: true
+
+output_annotation_dir: annotation_output
+output_annotation_format: json

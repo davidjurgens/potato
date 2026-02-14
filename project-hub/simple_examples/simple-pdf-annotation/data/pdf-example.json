@@ -1,0 +1,16 @@
+[
+  {
+    "id": "doc_001",
+    "pdf_url": "https://www.w3.org/WAI/WCAG21/Techniques/pdf/img/table-word.pdf",
+    "text": "This is a sample document about accessibility guidelines. The Web Content Accessibility Guidelines (WCAG) are developed by the World Wide Web Consortium (W3C) in cooperation with individuals and organizations around the world. Published on December 11, 2018.",
+    "title": "Accessibility Guidelines Document",
+    "category": "technical"
+  },
+  {
+    "id": "doc_002",
+    "pdf_url": "https://www.africau.edu/images/default/sample.pdf",
+    "text": "A Simple PDF File. This is a small demonstration PDF file to test document handling. Adobe created the PDF format in the early 1990s. San Jose, California is where Adobe is headquartered.",
+    "title": "Sample PDF Document",
+    "category": "sample"
+  }
+]

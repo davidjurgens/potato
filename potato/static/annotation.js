@@ -66,6 +66,272 @@ let deepDebugState = {
 };
 
 /**
+ * FormLayoutManager - Manages annotation form grid layout
+ *
+ * Handles:
+ * - CSS grid configuration from layout config
+ * - Form grouping with collapsible sections
+ * - Explicit ordering of forms
+ * - Responsive breakpoint customization
+ */
+class FormLayoutManager {
+    constructor() {
+        this.config = null;
+        this.initialized = false;
+    }
+
+    /**
+     * Initialize the layout manager with configuration
+     * @param {Object} layoutConfig - Layout configuration from server
+     */
+    initialize(layoutConfig = {}) {
+        this.config = this.mergeDefaults(layoutConfig);
+        this.applyGridProperties();
+        this.wrapFormsInLayoutContainer();
+        this.setupGroups();
+        this.applyOrdering();
+        this.setupResponsiveBreakpoints();
+        this.initialized = true;
+        debugLog('[FormLayoutManager] Initialized with config:', this.config);
+    }
+
+    /**
+     * Merge user config with sensible defaults
+     */
+    mergeDefaults(config) {
+        return {
+            grid: {
+                columns: 2,
+                gap: '1rem',
+                row_gap: null,
+                align_items: 'start',
+                ...config?.grid
+            },
+            breakpoints: {
+                mobile: 480,
+                tablet: 768,
+                ...config?.breakpoints
+            },
+            groups: config?.groups || [],
+            order: config?.order || null
+        };
+    }
+
+    /**
+     * Apply grid CSS custom properties to document root
+     */
+    applyGridProperties() {
+        const root = document.documentElement;
+        root.style.setProperty('--layout-columns', this.config.grid.columns);
+        root.style.setProperty('--layout-gap', this.config.grid.gap);
+        root.style.setProperty('--layout-row-gap', this.config.grid.row_gap || this.config.grid.gap);
+        root.style.setProperty('--layout-align', this.config.grid.align_items);
+    }
+
+    /**
+     * Wrap annotation forms in a layout container
+     */
+    wrapFormsInLayoutContainer() {
+        const container = document.getElementById('annotation-forms');
+        if (!container) return;
+
+        // Check if already wrapped
+        if (container.querySelector('.annotation-forms-layout')) {
+            debugLog('[FormLayoutManager] Layout container already exists');
+            return;
+        }
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'annotation-forms-layout';
+
+        // Get all annotation forms
+        const forms = container.querySelectorAll('.annotation-form');
+        if (forms.length === 0) {
+            debugLog('[FormLayoutManager] No annotation forms found');
+            return;
+        }
+
+        // Move forms into wrapper
+        forms.forEach(form => {
+            // Set default data-grid-columns if not present
+            if (!form.hasAttribute('data-grid-columns')) {
+                form.setAttribute('data-grid-columns', '1');
+            }
+            wrapper.appendChild(form);
+        });
+
+        // Insert wrapper at the beginning of the container (after any pairwise display)
+        const pairwiseDisplay = container.querySelector('.pairwise-items-display-container');
+        if (pairwiseDisplay) {
+            pairwiseDisplay.after(wrapper);
+        } else {
+            container.insertBefore(wrapper, container.firstChild);
+        }
+
+        debugLog('[FormLayoutManager] Wrapped', forms.length, 'forms in layout container');
+    }
+
+    /**
+     * Setup form groups with headers and collapsible behavior
+     */
+    setupGroups() {
+        if (!this.config.groups || this.config.groups.length === 0) return;
+
+        const container = document.querySelector('.annotation-forms-layout') ||
+                          document.querySelector('.annotation-forms-grid');
+        if (!container) return;
+
+        this.config.groups.forEach(groupConfig => {
+            const groupElement = this.createGroupElement(groupConfig, container);
+            if (groupElement) {
+                // Move specified schemas into the group
+                groupConfig.schemas.forEach(schemaName => {
+                    const form = container.querySelector(`[data-schema-name="${schemaName}"]`);
+                    if (form) {
+                        const content = groupElement.querySelector('.annotation-form-group-content');
+                        if (content) {
+                            content.appendChild(form);
+                        }
+                    }
+                });
+
+                // Insert the group into the container
+                container.appendChild(groupElement);
+            }
+        });
+
+        debugLog('[FormLayoutManager] Setup', this.config.groups.length, 'groups');
+    }
+
+    /**
+     * Create a group element with header and content container
+     */
+    createGroupElement(groupConfig, container) {
+        const group = document.createElement('div');
+        group.className = 'annotation-form-group';
+        group.id = `group-${groupConfig.id}`;
+
+        if (groupConfig.collapsed_default) {
+            group.classList.add('collapsed');
+        }
+
+        let headerHtml = `
+            <div class="annotation-form-group-header">
+                <div>
+                    ${groupConfig.title ? `<h4 class="annotation-form-group-title">${this.escapeHtml(groupConfig.title)}</h4>` : ''}
+                    ${groupConfig.description ? `<p class="annotation-form-group-description">${this.escapeHtml(groupConfig.description)}</p>` : ''}
+                </div>
+        `;
+
+        if (groupConfig.collapsible) {
+            headerHtml += `
+                <button type="button" class="annotation-form-group-toggle" aria-label="Toggle group">
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+            `;
+        }
+
+        headerHtml += '</div>';
+
+        group.innerHTML = headerHtml + '<div class="annotation-form-group-content"></div>';
+
+        // Setup toggle behavior
+        if (groupConfig.collapsible) {
+            const toggle = group.querySelector('.annotation-form-group-toggle');
+            toggle.addEventListener('click', () => {
+                group.classList.toggle('collapsed');
+            });
+        }
+
+        return group;
+    }
+
+    /**
+     * Apply explicit ordering to forms
+     */
+    applyOrdering() {
+        const container = document.querySelector('.annotation-forms-layout') ||
+                          document.querySelector('.annotation-forms-grid');
+        if (!container) return;
+
+        // Apply order from config.order array
+        if (this.config.order && Array.isArray(this.config.order)) {
+            this.config.order.forEach((schemaName, index) => {
+                const form = container.querySelector(`[data-schema-name="${schemaName}"]`);
+                if (form) {
+                    form.style.order = index;
+                }
+            });
+        }
+
+        // Also apply order from data-grid-order attributes
+        const formsWithOrder = container.querySelectorAll('[data-grid-order]');
+        formsWithOrder.forEach(form => {
+            const order = parseInt(form.getAttribute('data-grid-order'), 10);
+            if (!isNaN(order)) {
+                form.style.order = order;
+            }
+        });
+    }
+
+    /**
+     * Setup custom responsive breakpoints via media query injection
+     */
+    setupResponsiveBreakpoints() {
+        const mobile = this.config.breakpoints.mobile;
+        const tablet = this.config.breakpoints.tablet;
+
+        // Only inject custom breakpoints if they differ from defaults
+        if (mobile !== 480 || tablet !== 768) {
+            const styleId = 'layout-breakpoints-custom';
+            let styleEl = document.getElementById(styleId);
+            if (!styleEl) {
+                styleEl = document.createElement('style');
+                styleEl.id = styleId;
+                document.head.appendChild(styleEl);
+            }
+
+            styleEl.textContent = `
+                @media (max-width: ${mobile}px) {
+                    .annotation-forms-layout,
+                    .annotation-forms-grid {
+                        --layout-columns: 1 !important;
+                    }
+                    .annotation-forms-layout .annotation-form[data-grid-columns],
+                    .annotation-forms-grid .annotation-form[data-grid-columns] {
+                        grid-column: span 1 !important;
+                    }
+                }
+                @media (min-width: ${mobile + 1}px) and (max-width: ${tablet}px) {
+                    .annotation-forms-layout .annotation-form[data-grid-columns="3"],
+                    .annotation-forms-layout .annotation-form[data-grid-columns="4"],
+                    .annotation-forms-layout .annotation-form[data-grid-columns="5"],
+                    .annotation-forms-layout .annotation-form[data-grid-columns="6"],
+                    .annotation-forms-grid .annotation-form[data-grid-columns="3"],
+                    .annotation-forms-grid .annotation-form[data-grid-columns="4"],
+                    .annotation-forms-grid .annotation-form[data-grid-columns="5"],
+                    .annotation-forms-grid .annotation-form[data-grid-columns="6"] {
+                        grid-column: span 2;
+                    }
+                }
+            `;
+        }
+    }
+
+    /**
+     * Helper to escape HTML
+     */
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+}
+
+// Global FormLayoutManager instance
+window.formLayoutManager = new FormLayoutManager();
+
+/**
  * Deep debug logging for navigation events - only logs when debug mode is enabled
  */
 function logDeepDebug(action, extraData = {}) {
@@ -136,6 +402,10 @@ document.addEventListener('DOMContentLoaded', function () {
     // Initialize display logic for conditional schemas
     if (typeof initDisplayLogic === 'function') {
         initDisplayLogic();
+    }
+    // Initialize form layout manager (if layout config is available)
+    if (window.config && window.config.layout) {
+        window.formLayoutManager.initialize(window.config.layout);
     }
     // Initialize pairwise annotation
     initPairwiseAnnotation();
@@ -602,6 +872,9 @@ async function loadCurrentInstance() {
         loadAnnotations();
         generateAnnotationForms();
         aiAssistantManger.getAiAssistantName();
+
+        // Populate pairwise item boxes after forms are generated
+        populatePairwiseTileContent();
 
         // Load span annotations
         debugLog('🔍 [DEBUG] loadCurrentInstance() - About to call loadSpanAnnotations()');
@@ -3240,48 +3513,183 @@ function initPairwiseAnnotation() {
 function populatePairwiseTileContent() {
     const pairwiseForms = document.querySelectorAll('.annotation-form.pairwise');
 
-    pairwiseForms.forEach(form => {
-        const itemsKey = form.getAttribute('data-items-key') || 'text';
+    if (pairwiseForms.length === 0) {
+        return;
+    }
 
-        // Get items from current instance
-        let items = null;
+    // Get items from instance text
+    let items = null;
+    const instanceText = document.getElementById('instance-text');
 
-        // First check if items are in the rendered instance text (list format)
-        const instanceText = document.getElementById('instance-text');
-        if (instanceText) {
-            // Check if the text contains list_as_text rendered items
-            const listItems = instanceText.querySelectorAll('[data-item-index]');
-            if (listItems.length >= 2) {
-                items = Array.from(listItems).map(el => el.textContent || el.innerHTML);
+    if (instanceText) {
+        const textContent = instanceText.querySelector('#text-content');
+        const contentElement = textContent || instanceText;
+
+        // Method 1: Check for data-item-index attributes
+        const listItems = contentElement.querySelectorAll('[data-item-index]');
+        if (listItems.length >= 2) {
+            items = Array.from(listItems).map(el => el.textContent.trim());
+        }
+
+        // Method 2: Parse HTML with <b>A.</b> / <b>B.</b> markers (list_as_text format)
+        if (!items) {
+            const html = contentElement.innerHTML;
+            const parts = html.split(/<br\s*\/?>\s*<br\s*\/?>/i);
+            if (parts.length >= 2) {
+                items = parts.map(part => {
+                    const temp = document.createElement('div');
+                    temp.innerHTML = part;
+                    let text = temp.textContent || '';
+                    text = text.replace(/^[A-Z]\.\s*/, '').trim();
+                    return text;
+                }).filter(t => t.length > 0);
+                if (items.length < 2) items = null;
             }
         }
 
-        // If not found in rendered HTML, try to get from window.currentInstanceData if available
-        if (!items && window.currentInstanceData && window.currentInstanceData[itemsKey]) {
+        // Method 3: Parse text content directly with regex
+        if (!items) {
+            const rawText = contentElement.textContent || '';
+            const regex = /([A-Z])\.\s*([\s\S]*?)(?=(?:[A-Z]\.\s)|$)/g;
+            const matches = [];
+            let match;
+            while ((match = regex.exec(rawText)) !== null) {
+                const text = match[2].trim();
+                if (text.length > 0) matches.push(text);
+            }
+            if (matches.length >= 2) items = matches;
+        }
+    }
+
+    // Method 4: Try window.currentInstanceData
+    if (!items) {
+        const firstForm = pairwiseForms[0];
+        const itemsKey = firstForm.getAttribute('data-items-key') || 'text';
+        if (window.currentInstanceData && window.currentInstanceData[itemsKey]) {
             const data = window.currentInstanceData[itemsKey];
-            if (Array.isArray(data) && data.length >= 2) {
-                items = data;
-            }
+            if (Array.isArray(data) && data.length >= 2) items = data;
         }
+    }
 
-        // Populate tile content
-        if (items && items.length >= 2) {
-            const tileContents = form.querySelectorAll('.pairwise-tile-content');
-            tileContents.forEach((content, index) => {
-                if (index < items.length) {
-                    content.textContent = items[index];
-                }
-            });
+    if (items && items.length >= 2) {
+        // Create pairwise items display ONCE at top (if not exists)
+        createPairwiseItemsDisplay(items, pairwiseForms[0]);
 
-            // Also populate scale mode items
-            const scaleContents = form.querySelectorAll('.pairwise-scale-item .pairwise-tile-content');
-            scaleContents.forEach((content, index) => {
-                if (index < items.length) {
-                    content.textContent = items[index];
-                }
-            });
+        // Wrap pairwise forms in a flex container for side-by-side layout
+        wrapPairwiseFormsInFlexContainer(pairwiseForms);
+
+        // Hide the "Text to Annotate" section
+        const instanceTextContainer = document.querySelector('.instance-text-container');
+        if (instanceTextContainer) {
+            instanceTextContainer.style.display = 'none';
         }
+        // Also hide the "Text to Annotate" heading
+        const textHeading = document.querySelector('h5.mb-3');
+        if (textHeading && textHeading.textContent.includes('Text to Annotate')) {
+            textHeading.style.display = 'none';
+        }
+    }
+}
+
+/**
+ * Wrap ALL annotation forms in a grid container for layout control.
+ * Forms can specify column span via data-grid-columns attribute.
+ * This enables side-by-side layout for multiple annotation schemas.
+ *
+ * Note: If FormLayoutManager is initialized, it handles wrapping.
+ * This function provides fallback behavior for backwards compatibility.
+ */
+function wrapPairwiseFormsInFlexContainer(pairwiseForms) {
+    // Check if FormLayoutManager already handled this
+    if (window.formLayoutManager && window.formLayoutManager.initialized) {
+        debugLog('[wrapPairwiseFormsInFlexContainer] Skipping - FormLayoutManager active');
+        return;
+    }
+
+    // Check if wrapper already exists
+    if (document.querySelector('.annotation-forms-layout') ||
+        document.querySelector('.annotation-forms-grid')) {
+        return;
+    }
+
+    // Get ALL annotation forms in the container
+    const annotationFormsContainer = document.getElementById('annotation-forms');
+    if (!annotationFormsContainer) return;
+
+    const allForms = annotationFormsContainer.querySelectorAll('.annotation-form');
+    if (allForms.length < 2) {
+        return; // No need to wrap if only one form
+    }
+
+    // Create a wrapper div with grid layout
+    const wrapper = document.createElement('div');
+    wrapper.className = 'pairwise-forms-wrapper annotation-forms-grid';
+
+    // Insert wrapper at the end of the pairwise items display (if exists) or at start
+    const pairwiseDisplay = annotationFormsContainer.querySelector('.pairwise-items-display-container');
+    if (pairwiseDisplay) {
+        pairwiseDisplay.after(wrapper);
+    } else {
+        annotationFormsContainer.insertBefore(wrapper, annotationFormsContainer.firstChild);
+    }
+
+    // Move ALL annotation forms into the wrapper
+    allForms.forEach(form => {
+        // Set default grid column if not specified
+        if (!form.hasAttribute('data-grid-columns')) {
+            form.setAttribute('data-grid-columns', '1');
+        }
+        wrapper.appendChild(form);
     });
+}
+
+/**
+ * Create a single pairwise items display at the top of the annotation forms.
+ */
+function createPairwiseItemsDisplay(items, referenceForm) {
+    // Check if display already exists
+    if (document.querySelector('.pairwise-items-display-container')) {
+        // Just update the content
+        const boxes = document.querySelectorAll('.pairwise-items-display-container .pairwise-item-box');
+        boxes.forEach((box, index) => {
+            if (index < items.length) box.textContent = items[index];
+        });
+        return;
+    }
+
+    // Get labels from the first pairwise form
+    const labels = ['Response A', 'Response B'];
+
+    // Create the display container
+    const displayContainer = document.createElement('div');
+    displayContainer.className = 'pairwise-items-display-container';
+    displayContainer.innerHTML = `
+        <div class="pairwise-items-display">
+            <div class="pairwise-item-wrapper">
+                <div class="pairwise-item-title">${labels[0]}</div>
+                <div class="pairwise-item-box">${escapeHtml(items[0])}</div>
+            </div>
+            <div class="pairwise-item-wrapper">
+                <div class="pairwise-item-title">${labels[1]}</div>
+                <div class="pairwise-item-box">${escapeHtml(items[1])}</div>
+            </div>
+        </div>
+    `;
+
+    // Insert before the first pairwise form
+    const annotationForms = document.getElementById('annotation-forms');
+    if (annotationForms) {
+        annotationForms.insertBefore(displayContainer, annotationForms.firstChild);
+    }
+}
+
+/**
+ * Simple HTML escape function.
+ */
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 /**

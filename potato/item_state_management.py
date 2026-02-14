@@ -213,8 +213,11 @@ class SpanAnnotation:
     A utility class for representing a single span annotation in any annotation scheme.
 
     Spans are represented by a start and end index, as well as a label.
+    Optionally includes format-specific coordinates (e.g., PDF page/bbox, spreadsheet row/col).
     """
-    def __init__(self, schema: str, name: str, title: str, start: int, end: int, id: str = None, annotation_id: str = None, target_field: str = None):
+    def __init__(self, schema: str, name: str, title: str, start: int, end: int,
+                 id: str = None, annotation_id: str = None, target_field: str = None,
+                 format_coords: dict = None):
         """
         Initialize a span annotation.
 
@@ -227,6 +230,12 @@ class SpanAnnotation:
             id: Optional custom ID for the span
             annotation_id: Alternative parameter name for ID (for compatibility)
             target_field: The display field this span targets (for multi-span mode)
+            format_coords: Optional format-specific coordinates (e.g., PDF page/bbox,
+                          spreadsheet row/col). Structure depends on source format:
+                          - PDF: {"format": "pdf", "page": 1, "bbox": [x0, y0, x1, y1]}
+                          - Spreadsheet: {"format": "spreadsheet", "row": 1, "col": 2, "cell_ref": "B1"}
+                          - Code: {"format": "code", "line": 10, "column": 5}
+                          - Document: {"format": "document", "paragraph_id": "p_0", "local_offset": 0}
         """
         self.schema = schema
         self.start = start
@@ -234,6 +243,7 @@ class SpanAnnotation:
         self.end = end
         self.name = name
         self.target_field = target_field  # For multi-span support
+        self.format_coords = format_coords  # Format-specific coordinates
         # Accept both id and annotation_id for compatibility
         _id = id if id is not None else annotation_id
         if _id is not None:
@@ -270,9 +280,34 @@ class SpanAnnotation:
         """Get the target field key (for multi-span mode)"""
         return self.target_field
 
+    def get_format_coords(self):
+        """Get format-specific coordinates (for document format support)"""
+        return self.format_coords
+
+    def set_format_coords(self, coords: dict):
+        """Set format-specific coordinates"""
+        self.format_coords = coords
+
+    def to_dict(self) -> dict:
+        """Convert span annotation to dictionary for serialization."""
+        result = {
+            "schema": self.schema,
+            "name": self.name,
+            "title": self.title,
+            "start": self.start,
+            "end": self.end,
+            "id": self._id,
+        }
+        if self.target_field:
+            result["target_field"] = self.target_field
+        if self.format_coords:
+            result["format_coords"] = self.format_coords
+        return result
+
     def __str__(self):
         field_str = f", target_field:{self.target_field}" if self.target_field else ""
-        return f"SpanAnnotation(schema:{self.schema}, name:{self.name}, start:{self.start}, end:{self.end}, id:{self._id}{field_str})"
+        coords_str = f", format_coords:{self.format_coords}" if self.format_coords else ""
+        return f"SpanAnnotation(schema:{self.schema}, name:{self.name}, start:{self.start}, end:{self.end}, id:{self._id}{field_str}{coords_str})"
 
     def __eq__(self, other):
         """Check if two span annotations are equal"""
@@ -284,6 +319,8 @@ class SpanAnnotation:
             and self.start == other.start
             and self.end == other.end
             and self.target_field == other.target_field
+            # Note: format_coords not included in equality check
+            # as they are derived from position, not essential identity
         )
 
     def __hash__(self):

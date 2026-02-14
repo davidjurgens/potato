@@ -12,7 +12,8 @@ from .identifier_utils import (
     generate_element_identifier,
     generate_element_value,
     generate_validation_attribute,
-    escape_html_content
+    escape_html_content,
+    generate_layout_attributes
 )
 
 
@@ -116,8 +117,11 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
     target_field = annotation_scheme.get("target_field", "")
     target_field_attr = f' data-target-field="{escape_html_content(target_field)}"' if target_field else ""
 
+    # Get layout attributes for grid positioning
+    layout_attrs = generate_layout_attributes(annotation_scheme)
+
     schematic = f"""
-    <form id="{escape_html_content(scheme_name)}" class="annotation-form span shadcn-span-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}"{target_field_attr} >
+    <form id="{escape_html_content(scheme_name)}" class="annotation-form span shadcn-span-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}"{target_field_attr} {layout_attrs}>
             {get_ai_wrapper()}
         <fieldset schema="{escape_html_content(scheme_name)}">
             <legend class="shadcn-span-title">{escape_html_content(annotation_scheme["description"])}</legend>

@@ -1,0 +1,67 @@
+/* Segmentation Tool Styles */
+
+/* Eraser cursor visualization */
+.segmentation-eraser-cursor {
+    position: absolute;
+    border: 2px solid rgba(255, 255, 255, 0.8);
+    border-radius: 50%;
+    pointer-events: none;
+    box-shadow: 0 0 3px rgba(0, 0, 0, 0.4);
+    transform: translate(-50%, -50%);
+    z-index: 100;
+}
+
+/* Segmentation tool button active states */
+.tool-btn[data-tool="fill"].active {
+    background-color: #dbeafe;
+    border-color: #3b82f6;
+    color: #1d4ed8;
+}
+
+.tool-btn[data-tool="eraser"].active {
+    background-color: #fef2f2;
+    border-color: #ef4444;
+    color: #dc2626;
+}
+
+/* Eraser size control */
+.segmentation-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+    padding: 4px 8px;
+    font-size: 0.8rem;
+    color: #64748b;
+}
+
+.segmentation-controls label {
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.segmentation-controls input[type="range"] {
+    width: 80px;
+    height: 4px;
+}
+
+.segmentation-controls .fill-tolerance-control,
+.segmentation-controls .eraser-size-control {
+    display: none;
+}
+
+.segmentation-controls .fill-tolerance-control.visible,
+.segmentation-controls .eraser-size-control.visible {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Mask overlay canvas */
+.segmentation-mask-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    opacity: 0.4;
+}

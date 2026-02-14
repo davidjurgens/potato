@@ -18,7 +18,8 @@ from .identifier_utils import (
     safe_generate_layout,
     generate_element_identifier,
     generate_validation_attribute,
-    escape_html_content
+    escape_html_content,
+    generate_layout_attributes
 )
 
 logger = logging.getLogger(__name__)
@@ -107,50 +108,33 @@ def _generate_binary_mode(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[
     # Data attributes for JavaScript initialization
     data_attrs = f'data-annotation-type="pairwise" data-schema-name="{escaped_schema}" data-mode="binary" data-items-key="{escaped_items_key}"'
 
-    schematic = f"""
-    <form id="{escaped_schema}" class="annotation-form pairwise pairwise-binary" action="/action_page.php" data-annotation-id="{annotation_scheme.get('annotation_id', '')}" {data_attrs}>
-        {get_ai_wrapper()}
-        <fieldset schema="{escaped_schema}">
-            <legend class="pairwise-title">{escaped_description}</legend>
+    # Layout attributes for grid positioning
+    layout_attrs = generate_layout_attributes(annotation_scheme)
 
-            <div class="pairwise-selection-container">
-    """
-
-    # Tile A
+    # Tile labels
     label_a = escape_html_content(labels[0])
-    shortcut_a = "[1]" if enable_keybindings else ""
-    data_key_a = 'data-key="1"' if enable_keybindings else ""
-
-    schematic += f"""
-                <div class="pairwise-tile" data-value="A" data-schema="{escaped_schema}" tabindex="0" {data_key_a}>
-                    <div class="pairwise-tile-header">
-                        <span class="pairwise-tile-label">{label_a}</span>
-                        <span class="pairwise-tile-shortcut">{shortcut_a}</span>
-                    </div>
-                    <div class="pairwise-tile-content" data-item-index="0">
-                        <!-- Content populated by JavaScript from instance data -->
-                    </div>
-                </div>
-    """
-
-    # Tile B
     label_b = escape_html_content(labels[1])
+    shortcut_a = "[1]" if enable_keybindings else ""
     shortcut_b = "[2]" if enable_keybindings else ""
+    data_key_a = 'data-key="1"' if enable_keybindings else ""
     data_key_b = 'data-key="2"' if enable_keybindings else ""
 
-    schematic += f"""
-                <div class="pairwise-tile" data-value="B" data-schema="{escaped_schema}" tabindex="0" {data_key_b}>
-                    <div class="pairwise-tile-header">
-                        <span class="pairwise-tile-label">{label_b}</span>
-                        <span class="pairwise-tile-shortcut">{shortcut_b}</span>
-                    </div>
-                    <div class="pairwise-tile-content" data-item-index="1">
-                        <!-- Content populated by JavaScript from instance data -->
-                    </div>
-                </div>
-    """
+    schematic = f"""
+    <form id="{escaped_schema}" class="annotation-form pairwise pairwise-binary" action="/action_page.php" data-annotation-id="{annotation_scheme.get('annotation_id', '')}" {data_attrs} {layout_attrs}>
+        {get_ai_wrapper()}
+        <fieldset schema="{escaped_schema}">
+            <legend class="pairwise-question">{escaped_description}</legend>
 
-    schematic += """
+            <!-- Compact selection tiles -->
+            <div class="pairwise-selection-container">
+                <div class="pairwise-tile" data-value="A" data-schema="{escaped_schema}" tabindex="0" {data_key_a}>
+                    <span class="pairwise-tile-label">{label_a}</span>
+                    <span class="pairwise-tile-shortcut">{shortcut_a}</span>
+                </div>
+                <div class="pairwise-tile" data-value="B" data-schema="{escaped_schema}" tabindex="0" {data_key_b}>
+                    <span class="pairwise-tile-label">{label_b}</span>
+                    <span class="pairwise-tile-shortcut">{shortcut_b}</span>
+                </div>
             </div>
     """
 
@@ -234,40 +218,38 @@ def _generate_scale_mode(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[T
     # Data attributes for JavaScript initialization
     data_attrs = f'data-annotation-type="pairwise" data-schema-name="{escaped_schema}" data-mode="scale" data-items-key="{escaped_items_key}"'
 
+    # Layout attributes for grid positioning
+    layout_attrs = generate_layout_attributes(annotation_scheme)
+
+    # Escaped labels
+    label_a = escape_html_content(labels[0])
+    label_b = escape_html_content(labels[1])
+
     schematic = f"""
-    <form id="{escaped_schema}" class="annotation-form pairwise pairwise-scale" action="/action_page.php" data-annotation-id="{annotation_scheme.get('annotation_id', '')}" {data_attrs}>
+    <form id="{escaped_schema}" class="annotation-form pairwise pairwise-scale" action="/action_page.php" data-annotation-id="{annotation_scheme.get('annotation_id', '')}" {data_attrs} {layout_attrs}>
         {get_ai_wrapper()}
         <fieldset schema="{escaped_schema}">
-            <legend class="pairwise-title">{escaped_description}</legend>
+            <legend class="pairwise-question">{escaped_description}</legend>
 
-            <div class="pairwise-scale-container">
-                <!-- Left item -->
-                <div class="pairwise-scale-item pairwise-scale-left">
-                    <div class="pairwise-tile-label">{escape_html_content(labels[0])}</div>
-                    <div class="pairwise-tile-content" data-item-index="0">
-                        <!-- Content populated by JavaScript from instance data -->
-                    </div>
+            <!-- Compact rating scale slider -->
+            <div class="pairwise-scale-widget">
+                <div class="pairwise-scale-labels">
+                    <span class="pairwise-scale-label-min">{escape_html_content(min_label)}</span>
+                    <span class="pairwise-scale-label-center">{escape_html_content(center_label)}</span>
+                    <span class="pairwise-scale-label-max">{escape_html_content(max_label)}</span>
                 </div>
-
-                <!-- Slider between items -->
-                <div class="pairwise-scale-slider-container">
-                    <div class="pairwise-scale-labels">
-                        <span class="pairwise-scale-label-min">{escape_html_content(min_label)}</span>
-                        <span class="pairwise-scale-label-center">{escape_html_content(center_label)}</span>
-                        <span class="pairwise-scale-label-max">{escape_html_content(max_label)}</span>
-                    </div>
-                    <input type="range" class="pairwise-scale-slider annotation-input"
-                           name="{escaped_schema}"
-                           schema="{escaped_schema}"
-                           label_name="scale_value"
-                           min="{min_value}" max="{max_value}" step="{step}" value="{default_value}"
-                           validation="{validation}"
-                           oninput="updatePairwiseScaleDisplay(this);"
-                           onchange="registerAnnotation(this);">
-                    <div class="pairwise-scale-value-display">
-                        <span class="pairwise-scale-current-value">{default_value}</span>
-                    </div>
-                    <div class="pairwise-scale-ticks">
+                <input type="range" class="pairwise-scale-slider annotation-input"
+                       name="{escaped_schema}"
+                       schema="{escaped_schema}"
+                       label_name="scale_value"
+                       min="{min_value}" max="{max_value}" step="{step}" value="{default_value}"
+                       validation="{validation}"
+                       oninput="updatePairwiseScaleDisplay(this);"
+                       onchange="registerAnnotation(this);">
+                <div class="pairwise-scale-value-display">
+                    <span class="pairwise-scale-current-value">{default_value}</span>
+                </div>
+                <div class="pairwise-scale-ticks">
     """
 
     # Generate tick marks
@@ -283,16 +265,7 @@ def _generate_scale_mode(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[T
         tick_class = "pairwise-scale-tick center" if is_center else "pairwise-scale-tick"
         schematic += f'<span class="{tick_class}" style="left: {percent}%">{tick}</span>'
 
-    schematic += f"""
-                    </div>
-                </div>
-
-                <!-- Right item -->
-                <div class="pairwise-scale-item pairwise-scale-right">
-                    <div class="pairwise-tile-label">{escape_html_content(labels[1])}</div>
-                    <div class="pairwise-tile-content" data-item-index="1">
-                        <!-- Content populated by JavaScript from instance data -->
-                    </div>
+    schematic += """
                 </div>
             </div>
         </fieldset>

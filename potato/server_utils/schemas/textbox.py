@@ -9,7 +9,8 @@ from .identifier_utils import (
     safe_generate_layout,
     generate_element_identifier,
     generate_validation_attribute,
-    escape_html_content
+    escape_html_content,
+    generate_layout_attributes
 )
 
 
@@ -46,9 +47,12 @@ def _generate_textbox_layout_internal(annotation_scheme):
     """
     logger.debug(f"Generating textbox layout for schema: {annotation_scheme['name']}")
 
+    # Layout attributes for grid positioning
+    layout_attrs = generate_layout_attributes(annotation_scheme)
+
     # Initialize form wrapper
     schematic = f"""
-    <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form textbox shadcn-textbox-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}">
+    <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form textbox shadcn-textbox-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" {layout_attrs}>
             {get_ai_wrapper()}
         <fieldset schema_name="{escape_html_content(annotation_scheme['name'])}">
             <legend class="shadcn-textbox-title">{escape_html_content(annotation_scheme["description"])}</legend>

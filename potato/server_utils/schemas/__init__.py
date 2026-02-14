@@ -14,6 +14,8 @@ from .image_annotation import generate_image_annotation_layout
 from .audio_annotation import generate_audio_annotation_layout
 from .video_annotation import generate_video_annotation_layout
 from .pairwise import generate_pairwise_layout
+from .coreference import generate_coreference_layout
+from .tree_annotation import generate_tree_annotation_layout
 
 # Import identifier utilities for use by other modules
 from .identifier_utils import (
@@ -23,7 +25,8 @@ from .identifier_utils import (
     generate_validation_attribute,
     escape_html_content,
     safe_generate_layout,
-    generate_tooltip_html
+    generate_tooltip_html,
+    generate_layout_attributes
 )
 
 # Import schema registry for centralized schema management

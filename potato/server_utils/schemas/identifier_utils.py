@@ -212,6 +212,79 @@ def generate_validation_attribute(annotation_scheme: dict, label_name: str = Non
     return ""
 
 
+def generate_layout_attributes(annotation_scheme: dict) -> str:
+    """
+    Generate layout-related HTML attributes for grid positioning.
+
+    Args:
+        annotation_scheme: Schema configuration that may contain:
+            - layout: dict with layout options
+                - columns: Number of grid columns to span (1-6, default: 1)
+                - rows: Number of grid rows to span (1-4, default: 1)
+                - order: Explicit ordering integer for grid placement
+                - min_width: Minimum width CSS value (e.g., "200px")
+                - max_width: Maximum width CSS value (e.g., "400px")
+                - align_self: Alignment override (start, center, end, stretch)
+
+    Returns:
+        str: HTML attribute string for layout (e.g., 'data-grid-columns="2" data-grid-rows="1"')
+
+    Example config:
+        annotation_schemes:
+          - name: preference
+            description: "Which is better?"
+            layout:
+              columns: 2      # Span 2 columns in the grid
+              rows: 1         # Span 1 row (default)
+              order: 1        # Explicit ordering
+              min_width: "200px"
+              max_width: "400px"
+              align_self: "start"
+    """
+    layout_config = annotation_scheme.get("layout", {})
+    attrs = []
+
+    # Column span (1-6, default: 1)
+    columns = layout_config.get("columns", 1)
+    if not isinstance(columns, int) or columns < 1:
+        columns = 1
+    elif columns > 6:
+        columns = 6
+    attrs.append(f'data-grid-columns="{columns}"')
+
+    # Row span (1-4, default: 1)
+    rows = layout_config.get("rows", 1)
+    if isinstance(rows, int) and rows > 1:
+        rows = min(rows, 4)
+        attrs.append(f'data-grid-rows="{rows}"')
+
+    # Explicit order (integer)
+    order = layout_config.get("order")
+    if isinstance(order, int):
+        attrs.append(f'data-grid-order="{order}"')
+
+    # Min/max width via CSS custom properties in style attribute
+    style_parts = []
+    min_width = layout_config.get("min_width")
+    if min_width and isinstance(min_width, str):
+        style_parts.append(f"--form-min-width: {html.escape(min_width)}")
+
+    max_width = layout_config.get("max_width")
+    if max_width and isinstance(max_width, str):
+        style_parts.append(f"--form-max-width: {html.escape(max_width)}")
+
+    if style_parts:
+        attrs.append(f'style="{"; ".join(style_parts)}"')
+
+    # Align self override
+    align_self = layout_config.get("align_self")
+    valid_alignments = ["start", "center", "end", "stretch"]
+    if align_self and align_self in valid_alignments:
+        attrs.append(f'data-align-self="{align_self}"')
+
+    return " ".join(attrs)
+
+
 def generate_tooltip_html(label_data: Dict[str, Any]) -> str:
     """
     Generate tooltip HTML attribute from label data.

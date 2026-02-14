@@ -239,6 +239,8 @@ def _register_builtin_schemas():
     from .audio_annotation import generate_audio_annotation_layout
     from .video_annotation import generate_video_annotation_layout
     from .pairwise import generate_pairwise_layout
+    from .coreference import generate_coreference_layout
+    from .tree_annotation import generate_tree_annotation_layout
 
     schemas = [
         SchemaDefinition(
@@ -349,9 +351,9 @@ def _register_builtin_schemas():
             name="video_annotation",
             generator=generate_video_annotation_layout,
             required_fields=["name", "description"],
-            optional_fields=["mode", "labels", "segment_schemes", "min_segments", "max_segments", "timeline_height", "overview_height", "zoom_enabled", "playback_rate_control", "frame_stepping", "show_timecode", "video_fps"],
+            optional_fields=["mode", "labels", "segment_schemes", "min_segments", "max_segments", "timeline_height", "overview_height", "zoom_enabled", "playback_rate_control", "frame_stepping", "show_timecode", "video_fps", "tracking_options"],
             supports_keybindings=True,
-            description="Video annotation with temporal segments, frame classification, and keyframes"
+            description="Video annotation with temporal segments, frame classification, keyframes, and object tracking"
         ),
         SchemaDefinition(
             name="span_link",
@@ -368,6 +370,22 @@ def _register_builtin_schemas():
             optional_fields=["mode", "items_key", "items", "show_labels", "labels", "allow_tie", "tie_label", "sequential_key_binding", "scale", "label_requirement"],
             supports_keybindings=True,
             description="Pairwise comparison of two items (binary selection or scale rating)"
+        ),
+        SchemaDefinition(
+            name="coreference",
+            generator=generate_coreference_layout,
+            required_fields=["name", "description", "span_schema"],
+            optional_fields=["entity_types", "allow_singletons", "visual_display"],
+            supports_keybindings=False,
+            description="Coreference chain annotation for grouping mentions of the same entity"
+        ),
+        SchemaDefinition(
+            name="tree_annotation",
+            generator=generate_tree_annotation_layout,
+            required_fields=["name", "description"],
+            optional_fields=["node_scheme", "path_selection", "branch_comparison"],
+            supports_keybindings=False,
+            description="Annotation of conversation tree nodes with path selection"
         ),
     ]
 

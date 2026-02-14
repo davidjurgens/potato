@@ -1,0 +1,77 @@
+# Code Review Annotation Example
+# Demonstrates annotating source code for quality review
+
+annotation_task_name: "Code Quality Review"
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+# Data files
+data_files:
+  - data/code-example.json
+
+# Item properties
+item_properties:
+  id_key: id
+  text_key: description
+
+# Instance display with code viewer
+instance_display:
+  fields:
+    - key: code
+      type: code
+      label: "Source Code"
+      span_target: true
+      display_options:
+        language: python
+        show_line_numbers: true
+        max_height: 400
+        theme: default
+        copy_button: true
+    - key: description
+      type: text
+      label: "Code Description"
+
+# Annotation schemes
+annotation_schemes:
+  - annotation_type: radio
+    name: overall_quality
+    description: "Rate the overall code quality"
+    horizontal: true
+    labels:
+      - name: excellent
+        tooltip: "Clean, well-documented, follows best practices"
+      - name: good
+        tooltip: "Generally good with minor issues"
+      - name: needs_improvement
+        tooltip: "Has significant issues that should be addressed"
+      - name: poor
+        tooltip: "Major problems, requires significant refactoring"
+
+  - annotation_type: multiselect
+    name: issues
+    description: "Select all issues found in the code"
+    labels:
+      - name: naming
+        tooltip: "Poor variable/function naming"
+      - name: complexity
+        tooltip: "Overly complex logic or structure"
+      - name: documentation
+        tooltip: "Missing or inadequate comments/docstrings"
+      - name: error_handling
+        tooltip: "Missing or improper error handling"
+      - name: security
+        tooltip: "Potential security vulnerabilities"
+      - name: performance
+        tooltip: "Performance concerns"
+      - name: no_issues
+        tooltip: "No significant issues found"
+
+  - annotation_type: textbox
+    name: feedback
+    description: "Detailed feedback for the code author"
+    text_box_single_line: false
+
+# User configuration
+user_config:
+  allow_all_users: true

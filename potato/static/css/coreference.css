@@ -1,0 +1,276 @@
+/* Coreference Chain Annotation Styles */
+
+.coref-container {
+    margin: 10px 0;
+    padding: 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #fafafa;
+}
+
+.coref-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.coref-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1a1a2e;
+}
+
+.coref-chain-count {
+    font-size: 0.85rem;
+    color: #64748b;
+    font-weight: 500;
+    padding: 2px 8px;
+    background: #e2e8f0;
+    border-radius: 12px;
+}
+
+/* Entity Type Selector */
+.coref-entity-type-selector {
+    margin-bottom: 10px;
+}
+
+.coref-section-label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 4px;
+}
+
+.coref-entity-types {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.coref-entity-type {
+    display: inline-flex;
+}
+
+.coref-entity-type-radio {
+    display: none;
+}
+
+.coref-entity-type-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border: 2px solid #e2e8f0;
+    border-radius: 16px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 500;
+    transition: all 0.15s;
+}
+
+.coref-entity-type-label:hover {
+    border-color: var(--chain-color, #6E56CF);
+    background: rgba(110, 86, 207, 0.05);
+}
+
+.coref-entity-type-radio:checked + .coref-entity-type-label {
+    border-color: var(--chain-color, #6E56CF);
+    background: rgba(110, 86, 207, 0.1);
+    font-weight: 600;
+}
+
+.coref-color-indicator {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+/* Action Buttons */
+.coref-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.coref-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: white;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #374151;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.coref-btn:hover:not(:disabled) {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+}
+
+.coref-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.coref-new-chain-btn:hover:not(:disabled) {
+    background: #ede9fe;
+    border-color: #6E56CF;
+    color: #6E56CF;
+}
+
+.coref-remove-btn:hover:not(:disabled) {
+    background: #fef2f2;
+    border-color: #ef4444;
+    color: #ef4444;
+}
+
+/* Chain Panel */
+.coref-chain-panel {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background: white;
+}
+
+.coref-chain-list {
+    padding: 6px;
+}
+
+.coref-no-chains-message {
+    text-align: center;
+    color: #94a3b8;
+    font-size: 0.85rem;
+    padding: 16px;
+    margin: 0;
+}
+
+/* Individual Chain Item */
+.coref-chain-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px;
+    margin-bottom: 4px;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.coref-chain-item:hover {
+    background: #f8fafc;
+}
+
+.coref-chain-item.active {
+    border-color: var(--chain-color, #6E56CF);
+    background: rgba(110, 86, 207, 0.04);
+}
+
+.coref-chain-color {
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    margin-top: 2px;
+}
+
+.coref-chain-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.coref-chain-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.coref-chain-mentions {
+    font-size: 0.78rem;
+    color: #64748b;
+    margin-top: 2px;
+    line-height: 1.4;
+}
+
+.coref-chain-mention-tag {
+    display: inline;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.coref-chain-delete {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: none;
+    color: #94a3b8;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    font-size: 14px;
+    line-height: 1;
+}
+
+.coref-chain-delete:hover {
+    background: #fef2f2;
+    color: #ef4444;
+}
+
+/* Mention Highlighting Modes */
+/* Background mode */
+.coref-mention-highlight-background {
+    border-radius: 2px;
+    padding: 1px 0;
+    cursor: pointer;
+    transition: background-color 0.15s;
+}
+
+.coref-mention-highlight-background:hover {
+    filter: brightness(0.9);
+}
+
+/* Bracket mode */
+.coref-mention-highlight-bracket {
+    border-bottom: 2px solid var(--chain-color, #6E56CF);
+    cursor: pointer;
+}
+
+.coref-mention-highlight-bracket::before {
+    content: "[";
+    color: var(--chain-color, #6E56CF);
+    font-weight: bold;
+    font-size: 0.9em;
+}
+
+.coref-mention-highlight-bracket::after {
+    content: "]";
+    color: var(--chain-color, #6E56CF);
+    font-weight: bold;
+    font-size: 0.9em;
+}
+
+/* Underline mode */
+.coref-mention-highlight-underline {
+    border-bottom: 3px solid var(--chain-color, #6E56CF);
+    cursor: pointer;
+}
+
+.coref-mention-highlight-underline:hover {
+    border-bottom-width: 4px;
+}

@@ -118,7 +118,7 @@ def create_test_config(
     optional_fields = [
         "max_annotations_per_user", "assignment_strategy", "output_annotation_format",
         "random_seed", "admin_api_key", "max_annotations_per_item",
-        "icl_labeling", "adjudication", "mace"
+        "icl_labeling", "adjudication", "mace", "list_as_text"
     ]
     for field in optional_fields:
         if field in kwargs:
@@ -304,9 +304,10 @@ class TestConfigManager:
     Context manager for creating and cleaning up test configurations.
     """
 
-    def __init__(self, test_name: str, annotation_schemes: List[Dict[str, Any]], **kwargs):
+    def __init__(self, test_name: str, annotation_schemes: List[Dict[str, Any]], num_instances: int = 2, **kwargs):
         self.test_name = test_name
         self.annotation_schemes = annotation_schemes
+        self.num_instances = num_instances
         self.kwargs = kwargs
         self.test_dir = None
         self.config_file = None
@@ -316,10 +317,10 @@ class TestConfigManager:
         # Create test directory
         self.test_dir = create_test_directory(self.test_name)
 
-        # Create test data
+        # Create test data with requested number of instances
         test_data = [
-            {"id": "1", "text": "Test item 1"},
-            {"id": "2", "text": "Test item 2"}
+            {"id": str(i + 1), "text": f"Test item {i + 1}"}
+            for i in range(self.num_instances)
         ]
         self.data_file = create_test_data_file(self.test_dir, test_data)
 

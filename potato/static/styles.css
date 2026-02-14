@@ -2723,8 +2723,202 @@ fieldset[schema] {
    ======================================== */
 
 /* Pairwise annotation form container */
-.annotation-form.pairwise {
+/* Pairwise items display container - created by JS */
+.pairwise-items-display-container {
   margin-bottom: 1.5rem;
+}
+
+/* ========================================
+   ANNOTATION FORM LAYOUT SYSTEM
+   ======================================== */
+
+/* CSS Custom Properties for Layout Configuration */
+:root {
+  --layout-columns: 2;
+  --layout-gap: 1rem;
+  --layout-row-gap: var(--layout-gap);
+  --layout-align: start;
+}
+
+/* Main Layout Container */
+.annotation-forms-layout {
+  display: grid;
+  grid-template-columns: repeat(var(--layout-columns), 1fr);
+  gap: var(--layout-row-gap) var(--layout-gap);
+  align-items: var(--layout-align);
+}
+
+/* Legacy grid-based layout for annotation forms (backwards compatibility) */
+.annotation-forms-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--layout-columns, 2), 1fr);
+  gap: var(--layout-gap, 1rem);
+  align-items: var(--layout-align, start);
+}
+
+/* Column Spans (1-6) for both layout containers */
+.annotation-forms-layout .annotation-form[data-grid-columns="1"],
+.annotation-forms-grid .annotation-form[data-grid-columns="1"] {
+  grid-column: span 1;
+}
+
+.annotation-forms-layout .annotation-form[data-grid-columns="2"],
+.annotation-forms-grid .annotation-form[data-grid-columns="2"] {
+  grid-column: span 2;
+}
+
+.annotation-forms-layout .annotation-form[data-grid-columns="3"],
+.annotation-forms-grid .annotation-form[data-grid-columns="3"] {
+  grid-column: span 3;
+}
+
+.annotation-forms-layout .annotation-form[data-grid-columns="4"],
+.annotation-forms-grid .annotation-form[data-grid-columns="4"] {
+  grid-column: span 4;
+}
+
+.annotation-forms-layout .annotation-form[data-grid-columns="5"],
+.annotation-forms-grid .annotation-form[data-grid-columns="5"] {
+  grid-column: span 5;
+}
+
+.annotation-forms-layout .annotation-form[data-grid-columns="6"],
+.annotation-forms-grid .annotation-form[data-grid-columns="6"] {
+  grid-column: span 6;
+}
+
+/* Row Spans (2-4) */
+.annotation-forms-layout .annotation-form[data-grid-rows="2"],
+.annotation-forms-grid .annotation-form[data-grid-rows="2"] {
+  grid-row: span 2;
+}
+
+.annotation-forms-layout .annotation-form[data-grid-rows="3"],
+.annotation-forms-grid .annotation-form[data-grid-rows="3"] {
+  grid-row: span 3;
+}
+
+.annotation-forms-layout .annotation-form[data-grid-rows="4"],
+.annotation-forms-grid .annotation-form[data-grid-rows="4"] {
+  grid-row: span 4;
+}
+
+/* Min/Max Width via CSS Custom Properties */
+.annotation-forms-layout .annotation-form,
+.annotation-forms-grid .annotation-form {
+  min-width: var(--form-min-width, 0);
+  max-width: var(--form-max-width, none);
+}
+
+/* Self Alignment Overrides */
+.annotation-forms-layout .annotation-form[data-align-self="start"],
+.annotation-forms-grid .annotation-form[data-align-self="start"] {
+  align-self: start;
+}
+
+.annotation-forms-layout .annotation-form[data-align-self="center"],
+.annotation-forms-grid .annotation-form[data-align-self="center"] {
+  align-self: center;
+}
+
+.annotation-forms-layout .annotation-form[data-align-self="end"],
+.annotation-forms-grid .annotation-form[data-align-self="end"] {
+  align-self: end;
+}
+
+.annotation-forms-layout .annotation-form[data-align-self="stretch"],
+.annotation-forms-grid .annotation-form[data-align-self="stretch"] {
+  align-self: stretch;
+}
+
+/* CSS Order Support (for explicit ordering) */
+.annotation-forms-layout .annotation-form[data-grid-order],
+.annotation-forms-grid .annotation-form[data-grid-order] {
+  /* Order value is set via JavaScript */
+}
+
+/* ========================================
+   ANNOTATION FORM GROUPS
+   ======================================== */
+
+.annotation-form-group {
+  grid-column: 1 / -1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  background-color: var(--card);
+  margin-bottom: 0.5rem;
+}
+
+.annotation-form-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.annotation-form-group-title {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--heading-color);
+  margin: 0;
+}
+
+.annotation-form-group-description {
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+  margin: 0.25rem 0 0 0;
+}
+
+.annotation-form-group-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius);
+  color: var(--muted-foreground);
+  transition: var(--transition);
+}
+
+.annotation-form-group-toggle:hover {
+  background-color: var(--secondary);
+  color: var(--foreground);
+}
+
+.annotation-form-group-toggle i {
+  transition: transform 0.2s ease;
+}
+
+.annotation-form-group.collapsed .annotation-form-group-toggle i {
+  transform: rotate(-90deg);
+}
+
+.annotation-form-group-content {
+  display: grid;
+  grid-template-columns: repeat(var(--layout-columns, 2), 1fr);
+  gap: var(--layout-gap, 1rem);
+}
+
+.annotation-form-group.collapsed .annotation-form-group-content {
+  display: none;
+}
+
+/* Pairwise forms wrapper - legacy flex fallback */
+.pairwise-forms-wrapper {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.annotation-form.pairwise {
+  margin-bottom: 0;
+  padding: 0.75rem;
+  background-color: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
 }
 
 .annotation-form.pairwise fieldset {
@@ -2733,31 +2927,89 @@ fieldset[schema] {
   margin: 0;
 }
 
-.pairwise-title {
+/* Hide "Text to Annotate" when pairwise items display is present */
+.pairwise-has-items ~ #instance-text,
+body.has-pairwise-display #instance-text {
+  display: none;
+}
+
+/* Pairwise question title (compact) */
+.pairwise-question {
   font-weight: 600;
-  font-size: 1rem;
+  font-size: 0.95rem;
   color: var(--foreground);
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
   padding: 0;
 }
 
-/* Binary mode: Clickable tiles */
-.pairwise-selection-container {
+/* Pairwise annotations container - compact layout */
+.pairwise-annotations-section {
   display: flex;
-  gap: 16px;
-  margin: 16px 0;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+/* Side-by-side item display boxes - shown ONCE at top */
+.pairwise-items-display {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 1.5rem;
+}
+
+.pairwise-item-wrapper {
+  flex: 1;
+  min-width: 0;
+}
+
+.pairwise-item-title {
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--primary);
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--primary);
+}
+
+.pairwise-item-box {
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  min-height: 100px;
+  max-height: 300px;
+  overflow-y: auto;
+  line-height: 1.6;
+  color: var(--foreground);
+  font-size: 0.95rem;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* Binary mode: Compact selection tiles */
+.pairwise-selection-container {
+  display: inline-flex;
+  gap: 12px;
+  margin: 8px 0;
+  justify-content: flex-start;
+  vertical-align: middle;
 }
 
 .pairwise-tile {
-  flex: 1;
+  flex: 0 0 auto;
+  min-width: 80px;
+  max-width: 150px;
   border: 2px solid var(--border);
   border-radius: var(--radius);
-  padding: 16px;
+  padding: 8px 20px;
   cursor: pointer;
   transition: all 0.2s ease;
   position: relative;
   background-color: var(--card);
-  min-height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .pairwise-tile:hover {
@@ -2794,17 +3046,10 @@ fieldset[schema] {
   font-weight: bold;
 }
 
-.pairwise-tile-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
 .pairwise-tile-label {
-  font-weight: 700;
-  font-size: 1.25rem;
-  color: var(--primary);
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--foreground);
 }
 
 .pairwise-tile-shortcut {
@@ -2815,18 +3060,12 @@ fieldset[schema] {
   border-radius: 4px;
 }
 
-.pairwise-tile-content {
-  line-height: 1.6;
-  color: var(--foreground);
-  font-size: 0.95rem;
-}
-
-/* Extra options (tie/neither buttons) */
+/* Extra options (tie/neither buttons) - inline with selection tiles */
 .pairwise-extra-options {
-  display: flex;
-  justify-content: center;
+  display: inline-flex;
   gap: 12px;
-  margin-top: 16px;
+  margin-left: 12px;
+  vertical-align: middle;
 }
 
 .pairwise-tie-btn,
@@ -2861,46 +3100,23 @@ fieldset[schema] {
   border-color: var(--primary);
 }
 
-/* Scale mode: Slider between items */
-.pairwise-scale-container {
-  display: flex;
-  align-items: flex-start;
-  gap: 24px;
-  margin: 16px 0;
-}
-
-.pairwise-scale-item {
-  flex: 1;
-  padding: 16px;
-  border: 1px solid var(--border);
+/* Scale mode: Rating slider widget - compact */
+.pairwise-scale-widget {
+  margin-top: 0.5rem;
+  padding: 0.75rem 1rem;
+  background-color: var(--muted);
   border-radius: var(--radius);
-  background-color: var(--card);
-}
-
-.pairwise-scale-item .pairwise-tile-label {
-  margin-bottom: 8px;
-  font-size: 1rem;
-}
-
-.pairwise-scale-item .pairwise-tile-content {
-  font-size: 0.9rem;
-}
-
-.pairwise-scale-slider-container {
-  flex: 0 0 200px;
-  padding: 16px 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  max-width: 600px;
 }
 
 .pairwise-scale-labels {
   display: flex;
   justify-content: space-between;
   width: 100%;
-  font-size: 0.75rem;
-  color: var(--muted-foreground);
-  margin-bottom: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--foreground);
+  margin-bottom: 12px;
 }
 
 .pairwise-scale-label-min {
@@ -2919,7 +3135,7 @@ fieldset[schema] {
   width: 100%;
   height: 8px;
   border-radius: 4px;
-  background: var(--muted);
+  background: #c4c4c8;  /* Darker gray for visible track */
   outline: none;
   -webkit-appearance: none;
   appearance: none;
@@ -2953,6 +3169,20 @@ fieldset[schema] {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
+.pairwise-scale-slider::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 8px;
+  background: #c4c4c8;
+  border-radius: 4px;
+}
+
+.pairwise-scale-slider::-moz-range-track {
+  width: 100%;
+  height: 8px;
+  background: #c4c4c8;
+  border-radius: 4px;
+}
+
 .pairwise-scale-value-display {
   margin-top: 8px;
   font-weight: 600;
@@ -2970,7 +3200,7 @@ fieldset[schema] {
 .pairwise-scale-tick {
   position: absolute;
   transform: translateX(-50%);
-  font-size: 0.7rem;
+  font-size: 0.9rem;
   color: var(--muted-foreground);
 }
 
@@ -2979,20 +3209,75 @@ fieldset[schema] {
   color: var(--foreground);
 }
 
-/* Responsive: Stack tiles vertically on mobile */
+/* ========================================
+   RESPONSIVE LAYOUT BREAKPOINTS
+   ======================================== */
+
+/* Mobile breakpoint (default 480px) - Collapse to single column */
+@media (max-width: 480px) {
+  .annotation-forms-layout,
+  .annotation-forms-grid {
+    --layout-columns: 1 !important;
+  }
+
+  .annotation-forms-layout .annotation-form[data-grid-columns],
+  .annotation-forms-grid .annotation-form[data-grid-columns] {
+    grid-column: span 1 !important;
+  }
+
+  .annotation-form-group-content {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Tablet breakpoint (default 768px) - Halve column spans > 2 */
+@media (min-width: 481px) and (max-width: 768px) {
+  .annotation-forms-layout .annotation-form[data-grid-columns="3"],
+  .annotation-forms-layout .annotation-form[data-grid-columns="4"],
+  .annotation-forms-layout .annotation-form[data-grid-columns="5"],
+  .annotation-forms-layout .annotation-form[data-grid-columns="6"],
+  .annotation-forms-grid .annotation-form[data-grid-columns="3"],
+  .annotation-forms-grid .annotation-form[data-grid-columns="4"],
+  .annotation-forms-grid .annotation-form[data-grid-columns="5"],
+  .annotation-forms-grid .annotation-form[data-grid-columns="6"] {
+    grid-column: span 2;
+  }
+}
+
+/* Responsive: Stack items vertically on tablet and mobile */
 @media (max-width: 768px) {
+  .annotation-forms-grid,
+  .annotation-forms-layout,
+  .pairwise-forms-wrapper {
+    grid-template-columns: 1fr;
+  }
+
+  .annotation-forms-grid .annotation-form[data-grid-columns="2"],
+  .annotation-forms-layout .annotation-form[data-grid-columns="2"] {
+    grid-column: span 1;
+  }
+
+  .pairwise-items-display {
+    flex-direction: column;
+  }
+
   .pairwise-selection-container {
     flex-direction: column;
   }
 
-  .pairwise-scale-container {
-    flex-direction: column;
+  .pairwise-extra-options {
+    display: flex;
+    margin-left: 0;
+    margin-top: 8px;
   }
 
-  .pairwise-scale-slider-container {
-    flex: 1;
-    width: 100%;
-    order: -1; /* Put slider at top on mobile */
+  .annotation-form.pairwise {
+    max-width: 100%;
+    display: block;
+  }
+
+  .annotation-form-group-content {
+    grid-template-columns: 1fr;
   }
 }
 

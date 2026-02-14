@@ -859,14 +859,20 @@ def reset_state_managers(request):
     we skip clearing config to avoid wiping out server configuration.
     """
     import os
+    import inspect
 
     # Save original working directory
     original_cwd = os.getcwd()
 
+    # Skip state clearing for server tests - they manage their own server lifecycle
+    # Check if this is a server test by looking at the module path
+    test_module = request.fspath.basename if hasattr(request, 'fspath') else ""
+    is_server_test = 'test_conditional' in test_module or 'server' in str(request.fspath)
+
     # Check if this test class has a class-scoped flask_server fixture or class attribute
     # If so, don't clear config as it would wipe out the server's configuration
-    has_class_scoped_server = False
-    if hasattr(request, 'cls') and request.cls is not None:
+    has_class_scoped_server = is_server_test
+    if not has_class_scoped_server and hasattr(request, 'cls') and request.cls is not None:
         # Check if this class has a flask_server fixture or a 'server' class attribute
         # (many unittest-style tests use cls.server instead of a pytest fixture)
         has_class_scoped_server = (
@@ -874,6 +880,24 @@ def reset_state_managers(request):
             hasattr(request.cls, 'server') or
             'flask_server' in getattr(request, 'fixturenames', [])
         )
+
+        # Also check if any class methods are pytest fixtures with class or session scope
+        # This catches fixtures defined inside the test class
+        if not has_class_scoped_server:
+            for name, method in inspect.getmembers(request.cls, predicate=inspect.isfunction):
+                if hasattr(method, '_pytestfixturefunction'):
+                    # Check if the fixture has class or session scope
+                    fixture_info = method._pytestfixturefunction
+                    if hasattr(fixture_info, 'scope') and fixture_info.scope in ('class', 'session'):
+                        # Check if it's a server-related fixture (common naming patterns)
+                        server_patterns = ['server', 'flask', 'config', 'test_config']
+                        if any(pattern in name.lower() for pattern in server_patterns):
+                            has_class_scoped_server = True
+                            break
+                        # Also check if it's in the fixture names for this test
+                        if name in getattr(request, 'fixturenames', []):
+                            has_class_scoped_server = True
+                            break
 
     # Also check for session-scoped servers in fixture names
     session_scoped_fixtures = ['shared_flask_server', 'shared_form_server', 'shared_span_server']

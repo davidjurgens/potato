@@ -35,6 +35,27 @@
     <!-- Format Display Styles (document, code, etc.) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/format-displays.css') }}">
 
+    <!-- Document Bounding Box Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='document-bbox.css') }}">
+
+    <!-- PDF Annotation Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='pdf-annotation.css') }}">
+
+    <!-- Display Logic Styles (conditional schema branching) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='display-logic.css') }}">
+
+    <!-- Coreference Chain Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/coreference.css') }}">
+
+    <!-- Segmentation Tool Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/segmentation.css') }}">
+
+    <!-- Conversation Tree Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/conversation-tree.css') }}">
+
+    <!-- Video Tracking Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tracking.css') }}">
+
     <!-- jQuery (required for span annotation) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
 </head>
@@ -264,6 +285,8 @@
     <script src="{{ url_for('static', filename='interaction_tracker.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='span-core.js') }}?v=7"></script>
     <script src="{{ url_for('static', filename='ai_assistant_manager.js') }}?v=1"></script>
+    <!-- Display Logic Manager (conditional schema branching) - must load before annotation.js -->
+    <script src="{{ url_for('static', filename='display-logic.js') }}?v=1"></script>
     <!-- Instance display manager (for new instance_display configuration) -->
     {% if has_instance_display | default(false) %}
     <script src="{{ url_for('static', filename='instance-display.js') }}?v=2"></script>
@@ -290,6 +313,25 @@
 
     <!-- Span link manager -->
     <script src="{{ url_for('static', filename='span-link-manager.js') }}?v=1"></script>
+
+    <!-- Coreference chain manager -->
+    <script src="{{ url_for('static', filename='coreference-manager.js') }}?v=1"></script>
+
+    <!-- Segmentation tools -->
+    <script src="{{ url_for('static', filename='segmentation-tools.js') }}?v=1"></script>
+
+    <!-- Conversation tree interaction -->
+    <script src="{{ url_for('static', filename='conversation-tree.js') }}?v=1"></script>
+
+    <!-- Video tracking interpolation and UI -->
+    <script src="{{ url_for('static', filename='tracking-interpolation.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='tracking-ui.js') }}?v=1"></script>
+
+    <!-- Document bounding box annotation -->
+    <script src="{{ url_for('static', filename='document-bbox.js') }}?v=2"></script>
+
+    <!-- PDF bounding box annotation -->
+    <script src="{{ url_for('static', filename='pdf-bbox.js') }}?v=2"></script>
 
     <!-- Global keyboard debug (temporary) -->
     <script>

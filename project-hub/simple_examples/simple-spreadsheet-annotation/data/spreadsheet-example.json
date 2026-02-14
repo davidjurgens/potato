@@ -1,0 +1,44 @@
+[
+  {
+    "id": "table_001",
+    "description": "Customer sales data for Q1 2024. Review the data quality.",
+    "table_data": {
+      "headers": ["Customer ID", "Name", "Date", "Amount", "Region"],
+      "rows": [
+        ["C001", "John Smith", "2024-01-15", "1250.00", "North"],
+        ["C002", "Jane Doe", "01/20/2024", "890.50", "South"],
+        ["C003", "", "2024-01-22", "1500.00", "East"],
+        ["C001", "John Smith", "2024-01-15", "1250.00", "North"],
+        ["C004", "Bob Johnson", "2024-01-25", "-50.00", "West"]
+      ]
+    }
+  },
+  {
+    "id": "table_002",
+    "description": "Product inventory data. Check for any issues.",
+    "table_data": {
+      "headers": ["SKU", "Product Name", "Quantity", "Price", "Category"],
+      "rows": [
+        ["SKU001", "Widget A", "150", "29.99", "Electronics"],
+        ["SKU002", "Widget B", "75", "49.99", "Electronics"],
+        ["SKU003", "Gadget X", "200", "19.99", "Accessories"],
+        ["SKU004", "Gadget Y", "100", "24.99", "Accessories"],
+        ["SKU005", "Device Z", "50", "99.99", "Electronics"]
+      ]
+    }
+  },
+  {
+    "id": "table_003",
+    "description": "Employee attendance records. Verify data accuracy.",
+    "table_data": {
+      "headers": ["Employee", "Mon", "Tue", "Wed", "Thu", "Fri"],
+      "rows": [
+        ["Alice", "P", "P", "P", "A", "P"],
+        ["Bob", "P", "P", "P", "P", "P"],
+        ["Carol", "A", "P", "P", "P", "L"],
+        ["David", "P", "P", "", "P", "P"],
+        ["Eve", "P", "P", "P", "P", "P"]
+      ]
+    }
+  }
+]

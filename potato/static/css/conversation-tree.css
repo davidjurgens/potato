@@ -1,0 +1,239 @@
+/* Conversation Tree Display Styles */
+
+.conv-tree {
+    margin: 8px 0;
+}
+
+.conv-tree-controls {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.conv-tree-btn {
+    padding: 3px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    background: white;
+    font-size: 0.78rem;
+    cursor: pointer;
+    color: #475569;
+}
+
+.conv-tree-btn:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+}
+
+.conv-tree-empty,
+.conv-tree-error {
+    text-align: center;
+    color: #94a3b8;
+    padding: 20px;
+    font-size: 0.9rem;
+}
+
+.conv-tree-truncated {
+    color: #94a3b8;
+    font-style: italic;
+    font-size: 0.8rem;
+    padding: 4px 0 4px 20px;
+}
+
+/* Node Styles */
+.conv-tree-node {
+    margin-left: 16px;
+    margin-bottom: 4px;
+}
+
+.conv-tree-node.card {
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background: white;
+    padding: 0;
+    overflow: hidden;
+}
+
+.conv-tree-root > .conv-tree-node {
+    margin-left: 0;
+}
+
+.conv-tree-node-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: default;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.conv-tree-toggle {
+    cursor: pointer;
+    font-size: 0.7rem;
+    color: #94a3b8;
+    user-select: none;
+    width: 14px;
+    text-align: center;
+}
+
+.conv-tree-toggle:hover {
+    color: #475569;
+}
+
+.conv-tree-speaker {
+    font-weight: 600;
+}
+
+.conv-tree-node-id {
+    font-size: 0.7rem;
+    color: #94a3b8;
+    font-weight: normal;
+}
+
+.conv-tree-branch-count {
+    font-size: 0.7rem;
+    color: #94a3b8;
+    font-weight: normal;
+    margin-left: auto;
+}
+
+.conv-tree-node-text {
+    padding: 8px 10px;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: #1e293b;
+    white-space: pre-wrap;
+}
+
+/* Speaker colors */
+.conv-tree-speaker-0 { background-color: #ede9fe; color: #6E56CF; }
+.conv-tree-speaker-1 { background-color: #dbeafe; color: #2563EB; }
+.conv-tree-speaker-2 { background-color: #dcfce7; color: #16a34a; }
+.conv-tree-speaker-3 { background-color: #fef3c7; color: #d97706; }
+.conv-tree-speaker-4 { background-color: #fce7f3; color: #db2777; }
+.conv-tree-speaker-5 { background-color: #e0f2fe; color: #0284c7; }
+
+.conv-tree-children {
+    padding: 4px 0 4px 4px;
+    border-left: 2px solid #e2e8f0;
+    margin-left: 12px;
+}
+
+/* Selectable nodes for annotation */
+.conv-tree-node.selectable {
+    cursor: pointer;
+}
+
+.conv-tree-node.selectable:hover {
+    border-color: #6E56CF;
+    box-shadow: 0 0 0 1px #6E56CF;
+}
+
+.conv-tree-node.selected {
+    border-color: #6E56CF;
+    background-color: #faf5ff;
+}
+
+.conv-tree-node.on-path {
+    border-left: 3px solid #22c55e;
+}
+
+/* Tree Annotation Schema Styles */
+.tree-ann-container {
+    margin: 10px 0;
+    padding: 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #fafafa;
+}
+
+.tree-ann-header {
+    margin-bottom: 8px;
+}
+
+.tree-ann-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1a1a2e;
+}
+
+.tree-ann-hint {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin: 4px 0;
+}
+
+.tree-ann-section-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #475569;
+    margin: 8px 0 4px;
+}
+
+.tree-ann-node-panel {
+    margin: 10px 0;
+    padding: 10px;
+    border: 2px solid #6E56CF;
+    border-radius: 6px;
+    background: white;
+}
+
+.tree-ann-node-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.tree-ann-node-panel-title {
+    font-size: 0.85rem;
+    color: #475569;
+}
+
+.tree-ann-close-panel {
+    border: none;
+    background: none;
+    font-size: 18px;
+    color: #94a3b8;
+    cursor: pointer;
+}
+
+.tree-ann-close-panel:hover {
+    color: #ef4444;
+}
+
+.tree-ann-path-selection {
+    margin-top: 10px;
+    padding: 8px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background: white;
+}
+
+.tree-ann-path-desc {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin: 2px 0 6px;
+}
+
+.tree-ann-selected-path {
+    min-height: 30px;
+    padding: 6px;
+    background: #f8fafc;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.tree-ann-no-path {
+    color: #94a3b8;
+    font-style: italic;
+}
+
+.tree-ann-clear-path {
+    margin-top: 6px;
+}

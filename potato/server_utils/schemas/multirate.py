@@ -18,14 +18,15 @@ from .identifier_utils import (
     safe_generate_layout,
     generate_element_identifier,
     generate_validation_attribute,
-    escape_html_content
+    escape_html_content,
+    generate_layout_attributes
 )
 
 logger = logging.getLogger(__name__)
 
 # HTML template using Jinja2 with comprehensive styling that preserves horizontal layout
 MULTIRATE_TEMPLATE = """
-<form id="{{ schema_name }}" class="annotation-form multirate shadcn-multirate-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" >
+<form id="{{ schema_name }}" class="annotation-form multirate shadcn-multirate-container" action="/action_page.php" data-annotation-id="{{ annotation_id }}" {{ layout_attrs }}>
     <fieldset schema="{{ schema_name }}">
         <legend class="shadcn-multirate-title">{{ description }}</legend>
         <table class="shadcn-multirate-table">
@@ -114,6 +115,9 @@ def _generate_multirate_layout_internal(annotation_scheme):
     # Set validation
     validation = generate_validation_attribute(annotation_scheme)
 
+    # Get layout attributes for grid positioning
+    layout_attrs = generate_layout_attributes(annotation_scheme)
+
     # Preprocess items for template
     processed_items = []
     for option in options:
@@ -149,7 +153,9 @@ def _generate_multirate_layout_internal(annotation_scheme):
         'ratings': [escape_html_content(rating) for rating in ratings],
         'num_headers': min(len(options), num_columns),
         'rows': arranged_items,
-        'validation': validation
+        'validation': validation,
+        'annotation_id': annotation_scheme.get('annotation_id', ''),
+        'layout_attrs': layout_attrs
     }
 
     # Render template

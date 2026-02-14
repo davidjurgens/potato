@@ -2458,6 +2458,17 @@ def run_server(args):
             # Prefill embeddings for first N items
             _prefill_diversity_embeddings(dm, config)
             logger.info("Diversity manager initialized successfully")
+
+            # Initialize embedding visualization manager (requires diversity manager)
+            from potato.embedding_visualization import init_embedding_viz_manager
+            viz_manager = init_embedding_viz_manager(config)
+            if viz_manager and viz_manager.enabled:
+                logger.info("Embedding visualization manager initialized")
+            else:
+                logger.debug(
+                    "Embedding visualization not enabled. "
+                    "Install umap-learn: pip install umap-learn"
+                )
         else:
             logger.warning(
                 "Diversity ordering requested but manager not enabled. "

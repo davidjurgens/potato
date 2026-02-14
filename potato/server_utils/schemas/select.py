@@ -10,7 +10,8 @@ from .identifier_utils import (
     safe_generate_layout,
     generate_element_identifier,
     generate_validation_attribute,
-    escape_html_content
+    escape_html_content,
+    generate_layout_attributes
 )
 
 
@@ -42,8 +43,11 @@ def _generate_select_layout_internal(annotation_scheme):
     identifiers = generate_element_identifier(annotation_scheme["name"], "select-one", "select")
     validation = generate_validation_attribute(annotation_scheme)
 
+    # Get layout attributes for grid positioning
+    layout_attrs = generate_layout_attributes(annotation_scheme)
+
     schematic = (
-          f'<form id="{escape_html_content(annotation_scheme["name"])}" class="annotation-form select" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" data-annotation-type="select" data-schema-name="{escape_html_content(annotation_scheme["name"])}">     {get_ai_wrapper()}'
+          f'<form id="{escape_html_content(annotation_scheme["name"])}" class="annotation-form select" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" data-annotation-type="select" data-schema-name="{escape_html_content(annotation_scheme["name"])}" {layout_attrs}>     {get_ai_wrapper()}'
         + "  <fieldset>"
         + f"  <legend>{escape_html_content(annotation_scheme['description'])}</legend>"
         + (

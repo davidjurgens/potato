@@ -15,9 +15,20 @@ Usage:
 """
 
 from .registry import display_registry, DisplayDefinition, DisplayRegistry
+from .base import BaseDisplay, render_display_container
+from .pdf_display import PDFDisplay
+from .document_display import DocumentDisplay
+from .spreadsheet_display import SpreadsheetDisplay
+from .code_display import CodeDisplay
 
 __all__ = [
     'display_registry',
     'DisplayDefinition',
     'DisplayRegistry',
+    'BaseDisplay',
+    'render_display_container',
+    'PDFDisplay',
+    'DocumentDisplay',
+    'SpreadsheetDisplay',
+    'CodeDisplay',
 ]

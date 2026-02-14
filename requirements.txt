@@ -23,3 +23,14 @@ Werkzeug>=3.0.6
 pydantic>=2.11.9
 ollama>=0.6.0
 openai>=1.0.0
+
+# Embedding Visualization (optional - for admin dashboard UMAP visualization)
+umap-learn>=0.5.0       # UMAP dimensionality reduction
+
+# Extended Format Support (optional - install for PDF, DOCX, etc.)
+pdfplumber>=0.10.0      # PDF text extraction with positions
+python-docx>=1.0.0      # Word document parsing
+mammoth>=1.6.0          # DOCX to HTML conversion
+mistune>=3.0.0          # Markdown parsing
+pygments>=2.17.0        # Syntax highlighting for code and Markdown
+openpyxl>=3.1.0         # Excel file support

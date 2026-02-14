@@ -34,7 +34,7 @@ DEFAULT_COLORS = [
 ]
 
 # Valid annotation tools
-VALID_TOOLS = ["bbox", "polygon", "freeform", "landmark"]
+VALID_TOOLS = ["bbox", "polygon", "freeform", "landmark", "fill", "eraser"]
 
 
 def generate_image_annotation_layout(annotation_scheme):
@@ -463,6 +463,8 @@ def _generate_tool_buttons(tools):
         "polygon": {"label": "Polygon", "title": "Polygon (P)", "icon": "⬡"},
         "freeform": {"label": "Draw", "title": "Freeform Draw (F)", "icon": "✎"},
         "landmark": {"label": "Point", "title": "Landmark Point (L)", "icon": "◉"},
+        "fill": {"label": "Fill", "title": "Flood Fill (G)", "icon": "🪣"},
+        "eraser": {"label": "Eraser", "title": "Eraser (E)", "icon": "⌫"},
     }
 
     buttons = []
@@ -507,6 +509,8 @@ def _generate_keybindings(labels, tools):
         "polygon": ("p", "Polygon tool"),
         "freeform": ("f", "Freeform draw tool"),
         "landmark": ("l", "Landmark point tool"),
+        "fill": ("g", "Flood fill tool"),
+        "eraser": ("e", "Eraser tool"),
     }
     for tool in tools:
         if tool in tool_keys:

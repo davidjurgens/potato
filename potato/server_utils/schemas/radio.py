@@ -20,7 +20,8 @@ from .identifier_utils import (
     generate_element_identifier,
     generate_element_value,
     generate_validation_attribute,
-    escape_html_content
+    escape_html_content,
+    generate_layout_attributes
 )
 
 
@@ -67,10 +68,13 @@ def _generate_radio_layout_internal(annotation_scheme, horizontal=False):
         horizontal = True
         logger.debug("Using horizontal layout")
 
+    # Get layout attributes for grid positioning
+    layout_attrs = generate_layout_attributes(annotation_scheme)
+
     # Initialize form wrapper
     schema_name = annotation_scheme["name"]
     schematic = f"""
-    <form id="{escape_html_content(schema_name)}" class="annotation-form radio shadcn-radio-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" data-annotation-type="radio" data-schema-name="{escape_html_content(schema_name)}">
+    <form id="{escape_html_content(schema_name)}" class="annotation-form radio shadcn-radio-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" data-annotation-type="radio" data-schema-name="{escape_html_content(schema_name)}" {layout_attrs}>
         {get_ai_wrapper()}
         <fieldset schema="{escape_html_content(schema_name)}">
             <legend class="shadcn-radio-title">{escape_html_content(annotation_scheme['description'])}</legend>

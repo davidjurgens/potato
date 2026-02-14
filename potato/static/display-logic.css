@@ -1,0 +1,83 @@
+/**
+ * Display Logic CSS
+ *
+ * Styles for conditional schema visibility with smooth animations.
+ */
+
+/* Container for schemas with display_logic */
+.display-logic-container {
+    transition: opacity 0.3s ease, max-height 0.3s ease, margin 0.3s ease, padding 0.3s ease;
+    overflow: hidden;
+}
+
+/* Hidden state - collapsed and invisible */
+.display-logic-hidden {
+    opacity: 0;
+    max-height: 0 !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    pointer-events: none;
+    visibility: hidden;
+}
+
+/* Visible state - expanded and fully visible */
+.display-logic-visible {
+    opacity: 1;
+    max-height: 2000px; /* Large enough for any content */
+    visibility: visible;
+    pointer-events: auto;
+}
+
+/* Ensure child elements don't interfere with animations */
+.display-logic-container * {
+    transition: none;
+}
+
+/* Add a subtle indicator for conditional schemas (optional - can be removed) */
+.display-logic-container.display-logic-visible::before {
+    content: '';
+    display: block;
+    width: 3px;
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    background-color: transparent;
+    transition: background-color 0.3s ease;
+}
+
+/* When transitioning, briefly show the indicator */
+.display-logic-container.display-logic-visible:not(.transitioning)::before {
+    background-color: transparent;
+}
+
+/* Accessibility: Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+    .display-logic-container {
+        transition: none;
+    }
+
+    .display-logic-hidden {
+        display: none;
+    }
+
+    .display-logic-visible {
+        display: block;
+    }
+}
+
+/* Print styles - always show everything */
+@media print {
+    .display-logic-container {
+        opacity: 1 !important;
+        max-height: none !important;
+        visibility: visible !important;
+        pointer-events: auto !important;
+    }
+
+    .display-logic-hidden {
+        display: block !important;
+    }
+}
