@@ -127,11 +127,12 @@ body {
 
 /* Annotation form styling */
 .annotation-form {
-  min-width: 20rem;
+  min-width: 0; /* Allow forms to shrink in grid layout */
 }
 
 .annotation-form fieldset {
-  padding: 1rem;
+  padding: 0.25rem;
+  margin: 0;
 }
 
 .annotation-form legend {
@@ -482,7 +483,7 @@ input[type="range"]::-moz-range-thumb {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--box-shadow);
-  padding: 1rem;
+  padding: 0.5rem 0.75rem;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -498,11 +499,12 @@ input[type="range"]::-moz-range-thumb {
   color: black;
   text-align: left;
   width: 100%;
+  margin-bottom: 0.25rem;
 }
 
 .shadcn-likert-scale {
   display: flex;
-  align-items: center;
+  align-items: flex-start;  /* Align to top so endpoints match track position */
   justify-content: space-between;
   width: 100%;
 }
@@ -510,9 +512,9 @@ input[type="range"]::-moz-range-thumb {
 .shadcn-likert-endpoint {
   display: flex;
   align-items: center;
-  height: 2.5rem;
   flex: 0 0 auto;
   font-size: 0.875rem;
+  line-height: 1.25rem;  /* Match button height for vertical alignment */
   color: var(--muted-foreground);
   padding: 0 0.5rem;
   max-width: 30%;
@@ -526,6 +528,7 @@ input[type="range"]::-moz-range-thumb {
   display: flex;
   flex: 1;
   justify-content: space-between;
+  align-items: flex-start;  /* Align options to top so track math works correctly */
   position: relative;
   padding: 0 0.5rem;
   gap: 0.5rem;
@@ -537,15 +540,16 @@ input[type="range"]::-moz-range-thumb {
   background-color: var(--border);
   left: 0.5rem;
   right: 0.5rem;
-  top: 0.625rem;
-  transform: none;
+  top: 0.625rem;  /* Half of button height (1.25rem / 2) - positions track at button center */
+  transform: translateY(-50%);
   z-index: 0;
 }
 
 .shadcn-likert-option {
   display: flex;
-  flex-direction: column;
+  flex-direction: column;  /* Stack button and label vertically */
   align-items: center;
+  justify-content: flex-start;  /* Align to top */
   position: relative;
   z-index: 1;
 }
@@ -563,7 +567,7 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 50%;
   background-color: var(--secondary);
   border: 2px solid var(--border);
-  margin-bottom: 0.5rem;
+  margin-bottom: 0;
   cursor: pointer;
   transition: var(--transition);
 }
@@ -616,7 +620,7 @@ input[type="range"]::-moz-range-thumb {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--box-shadow);
-  padding: 1rem;
+  padding: 0.5rem 0.75rem;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -630,7 +634,7 @@ input[type="range"]::-moz-range-thumb {
   font-size: 1rem;
   font-weight: 500;
   color: var(--heading-color);
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
   text-align: left;
   width: 100%;
 }
@@ -729,7 +733,7 @@ input[type="range"]::-moz-range-thumb {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--box-shadow);
-  padding: 1rem;
+  padding: 0.5rem 0.75rem;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -743,7 +747,7 @@ input[type="range"]::-moz-range-thumb {
   font-size: 1rem;
   font-weight: 500;
   color: var(--heading-color);
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
   text-align: left;
   width: 100%;
 }
@@ -858,7 +862,7 @@ input[type="range"]::-moz-range-thumb {
   font-size: 1rem;
   font-weight: 500;
   color: var(--heading-color);
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
   text-align: left;
   width: 100%;
 }
@@ -951,7 +955,7 @@ input[type="range"]::-moz-range-thumb {
   font-size: 1rem;
   font-weight: 500;
   color: var(--heading-color);
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
   text-align: left;
   width: 100%;
 }
@@ -1081,21 +1085,28 @@ input[type="range"]::-moz-range-thumb {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--box-shadow);
-  padding: 1rem;
+  padding: 0.5rem 0.75rem;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  width: fit-content;
-  max-width: 100%;
+  align-items: stretch;  /* Stretch children to fill width */
+  width: 100%;  /* Fill container width by default */
+  box-sizing: border-box;
   font-family: ui-sans-serif, system-ui, sans-serif;
   position: relative;
+}
+
+/* Ensure fieldset inside textbox fills width (override browser default min-width: min-content) */
+.shadcn-textbox-container fieldset {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .shadcn-textbox-title {
   font-size: 1rem;
   font-weight: 500;
   color: var(--heading-color);
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
   text-align: left;
   width: 100%;
 }
@@ -1116,6 +1127,7 @@ input[type="range"]::-moz-range-thumb {
 
 .shadcn-textbox-input {
   width: 100%;
+  box-sizing: border-box;
   border-radius: var(--radius);
   border: 1px solid var(--input);
   background-color: var(--background);
@@ -1129,6 +1141,7 @@ input[type="range"]::-moz-range-thumb {
 .shadcn-textbox-textarea {
   min-height: 6rem;
   resize: vertical;
+  height: auto;  /* Override fixed height from .shadcn-textbox-input */
 }
 
 .shadcn-textbox-input:focus {
@@ -1139,6 +1152,22 @@ input[type="range"]::-moz-range-thumb {
 
 .shadcn-textbox-input:hover {
   border-color: var(--primary);
+}
+
+/* Remove bottom margin from last items in schema containers to fix excessive whitespace */
+.shadcn-radio-options > .shadcn-radio-option:last-child,
+.shadcn-multiselect-grid > .shadcn-multiselect-item:last-child,
+.shadcn-likert-options > .shadcn-likert-option:last-child,
+.shadcn-textbox-item:last-child {
+  margin-bottom: 0;
+}
+
+/* Remove bottom margin from container elements themselves */
+.shadcn-radio-options,
+.shadcn-multiselect-grid,
+.shadcn-likert-scale,
+.shadcn-textbox-items {
+  margin-bottom: 0;
 }
 
 /* Number Styles */
@@ -1489,139 +1518,6 @@ fieldset[schema] {
 /* Overlay span delete buttons should always be clickable */
 .annotation-span.overlay-span .span-delete-btn {
   pointer-events: auto;
-}
-
-.shadcn-likert-container {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--box-shadow);
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: fit-content;
-  max-width: 100%;
-  font-family: ui-sans-serif, system-ui, sans-serif;
-  position: relative;
-}
-
-.shadcn-likert-title {
-  font-size: 1rem;
-  font-weight: 500;
-  color: black;
-  text-align: left;
-  width: 100%;
-}
-
-.shadcn-likert-scale {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-}
-
-.shadcn-likert-endpoint {
-  display: flex;
-  align-items: center;
-  height: 2.5rem;
-  flex: 0 0 auto;
-  font-size: 0.875rem;
-  color: var(--muted-foreground);
-  padding: 0 0.5rem;
-  max-width: 30%;
-  text-align: center;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  hyphens: auto;
-}
-
-.shadcn-likert-options {
-  display: flex;
-  flex: 1;
-  justify-content: space-between;
-  position: relative;
-  padding: 0 0.5rem;
-  gap: 0.5rem;
-}
-
-.shadcn-likert-track {
-  position: absolute;
-  height: 2px;
-  background-color: var(--border);
-  left: 0.5rem;
-  right: 0.5rem;
-  top: 0.625rem;
-  transform: none;
-  z-index: 0;
-}
-
-.shadcn-likert-option {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  position: relative;
-  z-index: 1;
-}
-
-.shadcn-likert-input {
-  opacity: 0;
-  position: absolute;
-  width: 0;
-  height: 0;
-}
-
-.shadcn-likert-button {
-  width: 1.25rem;
-  height: 1.25rem;
-  border-radius: 50%;
-  background-color: var(--secondary);
-  border: 2px solid var(--border);
-  margin-bottom: 0.5rem;
-  cursor: pointer;
-  transition: var(--transition);
-}
-
-.shadcn-likert-input:checked + .shadcn-likert-button {
-  background-color: var(--primary);
-  border-color: var(--primary);
-  transform: scale(1.1);
-  box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.2);
-}
-
-.shadcn-likert-input:focus + .shadcn-likert-button {
-  box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.2);
-}
-
-.shadcn-likert-input:hover + .shadcn-likert-button {
-  border-color: var(--primary);
-}
-
-.shadcn-likert-label {
-  font-size: 0.75rem;
-  color: var(--muted-foreground);
-  margin-top: 0.25rem;
-  text-align: center;
-}
-
-.shadcn-likert-input:checked ~ .shadcn-likert-label {
-  color: var(--primary);
-  font-weight: 500;
-}
-
-.shadcn-likert-bad-text {
-  display: flex;
-  align-items: center;
-  margin-top: 0.75rem;
-  padding: 0.5rem 0;
-}
-
-.shadcn-likert-bad-text-label {
-  margin-left: 0.5rem;
-  font-size: 0.875rem;
-  color: var(--text-color);
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  flex: 1;
 }
 
 fieldset[schema] {
@@ -2738,6 +2634,11 @@ fieldset[schema] {
   --layout-gap: 1rem;
   --layout-row-gap: var(--layout-gap);
   --layout-align: start;
+  --layout-content-align: left;
+  --group-bg-odd: #fafafa;
+  --group-bg-even: #f8f9fc;
+  --group-padding: 0.5rem 0.75rem;
+  --form-padding: 0.375rem 0.5rem;
 }
 
 /* Main Layout Container */
@@ -2845,31 +2746,53 @@ fieldset[schema] {
   grid-column: 1 / -1;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 1rem;
+  padding: var(--group-padding);
   background-color: var(--card);
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+/* Subtle alternating background colors for visual distinction */
+.annotation-form-group:nth-child(odd) {
+  background-color: var(--group-bg-odd);
+}
+
+.annotation-form-group:nth-child(even) {
+  background-color: var(--group-bg-even);
+}
+
+/* Per-group custom background color (set via inline style) */
+.annotation-form-group[style*="--group-bg:"] {
+  background-color: var(--group-bg) !important;
+}
+
+/* Main content display area (text/image/video to annotate) always white */
+#task_layout,
+#task_layout.shadcn-card,
+.instance-text-container,
+#instance-text {
+  background-color: #ffffff !important;
 }
 
 .annotation-form-group-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
+  margin-bottom: 0.375rem;
+  padding-bottom: 0.25rem;
   border-bottom: 1px solid var(--border);
 }
 
 .annotation-form-group-title {
   font-weight: 600;
-  font-size: 1rem;
+  font-size: 0.9rem;
   color: var(--heading-color);
   margin: 0;
 }
 
 .annotation-form-group-description {
-  font-size: 0.875rem;
+  font-size: 0.8rem;
   color: var(--muted-foreground);
-  margin: 0.25rem 0 0 0;
+  margin: 0.125rem 0 0 0;
 }
 
 .annotation-form-group-toggle {
@@ -2898,7 +2821,49 @@ fieldset[schema] {
 .annotation-form-group-content {
   display: grid;
   grid-template-columns: repeat(var(--layout-columns, 2), 1fr);
-  gap: var(--layout-gap, 1rem);
+  gap: var(--layout-gap, 0.75rem);
+  width: 100%;
+  align-items: start; /* Don't stretch forms vertically */
+}
+
+/* Forms inside groups should fill their grid cells horizontally but not stretch vertically */
+.annotation-form-group-content .annotation-form,
+.annotation-forms-layout .annotation-form {
+  width: 100%;
+  box-sizing: border-box;
+  /* Keep forms at their natural height - don't stretch to fill grid row */
+}
+
+/* Reduce padding in forms within layout containers */
+.annotation-forms-layout .shadcn-radio-container,
+.annotation-forms-layout .shadcn-multiselect-container,
+.annotation-forms-layout .shadcn-likert-container,
+.annotation-forms-layout .shadcn-textbox-container,
+.annotation-form-group-content .shadcn-radio-container,
+.annotation-form-group-content .shadcn-multiselect-container,
+.annotation-form-group-content .shadcn-likert-container,
+.annotation-form-group-content .shadcn-textbox-container {
+  padding: var(--form-padding);
+  width: 100%;
+  box-sizing: border-box;
+  align-items: flex-start;  /* Don't center content vertically in layout mode */
+}
+
+/* Minimal fieldset padding within layout containers - container already has padding */
+.annotation-forms-layout fieldset,
+.annotation-form-group-content fieldset {
+  padding: 0.125rem 0;  /* Reduced from 0.25rem 0.5rem to avoid double padding */
+  margin: 0;
+  text-align: var(--layout-content-align);
+}
+
+/* Ensure radio and multiselect options are left-aligned */
+.annotation-form-group-content .shadcn-radio-options,
+.annotation-form-group-content .shadcn-multiselect-grid,
+.annotation-forms-layout .shadcn-radio-options,
+.annotation-forms-layout .shadcn-multiselect-grid {
+  align-items: flex-start;
+  width: 100%;
 }
 
 .annotation-form-group.collapsed .annotation-form-group-content {
