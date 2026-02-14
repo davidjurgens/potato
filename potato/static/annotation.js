@@ -404,8 +404,10 @@ document.addEventListener('DOMContentLoaded', function () {
         initDisplayLogic();
     }
     // Initialize form layout manager (if layout config is available)
-    if (window.config && window.config.layout) {
-        window.formLayoutManager.initialize(window.config.layout);
+    // Layout config is passed via ui_config from the server
+    const layoutConfig = window.config?.ui_config?.layout || window.config?.layout;
+    if (layoutConfig) {
+        window.formLayoutManager.initialize(layoutConfig);
     }
     // Initialize pairwise annotation
     initPairwiseAnnotation();

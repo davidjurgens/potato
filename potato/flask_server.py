@@ -1553,6 +1553,11 @@ def render_page_with_annotations(username) -> str:
     # Get UI configuration from config
     ui_config = config.get("ui", {})
 
+    # Add layout configuration to ui_config for JavaScript access
+    if config.get("layout"):
+        ui_config = dict(ui_config)  # Make a copy to avoid modifying the original
+        ui_config["layout"] = config["layout"]
+
     # Detect if any annotation scheme is video_annotation type
     # This is used to customize the display (show "Video to Annotate:" instead of "Text to Annotate:")
     has_video_annotation = any(
@@ -1932,6 +1937,11 @@ def render_page_with_annotations_WEIRD(username):
 
     # Get UI configuration from config
     ui_config = config.get("ui", {})
+
+    # Add layout configuration to ui_config for JavaScript access
+    if config.get("layout"):
+        ui_config = dict(ui_config)  # Make a copy to avoid modifying the original
+        ui_config["layout"] = config["layout"]
 
     return render_template(
         html_fname,

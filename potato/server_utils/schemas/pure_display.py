@@ -12,7 +12,8 @@ interaction elements. This is useful for:
 import logging
 from .identifier_utils import (
     safe_generate_layout,
-    escape_html_content
+    escape_html_content,
+    generate_layout_attributes
 )
 
 logger = logging.getLogger(__name__)
@@ -47,9 +48,12 @@ def _generate_pure_display_layout_internal(annotation_scheme):
     """
     logger.debug(f"Generating pure display layout for schema: {annotation_scheme['name']}")
 
+    # Get layout attributes for grid positioning
+    layout_attrs = generate_layout_attributes(annotation_scheme)
+
     # Format content with header and body text
     schematic = f"""
-        <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form pure-display" action="/action_page.php">
+        <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form pure-display" action="/action_page.php" {layout_attrs}>
             <fieldset schema="{escape_html_content(annotation_scheme['name'])}">
                 <legend>{escape_html_content(annotation_scheme['description'])}</legend>
                 <div class="display-content">

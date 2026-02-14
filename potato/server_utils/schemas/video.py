@@ -17,7 +17,8 @@ import os.path
 from potato.ai.ai_help_wrapper import get_ai_wrapper, get_dynamic_ai_help
 from .identifier_utils import (
     safe_generate_layout,
-    escape_html_content
+    escape_html_content,
+    generate_layout_attributes
 )
 
 logger = logging.getLogger(__name__)
@@ -84,9 +85,12 @@ def _generate_video_layout_internal(annotation_scheme):
         logger.warning(f"Video file not found locally: {video_path}. "
                       f"Assuming it will be served from a web-accessible location.")
 
+    # Get layout attributes for grid positioning
+    layout_attrs = generate_layout_attributes(annotation_scheme)
+
     # Initialize form wrapper
     schematic = f"""
-        <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form video" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}>
+        <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form video" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" {layout_attrs}>
                  {get_ai_wrapper()}
             <fieldset schema="{escape_html_content(annotation_scheme['name'])}">
                 <legend>{escape_html_content(annotation_scheme['description'])}</legend>
