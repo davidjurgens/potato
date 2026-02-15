@@ -34,7 +34,7 @@ DEFAULT_COLORS = [
 ]
 
 # Valid annotation tools
-VALID_TOOLS = ["bbox", "polygon", "freeform", "landmark", "fill", "eraser"]
+VALID_TOOLS = ["bbox", "polygon", "freeform", "landmark", "fill", "eraser", "brush"]
 
 
 def generate_image_annotation_layout(annotation_scheme):
@@ -107,6 +107,11 @@ def _generate_image_annotation_layout_internal(annotation_scheme):
     freeform_brush_size = annotation_scheme.get("freeform_brush_size", 5)
     freeform_simplify = annotation_scheme.get("freeform_simplify", True)
 
+    # Segmentation mask configuration
+    brush_size = annotation_scheme.get("brush_size", 20)
+    eraser_size = annotation_scheme.get("eraser_size", 20)
+    mask_opacity = annotation_scheme.get("mask_opacity", 0.5)
+
     # AI support configuration
     ai_support = annotation_scheme.get("ai_support", {})
     ai_enabled = ai_support.get("enabled", False)
@@ -125,6 +130,9 @@ def _generate_image_annotation_layout_internal(annotation_scheme):
         "maxAnnotations": max_annotations,
         "freeformBrushSize": freeform_brush_size,
         "freeformSimplify": freeform_simplify,
+        "brushSize": brush_size,
+        "eraserSize": eraser_size,
+        "maskOpacity": mask_opacity,
         "aiSupport": ai_enabled,
         "aiFeatures": ai_support.get("features", {}) if ai_enabled else {},
         "sourceField": source_field,
@@ -233,6 +241,13 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
                         <button type="button" class="edit-btn delete-btn" data-action="delete" title="Delete Selected (Del)">Delete</button>
                     </div>
 
+                    <!-- Brush size control (shown when brush/eraser selected) -->
+                    <div class="brush-size-group" style="display: none;">
+                        <span class="tool-group-label">Size:</span>
+                        <input type="range" class="brush-size-slider" min="1" max="100" value="20" title="Brush Size">
+                        <span class="brush-size-value">20</span>
+                    </div>
+
                     <!-- Annotation count -->
                     <div class="count-group">
                         <span class="annotation-count">Annotations: <span class="count-value">0</span></span>
@@ -244,6 +259,8 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
                 <!-- Canvas wrapper -->
                 <div class="canvas-wrapper">
                     <canvas id="canvas-{escaped_name}" class="annotation-canvas"></canvas>
+                    <!-- Mask canvas for segmentation (overlaid on top) -->
+                    <canvas id="mask-canvas-{escaped_name}" class="mask-canvas" style="display: none;"></canvas>
                 </div>
 
                 <!-- Hidden input for storing annotation data -->
@@ -251,6 +268,12 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
                        name="{escaped_name}"
                        id="input-{escaped_name}"
                        class="annotation-data-input"
+                       value="">
+                <!-- Hidden input for storing mask data (RLE encoded) -->
+                <input type="hidden"
+                       name="{escaped_name}_masks"
+                       id="mask-input-{escaped_name}"
+                       class="mask-data-input"
                        value="">
             </div>
 
@@ -271,17 +294,54 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
                         var inputId = 'input-{escaped_name}';
 
                         // Get image URL from the instance display
+                        // Priority: 1) data-image-url on #text-content, 2) img src, 3) text content itself
                         var instanceContainer = document.getElementById('instance-text');
-                        console.log('Instance container:', instanceContainer);
+                        console.log('[ImageAnnotation] Instance container:', instanceContainer);
                         var textContent = instanceContainer ? instanceContainer.querySelector('#text-content') : null;
-                        console.log('Text content element:', textContent);
-                        var imageUrl = textContent ? textContent.getAttribute('data-image-url') : null;
-                        console.log('Image URL from data-image-url:', imageUrl);
-                        // Fallback to looking for an img element
+                        console.log('[ImageAnnotation] Text content element:', textContent);
+
+                        var imageUrl = null;
+
+                        // Method 1: Check data-image-url attribute (set by template when has_image_annotation=true)
+                        if (textContent) {{
+                            imageUrl = textContent.getAttribute('data-image-url');
+                            if (imageUrl) {{
+                                console.log('[ImageAnnotation] Found URL from data-image-url:', imageUrl);
+                            }}
+                        }}
+
+                        // Method 2: Fallback to looking for an img element with data-source-url or src
+                        if (!imageUrl && instanceContainer) {{
+                            var imgElement = instanceContainer.querySelector('img');
+                            if (imgElement) {{
+                                imageUrl = imgElement.getAttribute('data-source-url') || imgElement.src;
+                                console.log('[ImageAnnotation] Found URL from img element:', imageUrl);
+                            }}
+                        }}
+
+                        // Method 3: If text content looks like a URL, use it directly
+                        if (!imageUrl && textContent) {{
+                            var textVal = textContent.textContent.trim();
+                            if (textVal.match(/^https?:\/\/.+\.(jpg|jpeg|png|gif|webp|svg)/i)) {{
+                                imageUrl = textVal;
+                                console.log('[ImageAnnotation] Found URL from text content:', imageUrl);
+                            }}
+                        }}
+
+                        // Method 4: Check source_field in instance data (via display fields)
+                        if (!imageUrl && config.sourceField) {{
+                            var displayFields = document.querySelectorAll('[data-field-key="' + config.sourceField + '"]');
+                            displayFields.forEach(function(field) {{
+                                var url = field.getAttribute('data-source-url') || field.getAttribute('src');
+                                if (url && !imageUrl) {{
+                                    imageUrl = url;
+                                    console.log('[ImageAnnotation] Found URL from source_field display:', imageUrl);
+                                }}
+                            }});
+                        }}
+
                         if (!imageUrl) {{
-                            var imgElement = instanceContainer ? instanceContainer.querySelector('img') : null;
-                            imageUrl = imgElement ? imgElement.src : null;
-                            console.log('Image URL from img element:', imageUrl);
+                            console.error('[ImageAnnotation] No image URL found! Check that the instance data contains an image URL.');
                         }}
 
                         // Initialize manager
@@ -308,8 +368,25 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
                                     b.classList.remove('active');
                                 }});
                                 this.classList.add('active');
+
+                                // Show/hide brush size control for brush/eraser tools
+                                var brushSizeGroup = container.querySelector('.brush-size-group');
+                                if (brushSizeGroup) {{
+                                    brushSizeGroup.style.display = (tool === 'brush' || tool === 'eraser') ? 'flex' : 'none';
+                                }}
                             }});
                         }});
+
+                        // Wire up brush size slider
+                        var brushSlider = container.querySelector('.brush-size-slider');
+                        var brushSizeValue = container.querySelector('.brush-size-value');
+                        if (brushSlider) {{
+                            brushSlider.addEventListener('input', function() {{
+                                var size = parseInt(this.value);
+                                if (brushSizeValue) brushSizeValue.textContent = size;
+                                manager.setBrushSize(size);
+                            }});
+                        }}
 
                         container.querySelectorAll('.label-btn').forEach(function(btn) {{
                             btn.addEventListener('click', function() {{
@@ -463,6 +540,7 @@ def _generate_tool_buttons(tools):
         "polygon": {"label": "Polygon", "title": "Polygon (P)", "icon": "⬡"},
         "freeform": {"label": "Draw", "title": "Freeform Draw (F)", "icon": "✎"},
         "landmark": {"label": "Point", "title": "Landmark Point (L)", "icon": "◉"},
+        "brush": {"label": "Brush", "title": "Segmentation Brush (M)", "icon": "🖌️"},
         "fill": {"label": "Fill", "title": "Flood Fill (G)", "icon": "🪣"},
         "eraser": {"label": "Eraser", "title": "Eraser (E)", "icon": "⌫"},
     }
@@ -509,6 +587,7 @@ def _generate_keybindings(labels, tools):
         "polygon": ("p", "Polygon tool"),
         "freeform": ("f", "Freeform draw tool"),
         "landmark": ("l", "Landmark point tool"),
+        "brush": ("m", "Segmentation brush tool"),
         "fill": ("g", "Flood fill tool"),
         "eraser": ("e", "Eraser tool"),
     }

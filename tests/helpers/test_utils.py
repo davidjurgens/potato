@@ -476,6 +476,58 @@ def create_image_annotation_config(test_dir: str, **kwargs) -> Tuple[str, str]:
     return config_file, data_file
 
 
+def create_segmentation_annotation_config(test_dir: str, **kwargs) -> Tuple[str, str]:
+    """
+    Create a test configuration with segmentation mask annotation support.
+
+    This config includes brush, eraser, and fill tools for pixel-level mask annotation.
+
+    Args:
+        test_dir: Directory to create the config in
+        **kwargs: Additional config options
+
+    Returns:
+        Tuple of (config_file_path, data_file_path)
+    """
+    # Create test data with image URLs
+    test_data = [
+        {"id": "seg_001", "image": "https://picsum.photos/id/1011/400/300"},
+        {"id": "seg_002", "image": "https://picsum.photos/id/1025/400/300"},
+    ]
+
+    data_file = create_test_data_file(test_dir, test_data, filename="segmentation_data.jsonl")
+
+    # Create segmentation annotation scheme with brush/mask tools
+    annotation_schemes = [
+        {
+            "annotation_type": "image_annotation",
+            "name": "segmentation",
+            "description": "Paint regions in the image using the brush tool",
+            "source_field": "image",
+            "tools": ["brush", "eraser", "fill", "bbox"],
+            "labels": [
+                {"name": "foreground", "color": "#FF6B6B", "key_value": "1"},
+                {"name": "background", "color": "#4ECDC4", "key_value": "2"},
+            ],
+            "zoom_enabled": True,
+            "pan_enabled": True,
+            "brush_size": 20,
+            "eraser_size": 20,
+            "mask_opacity": 0.5
+        }
+    ]
+
+    config_file = create_test_config(
+        test_dir,
+        annotation_schemes,
+        data_files=[data_file],
+        item_properties={"id_key": "id", "text_key": "image"},
+        **kwargs
+    )
+
+    return config_file, data_file
+
+
 def create_multiselect_annotation_config(test_dir: str, num_items: int = 3, **kwargs) -> Tuple[str, str]:
     """
     Create a test configuration with multiselect/checkbox annotation support.
