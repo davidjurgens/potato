@@ -1,0 +1,56 @@
+# Simple Entity Linking Example
+# This example demonstrates linking span annotations to external knowledge bases
+# like Wikidata for named entity recognition tasks.
+
+port: 9001
+server_name: potato annotator
+annotation_task_name: Entity Linking Example
+
+task_dir: .
+output_annotation_dir: annotation_output/simple-entity-linking/
+output_annotation_format: json
+annotation_codebook_url: ''
+
+data_files:
+  - data/entity-linking-example.json
+
+item_properties:
+  id_key: id
+  text_key: text
+  context_key: context
+
+user_config:
+  allow_all_users: true
+  users: []
+
+alert_time_each_instance: 10000000
+
+annotation_schemes:
+  - annotation_type: span
+    name: ner
+    description: Highlight and link named entities to Wikidata
+    labels:
+      - name: PERSON
+        tooltip: "A person's name (e.g., Albert Einstein, Marie Curie)"
+      - name: ORGANIZATION
+        tooltip: "An organization name (e.g., NASA, United Nations)"
+      - name: LOCATION
+        tooltip: "A location or place name (e.g., Paris, Mount Everest)"
+      - name: EVENT
+        tooltip: "A named event (e.g., World War II, Olympics)"
+    sequential_key_binding: true
+    # Entity linking configuration
+    entity_linking:
+      enabled: true
+      knowledge_bases:
+        - name: wikidata
+          type: wikidata
+          language: en
+      auto_search: true
+      required: false
+
+site_dir: default
+
+# UI configuration
+ui:
+  display_instance_id: true

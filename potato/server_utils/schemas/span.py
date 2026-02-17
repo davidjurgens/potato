@@ -109,7 +109,40 @@ def set_span_color(schema, span_label, color):
 def _generate_span_layout_internal(annotation_scheme, horizontal=False):
     """
     Internal function to generate span layout after validation.
+
+    Configuration options:
+        allow_discontinuous (bool): Enable discontinuous span selection via Ctrl/Cmd+click.
+            When enabled, users can hold Ctrl (Windows/Linux) or Cmd (Mac) and click to
+            add additional non-contiguous text ranges to an existing span annotation.
+            Default: false
+
+        entity_linking (dict): Configuration for knowledge base entity linking.
+            When enabled, users can link annotated spans to external knowledge bases
+            like Wikidata or UMLS. Configuration options:
+            - enabled (bool): Whether entity linking is enabled. Default: false
+            - knowledge_bases (list): List of KB configurations, each with:
+              - name (str): Display name for the KB
+              - type (str): KB type ("wikidata", "umls", "rest")
+              - api_key (str): Optional API key for authenticated services
+              - language (str): Language code for results. Default: "en"
+            - auto_search (bool): Automatically search when span is created. Default: true
+            - required (bool): Require entity link before saving span. Default: false
+
+            Example:
+                entity_linking:
+                  enabled: true
+                  knowledge_bases:
+                    - name: wikidata
+                      type: wikidata
+                      language: en
+                    - name: umls
+                      type: umls
+                      api_key: ${UMLS_API_KEY}
+                  auto_search: true
+                  required: false
     """
+    import json as json_module
+
     # Initialize form wrapper
     scheme_name = annotation_scheme["name"]
 
@@ -117,14 +150,35 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
     target_field = annotation_scheme.get("target_field", "")
     target_field_attr = f' data-target-field="{escape_html_content(target_field)}"' if target_field else ""
 
+    # Check for discontinuous span support
+    allow_discontinuous = annotation_scheme.get("allow_discontinuous", False)
+    discontinuous_attr = ' data-allow-discontinuous="true"' if allow_discontinuous else ""
+
+    # Check for entity linking support
+    entity_linking = annotation_scheme.get("entity_linking", {})
+    entity_linking_enabled = entity_linking.get("enabled", False)
+    entity_linking_attr = ""
+    if entity_linking_enabled:
+        # Serialize entity_linking config to JSON for frontend
+        el_config = {
+            "enabled": True,
+            "knowledge_bases": entity_linking.get("knowledge_bases", []),
+            "auto_search": entity_linking.get("auto_search", True),
+            "required": entity_linking.get("required", False)
+        }
+        el_json = json_module.dumps(el_config)
+        entity_linking_attr = f' data-entity-linking=\'{escape_html_content(el_json)}\''
+
     # Get layout attributes for grid positioning
     layout_attrs = generate_layout_attributes(annotation_scheme)
 
     schematic = f"""
-    <form id="{escape_html_content(scheme_name)}" class="annotation-form span shadcn-span-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}"{target_field_attr} {layout_attrs}>
+    <form id="{escape_html_content(scheme_name)}" class="annotation-form span shadcn-span-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}"{target_field_attr}{discontinuous_attr}{entity_linking_attr} {layout_attrs}>
             {get_ai_wrapper()}
         <fieldset schema="{escape_html_content(scheme_name)}">
             <legend class="shadcn-span-title">{escape_html_content(annotation_scheme["description"])}</legend>
+            {"<div class='discontinuous-hint'>Hold Ctrl/Cmd + select to add additional text to this span</div>" if allow_discontinuous else ""}
+            {"<div class='entity-linking-hint'>Click the link icon on spans to connect to knowledge base entities</div>" if entity_linking_enabled else ""}
             <div class="shadcn-span-options">
     """
 
@@ -292,6 +346,8 @@ def generate_span_layout(annotation_scheme, horizontal=False):
 def render_span_annotations(text, span_annotations, target_field=None):
     """
     Render span annotations into HTML with boundary-based algorithm.
+    Supports discontinuous spans with additional_parts.
+
     Args:
         text (str): The original text to annotate
         span_annotations: Dictionary of span_id -> span data, or list of SpanAnnotation objects,
@@ -336,6 +392,26 @@ def render_span_annotations(text, span_annotations, target_field=None):
                     continue  # Skip spans not targeting this field
 
                 span_id = span.get_id()
+                # Get additional_parts for discontinuous spans
+                additional_parts = []
+                if hasattr(span, 'get_additional_parts'):
+                    additional_parts = span.get_additional_parts() or []
+                elif hasattr(span, 'additional_parts'):
+                    additional_parts = getattr(span, 'additional_parts', []) or []
+
+                # Get KB entity linking data
+                kb_id = None
+                kb_source = None
+                kb_label = None
+                if hasattr(span, 'get_kb_id'):
+                    kb_id = span.get_kb_id()
+                    kb_source = span.get_kb_source() if hasattr(span, 'get_kb_source') else None
+                    kb_label = span.get_kb_label() if hasattr(span, 'get_kb_label') else None
+                elif hasattr(span, 'kb_id'):
+                    kb_id = getattr(span, 'kb_id', None)
+                    kb_source = getattr(span, 'kb_source', None)
+                    kb_label = getattr(span, 'kb_label', None)
+
                 span_data = {
                     'schema': span.get_schema() if hasattr(span, 'get_schema') else getattr(span, 'schema', ''),
                     'name': span.get_name() if hasattr(span, 'get_name') else getattr(span, 'name', ''),
@@ -343,6 +419,10 @@ def render_span_annotations(text, span_annotations, target_field=None):
                     'start': span.get_start() if hasattr(span, 'get_start') else getattr(span, 'start', 0),
                     'end': span.get_end() if hasattr(span, 'get_end') else getattr(span, 'end', 0),
                     'target_field': span_target,
+                    'additional_parts': additional_parts,
+                    'kb_id': kb_id,
+                    'kb_source': kb_source,
+                    'kb_label': kb_label,
                 }
             elif isinstance(span, dict):
                 # Filter by target_field if specified
@@ -357,11 +437,21 @@ def render_span_annotations(text, span_annotations, target_field=None):
             spans_as_tuples.append((span_id, span_data))
         sorted_spans = sorted(spans_as_tuples, key=lambda x: x[1].get('start', 0))
 
-    # Create boundary points
+    # Create boundary points (including additional_parts for discontinuous spans)
     boundaries = []
     for span_id, span_data in sorted_spans:
+        # Add primary span boundaries
         boundaries.append((span_data['start'], 'start', span_id, span_data))
         boundaries.append((span_data['end'], 'end', span_id, span_data))
+
+        # Add boundaries for additional parts (discontinuous spans)
+        additional_parts = span_data.get('additional_parts', [])
+        for part in additional_parts:
+            # Create a modified span_data for this part that includes discontinuous marker
+            part_data = span_data.copy()
+            part_data['_is_discontinuous_part'] = True
+            boundaries.append((part['start'], 'start', span_id, part_data))
+            boundaries.append((part['end'], 'end', span_id, part_data))
 
     # Sort boundaries by position
     boundaries.sort(key=lambda x: x[0])
@@ -390,7 +480,25 @@ def render_span_annotations(text, span_annotations, target_field=None):
 
             # Add target_field attribute if present
             target_attr = f' data-target-field="{span_data.get("target_field", "")}"' if span_data.get("target_field") else ""
-            result += f'<span class="span-highlight" data-annotation-id="{span_id}" data-label="{span_data["name"]}" schema="{span_data["schema"]}"{target_attr} style="background-color: {hex_color};">'
+
+            # Check if this is a discontinuous span part
+            is_discontinuous = span_data.get('_is_discontinuous_part', False) or len(span_data.get('additional_parts', [])) > 0
+            discontinuous_class = ' discontinuous-part' if is_discontinuous else ''
+            discontinuous_attr = ' data-discontinuous="true"' if is_discontinuous else ""
+
+            # Add KB entity linking attributes
+            kb_id = span_data.get('kb_id', '')
+            kb_source = span_data.get('kb_source', '')
+            kb_label = span_data.get('kb_label', '')
+            kb_attr = ""
+            kb_class = ""
+            if kb_id:
+                kb_attr = f' data-kb-id="{kb_id}" data-kb-source="{kb_source}"'
+                if kb_label:
+                    kb_attr += f' data-kb-label="{escape_html_content(kb_label)}"'
+                kb_class = ' has-entity-link'
+
+            result += f'<span class="span-highlight{discontinuous_class}{kb_class}" data-annotation-id="{span_id}" data-label="{span_data["name"]}" schema="{span_data["schema"]}"{target_attr}{discontinuous_attr}{kb_attr} style="background-color: {hex_color};">'
         elif boundary_type == 'end':
             # End the span
             result += "</span>"

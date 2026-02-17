@@ -1,0 +1,518 @@
+/**
+ * Entity Linking Styles
+ *
+ * Styles for the knowledge base entity linking feature including:
+ * - Search modal
+ * - Entity results display
+ * - Entity tooltips on hover
+ * - Link icons on spans
+ */
+
+/* =============================================================================
+   Modal Styles
+   ============================================================================= */
+
+.el-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+}
+
+.el-modal-content {
+    background: var(--background, #fff);
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    max-width: 600px;
+    width: 90%;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.el-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border, #e5e7eb);
+    background: var(--muted, #f9fafb);
+}
+
+.el-modal-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--foreground, #111827);
+}
+
+.el-close-btn {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: var(--muted-foreground, #6b7280);
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    transition: color 0.2s;
+}
+
+.el-close-btn:hover {
+    color: var(--foreground, #111827);
+}
+
+.el-modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.el-modal-footer {
+    padding: 16px 20px;
+    border-top: 1px solid var(--border, #e5e7eb);
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+/* =============================================================================
+   Search Container
+   ============================================================================= */
+
+.el-span-info {
+    margin-bottom: 16px;
+    padding: 12px;
+    background: var(--muted, #f9fafb);
+    border-radius: 6px;
+}
+
+.el-span-info strong {
+    color: var(--muted-foreground, #6b7280);
+    font-size: 0.85rem;
+}
+
+.el-selected-text {
+    display: block;
+    margin-top: 4px;
+    font-weight: 500;
+    color: var(--foreground, #111827);
+}
+
+.el-search-container {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.el-kb-selector {
+    flex: 0 0 auto;
+    min-width: 160px;
+    padding: 8px 12px;
+    border: 1px solid var(--border, #d1d5db);
+    border-radius: 6px;
+    background: var(--background, #fff);
+    color: var(--foreground, #111827);
+    font-size: 0.9rem;
+}
+
+.el-search-input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--border, #d1d5db);
+    border-radius: 6px;
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.el-search-input:focus {
+    border-color: var(--primary, #6E56CF);
+    box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.1);
+}
+
+.el-search-btn {
+    padding: 8px 16px;
+    background: var(--primary, #6E56CF);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.el-search-btn:hover {
+    background: var(--primary-hover, #5b47b3);
+}
+
+/* =============================================================================
+   Loading and Results
+   ============================================================================= */
+
+.el-loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 16px;
+    color: var(--muted-foreground, #6b7280);
+    justify-content: center;
+}
+
+.el-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border, #e5e7eb);
+    border-top-color: var(--primary, #6E56CF);
+    border-radius: 50%;
+    animation: el-spin 0.8s linear infinite;
+}
+
+@keyframes el-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.el-results {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.el-result-item {
+    padding: 12px;
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: 6px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+}
+
+.el-result-item:hover {
+    background: var(--muted, #f9fafb);
+    border-color: var(--primary, #6E56CF);
+}
+
+.el-result-item:last-child {
+    margin-bottom: 0;
+}
+
+.el-result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.el-result-label {
+    font-weight: 600;
+    color: var(--foreground, #111827);
+}
+
+.el-result-id {
+    font-size: 0.8rem;
+    color: var(--muted-foreground, #6b7280);
+    font-family: monospace;
+    background: var(--muted, #f3f4f6);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.el-result-desc {
+    font-size: 0.9rem;
+    color: var(--muted-foreground, #6b7280);
+    margin-top: 4px;
+    line-height: 1.4;
+}
+
+.el-result-aliases {
+    font-size: 0.8rem;
+    color: var(--muted-foreground, #9ca3af);
+    margin-top: 4px;
+    font-style: italic;
+}
+
+.el-result-link {
+    display: inline-block;
+    margin-top: 8px;
+    font-size: 0.8rem;
+    color: var(--primary, #6E56CF);
+    text-decoration: none;
+}
+
+.el-result-link:hover {
+    text-decoration: underline;
+}
+
+.el-no-results,
+.el-error {
+    text-align: center;
+    padding: 24px;
+    color: var(--muted-foreground, #6b7280);
+}
+
+.el-error {
+    color: var(--destructive, #ef4444);
+}
+
+/* =============================================================================
+   Current Link Display
+   ============================================================================= */
+
+.el-current-link {
+    margin-top: 16px;
+    padding: 12px;
+    background: rgba(110, 86, 207, 0.1);
+    border-radius: 6px;
+    border: 1px solid rgba(110, 86, 207, 0.2);
+}
+
+.el-current-link strong {
+    font-size: 0.85rem;
+    color: var(--muted-foreground, #6b7280);
+}
+
+#el-current-entity {
+    margin-top: 8px;
+}
+
+.el-current-kb {
+    font-weight: 600;
+    color: var(--primary, #6E56CF);
+}
+
+.el-current-id {
+    font-family: monospace;
+    font-size: 0.9rem;
+}
+
+.el-current-label {
+    color: var(--foreground, #111827);
+    font-weight: 500;
+}
+
+.el-remove-link-btn {
+    margin-top: 12px;
+    padding: 6px 12px;
+    background: var(--destructive, #ef4444);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.el-remove-link-btn:hover {
+    background: #dc2626;
+}
+
+/* =============================================================================
+   Cancel Button
+   ============================================================================= */
+
+.el-cancel-btn {
+    padding: 8px 20px;
+    background: var(--muted, #f3f4f6);
+    color: var(--foreground, #374151);
+    border: 1px solid var(--border, #d1d5db);
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.el-cancel-btn:hover {
+    background: var(--border, #e5e7eb);
+}
+
+/* =============================================================================
+   Link Icon on Spans
+   ============================================================================= */
+
+.el-link-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 4px;
+    padding: 2px;
+    border-radius: 3px;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.2s, background 0.2s;
+    vertical-align: middle;
+}
+
+.el-link-icon:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.span-highlight.has-entity-link .el-link-icon {
+    opacity: 1;
+    color: var(--primary, #6E56CF);
+}
+
+/* =============================================================================
+   Entity Tooltip
+   ============================================================================= */
+
+.el-entity-tooltip {
+    position: fixed;
+    background: var(--background, #fff);
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    padding: 10px 14px;
+    max-width: 300px;
+    z-index: 10001;
+    font-size: 0.9rem;
+}
+
+.el-tooltip-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.el-tooltip-kb {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--primary, #6E56CF);
+    text-transform: uppercase;
+}
+
+.el-tooltip-id {
+    font-size: 0.75rem;
+    color: var(--muted-foreground, #9ca3af);
+    font-family: monospace;
+}
+
+.el-tooltip-label {
+    font-weight: 600;
+    color: var(--foreground, #111827);
+    margin-bottom: 4px;
+}
+
+.el-tooltip-desc {
+    font-size: 0.85rem;
+    color: var(--muted-foreground, #6b7280);
+    line-height: 1.4;
+}
+
+/* =============================================================================
+   Schema Hint
+   ============================================================================= */
+
+.entity-linking-hint {
+    font-size: 0.8rem;
+    color: var(--muted-foreground, #6b7280);
+    margin-bottom: 8px;
+    padding: 4px 8px;
+    background: rgba(110, 86, 207, 0.1);
+    border-radius: 4px;
+    display: inline-block;
+}
+
+/* =============================================================================
+   Visual Indicator for Linked Spans
+   ============================================================================= */
+
+.span-highlight.has-entity-link {
+    border-bottom: 2px dotted var(--primary, #6E56CF);
+}
+
+/* =============================================================================
+   Dark Mode Support
+   ============================================================================= */
+
+@media (prefers-color-scheme: dark) {
+    .el-modal-content {
+        background: #1f2937;
+    }
+
+    .el-modal-header {
+        background: #111827;
+        border-color: #374151;
+    }
+
+    .el-modal-header h3 {
+        color: #f9fafb;
+    }
+
+    .el-modal-footer {
+        border-color: #374151;
+    }
+
+    .el-span-info {
+        background: #111827;
+    }
+
+    .el-selected-text {
+        color: #f9fafb;
+    }
+
+    .el-kb-selector,
+    .el-search-input {
+        background: #111827;
+        border-color: #374151;
+        color: #f9fafb;
+    }
+
+    .el-result-item {
+        border-color: #374151;
+    }
+
+    .el-result-item:hover {
+        background: #374151;
+    }
+
+    .el-result-label {
+        color: #f9fafb;
+    }
+
+    .el-result-id {
+        background: #374151;
+    }
+
+    .el-entity-tooltip {
+        background: #1f2937;
+        border-color: #374151;
+    }
+
+    .el-tooltip-label {
+        color: #f9fafb;
+    }
+}
+
+/* =============================================================================
+   Responsive Adjustments
+   ============================================================================= */
+
+@media (max-width: 600px) {
+    .el-search-container {
+        flex-direction: column;
+    }
+
+    .el-kb-selector {
+        width: 100%;
+    }
+
+    .el-modal-content {
+        width: 95%;
+        max-height: 90vh;
+    }
+
+    .el-result-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+}
