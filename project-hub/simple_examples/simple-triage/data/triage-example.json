@@ -1,0 +1,20 @@
+{"id": "item_1", "text": "The quick brown fox jumps over the lazy dog.", "context": "Example sentence for data quality review"}
+{"id": "item_2", "text": "This is a well-formed English sentence with proper grammar.", "context": "Good quality text example"}
+{"id": "item_3", "text": "asdfghjkl qwerty random text without meaning", "context": "Potentially noisy data"}
+{"id": "item_4", "text": "Machine learning models require high-quality training data.", "context": "Technical content example"}
+{"id": "item_5", "text": "Hello world! This is a test.", "context": "Simple greeting text"}
+{"id": "item_6", "text": "12345 67890 !@#$%", "context": "Numbers and special characters only"}
+{"id": "item_7", "text": "The sentiment analysis model achieved 95% accuracy on the test set.", "context": "ML research result"}
+{"id": "item_8", "text": "Lorem ipsum dolor sit amet, consectetur adipiscing elit.", "context": "Placeholder Latin text"}
+{"id": "item_9", "text": "Natural language processing is a subfield of artificial intelligence.", "context": "NLP definition"}
+{"id": "item_10", "text": "  extra   whitespace   everywhere  ", "context": "Poorly formatted text"}
+{"id": "item_11", "text": "The conference paper was accepted with minor revisions.", "context": "Academic context"}
+{"id": "item_12", "text": "ALLCAPS TEXT IS HARD TO READ AND LOOKS LIKE SHOUTING", "context": "Capitalization issue"}
+{"id": "item_13", "text": "Deep learning has revolutionized computer vision applications.", "context": "AI advancement statement"}
+{"id": "item_14", "text": "Python is a popular programming language for data science.", "context": "Programming language info"}
+{"id": "item_15", "text": "", "context": "Empty text content"}
+{"id": "item_16", "text": "The transformer architecture introduced self-attention mechanisms.", "context": "Technical ML concept"}
+{"id": "item_17", "text": "Click here! Buy now! Limited time offer!", "context": "Spam-like promotional text"}
+{"id": "item_18", "text": "Pre-training and fine-tuning are common transfer learning strategies.", "context": "ML methodology"}
+{"id": "item_19", "text": "jdnfksjdfn dfjndfjn djfndjfn", "context": "Gibberish text"}
+{"id": "item_20", "text": "Annotation quality is crucial for supervised machine learning.", "context": "Annotation importance"}

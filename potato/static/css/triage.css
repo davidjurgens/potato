@@ -1,0 +1,365 @@
+/**
+ * Triage Schema Styles
+ *
+ * Styles for the Prodigy-style binary accept/reject/skip interface.
+ * Optimized for rapid decision-making with large, touch-friendly buttons.
+ */
+
+/* ==========================================
+   Triage Container
+   ========================================== */
+
+.annotation-form.triage {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+}
+
+.annotation-form.triage fieldset {
+    border: none;
+    padding: 0;
+    margin: 0;
+}
+
+.triage-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-secondary, #6b7280);
+    margin-bottom: 0.75rem;
+    text-align: left;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.triage-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+/* ==========================================
+   Triage Buttons
+   ========================================== */
+
+.triage-buttons {
+    display: flex;
+    flex-direction: row;
+    gap: 0.5rem;
+    justify-content: flex-start;
+    align-items: stretch;
+}
+
+.triage-btn {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    flex: 1;
+    max-width: 180px;
+    min-height: 48px;
+    padding: 0.625rem 1rem;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.875rem;
+    font-weight: 600;
+    transition: all 0.15s ease;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.triage-btn:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
+}
+
+.triage-btn:active {
+    transform: scale(0.98);
+}
+
+/* Icon styling */
+.triage-btn-icon {
+    font-size: 1.125rem;
+    line-height: 1;
+}
+
+/* Label styling */
+.triage-btn-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+/* Keyboard shortcut styling */
+.triage-btn-key {
+    font-size: 0.75rem;
+    font-weight: 500;
+    opacity: 0.6;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* ==========================================
+   Accept Button States
+   ========================================== */
+
+.triage-accept {
+    background-color: #dcfce7;
+    border-color: #86efac;
+    color: #166534;
+}
+
+.triage-accept:hover {
+    background-color: #bbf7d0;
+    border-color: #4ade80;
+}
+
+.triage-accept.selected {
+    background-color: #22c55e;
+    border-color: #16a34a;
+    color: white;
+    box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
+}
+
+.triage-accept.selected .triage-btn-icon,
+.triage-accept.selected .triage-btn-key {
+    opacity: 1;
+}
+
+/* ==========================================
+   Reject Button States
+   ========================================== */
+
+.triage-reject {
+    background-color: #fee2e2;
+    border-color: #fca5a5;
+    color: #991b1b;
+}
+
+.triage-reject:hover {
+    background-color: #fecaca;
+    border-color: #f87171;
+}
+
+.triage-reject.selected {
+    background-color: #ef4444;
+    border-color: #dc2626;
+    color: white;
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+}
+
+.triage-reject.selected .triage-btn-icon,
+.triage-reject.selected .triage-btn-key {
+    opacity: 1;
+}
+
+/* ==========================================
+   Skip Button States
+   ========================================== */
+
+.triage-skip {
+    background-color: #f3f4f6;
+    border-color: #d1d5db;
+    color: #4b5563;
+}
+
+.triage-skip:hover {
+    background-color: #e5e7eb;
+    border-color: #9ca3af;
+}
+
+.triage-skip.selected {
+    background-color: #6b7280;
+    border-color: #4b5563;
+    color: white;
+    box-shadow: 0 4px 12px rgba(107, 114, 128, 0.4);
+}
+
+.triage-skip.selected .triage-btn-icon,
+.triage-skip.selected .triage-btn-key {
+    opacity: 1;
+}
+
+/* ==========================================
+   Progress Indicator
+   ========================================== */
+
+.triage-progress {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+}
+
+.triage-progress-bar {
+    flex: 1;
+    max-width: 200px;
+    height: 4px;
+    background-color: #e5e7eb;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.triage-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #3b82f6, #2563eb);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+.triage-progress-text {
+    font-size: 0.75rem;
+    color: var(--text-secondary, #6b7280);
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.triage-progress-current {
+    font-weight: 700;
+    color: var(--text-primary, #1a1a1a);
+}
+
+/* ==========================================
+   Responsive Adjustments
+   ========================================== */
+
+@media (max-width: 480px) {
+    .triage-buttons {
+        flex-direction: column;
+        gap: 0.375rem;
+    }
+
+    .triage-btn {
+        max-width: none;
+        min-height: 44px;
+        padding: 0.5rem 0.75rem;
+    }
+
+    .triage-progress {
+        flex-direction: column;
+        gap: 0.375rem;
+    }
+
+    .triage-progress-bar {
+        max-width: none;
+        width: 100%;
+    }
+}
+
+/* ==========================================
+   Dark Mode Support
+   ========================================== */
+
+@media (prefers-color-scheme: dark) {
+    .triage-title {
+        color: #f3f4f6;
+    }
+
+    .triage-accept {
+        background-color: rgba(34, 197, 94, 0.15);
+        border-color: rgba(34, 197, 94, 0.4);
+        color: #86efac;
+    }
+
+    .triage-accept:hover {
+        background-color: rgba(34, 197, 94, 0.25);
+        border-color: rgba(34, 197, 94, 0.6);
+    }
+
+    .triage-reject {
+        background-color: rgba(239, 68, 68, 0.15);
+        border-color: rgba(239, 68, 68, 0.4);
+        color: #fca5a5;
+    }
+
+    .triage-reject:hover {
+        background-color: rgba(239, 68, 68, 0.25);
+        border-color: rgba(239, 68, 68, 0.6);
+    }
+
+    .triage-skip {
+        background-color: rgba(107, 114, 128, 0.15);
+        border-color: rgba(107, 114, 128, 0.4);
+        color: #d1d5db;
+    }
+
+    .triage-skip:hover {
+        background-color: rgba(107, 114, 128, 0.25);
+        border-color: rgba(107, 114, 128, 0.6);
+    }
+
+    .triage-progress {
+        background-color: rgba(255, 255, 255, 0.05);
+    }
+
+    .triage-progress-bar {
+        background-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .triage-progress-text {
+        color: #9ca3af;
+    }
+
+    .triage-progress-current {
+        color: #f3f4f6;
+    }
+}
+
+/* ==========================================
+   Animation for Selection Feedback
+   ========================================== */
+
+@keyframes triage-pulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.02);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+.triage-btn.selected {
+    animation: triage-pulse 0.2s ease;
+}
+
+/* ==========================================
+   Accessibility Improvements
+   ========================================== */
+
+.triage-btn[aria-pressed="true"] {
+    /* Additional visual indicator for screen readers */
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .triage-btn {
+        border-width: 3px;
+    }
+
+    .triage-accept.selected,
+    .triage-reject.selected,
+    .triage-skip.selected {
+        border-color: currentColor;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .triage-btn {
+        transition: none;
+    }
+
+    .triage-btn.selected {
+        animation: none;
+    }
+
+    .triage-progress-fill {
+        transition: none;
+    }
+}

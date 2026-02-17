@@ -241,6 +241,7 @@ def _register_builtin_schemas():
     from .pairwise import generate_pairwise_layout
     from .coreference import generate_coreference_layout
     from .tree_annotation import generate_tree_annotation_layout
+    from .triage import generate_triage_layout
 
     schemas = [
         SchemaDefinition(
@@ -303,9 +304,9 @@ def _register_builtin_schemas():
             name="span",
             generator=generate_span_layout,
             required_fields=["name", "description", "labels"],
-            optional_fields=["sequential_key_binding", "bad_text_label", "title"],
+            optional_fields=["sequential_key_binding", "bad_text_label", "title", "allow_discontinuous", "entity_linking"],
             supports_keybindings=True,
-            description="Text span annotation/highlighting"
+            description="Text span annotation/highlighting with optional entity linking to knowledge bases"
         ),
         SchemaDefinition(
             name="select",
@@ -386,6 +387,14 @@ def _register_builtin_schemas():
             optional_fields=["node_scheme", "path_selection", "branch_comparison"],
             supports_keybindings=False,
             description="Annotation of conversation tree nodes with path selection"
+        ),
+        SchemaDefinition(
+            name="triage",
+            generator=generate_triage_layout,
+            required_fields=["name", "description"],
+            optional_fields=["accept_label", "reject_label", "skip_label", "auto_advance", "show_progress", "accept_key", "reject_key", "skip_key"],
+            supports_keybindings=True,
+            description="Binary accept/reject triage for rapid data curation"
         ),
     ]
 

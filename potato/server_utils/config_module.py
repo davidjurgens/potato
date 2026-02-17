@@ -528,7 +528,7 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
 
     # Validate annotation_type
     # Note: Keep in sync with potato.server_utils.schemas.registry
-    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'span_link', 'select', 'number', 'multirate', 'pure_display', 'video', 'image_annotation', 'audio_annotation', 'video_annotation', 'pairwise', 'coreference', 'tree_annotation']
+    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'span_link', 'select', 'number', 'multirate', 'pure_display', 'video', 'image_annotation', 'audio_annotation', 'video_annotation', 'pairwise', 'coreference', 'tree_annotation', 'triage']
     if scheme['annotation_type'] not in valid_types:
         raise ConfigValidationError(f"{path}.annotation_type must be one of: {', '.join(valid_types)}")
 
@@ -600,7 +600,7 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
             raise ConfigValidationError(f"{path}.tools cannot be empty")
 
         # Validate tools
-        valid_tools = ['bbox', 'polygon', 'freeform', 'landmark', 'fill', 'eraser']
+        valid_tools = ['bbox', 'polygon', 'freeform', 'landmark', 'fill', 'eraser', 'brush']
         invalid_tools = [t for t in scheme['tools'] if t not in valid_tools]
         if invalid_tools:
             raise ConfigValidationError(f"{path}.tools contains invalid values: {invalid_tools}. Valid tools are: {valid_tools}")
@@ -3054,6 +3054,56 @@ def validate_layout_config(config_data: Dict[str, Any]) -> None:
         for i, schema_name in enumerate(order):
             if not isinstance(schema_name, str):
                 raise ConfigValidationError(f"layout.order[{i}] must be a string")
+
+    # Validate styling (advanced options)
+    if 'styling' in layout:
+        styling = layout['styling']
+        if not isinstance(styling, dict):
+            raise ConfigValidationError("layout.styling must be a dictionary")
+
+        # Validate align_items
+        if 'align_items' in styling:
+            valid_alignments = ['start', 'center', 'end', 'stretch']
+            if styling['align_items'] not in valid_alignments:
+                raise ConfigValidationError(
+                    f"layout.styling.align_items must be one of: {', '.join(valid_alignments)}"
+                )
+
+        # Validate content_align
+        if 'content_align' in styling:
+            valid_content_align = ['left', 'center', 'right']
+            if styling['content_align'] not in valid_content_align:
+                raise ConfigValidationError(
+                    f"layout.styling.content_align must be one of: {', '.join(valid_content_align)}"
+                )
+
+        # Validate background colors (CSS color values)
+        for color_key in ['group_background_odd', 'group_background_even']:
+            if color_key in styling:
+                color = styling[color_key]
+                if not isinstance(color, str) or not color.strip():
+                    raise ConfigValidationError(
+                        f"layout.styling.{color_key} must be a non-empty CSS color value"
+                    )
+
+        # Validate padding values (CSS padding)
+        for padding_key in ['group_padding', 'form_padding']:
+            if padding_key in styling:
+                padding = styling[padding_key]
+                if not isinstance(padding, str) or not padding.strip():
+                    raise ConfigValidationError(
+                        f"layout.styling.{padding_key} must be a non-empty CSS padding value"
+                    )
+
+    # Validate per-group background_color if present
+    if 'groups' in layout:
+        for i, group in enumerate(layout['groups']):
+            if 'background_color' in group:
+                bg_color = group['background_color']
+                if not isinstance(bg_color, str) or not bg_color.strip():
+                    raise ConfigValidationError(
+                        f"layout.groups[{i}].background_color must be a non-empty CSS color value"
+                    )
 
 
 def validate_adjudication_config(config_data: Dict[str, Any]) -> None:

@@ -16,6 +16,7 @@ from .video_annotation import generate_video_annotation_layout
 from .pairwise import generate_pairwise_layout
 from .coreference import generate_coreference_layout
 from .tree_annotation import generate_tree_annotation_layout
+from .triage import generate_triage_layout
 
 # Import identifier utilities for use by other modules
 from .identifier_utils import (
