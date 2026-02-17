@@ -112,20 +112,45 @@ class FormLayoutManager {
                 tablet: 768,
                 ...config?.breakpoints
             },
+            styling: {
+                align_items: 'start',
+                content_align: 'left',
+                group_background_odd: '#fafafa',
+                group_background_even: '#f8f9fc',
+                group_padding: '0.5rem 0.75rem',
+                form_padding: '0.375rem 0.5rem',
+                ...config?.styling
+            },
             groups: config?.groups || [],
             order: config?.order || null
         };
     }
 
     /**
-     * Apply grid CSS custom properties to document root
+     * Apply grid and styling CSS custom properties to document root
      */
     applyGridProperties() {
         const root = document.documentElement;
+
+        // Grid properties
         root.style.setProperty('--layout-columns', this.config.grid.columns);
         root.style.setProperty('--layout-gap', this.config.grid.gap);
         root.style.setProperty('--layout-row-gap', this.config.grid.row_gap || this.config.grid.gap);
-        root.style.setProperty('--layout-align', this.config.grid.align_items);
+
+        // Alignment (use styling.align_items if present, fallback to grid.align_items)
+        const alignItems = this.config.styling.align_items || this.config.grid.align_items || 'start';
+        root.style.setProperty('--layout-align', alignItems);
+
+        // Content alignment
+        root.style.setProperty('--layout-content-align', this.config.styling.content_align);
+
+        // Group background colors
+        root.style.setProperty('--group-bg-odd', this.config.styling.group_background_odd);
+        root.style.setProperty('--group-bg-even', this.config.styling.group_background_even);
+
+        // Padding
+        root.style.setProperty('--group-padding', this.config.styling.group_padding);
+        root.style.setProperty('--form-padding', this.config.styling.form_padding);
     }
 
     /**
@@ -210,6 +235,12 @@ class FormLayoutManager {
         const group = document.createElement('div');
         group.className = 'annotation-form-group';
         group.id = `group-${groupConfig.id}`;
+
+        // Apply per-group custom background color if specified
+        if (groupConfig.background_color) {
+            group.style.setProperty('--group-bg', groupConfig.background_color);
+            group.style.backgroundColor = groupConfig.background_color;
+        }
 
         if (groupConfig.collapsed_default) {
             group.classList.add('collapsed');
@@ -1721,6 +1752,19 @@ function syncAnnotationsFromDOM() {
         }
     });
 
+    // Sync hidden inputs (used by triage and other custom schemas)
+    const hiddenInputs = document.querySelectorAll('input[type="hidden"].annotation-input');
+    hiddenInputs.forEach(input => {
+        const schema = input.getAttribute('schema');
+        const labelName = input.getAttribute('label_name');
+        if (schema && labelName && input.value) {
+            if (!currentAnnotations[schema]) {
+                currentAnnotations[schema] = {};
+            }
+            currentAnnotations[schema][labelName] = input.value;
+        }
+    });
+
     debugLog('[DEBUG] syncAnnotationsFromDOM: synced annotations:', currentAnnotations);
 }
 
@@ -1785,6 +1829,12 @@ function setupInputEventListeners() {
                     handleInputChange(event.target);
                 }, 1000);
             });
+        } else if (inputType === 'hidden') {
+            // Hidden inputs (used by triage and other custom schemas) - listen for change events
+            input.addEventListener('change', function (event) {
+                handleInputChange(event.target);
+            });
+            debugLog(`Set up event listener for hidden input:`, input.id);
         }
     });
 }
@@ -3464,10 +3514,180 @@ function testAggressiveFirefoxFix() {
 
 
 
+/**
+ * Jump to the previous unannotated instance.
+ * Saves current annotations and navigates to the first unannotated item before the current position.
+ * If all items are annotated, shows a notification.
+ */
+async function jumpToUnannotatedPrev() {
+    debugLog('[NAV] jumpToUnannotatedPrev - ENTRY POINT');
+
+    if (isLoading) {
+        debugLog('[NAV] jumpToUnannotatedPrev - Navigation blocked, still loading');
+        return;
+    }
+
+    setLoading(true);
+    debugLog('[NAV] jumpToUnannotatedPrev - Loading set to true');
+
+    // Track navigation event
+    if (window.interactionTracker) {
+        window.interactionTracker.trackNavigation('jump_to_unannotated_prev', currentInstance?.id, null);
+    }
+
+    try {
+        // Save annotations before navigating away
+        debugLog('[NAV] jumpToUnannotatedPrev - Saving annotations before navigation');
+        await saveAnnotations();
+
+        // Use the correct endpoint and payload for navigation
+        const response = await fetch('/annotate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                action: 'jump_to_unannotated_prev',
+                instance_id: currentInstance?.id
+            })
+        });
+
+        if (response.ok) {
+            // Check if the response indicates no unannotated items
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                const result = await response.json();
+                if (result.status === 'no_unannotated') {
+                    debugLog('[NAV] jumpToUnannotatedPrev - All items annotated');
+                    showNotification('All items have been annotated!', 'info');
+                    setLoading(false);
+                    return;
+                }
+            }
+
+            debugLog('[NAV] jumpToUnannotatedPrev - Navigation successful, reloading page');
+            window.location.reload();
+        } else {
+            console.error('[NAV] jumpToUnannotatedPrev - Navigation failed:', response.status);
+            setLoading(false);
+        }
+    } catch (error) {
+        console.error('[NAV] jumpToUnannotatedPrev - Navigation error:', error);
+        setLoading(false);
+    }
+}
+
+/**
+ * Jump to the next unannotated instance.
+ * Saves current annotations and navigates to the first unannotated item after the current position.
+ * If all items are annotated, shows a notification.
+ */
+async function jumpToUnannotated() {
+    debugLog('[NAV] jumpToUnannotated - ENTRY POINT');
+
+    if (isLoading) {
+        debugLog('[NAV] jumpToUnannotated - Navigation blocked, still loading');
+        return;
+    }
+
+    setLoading(true);
+    debugLog('[NAV] jumpToUnannotated - Loading set to true');
+
+    // Track navigation event
+    if (window.interactionTracker) {
+        window.interactionTracker.trackNavigation('jump_to_unannotated', currentInstance?.id, null);
+    }
+
+    try {
+        // Save annotations before navigating away
+        debugLog('[NAV] jumpToUnannotated - Saving annotations before navigation');
+        await saveAnnotations();
+
+        // Use the correct endpoint and payload for navigation
+        const response = await fetch('/annotate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                action: 'jump_to_unannotated',
+                instance_id: currentInstance?.id
+            })
+        });
+
+        if (response.ok) {
+            // Check if the response indicates no unannotated items
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                const result = await response.json();
+                if (result.status === 'no_unannotated') {
+                    debugLog('[NAV] jumpToUnannotated - All items annotated');
+                    showNotification('All items have been annotated!', 'info');
+                    setLoading(false);
+                    return;
+                }
+            }
+
+            debugLog('[NAV] jumpToUnannotated - Navigation successful, reloading page');
+            window.location.reload();
+        } else {
+            console.error('[NAV] jumpToUnannotated - Navigation failed:', response.status);
+            setLoading(false);
+        }
+    } catch (error) {
+        console.error('[NAV] jumpToUnannotated - Navigation error:', error);
+        setLoading(false);
+    }
+}
+
+/**
+ * Show a notification message to the user.
+ * @param {string} message - The message to display
+ * @param {string} type - The type of notification ('info', 'success', 'warning', 'error')
+ */
+function showNotification(message, type = 'info') {
+    // Check if a notification container exists, create if not
+    let container = document.getElementById('notification-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'notification-container';
+        container.style.cssText = 'position: fixed; top: 80px; right: 20px; z-index: 9999;';
+        document.body.appendChild(container);
+    }
+
+    // Create the notification element
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.style.cssText = `
+        padding: 12px 20px;
+        margin-bottom: 10px;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 500;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        animation: slideIn 0.3s ease;
+        background-color: ${type === 'info' ? '#e0f2fe' : type === 'success' ? '#dcfce7' : type === 'warning' ? '#fef3c7' : '#fee2e2'};
+        color: ${type === 'info' ? '#0369a1' : type === 'success' ? '#166534' : type === 'warning' ? '#92400e' : '#dc2626'};
+        border: 1px solid ${type === 'info' ? '#7dd3fc' : type === 'success' ? '#86efac' : type === 'warning' ? '#fcd34d' : '#fca5a5'};
+    `;
+    notification.textContent = message;
+
+    container.appendChild(notification);
+
+    // Auto-remove after 4 seconds
+    setTimeout(() => {
+        notification.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => notification.remove(), 300);
+    }, 4000);
+}
+
 // Make the function available globally for debugging
 window.testAggressiveFirefoxFix = testAggressiveFirefoxFix;
 window.navigateToNext = navigateToNext;
 window.navigateToPrevious = navigateToPrevious;
+window.jumpToUnannotated = jumpToUnannotated;
+window.jumpToUnannotatedPrev = jumpToUnannotatedPrev;
+window.showNotification = showNotification;
 window.loadCurrentInstance = loadCurrentInstance;
 
 // ========================================

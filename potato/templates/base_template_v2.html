@@ -56,6 +56,12 @@
     <!-- Video Tracking Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tracking.css') }}">
 
+    <!-- Triage Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/triage.css') }}">
+
+    <!-- Entity Linking Styles (knowledge base linking) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/entity-linking.css') }}">
+
     <!-- jQuery (required for span annotation) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
 </head>
@@ -71,6 +77,13 @@
 
             <!-- Middle section with progress and navigation -->
             <div class="d-flex align-items-center justify-content-center flex-grow-1 gap-4">
+                <!-- Annotation status indicator -->
+                <div class="annotation-status-indicator" id="annotation-status">
+                    <span class="status-badge {{ 'labeled' if instance_has_annotations else 'unlabeled' }}">
+                        {{ 'Labeled' if instance_has_annotations else 'Not labeled' }}
+                    </span>
+                </div>
+
                 <!-- Progress counter -->
                 <div class="d-flex align-items-center" style="color: var(--light-color); margin-right: 40px">
                     <span>Progress: <span class="fw-medium" id="progress-counter">{{finished}}/{{total_count}}</span></span>
@@ -88,6 +101,22 @@
                             Go
                         </button>
                     </div>
+                </div>
+
+                <!-- Skip to unannotated buttons -->
+                <div class="d-flex align-items-center" style="margin-left: 20px; gap: 8px;">
+                    <button type="button" class="shadcn-button" id="jump-unannotated-prev-btn"
+                            onclick="jumpToUnannotatedPrev()"
+                            style="height: 31px; line-height: 1; padding: 0 0.75rem; background-color: rgba(255,255,255,0.2); color: var(--light-color); border: 1px solid rgba(255,255,255,0.3);"
+                            title="Skip to previous unannotated item">
+                        <i class="fas fa-backward"></i>
+                    </button>
+                    <button type="button" class="shadcn-button" id="jump-unannotated-btn"
+                            onclick="jumpToUnannotated()"
+                            style="height: 31px; line-height: 1; padding: 0 0.75rem; background-color: rgba(255,255,255,0.2); color: var(--light-color); border: 1px solid rgba(255,255,255,0.3);"
+                            title="Skip to next unannotated item">
+                        <i class="fas fa-forward"></i>
+                    </button>
                 </div>
             </div>
 
@@ -314,6 +343,9 @@
     <!-- Span link manager -->
     <script src="{{ url_for('static', filename='span-link-manager.js') }}?v=1"></script>
 
+    <!-- Entity linking for knowledge bases (Wikidata, UMLS) -->
+    <script src="{{ url_for('static', filename='entity-linking.js') }}?v=1"></script>
+
     <!-- Coreference chain manager -->
     <script src="{{ url_for('static', filename='coreference-manager.js') }}?v=1"></script>
 
@@ -326,6 +358,9 @@
     <!-- Video tracking interpolation and UI -->
     <script src="{{ url_for('static', filename='tracking-interpolation.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='tracking-ui.js') }}?v=1"></script>
+
+    <!-- Triage annotation manager -->
+    <script src="{{ url_for('static', filename='triage.js') }}?v=1"></script>
 
     <!-- Document bounding box annotation -->
     <script src="{{ url_for('static', filename='document-bbox.js') }}?v=2"></script>

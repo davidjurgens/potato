@@ -89,6 +89,61 @@ body {
   color: var(--primary);
 }
 
+/* Annotation status indicator (navbar badge) */
+.annotation-status-indicator {
+  display: flex;
+  align-items: center;
+  margin-right: 1rem;
+}
+
+.status-badge {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.status-badge.labeled {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.status-badge.unlabeled {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+/* Skip to unannotated button hover states */
+#jump-unannotated-btn:hover,
+#jump-unannotated-prev-btn:hover {
+  background-color: rgba(255, 255, 255, 0.35) !important;
+}
+
+/* Notification animations */
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOut {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
 /* Card styling */
 .shadcn-card {
   min-height: 250px;
@@ -3244,5 +3299,69 @@ body.has-pairwise-display #instance-text {
   .annotation-form-group-content {
     grid-template-columns: 1fr;
   }
+}
+
+/* ========================================
+   SEGMENTATION MASK STYLES
+   ======================================== */
+
+/* Mask canvas overlay for segmentation - extends image-annotation.css */
+.mask-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.mask-canvas.active {
+  pointer-events: auto;
+  cursor: crosshair;
+}
+
+/* Brush size slider group - extends image-annotation.css */
+.brush-size-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brush-size-group input[type="range"] {
+  width: 80px;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: #e9ecef;
+  border-radius: 3px;
+  outline: none;
+}
+
+.brush-size-group input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #0d6efd;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.brush-size-group input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #0d6efd;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.brush-size-group .brush-size-value {
+  font-size: 13px;
+  color: #495057;
+  min-width: 24px;
+  text-align: right;
 }
 

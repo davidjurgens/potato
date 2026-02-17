@@ -1500,6 +1500,28 @@ def annotate():
 
         else:
             logger.warning('go_to action requested but no go_to value provided')
+    elif action == "jump_to_unannotated":
+        # Find the next unannotated instance and jump to it
+        next_idx = user_state.find_next_unannotated_index()
+        if next_idx is not None:
+            logger.debug(f"Jumping to next unannotated instance at index {next_idx}")
+            user_state.go_to_index(next_idx)
+        else:
+            logger.debug(f"No unannotated instances found for user {username}")
+            # Return a JSON response indicating no unannotated items
+            if request.is_json:
+                return jsonify({"status": "no_unannotated", "message": "All items have been annotated"})
+    elif action == "jump_to_unannotated_prev":
+        # Find the previous unannotated instance and jump to it
+        prev_idx = user_state.find_prev_unannotated_index()
+        if prev_idx is not None:
+            logger.debug(f"Jumping to previous unannotated instance at index {prev_idx}")
+            user_state.go_to_index(prev_idx)
+        else:
+            logger.debug(f"No unannotated instances found for user {username}")
+            # Return a JSON response indicating no unannotated items
+            if request.is_json:
+                return jsonify({"status": "no_unannotated", "message": "All items have been annotated"})
     else:
         logger.debug(f'Action "{action}" - no specific handling')
 
@@ -3026,6 +3048,12 @@ def get_span_data(instance_id):
         }
         if span_target_field:
             span_entry['target_field'] = span_target_field
+
+        # Include additional_parts for discontinuous spans
+        additional_parts = span.get_additional_parts() if hasattr(span, 'get_additional_parts') else getattr(span, 'additional_parts', [])
+        if additional_parts:
+            span_entry['additional_parts'] = additional_parts
+
         span_data.append(span_entry)
 
     response_data = {
@@ -3244,8 +3272,21 @@ def update_instance():
 
                     # Get span_id or generate one if not provided
                     span_id = sv.get("span_id") or sv.get("id") or f"{schema_name}_{sv['name']}_{start_offset}_{end_offset}"
-                    span = SpanAnnotation(schema_name, sv["name"], sv.get("title", sv["name"]), start_offset, end_offset, span_id, target_field=sv.get("target_field"))
-                    
+
+                    # Get additional_parts for discontinuous spans
+                    additional_parts = sv.get("additional_parts", [])
+
+                    span = SpanAnnotation(
+                        schema_name,
+                        sv["name"],
+                        sv.get("title", sv["name"]),
+                        start_offset,
+                        end_offset,
+                        span_id,
+                        target_field=sv.get("target_field"),
+                        additional_parts=additional_parts
+                    )
+
                     value = sv.get("value")
 
                     # Get old value for comparison
@@ -4616,6 +4657,237 @@ def delete_link_annotation(instance_id, link_id):
         logger.debug(f"=== DELETE_LINK_ANNOTATION END ===")
 
 
+# ============================================================================
+# Entity Linking API Routes
+# ============================================================================
+
+@app.route("/api/entity_linking/search")
+def entity_linking_search():
+    """
+    Search a knowledge base for entities matching a query.
+
+    Query parameters:
+        q: Search query string (required)
+        kb: Knowledge base name (required, e.g., "wikidata", "umls")
+        limit: Maximum number of results (default: 10)
+
+    Returns:
+        JSON with list of matching entities.
+    """
+    logger.debug(f"=== ENTITY_LINKING_SEARCH START ===")
+
+    if 'username' not in session:
+        logger.warning("Entity linking search without active session")
+        return jsonify({"error": "No active session"}), 401
+
+    query = request.args.get('q', '').strip()
+    kb_name = request.args.get('kb', '').strip()
+    limit = request.args.get('limit', 10, type=int)
+
+    logger.debug(f"Query: '{query}', KB: '{kb_name}', Limit: {limit}")
+
+    if not query:
+        return jsonify({"error": "Search query 'q' is required"}), 400
+
+    if not kb_name:
+        return jsonify({"error": "Knowledge base 'kb' is required"}), 400
+
+    try:
+        from potato.knowledge_base import get_kb_manager
+
+        kb_manager = get_kb_manager()
+        results = kb_manager.search(query, kb_name, limit=limit)
+
+        # Convert to serializable format
+        entities = [entity.to_dict() for entity in results]
+
+        logger.debug(f"Found {len(entities)} entities for query '{query}'")
+
+        return jsonify({
+            "status": "success",
+            "query": query,
+            "kb": kb_name,
+            "results": entities
+        })
+
+    except Exception as e:
+        logger.error(f"Error in entity linking search: {e}")
+        return jsonify({"error": f"Search failed: {str(e)}"}), 500
+
+    finally:
+        logger.debug(f"=== ENTITY_LINKING_SEARCH END ===")
+
+
+@app.route("/api/entity_linking/entity/<kb_name>/<entity_id>")
+def entity_linking_get_entity(kb_name, entity_id):
+    """
+    Get detailed information about a specific entity.
+
+    Args:
+        kb_name: Knowledge base name (e.g., "wikidata", "umls")
+        entity_id: Entity ID within the knowledge base (e.g., "Q937")
+
+    Returns:
+        JSON with entity details.
+    """
+    logger.debug(f"=== ENTITY_LINKING_GET_ENTITY START ===")
+    logger.debug(f"KB: {kb_name}, Entity ID: {entity_id}")
+
+    if 'username' not in session:
+        logger.warning("Entity linking get_entity without active session")
+        return jsonify({"error": "No active session"}), 401
+
+    try:
+        from potato.knowledge_base import get_kb_manager
+
+        kb_manager = get_kb_manager()
+        client = kb_manager.get_client(kb_name)
+
+        if not client:
+            return jsonify({"error": f"Knowledge base '{kb_name}' not configured"}), 404
+
+        entity = client.get_entity(entity_id)
+
+        if not entity:
+            return jsonify({"error": f"Entity '{entity_id}' not found"}), 404
+
+        logger.debug(f"Found entity: {entity.label}")
+
+        return jsonify({
+            "status": "success",
+            "entity": entity.to_dict()
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting entity: {e}")
+        return jsonify({"error": f"Failed to get entity: {str(e)}"}), 500
+
+    finally:
+        logger.debug(f"=== ENTITY_LINKING_GET_ENTITY END ===")
+
+
+@app.route("/api/entity_linking/configured_kbs")
+def entity_linking_configured_kbs():
+    """
+    Get list of configured knowledge bases.
+
+    Returns:
+        JSON with list of available knowledge base names and types.
+    """
+    logger.debug(f"=== ENTITY_LINKING_CONFIGURED_KBS START ===")
+
+    if 'username' not in session:
+        logger.warning("Entity linking configured_kbs without active session")
+        return jsonify({"error": "No active session"}), 401
+
+    try:
+        from potato.knowledge_base import get_kb_manager
+
+        kb_manager = get_kb_manager()
+        kb_names = kb_manager.list_clients()
+
+        # Get config info for each KB
+        kbs = []
+        for name in kb_names:
+            config = kb_manager.get_config(name)
+            if config:
+                kbs.append({
+                    "name": name,
+                    "type": config.kb_type,
+                    "language": config.language
+                })
+
+        logger.debug(f"Found {len(kbs)} configured knowledge bases")
+
+        return jsonify({
+            "status": "success",
+            "knowledge_bases": kbs
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting configured KBs: {e}")
+        return jsonify({"error": f"Failed to get configured KBs: {str(e)}"}), 500
+
+    finally:
+        logger.debug(f"=== ENTITY_LINKING_CONFIGURED_KBS END ===")
+
+
+@app.route("/api/entity_linking/update_span", methods=["POST"])
+def entity_linking_update_span():
+    """
+    Update a span annotation with entity linking information.
+
+    Request body:
+        instance_id: Instance ID
+        span_id: Span annotation ID
+        kb_id: Knowledge base entity ID
+        kb_source: Knowledge base source name
+        kb_label: Human-readable entity label
+
+    Returns:
+        JSON with success/failure status.
+    """
+    logger.debug(f"=== ENTITY_LINKING_UPDATE_SPAN START ===")
+
+    if 'username' not in session:
+        logger.warning("Entity linking update_span without active session")
+        return jsonify({"error": "No active session"}), 401
+
+    username = session['username']
+
+    try:
+        data = request.json
+        instance_id = data.get('instance_id')
+        span_id = data.get('span_id')
+        kb_id = data.get('kb_id')
+        kb_source = data.get('kb_source')
+        kb_label = data.get('kb_label')
+
+        logger.debug(f"Updating span {span_id} with KB: {kb_source}:{kb_id}")
+
+        if not instance_id or not span_id:
+            return jsonify({"error": "instance_id and span_id are required"}), 400
+
+        user_state = get_user_state(username)
+        if not user_state:
+            return jsonify({"error": "User state not found"}), 404
+
+        # Get span annotations for this instance
+        span_annotations = user_state.get_span_annotations(str(instance_id))
+
+        # Find the span with matching ID
+        updated = False
+        for span_key, span in span_annotations.items():
+            if hasattr(span, 'get_id') and span.get_id() == span_id:
+                # Update the span's KB link
+                span.set_entity_link(kb_id, kb_source, kb_label)
+                updated = True
+                logger.debug(f"Updated span {span_id} with entity link")
+                break
+            elif isinstance(span, dict) and span.get('id') == span_id:
+                span['kb_id'] = kb_id
+                span['kb_source'] = kb_source
+                span['kb_label'] = kb_label
+                updated = True
+                logger.debug(f"Updated span dict {span_id} with entity link")
+                break
+
+        if not updated:
+            return jsonify({"error": f"Span {span_id} not found"}), 404
+
+        return jsonify({
+            "status": "success",
+            "message": f"Span {span_id} linked to {kb_source}:{kb_id}"
+        })
+
+    except Exception as e:
+        logger.error(f"Error updating span with entity link: {e}")
+        return jsonify({"error": f"Failed to update span: {str(e)}"}), 500
+
+    finally:
+        logger.debug(f"=== ENTITY_LINKING_UPDATE_SPAN END ===")
+
+
 @app.route("/api/waveform/<cache_key>")
 def get_waveform_data(cache_key):
     """
@@ -5015,6 +5287,13 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/api/spans/<instance_id>/clear", "clear_span_annotations", clear_span_annotations, methods=["POST"])
     app.add_url_rule("/api/links/<instance_id>", "get_link_annotations", get_link_annotations, methods=["GET"])
     app.add_url_rule("/api/links/<instance_id>/<link_id>", "delete_link_annotation", delete_link_annotation, methods=["DELETE"])
+
+    # Entity linking API routes
+    app.add_url_rule("/api/entity_linking/search", "entity_linking_search", entity_linking_search, methods=["GET"])
+    app.add_url_rule("/api/entity_linking/entity/<kb_name>/<entity_id>", "entity_linking_get_entity", entity_linking_get_entity, methods=["GET"])
+    app.add_url_rule("/api/entity_linking/configured_kbs", "entity_linking_configured_kbs", entity_linking_configured_kbs, methods=["GET"])
+    app.add_url_rule("/api/entity_linking/update_span", "entity_linking_update_span", entity_linking_update_span, methods=["POST"])
+
     app.add_url_rule("/api/current_instance", "get_current_instance", get_current_instance, methods=["GET"])
     app.add_url_rule("/api/ai_assistant", "ai_assistant", ai_assistant, methods=["GET"])
     app.add_url_rule("/api/audio/proxy", "audio_proxy", audio_proxy, methods=["GET"])

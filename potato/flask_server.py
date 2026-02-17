@@ -253,6 +253,76 @@ class ActiveLearningState:
 # Set session timeout duration (e.g., 30 minutes)
 SESSION_TIMEOUT = timedelta(minutes=1)
 
+
+def _apply_annotation_filter(items: list, filter_config: dict, id_key: str) -> list:
+    """
+    Filter items based on prior annotation decisions.
+
+    This enables chaining annotation tasks, e.g., triage -> full annotation.
+
+    Args:
+        items: List of data items to filter
+        filter_config: Configuration dict with:
+            - annotation_dir: Path to annotation_output directory
+            - schema: Name of the annotation schema to filter by
+            - value: Value(s) to filter for (string or list)
+            - invert: If True, return items that DON'T match (optional)
+        id_key: Key in items containing the instance ID
+
+    Returns:
+        Filtered list of items
+    """
+    from potato.filter_by_annotation import load_annotations_from_dir
+
+    annotation_dir = filter_config.get("annotation_dir")
+    schema_name = filter_config.get("schema")
+    filter_value = filter_config.get("value")
+    invert = filter_config.get("invert", False)
+
+    if not annotation_dir:
+        logger.warning("filter_by_prior_annotation missing 'annotation_dir', skipping filter")
+        return items
+    if not schema_name:
+        logger.warning("filter_by_prior_annotation missing 'schema', skipping filter")
+        return items
+    if not filter_value:
+        logger.warning("filter_by_prior_annotation missing 'value', skipping filter")
+        return items
+
+    # Normalize filter_value to a set
+    if isinstance(filter_value, str):
+        filter_values = {filter_value}
+    else:
+        filter_values = set(filter_value)
+
+    # Load prior annotations
+    annotations = load_annotations_from_dir(annotation_dir)
+    logger.debug(f"Loaded prior annotations for {len(annotations)} instances")
+
+    # Filter items
+    filtered = []
+    for item in items:
+        instance_id = str(item.get(id_key, ""))
+        if not instance_id:
+            continue
+
+        # Check if this instance has the annotation we're looking for
+        instance_annotations = annotations.get(instance_id, {})
+        schema_annotation = instance_annotations.get(schema_name, {})
+
+        # Get the annotation value
+        anno_value = schema_annotation.get("name") or schema_annotation.get("value")
+        matches = anno_value in filter_values
+
+        if invert:
+            matches = not matches
+
+        if matches:
+            filtered.append(item)
+
+    return filtered
+
+
 def load_instance_data(config: dict):
     """
     Load instance data from the files specified in the config.
@@ -296,7 +366,18 @@ def load_instance_data(config: dict):
 
     logger.debug("Loading data from %d files" % (len(data_files)))
 
-    for data_fname in data_files:
+    for data_file_entry in data_files:
+        # Support both string paths and dict configs
+        if isinstance(data_file_entry, dict):
+            data_fname = data_file_entry.get("path")
+            filter_config = data_file_entry.get("filter_by_prior_annotation")
+        else:
+            data_fname = data_file_entry
+            filter_config = None
+
+        if not data_fname:
+            logger.warning(f"Skipping data_files entry with no path: {data_file_entry}")
+            continue
         fmt = data_fname.split(".")[-1]
         if fmt not in ["csv", "tsv", "json", "jsonl"]:
             raise Exception("Unsupported input file format %s for %s" % (fmt, data_fname))
@@ -332,6 +413,11 @@ def load_instance_data(config: dict):
                         raise ValueError(
                             f"Invalid JSON at line {line_no+1} in {data_fname}: {e}"
                         ) from e
+
+            # Apply filter_by_prior_annotation if configured
+            if filter_config:
+                items = _apply_annotation_filter(items, filter_config, id_key)
+                logger.info(f"Filtered to {len(items)} items based on prior annotations")
 
             for item_no, item in enumerate(items):
                 if not isinstance(item, dict):
@@ -382,13 +468,20 @@ def load_instance_data(config: dict):
             if text_key in df.columns:
                 df = df.astype({text_key: str})
 
+            # Convert to list of dicts for filtering
+            items = df.to_dict('records')
+
+            # Apply filter_by_prior_annotation if configured
+            if filter_config:
+                items = _apply_annotation_filter(items, filter_config, id_key)
+                logger.info(f"Filtered to {len(items)} items based on prior annotations")
+
             # Add items to state manager
-            for _, row in df.iterrows():
-                item = row.to_dict()
+            for item in items:
                 instance_id = item[id_key]
                 ism.add_item(instance_id, item)
 
-            line_no = len(df)
+            line_no = len(items)
 
         # If the admin didn't specify a subset, have the user annotate all instances
         max_annotations_per_user = config.get("max_annotations_per_user", len(ism.get_instance_ids()))
@@ -1547,8 +1640,14 @@ def render_page_with_annotations(username) -> str:
     # replacing {{variable_name}} with the associated text for keyword arguments
 
         # Calculate progress counter values
-    # Use the total number of items that will be assigned to the user
-    total_count = get_item_state_manager().get_total_assignable_items_for_user(get_user_state(username))
+    # Get the number of completed annotations and remaining assignable items
+    finished_count = get_user_state(username).get_annotation_count()
+    remaining_count = get_item_state_manager().get_total_assignable_items_for_user(get_user_state(username))
+    # Total = finished + remaining (so counter shows "X / Total" not "X / Remaining")
+    total_count = finished_count + remaining_count
+
+    # Check if the current instance has been annotated (for status indicator)
+    instance_has_annotations = user_state.has_annotated(instance_id)
 
     # Get UI configuration from config
     ui_config = config.get("ui", {})
@@ -1639,6 +1738,8 @@ def render_page_with_annotations(username) -> str:
         multi_span_mode=display_template_vars.get("multi_span_mode", False),
         # Adjudication: show link for adjudicators
         is_adjudicator=_is_user_adjudicator(username),
+        # Annotation status indicator
+        instance_has_annotations=instance_has_annotations,
         # ai=ai_hints,
         **kwargs
     )

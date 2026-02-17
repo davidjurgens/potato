@@ -129,6 +129,9 @@ temp_screenshots/
 # Implementation plans
 plans/
 
+# Internal documentation (competitive analysis, strategy docs, etc.)
+internal/
+
 # Documentation site build output
 site/
 

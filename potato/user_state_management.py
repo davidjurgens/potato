@@ -1899,6 +1899,82 @@ class InMemoryUserState(UserState):
            does not have a maximum number of assignments, this will always return True."""
         return self.max_assignments < 0 or len(self.get_annotated_instance_ids()) < self.max_assignments
 
+    def find_next_unannotated_index(self) -> Optional[int]:
+        """
+        Find the index of the next unannotated instance after the current position.
+
+        Searches forward from the current position, wrapping around to the beginning
+        if necessary. Returns None if all instances have been annotated.
+
+        Returns:
+            Optional[int]: Index of the next unannotated instance, or None if all
+                          instances are annotated.
+        """
+        current_idx = self.get_current_instance_index()
+        annotated_ids = self.get_annotated_instance_ids()
+        total_instances = len(self.instance_id_ordering)
+
+        if total_instances == 0:
+            return None
+
+        # Search forward from current position
+        for i in range(current_idx + 1, total_instances):
+            instance_id = self.instance_id_ordering[i]
+            if instance_id not in annotated_ids:
+                return i
+
+        # Wrap around and search from beginning to current position
+        for i in range(0, current_idx):
+            instance_id = self.instance_id_ordering[i]
+            if instance_id not in annotated_ids:
+                return i
+
+        # Check current position (in case it's the only unannotated item)
+        if current_idx < total_instances:
+            instance_id = self.instance_id_ordering[current_idx]
+            if instance_id not in annotated_ids:
+                return current_idx
+
+        return None  # All instances annotated
+
+    def find_prev_unannotated_index(self) -> Optional[int]:
+        """
+        Find the index of the previous unannotated instance before the current position.
+
+        Searches backward from the current position, wrapping around to the end
+        if necessary. Returns None if all instances have been annotated.
+
+        Returns:
+            Optional[int]: Index of the previous unannotated instance, or None if all
+                          instances are annotated.
+        """
+        current_idx = self.get_current_instance_index()
+        annotated_ids = self.get_annotated_instance_ids()
+        total_instances = len(self.instance_id_ordering)
+
+        if total_instances == 0:
+            return None
+
+        # Search backward from current position
+        for i in range(current_idx - 1, -1, -1):
+            instance_id = self.instance_id_ordering[i]
+            if instance_id not in annotated_ids:
+                return i
+
+        # Wrap around and search from end to current position
+        for i in range(total_instances - 1, current_idx, -1):
+            instance_id = self.instance_id_ordering[i]
+            if instance_id not in annotated_ids:
+                return i
+
+        # Check current position (in case it's the only unannotated item)
+        if current_idx < total_instances:
+            instance_id = self.instance_id_ordering[current_idx]
+            if instance_id not in annotated_ids:
+                return current_idx
+
+        return None  # All instances annotated
+
     # === ICL Verification Tracking Methods ===
 
     def mark_instance_as_verification(self, instance_id: str, schema_name: str) -> None:
