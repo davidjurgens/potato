@@ -3054,6 +3054,16 @@ def get_span_data(instance_id):
         if additional_parts:
             span_entry['additional_parts'] = additional_parts
 
+        # Include entity linking data if present
+        kb_id = span.get_kb_id() if hasattr(span, 'get_kb_id') else getattr(span, 'kb_id', None)
+        kb_source = span.get_kb_source() if hasattr(span, 'get_kb_source') else getattr(span, 'kb_source', None)
+        kb_label = span.get_kb_label() if hasattr(span, 'get_kb_label') else getattr(span, 'kb_label', None)
+        if kb_id and kb_source:
+            span_entry['kb_id'] = kb_id
+            span_entry['kb_source'] = kb_source
+            if kb_label:
+                span_entry['kb_label'] = kb_label
+
         span_data.append(span_entry)
 
     response_data = {
@@ -3179,12 +3189,17 @@ def update_instance():
             span_annotations = request.json.get("span_annotations", [])
             for span_data in span_annotations:
                 if isinstance(span_data, dict) and "schema" in span_data:
+                    # Use provided ID or generate deterministic one to preserve span identity
+                    span_id = span_data.get("id") or span_data.get("span_id") or \
+                              f"{span_data['schema']}_{span_data['name']}_{span_data['start']}_{span_data['end']}"
+
                     span = SpanAnnotation(
                         span_data["schema"],
                         span_data["name"],
                         span_data.get("title", span_data["name"]),
                         int(span_data["start"]),
                         int(span_data["end"]),
+                        id=span_id,
                         target_field=span_data.get("target_field")
                     )
                     value = span_data.get("value")
@@ -4855,19 +4870,29 @@ def entity_linking_update_span():
         # Get span annotations for this instance
         span_annotations = user_state.get_span_annotations(str(instance_id))
 
-        # Find the span with matching ID
-        updated = False
+        # Debug: Log all existing span IDs
+        existing_ids = []
         for span_key, span in span_annotations.items():
-            if hasattr(span, 'get_id') and span.get_id() == span_id:
+            if hasattr(span_key, 'get_id'):
+                existing_ids.append(span_key.get_id())
+            elif isinstance(span_key, dict):
+                existing_ids.append(span_key.get('id', 'no-id'))
+        logger.debug(f"Looking for span_id={span_id}, existing IDs: {existing_ids}")
+
+        # Find the span with matching ID
+        # Note: span_key is the SpanAnnotation object, span is the value
+        updated = False
+        for span_key, span_value in span_annotations.items():
+            if hasattr(span_key, 'get_id') and span_key.get_id() == span_id:
                 # Update the span's KB link
-                span.set_entity_link(kb_id, kb_source, kb_label)
+                span_key.set_entity_link(kb_id, kb_source, kb_label)
                 updated = True
                 logger.debug(f"Updated span {span_id} with entity link")
                 break
-            elif isinstance(span, dict) and span.get('id') == span_id:
-                span['kb_id'] = kb_id
-                span['kb_source'] = kb_source
-                span['kb_label'] = kb_label
+            elif isinstance(span_key, dict) and span_key.get('id') == span_id:
+                span_key['kb_id'] = kb_id
+                span_key['kb_source'] = kb_source
+                span_key['kb_label'] = kb_label
                 updated = True
                 logger.debug(f"Updated span dict {span_id} with entity link")
                 break

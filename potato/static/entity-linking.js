@@ -20,7 +20,10 @@
         currentInstanceId: null,
         searchTimeout: null,
         modal: null,
-        config: null
+        config: null,
+        // Track currently linked entities for the open span
+        currentLinkedEntities: [],  // Array of {kb_id, kb_source, kb_label}
+        multiSelect: false  // Whether multi-select is enabled
     };
 
     /**
@@ -45,7 +48,9 @@
         try {
             const configStr = schemas[0].getAttribute('data-entity-linking');
             EntityLinking.config = JSON.parse(configStr);
+            EntityLinking.multiSelect = EntityLinking.config.multi_select || false;
             console.log('[EntityLinking] Config:', EntityLinking.config);
+            console.log('[EntityLinking] Multi-select enabled:', EntityLinking.multiSelect);
         } catch (e) {
             console.error('[EntityLinking] Failed to parse config:', e);
             return;
@@ -143,6 +148,7 @@
                     </div>
                 </div>
                 <div class="el-modal-footer">
+                    <button id="el-save-btn" class="el-save-btn" style="display: none;">Save Selection</button>
                     <button id="el-cancel-btn" class="el-cancel-btn">Cancel</button>
                 </div>
             </div>
@@ -154,6 +160,7 @@
         // Set up modal event listeners
         modal.querySelector('.el-close-btn').addEventListener('click', closeModal);
         modal.querySelector('#el-cancel-btn').addEventListener('click', closeModal);
+        modal.querySelector('#el-save-btn').addEventListener('click', saveMultiSelect);
         modal.querySelector('#el-search-btn').addEventListener('click', performSearch);
         modal.querySelector('#el-search-input').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
@@ -187,35 +194,99 @@
     }
 
     /**
-     * Add link icons to all span highlights
+     * Get the set of schema names that have entity linking enabled
+     */
+    function getSchemasWithEntityLinking() {
+        const schemas = new Set();
+        document.querySelectorAll('[data-entity-linking]').forEach(el => {
+            // The element with data-entity-linking is usually a form or container
+            // with a data-schema-name attribute, or we can extract from its structure
+            const schemaName = el.getAttribute('data-schema-name') ||
+                               el.querySelector('[name^="span_label:::"]')?.name?.split(':::')[1] ||
+                               el.id?.replace('annotation-form-', '');
+            if (schemaName) {
+                schemas.add(schemaName);
+            }
+        });
+        return schemas;
+    }
+
+    /**
+     * Add link icons to all span overlays (only for schemas with entity linking enabled)
      */
     function addLinkIconsToSpans() {
-        const spans = document.querySelectorAll('.span-highlight');
-        spans.forEach(span => {
-            if (!span.querySelector('.el-link-icon')) {
-                addLinkIconToSpan(span);
+        const enabledSchemas = getSchemasWithEntityLinking();
+        if (enabledSchemas.size === 0) {
+            return;
+        }
+
+        // Look for span-overlay-pure (created by span-core.js) instead of span-highlight
+        const overlays = document.querySelectorAll('.span-overlay-pure');
+        overlays.forEach(overlay => {
+            // Only add icon if the span's schema has entity linking enabled
+            const spanSchema = overlay.dataset.schema;
+            if (spanSchema && enabledSchemas.has(spanSchema) && !overlay.querySelector('.el-link-icon')) {
+                addLinkIconToSpan(overlay);
             }
         });
     }
 
     /**
-     * Add a link icon to a specific span
+     * Add a link icon to a specific span overlay
      */
-    function addLinkIconToSpan(span) {
-        const icon = document.createElement('span');
+    function addLinkIconToSpan(overlay) {
+        // Double-check that this span's schema has entity linking enabled
+        const enabledSchemas = getSchemasWithEntityLinking();
+        const spanSchema = overlay.dataset.schema;
+        if (spanSchema && !enabledSchemas.has(spanSchema)) {
+            return;  // Skip - this schema doesn't have entity linking
+        }
+
+        // Find the controls container where label and delete button are
+        const controlsContainer = overlay.querySelector('.span-controls');
+        if (!controlsContainer) {
+            console.debug('[EntityLinking] No controls container found for overlay');
+            return;
+        }
+
+        const icon = document.createElement('button');
         icon.className = 'el-link-icon';
-        icon.innerHTML = span.classList.contains('has-entity-link') ?
+        icon.type = 'button';
+        icon.innerHTML = overlay.classList.contains('has-entity-link') ?
             '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>' :
             '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>';
-        icon.title = span.classList.contains('has-entity-link') ?
+        icon.title = overlay.classList.contains('has-entity-link') ?
             'Edit entity link' : 'Link to knowledge base';
+
+        // Style the button to match the delete button
+        icon.style.backgroundColor = 'rgba(99, 102, 241, 0.9)';
+        icon.style.color = 'white';
+        icon.style.border = 'none';
+        icon.style.borderRadius = '50%';
+        icon.style.width = '16px';
+        icon.style.height = '16px';
+        icon.style.minWidth = '16px';
+        icon.style.minHeight = '16px';
+        icon.style.padding = '0';
+        icon.style.margin = '0';
+        icon.style.cursor = 'pointer';
+        icon.style.display = 'flex';
+        icon.style.alignItems = 'center';
+        icon.style.justifyContent = 'center';
+        icon.style.flexShrink = '0';
 
         icon.addEventListener('click', (e) => {
             e.stopPropagation();
-            openModal(span);
+            openModal(overlay);
         });
 
-        span.appendChild(icon);
+        // Insert before the delete button
+        const deleteBtn = controlsContainer.querySelector('.span-delete-btn');
+        if (deleteBtn) {
+            controlsContainer.insertBefore(icon, deleteBtn);
+        } else {
+            controlsContainer.appendChild(icon);
+        }
     }
 
     /**
@@ -336,21 +407,47 @@
     function openModal(spanElement) {
         if (!EntityLinking.modal) return;
 
-        // Get span info
+        // Get span info from data attributes
         EntityLinking.currentSpanId = spanElement.getAttribute('data-annotation-id');
         EntityLinking.currentInstanceId = document.getElementById('instance_id')?.value;
 
-        // Get selected text
-        const selectedText = spanElement.textContent.replace(/\s*$/, '');
+        // Get selected text from the original text using start/end offsets
+        const start = parseInt(spanElement.getAttribute('data-start'), 10);
+        const end = parseInt(spanElement.getAttribute('data-end'), 10);
+        let selectedText = '';
+
+        // Try to get the original text from text-content element
+        const textContent = document.getElementById('text-content');
+        if (textContent && !isNaN(start) && !isNaN(end)) {
+            const originalText = textContent.getAttribute('data-original-text') || textContent.textContent;
+            selectedText = originalText.substring(start, end);
+        }
+
+        // Fallback: try to get text from the span label
+        if (!selectedText) {
+            const label = spanElement.querySelector('.span-label');
+            selectedText = label ? label.textContent : spanElement.getAttribute('data-label') || '';
+        }
+
         document.getElementById('el-selected-text').textContent = selectedText;
         document.getElementById('el-search-input').value = selectedText;
 
-        // Check for existing link
+        // Check for existing link(s)
         const kbId = spanElement.getAttribute('data-kb-id');
         const kbSource = spanElement.getAttribute('data-kb-source');
         const kbLabel = spanElement.getAttribute('data-kb-label');
 
+        // Reset linked entities list
+        EntityLinking.currentLinkedEntities = [];
+
         if (kbId && kbSource) {
+            // For backwards compatibility, single link stored as attributes
+            // Future: could store multiple as JSON in data-kb-entities
+            EntityLinking.currentLinkedEntities.push({
+                kb_id: kbId,
+                kb_source: kbSource,
+                kb_label: kbLabel
+            });
             showCurrentLink(kbId, kbSource, kbLabel);
         } else {
             document.getElementById('el-current-link').style.display = 'none';
@@ -359,6 +456,12 @@
         // Clear previous results
         document.getElementById('el-results').innerHTML = '';
         document.getElementById('el-loading').style.display = 'none';
+
+        // Show/hide save button based on multi-select mode
+        const saveBtn = document.getElementById('el-save-btn');
+        if (saveBtn) {
+            saveBtn.style.display = EntityLinking.multiSelect ? 'inline-block' : 'none';
+        }
 
         // Show modal
         EntityLinking.modal.style.display = 'flex';
@@ -371,6 +474,69 @@
                 selector.value = EntityLinking.configuredKBs[0].name;
             }
             performSearch();
+        }
+    }
+
+    /**
+     * Save multi-select entities
+     */
+    async function saveMultiSelect() {
+        if (!EntityLinking.currentSpanId || !EntityLinking.currentInstanceId) {
+            console.error('[EntityLinking] No span selected for multi-select save');
+            return;
+        }
+
+        // Get the primary entity (first one) for backwards compatibility
+        const primaryEntity = EntityLinking.currentLinkedEntities[0];
+
+        if (!primaryEntity) {
+            // No entities selected - remove link
+            await removeCurrentLink();
+            return;
+        }
+
+        try {
+            const requestBody = {
+                instance_id: EntityLinking.currentInstanceId,
+                span_id: EntityLinking.currentSpanId,
+                kb_id: primaryEntity.kb_id,
+                kb_source: primaryEntity.kb_source,
+                kb_label: primaryEntity.kb_label,
+                // Include all linked entities for future multi-select support
+                linked_entities: EntityLinking.currentLinkedEntities
+            };
+
+            const response = await fetch('/api/entity_linking/update_span', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (response.ok) {
+                // Update the span overlay element
+                const spanElement = document.querySelector(
+                    `.span-overlay-pure[data-annotation-id="${EntityLinking.currentSpanId}"]`
+                );
+
+                if (spanElement) {
+                    spanElement.setAttribute('data-kb-id', primaryEntity.kb_id);
+                    spanElement.setAttribute('data-kb-source', primaryEntity.kb_source);
+                    spanElement.setAttribute('data-kb-label', primaryEntity.kb_label || '');
+                    spanElement.classList.add('has-entity-link');
+
+                    // Update link icon
+                    const icon = spanElement.querySelector('.el-link-icon');
+                    if (icon) {
+                        icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>';
+                        icon.title = 'Edit entity link';
+                    }
+                }
+
+                closeModal();
+                console.log('[EntityLinking] Multi-select saved:', EntityLinking.currentLinkedEntities.length, 'entities');
+            }
+        } catch (e) {
+            console.error('[EntityLinking] Error saving multi-select:', e);
         }
     }
 
@@ -410,7 +576,8 @@
     }
 
     /**
-     * Perform entity search
+     * Perform entity search with multi-word support
+     * For multi-word queries, also searches individual words and combines results
      */
     async function performSearch() {
         const query = document.getElementById('el-search-input').value.trim();
@@ -427,22 +594,58 @@
         results.innerHTML = '';
 
         try {
-            const response = await fetch(
-                `/api/entity_linking/search?q=${encodeURIComponent(query)}&kb=${encodeURIComponent(kbName)}&limit=10`
+            // Split query into words for multi-word search
+            const words = query.split(/\s+/).filter(w => w.length > 2);
+            const searches = [query]; // Always search the full query first
+
+            // For multi-word queries, also search individual significant words
+            if (words.length > 1) {
+                words.forEach(word => {
+                    if (!searches.includes(word)) {
+                        searches.push(word);
+                    }
+                });
+            }
+
+            // Perform searches in parallel (limit to 3 searches)
+            const searchPromises = searches.slice(0, 3).map(q =>
+                fetch(`/api/entity_linking/search?q=${encodeURIComponent(q)}&kb=${encodeURIComponent(kbName)}&limit=5`)
+                    .then(r => r.ok ? r.json() : { results: [] })
+                    .catch(() => ({ results: [] }))
             );
 
-            if (response.ok) {
-                const data = await response.json();
-                displayResults(data.results);
-            } else {
-                results.innerHTML = '<div class="el-error">Search failed. Please try again.</div>';
-            }
+            const searchResults = await Promise.all(searchPromises);
+
+            // Combine and deduplicate results
+            const seenIds = new Set();
+            const allResults = [];
+
+            searchResults.forEach(data => {
+                (data.results || []).forEach(entity => {
+                    if (!seenIds.has(entity.entity_id)) {
+                        seenIds.add(entity.entity_id);
+                        allResults.push(entity);
+                    }
+                });
+            });
+
+            // Limit to 10 results
+            displayResults(allResults.slice(0, 10));
         } catch (e) {
             console.error('[EntityLinking] Search error:', e);
             results.innerHTML = '<div class="el-error">Search failed. Please try again.</div>';
         } finally {
             loading.style.display = 'none';
         }
+    }
+
+    /**
+     * Check if an entity is currently linked
+     */
+    function isEntityLinked(entityId, kbSource) {
+        return EntityLinking.currentLinkedEntities.some(
+            e => e.kb_id === entityId && e.kb_source === kbSource
+        );
     }
 
     /**
@@ -456,24 +659,93 @@
             return;
         }
 
-        results.innerHTML = entities.map(entity => `
-            <div class="el-result-item" data-entity-id="${entity.entity_id}"
-                 data-kb-source="${entity.kb_source}" data-label="${escapeHtml(entity.label)}">
-                <div class="el-result-header">
-                    <span class="el-result-label">${escapeHtml(entity.label)}</span>
-                    <span class="el-result-id">${entity.entity_id}</span>
+        const multiSelect = EntityLinking.multiSelect;
+
+        results.innerHTML = entities.map(entity => {
+            const isLinked = isEntityLinked(entity.entity_id, entity.kb_source);
+            const linkedClass = isLinked ? 'el-result-item-linked' : '';
+            const linkedBadge = isLinked ? '<span class="el-linked-badge">✓ Currently Linked</span>' : '';
+            const checkbox = multiSelect ?
+                `<input type="checkbox" class="el-result-checkbox" ${isLinked ? 'checked' : ''}>` : '';
+
+            return `
+                <div class="el-result-item ${linkedClass}" data-entity-id="${entity.entity_id}"
+                     data-kb-source="${entity.kb_source}" data-label="${escapeHtml(entity.label)}">
+                    <div class="el-result-header">
+                        ${checkbox}
+                        <span class="el-result-label">${escapeHtml(entity.label)}</span>
+                        <span class="el-result-id">${entity.entity_id}</span>
+                        ${linkedBadge}
+                    </div>
+                    ${entity.description ? `<div class="el-result-desc">${escapeHtml(entity.description)}</div>` : ''}
+                    ${entity.aliases && entity.aliases.length > 0 ?
+                        `<div class="el-result-aliases">Also: ${entity.aliases.slice(0, 3).map(a => escapeHtml(a)).join(', ')}</div>` : ''}
+                    ${entity.url ? `<a href="${entity.url}" target="_blank" class="el-result-link">View in KB</a>` : ''}
                 </div>
-                ${entity.description ? `<div class="el-result-desc">${escapeHtml(entity.description)}</div>` : ''}
-                ${entity.aliases && entity.aliases.length > 0 ?
-                    `<div class="el-result-aliases">Also: ${entity.aliases.slice(0, 3).map(a => escapeHtml(a)).join(', ')}</div>` : ''}
-                ${entity.url ? `<a href="${entity.url}" target="_blank" class="el-result-link">View in KB</a>` : ''}
-            </div>
-        `).join('');
+            `;
+        }).join('');
 
         // Add click handlers
         results.querySelectorAll('.el-result-item').forEach(item => {
-            item.addEventListener('click', () => selectEntity(item));
+            if (multiSelect) {
+                // In multi-select mode, clicking toggles checkbox
+                item.addEventListener('click', (e) => {
+                    if (e.target.tagName !== 'A') { // Don't toggle on link clicks
+                        const checkbox = item.querySelector('.el-result-checkbox');
+                        if (checkbox && e.target !== checkbox) {
+                            checkbox.checked = !checkbox.checked;
+                        }
+                        updateMultiSelectState(item, checkbox?.checked);
+                    }
+                });
+            } else {
+                // In single-select mode, clicking selects immediately
+                item.addEventListener('click', (e) => {
+                    if (e.target.tagName !== 'A') {
+                        selectEntity(item);
+                    }
+                });
+            }
         });
+    }
+
+    /**
+     * Update multi-select state when checkbox changes
+     */
+    function updateMultiSelectState(item, isSelected) {
+        const entityId = item.getAttribute('data-entity-id');
+        const kbSource = item.getAttribute('data-kb-source');
+        const label = item.getAttribute('data-label');
+
+        if (isSelected) {
+            // Add to linked entities if not already there
+            if (!isEntityLinked(entityId, kbSource)) {
+                EntityLinking.currentLinkedEntities.push({
+                    kb_id: entityId,
+                    kb_source: kbSource,
+                    kb_label: label
+                });
+            }
+            item.classList.add('el-result-item-linked');
+        } else {
+            // Remove from linked entities
+            EntityLinking.currentLinkedEntities = EntityLinking.currentLinkedEntities.filter(
+                e => !(e.kb_id === entityId && e.kb_source === kbSource)
+            );
+            item.classList.remove('el-result-item-linked');
+        }
+
+        // Update the badge
+        const badge = item.querySelector('.el-linked-badge');
+        if (isSelected && !badge) {
+            const header = item.querySelector('.el-result-header');
+            const newBadge = document.createElement('span');
+            newBadge.className = 'el-linked-badge';
+            newBadge.textContent = '✓ Currently Linked';
+            header.appendChild(newBadge);
+        } else if (!isSelected && badge) {
+            badge.remove();
+        }
     }
 
     /**
@@ -484,30 +756,42 @@
         const kbSource = item.getAttribute('data-kb-source');
         const label = item.getAttribute('data-label');
 
+        console.log('[EntityLinking] selectEntity called with:', { entityId, kbSource, label });
+        console.log('[EntityLinking] Current state:', {
+            spanId: EntityLinking.currentSpanId,
+            instanceId: EntityLinking.currentInstanceId
+        });
+
         if (!EntityLinking.currentSpanId || !EntityLinking.currentInstanceId) {
-            console.error('[EntityLinking] No span selected');
+            console.error('[EntityLinking] No span selected - spanId:', EntityLinking.currentSpanId, 'instanceId:', EntityLinking.currentInstanceId);
+            alert('Error: No span selected. Please try again.');
             return;
         }
 
         try {
+            const requestBody = {
+                instance_id: EntityLinking.currentInstanceId,
+                span_id: EntityLinking.currentSpanId,
+                kb_id: entityId,
+                kb_source: kbSource,
+                kb_label: label
+            };
+            console.log('[EntityLinking] Sending request:', requestBody);
+
             const response = await fetch('/api/entity_linking/update_span', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    instance_id: EntityLinking.currentInstanceId,
-                    span_id: EntityLinking.currentSpanId,
-                    kb_id: entityId,
-                    kb_source: kbSource,
-                    kb_label: label
-                })
+                body: JSON.stringify(requestBody)
             });
 
+            console.log('[EntityLinking] Response status:', response.status);
+
             if (response.ok) {
-                // Update the span element
+                // Update the span overlay element
                 const spanElement = document.querySelector(
-                    `.span-highlight[data-annotation-id="${EntityLinking.currentSpanId}"]`
+                    `.span-overlay-pure[data-annotation-id="${EntityLinking.currentSpanId}"]`
                 );
 
                 if (spanElement) {
@@ -522,12 +806,15 @@
                         icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>';
                         icon.title = 'Edit entity link';
                     }
+                } else {
+                    console.warn('[EntityLinking] Could not find span element to update');
                 }
 
                 closeModal();
                 console.log('[EntityLinking] Entity link saved:', entityId);
             } else {
-                console.error('[EntityLinking] Failed to save entity link');
+                const errorData = await response.json().catch(() => ({}));
+                console.error('[EntityLinking] Failed to save entity link:', errorData);
             }
         } catch (e) {
             console.error('[EntityLinking] Error saving entity link:', e);
@@ -558,9 +845,9 @@
             });
 
             if (response.ok) {
-                // Update the span element
+                // Update the span overlay element
                 const spanElement = document.querySelector(
-                    `.span-highlight[data-annotation-id="${EntityLinking.currentSpanId}"]`
+                    `.span-overlay-pure[data-annotation-id="${EntityLinking.currentSpanId}"]`
                 );
 
                 if (spanElement) {
@@ -602,22 +889,23 @@
         init();
     }
 
-    // Also initialize when spans are added to the page
+    // Also initialize when span overlays are added to the page
     const observer = new MutationObserver((mutations) => {
         mutations.forEach((mutation) => {
             mutation.addedNodes.forEach((node) => {
                 if (node.nodeType === Node.ELEMENT_NODE) {
-                    if (node.classList && node.classList.contains('span-highlight')) {
+                    // Check if the added node is a span overlay
+                    if (node.classList && node.classList.contains('span-overlay-pure')) {
                         if (!node.querySelector('.el-link-icon')) {
                             addLinkIconToSpan(node);
                         }
                     }
-                    // Also check child nodes
-                    const spans = node.querySelectorAll && node.querySelectorAll('.span-highlight');
-                    if (spans) {
-                        spans.forEach(span => {
-                            if (!span.querySelector('.el-link-icon')) {
-                                addLinkIconToSpan(span);
+                    // Also check child nodes for span overlays
+                    const overlays = node.querySelectorAll && node.querySelectorAll('.span-overlay-pure');
+                    if (overlays) {
+                        overlays.forEach(overlay => {
+                            if (!overlay.querySelector('.el-link-icon')) {
+                                addLinkIconToSpan(overlay);
                             }
                         });
                     }

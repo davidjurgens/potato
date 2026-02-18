@@ -282,6 +282,7 @@ class UnifiedPositioningStrategy {
         }
 
         const span = {
+            // Use a temporary ID - will be replaced with deterministic ID when label/schema are set
             id: `span_${start}_${end}_${Date.now()}`,
             start: start,
             end: end,
@@ -289,6 +290,9 @@ class UnifiedPositioningStrategy {
             label: 'unknown',
             color: null
         };
+
+        // Store the positions for later ID generation
+        span._tempPositions = { start, end };
 
         // Pass options (including color) to createOverlay
         const overlay = this.createOverlay(span, positions, options);
@@ -506,6 +510,15 @@ class UnifiedPositioningStrategy {
         if (isAiSpan) {
             overlay.dataset.isAiSpan = 'true';
         }
+        // Include entity linking data if present
+        if (span.kb_id && span.kb_source) {
+            overlay.dataset.kbId = span.kb_id;
+            overlay.dataset.kbSource = span.kb_source;
+            if (span.kb_label) {
+                overlay.dataset.kbLabel = span.kb_label;
+            }
+            overlay.classList.add('has-entity-link');
+        }
 
         overlay.style.position = 'absolute';
         overlay.style.pointerEvents = 'none';
@@ -543,11 +556,13 @@ class UnifiedPositioningStrategy {
             const segmentTop = positions[0].y - VERTICAL_PADDING;
 
             // Create a container for label + delete button so they stay together
+            // Position above the highlight - allow negative values to go above container
             const controlsContainer = document.createElement('div');
             controlsContainer.className = 'span-controls';
             controlsContainer.style.position = 'absolute';
             controlsContainer.style.left = `${segmentLeft}px`;
-            controlsContainer.style.top = `${Math.max(0, segmentTop - 20)}px`;
+            // Position 22px above the segment top (controls are ~18px tall)
+            controlsContainer.style.top = `${segmentTop - 22}px`;
             controlsContainer.style.display = 'flex';
             controlsContainer.style.alignItems = 'center';
             controlsContainer.style.gap = '4px';
@@ -652,6 +667,10 @@ class SpanManager {
 
         // Admin keyword highlight state tracking
         this.keywordHighlights = []; // Array of keyword highlight overlay elements
+
+        // Discontinuous span support: track active span being extended
+        this.discontinuousMode = false;
+        this.activeDiscontinuousSpan = null; // Span being extended with additional parts
     }
 
     // ==================== SCHEMA STATE MANAGEMENT ====================
@@ -1089,20 +1108,30 @@ class SpanManager {
         const textContent = document.getElementById('text-content');
 
         if (textContainer) {
-            textContainer.addEventListener('mouseup', () => this.handleTextSelection());
-            textContainer.addEventListener('keyup', () => this.handleTextSelection());
+            textContainer.addEventListener('mouseup', (e) => this.handleTextSelection(e));
+            textContainer.addEventListener('keyup', (e) => this.handleTextSelection(e));
         }
         if (textContent) {
-            textContent.addEventListener('mouseup', () => this.handleTextSelection());
-            textContent.addEventListener('keyup', () => this.handleTextSelection());
+            textContent.addEventListener('mouseup', (e) => this.handleTextSelection(e));
+            textContent.addEventListener('keyup', (e) => this.handleTextSelection(e));
         }
 
         // Also listen on instance_display span target fields
         const spanTargetFields = document.querySelectorAll('.display-field[data-span-target="true"]');
         for (const field of spanTargetFields) {
-            field.addEventListener('mouseup', () => this.handleTextSelection());
-            field.addEventListener('keyup', () => this.handleTextSelection());
+            field.addEventListener('mouseup', (e) => this.handleTextSelection(e));
+            field.addEventListener('keyup', (e) => this.handleTextSelection(e));
         }
+
+        // Listen for clicks outside spans to clear discontinuous mode
+        document.addEventListener('click', (e) => {
+            // If clicking outside span annotation areas, clear discontinuous span
+            if (!e.target.closest('.annotation-form.span') &&
+                !e.target.closest('#instance-text') &&
+                !e.target.closest('.display-field[data-span-target="true"]')) {
+                this.clearActiveDiscontinuousSpan();
+            }
+        });
 
         document.addEventListener('click', (e) => {
             if (e.target.classList.contains('span-delete')) {
@@ -1357,7 +1386,7 @@ class SpanManager {
         }
     }
 
-    handleTextSelection() {
+    handleTextSelection(event) {
         const selection = window.getSelection();
 
         console.warn('[SpanManager] handleTextSelection ENTRY: rangeCount=' + selection.rangeCount + ' isCollapsed=' + selection.isCollapsed + ' selectedLabel=' + this.selectedLabel + ' currentSchema=' + this.currentSchema);
@@ -1371,6 +1400,13 @@ class SpanManager {
             console.warn('[SpanManager] handleTextSelection: no selectedLabel, returning');
             return;
         }
+
+        // Check if Ctrl/Cmd key is held for discontinuous span mode
+        const isDiscontinuousMode = event && (event.ctrlKey || event.metaKey);
+
+        // Check if discontinuous spans are allowed for current schema
+        const schemaForm = document.querySelector(`.annotation-form.span[data-allow-discontinuous="true"]`);
+        const allowDiscontinuous = schemaForm !== null;
 
         // Detect which field the selection is in and pick the right positioning strategy
         let targetField = this.selectedTargetField || '';
@@ -1402,6 +1438,17 @@ class SpanManager {
 
         console.warn('[SpanManager] handleTextSelection: using strategy for field=' + targetField + ' container=' + (strategy.container ? strategy.container.id : 'NULL') + ' overlays=' + (overlaysContainer ? overlaysContainer.id : 'NULL'));
 
+        // Handle discontinuous span extension (Ctrl/Cmd+click with existing active span)
+        if (isDiscontinuousMode && allowDiscontinuous && this.activeDiscontinuousSpan) {
+            // Only allow extending if same label and schema
+            if (this.activeDiscontinuousSpan.label === selectedLabel &&
+                this.activeDiscontinuousSpan.schema === this.currentSchema) {
+                this.addDiscontinuousPart(selection, strategy, overlaysContainer);
+                selection.removeAllRanges();
+                return;
+            }
+        }
+
         // Get color BEFORE creating the overlay so it's created with the correct color
         const color = this.getSpanColor(selectedLabel);
 
@@ -1418,12 +1465,27 @@ class SpanManager {
         span.label = selectedLabel;
         span.schema = this.currentSchema;
         span.target_field = targetField;
+        span.additional_parts = []; // Initialize for discontinuous support
+
+        // Generate deterministic ID matching server format: {schema}_{label}_{start}_{end}
+        // This ensures span IDs are stable across page reloads
+        const oldId = span.id;
+        span.id = `${this.currentSchema}_${selectedLabel}_${span.start}_${span.end}`;
+        console.log(`[SpanManager] Generated deterministic span ID: ${span.id} (was ${oldId})`);
 
         if (overlay) {
+            // Update overlay's data-annotation-id to match the new deterministic ID
+            overlay.dataset.annotationId = span.id;
             // Update the label text to match the selected label
             const label = overlay.querySelector('.span-label');
             if (label) {
                 label.textContent = selectedLabel;
+            }
+
+            // Add discontinuous indicator if enabled
+            if (allowDiscontinuous) {
+                overlay.classList.add('discontinuous-enabled');
+                overlay.dataset.discontinuousEnabled = 'true';
             }
 
             // Append the overlay to the correct container
@@ -1441,11 +1503,151 @@ class SpanManager {
         }
         this.annotations.spans.push(span);
 
+        // If discontinuous mode is enabled, set this as the active span for extension
+        if (allowDiscontinuous && isDiscontinuousMode) {
+            this.activeDiscontinuousSpan = span;
+            console.log('[SpanManager] Set active discontinuous span:', span.id);
+        } else {
+            // Clear active span if not in discontinuous mode
+            this.activeDiscontinuousSpan = null;
+        }
+
         this.saveSpan(span);
         selection.removeAllRanges();
     }
 
-    async saveSpan(span) {
+    /**
+     * Add an additional part to the active discontinuous span.
+     * @param {Selection} selection - The current text selection
+     * @param {UnifiedPositioningStrategy} strategy - The positioning strategy to use
+     * @param {Element} overlaysContainer - The container for span overlays
+     */
+    addDiscontinuousPart(selection, strategy, overlaysContainer) {
+        if (!this.activeDiscontinuousSpan) {
+            console.warn('[SpanManager] addDiscontinuousPart: no active discontinuous span');
+            return;
+        }
+
+        // Get the offsets for the new selection
+        const offsets = strategy.getOffsetsFromSelection(selection);
+        if (!offsets) {
+            console.warn('[SpanManager] addDiscontinuousPart: could not get offsets');
+            return;
+        }
+
+        const selectedText = selection.toString().trim();
+        const newPart = {
+            start: offsets.start,
+            end: offsets.end,
+            text: selectedText
+        };
+
+        // Check for overlap with existing parts
+        const allParts = [
+            { start: this.activeDiscontinuousSpan.start, end: this.activeDiscontinuousSpan.end },
+            ...(this.activeDiscontinuousSpan.additional_parts || [])
+        ];
+
+        for (const part of allParts) {
+            if (newPart.start < part.end && newPart.end > part.start) {
+                console.warn('[SpanManager] addDiscontinuousPart: new part overlaps with existing part');
+                return;
+            }
+        }
+
+        // Add the new part
+        if (!this.activeDiscontinuousSpan.additional_parts) {
+            this.activeDiscontinuousSpan.additional_parts = [];
+        }
+        this.activeDiscontinuousSpan.additional_parts.push(newPart);
+
+        // Sort parts by start position
+        this.activeDiscontinuousSpan.additional_parts.sort((a, b) => a.start - b.start);
+
+        console.log('[SpanManager] Added discontinuous part:', newPart, 'to span:', this.activeDiscontinuousSpan.id);
+
+        // Create overlay for the new part
+        const color = this.getSpanColor(this.activeDiscontinuousSpan.label);
+        const positions = strategy.getPositionsFromOffsets(newPart.start, newPart.end);
+
+        if (positions && positions.length > 0) {
+            const partOverlay = this.createDiscontinuousPartOverlay(
+                this.activeDiscontinuousSpan,
+                newPart,
+                positions,
+                color
+            );
+            if (partOverlay && overlaysContainer) {
+                overlaysContainer.appendChild(partOverlay);
+            }
+        }
+
+        // Save the updated span
+        this.saveSpanWithParts(this.activeDiscontinuousSpan);
+    }
+
+    /**
+     * Create an overlay for a discontinuous span part.
+     * Uses a dashed border to visually connect it to the parent span.
+     */
+    createDiscontinuousPartOverlay(parentSpan, part, positions, color) {
+        const HORIZONTAL_PADDING = 3;
+        const VERTICAL_PADDING = 2;
+
+        const overlay = document.createElement('div');
+        overlay.className = 'span-overlay-pure discontinuous-part';
+        overlay.dataset.annotationId = parentSpan.id;
+        overlay.dataset.parentSpanId = parentSpan.id;
+        overlay.dataset.partStart = part.start;
+        overlay.dataset.partEnd = part.end;
+        overlay.dataset.label = parentSpan.label;
+        overlay.dataset.isDiscontinuousPart = 'true';
+
+        overlay.style.position = 'absolute';
+        overlay.style.pointerEvents = 'none';
+        overlay.style.zIndex = OVERLAY_Z_INDEX.USER_SPAN;
+
+        positions.forEach((pos) => {
+            const segment = document.createElement('div');
+            segment.className = 'span-highlight-segment discontinuous-segment';
+            segment.style.position = 'absolute';
+            segment.style.left = `${pos.x - HORIZONTAL_PADDING}px`;
+            segment.style.top = `${pos.y - VERTICAL_PADDING}px`;
+            segment.style.width = `${pos.width + 2 * HORIZONTAL_PADDING}px`;
+            segment.style.height = `${pos.height + 2 * VERTICAL_PADDING}px`;
+            segment.style.backgroundColor = color;
+            segment.style.border = `2px dashed ${color.replace('0.15', '0.8').replace('0.3', '0.8')}`;
+            segment.style.borderRadius = '4px';
+            segment.style.pointerEvents = 'none';
+            overlay.appendChild(segment);
+        });
+
+        // Add a small label indicating this is part of a discontinuous span
+        if (positions.length > 0) {
+            const label = document.createElement('div');
+            label.className = 'span-label discontinuous-label';
+            label.textContent = `+ ${parentSpan.label}`;
+            label.style.position = 'absolute';
+            label.style.left = `${positions[0].x - HORIZONTAL_PADDING}px`;
+            label.style.top = `${Math.max(0, positions[0].y - VERTICAL_PADDING - 18)}px`;
+            label.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+            label.style.color = 'white';
+            label.style.padding = '1px 4px';
+            label.style.borderRadius = '3px';
+            label.style.fontSize = '10px';
+            label.style.fontWeight = '500';
+            label.style.whiteSpace = 'nowrap';
+            label.style.pointerEvents = 'auto';
+            overlay.appendChild(label);
+        }
+
+        return overlay;
+    }
+
+    /**
+     * Save a span with additional parts (discontinuous span).
+     */
+    async saveSpanWithParts(span) {
         try {
             const postData = {
                 type: "span",
@@ -1456,8 +1658,61 @@ class SpanManager {
                     end: span.end,
                     title: span.label,
                     value: 1,
-                    target_field: span.target_field || ''
+                    target_field: span.target_field || '',
+                    additional_parts: span.additional_parts || [],
+                    span_id: span.id  // Send the deterministic ID to server
                 }],
+                instance_id: this.currentInstanceId
+            };
+
+            const response = await fetch('/updateinstance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(postData)
+            });
+
+            if (response.ok) {
+                console.log('[SpanManager] Saved discontinuous span with parts:', span.additional_parts);
+                // Don't reload annotations immediately to preserve UI state during discontinuous mode
+            } else {
+                console.error('[SpanManager] Failed to save discontinuous span:', await response.text());
+            }
+        } catch (error) {
+            console.error('[SpanManager] Error saving discontinuous span:', error);
+        }
+    }
+
+    /**
+     * Clear the active discontinuous span (e.g., when clicking elsewhere or selecting a different label).
+     */
+    clearActiveDiscontinuousSpan() {
+        if (this.activeDiscontinuousSpan) {
+            console.log('[SpanManager] Clearing active discontinuous span:', this.activeDiscontinuousSpan.id);
+            this.activeDiscontinuousSpan = null;
+        }
+    }
+
+    async saveSpan(span) {
+        try {
+            const spanState = {
+                name: span.label,
+                start: span.start,
+                end: span.end,
+                title: span.label,
+                value: 1,
+                target_field: span.target_field || '',
+                span_id: span.id  // Send the deterministic ID to server
+            };
+
+            // Include additional_parts for discontinuous spans
+            if (span.additional_parts && span.additional_parts.length > 0) {
+                spanState.additional_parts = span.additional_parts;
+            }
+
+            const postData = {
+                type: "span",
+                schema: span.schema || this.currentSchema,
+                state: [spanState],
                 instance_id: this.currentInstanceId
             };
 
@@ -1482,15 +1737,43 @@ class SpanManager {
 
         // Immediately remove the overlay from DOM for instant visual feedback
         // This ensures overlay is removed even if server reload has issues
+        // Search in all possible overlay containers (main and field-specific)
+        const selector = `.span-overlay-pure[data-annotation-id="${spanId}"]`;
+
+        // Remove from main span-overlays container
         const spanOverlays = document.getElementById('span-overlays');
         if (spanOverlays) {
-            const overlayToRemove = spanOverlays.querySelector(
-                `.span-overlay-pure[data-annotation-id="${spanId}"]`
-            );
+            const overlayToRemove = spanOverlays.querySelector(selector);
             if (overlayToRemove) {
                 overlayToRemove.remove();
             }
         }
+
+        // Also search in field-specific overlay containers
+        document.querySelectorAll('[id^="span-overlays-"]').forEach(container => {
+            const overlayToRemove = container.querySelector(selector);
+            if (overlayToRemove) {
+                overlayToRemove.remove();
+            }
+        });
+
+        // Also search anywhere in the document as a fallback
+        const anyOverlay = document.querySelector(selector);
+        if (anyOverlay) {
+            anyOverlay.remove();
+        }
+
+        // Also remove server-rendered inline span-highlight elements
+        // These are rendered by render_span_annotations() on the server
+        const inlineSelector = `.span-highlight[data-annotation-id="${spanId}"]`;
+        document.querySelectorAll(inlineSelector).forEach(inlineSpan => {
+            // Unwrap the span: replace it with its text content
+            const parent = inlineSpan.parentNode;
+            while (inlineSpan.firstChild) {
+                parent.insertBefore(inlineSpan.firstChild, inlineSpan);
+            }
+            inlineSpan.remove();
+        });
 
         // Also remove from local state immediately
         if (this.annotations.spans) {

@@ -20,6 +20,479 @@ function audioDebugLog(...args) {
     }
 }
 
+/**
+ * Color maps for spectrogram visualization
+ * Each color map is an array of RGB arrays for gradient interpolation
+ */
+const SPECTROGRAM_COLORMAPS = {
+    viridis: [
+        [68, 1, 84],
+        [72, 40, 120],
+        [62, 73, 137],
+        [49, 104, 142],
+        [38, 130, 142],
+        [31, 158, 137],
+        [53, 183, 121],
+        [109, 205, 89],
+        [180, 222, 44],
+        [253, 231, 37]
+    ],
+    magma: [
+        [0, 0, 4],
+        [28, 16, 68],
+        [79, 18, 123],
+        [129, 37, 129],
+        [181, 54, 122],
+        [229, 80, 100],
+        [251, 135, 97],
+        [254, 194, 135],
+        [252, 253, 191]
+    ],
+    plasma: [
+        [13, 8, 135],
+        [75, 3, 161],
+        [125, 3, 168],
+        [168, 34, 150],
+        [203, 70, 121],
+        [229, 107, 93],
+        [248, 148, 65],
+        [253, 195, 40],
+        [240, 249, 33]
+    ],
+    inferno: [
+        [0, 0, 4],
+        [31, 12, 72],
+        [85, 15, 109],
+        [136, 34, 106],
+        [186, 54, 85],
+        [227, 89, 51],
+        [249, 140, 10],
+        [249, 201, 50],
+        [252, 255, 164]
+    ],
+    grayscale: [
+        [0, 0, 0],
+        [255, 255, 255]
+    ]
+};
+
+/**
+ * SpectrogramRenderer - Renders spectrogram visualization of audio using Web Audio API
+ *
+ * Features:
+ * - Real-time FFT computation using AnalyserNode
+ * - Offline rendering for full audio buffer
+ * - Color mapping with multiple colormap options
+ * - Synchronized playhead with waveform
+ * - Zoom and scroll support
+ */
+class SpectrogramRenderer {
+    /**
+     * Create a SpectrogramRenderer instance.
+     *
+     * @param {Object} options - Configuration options
+     * @param {HTMLCanvasElement} options.canvas - Main canvas for spectrogram
+     * @param {HTMLCanvasElement} options.playheadCanvas - Overlay canvas for playhead
+     * @param {Object} options.spectrogramOptions - FFT and display options
+     */
+    constructor(options) {
+        this.canvas = options.canvas;
+        this.playheadCanvas = options.playheadCanvas;
+        this.options = {
+            fftSize: 2048,
+            hopLength: 512,
+            frequencyRange: [0, 8000],
+            colorMap: 'viridis',
+            ...options.spectrogramOptions
+        };
+
+        this.ctx = this.canvas ? this.canvas.getContext('2d') : null;
+        this.playheadCtx = this.playheadCanvas ? this.playheadCanvas.getContext('2d') : null;
+
+        // Audio context and data
+        this.audioContext = null;
+        this.audioBuffer = null;
+        this.spectrogramData = null;
+
+        // View state (for zoom/scroll synchronization)
+        this.viewStartTime = 0;
+        this.viewEndTime = 0;
+        this.duration = 0;
+
+        // Playhead position
+        this.playheadTime = 0;
+
+        // Build color lookup table for performance
+        this._buildColorLUT();
+
+        audioDebugLog('[Spectrogram] SpectrogramRenderer initialized with options:', this.options);
+    }
+
+    /**
+     * Build color lookup table for fast rendering
+     */
+    _buildColorLUT() {
+        const colormap = SPECTROGRAM_COLORMAPS[this.options.colorMap] || SPECTROGRAM_COLORMAPS.viridis;
+        this.colorLUT = new Uint8ClampedArray(256 * 4);
+
+        for (let i = 0; i < 256; i++) {
+            const t = i / 255;
+            const color = this._interpolateColor(colormap, t);
+            this.colorLUT[i * 4] = color[0];
+            this.colorLUT[i * 4 + 1] = color[1];
+            this.colorLUT[i * 4 + 2] = color[2];
+            this.colorLUT[i * 4 + 3] = 255;
+        }
+    }
+
+    /**
+     * Interpolate between colors in a colormap
+     *
+     * @param {Array} colormap - Array of RGB color arrays
+     * @param {number} t - Value between 0 and 1
+     * @returns {Array} RGB color array
+     */
+    _interpolateColor(colormap, t) {
+        const n = colormap.length - 1;
+        const i = Math.min(Math.floor(t * n), n - 1);
+        const f = t * n - i;
+
+        const c1 = colormap[i];
+        const c2 = colormap[i + 1];
+
+        return [
+            Math.round(c1[0] + f * (c2[0] - c1[0])),
+            Math.round(c1[1] + f * (c2[1] - c1[1])),
+            Math.round(c1[2] + f * (c2[2] - c1[2]))
+        ];
+    }
+
+    /**
+     * Compute spectrogram from audio buffer using offline FFT
+     *
+     * @param {AudioBuffer} audioBuffer - The audio buffer to analyze
+     * @returns {Promise<Float32Array[]>} 2D array of FFT magnitudes
+     */
+    async computeSpectrogram(audioBuffer) {
+        audioDebugLog('[Spectrogram] Computing spectrogram for buffer:', audioBuffer.duration, 'seconds');
+
+        this.audioBuffer = audioBuffer;
+        this.duration = audioBuffer.duration;
+
+        // Get audio data (mono or first channel)
+        const channelData = audioBuffer.getChannelData(0);
+        const sampleRate = audioBuffer.sampleRate;
+
+        const fftSize = this.options.fftSize;
+        const hopLength = this.options.hopLength;
+        const numFrames = Math.floor((channelData.length - fftSize) / hopLength) + 1;
+
+        // Compute frequency bin indices for the frequency range
+        const minFreq = this.options.frequencyRange[0];
+        const maxFreq = Math.min(this.options.frequencyRange[1], sampleRate / 2);
+        const freqPerBin = sampleRate / fftSize;
+        const minBin = Math.floor(minFreq / freqPerBin);
+        const maxBin = Math.min(Math.ceil(maxFreq / freqPerBin), fftSize / 2);
+        const numBins = maxBin - minBin;
+
+        audioDebugLog('[Spectrogram] FFT params:', {
+            fftSize,
+            hopLength,
+            numFrames,
+            minBin,
+            maxBin,
+            numBins,
+            freqPerBin
+        });
+
+        // Create offline audio context for FFT computation
+        const offlineCtx = new OfflineAudioContext(1, channelData.length, sampleRate);
+        const analyser = offlineCtx.createAnalyser();
+        analyser.fftSize = fftSize;
+        analyser.smoothingTimeConstant = 0;
+
+        // Allocate spectrogram data array
+        this.spectrogramData = new Float32Array(numFrames * numBins);
+
+        // Use a ScriptProcessor approach for frame-by-frame FFT
+        // Note: For better performance with large files, we compute manually
+        const fftData = new Float32Array(analyser.frequencyBinCount);
+
+        // Window function (Hann window)
+        const window = new Float32Array(fftSize);
+        for (let i = 0; i < fftSize; i++) {
+            window[i] = 0.5 * (1 - Math.cos(2 * Math.PI * i / (fftSize - 1)));
+        }
+
+        // Manual FFT computation using Web Audio API AnalyserNode workaround
+        // Since OfflineAudioContext doesn't support real-time analysis well,
+        // we'll use a simpler approach: create short audio buffers and analyze them
+
+        // For now, use a simplified FFT using real-time analysis
+        // This is a compromise between accuracy and performance
+        return this._computeSpectrogramRealTime(channelData, sampleRate, numFrames, numBins, minBin);
+    }
+
+    /**
+     * Compute spectrogram using real-time-like FFT computation
+     * This method creates a real AudioContext and processes the audio in chunks
+     */
+    async _computeSpectrogramRealTime(channelData, sampleRate, numFrames, numBins, minBin) {
+        const fftSize = this.options.fftSize;
+        const hopLength = this.options.hopLength;
+
+        // Create audio context if needed
+        if (!this.audioContext) {
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        // Create analyser
+        const analyser = this.audioContext.createAnalyser();
+        analyser.fftSize = fftSize;
+        analyser.smoothingTimeConstant = 0;
+
+        const fftData = new Uint8Array(analyser.frequencyBinCount);
+
+        // Process in frames using OfflineAudioContext for accurate FFT
+        // Create an offline context for each chunk
+        const numChunks = Math.ceil(numFrames / 100);
+        const framesPerChunk = Math.ceil(numFrames / numChunks);
+
+        for (let chunk = 0; chunk < numChunks; chunk++) {
+            const startFrame = chunk * framesPerChunk;
+            const endFrame = Math.min((chunk + 1) * framesPerChunk, numFrames);
+
+            for (let frame = startFrame; frame < endFrame; frame++) {
+                const startSample = frame * hopLength;
+                const endSample = Math.min(startSample + fftSize, channelData.length);
+
+                // Extract frame data
+                const frameData = channelData.slice(startSample, endSample);
+
+                // Simple magnitude computation using DFT approximation
+                // For performance, we use a simplified approach
+                for (let bin = 0; bin < numBins; bin++) {
+                    const actualBin = bin + minBin;
+                    const freq = actualBin * sampleRate / fftSize;
+
+                    // Compute magnitude at this frequency using Goertzel-like approach
+                    let real = 0, imag = 0;
+                    const omega = 2 * Math.PI * actualBin / fftSize;
+
+                    for (let i = 0; i < frameData.length; i++) {
+                        real += frameData[i] * Math.cos(omega * i);
+                        imag -= frameData[i] * Math.sin(omega * i);
+                    }
+
+                    const magnitude = Math.sqrt(real * real + imag * imag) / fftSize;
+                    // Convert to dB scale (with minimum threshold)
+                    const db = 20 * Math.log10(Math.max(magnitude, 1e-10));
+                    // Normalize to 0-1 range (assuming -100 to 0 dB range)
+                    const normalized = Math.max(0, Math.min(1, (db + 100) / 100));
+
+                    this.spectrogramData[frame * numBins + bin] = normalized;
+                }
+            }
+
+            // Yield to prevent UI blocking
+            if (chunk % 10 === 0) {
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
+        }
+
+        audioDebugLog('[Spectrogram] Spectrogram computation complete');
+        return { numFrames, numBins };
+    }
+
+    /**
+     * Render the spectrogram to the canvas
+     *
+     * @param {number} startTime - Start time of visible region
+     * @param {number} endTime - End time of visible region
+     */
+    render(startTime = 0, endTime = null) {
+        if (!this.ctx || !this.spectrogramData || !this.audioBuffer) {
+            audioDebugLog('[Spectrogram] Cannot render: missing context or data');
+            return;
+        }
+
+        endTime = endTime || this.duration;
+        this.viewStartTime = startTime;
+        this.viewEndTime = endTime;
+
+        const canvas = this.canvas;
+        const ctx = this.ctx;
+        const width = canvas.width;
+        const height = canvas.height;
+
+        // Clear canvas
+        ctx.clearRect(0, 0, width, height);
+
+        const fftSize = this.options.fftSize;
+        const hopLength = this.options.hopLength;
+        const sampleRate = this.audioBuffer.sampleRate;
+
+        // Calculate frame range for visible region
+        const samplesPerFrame = hopLength;
+        const startFrame = Math.floor((startTime * sampleRate) / samplesPerFrame);
+        const endFrame = Math.ceil((endTime * sampleRate) / samplesPerFrame);
+        const numVisibleFrames = endFrame - startFrame;
+
+        // Get spectrogram dimensions
+        const minFreq = this.options.frequencyRange[0];
+        const maxFreq = Math.min(this.options.frequencyRange[1], sampleRate / 2);
+        const freqPerBin = sampleRate / fftSize;
+        const minBin = Math.floor(minFreq / freqPerBin);
+        const maxBin = Math.min(Math.ceil(maxFreq / freqPerBin), fftSize / 2);
+        const numBins = maxBin - minBin;
+
+        // Create ImageData for efficient rendering
+        const imageData = ctx.createImageData(width, height);
+        const data = imageData.data;
+
+        // Calculate total frames in spectrogram
+        const totalFrames = Math.floor((this.audioBuffer.length - fftSize) / hopLength) + 1;
+
+        // Render each pixel
+        for (let x = 0; x < width; x++) {
+            // Map x to frame index
+            const frameFloat = startFrame + (x / width) * numVisibleFrames;
+            const frame = Math.floor(frameFloat);
+
+            if (frame < 0 || frame >= totalFrames) continue;
+
+            for (let y = 0; y < height; y++) {
+                // Map y to frequency bin (inverted - high frequencies at top)
+                const binFloat = (1 - y / height) * numBins;
+                const bin = Math.floor(binFloat);
+
+                if (bin < 0 || bin >= numBins) continue;
+
+                // Get spectrogram value
+                const idx = frame * numBins + bin;
+                const value = this.spectrogramData[idx] || 0;
+
+                // Map value to color using LUT
+                const colorIdx = Math.floor(value * 255) * 4;
+                const pixelIdx = (y * width + x) * 4;
+
+                data[pixelIdx] = this.colorLUT[colorIdx];
+                data[pixelIdx + 1] = this.colorLUT[colorIdx + 1];
+                data[pixelIdx + 2] = this.colorLUT[colorIdx + 2];
+                data[pixelIdx + 3] = 255;
+            }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+
+        // Draw frequency axis labels
+        this._drawFrequencyAxis(ctx, width, height, minFreq, maxFreq);
+
+        audioDebugLog('[Spectrogram] Rendered spectrogram from', startTime, 'to', endTime);
+    }
+
+    /**
+     * Draw frequency axis labels on the spectrogram
+     */
+    _drawFrequencyAxis(ctx, width, height, minFreq, maxFreq) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'left';
+
+        const freqSteps = [100, 500, 1000, 2000, 4000, 8000];
+        for (const freq of freqSteps) {
+            if (freq >= minFreq && freq <= maxFreq) {
+                const y = height * (1 - (freq - minFreq) / (maxFreq - minFreq));
+                ctx.fillText(`${freq >= 1000 ? (freq / 1000) + 'k' : freq} Hz`, 4, y + 4);
+            }
+        }
+    }
+
+    /**
+     * Update playhead position
+     *
+     * @param {number} time - Current playhead time in seconds
+     */
+    updatePlayhead(time) {
+        if (!this.playheadCtx || !this.playheadCanvas) return;
+
+        this.playheadTime = time;
+
+        const canvas = this.playheadCanvas;
+        const ctx = this.playheadCtx;
+        const width = canvas.width;
+        const height = canvas.height;
+
+        // Clear canvas
+        ctx.clearRect(0, 0, width, height);
+
+        // Calculate playhead x position
+        if (time >= this.viewStartTime && time <= this.viewEndTime) {
+            const x = (time - this.viewStartTime) / (this.viewEndTime - this.viewStartTime) * width;
+
+            // Draw playhead line
+            ctx.strokeStyle = '#ff4444';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, height);
+            ctx.stroke();
+        }
+    }
+
+    /**
+     * Resize the spectrogram canvas
+     *
+     * @param {number} width - New width
+     * @param {number} height - New height
+     */
+    resize(width, height) {
+        if (this.canvas) {
+            this.canvas.width = width;
+            this.canvas.height = height;
+        }
+        if (this.playheadCanvas) {
+            this.playheadCanvas.width = width;
+            this.playheadCanvas.height = height;
+        }
+
+        // Re-render if we have data
+        if (this.spectrogramData) {
+            this.render(this.viewStartTime, this.viewEndTime);
+        }
+    }
+
+    /**
+     * Update color map
+     *
+     * @param {string} colorMap - Color map name
+     */
+    setColorMap(colorMap) {
+        if (SPECTROGRAM_COLORMAPS[colorMap]) {
+            this.options.colorMap = colorMap;
+            this._buildColorLUT();
+            if (this.spectrogramData) {
+                this.render(this.viewStartTime, this.viewEndTime);
+            }
+        }
+    }
+
+    /**
+     * Clean up resources
+     */
+    destroy() {
+        if (this.audioContext && this.audioContext.state !== 'closed') {
+            // Don't close the shared context
+        }
+        this.spectrogramData = null;
+        this.audioBuffer = null;
+        audioDebugLog('[Spectrogram] SpectrogramRenderer destroyed');
+    }
+}
+
+// Export SpectrogramRenderer
+window.SpectrogramRenderer = SpectrogramRenderer;
+
 class AudioAnnotationManager {
     /**
      * Create an AudioAnnotationManager instance.
@@ -32,6 +505,9 @@ class AudioAnnotationManager {
      * @param {string} options.inputId - ID of hidden input for data storage
      * @param {string} options.segmentListId - ID of segment list container
      * @param {string} options.questionsId - ID of segment questions panel
+     * @param {string} options.spectrogramId - ID of spectrogram container element
+     * @param {string} options.spectrogramCanvasId - ID of spectrogram canvas element
+     * @param {string} options.spectrogramPlayheadId - ID of spectrogram playhead canvas element
      * @param {Object} options.config - Schema configuration
      */
     constructor(options) {
@@ -42,6 +518,9 @@ class AudioAnnotationManager {
         this.inputId = options.inputId;
         this.segmentListId = options.segmentListId;
         this.questionsId = options.questionsId;
+        this.spectrogramId = options.spectrogramId;
+        this.spectrogramCanvasId = options.spectrogramCanvasId;
+        this.spectrogramPlayheadId = options.spectrogramPlayheadId;
         this.config = options.config || {};
 
         // State
@@ -52,6 +531,9 @@ class AudioAnnotationManager {
         this.activeLabelColor = null;
         this.isPlaying = false;
         this.segmentCounter = 0;
+
+        // Spectrogram renderer
+        this.spectrogramRenderer = null;
 
         // Ready state for tests to wait on
         this.isReady = false;
@@ -69,6 +551,9 @@ class AudioAnnotationManager {
         this.inputEl = document.getElementById(this.inputId);
         this.segmentListEl = document.getElementById(this.segmentListId);
         this.questionsEl = document.getElementById(this.questionsId);
+        this.spectrogramContainerEl = document.getElementById(this.spectrogramId);
+        this.spectrogramCanvasEl = document.getElementById(this.spectrogramCanvasId);
+        this.spectrogramPlayheadEl = document.getElementById(this.spectrogramPlayheadId);
 
         // Bind methods
         this._onSegmentClick = this._onSegmentClick.bind(this);
@@ -78,7 +563,41 @@ class AudioAnnotationManager {
         // Set up keyboard shortcuts
         this._setupKeyboardShortcuts();
 
+        // Initialize spectrogram if enabled
+        if (this.config.spectrogram && this.spectrogramCanvasEl) {
+            this._initSpectrogram();
+        }
+
         audioDebugLog('AudioAnnotationManager initialized:', this.config.schemaName);
+    }
+
+    /**
+     * Initialize spectrogram renderer
+     */
+    _initSpectrogram() {
+        audioDebugLog('[AudioAnnotation] Initializing spectrogram renderer');
+
+        // Set canvas dimensions based on container
+        if (this.spectrogramContainerEl) {
+            const rect = this.spectrogramContainerEl.getBoundingClientRect();
+            const width = rect.width || 800;
+            const height = 150; // Fixed height for spectrogram
+
+            if (this.spectrogramCanvasEl) {
+                this.spectrogramCanvasEl.width = width;
+                this.spectrogramCanvasEl.height = height;
+            }
+            if (this.spectrogramPlayheadEl) {
+                this.spectrogramPlayheadEl.width = width;
+                this.spectrogramPlayheadEl.height = height;
+            }
+        }
+
+        this.spectrogramRenderer = new SpectrogramRenderer({
+            canvas: this.spectrogramCanvasEl,
+            playheadCanvas: this.spectrogramPlayheadEl,
+            spectrogramOptions: this.config.spectrogramOptions || {}
+        });
     }
 
     /**
@@ -156,6 +675,11 @@ class AudioAnnotationManager {
             // Load existing annotations if any
             this._loadExistingAnnotations();
 
+            // Initialize spectrogram if enabled
+            if (this.spectrogramRenderer && this.config.spectrogram) {
+                await this._loadSpectrogram(audioUrl);
+            }
+
             // Mark as ready
             this.isReady = true;
             if (this._resolveReady) {
@@ -190,6 +714,57 @@ class AudioAnnotationManager {
     }
 
     /**
+     * Load and compute spectrogram from audio URL
+     *
+     * @param {string} audioUrl - URL of the audio file
+     */
+    async _loadSpectrogram(audioUrl) {
+        if (!this.spectrogramRenderer) return;
+
+        audioDebugLog('[AudioAnnotation] Loading spectrogram for:', audioUrl);
+
+        try {
+            // Fetch audio data
+            const response = await fetch(audioUrl);
+            const arrayBuffer = await response.arrayBuffer();
+
+            // Decode audio data
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+            // Compute spectrogram
+            await this.spectrogramRenderer.computeSpectrogram(audioBuffer);
+
+            // Render initial view (full duration)
+            const duration = audioBuffer.duration;
+            this.spectrogramRenderer.render(0, duration);
+
+            audioDebugLog('[AudioAnnotation] Spectrogram loaded successfully');
+
+            // Close the temporary audio context
+            await audioContext.close();
+
+        } catch (error) {
+            console.error('[AudioAnnotation] Failed to load spectrogram:', error);
+            // Don't fail the whole load, just log the error
+        }
+    }
+
+    /**
+     * Update spectrogram view to match waveform zoom/scroll
+     */
+    _updateSpectrogramView() {
+        if (!this.spectrogramRenderer || !this.peaks) return;
+
+        const view = this.peaks.views.getView('zoomview');
+        if (view) {
+            const startTime = view.getStartTime();
+            const endTime = view.getEndTime();
+            this.spectrogramRenderer.render(startTime, endTime);
+        }
+    }
+
+    /**
      * Set up Peaks.js event listeners
      */
     _setupPeaksEventListeners() {
@@ -214,11 +789,20 @@ class AudioAnnotationManager {
 
             this.peaks.on('player.timeupdate', (time) => {
                 this._updateTimeDisplay(time);
+                // Update spectrogram playhead
+                if (this.spectrogramRenderer) {
+                    this.spectrogramRenderer.updatePlayhead(time);
+                }
             });
 
             // Segment events
             this.peaks.on('segments.click', this._onSegmentClick);
             this.peaks.on('segments.dragend', this._onSegmentDragEnd);
+
+            // Zoom events - update spectrogram view
+            this.peaks.on('zoom.update', () => {
+                this._updateSpectrogramView();
+            });
 
             audioDebugLog('Peaks.js event listeners set up successfully');
         } catch (e) {
@@ -578,6 +1162,8 @@ class AudioAnnotationManager {
             view.setZoom({ scale: 'auto' });
             const currentZoom = view.getZoom();
             view.setZoom({ scale: Math.max(256, currentZoom / 2) });
+            // Update spectrogram to match
+            this._updateSpectrogramView();
         }
     }
 
@@ -590,6 +1176,8 @@ class AudioAnnotationManager {
         if (view) {
             const currentZoom = view.getZoom();
             view.setZoom({ scale: Math.min(4096, currentZoom * 2) });
+            // Update spectrogram to match
+            this._updateSpectrogramView();
         }
     }
 
@@ -601,6 +1189,8 @@ class AudioAnnotationManager {
         const view = this.peaks.views.getView('zoomview');
         if (view) {
             view.setZoom({ scale: 'auto' });
+            // Update spectrogram to match
+            this._updateSpectrogramView();
         }
     }
 
@@ -1175,6 +1765,12 @@ class AudioAnnotationManager {
         if (this.peaks) {
             this.peaks.destroy();
             this.peaks = null;
+        }
+
+        // Destroy spectrogram renderer
+        if (this.spectrogramRenderer) {
+            this.spectrogramRenderer.destroy();
+            this.spectrogramRenderer = null;
         }
 
         audioDebugLog('AudioAnnotationManager destroyed');

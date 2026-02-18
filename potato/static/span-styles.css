@@ -176,3 +176,80 @@
     outline: none;
     border-color: #007bff;
 }
+
+/* ==========================================================================
+   Discontinuous Span Styles
+   ========================================================================== */
+
+/* Hint text shown when discontinuous mode is enabled */
+.discontinuous-hint {
+    font-size: 12px;
+    color: #666;
+    font-style: italic;
+    margin-bottom: 8px;
+    padding: 4px 8px;
+    background-color: #f0f8ff;
+    border-left: 3px solid #007bff;
+    border-radius: 2px;
+}
+
+/* Discontinuous span parts have dashed borders */
+.span-highlight.discontinuous-part {
+    border-style: dashed !important;
+    border-width: 2px !important;
+}
+
+/* Overlay segments for discontinuous parts */
+.discontinuous-segment {
+    border-style: dashed !important;
+}
+
+/* Label for additional discontinuous parts */
+.span-label.discontinuous-label {
+    font-size: 10px !important;
+    padding: 1px 4px !important;
+    background-color: rgba(0, 0, 0, 0.7) !important;
+}
+
+/* Visual indicator when span is enabled for discontinuous extension */
+.span-overlay-pure.discontinuous-enabled::after {
+    content: '+';
+    position: absolute;
+    right: -8px;
+    top: -8px;
+    background-color: #007bff;
+    color: white;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+/* Hover effect for discontinuous parts - highlight all parts of same span */
+.span-highlight[data-discontinuous="true"]:hover,
+.span-overlay-pure.discontinuous-part:hover {
+    filter: brightness(0.85);
+}
+
+/* Connected parts indicator - shows dotted line between parts */
+.span-highlight.discontinuous-part::before {
+    content: '';
+    position: absolute;
+    left: -20px;
+    top: 50%;
+    width: 16px;
+    height: 2px;
+    background: repeating-linear-gradient(
+        to right,
+        currentColor 0px,
+        currentColor 4px,
+        transparent 4px,
+        transparent 8px
+    );
+    opacity: 0.5;
+}

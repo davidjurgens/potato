@@ -2103,6 +2103,10 @@ function extractSpanAnnotationsFromDOM() {
 
         const targetField = overlay.getAttribute('data-target-field') || '';
 
+        // Extract span ID to preserve identity across saves
+        const spanId = overlay.getAttribute('data-annotation-id') ||
+                       overlay.getAttribute('data-span-id');
+
         spanAnnotations.push({
             schema: schema,
             name: label,
@@ -2110,7 +2114,8 @@ function extractSpanAnnotationsFromDOM() {
             end: end,
             title: title,
             value: coveredText,
-            target_field: targetField
+            target_field: targetField,
+            id: spanId
         });
     }
 
