@@ -553,6 +553,122 @@ class SpanLink:
         return hash((self.schema, self.link_type, tuple(self.span_ids), self.direction))
 
 
+class EventAnnotation:
+    """
+    A utility class for representing an N-ary event annotation.
+
+    Events consist of:
+    - A trigger span: The word/phrase indicating the event (e.g., "attacked", "hired")
+    - Argument spans: Entities with typed roles (e.g., attacker, target, weapon)
+
+    This enables information extraction tasks where events have multiple participants
+    with specific semantic roles.
+    """
+    def __init__(self, schema: str, event_type: str, trigger_span_id: str,
+                 arguments: List[Dict[str, str]], id: str = None, properties: dict = None):
+        """
+        Initialize an event annotation.
+
+        Args:
+            schema: The annotation scheme this event belongs to
+            event_type: The type of event (e.g., "ATTACK", "HIRE")
+            trigger_span_id: ID of the span that triggers/indicates the event
+            arguments: List of argument dicts, each with:
+                - role: The semantic role (e.g., "attacker", "target")
+                - span_id: ID of the span filling this role
+            id: Optional custom ID for the event
+            properties: Optional dictionary of additional properties
+        """
+        self.schema = schema
+        self.event_type = event_type
+        self.trigger_span_id = trigger_span_id
+        self.arguments = arguments  # [{role: "attacker", span_id: "..."}, ...]
+        self.properties = properties or {}
+        self._id = id if id else f"event_{uuid.uuid4().hex}"
+
+    def get_schema(self) -> str:
+        """Get the schema this event belongs to"""
+        return self.schema
+
+    def get_event_type(self) -> str:
+        """Get the event type"""
+        return self.event_type
+
+    def get_trigger_span_id(self) -> str:
+        """Get the trigger span ID"""
+        return self.trigger_span_id
+
+    def get_arguments(self) -> List[Dict[str, str]]:
+        """Get the list of arguments with their roles"""
+        return self.arguments
+
+    def get_argument_by_role(self, role: str) -> Optional[Dict[str, str]]:
+        """Get the argument for a specific role, or None if not found"""
+        for arg in self.arguments:
+            if arg.get('role') == role:
+                return arg
+        return None
+
+    def get_all_span_ids(self) -> List[str]:
+        """Get all span IDs involved in this event (trigger + arguments)"""
+        span_ids = [self.trigger_span_id]
+        for arg in self.arguments:
+            if 'span_id' in arg:
+                span_ids.append(arg['span_id'])
+        return span_ids
+
+    def get_id(self) -> str:
+        """Get the event's unique identifier"""
+        return self._id
+
+    def get_properties(self) -> dict:
+        """Get additional properties for this event"""
+        return self.properties
+
+    def to_dict(self) -> dict:
+        """Convert the event annotation to a dictionary for serialization"""
+        return {
+            "id": self._id,
+            "schema": self.schema,
+            "event_type": self.event_type,
+            "trigger_span_id": self.trigger_span_id,
+            "arguments": self.arguments,
+            "properties": self.properties
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'EventAnnotation':
+        """Create an EventAnnotation from a dictionary"""
+        return cls(
+            schema=data["schema"],
+            event_type=data["event_type"],
+            trigger_span_id=data["trigger_span_id"],
+            arguments=data.get("arguments", []),
+            id=data.get("id"),
+            properties=data.get("properties", {})
+        )
+
+    def __str__(self):
+        args_str = ", ".join(f"{a['role']}:{a['span_id']}" for a in self.arguments)
+        return f"EventAnnotation(schema:{self.schema}, type:{self.event_type}, trigger:{self.trigger_span_id}, args:[{args_str}], id:{self._id})"
+
+    def __eq__(self, other):
+        """Check if two event annotations are equal"""
+        return (
+            isinstance(other, EventAnnotation)
+            and self.schema == other.schema
+            and self.event_type == other.event_type
+            and self.trigger_span_id == other.trigger_span_id
+            and self.arguments == other.arguments
+        )
+
+    def __hash__(self):
+        """Generate hash for event annotation (enables use in sets/dicts)"""
+        # Convert arguments to a hashable tuple representation
+        args_tuple = tuple((a.get('role', ''), a.get('span_id', '')) for a in self.arguments)
+        return hash((self.schema, self.event_type, self.trigger_span_id, args_tuple))
+
+
 class AssignmentStrategy(Enum):
     """
     Enumeration of strategies for assigning items to users.

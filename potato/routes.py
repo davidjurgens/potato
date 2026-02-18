@@ -3136,8 +3136,8 @@ def update_instance():
             "request_size": len(request.get_data()) if request.get_data() else 0
         }
 
-        # Check if this is the frontend format (annotations, span_annotations)
-        if "annotations" in request.json:
+        # Check if this is the frontend format (annotations, span_annotations, link_annotations, event_annotations)
+        if "annotations" in request.json or "span_annotations" in request.json or "link_annotations" in request.json or "event_annotations" in request.json:
             logger.debug("Processing frontend format (annotations, span_annotations)")
 
             # Handle label annotations from frontend format
@@ -3256,6 +3256,38 @@ def update_instance():
                     # Add or update the link annotation
                     user_state.add_link_annotation(instance_id, link)
                     logger.debug(f"Added link annotation: {link}")
+
+            # Handle event annotations from frontend format
+            event_annotations = request.json.get("event_annotations", [])
+            logger.debug(f"Processing {len(event_annotations)} event annotations")
+            for event_data in event_annotations:
+                logger.debug(f"Processing event data: {event_data}")
+                if isinstance(event_data, dict) and "schema" in event_data and "event_type" in event_data:
+                    from potato.item_state_management import EventAnnotation
+
+                    # Log the incoming ID
+                    incoming_id = event_data.get("id")
+                    logger.debug(f"Incoming event ID: {incoming_id}")
+
+                    event = EventAnnotation(
+                        schema=event_data["schema"],
+                        event_type=event_data["event_type"],
+                        trigger_span_id=event_data.get("trigger_span_id", ""),
+                        arguments=event_data.get("arguments", []),
+                        id=incoming_id,
+                        properties=event_data.get("properties", {})
+                    )
+
+                    # Log the actual ID assigned
+                    logger.debug(f"Event object ID after creation: {event.get_id()}")
+
+                    # Add or update the event annotation
+                    user_state.add_event_annotation(instance_id, event)
+
+                    # Log current events count
+                    current_events = user_state.get_event_annotations(instance_id)
+                    logger.debug(f"Added event annotation. Total events for instance: {len(current_events)}")
+                    logger.debug(f"Current event IDs: {list(current_events.keys())}")
 
         # Check if this is the backend format (schema, state, type)
         elif "schema" in request.json and "state" in request.json and "type" in request.json:
@@ -4673,6 +4705,119 @@ def delete_link_annotation(instance_id, link_id):
 
 
 # ============================================================================
+# Event Annotation API Routes
+# ============================================================================
+
+@app.route("/api/events/<instance_id>")
+def get_event_annotations(instance_id):
+    """
+    Get event annotations for a specific instance.
+
+    Returns:
+        JSON with event annotations for the instance.
+    """
+    logger.debug(f"=== GET_EVENT_ANNOTATIONS START ===")
+    logger.debug(f"Instance ID: {instance_id}")
+
+    if 'username' not in session:
+        logger.warning("Get event annotations without active session")
+        return jsonify({"error": "No active session"}), 401
+
+    username = session['username']
+    logger.debug(f"Username: {username}")
+
+    try:
+        user_state = get_user_state(username)
+        if not user_state:
+            logger.error(f"User state not found for user: {username}")
+            return jsonify({"error": "User state not found"}), 404
+
+        # Normalize instance_id to string
+        instance_id = str(instance_id)
+
+        # Get event annotations for this instance
+        events = user_state.get_event_annotations(instance_id)
+
+        # Convert to serializable format
+        events_data = []
+        for event_id, event in events.items():
+            event_dict = event.to_dict()
+            events_data.append(event_dict)
+            logger.debug(f"  Event ID: {event_id}, data: {event_dict}")
+
+        logger.debug(f"Found {len(events_data)} event annotations for instance {instance_id}")
+        logger.debug(f"Event IDs in storage: {list(events.keys())}")
+
+        return jsonify({
+            "status": "success",
+            "instance_id": instance_id,
+            "events": events_data
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting event annotations: {e}")
+        return jsonify({"error": f"Failed to get event annotations: {str(e)}"}), 500
+
+    finally:
+        logger.debug(f"=== GET_EVENT_ANNOTATIONS END ===")
+
+
+@app.route("/api/events/<instance_id>/<event_id>", methods=["DELETE"])
+def delete_event_annotation(instance_id, event_id):
+    """
+    Delete a specific event annotation.
+
+    Args:
+        instance_id: The instance ID
+        event_id: The event ID to delete
+
+    Returns:
+        JSON with success/failure status.
+    """
+    logger.debug(f"=== DELETE_EVENT_ANNOTATION START ===")
+    logger.debug(f"Instance ID: {instance_id}, Event ID: {event_id}")
+
+    if 'username' not in session:
+        logger.warning("Delete event annotation without active session")
+        return jsonify({"error": "No active session"}), 401
+
+    username = session['username']
+    logger.debug(f"Username: {username}")
+
+    try:
+        user_state = get_user_state(username)
+        if not user_state:
+            logger.error(f"User state not found for user: {username}")
+            return jsonify({"error": "User state not found"}), 404
+
+        # Normalize instance_id to string
+        instance_id = str(instance_id)
+
+        # Try to remove the event
+        success = user_state.remove_event_annotation(instance_id, event_id)
+
+        if success:
+            logger.debug(f"Deleted event annotation: {event_id} from instance {instance_id}")
+            return jsonify({
+                "status": "success",
+                "message": f"Event {event_id} deleted successfully"
+            })
+        else:
+            logger.warning(f"Event not found: {event_id} in instance {instance_id}")
+            return jsonify({
+                "status": "error",
+                "message": f"Event {event_id} not found"
+            }), 404
+
+    except Exception as e:
+        logger.error(f"Error deleting event annotation: {e}")
+        return jsonify({"error": f"Failed to delete event annotation: {str(e)}"}), 500
+
+    finally:
+        logger.debug(f"=== DELETE_EVENT_ANNOTATION END ===")
+
+
+# ============================================================================
 # Entity Linking API Routes
 # ============================================================================
 
@@ -5312,6 +5457,10 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/api/spans/<instance_id>/clear", "clear_span_annotations", clear_span_annotations, methods=["POST"])
     app.add_url_rule("/api/links/<instance_id>", "get_link_annotations", get_link_annotations, methods=["GET"])
     app.add_url_rule("/api/links/<instance_id>/<link_id>", "delete_link_annotation", delete_link_annotation, methods=["DELETE"])
+
+    # Event annotation API routes
+    app.add_url_rule("/api/events/<instance_id>", "get_event_annotations", get_event_annotations, methods=["GET"])
+    app.add_url_rule("/api/events/<instance_id>/<event_id>", "delete_event_annotation", delete_event_annotation, methods=["DELETE"])
 
     # Entity linking API routes
     app.add_url_rule("/api/entity_linking/search", "entity_linking_search", entity_linking_search, methods=["GET"])

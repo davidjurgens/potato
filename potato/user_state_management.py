@@ -41,7 +41,7 @@ from typing import Optional, Dict, Any, List, Tuple, Set
 
 from potato.authentication import UserAuthenticator
 from potato.phase import UserPhase
-from potato.item_state_management import get_item_state_manager, Item, SpanAnnotation, Label, SpanLink
+from potato.item_state_management import get_item_state_manager, Item, SpanAnnotation, Label, SpanLink, EventAnnotation
 from potato.annotation_history import AnnotationAction, AnnotationHistoryManager
 from dataclasses import dataclass
 
@@ -1248,6 +1248,14 @@ class UserState:
                     for link_id, link_data in links_dict.items()
                 }
 
+        # Restore event annotations if present
+        if 'instance_id_to_event_to_value' in j:
+            for instance_id, events_dict in j['instance_id_to_event_to_value'].items():
+                user_state.instance_id_to_event_to_value[instance_id] = {
+                    event_id: EventAnnotation.from_dict(event_data)
+                    for event_id, event_data in events_dict.items()
+                }
+
         return user_state
 
     def add_annotation(self, instance_id, annotation):
@@ -1554,6 +1562,10 @@ class InMemoryUserState(UserState):
         # Maps instance_id -> {link_id -> SpanLink}
         self.instance_id_to_link_to_value: Dict[str, Dict[str, SpanLink]] = defaultdict(dict)
 
+        # Event annotations - stores N-ary event structures with triggers and arguments
+        # Maps instance_id -> {event_id -> EventAnnotation}
+        self.instance_id_to_event_to_value: Dict[str, Dict[str, EventAnnotation]] = defaultdict(dict)
+
     def hint_exists(self, instance_id: str) -> bool:
         return instance_id in self.ai_hints
 
@@ -1757,6 +1769,94 @@ class InMemoryUserState(UserState):
         """
         if instance_id in self.instance_id_to_link_to_value:
             self.instance_id_to_link_to_value[instance_id] = {}
+
+    # =========================================================================
+    # Event Annotation Methods
+    # =========================================================================
+
+    def add_event_annotation(self, instance_id: str, event: EventAnnotation) -> None:
+        """
+        Add an event annotation.
+
+        Args:
+            instance_id: The instance ID the event belongs to
+            event: The EventAnnotation object
+        """
+        if instance_id not in self.instance_id_to_event_to_value:
+            self.instance_id_to_event_to_value[instance_id] = {}
+
+        self.instance_id_to_event_to_value[instance_id][event.get_id()] = event
+
+    def get_event_annotations(self, instance_id: str) -> Dict[str, EventAnnotation]:
+        """
+        Get all event annotations for an instance.
+
+        Args:
+            instance_id: The instance ID to get events for
+
+        Returns:
+            Dictionary mapping event_id -> EventAnnotation
+        """
+        return self.instance_id_to_event_to_value.get(instance_id, {})
+
+    def get_event_annotation(self, instance_id: str, event_id: str) -> Optional[EventAnnotation]:
+        """
+        Get a specific event annotation by ID.
+
+        Args:
+            instance_id: The instance ID
+            event_id: The event ID to retrieve
+
+        Returns:
+            EventAnnotation if found, None otherwise
+        """
+        events = self.instance_id_to_event_to_value.get(instance_id, {})
+        return events.get(event_id)
+
+    def remove_event_annotation(self, instance_id: str, event_id: str) -> bool:
+        """
+        Remove an event annotation.
+
+        Args:
+            instance_id: The instance ID
+            event_id: The event ID to remove
+
+        Returns:
+            True if the event was removed, False if not found
+        """
+        if instance_id in self.instance_id_to_event_to_value:
+            if event_id in self.instance_id_to_event_to_value[instance_id]:
+                del self.instance_id_to_event_to_value[instance_id][event_id]
+                return True
+        return False
+
+    def get_events_for_span(self, instance_id: str, span_id: str) -> List[EventAnnotation]:
+        """
+        Get all events that include a specific span (as trigger or argument).
+
+        Args:
+            instance_id: The instance ID
+            span_id: The span ID to find events for
+
+        Returns:
+            List of EventAnnotation objects that include the given span
+        """
+        result = []
+        events = self.instance_id_to_event_to_value.get(instance_id, {})
+        for event in events.values():
+            if span_id in event.get_all_span_ids():
+                result.append(event)
+        return result
+
+    def clear_event_annotations(self, instance_id: str) -> None:
+        """
+        Clear all event annotations for an instance.
+
+        Args:
+            instance_id: The instance ID to clear events for
+        """
+        if instance_id in self.instance_id_to_event_to_value:
+            self.instance_id_to_event_to_value[instance_id] = {}
 
     def get_current_instance_index(self):
         '''Returns the index of the item the user is annotating within the list of items
@@ -2253,6 +2353,13 @@ class InMemoryUserState(UserState):
                 link_id: link.to_dict() for link_id, link in links.items()
             }
 
+        # Save event annotations
+        d['instance_id_to_event_to_value'] = {}
+        for instance_id, events in self.instance_id_to_event_to_value.items():
+            d['instance_id_to_event_to_value'][instance_id] = {
+                event_id: event.to_dict() for event_id, event in events.items()
+            }
+
         return d
 
     def save(self, user_dir: str) -> None:
@@ -2369,10 +2476,14 @@ class InMemoryUserState(UserState):
                     for link_id, link_data in links_dict.items()
                 }
 
+        # Restore event annotations if present
+        if 'instance_id_to_event_to_value' in j:
+            for instance_id, events_dict in j['instance_id_to_event_to_value'].items():
+                user_state.instance_id_to_event_to_value[instance_id] = {
+                    event_id: EventAnnotation.from_dict(event_data)
+                    for event_id, event_data in events_dict.items()
+                }
+
         return user_state
 
-    def add_annotation(self, instance_id, annotation):
-        """Add a label annotation for the given instance."""
-        # Store the annotation as a dict under the instance_id
-        self.instance_id_to_label_to_value[instance_id].update(annotation)
 

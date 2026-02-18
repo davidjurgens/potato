@@ -1,0 +1,493 @@
+/**
+ * Event Annotation Styles
+ *
+ * Styles for the N-ary event annotation feature with triggers and typed arguments.
+ */
+
+/* Container */
+.event-annotation-container {
+    background-color: var(--card-bg, #fff);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.event-annotation-container.event-mode-active {
+    border-color: var(--event-color, #dc2626);
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.2);
+}
+
+/* Header */
+.event-annotation-header {
+    margin-bottom: 16px;
+}
+
+.event-annotation-title {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-color, #1f2937);
+}
+
+/* Section Labels */
+.event-section-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted, #6b7280);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Event Type Selector */
+.event-type-selector {
+    margin-bottom: 16px;
+}
+
+.event-types {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.event-type {
+    display: flex;
+    align-items: center;
+}
+
+.event-type-radio {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.event-type-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.15s ease;
+    background-color: var(--card-bg, #fff);
+}
+
+.event-type-label:hover {
+    border-color: var(--event-color, #dc2626);
+    background-color: color-mix(in srgb, var(--event-color, #dc2626) 5%, transparent);
+}
+
+.event-type-radio:checked + .event-type-label {
+    border-color: var(--event-color, #dc2626);
+    background-color: color-mix(in srgb, var(--event-color, #dc2626) 10%, transparent);
+    font-weight: 500;
+}
+
+.event-color-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.event-type-name {
+    color: var(--text-color, #1f2937);
+}
+
+/* Trigger Section */
+.event-trigger-section {
+    margin-bottom: 16px;
+    padding: 12px;
+    background-color: var(--bg-secondary, #f9fafb);
+    border-radius: 6px;
+    min-height: 60px;
+}
+
+.event-trigger-display {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.no-trigger-message,
+.no-events-message,
+.no-arguments-message {
+    color: var(--text-muted, #6b7280);
+    font-size: 13px;
+    font-style: italic;
+    margin: 0;
+}
+
+.event-trigger-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background-color: color-mix(in srgb, var(--event-color, #dc2626) 15%, white);
+    border: 2px solid var(--event-color, #dc2626);
+    border-radius: 6px;
+    font-size: 13px;
+}
+
+.trigger-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    background-color: var(--event-color, #dc2626);
+    color: white;
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.trigger-text {
+    color: var(--text-color, #1f2937);
+    font-weight: 500;
+}
+
+.trigger-label {
+    color: var(--event-color, #dc2626);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+/* Arguments Section */
+.event-arguments-section {
+    margin-bottom: 16px;
+    padding: 12px;
+    background-color: var(--bg-secondary, #f9fafb);
+    border-radius: 6px;
+}
+
+.event-arguments-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.event-argument-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.event-argument-row.active {
+    background-color: color-mix(in srgb, var(--event-color, #dc2626) 5%, transparent);
+    padding: 8px;
+    margin: -4px;
+    border-radius: 6px;
+}
+
+.event-role-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    background-color: var(--card-bg, #fff);
+    transition: all 0.15s ease;
+    min-width: 80px;
+    justify-content: center;
+}
+
+.event-role-button:hover {
+    border-color: var(--event-color, #dc2626);
+}
+
+.event-role-button.active {
+    border-color: var(--event-color, #dc2626);
+    background-color: color-mix(in srgb, var(--event-color, #dc2626) 15%, white);
+    font-weight: 500;
+}
+
+.role-name {
+    color: var(--text-color, #1f2937);
+}
+
+.required-indicator {
+    color: #ef4444;
+    font-weight: 700;
+}
+
+.entity-type-hint {
+    color: var(--text-muted, #6b7280);
+    font-size: 11px;
+    font-style: italic;
+}
+
+.event-argument-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    background-color: var(--card-bg, #fff);
+    border: 1px solid var(--event-color, #dc2626);
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.argument-text {
+    color: var(--text-color, #1f2937);
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.argument-label {
+    color: var(--event-color, #dc2626);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.argument-remove-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border: none;
+    background-color: transparent;
+    color: var(--text-muted, #6b7280);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0;
+    border-radius: 50%;
+}
+
+.argument-remove-btn:hover {
+    background-color: #fee2e2;
+    color: #ef4444;
+}
+
+/* Action Buttons */
+.event-actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.event-create-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background-color: var(--primary-color, #3b82f6);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.event-create-btn:hover:not(:disabled) {
+    background-color: var(--primary-hover, #2563eb);
+}
+
+.event-create-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.event-cancel-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background-color: transparent;
+    color: var(--text-muted, #6b7280);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.event-cancel-btn:hover {
+    background-color: var(--bg-secondary, #f9fafb);
+    color: var(--text-color, #1f2937);
+}
+
+/* Existing Events */
+.event-existing {
+    margin-bottom: 16px;
+}
+
+.event-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.event-item {
+    padding: 12px;
+    background-color: var(--card-bg, #fff);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-left: 3px solid var(--event-color, #dc2626);
+    border-radius: 6px;
+}
+
+.event-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.event-type-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    border-radius: 4px;
+}
+
+.event-delete-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    background-color: transparent;
+    color: var(--text-muted, #6b7280);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.15s ease;
+}
+
+.event-delete-btn:hover {
+    background-color: #fee2e2;
+    color: #ef4444;
+}
+
+.event-item-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.event-trigger-info,
+.event-argument-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+}
+
+.trigger-role,
+.argument-role {
+    color: var(--text-muted, #6b7280);
+    font-weight: 500;
+    min-width: 60px;
+}
+
+.trigger-value,
+.argument-value {
+    color: var(--text-color, #1f2937);
+}
+
+/* Visual Toggle */
+.event-visual-toggle {
+    padding-top: 8px;
+    border-top: 1px solid var(--border-color, #e5e7eb);
+}
+
+.event-visual-toggle label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-muted, #6b7280);
+    cursor: pointer;
+}
+
+/* Span Selection Styles */
+body.event-annotation-mode-active .span-overlay-pure.event-selectable,
+body.event-annotation-mode-active .span-overlay.event-selectable,
+body.event-annotation-mode-active .span-overlay-ai.event-selectable {
+    cursor: pointer !important;
+    pointer-events: auto !important;
+}
+
+body.event-annotation-mode-active .span-overlay-pure.event-selectable:hover,
+body.event-annotation-mode-active .span-overlay.event-selectable:hover,
+body.event-annotation-mode-active .span-overlay-ai.event-selectable:hover {
+    outline: 2px dashed var(--current-event-color, #dc2626);
+    outline-offset: 2px;
+}
+
+body.event-annotation-mode-active .span-overlay-pure.event-trigger-selected,
+body.event-annotation-mode-active .span-overlay.event-trigger-selected,
+body.event-annotation-mode-active .span-overlay-ai.event-trigger-selected {
+    outline: 3px solid var(--current-event-color, #dc2626) !important;
+    outline-offset: 2px;
+    box-shadow: 0 0 8px rgba(220, 38, 38, 0.4);
+}
+
+body.event-annotation-mode-active .span-overlay-pure.event-argument-selected,
+body.event-annotation-mode-active .span-overlay.event-argument-selected,
+body.event-annotation-mode-active .span-overlay-ai.event-argument-selected {
+    outline: 2px solid var(--current-event-color, #dc2626) !important;
+    outline-offset: 1px;
+}
+
+/* Arc Visualization */
+.event-annotation-arc-spacer {
+    position: relative;
+    width: 100%;
+    transition: height 0.2s ease;
+}
+
+.event-annotation-arcs-container {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    overflow: visible;
+    z-index: 100;
+}
+
+.event-arcs-svg {
+    overflow: visible;
+}
+
+.event-hub {
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+}
+
+.event-arc {
+    opacity: 0.8;
+}
+
+.event-type-label,
+.event-role-label {
+    font-family: system-ui, -apple-system, sans-serif;
+    paint-order: stroke;
+    stroke: white;
+    stroke-width: 3px;
+}
+
+.event-annotation-text-wrapper {
+    position: relative;
+}

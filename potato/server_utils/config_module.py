@@ -528,7 +528,7 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
 
     # Validate annotation_type
     # Note: Keep in sync with potato.server_utils.schemas.registry
-    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'span_link', 'select', 'number', 'multirate', 'pure_display', 'video', 'image_annotation', 'audio_annotation', 'video_annotation', 'pairwise', 'coreference', 'tree_annotation', 'triage']
+    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'span_link', 'select', 'number', 'multirate', 'pure_display', 'video', 'image_annotation', 'audio_annotation', 'video_annotation', 'pairwise', 'coreference', 'tree_annotation', 'triage', 'event_annotation']
     if scheme['annotation_type'] not in valid_types:
         raise ConfigValidationError(f"{path}.annotation_type must be one of: {', '.join(valid_types)}")
 

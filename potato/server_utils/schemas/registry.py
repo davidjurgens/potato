@@ -242,6 +242,7 @@ def _register_builtin_schemas():
     from .coreference import generate_coreference_layout
     from .tree_annotation import generate_tree_annotation_layout
     from .triage import generate_triage_layout
+    from .event_annotation import generate_event_annotation_layout
 
     schemas = [
         SchemaDefinition(
@@ -395,6 +396,14 @@ def _register_builtin_schemas():
             optional_fields=["accept_label", "reject_label", "skip_label", "auto_advance", "show_progress", "accept_key", "reject_key", "skip_key"],
             supports_keybindings=True,
             description="Binary accept/reject triage for rapid data curation"
+        ),
+        SchemaDefinition(
+            name="event_annotation",
+            generator=generate_event_annotation_layout,
+            required_fields=["name", "description", "event_types", "span_schema"],
+            optional_fields=["visual_display"],
+            supports_keybindings=False,
+            description="N-ary event annotation with triggers and typed arguments"
         ),
     ]
 
