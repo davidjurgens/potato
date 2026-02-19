@@ -556,7 +556,7 @@ def api_advance_phase():
         return jsonify({'error': 'Missing target phase'}), 400
 
     try:
-        phase = SoloPhase(target_phase)
+        phase = SoloPhase.from_str(target_phase)
         success = manager.advance_to_phase(phase)
 
         if success:
@@ -599,6 +599,15 @@ def api_resume_labeling():
 
     return jsonify({'error': 'LLM labeling thread not running'}), 400
 
+@solo_mode_bp.route('/api/start-labeling', methods=['POST'])
+@solo_mode_required
+def api_start_labeling():
+    """Start background LLM labeling."""
+    manager = get_solo_mode_manager()
+    success = manager.start_background_labeling()
+    if success:
+        return jsonify({'success': True, 'message': 'LLM labeling started'})
+    return jsonify({'success': False, 'message': 'Already running or failed to start'})
 
 @solo_mode_bp.route('/api/optimize-prompt', methods=['POST'])
 @solo_mode_required

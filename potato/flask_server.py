@@ -87,6 +87,9 @@ from potato.diversity_manager import (
     init_diversity_manager, get_diversity_manager, clear_diversity_manager
 )
 
+from potato.solo_mode import init_solo_mode_manager, get_solo_mode_manager
+from potato.solo_mode.routes import solo_mode_bp
+
 from potato.create_task_cli import create_task_cli, yes_or_no
 from potato.server_utils.arg_utils import arguments
 from potato.server_utils.config_module import init_config, config
@@ -107,6 +110,7 @@ from potato.ai.ai_help_wrapper import init_dynamic_ai_help
 
 # Initialize Flask app
 app = Flask(__name__)
+app.register_blueprint(solo_mode_bp)
 
 # Secret key will be set in configure_app() from config
 
@@ -2271,6 +2275,9 @@ def create_app():
     # Configure the app
     configure_app(app)
 
+    # Register Solo Mode blueprint
+    app.register_blueprint(solo_mode_bp)
+
     # Add context processor for debug settings and common config values
     @app.context_processor
     def inject_template_context():
@@ -2441,6 +2448,12 @@ def run_server(args):
         logger.info("Initializing AI cache manager...")
         init_ai_cache_manager()
         logger.info("AI support initialized successfully")
+    
+    # Initialize Solo Mode if enabled
+    if config.get("solo_mode", {}).get("enabled", False):
+        logger.info("Initializing Solo Mode...")
+        init_solo_mode_manager(config)
+        logger.info("Solo Mode initialized successfully")
 
     # Initialize diversity manager if diversity_clustering strategy is used
     # or if diversity_ordering is explicitly enabled
