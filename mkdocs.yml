@@ -4,6 +4,7 @@ nav:
     - Home: index.md
     - Quick Start: quick-start.md
     - "What's New in v2": new_features_v2.md
+    - Comparison: comparison.md
     - Configuration:
         - Overview: configuration.md
         - Config File Structure: config_file_structure.md
