@@ -2,6 +2,167 @@
 
 All notable changes to the Potato annotation platform are documented in this file.
 
+## [2.2.0] - Comprehensive Annotation & Export Platform
+
+This release adds 9 new annotation schemas, intelligent annotation features (MACE, option highlighting, diversity ordering), a pluggable export system with 8 format backends, extended remote data source support, a standard survey instruments library, and major UX improvements including annotation navigation and form layout grids.
+
+### New Annotation Schemas
+
+#### N-ary Event Annotation
+- Trigger-and-argument event annotation with hub-spoke arc visualization
+- Define event types with typed argument roles (e.g., Agent, Patient, Location)
+- Annotate triggers as spans, then attach argument spans to each trigger
+- Configurable event type taxonomy with per-type argument constraints
+- See [Event Annotation Guide](docs/event_annotation.md) for details
+
+#### Entity Linking
+- Link annotated spans to knowledge base entries (Wikidata, UMLS, or custom KBs)
+- Inline search widget with auto-complete and candidate ranking
+- Support for multiple KB backends with configurable endpoints
+- See [Entity Linking Guide](docs/entity_linking.md) for configuration
+
+#### Triage
+- Rapid accept/reject/skip annotation for high-throughput screening tasks
+- Single-click decisions with configurable keyboard shortcuts
+- Progress indicators and throughput metrics
+- See [Triage Guide](docs/triage.md) for setup
+
+#### Pairwise Comparison
+- Compare two items side-by-side with binary A/B selection or scale slider modes
+- Configurable comparison dimensions and tie-breaking options
+- Balanced pair generation strategies
+- See [Pairwise Annotation Guide](docs/pairwise_annotation.md) for details
+
+#### Conversation Tree Annotation
+- Hierarchical annotation of multi-turn conversations as tree structures
+- Branching dialogue support with parent-child turn relationships
+- Per-turn and per-branch annotation labels
+- See [Conversation Tree Guide](docs/conversation_tree_annotation.md) for details
+
+#### Coreference Chain Annotation
+- Mark and chain coreferring mentions across a document
+- Color-coded chain visualization with merge and split operations
+- Cluster-level and mention-level annotation support
+- See [Coreference Annotation Guide](docs/coreference_annotation.md) for details
+
+#### Segmentation Mask Tools
+- Pixel-level fill and eraser tools for image segmentation
+- Mask PNG export for downstream model training
+- COCO RLE mask encoding for compact storage
+- Configurable brush sizes and label-based mask layers
+
+#### Bounding Box for PDF/Documents
+- Draw bounding boxes on PDF pages and document images
+- Per-page annotation with multi-page navigation
+- Export in Pascal VOC and YOLO formats
+
+#### Discontinuous/Multi-range Spans
+- Select non-contiguous text spans as a single annotation unit
+- Useful for capturing split antecedents and discontinuous entities
+
+### Intelligent Annotation
+
+#### MACE Annotator Competence Estimation
+- Integration of Multi-Annotator Competence Estimation (MACE) for modeling annotator reliability
+- Per-annotator competence scores surfaced in admin dashboard
+- Weighted aggregation of annotations based on estimated competence
+- See [MACE Guide](docs/mace.md) for details
+
+#### LLM-based Option Highlighting
+- AI-powered visual highlighting of likely correct options for discrete annotation tasks
+- Uses configurable LLM backend to pre-score label options
+- Subtle visual cues (not pre-selection) to guide annotators without biasing
+- See [Option Highlighting Guide](docs/option_highlighting.md) for configuration
+
+#### Embedding-based Diversity Ordering
+- Reorder annotation queue to maximize diversity of consecutive items
+- Uses sentence embeddings to compute pairwise distances
+- Reduces annotator fatigue from repetitive content
+- See [Diversity Ordering Guide](docs/diversity_ordering.md) for details
+
+#### Video Object Tracking
+- Keyframe interpolation for tracking objects across video frames
+- Annotate objects in key frames and auto-interpolate bounding boxes between them
+
+### Infrastructure
+
+#### Pluggable Export System
+- Unified export pipeline with 8 format backends:
+  - COCO JSON (with RLE mask support)
+  - YOLO darknet format
+  - Pascal VOC XML
+  - CoNLL-2003 and CoNLL-U for token-level annotations
+  - Mask PNG for segmentation
+  - EAF (ELAN) for audio/video time-aligned annotations
+  - TextGrid (Praat) for phonetic segmentation
+- CLI export command: `potato export <config> --format <fmt>`
+- See [Export Formats Guide](docs/export_formats.md) for details
+
+#### Extended Remote Data Sources
+- Load annotation data from remote locations:
+  - HTTP/HTTPS URLs
+  - Google Drive (public and authenticated)
+  - Dropbox shared links
+  - Amazon S3 buckets
+  - HuggingFace datasets
+  - Google Sheets
+  - Database connections
+- Configurable caching and refresh policies
+- See [Remote Data Sources Guide](docs/remote_data_sources.md) for setup
+
+#### External AI Config File Support
+- Factor AI endpoint configuration into separate YAML files
+- Share AI configs across multiple annotation projects
+- Override AI parameters per-project while inheriting defaults
+
+#### Format Handlers
+- Native rendering for PDF, Word (.docx), code files, and spreadsheets
+- In-browser previews with syntax highlighting for code
+- Page-level navigation for multi-page documents
+
+#### Standard Survey Instruments Library
+- 55 validated questionnaires ready to deploy (SUS, NASA-TLX, UMUX, AttrakDiff, etc.)
+- Pre-configured scoring, reverse-coding, and normative benchmarks
+- Drop-in YAML includes for post-study surveys
+- See [Survey Instruments Guide](docs/survey_instruments.md) for the full catalog
+
+### UX Improvements
+
+#### Annotation Navigation
+- Navigate between items with status badges showing annotation progress
+- Skip-to-unannotated button for efficient queue management
+- Filter items by annotation status (annotated, unannotated, skipped)
+- See [Annotation Navigation Guide](docs/annotation_navigation.md) for details
+
+#### Form Layout Grid
+- Arrange annotation schemas in multi-column grid layouts
+- CSS Grid-based positioning with configurable column spans
+- See [Form Layout Guide](docs/form_layout.md) for configuration
+
+#### Resizable Instance Display
+- Draggable resize handles on instance display panels
+- Persist user-preferred panel sizes across sessions
+
+#### Conditional Display Logic
+- Show or hide annotation fields based on prior responses
+- Branching annotation flows within a single instance
+- See [Conditional Logic Guide](docs/conditional_logic.md) for details
+
+### Bug Fixes
+- Fixed Peaks.js waveform rendering and overview/zoom synchronization
+- Fixed dependency arc persistence and span deletion issues
+- Fixed image annotation display and mask zoom synchronization
+- Fixed CSS visual issues: Likert alignment, whitespace, and textbox width
+- Fixed span annotation positioning for code and document displays
+- Fixed test infrastructure for login flow and obsolete JS functions
+
+### Documentation
+- 28+ new documentation pages added covering all new features
+- Project-hub examples reorganized with external AI config support
+- New guides: Event Annotation, Entity Linking, Triage, Pairwise Comparison, Coreference, Conversation Trees, Export Formats, Remote Data Sources, MACE, Option Highlighting, Diversity Ordering, Survey Instruments, Annotation Navigation, Form Layout, Conditional Logic, Tiered Annotation, Format Support, Layout Customization, Embedding Visualization, Annotation Filtering
+
+---
+
 ## [2.1.0] - Adjudication & Multi-Modal Annotation
 
 This release adds a complete adjudication workflow for resolving inter-annotator disagreements, a flexible instance display system, span linking for relation extraction, and expanded AI support for visual annotation tasks.
