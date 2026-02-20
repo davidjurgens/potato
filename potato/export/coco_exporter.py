@@ -19,6 +19,10 @@ from .cv_utils import (
     extract_image_annotations,
     get_image_dimensions,
     get_image_filename,
+    decode_rle,
+    rle_to_coco_rle,
+    rle_bbox,
+    rle_area,
 )
 
 logger = logging.getLogger(__name__)
@@ -123,6 +127,23 @@ class COCOExporter(BaseExporter):
                         bx, by, bw, bh = polygon_to_bbox(points)
                         coco_ann["bbox"] = [bx, by, bw, bh]
                         coco_ann["area"] = polygon_area(points)
+
+                    elif obj_type == "mask":
+                        rle = obj.get("rle", {})
+                        if not rle.get("counts"):
+                            warnings.append(
+                                f"Empty RLE mask in {instance_id}"
+                            )
+                            continue
+                        size = rle.get("size", [])
+                        mask_h = size[0] if len(size) >= 2 else height
+                        mask_w = size[1] if len(size) >= 2 else width
+                        coco_rle = rle_to_coco_rle(rle, mask_w, mask_h)
+                        decoded = decode_rle(rle, mask_w, mask_h)
+                        coco_ann["segmentation"] = coco_rle
+                        coco_ann["bbox"] = rle_bbox(decoded, mask_w, mask_h)
+                        coco_ann["area"] = rle_area(decoded)
+                        coco_ann["iscrowd"] = 1
 
                     elif obj_type == "landmark":
                         warnings.append(

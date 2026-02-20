@@ -7,7 +7,8 @@ import pytest
 import tempfile
 
 from potato.export.base import ExportContext
-from potato.export.mask_exporter import MaskExporter, _decode_rle
+from potato.export.mask_exporter import MaskExporter
+from potato.export.cv_utils import decode_rle as _decode_rle
 
 
 class TestDecodeRLE:

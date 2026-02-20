@@ -146,3 +146,99 @@ class TestCOCOExporter:
             result = self.exporter.export(ctx, tmpdir)
             assert result.success
             assert result.stats["num_images"] == 0
+
+    def test_export_mask(self):
+        """Mask annotation should produce COCO RLE with iscrowd=1."""
+        # 3x2 mask: row0=[0,0,1], row1=[1,1,0]
+        # Potato RLE (row-major): 2 zeros, 3 ones, 1 zero → counts=[2,3,1]
+        annotations = [{
+            "instance_id": "img1",
+            "user_id": "user1",
+            "image_annotations": {
+                "img": [
+                    {
+                        "type": "mask", "label": "cat",
+                        "rle": {"counts": [2, 3, 1], "size": [2, 3]},
+                    },
+                ]
+            }
+        }]
+        items = {"img1": {"image": "mask.jpg", "image_width": 3, "image_height": 2}}
+        ctx = self._make_context(annotations=annotations, items=items)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = self.exporter.export(ctx, tmpdir)
+            assert result.success
+            assert result.stats["num_annotations"] == 1
+
+            with open(os.path.join(tmpdir, "annotations.json")) as f:
+                coco = json.load(f)
+
+            ann = coco["annotations"][0]
+            assert ann["iscrowd"] == 1
+            assert ann["area"] == 3  # 3 foreground pixels
+            # segmentation should be COCO RLE dict with string counts
+            seg = ann["segmentation"]
+            assert isinstance(seg["counts"], str)
+            assert seg["size"] == [2, 3]
+            # bbox should cover the foreground region
+            assert ann["bbox"][2] > 0  # width > 0
+            assert ann["bbox"][3] > 0  # height > 0
+
+    def test_export_mask_empty_rle(self):
+        """Empty RLE mask should produce a warning and be skipped."""
+        annotations = [{
+            "instance_id": "img1",
+            "user_id": "user1",
+            "image_annotations": {
+                "img": [
+                    {"type": "mask", "label": "cat", "rle": {"counts": [], "size": [2, 3]}},
+                ]
+            }
+        }]
+        items = {"img1": {"image": "test.jpg", "image_width": 3, "image_height": 2}}
+        ctx = self._make_context(annotations=annotations, items=items)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = self.exporter.export(ctx, tmpdir)
+            assert result.success
+            assert result.stats["num_annotations"] == 0
+            assert any("Empty RLE" in w for w in result.warnings)
+
+    def test_export_mixed_types(self):
+        """bbox + polygon + mask in same image should all export correctly."""
+        annotations = [{
+            "instance_id": "img1",
+            "user_id": "user1",
+            "image_annotations": {
+                "img": [
+                    {"type": "bbox", "label": "cat", "x": 10, "y": 20, "width": 30, "height": 40},
+                    {"type": "polygon", "label": "dog",
+                     "points": [[0, 0], [10, 0], [10, 10], [0, 10]]},
+                    {"type": "mask", "label": "cat",
+                     "rle": {"counts": [0, 4, 0], "size": [2, 2]}},
+                ]
+            }
+        }]
+        items = {"img1": {"image": "mixed.jpg", "image_width": 100, "image_height": 100}}
+        ctx = self._make_context(annotations=annotations, items=items)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = self.exporter.export(ctx, tmpdir)
+            assert result.success
+            assert result.stats["num_annotations"] == 3
+
+            with open(os.path.join(tmpdir, "annotations.json")) as f:
+                coco = json.load(f)
+
+            types = []
+            for ann in coco["annotations"]:
+                if isinstance(ann["segmentation"], dict):
+                    types.append("mask")
+                elif isinstance(ann["segmentation"], list) and ann["segmentation"]:
+                    types.append("polygon")
+                else:
+                    types.append("bbox")
+            assert "bbox" in types
+            assert "polygon" in types
+            assert "mask" in types

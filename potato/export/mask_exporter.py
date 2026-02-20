@@ -18,35 +18,10 @@ from .cv_utils import (
     get_image_dimensions,
     get_image_filename,
     build_category_mapping,
+    decode_rle,
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _decode_rle(rle: dict, width: int, height: int) -> list:
-    """
-    Decode RLE-encoded mask to a flat binary array.
-
-    Args:
-        rle: Dict with 'counts' (list of ints) and 'size' [height, width]
-        width: Image width
-        height: Image height
-
-    Returns:
-        Flat list of 0/1 values
-    """
-    counts = rle.get("counts", [])
-    total = width * height
-    mask = [0] * total
-    pos = 0
-    val = 0
-    for count in counts:
-        for _ in range(count):
-            if pos < total:
-                mask[pos] = val
-                pos += 1
-        val = 1 - val
-    return mask
 
 
 class MaskExporter(BaseExporter):
@@ -131,7 +106,7 @@ class MaskExporter(BaseExporter):
                     if not rle.get("counts"):
                         continue
 
-                    mask_data = _decode_rle(rle, width, height)
+                    mask_data = decode_rle(rle, width, height)
                     color = category_colors.get(label, (255, 255, 255))
 
                     # Create RGBA image

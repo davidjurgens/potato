@@ -195,3 +195,184 @@ def get_image_filename(item: dict) -> Optional[str]:
         if key in item and item[key]:
             return str(item[key])
     return None
+
+
+# ---------------------------------------------------------------------------
+# RLE mask utilities (Potato RLE <-> COCO RLE conversion)
+# ---------------------------------------------------------------------------
+
+
+def decode_rle(rle: dict, width: int, height: int) -> List[int]:
+    """
+    Decode Potato RLE-encoded mask to a flat binary array (row-major order).
+
+    Potato RLE stores counts alternating between 0-pixels and 1-pixels,
+    starting with 0s, in row-major (left-to-right, top-to-bottom) order.
+
+    Args:
+        rle: Dict with 'counts' (list of ints) and 'size' [height, width]
+        width: Image width
+        height: Image height
+
+    Returns:
+        Flat list of 0/1 values in row-major order
+    """
+    counts = rle.get("counts", [])
+    total = width * height
+    mask = [0] * total
+    pos = 0
+    val = 0
+    for count in counts:
+        for _ in range(count):
+            if pos < total:
+                mask[pos] = val
+                pos += 1
+        val = 1 - val
+    return mask
+
+
+def rle_bbox(mask: List[int], width: int, height: int) -> List[float]:
+    """
+    Compute axis-aligned bounding box [x, y, w, h] from a flat binary mask.
+
+    Args:
+        mask: Flat list of 0/1 values (row-major)
+        width: Image width
+        height: Image height
+
+    Returns:
+        [x_min, y_min, bbox_width, bbox_height] or [0, 0, 0, 0] if empty
+    """
+    x_min, y_min = width, height
+    x_max, y_max = -1, -1
+    for i, val in enumerate(mask):
+        if val:
+            y = i // width
+            x = i % width
+            if x < x_min:
+                x_min = x
+            if x > x_max:
+                x_max = x
+            if y < y_min:
+                y_min = y
+            if y > y_max:
+                y_max = y
+    if x_max < 0:
+        return [0, 0, 0, 0]
+    return [float(x_min), float(y_min),
+            float(x_max - x_min + 1), float(y_max - y_min + 1)]
+
+
+def rle_area(mask: List[int]) -> int:
+    """
+    Compute mask area as the count of foreground pixels.
+
+    Args:
+        mask: Flat list of 0/1 values
+
+    Returns:
+        Number of 1-pixels
+    """
+    return sum(mask)
+
+
+def _column_major_rle_counts(mask_2d: List[List[int]], height: int,
+                              width: int) -> List[int]:
+    """
+    Read a 2D mask in column-major order and compute RLE counts.
+
+    Counts alternate between 0-pixels and 1-pixels, starting with 0s.
+
+    Args:
+        mask_2d: 2D list [height][width] of 0/1 values
+        height: Image height
+        width: Image width
+
+    Returns:
+        List of integer run counts in column-major order
+    """
+    counts: List[int] = []
+    current_val = 0
+    current_run = 0
+
+    for x in range(width):
+        for y in range(height):
+            pixel = mask_2d[y][x]
+            if pixel == current_val:
+                current_run += 1
+            else:
+                counts.append(current_run)
+                current_val = 1 - current_val
+                current_run = 1
+    counts.append(current_run)
+    return counts
+
+
+def _encode_coco_rle_string(counts: List[int]) -> str:
+    """
+    Encode RLE integer counts as a COCO compressed ASCII string.
+
+    Implements the exact algorithm from pycocotools maskApi.c rleToString():
+    - Delta encoding for i > 2: x = counts[i] - counts[i-2]
+    - Each value encoded as 6-bit groups (5 data bits + 1 continuation bit)
+    - Each group offset by 48 to produce printable ASCII
+    - Signed values supported via arithmetic right shift
+
+    Args:
+        counts: List of integer run counts
+
+    Returns:
+        Encoded ASCII string
+    """
+    chars = []
+    for i, cnt in enumerate(counts):
+        # Delta encoding: for i > 2, encode difference from counts[i-2]
+        x = cnt - counts[i - 2] if i > 2 else cnt
+        while True:
+            c = x & 0x1F
+            x >>= 5
+            # If bit 4 set, sign bit is 1 → more groups unless x is all-ones (-1)
+            # If bit 4 clear, sign bit is 0 → more groups unless x is all-zeros (0)
+            if c & 0x10:
+                more = (x != -1)
+            else:
+                more = (x != 0)
+            if more:
+                c |= 0x20
+            chars.append(chr(c + 48))
+            if not more:
+                break
+    return "".join(chars)
+
+
+def rle_to_coco_rle(rle: dict, width: int, height: int) -> Dict[str, Any]:
+    """
+    Convert Potato RLE to COCO RLE format.
+
+    Potato RLE is row-major; COCO RLE is column-major with compressed
+    ASCII string encoding.
+
+    Args:
+        rle: Potato RLE dict with 'counts' and 'size'
+        width: Image width
+        height: Image height
+
+    Returns:
+        COCO RLE dict {"counts": "encoded_string", "size": [height, width]}
+    """
+    # Decode to flat row-major mask
+    flat = decode_rle(rle, width, height)
+
+    # Reshape to 2D
+    mask_2d = []
+    for y in range(height):
+        row = flat[y * width:(y + 1) * width]
+        mask_2d.append(row)
+
+    # Compute column-major RLE counts
+    col_counts = _column_major_rle_counts(mask_2d, height, width)
+
+    # Encode as COCO compressed string
+    encoded = _encode_coco_rle_string(col_counts)
+
+    return {"counts": encoded, "size": [height, width]}
