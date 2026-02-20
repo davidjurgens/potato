@@ -18,6 +18,7 @@ from .coreference import generate_coreference_layout
 from .tree_annotation import generate_tree_annotation_layout
 from .triage import generate_triage_layout
 from .event_annotation import generate_event_annotation_layout
+from .tiered_annotation import generate_tiered_annotation_layout
 
 # Import identifier utilities for use by other modules
 from .identifier_utils import (

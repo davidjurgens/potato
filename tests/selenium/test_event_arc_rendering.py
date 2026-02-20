@@ -28,7 +28,7 @@ class EventAnnotationSeleniumTest(unittest.TestCase):
     def setUpClass(cls):
         """Set up the Flask server with event annotation config."""
         # Use the event annotation example config
-        config_file = "project-hub/simple_examples/simple-event-annotation/config.yaml"
+        config_file = "examples/span/event-annotation/config.yaml"
 
         # Use dynamic port allocation
         port = find_free_port(preferred_port=9020)

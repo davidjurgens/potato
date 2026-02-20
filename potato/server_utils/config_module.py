@@ -528,7 +528,7 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
 
     # Validate annotation_type
     # Note: Keep in sync with potato.server_utils.schemas.registry
-    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'span_link', 'select', 'number', 'multirate', 'pure_display', 'video', 'image_annotation', 'audio_annotation', 'video_annotation', 'pairwise', 'coreference', 'tree_annotation', 'triage', 'event_annotation']
+    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'span_link', 'select', 'number', 'multirate', 'pure_display', 'video', 'image_annotation', 'audio_annotation', 'video_annotation', 'pairwise', 'coreference', 'tree_annotation', 'triage', 'event_annotation', 'tiered_annotation']
     if scheme['annotation_type'] not in valid_types:
         raise ConfigValidationError(f"{path}.annotation_type must be one of: {', '.join(valid_types)}")
 
@@ -687,6 +687,70 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
         if 'video_fps' in scheme:
             if not isinstance(scheme['video_fps'], (int, float)) or scheme['video_fps'] <= 0:
                 raise ConfigValidationError(f"{path}.video_fps must be a positive number")
+
+    elif annotation_type == 'tiered_annotation':
+        # Validate required fields
+        if 'tiers' not in scheme:
+            raise ConfigValidationError(f"{path} missing 'tiers' field for tiered_annotation")
+        if not isinstance(scheme['tiers'], list):
+            raise ConfigValidationError(f"{path}.tiers must be a list")
+        if not scheme['tiers']:
+            raise ConfigValidationError(f"{path}.tiers cannot be empty")
+
+        if 'source_field' not in scheme:
+            raise ConfigValidationError(f"{path} missing 'source_field' field for tiered_annotation")
+
+        # Validate media_type
+        media_type = scheme.get('media_type', 'audio')
+        if media_type not in ['audio', 'video']:
+            raise ConfigValidationError(f"{path}.media_type must be 'audio' or 'video'")
+
+        # Validate tiers
+        tier_names = set()
+        valid_tier_types = ['independent', 'dependent']
+        valid_constraint_types = ['time_subdivision', 'included_in', 'symbolic_association', 'symbolic_subdivision', 'none']
+
+        for i, tier in enumerate(scheme['tiers']):
+            tier_path = f"{path}.tiers[{i}]"
+
+            if not isinstance(tier, dict):
+                raise ConfigValidationError(f"{tier_path} must be a dictionary")
+
+            if 'name' not in tier:
+                raise ConfigValidationError(f"{tier_path} missing 'name' field")
+
+            tier_name = tier['name']
+            if tier_name in tier_names:
+                raise ConfigValidationError(f"{tier_path} duplicate tier name: '{tier_name}'")
+            tier_names.add(tier_name)
+
+            # Validate tier_type
+            tier_type = tier.get('tier_type', 'independent')
+            if tier_type not in valid_tier_types:
+                raise ConfigValidationError(f"{tier_path}.tier_type must be one of: {valid_tier_types}")
+
+            # Validate dependent tier requirements
+            if tier_type == 'dependent':
+                if 'parent_tier' not in tier:
+                    raise ConfigValidationError(f"{tier_path} dependent tier must have 'parent_tier'")
+
+            # Validate constraint_type
+            constraint_type = tier.get('constraint_type', 'none')
+            if constraint_type not in valid_constraint_types:
+                raise ConfigValidationError(f"{tier_path}.constraint_type must be one of: {valid_constraint_types}")
+
+        # Validate parent_tier references (second pass)
+        for i, tier in enumerate(scheme['tiers']):
+            parent = tier.get('parent_tier')
+            if parent and parent not in tier_names:
+                raise ConfigValidationError(f"{path}.tiers[{i}] references unknown parent_tier: '{parent}'")
+            if parent and parent == tier['name']:
+                raise ConfigValidationError(f"{path}.tiers[{i}] cannot be its own parent")
+
+        # Validate optional numeric fields
+        if 'tier_height' in scheme:
+            if not isinstance(scheme['tier_height'], int) or scheme['tier_height'] < 20:
+                raise ConfigValidationError(f"{path}.tier_height must be an integer >= 20")
 
     elif annotation_type == 'pairwise':
         # Validate mode
@@ -1939,6 +2003,88 @@ def validate_embedding_visualization_config(config_data: Dict[str, Any]) -> None
             )
 
 
+def _merge_ai_config_file(config_data: Dict[str, Any], config_dir: str) -> Dict[str, Any]:
+    """
+    Merge an external ai-config.yaml into the main config if specified.
+
+    When ai_support.ai_config_file is set, loads that YAML file and merges its
+    contents into the ai_support section. The external file provides endpoint-specific
+    details (endpoint_type, model, api_key, base_url) while the inline ai_config
+    provides defaults (temperature, max_tokens, include settings).
+
+    Args:
+        config_data: The parsed main configuration dictionary
+        config_dir: Directory containing the main config file (for resolving relative paths)
+
+    Returns:
+        The config_data with external AI config merged in (modified in place and returned)
+    """
+    ai_support = config_data.get("ai_support", {})
+    if not isinstance(ai_support, dict):
+        return config_data
+
+    ai_config_file = ai_support.get("ai_config_file")
+
+    if not ai_config_file:
+        # No external file specified - apply env var substitution to inline ai_config
+        if "ai_config" in ai_support:
+            from potato.data_sources.credentials import substitute_env_vars
+            ai_support["ai_config"] = substitute_env_vars(ai_support["ai_config"])
+            config_data["ai_support"] = ai_support
+        return config_data
+
+    if not isinstance(ai_config_file, str):
+        logger.warning("ai_support.ai_config_file must be a string. Ignoring.")
+        return config_data
+
+    # Resolve relative to config file directory
+    ai_config_path = os.path.join(config_dir, ai_config_file)
+
+    if not os.path.exists(ai_config_path):
+        logger.warning(
+            f"AI config file '{ai_config_file}' not found at {ai_config_path}. "
+            f"AI support will be disabled. Create this file with your endpoint details."
+        )
+        config_data["ai_support"]["enabled"] = False
+        return config_data
+
+    # Load external AI config
+    try:
+        with open(ai_config_path, 'r', encoding='utf-8') as f:
+            external_config = yaml.safe_load(f) or {}
+    except yaml.YAMLError as e:
+        logger.warning(f"Invalid YAML in AI config file '{ai_config_file}': {e}. AI support will be disabled.")
+        config_data["ai_support"]["enabled"] = False
+        return config_data
+
+    if not isinstance(external_config, dict):
+        logger.warning(f"AI config file '{ai_config_file}' must contain a YAML dictionary. AI support will be disabled.")
+        config_data["ai_support"]["enabled"] = False
+        return config_data
+
+    # Apply environment variable substitution to external config
+    from potato.data_sources.credentials import substitute_env_vars
+    external_config = substitute_env_vars(external_config)
+
+    # Extract endpoint_type from external config (top-level key)
+    if "endpoint_type" in external_config:
+        ai_support["endpoint_type"] = external_config.pop("endpoint_type")
+
+    # Merge remaining keys into ai_config (external takes precedence)
+    ai_config = ai_support.get("ai_config", {})
+    if not isinstance(ai_config, dict):
+        ai_config = {}
+    ai_config.update(external_config)
+    ai_support["ai_config"] = ai_config
+
+    # Also apply env var substitution to the final merged ai_config
+    ai_support["ai_config"] = substitute_env_vars(ai_support["ai_config"])
+
+    config_data["ai_support"] = ai_support
+    logger.info(f"Loaded AI endpoint config from {ai_config_file}")
+    return config_data
+
+
 def load_and_validate_config(config_file: str, project_dir: str) -> Dict[str, Any]:
     """
     Load and validate a YAML configuration file with security checks.
@@ -1977,6 +2123,9 @@ def load_and_validate_config(config_file: str, project_dir: str) -> Dict[str, An
 
     # Get the directory containing the config file for relative path resolution
     config_file_dir = os.path.dirname(validated_config_path)
+
+    # Merge external AI config file if specified (before validation)
+    config_data = _merge_ai_config_file(config_data, config_file_dir)
 
     # Apply default values for common configuration options
     if 'task_dir' not in config_data:
@@ -2326,6 +2475,11 @@ def validate_ai_support_config(config_data: Dict[str, Any]) -> None:
 
     if not ai_config.get("enabled", False):
         return  # Skip validation if not enabled
+
+    # Validate ai_config_file (optional, string path to external AI config)
+    if "ai_config_file" in ai_config:
+        if not isinstance(ai_config["ai_config_file"], str):
+            raise ConfigValidationError("ai_support.ai_config_file must be a string")
 
     # Validate endpoint type
     if "endpoint_type" not in ai_config:

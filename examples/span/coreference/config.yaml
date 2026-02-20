@@ -1,0 +1,49 @@
+# Simple Coreference Annotation Example
+# Run: python potato/flask_server.py start examples/span/coreference/config.yaml -p 8000
+
+annotation_task_name: "Coreference Annotation Demo"
+task_dir: .
+
+data_files:
+  - data/coreference-example.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+user_config:
+  allow_all_users: true
+
+instance_display:
+  fields:
+    - key: text
+      type: text
+      label: "Text"
+
+annotation_schemes:
+  # First, a span schema for identifying mentions
+  - annotation_type: span
+    name: mentions
+    description: "Highlight entity mentions in the text"
+    labels:
+      - name: PERSON
+        tooltip: "Person names and pronouns"
+      - name: ORG
+        tooltip: "Organization names"
+      - name: LOC
+        tooltip: "Location names"
+      - name: OTHER
+        tooltip: "Other referring expressions"
+
+  # Then, the coreference schema for grouping mentions into chains
+  - annotation_type: coreference
+    name: coref_chains
+    description: "Group mentions that refer to the same entity into coreference chains"
+    span_schema: mentions
+    entity_types: [PERSON, ORG, LOC, OTHER]
+    allow_singletons: true
+    visual_display:
+      highlight_mode: background
+
+output_annotation_dir: annotation_output
+output_annotation_format: json

@@ -25,12 +25,12 @@ class TestArcPersistenceBug:
     @classmethod
     def setup_class(cls):
         """Set up the Flask server with the dependency tree config."""
-        config_path = "project-hub/simple_examples/simple-dependency-tree/config.yaml"
+        config_path = "examples/span/dependency-tree/config.yaml"
         repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         config_file = os.path.join(repo_root, config_path)
 
         # Clear any existing annotations
-        output_dir = os.path.join(repo_root, "project-hub/simple_examples/simple-dependency-tree/annotation_output")
+        output_dir = os.path.join(repo_root, "examples/span/dependency-tree/annotation_output")
         if os.path.exists(output_dir):
             import shutil
             shutil.rmtree(output_dir)

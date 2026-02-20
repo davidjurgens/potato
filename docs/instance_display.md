@@ -458,13 +458,13 @@ Ready-to-run examples demonstrating advanced instance display usage:
 
 ```bash
 # Content moderation with image + text side by side
-python potato/flask_server.py start project-hub/layout-examples/content-moderation/config.yaml -p 8000
+python potato/flask_server.py start examples/custom-layouts/content-moderation/config.yaml -p 8000
 
 # Dialogue QA with per-turn ratings
-python potato/flask_server.py start project-hub/layout-examples/dialogue-qa/config.yaml -p 8000
+python potato/flask_server.py start examples/custom-layouts/dialogue-qa/config.yaml -p 8000
 
 # Medical review with horizontal image + notes
-python potato/flask_server.py start project-hub/layout-examples/medical-review/config.yaml -p 8000
+python potato/flask_server.py start examples/custom-layouts/medical-review/config.yaml -p 8000
 ```
 
-See `project-hub/layout-examples/` for the complete source of each example.
+See `examples/custom-layouts/` for the complete source of each example.

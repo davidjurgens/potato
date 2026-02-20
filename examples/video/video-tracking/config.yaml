@@ -1,0 +1,47 @@
+# Simple Video Object Tracking Example
+# Run from repo root:
+#   python potato/flask_server.py start examples/video/video-tracking/config.yaml -p 8000
+
+annotation_task_name: "Simple Video Object Tracking"
+
+data_files:
+  - data/video-tracking-example.json
+
+item_properties:
+  id_key: id
+  text_key: video_url  # Must be the video URL field for video_annotation to find it
+
+# NOTE: We intentionally do NOT use instance_display here.
+# The video_annotation schema handles video display directly in its player.
+# Using instance_display would cause the video to appear twice.
+
+annotation_schemes:
+  - annotation_type: video_annotation
+    name: object_tracking
+    description: "Track objects across video frames by placing bounding boxes at keyframes. The system interpolates positions between keyframes."
+    source_field: video_url
+    mode: tracking
+    labels:
+      - name: person
+        color: "#FF6B6B"
+      - name: animal
+        color: "#4ECDC4"
+      - name: vehicle
+        color: "#45B7D1"
+      - name: object
+        color: "#96CEB4"
+    tracking_options:
+      interpolation: linear
+      auto_advance_frames: 5
+    video_fps: 30
+    show_timecode: true
+    frame_stepping: true
+
+# User authentication
+user_config:
+  allow_all_users: true
+
+task_dir: .
+output_annotation_dir: annotation_output
+
+port: 8000

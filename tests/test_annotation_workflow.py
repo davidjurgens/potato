@@ -282,7 +282,7 @@ class TestAnnotationWorkflow:
     def test_output_generation_workflow(self, temp_project_dir):
         """Test that annotation output is generated correctly"""
         # Create output directory
-        output_dir = os.path.join(temp_project_dir, 'simple_examples', 'annotation_output', 'simple-likert', 'annotations')
+        output_dir = os.path.join(temp_project_dir, 'examples', 'classification', 'likert', 'annotation_output', 'annotations')
         os.makedirs(output_dir, exist_ok=True)
 
         # Simulate annotation output
@@ -367,7 +367,7 @@ class TestAnnotationWorkflow:
     def test_data_persistence_workflow(self, temp_project_dir):
         """Test that annotation data persists correctly"""
         # Create user state directory
-        user_state_dir = os.path.join(temp_project_dir, 'simple_examples', 'annotation_output', 'simple-likert', 'debug_user')
+        user_state_dir = os.path.join(temp_project_dir, 'examples', 'classification', 'likert', 'annotation_output', 'debug_user')
         os.makedirs(user_state_dir, exist_ok=True)
 
         # Simulate user state file

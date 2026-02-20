@@ -1493,6 +1493,13 @@ fieldset[schema] {
   position: relative;
   line-height: 1.4em;
   min-height: 2em;
+  overflow: visible;
+  padding-top: 28px; /* Space for span controls above first line */
+}
+
+/* Span overlays container must allow controls to render above */
+#span-overlays {
+  overflow: visible !important;
 }
 
 /* Adjust label positioning for overlapping spans - use absolute positioning */

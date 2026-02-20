@@ -1,0 +1,127 @@
+# Content Moderation Dashboard
+#
+# A sophisticated content moderation interface demonstrating:
+#   - Custom visual layout with warning banner and metadata panel
+#   - 2-column grid for violation category assessment
+#   - Color-coded severity levels (green/yellow/red)
+#   - Professional moderation workflow UI
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/custom-layouts/content-moderation/config.yaml -p 8000
+
+annotation_task_name: "Content Moderation Dashboard"
+
+# Data configuration
+data_files:
+  - data/content.json
+
+item_properties:
+  id_key: id
+  text_key: reporter_notes
+
+# Task directory
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: jsonl
+
+# Custom layout file for sophisticated UI
+task_layout: layouts/custom_task_layout.html
+
+# Instance Display Configuration - shows the image and metadata side by side
+instance_display:
+  layout:
+    direction: horizontal
+    gap: 20px
+
+  fields:
+    - key: image_url
+      type: image
+      label: "Content Under Review"
+      display_options:
+        zoomable: true
+        max_height: 400px
+
+    - key: reporter_notes
+      type: text
+      label: "Review Notes"
+      display_options:
+        collapsible: false
+
+# Annotation schemes - these are rendered in the custom layout
+annotation_schemes:
+
+  # Violence/Gore Assessment
+  - annotation_type: radio
+    name: violence
+    description: "Violence or graphic content severity"
+    labels:
+      - name: none
+        tooltip: "No violent or graphic content present"
+      - name: mild
+        tooltip: "Minor violence, cartoon violence, or mild imagery"
+      - name: severe
+        tooltip: "Graphic violence, gore, or disturbing imagery"
+
+  # Adult Content Assessment
+  - annotation_type: radio
+    name: adult_content
+    description: "Adult or sexual content severity"
+    labels:
+      - name: none
+        tooltip: "No adult content present"
+      - name: mild
+        tooltip: "Suggestive content, partial nudity, or risque imagery"
+      - name: severe
+        tooltip: "Explicit adult content or pornography"
+
+  # Hate Speech Assessment
+  - annotation_type: radio
+    name: hate_speech
+    description: "Hate speech or discrimination severity"
+    labels:
+      - name: none
+        tooltip: "No hateful or discriminatory content"
+      - name: mild
+        tooltip: "Borderline content, insensitive imagery"
+      - name: severe
+        tooltip: "Clear hate speech, symbols, or discriminatory content"
+
+  # Misinformation Assessment
+  - annotation_type: radio
+    name: misinformation
+    description: "Misinformation or deceptive content severity"
+    labels:
+      - name: none
+        tooltip: "No misleading content detected"
+      - name: mild
+        tooltip: "Potentially misleading, requires context"
+      - name: severe
+        tooltip: "Clear misinformation or manipulated media"
+
+  # Final Decision
+  - annotation_type: radio
+    name: decision
+    description: "Final moderation decision"
+    labels:
+      - name: approve
+        tooltip: "Content meets community guidelines"
+      - name: flag_review
+        tooltip: "Escalate to senior reviewer"
+      - name: remove
+        tooltip: "Content violates policies - remove immediately"
+
+  # Moderator Notes
+  - annotation_type: text
+    name: moderator_notes
+    description: "Additional notes for the moderation log"
+    labels:
+      - notes
+    textarea:
+      'on': true
+      rows: 3
+      cols: 50
+
+# User configuration
+user_config:
+  allow_all_users: true
+  require_password: false

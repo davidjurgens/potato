@@ -120,6 +120,8 @@ def _register_builtin_exporters():
     from .conll_2003_exporter import CoNLL2003Exporter
     from .conll_u_exporter import CoNLLUExporter
     from .mask_exporter import MaskExporter
+    from .eaf_exporter import EAFExporter
+    from .textgrid_exporter import TextGridExporter
 
     exporters = [
         COCOExporter(),
@@ -128,6 +130,8 @@ def _register_builtin_exporters():
         CoNLL2003Exporter(),
         CoNLLUExporter(),
         MaskExporter(),
+        EAFExporter(),
+        TextGridExporter(),
     ]
 
     for exporter in exporters:

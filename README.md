@@ -92,7 +92,7 @@ cd potato
 pip install -r requirements.txt
 
 # Start a simple annotation task
-python potato/flask_server.py start project-hub/simple_examples/configs/simple-check-box.yaml -p 8000
+python potato/flask_server.py start examples/classification/check-box/config.yaml -p 8000
 ```
 
 Then open [http://localhost:8000](http://localhost:8000) in your browser.
@@ -120,25 +120,24 @@ Then open [http://localhost:8000](http://localhost:8000) in your browser.
 
 ## Example Projects
 
-Ready-to-use annotation setups in [`project-hub/`](project-hub/):
+Ready-to-use annotation templates organized by type in [`examples/`](examples/):
 
-| Project | Description | Config |
-|---------|-------------|--------|
-| [Sentiment Analysis](project-hub/sentiment_analysis/) | Document-level sentiment classification | Radio buttons |
-| [Dialogue Analysis](project-hub/dialogue_analysis/) | Span labeling in conversations | Span annotation |
-| [Summarization Eval](project-hub/summarization_evaluation/) | Compare and rate summaries | Likert + pairwise |
-| [Question Answering](project-hub/question_answering/) | Extract answer spans | Span + checkbox |
-| [Simple Examples](project-hub/simple_examples/) | Minimal configs for each schema type | Various |
+| Category | Examples | Description |
+|----------|----------|-------------|
+| [Classification](examples/classification/) | Radio, checkbox, Likert, slider, pairwise | Label selection and rating tasks |
+| [Span](examples/span/) | Span labeling, linking, coreference, NER | Text span annotation |
+| [Audio](examples/audio/) | Audio annotation, classification, tiered | Audio annotation with waveforms |
+| [Video](examples/video/) | Video annotation, tracking, frame-level | Video annotation with playback |
+| [Image](examples/image/) | Image, PDF, document annotation | Image and document annotation |
+| [Advanced](examples/advanced/) | Multi-modal, quality control, adjudication | Complex features and workflows |
+| [AI-Assisted](examples/ai-assisted/) | AI keywords, Ollama integration | AI/ML-powered annotation |
+| [Custom Layouts](examples/custom-layouts/) | Content moderation, dialogue QA | Layout customization |
 
-### Annotation Guidelines Showcase
+### Research Project Showcase
 
-Looking for real-world examples? The **[Potato Showcase](https://github.com/davidjurgens/potato-showcase/)** contains a curated gallery of annotation guidelines and configurations from published research projects. Browse examples of:
-- Annotation codebooks and instructions
-- Complex multi-schema configurations
-- Quality control setups
-- Custom UI configurations
+Looking for real-world examples from published research? The **[Potato Showcase](https://github.com/davidjurgens/potato-showcase/)** contains paper-specific annotation projects including sentiment analysis, dialogue analysis, summarization evaluation, and more.
 
-See [all example projects](https://potatoannotator.readthedocs.io/en/latest/example-projects/) in the documentation.
+Use `potato list all` to see downloadable projects, or `potato get <project>` to fetch one.
 
 ---
 
@@ -180,7 +179,7 @@ potato/
 ├── simulator/           # User simulation for testing
 └── quality_control.py   # QC validation logic
 
-project-hub/             # Example annotation projects
+examples/                # Annotation templates by type
 tests/                   # Test suite
 docs/                    # Documentation
 ```

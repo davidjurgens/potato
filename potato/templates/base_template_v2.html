@@ -65,6 +65,9 @@
     <!-- Entity Linking Styles (knowledge base linking) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/entity-linking.css') }}">
 
+    <!-- Tiered Annotation Styles (ELAN-style hierarchical annotation) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tiered-annotation.css') }}">
+
     <!-- jQuery (required for span annotation) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
 </head>
@@ -368,6 +371,9 @@
 
     <!-- Triage annotation manager -->
     <script src="{{ url_for('static', filename='triage.js') }}?v=1"></script>
+
+    <!-- Tiered annotation manager (ELAN-style hierarchical annotation) -->
+    <script src="{{ url_for('static', filename='tiered-annotation.js') }}?v=1"></script>
 
     <!-- Document bounding box annotation -->
     <script src="{{ url_for('static', filename='document-bbox.js') }}?v=2"></script>

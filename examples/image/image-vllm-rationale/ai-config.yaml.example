@@ -1,0 +1,22 @@
+# AI Endpoint Configuration for Image Classification with VLLMs
+# Copy this file to ai-config.yaml and fill in your endpoint details.
+# ai-config.yaml is gitignored and will not be committed.
+
+# --- Option A: Ollama Vision (default for this demo) ---
+endpoint_type: ollama_vision
+model: qwen3-vl:2b
+# base_url: http://localhost:11434  # default for Ollama
+
+# Other vision model options for Ollama:
+# model: llava:latest       # Good quality, widely tested
+# model: moondream:latest   # Smallest, fastest, good for testing
+
+# --- Option B: OpenAI Vision ---
+# endpoint_type: openai_vision
+# model: gpt-4o
+# api_key: ${OPENAI_API_KEY}
+
+# --- Option C: Anthropic Vision ---
+# endpoint_type: anthropic_vision
+# model: claude-sonnet-4-20250514
+# api_key: ${ANTHROPIC_API_KEY}

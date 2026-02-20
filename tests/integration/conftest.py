@@ -27,17 +27,17 @@ from tests.integration.base import IntegrationTestServer, integration_server
 
 def get_example_configs() -> List[Path]:
     """Get all example config files for testing."""
-    config_dir = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs"
+    examples_dir = PROJECT_ROOT / "examples"
     configs = []
 
-    for config_file in config_dir.glob("*.yaml"):
-        # Skip configs known to have issues or are templates
+    # Walk through examples/<category>/<name>/config.yaml structure
+    for config_file in examples_dir.glob("*/*/config.yaml"):
+        # Skip simulator configs and templates
         skip_patterns = [
-            "empty-to-copy",  # Template, not functional
-            "simulator-",     # Simulator configs, not server configs
+            "simulator-configs",  # Simulator configs, not server configs
         ]
 
-        if any(pattern in config_file.name for pattern in skip_patterns):
+        if any(pattern in str(config_file) for pattern in skip_patterns):
             continue
 
         configs.append(config_file)

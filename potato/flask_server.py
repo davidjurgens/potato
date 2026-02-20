@@ -86,6 +86,7 @@ from potato.adjudication import (
 from potato.diversity_manager import (
     init_diversity_manager, get_diversity_manager, clear_diversity_manager
 )
+from potato.knowledge_base import init_kb_manager
 
 from potato.create_task_cli import create_task_cli, yes_or_no
 from potato.server_utils.arg_utils import arguments
@@ -2608,6 +2609,10 @@ def run_server(args):
         from potato.mace_manager import init_mace_manager
         init_mace_manager(config)
         logger.info("MACE manager initialized")
+
+    # Initialize knowledge base manager for entity linking
+    init_kb_manager(config)
+    logger.info("Knowledge base manager initialized")
 
     # Initialize ExpertiseManager for dynamic category assignment
     category_assignment = config.get('category_assignment', {})

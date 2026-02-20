@@ -332,6 +332,66 @@
     background: var(--border, #e5e7eb);
 }
 
+.el-save-btn {
+    padding: 8px 20px;
+    background: var(--primary, #6E56CF);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.el-save-btn:hover {
+    background: var(--primary-hover, #5b47b3);
+}
+
+/* =============================================================================
+   Linked Entity Indicators
+   ============================================================================= */
+
+/* Highlight currently linked items in search results */
+.el-result-item-linked {
+    background: rgba(34, 197, 94, 0.1);
+    border-color: rgba(34, 197, 94, 0.5);
+}
+
+.el-result-item-linked:hover {
+    background: rgba(34, 197, 94, 0.15);
+    border-color: rgba(34, 197, 94, 0.7);
+}
+
+/* Currently linked badge */
+.el-linked-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #16a34a;
+    background: rgba(34, 197, 94, 0.2);
+    padding: 2px 8px;
+    border-radius: 12px;
+    margin-left: 8px;
+    white-space: nowrap;
+}
+
+/* Multi-select checkbox */
+.el-result-checkbox {
+    width: 16px;
+    height: 16px;
+    margin-right: 8px;
+    cursor: pointer;
+    accent-color: var(--primary, #6E56CF);
+    flex-shrink: 0;
+}
+
+/* Adjust header for checkbox */
+.el-result-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
 /* =============================================================================
    Link Icon on Spans
    ============================================================================= */

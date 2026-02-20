@@ -2918,15 +2918,58 @@ def get_current_instance():
         instance_id = current_instance.get_id()
         logger.debug(f"Current instance ID: {instance_id}")
 
+        # Include raw data for schemas that need access to media URLs
+        raw_data = current_instance.get_data()
+
         return jsonify({
             "instance_id": instance_id,
             "current_index": user_state.get_current_instance_index(),
-            "total_instances": len(user_state.instance_id_ordering)
+            "total_instances": len(user_state.instance_id_ordering),
+            "data": raw_data  # Include full instance data
         })
 
     except Exception as e:
         logger.error(f"Error getting current instance: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/instance_data", methods=["GET"])
+def get_instance_data():
+    """Get the full raw data for the current instance.
+
+    Returns all fields from the original data file (e.g., audio_url, video_url, etc.)
+    This is used by annotation schemas that need access to media URLs.
+    """
+    logger.debug(f"=== GET_INSTANCE_DATA START ===")
+
+    if 'username' not in session:
+        logger.warning("Get instance data without active session")
+        return jsonify({"error": "No active session"}), 401
+
+    username = session['username']
+    logger.debug(f"Username: {username}")
+
+    try:
+        user_state = get_user_state(username)
+        if not user_state:
+            logger.error(f"User state not found for user: {username}")
+            return jsonify({"error": "User state not found"}), 404
+
+        current_instance = user_state.get_current_instance()
+        if not current_instance:
+            logger.error(f"No current instance for user: {username}")
+            return jsonify({"error": "No current instance"}), 404
+
+        # Get the raw data from the instance
+        raw_data = current_instance.get_data()
+        logger.debug(f"Returning instance data with keys: {list(raw_data.keys())}")
+
+        return jsonify(raw_data)
+
+    except Exception as e:
+        logger.error(f"Error getting instance data: {e}")
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route("/api/spans/<instance_id>")
 def get_span_data(instance_id):

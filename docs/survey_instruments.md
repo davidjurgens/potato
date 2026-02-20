@@ -267,7 +267,7 @@ When using these instruments, please cite the original authors according to the 
 
 ## Example Project
 
-See `project-hub/simple_examples/simple-survey-demo/` for a complete example using survey instruments.
+See `examples/classification/survey-demo/` for a complete example using survey instruments.
 
 ## Backward Compatibility
 

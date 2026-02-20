@@ -1,0 +1,52 @@
+# Simple Segmentation Annotation Example
+# Run: python potato/flask_server.py start examples/span/segmentation/config.yaml -p 8000
+#
+# This example demonstrates pixel-level segmentation mask annotation
+# using brush, eraser, and fill tools for semantic segmentation tasks.
+
+annotation_task_name: "Image Segmentation Demo"
+task_dir: .
+
+data_files:
+  - data/segmentation-example.json
+
+item_properties:
+  id_key: id
+  text_key: image
+
+user_config:
+  allow_all_users: true
+
+# NOTE: We intentionally do NOT use instance_display here.
+# The image_annotation schema handles image display directly in its canvas.
+# Using instance_display would cause the image to appear twice.
+
+annotation_schemes:
+  - annotation_type: image_annotation
+    name: segmentation
+    description: "Paint regions in the image using the brush tool. Use the eraser to remove areas, or fill to fill enclosed regions."
+    source_field: image     # Link to the image field in the data
+    tools:
+      - brush      # Pixel-level brush painting
+      - eraser     # Remove mask regions
+      - fill       # Fill enclosed regions
+      - polygon    # Precise polygon boundaries
+      - bbox       # Quick bounding box selection
+    labels:
+      - name: foreground
+        color: "#FF6B6B"
+        key_value: "1"
+      - name: background
+        color: "#4ECDC4"
+        key_value: "2"
+      - name: object
+        color: "#45B7D1"
+        key_value: "3"
+    zoom_enabled: true
+    pan_enabled: true
+    brush_size: 20          # Default brush size (1-100)
+    eraser_size: 20         # Default eraser size (1-100)
+    mask_opacity: 0.5       # Mask overlay opacity (0-1)
+
+output_annotation_dir: annotation_output
+output_annotation_format: json

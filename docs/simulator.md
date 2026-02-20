@@ -279,9 +279,9 @@ def test_dashboard_shows_annotations(simulated_annotations, flask_test_server):
 ## Example Configurations
 
 See example configuration files in:
-- `project-hub/simple_examples/configs/simulator-random.yaml`
-- `project-hub/simple_examples/configs/simulator-biased.yaml`
-- `project-hub/simple_examples/configs/simulator-ollama.yaml`
+- `examples/simulator-configs/simulator-random.yaml`
+- `examples/simulator-configs/simulator-biased.yaml`
+- `examples/simulator-configs/simulator-ollama.yaml`
 
 ## Troubleshooting
 

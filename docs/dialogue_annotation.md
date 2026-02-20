@@ -164,10 +164,13 @@ annotation_schemes:
 
 ## Working Example
 
-A complete working example is available at `project-hub/dialogue_analysis/`:
+A complete working example is available in the [potato-showcase](https://github.com/davidjurgens/potato-showcase) repository under `dialogue_analysis/`:
 
 ```bash
-python potato/flask_server.py start project-hub/dialogue_analysis/configs/dialogue-analysis.yaml -p 8000
+# Clone the showcase repo for paper-specific examples
+git clone https://github.com/davidjurgens/potato-showcase.git
+cd potato-showcase/dialogue_analysis/configs
+python ../../../potato/flask_server.py start dialogue-analysis.yaml -p 8000
 ```
 
 Then open [http://localhost:8000](http://localhost:8000) in your browser.

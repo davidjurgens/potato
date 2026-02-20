@@ -12,38 +12,38 @@ Each document needs, at minimum, a unique identifier and the body of the
 document.
 
 You can find example data files
-[here](https://github.com/davidjurgens/potato/blob/master/project-hub/simple_examples/data/). We
+[here](https://github.com/davidjurgens/potato/blob/master/examples/classification/check-box/data/). We
 currently support four different document formats:
 
 -   Text: body is the document plaintext
-    ([example](https://github.com/davidjurgens/potato/blob/master/project-hub/simple_examples/data/toy-example.json))
+    ([example](https://github.com/davidjurgens/potato/blob/master/examples/classification/check-box/data/toy-example.json))
 -   Image, Video, or GIF: body is the filepath
-    ([example](https://github.com/davidjurgens/potato/blob/master/project-hub/simple_examples/data/video-as-input.json))
+    ([example](https://github.com/davidjurgens/potato/blob/master/examples/video/video-as-label/data/video-as-input.json))
 -   Dialogue or a list of text: body is a list of comma-seperated
     documents and potato will automatically display the list of text
     horizontally.
-    ([example](https://github.com/davidjurgens/potato/blob/master/project-hub/dialogue_analysis/data_files/dialogue-example.json))
+    ([example](https://github.com/davidjurgens/potato-showcase/blob/master/dialogue_analysis/data_files/dialogue-example.json))
 -   Pairs of text displayed in separate boxes: body is a dictionary of
     documents
-    ([example](https://github.com/davidjurgens/potato/blob/master/project-hub/match_finding/data_files/pilot_data_Biology.csv))
+    ([example](https://github.com/davidjurgens/potato-showcase/blob/master/match_finding/data_files/pilot_data_Biology.csv))
 -   Html files
-    - Put the .html files in a folder ([example](https://github.com/davidjurgens/potato/blob/master/project-hub/simple_examples/data/html_data)),
-    - Then put the relatiev paths to these htmls as normal text input ([example](https://github.com/davidjurgens/potato/blob/master/project-hub/simple_examples/data/html-as-input.json))
+    - Put the .html files in a folder ([example](https://github.com/davidjurgens/potato/blob/master/examples/advanced/html-annotation/data/html_data)),
+    - Then put the relatiev paths to these htmls as normal text input ([example](https://github.com/davidjurgens/potato/blob/master/examples/advanced/html-annotation/data/html-as-input.json))
 -   Best-Worst Scaling: body is a comma-separated list of documents to
     order
-    ([example](https://github.com/davidjurgens/potato/blob/master/project-hub/simple_examples/data/bws-example.json))
+    ([example](https://github.com/davidjurgens/potato/blob/master/examples/classification/best-worst-scaling/data/bws-example.json))
 -   Custom Arguments: body is one of the above + extra fields for
     whatever custom arguments you want to enter
-    ([example](https://github.com/davidjurgens/potato/blob/master/project-hub/simple_examples/data/bws-example.json)
+    ([example](https://github.com/davidjurgens/potato/blob/master/examples/classification/best-worst-scaling/data/bws-example.json)
     \-- in this `kwargs` and `other_kwargs` are the custom endpoints for
     a Likert scale)
 -   Annotating Document A in context of Document B: body is document A +
     extra `context` field with the body of document B
-    ([example](https://github.com/davidjurgens/potato/blob/master/project-hub/simple_examples/data/))
+    ([example](https://github.com/davidjurgens/potato/blob/master/examples/classification/check-box/data/))
 
 You can also use html tags to design the way your text to be displayed.
 In the [match finding example
-project](https://github.com/davidjurgens/potato/tree/master/project-hub/match_finding),
+project](https://github.com/davidjurgens/potato-showcase/tree/master/match_finding),
 html tags are used to create two seperate boxes for the finding pairs.
 
 

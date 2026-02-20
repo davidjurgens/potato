@@ -186,6 +186,12 @@ class WikidataClient(KnowledgeBaseClient):
     WIKIDATA_API = "https://www.wikidata.org/w/api.php"
     WIKIDATA_ENTITY_URL = "https://www.wikidata.org/wiki/"
 
+    # User-Agent header required by Wikimedia API policy
+    # https://meta.wikimedia.org/wiki/User-Agent_policy
+    HEADERS = {
+        "User-Agent": "Potato-Annotation-Tool/1.0 (https://github.com/davidjurgens/potato; annotation@example.com)"
+    }
+
     def search(self, query: str, limit: int = 10, entity_type: Optional[str] = None) -> List[KBEntity]:
         """
         Search Wikidata for entities matching the query.
@@ -219,6 +225,7 @@ class WikidataClient(KnowledgeBaseClient):
             response = requests.get(
                 self.WIKIDATA_API,
                 params=params,
+                headers=self.HEADERS,
                 timeout=self.config.timeout
             )
             response.raise_for_status()
@@ -279,6 +286,7 @@ class WikidataClient(KnowledgeBaseClient):
             response = requests.get(
                 self.WIKIDATA_API,
                 params=params,
+                headers=self.HEADERS,
                 timeout=self.config.timeout
             )
             response.raise_for_status()
@@ -334,6 +342,7 @@ class WikidataClient(KnowledgeBaseClient):
             response = requests.get(
                 self.WIKIDATA_API,
                 params=params,
+                headers=self.HEADERS,
                 timeout=self.config.timeout
             )
             response.raise_for_status()

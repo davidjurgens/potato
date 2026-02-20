@@ -22,7 +22,7 @@ class TestSchemaRegistryCompleteness:
             'radio', 'multiselect', 'likert', 'text', 'slider', 'span',
             'select', 'number', 'multirate', 'pure_display', 'video',
             'image_annotation', 'audio_annotation', 'video_annotation', 'span_link',
-            'pairwise', 'coreference', 'tree_annotation'
+            'pairwise', 'coreference', 'tree_annotation', 'triage', 'event_annotation'
         ]
 
         registry_types = schema_registry.get_supported_types()
@@ -39,7 +39,7 @@ class TestSchemaRegistryCompleteness:
             'radio', 'multiselect', 'likert', 'text', 'slider', 'span',
             'select', 'number', 'multirate', 'pure_display', 'video',
             'image_annotation', 'audio_annotation', 'video_annotation', 'span_link',
-            'pairwise', 'coreference', 'tree_annotation'
+            'pairwise', 'coreference', 'tree_annotation', 'triage', 'event_annotation'
         ]
 
         registry_types = schema_registry.get_supported_types()

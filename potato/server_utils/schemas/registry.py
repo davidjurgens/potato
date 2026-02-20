@@ -243,6 +243,7 @@ def _register_builtin_schemas():
     from .tree_annotation import generate_tree_annotation_layout
     from .triage import generate_triage_layout
     from .event_annotation import generate_event_annotation_layout
+    from .tiered_annotation import generate_tiered_annotation_layout
 
     schemas = [
         SchemaDefinition(
@@ -404,6 +405,14 @@ def _register_builtin_schemas():
             optional_fields=["visual_display"],
             supports_keybindings=False,
             description="N-ary event annotation with triggers and typed arguments"
+        ),
+        SchemaDefinition(
+            name="tiered_annotation",
+            generator=generate_tiered_annotation_layout,
+            required_fields=["name", "description", "tiers", "source_field"],
+            optional_fields=["media_type", "tier_height", "show_tier_labels", "collapsed_tiers", "zoom_enabled", "playback_rate_control", "overview_height"],
+            supports_keybindings=True,
+            description="Hierarchical multi-tier annotation for audio/video (ELAN-style)"
         ),
     ]
 

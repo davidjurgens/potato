@@ -81,7 +81,9 @@ annotation_output/
 output/
 tests/output/
 tests/server/output/
-project-hub/*/annotation_output/
+examples/**/annotation_output/
+examples/**/layouts/
+examples/**/waveform_cache/
 
 # Test results and debug files
 test_output.txt
@@ -97,6 +99,10 @@ quick_test.py
 resumes/
 my_annotation_task/
 
+# AI endpoint config files (contain API keys / environment-specific URLs)
+ai-config.yaml
+ai-config*.yaml
+
 # Demo and test configs (user-specific)
 admin_demo_config.yaml
 demo_config.yaml
@@ -110,7 +116,6 @@ potato/archive/
 # Example projects (optional, user-created)
 example-projects/
 example-tasks/
-examples/
 layouts/
 
 # Duplicate/temp test directories
@@ -119,11 +124,8 @@ tests/tests/
 # Debug test configs
 tests/configs/*debug*.yaml
 
-# Project hub examples (user-created)
-project-hub/training_example/
-project-hub/simple_examples/configs/all-phases-example/
-project-hub/simple_examples/data/toy-example.*.json
-project-hub/simple_examples/toy-example.*.json
+# Test config temp files
+test_config_port_*.yaml
 temp_screenshots/
 
 # Implementation plans

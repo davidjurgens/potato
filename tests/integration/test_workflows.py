@@ -119,7 +119,7 @@ class TestSimpleOnboarding:
     @pytest.fixture
     def server(self, base_port):
         """Start server with simple checkbox config."""
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-check-box.yaml"
+        config_path = PROJECT_ROOT / "examples" / "classification" / "check-box" / "config.yaml"
         server = IntegrationTestServer(str(config_path), port=base_port)
         success, error = server.start()
         if not success:
@@ -180,7 +180,7 @@ class TestReturningUser:
     @pytest.fixture
     def server(self, base_port):
         """Start server with simple checkbox config."""
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-check-box.yaml"
+        config_path = PROJECT_ROOT / "examples" / "classification" / "check-box" / "config.yaml"
         server = IntegrationTestServer(str(config_path), port=base_port)
         success, error = server.start()
         if not success:
@@ -226,7 +226,7 @@ class TestMultiPhaseWorkflow:
     @pytest.fixture
     def server(self, base_port):
         """Start server with all-phases config."""
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "all-phases-example.yaml"
+        config_path = PROJECT_ROOT / "examples" / "advanced" / "all-phases-example" / "config.yaml"
         server = IntegrationTestServer(str(config_path), port=base_port)
         success, error = server.start()
         if not success:
@@ -299,7 +299,7 @@ class TestErrorRecovery:
     @pytest.fixture
     def server(self, base_port):
         """Start server with simple checkbox config."""
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-check-box.yaml"
+        config_path = PROJECT_ROOT / "examples" / "classification" / "check-box" / "config.yaml"
         server = IntegrationTestServer(str(config_path), port=base_port)
         success, error = server.start()
         if not success:
@@ -377,7 +377,7 @@ class TestKeyboardShortcuts:
     @pytest.fixture
     def server(self, base_port):
         """Start server with simple checkbox config."""
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-check-box.yaml"
+        config_path = PROJECT_ROOT / "examples" / "classification" / "check-box" / "config.yaml"
         server = IntegrationTestServer(str(config_path), port=base_port)
         success, error = server.start()
         if not success:

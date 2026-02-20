@@ -223,10 +223,10 @@ annotation_schemes:
 
 ```bash
 # Binary mode example
-python potato/flask_server.py start project-hub/simple_examples/simple-pairwise-comparison/config.yaml -p 8000
+python potato/flask_server.py start examples/classification/pairwise-comparison/config.yaml -p 8000
 
 # Scale mode example
-python potato/flask_server.py start project-hub/simple_examples/simple-pairwise-scale/config.yaml -p 8002
+python potato/flask_server.py start examples/classification/pairwise-scale/config.yaml -p 8002
 ```
 
 Then navigate to `http://localhost:8000` and register/login to start annotating.

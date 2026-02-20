@@ -170,6 +170,25 @@
     user-select: text;
     line-height: 1.8;
     font-size: 18px;
+    /* Allow span controls to render above text */
+    overflow: visible;
+    padding-top: 28px; /* Space for controls above first line */
+}
+
+/* Span overlays container must allow overflow for controls */
+#span-overlays {
+    overflow: visible !important;
+}
+
+/* Span overlay containers allow controls to render outside bounds */
+.span-overlay-pure,
+.span-overlay-ai {
+    overflow: visible;
+}
+
+/* Span controls container styling */
+.span-controls {
+    white-space: nowrap;
 }
 
 #instance-text:focus {

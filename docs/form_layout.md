@@ -1,6 +1,6 @@
 # Annotation Form Layout System
 
-This guide explains how to configure the layout of annotation forms using the `layout` configuration section. The layout system provides fine-grained control over how annotation schemas are arranged on the page.
+This guide explains how to configure the layout of annotation forms using the `layout` configuration section. The layout system provides control over how annotation schemas are arranged on the page.
 
 ## Overview
 
@@ -11,7 +11,8 @@ The form layout system allows you to:
 - **Group schemas**: Organize related schemas under collapsible headers
 - **Order forms**: Explicitly control the order of forms
 - **Set responsive breakpoints**: Customize mobile/tablet behavior
-- **Style individual forms**: Set min/max widths and alignment
+
+For advanced styling options (colors, padding, alignment), see [Form Layout Advanced Options](form_layout_advanced.md).
 
 ## Basic Configuration
 
@@ -22,12 +23,9 @@ layout:
   grid:
     columns: 2              # Number of columns (1-6, default: 2)
     gap: "1rem"             # Gap between items (CSS value)
-    align_items: "start"    # Alignment: start, center, end, stretch
 ```
 
-## Task-Level Configuration
-
-### Grid Settings
+## Grid Settings
 
 Configure the overall grid layout:
 
@@ -35,27 +33,17 @@ Configure the overall grid layout:
 layout:
   grid:
     columns: 3              # 1-6 columns (default: 2)
-    gap: "1rem"             # Gap between items
-    row_gap: "1.5rem"       # Optional separate row gap
-    align_items: "start"    # start, center, end, stretch
+    gap: "1rem"             # Gap between items (default: "1rem")
+    row_gap: "0.75rem"      # Optional separate row gap
 ```
 
-### Responsive Breakpoints
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `columns` | integer | 2 | Number of grid columns (1-6) |
+| `gap` | string | "1rem" | Gap between grid items (CSS value) |
+| `row_gap` | string | same as gap | Vertical gap between rows |
 
-Customize when the layout collapses for smaller screens:
-
-```yaml
-layout:
-  breakpoints:
-    mobile: 480             # Collapse to 1 column below this width
-    tablet: 768             # Reduce column spans below this width
-```
-
-**Default behavior:**
-- Below mobile breakpoint: All forms become single-column
-- Between mobile and tablet: Large spans (3-6) reduce to span 2
-
-### Schema Grouping
+## Schema Grouping
 
 Organize related schemas under visual groups with optional headers:
 
@@ -80,16 +68,17 @@ layout:
 ```
 
 **Group options:**
-| Option | Type | Description |
-|--------|------|-------------|
-| `id` | string | **Required.** Unique identifier for the group |
-| `schemas` | list | **Required.** Schema names to include |
-| `title` | string | Optional header title |
-| `description` | string | Optional description text |
-| `collapsible` | boolean | Whether group can be collapsed (default: false) |
-| `collapsed_default` | boolean | Start collapsed (default: false) |
 
-### Explicit Ordering
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `id` | string | *required* | Unique identifier for the group |
+| `schemas` | list | *required* | Schema names to include |
+| `title` | string | none | Header title displayed above the group |
+| `description` | string | none | Description text below the title |
+| `collapsible` | boolean | false | Whether group can be collapsed |
+| `collapsed_default` | boolean | false | Start in collapsed state |
+
+## Explicit Ordering
 
 Override the default config file order:
 
@@ -102,7 +91,24 @@ layout:
     - "comments"
 ```
 
-## Schema-Level Configuration
+Forms are displayed in this order. Forms not listed appear after the ordered forms.
+
+## Responsive Breakpoints
+
+Customize when the layout collapses for smaller screens:
+
+```yaml
+layout:
+  breakpoints:
+    mobile: 480             # Collapse to 1 column below this width
+    tablet: 768             # Reduce column spans below this width
+```
+
+**Default behavior:**
+- Below mobile breakpoint (480px): All forms become single-column
+- Between mobile and tablet (481-768px): Large spans (3-6) reduce to span 2
+
+## Schema-Level Layout
 
 Each annotation scheme can specify its own layout properties:
 
@@ -116,9 +122,8 @@ annotation_schemes:
       columns: 1            # Column span (1-6, default: 1)
       rows: 1               # Row span (1-4, default: 1)
       order: 1              # Explicit order position
-      min_width: "200px"    # Minimum width
-      max_width: "400px"    # Maximum width
-      align_self: "start"   # Override alignment
+      min_width: "200px"    # Minimum width (CSS value)
+      max_width: "400px"    # Maximum width (CSS value)
 ```
 
 ### Column Spanning
@@ -181,19 +186,6 @@ Set minimum and maximum widths:
     max_width: "500px"      # Limit maximum stretch
 ```
 
-### Alignment Override
-
-Override the global alignment for specific forms:
-
-```yaml
-- annotation_type: text
-  name: notes
-  layout:
-    align_self: "stretch"   # Fill available height
-```
-
-Valid values: `start`, `center`, `end`, `stretch`
-
 ## Complete Example
 
 ```yaml
@@ -204,11 +196,6 @@ layout:
   grid:
     columns: 3
     gap: "1rem"
-    align_items: "start"
-
-  breakpoints:
-    mobile: 480
-    tablet: 768
 
   groups:
     - id: "classification"
@@ -252,7 +239,6 @@ annotation_schemes:
     description: "Notes"
     layout:
       columns: 3
-      align_self: "stretch"
 ```
 
 ## Backward Compatibility
@@ -285,5 +271,6 @@ Existing configurations without a `layout` section continue to work exactly as b
 
 ## Related Documentation
 
+- [Form Layout Advanced Options](form_layout_advanced.md) - Styling and alignment options
 - [Annotation Schemas](schemas_and_templates.md) - Schema configuration
 - [Configuration Reference](configuration.md) - Full config options

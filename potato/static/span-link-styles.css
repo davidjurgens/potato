@@ -330,6 +330,17 @@
     color: var(--primary-color, #6E56CF);
 }
 
+.link-mode-instruction kbd {
+    display: inline-block;
+    padding: 2px 6px;
+    font-size: 11px;
+    font-family: system-ui, -apple-system, monospace;
+    background-color: white;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    box-shadow: 0 1px 0 #bbb;
+}
+
 /* Disable text selection when in link mode to prevent span annotation conflicts */
 body.span-link-mode-active #instance-text {
     user-select: none;
@@ -394,6 +405,76 @@ body.span-link-mode-active #instance-text {
 
 .span-link-node {
     transition: r 0.15s ease;
+}
+
+/* Arc Labels */
+.span-link-label {
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    text-shadow: 0 0 2px white, 0 0 2px white, 0 0 2px white;
+}
+
+.span-link-label-bg {
+    opacity: 0.9;
+}
+
+/* Dependency Tree Specific Styles */
+.span-link-container[data-arc-position="above"] .span-link-arcs-container {
+    z-index: 10;
+}
+
+/* Arc spacer - dedicated area above text for arc visualization */
+.span-link-arc-spacer {
+    position: relative;
+    width: 100%;
+    background: linear-gradient(to bottom, rgba(248, 250, 252, 0.5), transparent);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    margin-bottom: 8px;
+}
+
+/* Text wrapper containing the annotatable content */
+.span-link-text-wrapper {
+    position: relative;
+}
+
+/* Single-line mode for dependency arcs (Option A) */
+.dependency-single-line-mode {
+    white-space: nowrap !important;
+    overflow-x: auto !important;
+    overflow-y: visible !important;  /* Allow arcs to extend above text */
+    scrollbar-width: thin;
+    scrollbar-color: #888 #f1f1f1;
+}
+
+.dependency-single-line-mode::-webkit-scrollbar {
+    height: 10px;
+}
+
+.dependency-single-line-mode::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 5px;
+}
+
+.dependency-single-line-mode::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 5px;
+}
+
+.dependency-single-line-mode::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* Scroll indicator shadows */
+.dependency-single-line-mode {
+    background:
+        linear-gradient(to right, white 30%, transparent),
+        linear-gradient(to right, transparent, white 70%) 100% 0,
+        linear-gradient(to right, rgba(0,0,0,0.1), transparent 20px),
+        linear-gradient(to left, rgba(0,0,0,0.1), transparent 20px) 100% 0;
+    background-repeat: no-repeat;
+    background-size: 40px 100%, 40px 100%, 20px 100%, 20px 100%;
+    background-attachment: local, local, scroll, scroll;
 }
 
 /* Dark Mode Support */

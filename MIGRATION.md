@@ -384,7 +384,7 @@ project_root/
 If you encounter issues not covered here:
 
 1. Check the [CHANGELOG.md](CHANGELOG.md) for a complete list of changes
-2. Review example configs in `project-hub/simple_examples/configs/`
+2. Review example configs in `examples/`
 3. Open an issue at https://github.com/davidjurgens/potato/issues
 
 ## New Features

@@ -345,9 +345,9 @@ When span annotations are made on format documents, Potato stores both:
 
 See the following example projects:
 
-- `project-hub/simple_examples/simple-pdf-annotation/` - PDF entity annotation
-- `project-hub/simple_examples/simple-spreadsheet-annotation/` - Tabular data quality review
-- `project-hub/simple_examples/simple-code-annotation/` - Code quality review
+- `examples/image/pdf-annotation/` - PDF entity annotation
+- `examples/advanced/spreadsheet-annotation/` - Tabular data quality review
+- `examples/advanced/code-annotation/` - Code quality review
 
 ## Troubleshooting
 

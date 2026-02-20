@@ -1,0 +1,39 @@
+# Simple Conversation Tree Annotation Example
+# Run: python potato/flask_server.py start examples/span/conversation-tree/config.yaml -p 8000
+
+annotation_task_name: "Conversation Tree Evaluation"
+task_dir: .
+
+data_files:
+  - data/tree-example.json
+
+item_properties:
+  id_key: id
+  text_key: tree
+
+user_config:
+  allow_all_users: true
+
+instance_display:
+  fields:
+    - key: tree
+      type: conversation_tree
+      label: "Conversation"
+      collapsed_depth: 3
+      node_style: card
+
+annotation_schemes:
+  - annotation_type: tree_annotation
+    name: response_quality
+    description: "Rate each response and select the best path through the conversation"
+    node_scheme:
+      annotation_type: likert
+      size: 5
+      min_label: Poor
+      max_label: Excellent
+    path_selection:
+      enabled: true
+      description: "Select the best response path by clicking nodes in order"
+
+output_annotation_dir: annotation_output
+output_annotation_format: json

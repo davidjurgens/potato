@@ -1,6 +1,0 @@
-{
-    "token": 'your prolific token',
-    "study_id": 'your study id',
-    "max_concurrent_sessions": 3,
-    "workload_checker_period": 60
-}

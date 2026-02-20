@@ -309,11 +309,11 @@ This will log all condition evaluations to help diagnose issues.
 ## Complete Example
 
 See the full example project at:
-`project-hub/simple_examples/simple-conditional-logic/`
+`examples/advanced/conditional-logic/`
 
 Run it with:
 ```bash
-python potato/flask_server.py start project-hub/simple_examples/simple-conditional-logic/config.yaml -p 8000
+python potato/flask_server.py start examples/advanced/conditional-logic/config.yaml -p 8000
 ```
 
 ## Technical Notes

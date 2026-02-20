@@ -1,0 +1,48 @@
+# Simulator Configuration: Random Strategy
+#
+# This is the simplest simulator configuration using random label selection.
+# Use this for basic testing of the annotation platform.
+#
+# Usage:
+#   1. Start your annotation server:
+#      python potato/flask_server.py start examples/classification/single-choice/config.yaml -p 8000
+#
+#   2. Run the simulator:
+#      python -m potato.simulator --config examples/simulator-configs/simulator-random.yaml --server http://localhost:8000
+
+simulator:
+  # User configuration
+  users:
+    count: 10  # Number of simulated users
+    competence_distribution:
+      # Distribution of competence levels (must sum to 1.0)
+      good: 0.3      # 30% high-quality annotators (80-90% accuracy with gold)
+      average: 0.5   # 50% typical annotators (60-70% accuracy)
+      poor: 0.2      # 20% low-quality annotators (40-50% accuracy)
+
+  # Annotation strategy
+  # Options: random, biased, llm, pattern, gold_standard
+  strategy: random
+
+  # Timing configuration - how long users "take" to annotate
+  timing:
+    annotation_time:
+      min: 2.0       # Minimum seconds per annotation
+      max: 30.0      # Maximum seconds per annotation
+      mean: 10.0     # Mean for normal distribution
+      std: 5.0       # Standard deviation
+      distribution: normal  # Options: uniform, normal, exponential
+    fast_response_threshold: 1.0  # Responses faster than this are flagged
+
+  # Execution settings
+  execution:
+    parallel_users: 5          # Maximum concurrent users
+    delay_between_users: 0.5   # Seconds between starting users
+    max_annotations_per_user: 20  # Limit annotations per user (remove for unlimited)
+
+  # Output settings
+  output:
+    dir: simulator_output
+    format: json  # Options: json, csv, jsonl
+
+# Note: Server URL is provided via --server command line argument

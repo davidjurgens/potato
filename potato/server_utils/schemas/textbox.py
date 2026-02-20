@@ -51,8 +51,9 @@ def _generate_textbox_layout_internal(annotation_scheme):
     layout_attrs = generate_layout_attributes(annotation_scheme)
 
     # Initialize form wrapper
+    schema_name = annotation_scheme['name']
     schematic = f"""
-    <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form textbox shadcn-textbox-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" {layout_attrs}>
+    <form id="{escape_html_content(schema_name)}" class="annotation-form textbox shadcn-textbox-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" data-annotation-type="text" data-schema-name="{escape_html_content(schema_name)}" {layout_attrs}>
             {get_ai_wrapper()}
         <fieldset schema_name="{escape_html_content(annotation_scheme['name'])}">
             <legend class="shadcn-textbox-title">{escape_html_content(annotation_scheme["description"])}</legend>

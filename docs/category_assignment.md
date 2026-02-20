@@ -172,7 +172,7 @@ Distribute work based on expertise:
 
 ## Complete Example
 
-See `project-hub/simple_examples/configs/category-assignment-example.yaml` for a complete working example including:
+See `examples/custom-layouts/category-assignment/config.yaml` for a complete working example including:
 
 - Configuration file with category assignment enabled
 - Training data with category-tagged questions
@@ -182,7 +182,7 @@ See `project-hub/simple_examples/configs/category-assignment-example.yaml` for a
 To run the example:
 
 ```bash
-python potato/flask_server.py start project-hub/simple_examples/configs/category-assignment-example.yaml -p 8000
+python potato/flask_server.py start examples/custom-layouts/category-assignment/config.yaml -p 8000
 ```
 
 ## Troubleshooting

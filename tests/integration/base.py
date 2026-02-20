@@ -60,7 +60,7 @@ class IntegrationTestServer:
         self.startup_errors = ""
 
         # Determine working directory
-        # For configs in project-hub/simple_examples/configs/, run from project-hub/simple_examples/
+        # For configs in examples/<category>/<name>/, run from the example directory
         # For configs elsewhere, use the config's parent directory
         if working_dir:
             self.working_dir = Path(working_dir).resolve()
@@ -71,20 +71,23 @@ class IntegrationTestServer:
         """
         Determine the appropriate working directory for the server.
 
-        For configs in project-hub/simple_examples/configs/, the working dir
-        should be project-hub/simple_examples/ (where the data folder is).
+        For configs in examples/<category>/<name>/, the working dir
+        should be the example directory (where the data folder is).
 
         For configs with task_dir: ., the working dir should be where the config
         can find its data files.
         """
         config_dir = self.config_path.parent
 
-        # Check if this is an example config in project-hub structure
+        # Check if this is an example config in examples/ structure
+        # examples/<category>/<name>/config.yaml -> working dir is the example dir
+        if "examples" in str(config_dir):
+            return config_dir
+
+        # Legacy: project-hub structure (if any remain)
         if "project-hub" in str(config_dir):
-            # Go up from configs/ to simple_examples/
             if config_dir.name == "configs":
                 return config_dir.parent
-            # Handle nested configs like all-phases-example/
             if config_dir.parent.name == "configs":
                 return config_dir.parent.parent
 

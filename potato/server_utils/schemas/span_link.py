@@ -113,6 +113,8 @@ def _generate_span_link_layout_internal(annotation_scheme, horizontal=False):
     show_arcs = visual_display.get("enabled", True)
     arc_position = visual_display.get("arc_position", "above")
     show_labels = visual_display.get("show_labels", True)
+    # Multi-line arc mode: "single_line" (horizontal scroll) or "bracket" (wrapped text with bracket arcs)
+    multi_line_mode = visual_display.get("multi_line_mode", "bracket")
 
     schematic = f"""
     <div id="{escape_html_content(scheme_name)}" class="span-link-container annotation-form"
@@ -121,7 +123,8 @@ def _generate_span_link_layout_internal(annotation_scheme, horizontal=False):
          data-span-schema="{escape_html_content(span_schema)}"
          data-show-arcs="{str(show_arcs).lower()}"
          data-arc-position="{escape_html_content(arc_position)}"
-         data-show-labels="{str(show_labels).lower()}">
+         data-show-labels="{str(show_labels).lower()}"
+         data-multi-line-mode="{escape_html_content(multi_line_mode)}">
 
         <div class="span-link-header">
             <h4 class="span-link-title">{escape_html_content(description)}</h4>
@@ -154,8 +157,9 @@ def _generate_span_link_layout_internal(annotation_scheme, horizontal=False):
                 </svg>
                 Create Link
             </button>
-            <button type="button" class="span-link-clear-btn" id="{escape_html_content(scheme_name)}_clear_selection">
-                Clear Selection
+            <button type="button" class="span-link-clear-btn" id="{escape_html_content(scheme_name)}_clear_selection"
+                    title="Exit link mode to create new span annotations (Esc)">
+                Exit Link Mode
             </button>
         </div>
 

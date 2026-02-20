@@ -1,0 +1,23 @@
+[
+  {
+    "id": "sample_001",
+    "text": "Sample audio for tiered annotation demonstration",
+    "audio_url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+    "speaker": "SoundHelix",
+    "duration_seconds": 180
+  },
+  {
+    "id": "sample_002",
+    "text": "A short piece for practicing annotation",
+    "audio_url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+    "speaker": "SoundHelix",
+    "duration_seconds": 60
+  },
+  {
+    "id": "sample_003",
+    "text": "Another audio sample for annotation practice",
+    "audio_url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+    "speaker": "SoundHelix",
+    "duration_seconds": 30
+  }
+]

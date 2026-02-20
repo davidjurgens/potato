@@ -164,7 +164,8 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
             "enabled": True,
             "knowledge_bases": entity_linking.get("knowledge_bases", []),
             "auto_search": entity_linking.get("auto_search", True),
-            "required": entity_linking.get("required", False)
+            "required": entity_linking.get("required", False),
+            "multi_select": entity_linking.get("multi_select", False)
         }
         el_json = json_module.dumps(el_config)
         entity_linking_attr = f' data-entity-linking=\'{escape_html_content(el_json)}\''

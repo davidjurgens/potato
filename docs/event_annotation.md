@@ -150,7 +150,7 @@ Events are stored with the following structure:
 See the `simple-event-annotation` example in the project hub:
 
 ```bash
-python potato/flask_server.py start project-hub/simple_examples/simple-event-annotation/config.yaml -p 8000 --debug --debug-phase annotation
+python potato/flask_server.py start examples/span/event-annotation/config.yaml -p 8000 --debug --debug-phase annotation
 ```
 
 This example demonstrates:

@@ -1,0 +1,110 @@
+# Format Display Verification
+# Tests rendering of new format display types: document, code, spreadsheet, PDF
+# Run: python potato/flask_server.py start examples/testing/verify-format-displays/config.yaml -p 8000
+
+annotation_task_name: "Format Display Verification"
+
+task_dir: .
+
+data_files:
+  - data/test-items.jsonl
+
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+item_properties:
+  id_key: id
+  text_key: description
+
+# Instance display with multiple format types
+instance_display:
+  fields:
+    - key: description
+      type: text
+      label: "Task Description"
+    - key: document_content
+      type: document
+      label: "Document (HTML)"
+      display_options:
+        max_height: 200
+        style_theme: default
+    - key: code_content
+      type: code
+      label: "Code Sample"
+      display_options:
+        language: python
+        show_line_numbers: true
+        max_height: 200
+    # Default table styling
+    - key: table_content
+      type: spreadsheet
+      label: "Default Table Style"
+      display_options:
+        show_headers: true
+        max_height: 200
+    # Dark header style
+    - key: table_dark
+      type: spreadsheet
+      label: "Dark Header Table"
+      display_options:
+        show_headers: true
+        header_style: dark
+        striped: true
+        max_height: 180
+    # Primary header with bordered style
+    - key: table_primary
+      type: spreadsheet
+      label: "Primary Bordered Table"
+      display_options:
+        show_headers: true
+        header_style: primary
+        border_style: bordered
+        striped: false
+        max_height: 180
+    # Minimal style with gradient header
+    - key: table_minimal
+      type: spreadsheet
+      label: "Minimal Gradient Table"
+      display_options:
+        show_headers: true
+        header_style: gradient
+        border_style: minimal
+        compact: true
+        max_height: 180
+    # Rounded style with custom CSS
+    - key: table_custom
+      type: spreadsheet
+      label: "Custom Styled Table"
+      display_options:
+        show_headers: true
+        border_style: rounded
+        header_style: light
+        custom_class: my-custom-table
+        custom_css: "font-family: Georgia, serif;"
+        max_height: 180
+
+# Simple classification annotation
+annotation_schemes:
+  - annotation_type: radio
+    name: display_quality
+    description: "Do all display types render correctly?"
+    horizontal: true
+    labels:
+      - name: all_correct
+        tooltip: "All displays render correctly"
+      - name: some_issues
+        tooltip: "Some displays have issues"
+      - name: major_problems
+        tooltip: "Major rendering problems"
+
+  - annotation_type: text
+    name: issues
+    description: "Describe any rendering issues"
+
+user_config:
+  allow_all_users: true
+  require_password: false
+
+# Debug mode - auto-login and skip to annotation phase
+debug: true
+debug_phase: annotation

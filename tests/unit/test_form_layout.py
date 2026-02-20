@@ -422,3 +422,151 @@ class TestBackwardCompatibility:
         # Other attributes should use defaults
         assert 'data-grid-rows' not in attrs
         assert 'data-grid-order' not in attrs
+
+
+class TestStylingValidation:
+    """Tests for layout.styling advanced options validation."""
+
+    def test_styling_must_be_dict(self):
+        """Test that styling must be a dictionary."""
+        config_data = {"layout": {"styling": "invalid"}}
+        with pytest.raises(ConfigValidationError, match="layout.styling must be a dictionary"):
+            validate_layout_config(config_data)
+
+    def test_styling_align_items_valid(self):
+        """Test that valid align_items values pass."""
+        for align in ["start", "center", "end", "stretch"]:
+            config_data = {"layout": {"styling": {"align_items": align}}}
+            # Should not raise
+            validate_layout_config(config_data)
+
+    def test_styling_align_items_invalid(self):
+        """Test that invalid align_items value is rejected."""
+        config_data = {"layout": {"styling": {"align_items": "invalid"}}}
+        with pytest.raises(ConfigValidationError, match="layout.styling.align_items must be one of"):
+            validate_layout_config(config_data)
+
+    def test_styling_content_align_valid(self):
+        """Test that valid content_align values pass."""
+        for align in ["left", "center", "right"]:
+            config_data = {"layout": {"styling": {"content_align": align}}}
+            # Should not raise
+            validate_layout_config(config_data)
+
+    def test_styling_content_align_invalid(self):
+        """Test that invalid content_align value is rejected."""
+        config_data = {"layout": {"styling": {"content_align": "invalid"}}}
+        with pytest.raises(ConfigValidationError, match="layout.styling.content_align must be one of"):
+            validate_layout_config(config_data)
+
+    def test_styling_group_background_colors_valid(self):
+        """Test that valid background color values pass."""
+        config_data = {
+            "layout": {
+                "styling": {
+                    "group_background_odd": "#fafafa",
+                    "group_background_even": "#f8f9fc"
+                }
+            }
+        }
+        # Should not raise
+        validate_layout_config(config_data)
+
+    def test_styling_group_background_empty_rejected(self):
+        """Test that empty background color is rejected."""
+        config_data = {"layout": {"styling": {"group_background_odd": ""}}}
+        with pytest.raises(ConfigValidationError, match="layout.styling.group_background_odd must be a non-empty CSS color"):
+            validate_layout_config(config_data)
+
+    def test_styling_group_background_non_string_rejected(self):
+        """Test that non-string background color is rejected."""
+        config_data = {"layout": {"styling": {"group_background_even": 123}}}
+        with pytest.raises(ConfigValidationError, match="layout.styling.group_background_even must be a non-empty CSS color"):
+            validate_layout_config(config_data)
+
+    def test_styling_padding_valid(self):
+        """Test that valid padding values pass."""
+        config_data = {
+            "layout": {
+                "styling": {
+                    "group_padding": "0.5rem 0.75rem",
+                    "form_padding": "0.375rem 0.5rem"
+                }
+            }
+        }
+        # Should not raise
+        validate_layout_config(config_data)
+
+    def test_styling_padding_empty_rejected(self):
+        """Test that empty padding value is rejected."""
+        config_data = {"layout": {"styling": {"group_padding": ""}}}
+        with pytest.raises(ConfigValidationError, match="layout.styling.group_padding must be a non-empty CSS padding"):
+            validate_layout_config(config_data)
+
+    def test_styling_padding_non_string_rejected(self):
+        """Test that non-string padding value is rejected."""
+        config_data = {"layout": {"styling": {"form_padding": 10}}}
+        with pytest.raises(ConfigValidationError, match="layout.styling.form_padding must be a non-empty CSS padding"):
+            validate_layout_config(config_data)
+
+    def test_group_background_color_valid(self):
+        """Test that per-group background_color passes."""
+        config_data = {
+            "layout": {
+                "groups": [
+                    {"id": "test", "schemas": ["a"], "background_color": "#fff8f0"}
+                ]
+            },
+            "annotation_schemes": [
+                {"name": "a", "description": "A", "annotation_type": "radio", "labels": ["x"]}
+            ]
+        }
+        # Should not raise
+        validate_layout_config(config_data)
+
+    def test_group_background_color_empty_rejected(self):
+        """Test that empty per-group background_color is rejected."""
+        config_data = {
+            "layout": {
+                "groups": [
+                    {"id": "test", "schemas": ["a"], "background_color": ""}
+                ]
+            },
+            "annotation_schemes": [
+                {"name": "a", "description": "A", "annotation_type": "radio", "labels": ["x"]}
+            ]
+        }
+        with pytest.raises(ConfigValidationError, match="layout.groups\\[0\\].background_color must be a non-empty CSS color"):
+            validate_layout_config(config_data)
+
+    def test_complete_styling_config(self):
+        """Test a complete valid styling configuration."""
+        config_data = {
+            "layout": {
+                "grid": {
+                    "columns": 3,
+                    "gap": "0.75rem"
+                },
+                "styling": {
+                    "align_items": "start",
+                    "content_align": "left",
+                    "group_background_odd": "#fafafa",
+                    "group_background_even": "#f0f7ff",
+                    "group_padding": "0.5rem 0.75rem",
+                    "form_padding": "0.375rem 0.5rem"
+                },
+                "groups": [
+                    {
+                        "id": "primary",
+                        "title": "Primary",
+                        "schemas": ["sentiment"],
+                        "background_color": "#fff8f0"
+                    }
+                ]
+            },
+            "annotation_schemes": [
+                {"name": "sentiment", "description": "Sentiment", "annotation_type": "radio", "labels": ["pos", "neg"]}
+            ]
+        }
+        # Should not raise
+        validate_layout_config(config_data)

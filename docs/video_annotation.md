@@ -62,7 +62,7 @@ annotation_schemes:
 ### Running the Example
 
 ```bash
-python potato/flask_server.py start project-hub/simple_examples/configs/simple-video-frame-annotation.yaml -p 8000
+python potato/flask_server.py start examples/video/video-frame-annotation/config.yaml -p 8000
 ```
 
 Then open http://localhost:8000 in your browser.
@@ -141,10 +141,94 @@ For marking important moments in the video.
 
 ### Tracking Mode (`tracking`)
 
-For object tracking annotations (basic support).
+For object tracking across video frames with keyframe-based bounding box annotation.
 
-- Canvas overlay for drawing bounding boxes
-- Track objects across frames
+**Features:**
+- Canvas overlay for drawing bounding boxes directly on the video
+- Track multiple objects across frames with color-coded labels
+- Automatic interpolation between keyframes
+- Keyframe-based workflow: annotate key positions and let the system interpolate
+
+**Tracking-Specific Options:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `tracking_options.interpolation` | string | `"linear"` | Interpolation method between keyframes |
+| `tracking_options.auto_advance_frames` | integer | `5` | Frames to auto-advance after placing keyframe |
+
+**Interpolation Methods:**
+- `linear` - Linear interpolation between keyframes (smooth movement)
+- `cubic` - Cubic/smooth interpolation (natural motion curves)
+- `constant` - Constant/hold interpolation (box stays in place until next keyframe)
+
+**Tracking Workflow:**
+1. Click **+ Track** to create a new object track
+2. Draw a bounding box on the video at the current frame
+3. Advance to another frame using frame stepping (`,` and `.` keys)
+4. Draw another bounding box for the same object
+5. The system interpolates the box position between keyframes
+
+**Example Configuration:**
+
+```yaml
+annotation_schemes:
+  - annotation_type: video_annotation
+    name: object_tracking
+    description: "Track objects across video frames"
+    source_field: video_url
+    mode: tracking
+    labels:
+      - name: person
+        color: "#FF6B6B"
+      - name: vehicle
+        color: "#4ECDC4"
+      - name: object
+        color: "#45B7D1"
+    tracking_options:
+      interpolation: linear
+      auto_advance_frames: 5
+    video_fps: 30
+    show_timecode: true
+    frame_stepping: true
+```
+
+**Tracking Keyboard Shortcuts:**
+
+| Key | Action |
+|-----|--------|
+| `T` | Create new track |
+| `,` | Step back one frame |
+| `.` | Step forward one frame |
+| `Delete` | Delete selected keyframe |
+
+**Tracking Output Format:**
+
+```json
+{
+    "tracks": {
+        "track_1": {
+            "id": "track_1",
+            "label": "person",
+            "color": "#FF6B6B",
+            "interpolation": "linear",
+            "startFrame": 0,
+            "endFrame": 150,
+            "keyframes": {
+                "0": {
+                    "frame": 0,
+                    "time": 0.0,
+                    "bbox": {"x": 100, "y": 50, "width": 80, "height": 160}
+                },
+                "30": {
+                    "frame": 30,
+                    "time": 1.0,
+                    "bbox": {"x": 150, "y": 60, "width": 85, "height": 165}
+                }
+            }
+        }
+    }
+}
+```
 
 ### Combined Mode (`combined`)
 
@@ -387,6 +471,40 @@ annotation_schemes:
         color: "#9B59B6"
         key_value: "c"
     playback_rate_control: true
+```
+
+### 5. Object Tracking
+
+Track objects moving through a video:
+
+```yaml
+annotation_schemes:
+  - annotation_type: video_annotation
+    name: object_tracking
+    description: "Track objects across video frames"
+    source_field: video_url
+    mode: tracking
+    labels:
+      - name: person
+        color: "#FF6B6B"
+      - name: animal
+        color: "#4ECDC4"
+      - name: vehicle
+        color: "#45B7D1"
+      - name: object
+        color: "#96CEB4"
+    tracking_options:
+      interpolation: linear
+      auto_advance_frames: 5
+    video_fps: 30
+    show_timecode: true
+    frame_stepping: true
+```
+
+Run the example:
+
+```bash
+python potato/flask_server.py start examples/video/video-tracking/config.yaml -p 8000
 ```
 
 ## Comparison with Audio Annotation
