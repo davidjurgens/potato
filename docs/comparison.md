@@ -13,6 +13,8 @@ Potato is a flexible, open-source annotation platform built for NLP and ML resea
 | Event annotation (n-ary) | Yes | - | - | - | - | Yes | - |
 | Entity linking (KB) | Yes | - | - | - | Yes | Yes | - |
 | Coreference chains | Yes | - | - | - | Yes | Yes | - |
+| Dependency trees | Yes | - | - | - | Yes | - | - |
+| Tiered annotation | Yes | - | - | - | - | - | Yes |
 | Pairwise comparison | Yes | Yes | - | - | - | - | - |
 | Triage (accept/reject) | Yes | - | - | Yes | - | - | - |
 | Image bounding boxes | Yes | Yes | Yes | - | - | - | - |
@@ -76,7 +78,7 @@ Define complete annotation tasks in YAML: schemas, display types, assignment str
 
 ### Text Annotation (NER, Classification, Relations)
 
-**vs. BRAT / INCEpTION**: Potato now matches BRAT's core NLP capabilities (spans, relations, events, coreference, discontinuous spans, entity linking) while adding AI assistance, active learning, pairwise comparison, triage, and crowdsourcing integration that BRAT lacks. INCEpTION has a richer plugin architecture and dependency tree annotation; Potato has broader AI/LLM integration and multi-modal support.
+**vs. BRAT / INCEpTION**: Potato now matches BRAT's core NLP capabilities (spans, relations, events, coreference, discontinuous spans, entity linking) while adding AI assistance, active learning, pairwise comparison, triage, and crowdsourcing integration that BRAT lacks. Potato also supports dependency tree annotation via span linking. INCEpTION has a richer plugin architecture; Potato has broader AI/LLM integration and multi-modal support.
 
 **vs. Prodigy**: Prodigy offers scriptable Python recipes and tight spaCy integration. Potato offers YAML-based configuration (no code), more annotation types, multi-phase research workflows, and broader AI provider support. Potato's triage schema covers Prodigy's core accept/reject workflow.
 
@@ -92,26 +94,13 @@ Define complete annotation tasks in YAML: schemas, display types, assignment str
 
 ### Audio and Video Annotation
 
-**vs. ELAN**: ELAN has hierarchical annotation tiers and synchronized multi-modal timelines for linguistics research. Potato has audio segmentation with waveform visualization, video temporal annotation with object tracking, and now exports to EAF and TextGrid formats for interoperability with ELAN workflows.
+**vs. ELAN**: Potato supports tiered annotation, audio segmentation with waveform visualization, video temporal annotation with object tracking, and exports to EAF and TextGrid formats for full interoperability with ELAN workflows. ELAN has synchronized multi-modal timelines and a dedicated GUI for field linguistics; Potato offers the same core annotation capabilities in a web-based platform with AI assistance and crowdsourcing integration.
 
 **vs. Praat**: Praat is specialized for phonetic analysis with spectrogram visualization. Potato covers audio segmentation and exports to TextGrid format, but does not replace Praat for acoustic analysis tasks.
 
 ### LLM Evaluation and Preference Annotation
 
 Potato's pairwise comparison schema (binary A/B and scale slider modes), conversation tree annotation, and triage schema make it suitable for RLHF data collection and LLM evaluation. Combined with 14+ AI endpoints for model-assisted annotation, Potato handles preference annotation workflows that typically require specialized tools.
-
-## Remaining Gaps
-
-Potato does not currently support:
-
-- **Dependency tree annotation** (available in WebAnno, INCEpTION)
-- **Spectrogram visualization** (available in Praat, Label Studio)
-- **Hierarchical annotation tiers** (available in ELAN)
-- **Time-series annotation** (available in Label Studio)
-- **3D cuboid / point cloud annotation** (available in CVAT, Scalabel)
-- **SAM 2 integration** for AI-assisted segmentation (available in CVAT)
-- **Visual template builder** for configuration (available via [Potato Playground](https://www.potatoannotator.com/))
-- **LLM-as-a-Judge** automated evaluation pipeline (in progress)
 
 ## Getting Started
 
