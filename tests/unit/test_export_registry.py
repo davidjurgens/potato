@@ -128,5 +128,5 @@ class TestBuiltinExportersRegistered:
 
     def test_all_formats_listed(self):
         formats = export_registry.get_supported_formats()
-        expected = ["coco", "conll_2003", "conll_u", "mask_png", "pascal_voc", "yolo"]
+        expected = ["coco", "conll_2003", "conll_u", "eaf", "mask_png", "pascal_voc", "textgrid", "yolo"]
         assert formats == expected

@@ -234,9 +234,9 @@ def _generate_scale_mode(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[T
             <!-- Compact rating scale slider -->
             <div class="pairwise-scale-widget">
                 <div class="pairwise-scale-labels">
-                    <span class="pairwise-scale-label-min">{escape_html_content(min_label)}</span>
+                    <span class="pairwise-scale-label-min">{label_a}: {escape_html_content(min_label)}</span>
                     <span class="pairwise-scale-label-center">{escape_html_content(center_label)}</span>
-                    <span class="pairwise-scale-label-max">{escape_html_content(max_label)}</span>
+                    <span class="pairwise-scale-label-max">{label_b}: {escape_html_content(max_label)}</span>
                 </div>
                 <input type="range" class="pairwise-scale-slider annotation-input"
                        name="{escaped_schema}"
