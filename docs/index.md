@@ -10,6 +10,7 @@
 - [Installation & Usage](usage.md) - Detailed setup guide
 - [Configuration Reference](configuration.md) - Complete config options
 - [What's New in v2](new_features_v2.md) - Latest features and improvements
+- [Comparison with Other Tools](comparison.md) - How Potato compares to alternatives
 
 ## Annotation Schemas
 
