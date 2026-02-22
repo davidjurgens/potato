@@ -224,7 +224,7 @@ pip install ultralytics opencv-python
 
 ## Example Project
 
-See `project-hub/simple_examples/configs/image-ai-detection.yaml` for a complete working example.
+See `examples/image/image-ai-detection/config.yaml` for a complete working example.
 
 ## Troubleshooting
 

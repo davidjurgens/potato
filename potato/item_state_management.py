@@ -213,8 +213,17 @@ class SpanAnnotation:
     A utility class for representing a single span annotation in any annotation scheme.
 
     Spans are represented by a start and end index, as well as a label.
+    Optionally includes format-specific coordinates (e.g., PDF page/bbox, spreadsheet row/col).
+
+    Discontinuous spans are supported via the additional_parts parameter, which stores
+    a list of non-contiguous text ranges that are all part of the same annotation.
+    For example, "New" and "York" in "New and exciting York" can be annotated as
+    a single LOCATION entity with additional_parts.
     """
-    def __init__(self, schema: str, name: str, title: str, start: int, end: int, id: str = None, annotation_id: str = None, target_field: str = None):
+    def __init__(self, schema: str, name: str, title: str, start: int, end: int,
+                 id: str = None, annotation_id: str = None, target_field: str = None,
+                 format_coords: dict = None, additional_parts: list = None,
+                 kb_id: str = None, kb_source: str = None, kb_label: str = None):
         """
         Initialize a span annotation.
 
@@ -227,6 +236,19 @@ class SpanAnnotation:
             id: Optional custom ID for the span
             annotation_id: Alternative parameter name for ID (for compatibility)
             target_field: The display field this span targets (for multi-span mode)
+            format_coords: Optional format-specific coordinates (e.g., PDF page/bbox,
+                          spreadsheet row/col). Structure depends on source format:
+                          - PDF: {"format": "pdf", "page": 1, "bbox": [x0, y0, x1, y1]}
+                          - Spreadsheet: {"format": "spreadsheet", "row": 1, "col": 2, "cell_ref": "B1"}
+                          - Code: {"format": "code", "line": 10, "column": 5}
+                          - Document: {"format": "document", "paragraph_id": "p_0", "local_offset": 0}
+            additional_parts: Optional list of additional text ranges for discontinuous spans.
+                             Each part is a dict with {"start": int, "end": int, "text": str}.
+                             Used for entities that span non-contiguous text, e.g.,
+                             "New" and "York" in "New and exciting York".
+            kb_id: Optional knowledge base entity ID (e.g., "Q937" for Wikidata)
+            kb_source: Optional knowledge base source name (e.g., "wikidata", "umls")
+            kb_label: Optional human-readable label from the knowledge base
         """
         self.schema = schema
         self.start = start
@@ -234,6 +256,11 @@ class SpanAnnotation:
         self.end = end
         self.name = name
         self.target_field = target_field  # For multi-span support
+        self.format_coords = format_coords  # Format-specific coordinates
+        self.additional_parts = additional_parts or []  # For discontinuous spans
+        self.kb_id = kb_id  # Knowledge base entity ID
+        self.kb_source = kb_source  # Knowledge base source (e.g., "wikidata", "umls")
+        self.kb_label = kb_label  # Human-readable KB entity label
         # Accept both id and annotation_id for compatibility
         _id = id if id is not None else annotation_id
         if _id is not None:
@@ -270,25 +297,164 @@ class SpanAnnotation:
         """Get the target field key (for multi-span mode)"""
         return self.target_field
 
+    def get_format_coords(self):
+        """Get format-specific coordinates (for document format support)"""
+        return self.format_coords
+
+    def set_format_coords(self, coords: dict):
+        """Set format-specific coordinates"""
+        self.format_coords = coords
+
+    def get_kb_id(self):
+        """Get the knowledge base entity ID"""
+        return self.kb_id
+
+    def set_kb_id(self, kb_id: str):
+        """Set the knowledge base entity ID"""
+        self.kb_id = kb_id
+
+    def get_kb_source(self):
+        """Get the knowledge base source name"""
+        return self.kb_source
+
+    def set_kb_source(self, kb_source: str):
+        """Set the knowledge base source name"""
+        self.kb_source = kb_source
+
+    def get_kb_label(self):
+        """Get the knowledge base entity label"""
+        return self.kb_label
+
+    def set_kb_label(self, kb_label: str):
+        """Set the knowledge base entity label"""
+        self.kb_label = kb_label
+
+    def has_entity_link(self) -> bool:
+        """Check if this span has a knowledge base entity link"""
+        return bool(self.kb_id and self.kb_source)
+
+    def set_entity_link(self, kb_id: str, kb_source: str, kb_label: str = None):
+        """
+        Set the knowledge base entity link for this span.
+
+        Args:
+            kb_id: Knowledge base entity ID (e.g., "Q937")
+            kb_source: Knowledge base source (e.g., "wikidata")
+            kb_label: Optional human-readable label
+        """
+        self.kb_id = kb_id
+        self.kb_source = kb_source
+        self.kb_label = kb_label
+
+    def clear_entity_link(self):
+        """Remove the knowledge base entity link from this span"""
+        self.kb_id = None
+        self.kb_source = None
+        self.kb_label = None
+
+    def get_additional_parts(self):
+        """Get additional parts for discontinuous spans"""
+        return self.additional_parts
+
+    def add_part(self, start: int, end: int, text: str = None):
+        """
+        Add an additional part to this discontinuous span.
+
+        Args:
+            start: Start character index (inclusive)
+            end: End character index (exclusive)
+            text: Optional text content of this part
+        """
+        part = {"start": start, "end": end}
+        if text is not None:
+            part["text"] = text
+        self.additional_parts.append(part)
+        # Keep parts sorted by start position
+        self.additional_parts.sort(key=lambda p: p["start"])
+
+    def remove_part(self, start: int, end: int):
+        """
+        Remove a part from this discontinuous span.
+
+        Args:
+            start: Start character index of the part to remove
+            end: End character index of the part to remove
+        """
+        self.additional_parts = [
+            p for p in self.additional_parts
+            if not (p["start"] == start and p["end"] == end)
+        ]
+
+    def is_discontinuous(self) -> bool:
+        """Check if this span has multiple parts (is discontinuous)"""
+        return len(self.additional_parts) > 0
+
+    def get_all_parts(self) -> list:
+        """
+        Get all parts of this span (primary + additional) as a sorted list.
+
+        Returns:
+            List of dicts with {"start": int, "end": int, "text": str (optional)}
+        """
+        primary = {"start": self.start, "end": self.end}
+        all_parts = [primary] + self.additional_parts
+        return sorted(all_parts, key=lambda p: p["start"])
+
+    def to_dict(self) -> dict:
+        """Convert span annotation to dictionary for serialization."""
+        result = {
+            "schema": self.schema,
+            "name": self.name,
+            "title": self.title,
+            "start": self.start,
+            "end": self.end,
+            "id": self._id,
+        }
+        if self.target_field:
+            result["target_field"] = self.target_field
+        if self.format_coords:
+            result["format_coords"] = self.format_coords
+        if self.additional_parts:
+            result["additional_parts"] = self.additional_parts
+        if self.kb_id:
+            result["kb_id"] = self.kb_id
+        if self.kb_source:
+            result["kb_source"] = self.kb_source
+        if self.kb_label:
+            result["kb_label"] = self.kb_label
+        return result
+
     def __str__(self):
         field_str = f", target_field:{self.target_field}" if self.target_field else ""
-        return f"SpanAnnotation(schema:{self.schema}, name:{self.name}, start:{self.start}, end:{self.end}, id:{self._id}{field_str})"
+        coords_str = f", format_coords:{self.format_coords}" if self.format_coords else ""
+        parts_str = f", additional_parts:{len(self.additional_parts)}" if self.additional_parts else ""
+        kb_str = f", kb:{self.kb_source}:{self.kb_id}" if self.kb_id else ""
+        return f"SpanAnnotation(schema:{self.schema}, name:{self.name}, start:{self.start}, end:{self.end}, id:{self._id}{field_str}{coords_str}{parts_str}{kb_str})"
 
     def __eq__(self, other):
         """Check if two span annotations are equal"""
+        if not isinstance(other, SpanAnnotation):
+            return False
+        # Convert additional_parts to comparable format (list of tuples)
+        self_parts = tuple((p["start"], p["end"]) for p in self.additional_parts)
+        other_parts = tuple((p["start"], p["end"]) for p in other.additional_parts)
         return (
-            isinstance(other, SpanAnnotation)
-            and self.schema == other.schema
+            self.schema == other.schema
             and self.name == other.name
             and self.title == other.title
             and self.start == other.start
             and self.end == other.end
             and self.target_field == other.target_field
+            and self_parts == other_parts
+            # Note: format_coords not included in equality check
+            # as they are derived from position, not essential identity
         )
 
     def __hash__(self):
         """Generate hash for span annotation (enables use in sets/dicts)"""
-        return hash((self.schema, self.name, self.title, self.start, self.end, self.target_field))
+        # Include additional_parts in hash for discontinuous spans
+        parts_hash = tuple((p["start"], p["end"]) for p in self.additional_parts)
+        return hash((self.schema, self.name, self.title, self.start, self.end, self.target_field, parts_hash))
 
 
 class SpanLink:
@@ -385,6 +551,122 @@ class SpanLink:
     def __hash__(self):
         """Generate hash for span link (enables use in sets/dicts)"""
         return hash((self.schema, self.link_type, tuple(self.span_ids), self.direction))
+
+
+class EventAnnotation:
+    """
+    A utility class for representing an N-ary event annotation.
+
+    Events consist of:
+    - A trigger span: The word/phrase indicating the event (e.g., "attacked", "hired")
+    - Argument spans: Entities with typed roles (e.g., attacker, target, weapon)
+
+    This enables information extraction tasks where events have multiple participants
+    with specific semantic roles.
+    """
+    def __init__(self, schema: str, event_type: str, trigger_span_id: str,
+                 arguments: List[Dict[str, str]], id: str = None, properties: dict = None):
+        """
+        Initialize an event annotation.
+
+        Args:
+            schema: The annotation scheme this event belongs to
+            event_type: The type of event (e.g., "ATTACK", "HIRE")
+            trigger_span_id: ID of the span that triggers/indicates the event
+            arguments: List of argument dicts, each with:
+                - role: The semantic role (e.g., "attacker", "target")
+                - span_id: ID of the span filling this role
+            id: Optional custom ID for the event
+            properties: Optional dictionary of additional properties
+        """
+        self.schema = schema
+        self.event_type = event_type
+        self.trigger_span_id = trigger_span_id
+        self.arguments = arguments  # [{role: "attacker", span_id: "..."}, ...]
+        self.properties = properties or {}
+        self._id = id if id else f"event_{uuid.uuid4().hex}"
+
+    def get_schema(self) -> str:
+        """Get the schema this event belongs to"""
+        return self.schema
+
+    def get_event_type(self) -> str:
+        """Get the event type"""
+        return self.event_type
+
+    def get_trigger_span_id(self) -> str:
+        """Get the trigger span ID"""
+        return self.trigger_span_id
+
+    def get_arguments(self) -> List[Dict[str, str]]:
+        """Get the list of arguments with their roles"""
+        return self.arguments
+
+    def get_argument_by_role(self, role: str) -> Optional[Dict[str, str]]:
+        """Get the argument for a specific role, or None if not found"""
+        for arg in self.arguments:
+            if arg.get('role') == role:
+                return arg
+        return None
+
+    def get_all_span_ids(self) -> List[str]:
+        """Get all span IDs involved in this event (trigger + arguments)"""
+        span_ids = [self.trigger_span_id]
+        for arg in self.arguments:
+            if 'span_id' in arg:
+                span_ids.append(arg['span_id'])
+        return span_ids
+
+    def get_id(self) -> str:
+        """Get the event's unique identifier"""
+        return self._id
+
+    def get_properties(self) -> dict:
+        """Get additional properties for this event"""
+        return self.properties
+
+    def to_dict(self) -> dict:
+        """Convert the event annotation to a dictionary for serialization"""
+        return {
+            "id": self._id,
+            "schema": self.schema,
+            "event_type": self.event_type,
+            "trigger_span_id": self.trigger_span_id,
+            "arguments": self.arguments,
+            "properties": self.properties
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'EventAnnotation':
+        """Create an EventAnnotation from a dictionary"""
+        return cls(
+            schema=data["schema"],
+            event_type=data["event_type"],
+            trigger_span_id=data["trigger_span_id"],
+            arguments=data.get("arguments", []),
+            id=data.get("id"),
+            properties=data.get("properties", {})
+        )
+
+    def __str__(self):
+        args_str = ", ".join(f"{a['role']}:{a['span_id']}" for a in self.arguments)
+        return f"EventAnnotation(schema:{self.schema}, type:{self.event_type}, trigger:{self.trigger_span_id}, args:[{args_str}], id:{self._id})"
+
+    def __eq__(self, other):
+        """Check if two event annotations are equal"""
+        return (
+            isinstance(other, EventAnnotation)
+            and self.schema == other.schema
+            and self.event_type == other.event_type
+            and self.trigger_span_id == other.trigger_span_id
+            and self.arguments == other.arguments
+        )
+
+    def __hash__(self):
+        """Generate hash for event annotation (enables use in sets/dicts)"""
+        # Convert arguments to a hashable tuple representation
+        args_tuple = tuple((a.get('role', ''), a.get('span_id', '')) for a in self.arguments)
+        return hash((self.schema, self.event_type, self.trigger_span_id, args_tuple))
 
 
 class AssignmentStrategy(Enum):

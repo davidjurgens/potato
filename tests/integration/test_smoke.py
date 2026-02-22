@@ -74,7 +74,7 @@ class TestHomePage:
     @pytest.fixture
     def server_with_checkbox_config(self, base_port: int) -> IntegrationTestServer:
         """Start a server with the simple checkbox config."""
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-check-box.yaml"
+        config_path = PROJECT_ROOT / "examples" / "classification" / "check-box" / "config.yaml"
         server = IntegrationTestServer(str(config_path), port=base_port)
         success, error = server.start()
         if not success:
@@ -144,7 +144,7 @@ class TestUserRegistration:
     @pytest.fixture
     def server(self, base_port: int) -> IntegrationTestServer:
         """Start a server with the simple checkbox config."""
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-check-box.yaml"
+        config_path = PROJECT_ROOT / "examples" / "classification" / "check-box" / "config.yaml"
         server = IntegrationTestServer(str(config_path), port=base_port)
         success, error = server.start()
         if not success:
@@ -225,7 +225,7 @@ class TestAnnotationPage:
         from selenium.webdriver.support.ui import WebDriverWait
         from selenium.webdriver.support import expected_conditions as EC
 
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-check-box.yaml"
+        config_path = PROJECT_ROOT / "examples" / "classification" / "check-box" / "config.yaml"
         server = IntegrationTestServer(str(config_path), port=base_port)
         success, error = server.start()
         if not success:
@@ -341,7 +341,7 @@ class TestBasicAnnotation:
         from selenium.webdriver.support.ui import WebDriverWait
         from selenium.webdriver.support import expected_conditions as EC
 
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-check-box.yaml"
+        config_path = PROJECT_ROOT / "examples" / "classification" / "check-box" / "config.yaml"
         server = IntegrationTestServer(str(config_path), port=base_port)
         success, error = server.start()
         if not success:

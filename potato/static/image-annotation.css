@@ -151,13 +151,18 @@
 .canvas-wrapper {
     position: relative;
     width: 100%;
-    min-height: 300px;
-    max-height: calc(100vh - 280px);
-    height: auto;
-    background: #f0f0f0;
+    min-height: 400px;
+    height: 500px;  /* Explicit height for Fabric.js canvas rendering */
+    max-height: calc(100vh - 200px);
+    background: #f8f9fa !important;  /* Force light background */
     border: 2px solid #dee2e6;
     border-radius: 6px;
     overflow: hidden;
+}
+
+/* Ensure Fabric.js canvas container has light background */
+.canvas-wrapper .canvas-container {
+    background: #f8f9fa !important;
 }
 
 .annotation-canvas {
@@ -213,55 +218,54 @@
     }
 }
 
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-    .image-annotation-toolbar {
-        background: #2d3748;
-        border-color: #4a5568;
-    }
+/* Dark mode support - only apply when explicitly enabled via class */
+/* To enable dark mode, add class="dark-mode" to the container */
+.image-annotation-container.dark-mode .image-annotation-toolbar {
+    background: #2d3748;
+    border-color: #4a5568;
+}
 
-    .tool-group-label {
-        color: #a0aec0;
-    }
+.image-annotation-container.dark-mode .tool-group-label {
+    color: #a0aec0;
+}
 
-    .tool-btn,
-    .label-btn,
-    .zoom-btn,
-    .edit-btn {
-        background: #4a5568;
-        border-color: #718096;
-        color: #e2e8f0;
-    }
+.image-annotation-container.dark-mode .tool-btn,
+.image-annotation-container.dark-mode .label-btn,
+.image-annotation-container.dark-mode .zoom-btn,
+.image-annotation-container.dark-mode .edit-btn {
+    background: #4a5568;
+    border-color: #718096;
+    color: #e2e8f0;
+}
 
-    .tool-btn:hover,
-    .label-btn:hover,
-    .zoom-btn:hover,
-    .edit-btn:hover {
-        background: #718096;
-        border-color: #a0aec0;
-    }
+.image-annotation-container.dark-mode .tool-btn:hover,
+.image-annotation-container.dark-mode .label-btn:hover,
+.image-annotation-container.dark-mode .zoom-btn:hover,
+.image-annotation-container.dark-mode .edit-btn:hover {
+    background: #718096;
+    border-color: #a0aec0;
+}
 
-    .canvas-wrapper {
-        background: #1a202c;
-        border-color: #4a5568;
-    }
+.image-annotation-container.dark-mode .canvas-wrapper {
+    background: #1a202c;
+    border-color: #4a5568;
+}
 
-    .canvas-wrapper::before {
-        background-image:
-            linear-gradient(45deg, #2d3748 25%, transparent 25%),
-            linear-gradient(-45deg, #2d3748 25%, transparent 25%),
-            linear-gradient(45deg, transparent 75%, #2d3748 75%),
-            linear-gradient(-45deg, transparent 75%, #2d3748 75%);
-    }
+.image-annotation-container.dark-mode .canvas-wrapper::before {
+    background-image:
+        linear-gradient(45deg, #2d3748 25%, transparent 25%),
+        linear-gradient(-45deg, #2d3748 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #2d3748 75%),
+        linear-gradient(-45deg, transparent 75%, #2d3748 75%);
+}
 
-    .annotation-count {
-        background: #4a5568;
-        color: #a0aec0;
-    }
+.image-annotation-container.dark-mode .annotation-count {
+    background: #4a5568;
+    color: #a0aec0;
+}
 
-    .count-value {
-        color: #e2e8f0;
-    }
+.image-annotation-container.dark-mode .count-value {
+    color: #e2e8f0;
 }
 
 /* Form styling within image annotation */

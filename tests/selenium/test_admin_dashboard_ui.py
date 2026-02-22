@@ -39,7 +39,7 @@ class TestAdminDashboardUI(unittest.TestCase):
         """Start the MACE demo server and Chrome driver."""
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "project-hub", "simple_examples", "simple-mace-demo", "config.yaml"
+            "examples", "advanced", "mace-demo", "config.yaml"
         )
 
         port = find_free_port(preferred_port=9024)
@@ -373,7 +373,7 @@ class TestAdminDashboardNavigation(unittest.TestCase):
         """Start the MACE demo server."""
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "project-hub", "simple_examples", "simple-mace-demo", "config.yaml"
+            "examples", "advanced", "mace-demo", "config.yaml"
         )
 
         port = find_free_port(preferred_port=9025)

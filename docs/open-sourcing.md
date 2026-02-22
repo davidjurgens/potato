@@ -92,7 +92,7 @@ Have an idea for improvement? [Open a feature request](https://github.com/davidj
 When adding or modifying features:
 
 1. **Update relevant documentation** in the `docs/` directory
-2. **Add or update example configurations** in `project-hub/simple_examples/`
+2. **Add or update example configurations** in `examples/`
 3. **Include inline comments** for complex logic
 
 See [Documentation Guidelines](#documentation-guidelines) for more details.
@@ -113,7 +113,7 @@ Every major feature should include:
    - YAML examples
    - Troubleshooting tips
 
-2. **Example Project** (`project-hub/simple_examples/`):
+2. **Example Project** (`examples/`):
    - Working configuration file
    - Sample data file
    - README if complex

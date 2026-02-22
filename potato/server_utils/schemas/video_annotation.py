@@ -92,9 +92,9 @@ def _generate_video_annotation_layout_internal(annotation_scheme: Dict[str, Any]
         logger.error(error_msg)
         raise ValueError(error_msg)
 
-    # Validate labels for segment/frame/keyframe/combined modes
+    # Validate labels for segment/frame/keyframe/tracking/combined modes
     labels = []
-    if mode in ['segment', 'frame', 'keyframe', 'combined']:
+    if mode in ['segment', 'frame', 'keyframe', 'tracking', 'combined']:
         if 'labels' not in annotation_scheme:
             error_msg = f"Missing labels in schema: {schema_name} (required for mode '{mode}')"
             logger.error(error_msg)
@@ -263,6 +263,18 @@ def _generate_html(
                 <button type="button" class="frame-classify-btn" data-action="classify-frame" title="Classify Current Frame (C)">Classify Frame</button>
             </div>
         '''
+    if mode in ['tracking', 'combined']:
+        mode_controls_html += '''
+            <div class="tracking-controls-group">
+                <button type="button" class="tracking-btn" data-action="create-track" title="Create a new object track (T)">+ Track</button>
+                <button type="button" class="tracking-btn delete-btn" data-action="delete-track" title="Delete selected track" disabled>Delete Track</button>
+                <select class="interpolation-select" title="Interpolation method between keyframes">
+                    <option value="linear">Linear</option>
+                    <option value="cubic">Cubic (smooth)</option>
+                    <option value="constant">Constant (hold)</option>
+                </select>
+            </div>
+        '''
 
     # Generate timecode display
     timecode_html = ""
@@ -375,6 +387,15 @@ def _generate_html(
                     <div class="segment-questions-content"></div>
                 </div>
 
+                <!-- Tracking panel (for tracking mode) -->
+                <div id="tracking-panel-{escaped_name}" class="tracking-panel" style="display: {'block' if mode in ['tracking', 'combined'] else 'none'};">
+                    <h4>Object Tracks</h4>
+                    <div class="tracking-instructions" style="font-size: 0.8rem; color: #666; margin-bottom: 0.5rem;">
+                        Click "+ Track" to create a track, then draw bounding boxes on the video. Boxes are interpolated between keyframes.
+                    </div>
+                    <div class="tracking-track-list"></div>
+                </div>
+
                 <!-- Hidden input for storing annotation data -->
                 <!-- autocomplete="off" prevents Firefox from restoring old values on reload -->
                 <input type="hidden"
@@ -432,37 +453,58 @@ def _generate_html(
                         var trackingCanvasId = 'tracking-canvas-{escaped_name}';
 
                         // Get video URL from the instance display
-                        // Try multiple possible element IDs (hyphen and underscore variants)
-                        var textContent = document.getElementById('text-content');
-                        var instanceText = document.getElementById('instance-text');
-                        var instanceTextUnderscore = document.getElementById('instance_text');
-
                         console.log('[VideoAnnotation DEBUG] Looking for video URL...');
-                        console.log('[VideoAnnotation DEBUG] text-content element:', textContent);
-                        console.log('[VideoAnnotation DEBUG] instance-text element:', instanceText);
-                        console.log('[VideoAnnotation DEBUG] instance_text element:', instanceTextUnderscore);
+                        console.log('[VideoAnnotation DEBUG] config.sourceField:', config.sourceField);
 
-                        var instanceContainer = textContent || instanceText || instanceTextUnderscore;
                         var videoUrl = null;
 
-                        // Try to find video URL in instance text
-                        if (instanceContainer) {{
-                            var text = instanceContainer.textContent || instanceContainer.innerText;
-                            console.log('[VideoAnnotation DEBUG] Container text content (first 200 chars):', text ? text.substring(0, 200) : 'EMPTY');
+                        // Method 1: Use sourceField to find video element by data-field-key
+                        if (config.sourceField) {{
+                            var videoContainer = document.querySelector('.video-container[data-field-key="' + config.sourceField + '"]');
+                            console.log('[VideoAnnotation DEBUG] Looking for video-container with data-field-key:', config.sourceField, videoContainer);
+                            if (videoContainer) {{
+                                var videoEl = videoContainer.querySelector('video');
+                                if (videoEl) {{
+                                    videoUrl = videoEl.getAttribute('data-source-url') ||
+                                               (videoEl.querySelector('source') && videoEl.querySelector('source').src) ||
+                                               videoEl.src;
+                                    console.log('[VideoAnnotation DEBUG] Found video via sourceField:', videoUrl);
+                                }}
+                            }}
+                        }}
 
-                            // Check if it's a URL
-                            if (text && (text.trim().startsWith('http') || text.trim().endsWith('.mp4') || text.trim().endsWith('.webm') || text.trim().endsWith('.ogg'))) {{
-                                videoUrl = text.trim();
-                                console.log('[VideoAnnotation DEBUG] Found video URL:', videoUrl);
+                        // Method 2: Find any video element with data-source-url
+                        if (!videoUrl) {{
+                            var anyVideo = document.querySelector('video[data-source-url]');
+                            if (anyVideo) {{
+                                videoUrl = anyVideo.getAttribute('data-source-url');
+                                console.log('[VideoAnnotation DEBUG] Found video via data-source-url attribute:', videoUrl);
                             }}
-                            // Check for video element
-                            var videoEl = instanceContainer.querySelector('video');
-                            if (videoEl && videoEl.src) {{
-                                videoUrl = videoEl.src;
-                                console.log('[VideoAnnotation DEBUG] Found video element with src:', videoUrl);
+                        }}
+
+                        // Method 3: Find any video element with source child
+                        if (!videoUrl) {{
+                            var anyVideo = document.querySelector('video source');
+                            if (anyVideo && anyVideo.src) {{
+                                videoUrl = anyVideo.src;
+                                console.log('[VideoAnnotation DEBUG] Found video via source element:', videoUrl);
                             }}
-                        }} else {{
-                            console.error('[VideoAnnotation DEBUG] No instance container found!');
+                        }}
+
+                        // Method 4: Search in instance text containers
+                        if (!videoUrl) {{
+                            var textContent = document.getElementById('text-content');
+                            var instanceText = document.getElementById('instance-text');
+                            var instanceTextUnderscore = document.getElementById('instance_text');
+                            var instanceContainer = textContent || instanceText || instanceTextUnderscore;
+
+                            if (instanceContainer) {{
+                                var text = instanceContainer.textContent || instanceContainer.innerText;
+                                if (text && (text.trim().startsWith('http') || text.trim().endsWith('.mp4') || text.trim().endsWith('.webm') || text.trim().endsWith('.ogg'))) {{
+                                    videoUrl = text.trim();
+                                    console.log('[VideoAnnotation DEBUG] Found video URL in text content:', videoUrl);
+                                }}
+                            }}
                         }}
 
                         // Debug: Log if video URL not found
@@ -581,6 +623,115 @@ def _generate_html(
                             rateSelect.addEventListener('change', function() {{
                                 manager.setPlaybackRate(parseFloat(this.value));
                             }});
+                        }}
+
+                        // Tracking mode initialization
+                        var trackingMode = container.dataset.mode;
+                        if ((trackingMode === 'tracking' || trackingMode === 'combined') && typeof TrackingUIManager !== 'undefined') {{
+                            console.log('[VideoAnnotation] Initializing TrackingUIManager for mode:', trackingMode);
+
+                            // Get tracking canvas and video element
+                            var trackingCanvas = document.getElementById(trackingCanvasId);
+                            var videoEl = document.getElementById(videoId);
+
+                            if (trackingCanvas && videoEl) {{
+                                // Show tracking canvas
+                                trackingCanvas.style.display = 'block';
+
+                                // Initialize tracking UI manager
+                                var trackingManager = new TrackingUIManager({{
+                                    canvas: trackingCanvas,
+                                    video: videoEl,
+                                    annotationManager: manager,
+                                    config: {{
+                                        videoFps: config.videoFps || 30,
+                                        interpolation: 'linear',
+                                        autoAdvanceFrames: config.autoAdvanceFrames || 5
+                                    }}
+                                }});
+
+                                // Store reference on manager
+                                manager.trackingManager = trackingManager;
+
+                                // Sync canvas size with video
+                                function syncTrackingCanvasSize() {{
+                                    // Use clientWidth/clientHeight for display size
+                                    var w = videoEl.clientWidth || videoEl.offsetWidth || 640;
+                                    var h = videoEl.clientHeight || videoEl.offsetHeight || 360;
+                                    if (w > 0 && h > 0) {{
+                                        trackingCanvas.width = w;
+                                        trackingCanvas.height = h;
+                                        console.log('[VideoAnnotation] Tracking canvas sized to:', w, 'x', h);
+                                        trackingManager.renderOverlay();
+                                    }}
+                                }}
+                                videoEl.addEventListener('loadedmetadata', syncTrackingCanvasSize);
+                                videoEl.addEventListener('loadeddata', syncTrackingCanvasSize);
+                                videoEl.addEventListener('canplay', syncTrackingCanvasSize);
+                                videoEl.addEventListener('resize', syncTrackingCanvasSize);
+                                window.addEventListener('resize', syncTrackingCanvasSize);
+                                // Also sync immediately in case video already loaded
+                                setTimeout(syncTrackingCanvasSize, 100);
+                                setTimeout(syncTrackingCanvasSize, 500);
+
+                                // Re-render tracking overlay on time update
+                                videoEl.addEventListener('timeupdate', function() {{
+                                    trackingManager.renderOverlay();
+                                }});
+
+                                // Wire up tracking toolbar buttons
+                                container.querySelectorAll('.tracking-btn').forEach(function(btn) {{
+                                    btn.addEventListener('click', function() {{
+                                        var action = this.dataset.action;
+                                        if (action === 'create-track') {{
+                                            var label = manager.activeLabel || 'object';
+                                            var color = manager.activeLabelColor || '#FF6B6B';
+                                            trackingManager.createTrack(label, color);
+                                            // Enable delete button
+                                            var deleteBtn = container.querySelector('[data-action="delete-track"]');
+                                            if (deleteBtn) deleteBtn.disabled = false;
+                                        }} else if (action === 'delete-track') {{
+                                            if (trackingManager.activeTrackId) {{
+                                                trackingManager.deleteTrack(trackingManager.activeTrackId);
+                                                // Disable delete button if no more tracks
+                                                if (Object.keys(trackingManager.tracks).length === 0) {{
+                                                    this.disabled = true;
+                                                }}
+                                            }}
+                                        }}
+                                    }});
+                                }});
+
+                                // Interpolation method selector
+                                var interpSelect = container.querySelector('.interpolation-select');
+                                if (interpSelect) {{
+                                    interpSelect.addEventListener('change', function() {{
+                                        if (trackingManager.activeTrackId) {{
+                                            trackingManager.setInterpolation(trackingManager.activeTrackId, this.value);
+                                        }}
+                                    }});
+                                }}
+
+                                // Extend manager's save method to include tracking data
+                                var originalSave = manager.save ? manager.save.bind(manager) : null;
+                                manager.save = function() {{
+                                    var data = originalSave ? originalSave() : {{}};
+                                    data.tracks = trackingManager.getTrackingData();
+                                    return data;
+                                }};
+
+                                // Load existing tracking data if available
+                                var existingData = manager.getAnnotationData ? manager.getAnnotationData() : null;
+                                if (existingData && existingData.tracks) {{
+                                    trackingManager.loadTrackingData(existingData.tracks);
+                                }}
+
+                                console.log('[VideoAnnotation] TrackingUIManager initialized successfully');
+                            }} else {{
+                                console.warn('[VideoAnnotation] Tracking canvas or video element not found');
+                            }}
+                        }} else if (trackingMode === 'tracking' || trackingMode === 'combined') {{
+                            console.warn('[VideoAnnotation] TrackingUIManager not loaded, tracking features unavailable');
                         }}
 
                         // Set default label

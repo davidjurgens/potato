@@ -1,0 +1,101 @@
+# Simple Event Annotation Example
+# Demonstrates N-ary event annotation with triggers and typed arguments
+
+annotation_task_name: "Event Annotation Example"
+task_dir: .
+output_annotation_dir: annotation_output
+
+# Data files
+data_files:
+  - data/event-example.json
+
+# Item properties
+item_properties:
+  id_key: id
+  text_key: text
+
+# User configuration
+user_config:
+  type: none
+
+# Annotation schemes
+annotation_schemes:
+  # First define the entity span schema
+  - annotation_type: span
+    name: entities
+    description: "Label entities in the text"
+    labels:
+      - name: PERSON
+        color: "#3b82f6"
+        key_binding: "p"
+      - name: ORGANIZATION
+        color: "#10b981"
+        key_binding: "o"
+      - name: LOCATION
+        color: "#f59e0b"
+        key_binding: "l"
+      - name: WEAPON
+        color: "#ef4444"
+        key_binding: "w"
+      - name: EVENT_TRIGGER
+        color: "#8b5cf6"
+        key_binding: "e"
+        tooltip: "Words that trigger/indicate events"
+
+  # Event annotation that builds on the span schema
+  - annotation_type: event_annotation
+    name: events
+    description: "Annotate events with triggers and arguments"
+    span_schema: entities  # Reference to the span schema above
+    event_types:
+      - type: "ATTACK"
+        color: "#dc2626"
+        trigger_labels: ["EVENT_TRIGGER"]
+        arguments:
+          - role: "attacker"
+            entity_types: ["PERSON", "ORGANIZATION"]
+            required: true
+          - role: "target"
+            entity_types: ["PERSON", "ORGANIZATION", "LOCATION"]
+            required: true
+          - role: "weapon"
+            entity_types: ["WEAPON"]
+            required: false
+          - role: "location"
+            entity_types: ["LOCATION"]
+            required: false
+
+      - type: "HIRE"
+        color: "#2563eb"
+        trigger_labels: ["EVENT_TRIGGER"]
+        arguments:
+          - role: "employer"
+            entity_types: ["ORGANIZATION"]
+            required: true
+          - role: "employee"
+            entity_types: ["PERSON"]
+            required: true
+          - role: "position"
+            required: false
+
+      - type: "TRAVEL"
+        color: "#16a34a"
+        trigger_labels: ["EVENT_TRIGGER"]
+        arguments:
+          - role: "traveler"
+            entity_types: ["PERSON"]
+            required: true
+          - role: "origin"
+            entity_types: ["LOCATION"]
+            required: false
+          - role: "destination"
+            entity_types: ["LOCATION"]
+            required: true
+
+    visual_display:
+      enabled: true
+      arc_position: above
+      show_labels: true
+
+# Display settings
+html_layout: default

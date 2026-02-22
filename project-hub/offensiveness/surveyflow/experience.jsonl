@@ -1,2 +1,0 @@
-{"id":"1","text":"How satisfied do you feel about your experience participating our study?","schema": "radio", "choices": ["Very satisfied", "Satisfied", "Not satisfied"], "label_requirement": {"required":true}}
-{"id":"2","text":"How do you feel about your experience participating our study compared with other studies?","schema": "radio", "choices": ["Much better than others", "Better than others", "Similar", "Worse than others", "Much worse than others"], "label_requirement": {"required":true}}

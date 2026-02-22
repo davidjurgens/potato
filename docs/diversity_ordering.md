@@ -184,13 +184,13 @@ pip install sentence-transformers scikit-learn
 
 ## Example Project
 
-A complete working example is available at `project-hub/simple_examples/simple-diversity-test/`.
+A complete working example is available at `examples/advanced/diversity-test/`.
 
 ### Running the Example
 
 ```bash
 # From the repository root
-python potato/flask_server.py start project-hub/simple_examples/simple-diversity-test/config.yaml -p 8000
+python potato/flask_server.py start examples/advanced/diversity-test/config.yaml -p 8000
 ```
 
 ### Example Configuration

@@ -1,0 +1,42 @@
+[
+  {
+    "id": "pii_001",
+    "text": "Hello, my name is John Smith and you can reach me at john.smith@email.com or call me at 555-123-4567."
+  },
+  {
+    "id": "pii_002",
+    "text": "The quarterly sales report shows a 15% increase in revenue compared to last year."
+  },
+  {
+    "id": "pii_003",
+    "text": "For verification purposes, please confirm your Social Security Number: 123-45-6789."
+  },
+  {
+    "id": "pii_004",
+    "text": "Our office is located at 123 Main Street, Suite 456, Springfield, IL 62701."
+  },
+  {
+    "id": "pii_005",
+    "text": "The weather forecast predicts sunny skies with temperatures reaching 75 degrees."
+  },
+  {
+    "id": "pii_006",
+    "text": "Please charge my credit card ending in 4242 for the total amount of $49.99."
+  },
+  {
+    "id": "pii_007",
+    "text": "Jane's employee ID is EMP-2023-0847. Her manager approved the vacation request."
+  },
+  {
+    "id": "pii_008",
+    "text": "The study involved 500 anonymous participants from diverse backgrounds."
+  },
+  {
+    "id": "pii_009",
+    "text": "Patient: Robert Johnson, DOB: 05/15/1980, MRN: 12345678. Diagnosis: Type 2 Diabetes."
+  },
+  {
+    "id": "pii_010",
+    "text": "According to the 2023 census data, the population of the city has grown by 8%."
+  }
+]

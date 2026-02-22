@@ -64,7 +64,21 @@
     top: 0;
     left: 0;
     width: 100%;
-    height: 100%;
+    /* Leave space for video controls at bottom (about 40px) */
+    height: calc(100% - 45px);
+    pointer-events: auto;  /* Enable drawing on canvas */
+    z-index: 10;
+    cursor: crosshair;
+}
+
+/* When no track is active, don't block video */
+.tracking-overlay.no-active-track {
+    pointer-events: none;
+    cursor: default;
+}
+
+/* When tracking is not active, hide the overlay */
+.tracking-overlay[style*="display: none"] {
     pointer-events: none;
 }
 

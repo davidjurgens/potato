@@ -22,7 +22,8 @@ from .identifier_utils import (
     generate_element_identifier,
     generate_element_value,
     generate_validation_attribute,
-    escape_html_content
+    escape_html_content,
+    generate_layout_attributes
 )
 from .radio import generate_radio_layout
 
@@ -81,10 +82,13 @@ def _generate_likert_layout_internal(annotation_scheme):
     # Setup validation and key bindings
     key_bindings = []
     validation = generate_validation_attribute(annotation_scheme)
-    
+
+    # Get layout attributes for grid positioning
+    layout_attrs = generate_layout_attributes(annotation_scheme)
+
     # Initialize form wrapper
     schematic = f"""
-    <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form likert shadcn-likert-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" data-annotation-type="likert" data-schema-name="{escape_html_content(annotation_scheme['name'])}">
+    <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form likert shadcn-likert-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" data-annotation-type="likert" data-schema-name="{escape_html_content(annotation_scheme['name'])}" {layout_attrs}>
         {get_ai_wrapper()}
         <fieldset schema="{escape_html_content(annotation_scheme['name'])}">
             <legend class="shadcn-likert-title">{escape_html_content(annotation_scheme['description'])}</legend>

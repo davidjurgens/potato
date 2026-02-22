@@ -42,18 +42,17 @@ class IntegrationTestServer:
         env['PYTHONPATH'] = str(PROJECT_ROOT)
 
         # Use absolute path for config file
-        # Run from parent of configs dir (e.g., simple_examples/) since data paths are relative to that
+        # Run from example dir since data paths are relative to that
         abs_config_path = os.path.abspath(self.config_path)
         config_dir = os.path.dirname(abs_config_path)
-        project_dir = os.path.dirname(config_dir)  # Go up one level from configs/
-        rel_config_path = os.path.join('configs', os.path.basename(abs_config_path))
+        rel_config_path = os.path.basename(abs_config_path)
 
         self.process = subprocess.Popen(
             [sys.executable, "-m", "potato.flask_server", "start", rel_config_path, "-p", str(self.port)],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             env=env,
-            cwd=project_dir  # Run from the project directory (parent of configs/)
+            cwd=config_dir  # Run from the example directory (where config.yaml lives)
         )
 
         # Wait for server to be ready
@@ -164,7 +163,7 @@ class TestGoToNavigationPersistence:
     @pytest.fixture
     def server(self, base_port):
         """Start server with checkbox config."""
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-check-box.yaml"
+        config_path = PROJECT_ROOT / "examples" / "classification" / "check-box" / "config.yaml"
         server = IntegrationTestServer(str(config_path), port=base_port)
         success, error = server.start()
         if not success:
@@ -309,7 +308,7 @@ class TestAnnotationModification:
     @pytest.fixture
     def server(self, base_port):
         """Start server with checkbox config."""
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-check-box.yaml"
+        config_path = PROJECT_ROOT / "examples" / "classification" / "check-box" / "config.yaml"
         server = IntegrationTestServer(str(config_path), port=base_port)
         success, error = server.start()
         if not success:
@@ -358,7 +357,7 @@ class TestTextInputPersistence:
     @pytest.fixture
     def server(self, base_port):
         """Start server with textbox config."""
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-text-box.yaml"
+        config_path = PROJECT_ROOT / "examples" / "classification" / "text-box" / "config.yaml"
         server = IntegrationTestServer(str(config_path), port=base_port)
         success, error = server.start()
         if not success:
@@ -405,7 +404,7 @@ class TestNextPrevNavigation:
     @pytest.fixture
     def server(self, base_port):
         """Start server with checkbox config."""
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-check-box.yaml"
+        config_path = PROJECT_ROOT / "examples" / "classification" / "check-box" / "config.yaml"
         server = IntegrationTestServer(str(config_path), port=base_port)
         success, error = server.start()
         if not success:

@@ -1,0 +1,114 @@
+# Span Annotation with AI Keywords and Admin Highlights Demo
+#
+# This example demonstrates all three overlay systems working together:
+# 1. User Span Annotations - filled overlays created by selecting text
+# 2. AI Keyword Highlights - bordered overlays from AI suggestions (click Keyword button)
+# 3. Admin Keyword Highlights - bordered overlays from pre-defined keyword list
+#
+# AI Assistant buttons available:
+# - Hint: Guidance on what to look for without revealing the answer
+# - Keyword: Highlights relevant words/phrases in the text for each label
+# - Rationale: Explains why each label might apply to this text
+#
+# Prerequisites:
+#   1. Install Ollama: https://ollama.ai
+#   2. Pull a model: ollama pull qwen3:0.6b
+#   3. Ensure Ollama is running: ollama serve
+#   4. Copy ai-config.yaml.example to ai-config.yaml (or create your own)
+#
+# Run from within this directory:
+#   python ../../../potato/flask_server.py start config.yaml -p 8000
+
+annotation_task_name: "Span Annotation with AI & Admin Keywords"
+
+# Server settings
+port: 8000
+debug: true
+
+# Task directory - current directory (run from within this folder)
+task_dir: .
+site_dir: default
+
+# User configuration - allow anyone to annotate without password
+user_config:
+  allow_all_users: true
+require_password: false
+
+# Data configuration
+data_files:
+  - data/reviews.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+# Output directory for annotations
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+# Admin keyword highlights file
+# These keywords will always be highlighted with bordered boxes
+keyword_highlights_file: data/keywords.tsv
+
+# Annotation scheme - span annotation for entity marking
+annotation_schemes:
+  - annotation_type: span
+    annotation_id: 0
+    name: entities
+    description: "Highlight entities in the text. Use the AI buttons (Hint, Keyword, Rationale) for assistance."
+    labels:
+      - name: positive
+        tooltip: "Positive sentiment expressions"
+        color: "#22C55E"
+      - name: negative
+        tooltip: "Negative sentiment expressions"
+        color: "#EF4444"
+      - name: product
+        tooltip: "Product names or features"
+        color: "#3B82F6"
+      - name: quality
+        tooltip: "Quality descriptors"
+        color: "#8B5CF6"
+
+# AI Support Configuration
+# Endpoint details (model, API key, server URL) are loaded from ai-config.yaml.
+# Copy ai-config.yaml.example to ai-config.yaml and fill in your details.
+ai_support:
+  enabled: true
+  ai_config_file: ai-config.yaml
+
+  ai_config:
+    # Generation parameters (defaults; can be overridden in ai-config.yaml)
+    temperature: 0.7
+    max_tokens: 1500
+
+    # Enable AI for all annotation schemes
+    include:
+      all: true
+
+  # Caching configuration for better performance
+  cache_config:
+    disk_cache:
+      enabled: true
+      path: annotation_output/ai_cache.json
+
+    # Pre-fetch hints (disabled for demo simplicity)
+    prefetch:
+      warm_up_page_count: 0
+      on_next: 0
+      on_prev: 0
+
+# UI customization - colors for labels
+ui:
+  show_instance_id: true
+  spans:
+    span_colors:
+      entities:
+        positive: "(34, 197, 94)"    # Green
+        negative: "(239, 68, 68)"    # Red
+        product: "(59, 130, 246)"    # Blue
+        quality: "(139, 92, 246)"    # Purple
+
+# Annotation constraints
+max_annotations_per_item: -1
+max_annotations_per_user: 20

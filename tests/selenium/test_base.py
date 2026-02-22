@@ -158,9 +158,9 @@ class BaseSeleniumTest(unittest.TestCase):
         """
         self.driver.get(f"{self.server.base_url}/")
 
-        # Wait for page to load - look for login-content which is present in both modes
+        # Wait for page to load - look for login-email which is present in both modes
         WebDriverWait(self.driver, 10).until(
-            EC.presence_of_element_located((By.ID, "login-content"))
+            EC.presence_of_element_located((By.ID, "login-email"))
         )
 
         # Check if this is password mode (has login-tab) or simple mode (no tabs)
@@ -194,11 +194,11 @@ class BaseSeleniumTest(unittest.TestCase):
             username_field.send_keys(self.test_user)
 
             # Submit the login form
-            login_form = self.driver.find_element(By.CSS_SELECTOR, "#login-content form")
-            login_form.submit()
+            submit_btn = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+            submit_btn.click()
 
         # Wait for redirect after registration/login
-        time.sleep(0.05)
+        time.sleep(0.5)
 
     def login_user(self):
         """
@@ -221,13 +221,13 @@ class BaseSeleniumTest(unittest.TestCase):
         if "/annotate" not in self.driver.current_url:
             self.driver.get(f"{self.server.base_url}/")
 
-            # Wait for page to load - look for login-content
+            # Wait for page to load - look for login-email
             try:
                 WebDriverWait(self.driver, 5).until(
-                    EC.presence_of_element_located((By.ID, "login-content"))
+                    EC.presence_of_element_located((By.ID, "login-email"))
                 )
             except:
-                # If login-content not found, check if we're at annotation interface
+                # If login-email not found, check if we're at annotation interface
                 try:
                     self.driver.find_element(By.ID, "task_layout")
                     return  # Already logged in
@@ -253,18 +253,22 @@ class BaseSeleniumTest(unittest.TestCase):
                 password_field.clear()
                 username_field.send_keys(self.test_user)
                 password_field.send_keys(self.test_password)
+
+                # Submit login form
+                login_form = self.driver.find_element(By.CSS_SELECTOR, "#login-content form")
+                login_form.submit()
             except NoSuchElementException:
                 # Simple mode - just enter username
                 username_field = self.driver.find_element(By.ID, "login-email")
                 username_field.clear()
                 username_field.send_keys(self.test_user)
 
-            # Submit login form
-            login_form = self.driver.find_element(By.CSS_SELECTOR, "#login-content form")
-            login_form.submit()
+                # Submit the login form
+                submit_btn = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+                submit_btn.click()
 
             # Wait for redirect after login
-            time.sleep(0.05)
+            time.sleep(0.5)
 
     def verify_authentication(self):
         """
@@ -277,11 +281,11 @@ class BaseSeleniumTest(unittest.TestCase):
 
         Raises an assertion error if authentication failed.
         """
-        # Check if we're still on the login page by looking for login-content
+        # Check if we're still on the login page by looking for login-email
         # (which is present in both password and simple modes)
         try:
-            login_content = self.driver.find_element(By.ID, "login-content")
-            if login_content.is_displayed():
+            login_email = self.driver.find_element(By.ID, "login-email")
+            if login_email.is_displayed():
                 # Still on login page - check if there's an error message
                 try:
                     error = self.driver.find_element(By.CSS_SELECTOR, ".text-destructive, [style*='destructive']")
@@ -291,7 +295,7 @@ class BaseSeleniumTest(unittest.TestCase):
                     pass
                 raise Exception("User is still on login page - authentication failed")
         except NoSuchElementException:
-            pass  # login-content not found - good, we've moved past the login page
+            pass  # login-email not found - good, we've moved past the login page
 
         # Wait for annotation interface to fully load
         # First check for the task layout structure

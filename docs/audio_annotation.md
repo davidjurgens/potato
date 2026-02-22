@@ -239,7 +239,7 @@ Shows all segments sorted by start time:
 
 ## Example Project
 
-See `project-hub/simple_examples/configs/simple-audio-annotation.yaml` for a complete working example.
+See `examples/audio/audio-annotation/config.yaml` for a complete working example.
 
 ## Tips for Administrators
 

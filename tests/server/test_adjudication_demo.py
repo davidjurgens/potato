@@ -1,7 +1,7 @@
 """
 Server integration tests for the Adjudication Demo example.
 
-Starts the server with the real simple-adjudication config and validates
+Starts the server with the real adjudication demo config and validates
 that pre-loaded annotation data populates the adjudication queue, that
 Phase 3 annotator signals fire correctly, and that decisions can be
 submitted and persisted.
@@ -22,7 +22,7 @@ REPO_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..")
 )
 DEMO_DIR = os.path.join(
-    REPO_ROOT, "project-hub", "simple_examples", "simple-adjudication"
+    REPO_ROOT, "examples", "advanced", "adjudication"
 )
 CONFIG_FILE = os.path.join(DEMO_DIR, "config.yaml")
 
@@ -32,7 +32,7 @@ class TestAdjudicationDemo:
 
     @pytest.fixture(scope="class", autouse=True)
     def flask_server(self, request):
-        """Start the server using the real simple-adjudication config."""
+        """Start the server using the real adjudication demo config."""
         # Clean up any previous adjudication decisions so the queue is fresh
         adj_output = os.path.join(DEMO_DIR, "annotation_output", "adjudication")
         if os.path.exists(adj_output):

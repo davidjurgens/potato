@@ -452,7 +452,7 @@ Previously saved decisions are automatically loaded when the server restarts, so
 A complete, self-contained example project is available at:
 
 ```
-project-hub/simple_examples/simple-adjudication/
+examples/advanced/adjudication/
 ```
 
 This example includes a sentiment analysis task with two annotation schemas (single-choice sentiment and multi-select topics), sample data with 8 review texts, and pre-created annotation output from three simulated annotators.
@@ -462,7 +462,7 @@ This example includes a sentiment analysis task with two annotation schemas (sin
 From the repository root:
 
 ```bash
-python potato/flask_server.py start project-hub/simple_examples/simple-adjudication/config.yaml -p 8000
+python potato/flask_server.py start examples/advanced/adjudication/config.yaml -p 8000
 ```
 
 Then:

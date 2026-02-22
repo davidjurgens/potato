@@ -183,6 +183,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Validate diversity ordering configuration if present
     validate_diversity_config(config_data)
 
+    # Validate embedding visualization configuration if present
+    validate_embedding_visualization_config(config_data)
+
     # Validate adjudication configuration if present
     if 'adjudication' in config_data:
         validate_adjudication_config(config_data)
@@ -192,6 +195,12 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 
     # Validate instance display configuration if present
     validate_instance_display_config(config_data)
+
+    # Validate format_handling configuration if present
+    validate_format_handling_config(config_data)
+
+    # Validate layout configuration if present
+    validate_layout_config(config_data)
 
     # Validate MACE configuration if present
     if 'mace' in config_data:
@@ -297,6 +306,40 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
 
     # Validate keyword_highlight is not enabled for image-based tasks
     _validate_keyword_highlight_for_images(config_data)
+
+    # Validate display_logic cross-references (schema references and circular dependencies)
+    all_schemes = _collect_all_annotation_schemes(config_data)
+    if all_schemes:
+        validate_display_logic_references(all_schemes)
+
+
+def _collect_all_annotation_schemes(config_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Collect all annotation schemes from config, whether top-level or in phases.
+
+    Args:
+        config_data: The configuration data
+
+    Returns:
+        List of all annotation scheme dictionaries
+    """
+    schemes = []
+
+    if 'annotation_schemes' in config_data:
+        schemes.extend(config_data['annotation_schemes'])
+    elif 'phases' in config_data:
+        phases = config_data['phases']
+        if isinstance(phases, list):
+            for phase in phases:
+                if 'annotation_schemes' in phase:
+                    schemes.extend(phase['annotation_schemes'])
+        elif isinstance(phases, dict):
+            for phase_name, phase in phases.items():
+                if phase_name != 'order' and isinstance(phase, dict):
+                    if 'annotation_schemes' in phase:
+                        schemes.extend(phase['annotation_schemes'])
+
+    return schemes
 
 
 def _validate_keyword_highlight_for_images(config_data: Dict[str, Any]) -> None:
@@ -485,7 +528,7 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
 
     # Validate annotation_type
     # Note: Keep in sync with potato.server_utils.schemas.registry
-    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'span_link', 'select', 'number', 'multirate', 'pure_display', 'video', 'image_annotation', 'audio_annotation', 'video_annotation']
+    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'span_link', 'select', 'number', 'multirate', 'pure_display', 'video', 'image_annotation', 'audio_annotation', 'video_annotation', 'pairwise', 'coreference', 'tree_annotation', 'triage', 'event_annotation', 'tiered_annotation']
     if scheme['annotation_type'] not in valid_types:
         raise ConfigValidationError(f"{path}.annotation_type must be one of: {', '.join(valid_types)}")
 
@@ -557,7 +600,7 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
             raise ConfigValidationError(f"{path}.tools cannot be empty")
 
         # Validate tools
-        valid_tools = ['bbox', 'polygon', 'freeform', 'landmark']
+        valid_tools = ['bbox', 'polygon', 'freeform', 'landmark', 'fill', 'eraser', 'brush']
         invalid_tools = [t for t in scheme['tools'] if t not in valid_tools]
         if invalid_tools:
             raise ConfigValidationError(f"{path}.tools contains invalid values: {invalid_tools}. Valid tools are: {valid_tools}")
@@ -644,6 +687,244 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
         if 'video_fps' in scheme:
             if not isinstance(scheme['video_fps'], (int, float)) or scheme['video_fps'] <= 0:
                 raise ConfigValidationError(f"{path}.video_fps must be a positive number")
+
+    elif annotation_type == 'tiered_annotation':
+        # Validate required fields
+        if 'tiers' not in scheme:
+            raise ConfigValidationError(f"{path} missing 'tiers' field for tiered_annotation")
+        if not isinstance(scheme['tiers'], list):
+            raise ConfigValidationError(f"{path}.tiers must be a list")
+        if not scheme['tiers']:
+            raise ConfigValidationError(f"{path}.tiers cannot be empty")
+
+        if 'source_field' not in scheme:
+            raise ConfigValidationError(f"{path} missing 'source_field' field for tiered_annotation")
+
+        # Validate media_type
+        media_type = scheme.get('media_type', 'audio')
+        if media_type not in ['audio', 'video']:
+            raise ConfigValidationError(f"{path}.media_type must be 'audio' or 'video'")
+
+        # Validate tiers
+        tier_names = set()
+        valid_tier_types = ['independent', 'dependent']
+        valid_constraint_types = ['time_subdivision', 'included_in', 'symbolic_association', 'symbolic_subdivision', 'none']
+
+        for i, tier in enumerate(scheme['tiers']):
+            tier_path = f"{path}.tiers[{i}]"
+
+            if not isinstance(tier, dict):
+                raise ConfigValidationError(f"{tier_path} must be a dictionary")
+
+            if 'name' not in tier:
+                raise ConfigValidationError(f"{tier_path} missing 'name' field")
+
+            tier_name = tier['name']
+            if tier_name in tier_names:
+                raise ConfigValidationError(f"{tier_path} duplicate tier name: '{tier_name}'")
+            tier_names.add(tier_name)
+
+            # Validate tier_type
+            tier_type = tier.get('tier_type', 'independent')
+            if tier_type not in valid_tier_types:
+                raise ConfigValidationError(f"{tier_path}.tier_type must be one of: {valid_tier_types}")
+
+            # Validate dependent tier requirements
+            if tier_type == 'dependent':
+                if 'parent_tier' not in tier:
+                    raise ConfigValidationError(f"{tier_path} dependent tier must have 'parent_tier'")
+
+            # Validate constraint_type
+            constraint_type = tier.get('constraint_type', 'none')
+            if constraint_type not in valid_constraint_types:
+                raise ConfigValidationError(f"{tier_path}.constraint_type must be one of: {valid_constraint_types}")
+
+        # Validate parent_tier references (second pass)
+        for i, tier in enumerate(scheme['tiers']):
+            parent = tier.get('parent_tier')
+            if parent and parent not in tier_names:
+                raise ConfigValidationError(f"{path}.tiers[{i}] references unknown parent_tier: '{parent}'")
+            if parent and parent == tier['name']:
+                raise ConfigValidationError(f"{path}.tiers[{i}] cannot be its own parent")
+
+        # Validate optional numeric fields
+        if 'tier_height' in scheme:
+            if not isinstance(scheme['tier_height'], int) or scheme['tier_height'] < 20:
+                raise ConfigValidationError(f"{path}.tier_height must be an integer >= 20")
+
+    elif annotation_type == 'pairwise':
+        # Validate mode
+        valid_modes = ['binary', 'scale']
+        mode = scheme.get('mode', 'binary')
+        if mode not in valid_modes:
+            raise ConfigValidationError(f"{path}.mode must be one of: {valid_modes}")
+
+        # Validate labels if provided
+        if 'labels' in scheme:
+            if not isinstance(scheme['labels'], list):
+                raise ConfigValidationError(f"{path}.labels must be a list")
+            if len(scheme['labels']) < 2:
+                raise ConfigValidationError(f"{path}.labels must have at least 2 items (for A and B)")
+
+        # Validate scale configuration for scale mode
+        if mode == 'scale':
+            scale = scheme.get('scale', {})
+            if not isinstance(scale, dict):
+                raise ConfigValidationError(f"{path}.scale must be a dictionary")
+
+            # Validate min/max values
+            min_val = scale.get('min', -3)
+            max_val = scale.get('max', 3)
+            if not isinstance(min_val, (int, float)) or not isinstance(max_val, (int, float)):
+                raise ConfigValidationError(f"{path}.scale.min and scale.max must be numbers")
+            if min_val >= max_val:
+                raise ConfigValidationError(f"{path}.scale.min must be less than scale.max")
+
+            # Validate step
+            step = scale.get('step', 1)
+            if not isinstance(step, (int, float)) or step <= 0:
+                raise ConfigValidationError(f"{path}.scale.step must be a positive number")
+
+            # Validate scale labels if provided
+            if 'labels' in scale:
+                scale_labels = scale['labels']
+                if not isinstance(scale_labels, dict):
+                    raise ConfigValidationError(f"{path}.scale.labels must be a dictionary")
+
+    # Validate display_logic if present
+    if 'display_logic' in scheme:
+        validate_display_logic_structure(scheme['display_logic'], path)
+
+
+def validate_display_logic_structure(display_logic: Dict[str, Any], path: str) -> None:
+    """
+    Validate the structure of a display_logic configuration block.
+
+    This validates the syntax and structure of a single display_logic block.
+    Cross-schema validation (checking referenced schemas exist) is done separately
+    in validate_display_logic_references().
+
+    Args:
+        display_logic: The display_logic configuration
+        path: Path in the config for error reporting
+
+    Raises:
+        ConfigValidationError: If the display_logic is invalid
+    """
+    from potato.server_utils.display_logic import SUPPORTED_OPERATORS
+
+    if not isinstance(display_logic, dict):
+        raise ConfigValidationError(f"{path}.display_logic must be a dictionary")
+
+    # Must have show_when
+    if 'show_when' not in display_logic:
+        raise ConfigValidationError(f"{path}.display_logic must have 'show_when' field")
+
+    show_when = display_logic['show_when']
+    if not isinstance(show_when, list):
+        raise ConfigValidationError(f"{path}.display_logic.show_when must be a list of conditions")
+
+    if len(show_when) == 0:
+        raise ConfigValidationError(f"{path}.display_logic.show_when must have at least one condition")
+
+    # Validate each condition
+    for i, condition in enumerate(show_when):
+        cond_path = f"{path}.display_logic.show_when[{i}]"
+
+        if not isinstance(condition, dict):
+            raise ConfigValidationError(f"{cond_path} must be a dictionary")
+
+        # Required fields
+        if 'schema' not in condition:
+            raise ConfigValidationError(f"{cond_path} missing required 'schema' field")
+
+        if 'operator' not in condition:
+            raise ConfigValidationError(f"{cond_path} missing required 'operator' field")
+
+        operator = condition['operator']
+        if operator not in SUPPORTED_OPERATORS:
+            raise ConfigValidationError(
+                f"{cond_path}.operator '{operator}' is not supported. "
+                f"Valid operators: {list(SUPPORTED_OPERATORS.keys())}"
+            )
+
+        # Validate operator-specific value requirements
+        value = condition.get('value')
+
+        # Operators that don't need a value
+        if operator in ('empty', 'not_empty'):
+            pass  # No value required
+        # Range operators need [min, max]
+        elif operator in ('in_range', 'not_in_range', 'length_in_range'):
+            if not isinstance(value, (list, tuple)):
+                raise ConfigValidationError(
+                    f"{cond_path}: operator '{operator}' requires a range value as [min, max]"
+                )
+            if len(value) != 2:
+                raise ConfigValidationError(
+                    f"{cond_path}: range value must have exactly 2 elements [min, max]"
+                )
+            try:
+                min_val, max_val = float(value[0]), float(value[1])
+                if min_val > max_val:
+                    raise ConfigValidationError(
+                        f"{cond_path}: range min ({min_val}) is greater than max ({max_val})"
+                    )
+            except (ValueError, TypeError):
+                raise ConfigValidationError(f"{cond_path}: range values must be numeric")
+        # Numeric operators need numeric values
+        elif operator in ('gt', 'gte', 'lt', 'lte', 'length_gt', 'length_lt'):
+            if value is None:
+                raise ConfigValidationError(f"{cond_path}: operator '{operator}' requires a value")
+            try:
+                float(value)
+            except (ValueError, TypeError):
+                raise ConfigValidationError(
+                    f"{cond_path}: operator '{operator}' requires a numeric value"
+                )
+        # Regex operator needs a valid pattern
+        elif operator == 'matches':
+            if value is None:
+                raise ConfigValidationError(f"{cond_path}: operator 'matches' requires a regex pattern")
+            try:
+                import re
+                re.compile(value)
+            except re.error as e:
+                raise ConfigValidationError(f"{cond_path}: invalid regex pattern '{value}': {e}")
+        # Other operators just need a non-None value
+        elif value is None:
+            raise ConfigValidationError(f"{cond_path}: operator '{operator}' requires a value")
+
+    # Validate logic field if present
+    logic = display_logic.get('logic', 'all')
+    if logic not in ('all', 'any'):
+        raise ConfigValidationError(
+            f"{path}.display_logic.logic must be 'all' or 'any', got '{logic}'"
+        )
+
+
+def validate_display_logic_references(annotation_schemes: List[Dict[str, Any]]) -> None:
+    """
+    Validate that all display_logic references point to existing schemas
+    and check for circular dependencies.
+
+    This is called after all annotation schemes have been validated individually.
+
+    Args:
+        annotation_schemes: List of annotation scheme configurations
+
+    Raises:
+        ConfigValidationError: If there are invalid references or circular dependencies
+    """
+    from potato.server_utils.display_logic import validate_display_logic_config
+
+    # Use the DisplayLogicValidator for comprehensive validation
+    is_valid, errors = validate_display_logic_config(annotation_schemes)
+
+    if not is_valid:
+        # Format errors nicely
+        error_msg = "Display logic validation errors:\n" + "\n".join(f"  - {e}" for e in errors)
+        raise ConfigValidationError(error_msg)
 
 
 def validate_server_config(config_data: Dict[str, Any]) -> None:
@@ -1625,6 +1906,185 @@ def validate_diversity_config(config_data: Dict[str, Any]) -> None:
             )
 
 
+def validate_embedding_visualization_config(config_data: Dict[str, Any]) -> None:
+    """
+    Validate embedding visualization configuration.
+
+    This function validates the embedding_visualization section which controls
+    the admin dashboard 2D visualization of embeddings.
+
+    Args:
+        config_data: The configuration data
+
+    Raises:
+        ConfigValidationError: If embedding visualization configuration is invalid
+    """
+    if 'embedding_visualization' not in config_data:
+        return  # Embedding visualization is optional
+
+    ev = config_data['embedding_visualization']
+    if not isinstance(ev, dict):
+        raise ConfigValidationError("embedding_visualization must be a dictionary")
+
+    # Validate enabled flag
+    if 'enabled' in ev:
+        if not isinstance(ev['enabled'], bool):
+            raise ConfigValidationError("embedding_visualization.enabled must be a boolean")
+
+    # If not enabled, skip further validation
+    if not ev.get('enabled', True):
+        return
+
+    # Validate sample_size
+    if 'sample_size' in ev:
+        sample_size = ev['sample_size']
+        if not isinstance(sample_size, int) or sample_size < 1:
+            raise ConfigValidationError(
+                "embedding_visualization.sample_size must be a positive integer"
+            )
+
+    # Validate include_all_annotated
+    if 'include_all_annotated' in ev:
+        if not isinstance(ev['include_all_annotated'], bool):
+            raise ConfigValidationError(
+                "embedding_visualization.include_all_annotated must be a boolean"
+            )
+
+    # Validate embedding_model
+    if 'embedding_model' in ev:
+        if not isinstance(ev['embedding_model'], str) or not ev['embedding_model'].strip():
+            raise ConfigValidationError(
+                "embedding_visualization.embedding_model must be a non-empty string"
+            )
+
+    # Validate image_embedding_model
+    if 'image_embedding_model' in ev:
+        if not isinstance(ev['image_embedding_model'], str) or not ev['image_embedding_model'].strip():
+            raise ConfigValidationError(
+                "embedding_visualization.image_embedding_model must be a non-empty string"
+            )
+
+    # Validate UMAP configuration
+    if 'umap' in ev:
+        umap_config = ev['umap']
+        if not isinstance(umap_config, dict):
+            raise ConfigValidationError("embedding_visualization.umap must be a dictionary")
+
+        # Validate n_neighbors
+        if 'n_neighbors' in umap_config:
+            n_neighbors = umap_config['n_neighbors']
+            if not isinstance(n_neighbors, int) or n_neighbors < 2:
+                raise ConfigValidationError(
+                    "embedding_visualization.umap.n_neighbors must be an integer >= 2"
+                )
+
+        # Validate min_dist
+        if 'min_dist' in umap_config:
+            min_dist = umap_config['min_dist']
+            if not isinstance(min_dist, (int, float)) or min_dist < 0 or min_dist > 1:
+                raise ConfigValidationError(
+                    "embedding_visualization.umap.min_dist must be a number between 0 and 1"
+                )
+
+        # Validate metric
+        if 'metric' in umap_config:
+            valid_metrics = ['cosine', 'euclidean', 'manhattan', 'correlation']
+            if umap_config['metric'] not in valid_metrics:
+                raise ConfigValidationError(
+                    f"embedding_visualization.umap.metric must be one of: {valid_metrics}"
+                )
+
+    # Validate label_source
+    if 'label_source' in ev:
+        valid_sources = ['mace', 'majority']
+        if ev['label_source'] not in valid_sources:
+            raise ConfigValidationError(
+                f"embedding_visualization.label_source must be one of: {valid_sources}"
+            )
+
+
+def _merge_ai_config_file(config_data: Dict[str, Any], config_dir: str) -> Dict[str, Any]:
+    """
+    Merge an external ai-config.yaml into the main config if specified.
+
+    When ai_support.ai_config_file is set, loads that YAML file and merges its
+    contents into the ai_support section. The external file provides endpoint-specific
+    details (endpoint_type, model, api_key, base_url) while the inline ai_config
+    provides defaults (temperature, max_tokens, include settings).
+
+    Args:
+        config_data: The parsed main configuration dictionary
+        config_dir: Directory containing the main config file (for resolving relative paths)
+
+    Returns:
+        The config_data with external AI config merged in (modified in place and returned)
+    """
+    ai_support = config_data.get("ai_support", {})
+    if not isinstance(ai_support, dict):
+        return config_data
+
+    ai_config_file = ai_support.get("ai_config_file")
+
+    if not ai_config_file:
+        # No external file specified - apply env var substitution to inline ai_config
+        if "ai_config" in ai_support:
+            from potato.data_sources.credentials import substitute_env_vars
+            ai_support["ai_config"] = substitute_env_vars(ai_support["ai_config"])
+            config_data["ai_support"] = ai_support
+        return config_data
+
+    if not isinstance(ai_config_file, str):
+        logger.warning("ai_support.ai_config_file must be a string. Ignoring.")
+        return config_data
+
+    # Resolve relative to config file directory
+    ai_config_path = os.path.join(config_dir, ai_config_file)
+
+    if not os.path.exists(ai_config_path):
+        logger.warning(
+            f"AI config file '{ai_config_file}' not found at {ai_config_path}. "
+            f"AI support will be disabled. Create this file with your endpoint details."
+        )
+        config_data["ai_support"]["enabled"] = False
+        return config_data
+
+    # Load external AI config
+    try:
+        with open(ai_config_path, 'r', encoding='utf-8') as f:
+            external_config = yaml.safe_load(f) or {}
+    except yaml.YAMLError as e:
+        logger.warning(f"Invalid YAML in AI config file '{ai_config_file}': {e}. AI support will be disabled.")
+        config_data["ai_support"]["enabled"] = False
+        return config_data
+
+    if not isinstance(external_config, dict):
+        logger.warning(f"AI config file '{ai_config_file}' must contain a YAML dictionary. AI support will be disabled.")
+        config_data["ai_support"]["enabled"] = False
+        return config_data
+
+    # Apply environment variable substitution to external config
+    from potato.data_sources.credentials import substitute_env_vars
+    external_config = substitute_env_vars(external_config)
+
+    # Extract endpoint_type from external config (top-level key)
+    if "endpoint_type" in external_config:
+        ai_support["endpoint_type"] = external_config.pop("endpoint_type")
+
+    # Merge remaining keys into ai_config (external takes precedence)
+    ai_config = ai_support.get("ai_config", {})
+    if not isinstance(ai_config, dict):
+        ai_config = {}
+    ai_config.update(external_config)
+    ai_support["ai_config"] = ai_config
+
+    # Also apply env var substitution to the final merged ai_config
+    ai_support["ai_config"] = substitute_env_vars(ai_support["ai_config"])
+
+    config_data["ai_support"] = ai_support
+    logger.info(f"Loaded AI endpoint config from {ai_config_file}")
+    return config_data
+
+
 def load_and_validate_config(config_file: str, project_dir: str) -> Dict[str, Any]:
     """
     Load and validate a YAML configuration file with security checks.
@@ -1663,6 +2123,9 @@ def load_and_validate_config(config_file: str, project_dir: str) -> Dict[str, An
 
     # Get the directory containing the config file for relative path resolution
     config_file_dir = os.path.dirname(validated_config_path)
+
+    # Merge external AI config file if specified (before validation)
+    config_data = _merge_ai_config_file(config_data, config_file_dir)
 
     # Apply default values for common configuration options
     if 'task_dir' not in config_data:
@@ -2013,6 +2476,11 @@ def validate_ai_support_config(config_data: Dict[str, Any]) -> None:
     if not ai_config.get("enabled", False):
         return  # Skip validation if not enabled
 
+    # Validate ai_config_file (optional, string path to external AI config)
+    if "ai_config_file" in ai_config:
+        if not isinstance(ai_config["ai_config_file"], str):
+            raise ConfigValidationError("ai_support.ai_config_file must be a string")
+
     # Validate endpoint type
     if "endpoint_type" not in ai_config:
         raise ConfigValidationError("ai_support.endpoint_type is required when ai_support is enabled")
@@ -2270,7 +2738,10 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
     span_targets = []
 
     # Valid display types - keep in sync with display registry
-    valid_display_types = ["text", "html", "image", "video", "audio", "dialogue", "pairwise"]
+    valid_display_types = [
+        "text", "html", "image", "video", "audio", "dialogue", "pairwise",
+        "pdf", "document", "spreadsheet", "code"
+    ]
 
     for i, field in enumerate(fields):
         if not isinstance(field, dict):
@@ -2301,11 +2772,12 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
 
         # Validate span_target
         if field.get("span_target"):
-            # Only text-based types can be span targets
-            if field_type not in ["text", "dialogue"]:
+            # Types that support span annotation targets
+            span_target_types = ["text", "dialogue", "pdf", "document", "spreadsheet", "code"]
+            if field_type not in span_target_types:
                 raise ConfigValidationError(
                     f"instance_display.fields[{i}].span_target is set but type '{field_type}' "
-                    f"does not support span annotation. Only 'text' and 'dialogue' types support span_target."
+                    f"does not support span annotation. Types that support span_target: {', '.join(span_target_types)}."
                 )
             span_targets.append(key)
 
@@ -2335,6 +2807,11 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
             gap = layout["gap"]
             if not isinstance(gap, str):
                 raise ConfigValidationError("instance_display.layout.gap must be a string (e.g., '20px', '1rem')")
+
+    # Validate resizable option (defaults to True)
+    if "resizable" in display_config:
+        if not isinstance(display_config["resizable"], bool):
+            raise ConfigValidationError("instance_display.resizable must be a boolean (true/false)")
 
     # Check for deprecation warning: using annotation schemas for display-only
     _check_display_only_deprecation(config_data)
@@ -2366,6 +2843,17 @@ def _validate_display_options(field_type: str, options: Dict[str, Any], path: st
             raise ConfigValidationError(f"{path}.display_options.max_height must be an integer or string")
         if isinstance(max_height, int) and max_height < 1:
             raise ConfigValidationError(f"{path}.display_options.max_height must be positive")
+
+    if "min_height" in options:
+        min_height = options["min_height"]
+        if not isinstance(min_height, (int, str)):
+            raise ConfigValidationError(f"{path}.display_options.min_height must be an integer or string")
+        if isinstance(min_height, int) and min_height < 1:
+            raise ConfigValidationError(f"{path}.display_options.min_height must be positive")
+
+    if "resizable" in options:
+        if not isinstance(options["resizable"], bool):
+            raise ConfigValidationError(f"{path}.display_options.resizable must be a boolean")
 
     # Text-specific options
     if field_type in ["text", "html"]:
@@ -2423,6 +2911,353 @@ def _validate_display_options(field_type: str, options: Dict[str, Any], path: st
             cell_width = options["cell_width"]
             if not isinstance(cell_width, str):
                 raise ConfigValidationError(f"{path}.display_options.cell_width must be a string (e.g., '50%')")
+
+    # PDF-specific options
+    if field_type == "pdf":
+        if "view_mode" in options:
+            valid_modes = ["scroll", "paginated", "side-by-side"]
+            if options["view_mode"] not in valid_modes:
+                raise ConfigValidationError(
+                    f"{path}.display_options.view_mode must be one of: {', '.join(valid_modes)}"
+                )
+
+        if "text_layer" in options:
+            if not isinstance(options["text_layer"], bool):
+                raise ConfigValidationError(f"{path}.display_options.text_layer must be a boolean")
+
+        if "zoom" in options:
+            zoom = options["zoom"]
+            valid_zoom_modes = ["auto", "page-fit", "page-width"]
+            if zoom not in valid_zoom_modes:
+                try:
+                    float(zoom)
+                except (TypeError, ValueError):
+                    raise ConfigValidationError(
+                        f"{path}.display_options.zoom must be one of {valid_zoom_modes} or a number"
+                    )
+
+    # Document-specific options
+    if field_type == "document":
+        if "collapsible" in options:
+            if not isinstance(options["collapsible"], bool):
+                raise ConfigValidationError(f"{path}.display_options.collapsible must be a boolean")
+
+        if "show_outline" in options:
+            if not isinstance(options["show_outline"], bool):
+                raise ConfigValidationError(f"{path}.display_options.show_outline must be a boolean")
+
+        if "style_theme" in options:
+            valid_themes = ["default", "minimal", "print"]
+            if options["style_theme"] not in valid_themes:
+                raise ConfigValidationError(
+                    f"{path}.display_options.style_theme must be one of: {', '.join(valid_themes)}"
+                )
+
+    # Spreadsheet-specific options
+    if field_type == "spreadsheet":
+        if "annotation_mode" in options:
+            valid_modes = ["row", "cell", "range"]
+            if options["annotation_mode"] not in valid_modes:
+                raise ConfigValidationError(
+                    f"{path}.display_options.annotation_mode must be one of: {', '.join(valid_modes)}"
+                )
+
+        for bool_opt in ["show_headers", "striped", "hoverable", "sortable", "selectable", "compact"]:
+            if bool_opt in options:
+                if not isinstance(options[bool_opt], bool):
+                    raise ConfigValidationError(f"{path}.display_options.{bool_opt} must be a boolean")
+
+    # Code-specific options
+    if field_type == "code":
+        if "language" in options:
+            if not isinstance(options["language"], (str, type(None))):
+                raise ConfigValidationError(f"{path}.display_options.language must be a string or null")
+
+        if "show_line_numbers" in options:
+            if not isinstance(options["show_line_numbers"], bool):
+                raise ConfigValidationError(f"{path}.display_options.show_line_numbers must be a boolean")
+
+        if "wrap_lines" in options:
+            if not isinstance(options["wrap_lines"], bool):
+                raise ConfigValidationError(f"{path}.display_options.wrap_lines must be a boolean")
+
+        if "highlight_lines" in options:
+            hl = options["highlight_lines"]
+            if hl is not None and not isinstance(hl, list):
+                raise ConfigValidationError(f"{path}.display_options.highlight_lines must be a list of line numbers or null")
+
+        if "theme" in options:
+            valid_themes = ["default", "dark"]
+            if options["theme"] not in valid_themes:
+                raise ConfigValidationError(
+                    f"{path}.display_options.theme must be one of: {', '.join(valid_themes)}"
+                )
+
+
+def validate_format_handling_config(config_data: Dict[str, Any]) -> None:
+    """
+    Validate format_handling configuration for extended format support.
+
+    Args:
+        config_data: The full configuration data
+
+    Raises:
+        ConfigValidationError: If the format_handling configuration is invalid
+    """
+    format_config = config_data.get('format_handling')
+    if format_config is None:
+        return
+
+    if not isinstance(format_config, dict):
+        raise ConfigValidationError("format_handling must be a dictionary")
+
+    # Validate enabled flag
+    if "enabled" in format_config:
+        if not isinstance(format_config["enabled"], bool):
+            raise ConfigValidationError("format_handling.enabled must be a boolean")
+
+    # Validate default_format
+    if "default_format" in format_config:
+        default = format_config["default_format"]
+        valid_defaults = ["auto", "pdf", "docx", "markdown", "spreadsheet", "code"]
+        if default not in valid_defaults:
+            raise ConfigValidationError(
+                f"format_handling.default_format must be one of: {', '.join(valid_defaults)}"
+            )
+
+    # Validate PDF-specific options
+    if "pdf" in format_config:
+        pdf_opts = format_config["pdf"]
+        if not isinstance(pdf_opts, dict):
+            raise ConfigValidationError("format_handling.pdf must be a dictionary")
+
+        if "extraction_mode" in pdf_opts:
+            valid_modes = ["text", "ocr", "hybrid"]
+            if pdf_opts["extraction_mode"] not in valid_modes:
+                raise ConfigValidationError(
+                    f"format_handling.pdf.extraction_mode must be one of: {', '.join(valid_modes)}"
+                )
+
+        if "cache_extracted" in pdf_opts:
+            if not isinstance(pdf_opts["cache_extracted"], bool):
+                raise ConfigValidationError("format_handling.pdf.cache_extracted must be a boolean")
+
+    # Validate spreadsheet-specific options
+    if "spreadsheet" in format_config:
+        ss_opts = format_config["spreadsheet"]
+        if not isinstance(ss_opts, dict):
+            raise ConfigValidationError("format_handling.spreadsheet must be a dictionary")
+
+        if "annotation_mode" in ss_opts:
+            valid_modes = ["row", "cell", "range"]
+            if ss_opts["annotation_mode"] not in valid_modes:
+                raise ConfigValidationError(
+                    f"format_handling.spreadsheet.annotation_mode must be one of: {', '.join(valid_modes)}"
+                )
+
+        if "max_rows" in ss_opts:
+            max_rows = ss_opts["max_rows"]
+            if not isinstance(max_rows, int) or max_rows < 1:
+                raise ConfigValidationError("format_handling.spreadsheet.max_rows must be a positive integer")
+
+
+def validate_layout_config(config_data: Dict[str, Any]) -> None:
+    """
+    Validate layout configuration for annotation form grid arrangement.
+
+    The layout section configures how annotation forms are arranged in a grid,
+    supports grouping schemas with collapsible headers, and provides responsive
+    breakpoints for mobile/tablet displays.
+
+    Args:
+        config_data: The full configuration data
+
+    Raises:
+        ConfigValidationError: If the layout configuration is invalid
+    """
+    layout = config_data.get('layout')
+    if layout is None:
+        return  # layout is optional
+
+    if not isinstance(layout, dict):
+        raise ConfigValidationError("layout must be a dictionary")
+
+    # Validate grid configuration
+    if 'grid' in layout:
+        grid = layout['grid']
+        if not isinstance(grid, dict):
+            raise ConfigValidationError("layout.grid must be a dictionary")
+
+        # Validate columns (1-6)
+        if 'columns' in grid:
+            columns = grid['columns']
+            if not isinstance(columns, int) or columns < 1 or columns > 6:
+                raise ConfigValidationError("layout.grid.columns must be an integer between 1 and 6")
+
+        # Validate gap (CSS value)
+        if 'gap' in grid:
+            gap = grid['gap']
+            if not isinstance(gap, str) or not gap.strip():
+                raise ConfigValidationError("layout.grid.gap must be a non-empty CSS value string (e.g., '1rem', '16px')")
+
+        # Validate row_gap (CSS value)
+        if 'row_gap' in grid:
+            row_gap = grid['row_gap']
+            if not isinstance(row_gap, str) or not row_gap.strip():
+                raise ConfigValidationError("layout.grid.row_gap must be a non-empty CSS value string")
+
+        # Validate align_items
+        if 'align_items' in grid:
+            valid_alignments = ['start', 'center', 'end', 'stretch']
+            if grid['align_items'] not in valid_alignments:
+                raise ConfigValidationError(
+                    f"layout.grid.align_items must be one of: {', '.join(valid_alignments)}"
+                )
+
+    # Validate breakpoints
+    if 'breakpoints' in layout:
+        breakpoints = layout['breakpoints']
+        if not isinstance(breakpoints, dict):
+            raise ConfigValidationError("layout.breakpoints must be a dictionary")
+
+        for bp_name in ['mobile', 'tablet']:
+            if bp_name in breakpoints:
+                bp_value = breakpoints[bp_name]
+                if not isinstance(bp_value, int) or bp_value < 0:
+                    raise ConfigValidationError(
+                        f"layout.breakpoints.{bp_name} must be a non-negative integer (pixel value)"
+                    )
+
+    # Validate groups
+    if 'groups' in layout:
+        groups = layout['groups']
+        if not isinstance(groups, list):
+            raise ConfigValidationError("layout.groups must be a list")
+
+        # Collect all schema names for validation
+        all_schemas = set()
+        schemes = config_data.get('annotation_schemes', [])
+        for scheme in schemes:
+            if isinstance(scheme, dict) and 'name' in scheme:
+                all_schemas.add(scheme['name'])
+
+        group_ids = set()
+        for i, group in enumerate(groups):
+            if not isinstance(group, dict):
+                raise ConfigValidationError(f"layout.groups[{i}] must be a dictionary")
+
+            # Validate required group fields
+            if 'id' not in group:
+                raise ConfigValidationError(f"layout.groups[{i}] missing required 'id' field")
+
+            group_id = group['id']
+            if not isinstance(group_id, str) or not group_id.strip():
+                raise ConfigValidationError(f"layout.groups[{i}].id must be a non-empty string")
+
+            if group_id in group_ids:
+                raise ConfigValidationError(f"layout.groups[{i}].id '{group_id}' is duplicate")
+            group_ids.add(group_id)
+
+            # Validate schemas list
+            if 'schemas' not in group:
+                raise ConfigValidationError(f"layout.groups[{i}] missing required 'schemas' field")
+
+            group_schemas = group['schemas']
+            if not isinstance(group_schemas, list):
+                raise ConfigValidationError(f"layout.groups[{i}].schemas must be a list")
+
+            if not group_schemas:
+                raise ConfigValidationError(f"layout.groups[{i}].schemas cannot be empty")
+
+            # Validate each schema reference exists
+            for j, schema_name in enumerate(group_schemas):
+                if not isinstance(schema_name, str):
+                    raise ConfigValidationError(
+                        f"layout.groups[{i}].schemas[{j}] must be a string"
+                    )
+                if schema_name not in all_schemas:
+                    raise ConfigValidationError(
+                        f"layout.groups[{i}].schemas references unknown schema: '{schema_name}'"
+                    )
+
+            # Validate optional boolean fields
+            if 'collapsible' in group:
+                if not isinstance(group['collapsible'], bool):
+                    raise ConfigValidationError(f"layout.groups[{i}].collapsible must be a boolean")
+
+            if 'collapsed_default' in group:
+                if not isinstance(group['collapsed_default'], bool):
+                    raise ConfigValidationError(f"layout.groups[{i}].collapsed_default must be a boolean")
+
+            # Validate optional title
+            if 'title' in group:
+                if not isinstance(group['title'], str):
+                    raise ConfigValidationError(f"layout.groups[{i}].title must be a string")
+
+            # Validate optional description
+            if 'description' in group:
+                if not isinstance(group['description'], str):
+                    raise ConfigValidationError(f"layout.groups[{i}].description must be a string")
+
+    # Validate order
+    if 'order' in layout:
+        order = layout['order']
+        if not isinstance(order, list):
+            raise ConfigValidationError("layout.order must be a list")
+
+        for i, schema_name in enumerate(order):
+            if not isinstance(schema_name, str):
+                raise ConfigValidationError(f"layout.order[{i}] must be a string")
+
+    # Validate styling (advanced options)
+    if 'styling' in layout:
+        styling = layout['styling']
+        if not isinstance(styling, dict):
+            raise ConfigValidationError("layout.styling must be a dictionary")
+
+        # Validate align_items
+        if 'align_items' in styling:
+            valid_alignments = ['start', 'center', 'end', 'stretch']
+            if styling['align_items'] not in valid_alignments:
+                raise ConfigValidationError(
+                    f"layout.styling.align_items must be one of: {', '.join(valid_alignments)}"
+                )
+
+        # Validate content_align
+        if 'content_align' in styling:
+            valid_content_align = ['left', 'center', 'right']
+            if styling['content_align'] not in valid_content_align:
+                raise ConfigValidationError(
+                    f"layout.styling.content_align must be one of: {', '.join(valid_content_align)}"
+                )
+
+        # Validate background colors (CSS color values)
+        for color_key in ['group_background_odd', 'group_background_even']:
+            if color_key in styling:
+                color = styling[color_key]
+                if not isinstance(color, str) or not color.strip():
+                    raise ConfigValidationError(
+                        f"layout.styling.{color_key} must be a non-empty CSS color value"
+                    )
+
+        # Validate padding values (CSS padding)
+        for padding_key in ['group_padding', 'form_padding']:
+            if padding_key in styling:
+                padding = styling[padding_key]
+                if not isinstance(padding, str) or not padding.strip():
+                    raise ConfigValidationError(
+                        f"layout.styling.{padding_key} must be a non-empty CSS padding value"
+                    )
+
+    # Validate per-group background_color if present
+    if 'groups' in layout:
+        for i, group in enumerate(layout['groups']):
+            if 'background_color' in group:
+                bg_color = group['background_color']
+                if not isinstance(bg_color, str) or not bg_color.strip():
+                    raise ConfigValidationError(
+                        f"layout.groups[{i}].background_color must be a non-empty CSS color value"
+                    )
 
 
 def validate_adjudication_config(config_data: Dict[str, Any]) -> None:

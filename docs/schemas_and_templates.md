@@ -22,6 +22,10 @@ Below are examples of the different annotation schema types available in Potato:
 |:---:|:---:|:---:|
 | ![Image](img/screenshots/image_annotation_annotation.png) | ![Audio](img/screenshots/audio_annotation_annotation.png) | ![Video](img/screenshots/video_annotation_annotation.png) |
 
+| Triage | Coreference | Conversation Tree |
+|:---:|:---:|:---:|
+| ![Triage](img/screenshots/triage_annotation.png) | ![Coreference](img/screenshots/coreference_annotation.png) | ![Tree](img/screenshots/tree_annotation.png) |
+
 ## Core Schema Structure
 
 All annotation schemas share these **required fields**:
@@ -328,7 +332,186 @@ annotation_schemes:
 
 See [Video Annotation](video_annotation.md) for detailed documentation.
 
+### 12. Triage (`triage`)
+
+Prodigy-style binary accept/reject/skip interface for rapid data curation tasks.
+
+**Required Fields:**
+None beyond the core fields
+
+**Optional Fields:**
+- `accept_label` (string): Label for accept button (default: "Keep")
+- `reject_label` (string): Label for reject button (default: "Discard")
+- `skip_label` (string): Label for skip button (default: "Unsure")
+- `auto_advance` (boolean): Auto-advance to next item (default: true)
+- `show_progress` (boolean): Show progress bar (default: true)
+- `accept_key` (string): Keyboard shortcut for accept (default: "1")
+- `reject_key` (string): Keyboard shortcut for reject (default: "2")
+- `skip_key` (string): Keyboard shortcut for skip (default: "3")
+
+**Example:**
+```yaml
+annotation_schemes:
+  - annotation_type: "triage"
+    name: "data_quality"
+    description: "Is this data sample suitable for training?"
+    auto_advance: true
+    show_progress: true
+```
+
+See [Triage](triage.md) for detailed documentation.
+
+### 13. Coreference Chains (`coreference`)
+
+Groups text spans that refer to the same entity into coreference chains.
+
+**Required Fields:**
+- `span_schema` (string): Name of the span schema providing mentions
+
+**Optional Fields:**
+- `entity_types` (list): Entity type categories for classification
+- `allow_singletons` (boolean): Allow single-mention chains (default: true)
+- `visual_display.highlight_mode` (string): Display style - "background", "bracket", or "underline"
+
+**Example:**
+```yaml
+annotation_schemes:
+  - annotation_type: "span"
+    name: "mentions"
+    description: "Highlight entity mentions"
+    labels: ["MENTION"]
+
+  - annotation_type: "coreference"
+    name: "entity_chains"
+    description: "Group mentions of the same entity"
+    span_schema: "mentions"
+    entity_types: ["PERSON", "ORGANIZATION", "LOCATION"]
+```
+
+See [Coreference Annotation](coreference_annotation.md) for detailed documentation.
+
+### 14. Conversation Tree (`tree_annotation`)
+
+Enables annotation of hierarchical conversation structures with per-node rating and path selection.
+
+**Required Fields:**
+None beyond the core fields
+
+**Optional Fields:**
+- `node_scheme` (object): Annotation scheme for individual nodes
+- `path_selection.enabled` (boolean): Enable path selection
+- `path_selection.description` (string): Path selection instructions
+- `branch_comparison.enabled` (boolean): Enable branch comparison mode
+
+**Example:**
+```yaml
+annotation_schemes:
+  - annotation_type: "tree_annotation"
+    name: "response_eval"
+    description: "Evaluate conversation responses"
+    node_scheme:
+      annotation_type: "likert"
+      min_label: "Poor"
+      max_label: "Excellent"
+      size: 5
+    path_selection:
+      enabled: true
+      description: "Select the best conversation path"
+```
+
+See [Conversation Tree Annotation](conversation_tree_annotation.md) for detailed documentation.
+
+### 15. Tiered Annotation (`tiered_annotation`)
+
+ELAN-style hierarchical multi-tier annotation for audio and video content. Supports parent-child relationships between tiers with various constraint types.
+
+**Required Fields:**
+- `source_field` (string): Field name containing media URL
+- `tiers` (list): List of tier definitions
+
+**Optional Fields:**
+- `media_type` (string): "audio" or "video" (default: "audio")
+- `tier_height` (integer): Height per tier row in pixels (default: 50)
+- `show_tier_labels` (boolean): Show tier name labels (default: true)
+- `collapsed_tiers` (list): Tier names to start collapsed
+- `zoom_enabled` (boolean): Enable zoom controls (default: true)
+- `playback_rate_control` (boolean): Show playback speed controls (default: true)
+
+**Tier Definition:**
+- `name` (string): Tier identifier
+- `tier_type` (string): "independent" or "dependent"
+- `parent_tier` (string): Parent tier name (for dependent tiers)
+- `constraint_type` (string): "time_subdivision", "included_in", "symbolic_association", or "symbolic_subdivision"
+- `labels` (list): Available annotation labels with name and color
+
+**Example:**
+```yaml
+annotation_schemes:
+  - annotation_type: "tiered_annotation"
+    name: "linguistic_tiers"
+    description: "Annotate speech with hierarchical tiers"
+    source_field: audio_url
+    media_type: audio
+    tiers:
+      - name: utterance
+        tier_type: independent
+        labels:
+          - name: Speaker_A
+            color: "#4ECDC4"
+          - name: Speaker_B
+            color: "#FF6B6B"
+      - name: word
+        tier_type: dependent
+        parent_tier: utterance
+        constraint_type: time_subdivision
+        labels:
+          - name: Word
+            color: "#95E1D3"
+```
+
+See [Tiered Annotation](tiered_annotation.md) for detailed documentation.
+
 ## Advanced Features
+
+### Discontinuous Span Selection
+
+For span annotation, you can enable discontinuous span selection, allowing annotators to select multiple non-contiguous text ranges as part of a single span annotation:
+
+```yaml
+annotation_schemes:
+  - annotation_type: "span"
+    name: "phrases"
+    description: "Highlight relevant phrases (Ctrl/Cmd+click to add more)"
+    labels: ["RELEVANT", "IRRELEVANT"]
+    allow_discontinuous: true
+```
+
+When enabled:
+- Hold **Ctrl** (Windows/Linux) or **Cmd** (Mac) while selecting text to add additional ranges
+- All selected ranges are stored as part of the same annotation
+- Useful for split antecedents, discontinuous constituents, or multi-part expressions
+
+### Entity Linking
+
+Span annotations can be linked to external knowledge bases like Wikidata:
+
+```yaml
+annotation_schemes:
+  - annotation_type: "span"
+    name: "ner"
+    description: "Highlight and link named entities"
+    labels: ["PERSON", "ORG", "LOC"]
+    entity_linking:
+      enabled: true
+      knowledge_bases:
+        - name: wikidata
+          type: wikidata
+          language: en
+      auto_search: true
+      required: false
+```
+
+See [Entity Linking](entity_linking.md) for detailed documentation.
 
 ### Keyboard Shortcuts
 
@@ -437,7 +620,7 @@ surveyflow_html_layout: "default"
 
 ## Examples and Templates
 
-For complete working examples, see the [project-hub](https://potato-annotation.readthedocs.io/en/latest/example-projects/) directory which contains ready-to-use configurations for various annotation tasks.
+For complete working examples, see the [examples](https://potato-annotation.readthedocs.io/en/latest/example-projects/) directory which contains ready-to-use configurations for various annotation tasks.
 
 ### Customizing the Instance Area
 

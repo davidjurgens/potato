@@ -1,0 +1,69 @@
+# Embedding Visualization Demo
+# This example demonstrates the embedding visualization feature in the admin dashboard.
+# It includes pre-annotated data to show how label coloring works.
+
+# Server configuration
+server_name: "Embedding Visualization Demo"
+port: 8000
+
+# Task directory
+task_dir: "."
+
+# Output directory for annotations (contains pre-populated annotations)
+output_dir: "annotation_output"
+
+# Data files
+data_files:
+  - data/embedding-viz-data.json
+
+# Item properties
+item_properties:
+  id_key: id
+  text_key: text
+
+# Instance display
+instance_display:
+  fields:
+    - key: text
+      type: text
+
+# Annotation scheme - sentiment classification
+annotation_schemes:
+  - annotation_type: radio
+    name: sentiment
+    description: "What is the sentiment of this text?"
+    labels:
+      - name: "Positive"
+        key_binding: p
+      - name: "Negative"
+        key_binding: n
+      - name: "Neutral"
+        key_binding: u
+
+# User configuration
+user_config:
+  allow_signup: true
+  allow_login: true
+  allow_guest_login: false
+  single_user_mode: false
+
+# Admin API key (for admin dashboard access)
+admin_api_key: "demo-admin-key-12345"
+
+# Diversity ordering - REQUIRED for embedding visualization
+# This computes embeddings for all instances
+diversity_ordering:
+  enabled: true
+  model_name: "all-MiniLM-L6-v2"
+  num_clusters: 5
+
+# Embedding visualization configuration
+embedding_visualization:
+  enabled: true
+  sample_size: 1000               # Max instances to visualize
+  include_all_annotated: true     # Always show annotated items
+  label_source: "majority"        # Use majority vote for coloring
+  umap:
+    n_neighbors: 15
+    min_dist: 0.1
+    metric: "cosine"

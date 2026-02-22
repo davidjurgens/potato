@@ -1,0 +1,104 @@
+# Simple Tiered Annotation Example
+# Demonstrates ELAN-style hierarchical multi-tier annotation
+
+annotation_task_name: Tiered Annotation Example
+
+# Data source
+data_files:
+  - data/tiered-example.json
+
+# Item properties
+item_properties:
+  id_key: id
+  text_key: text
+  audio_key: audio_url
+
+# NOTE: We intentionally do NOT use instance_display here.
+# The tiered_annotation schema handles audio display directly in its player.
+# Using instance_display would cause the audio to appear twice.
+
+# Annotation schema with hierarchical tiers
+annotation_schemes:
+  - annotation_type: tiered_annotation
+    name: linguistic_tiers
+    description: "Annotate speech with hierarchical tiers (utterance > word > phoneme)"
+    source_field: audio_url
+    media_type: audio
+
+    # Tier definitions - order determines display order
+    tiers:
+      # Independent tier - directly time-aligned
+      - name: utterance
+        tier_type: independent
+        description: "Speaker utterances"
+        labels:
+          - name: Speaker_A
+            color: "#4ECDC4"
+            tooltip: "Utterance by Speaker A"
+          - name: Speaker_B
+            color: "#FF6B6B"
+            tooltip: "Utterance by Speaker B"
+          - name: Overlap
+            color: "#F39C12"
+            tooltip: "Overlapping speech"
+
+      # Dependent tier - must reference parent annotations
+      - name: word
+        tier_type: dependent
+        parent_tier: utterance
+        constraint_type: time_subdivision
+        description: "Word-level transcription"
+        labels:
+          - name: Content
+            color: "#95E1D3"
+            tooltip: "Content word"
+          - name: Function
+            color: "#AA96DA"
+            tooltip: "Function word (articles, prepositions, etc.)"
+
+      # Nested dependent tier
+      - name: phoneme
+        tier_type: dependent
+        parent_tier: word
+        constraint_type: time_subdivision
+        description: "Phoneme segments"
+        labels:
+          - name: Vowel
+            color: "#F38181"
+          - name: Consonant
+            color: "#95E1D3"
+
+      # Independent tier for non-verbal events
+      - name: gesture
+        tier_type: independent
+        description: "Non-verbal gestures and events"
+        labels:
+          - name: Point
+            color: "#DDA0DD"
+          - name: Nod
+            color: "#87CEEB"
+          - name: Shake
+            color: "#98D8C8"
+          - name: Pause
+            color: "#C0C0C0"
+
+    # Display options
+    tier_height: 50
+    show_tier_labels: true
+    zoom_enabled: true
+    playback_rate_control: true
+
+# Basic layout
+html_layout: default
+
+# Task settings
+task_dir: .
+output_annotation_dir: annotation_output
+
+# User configuration
+user_config:
+  allow_new_users: true
+  require_password: false
+
+# Skip training
+require_train_phase: false

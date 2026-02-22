@@ -1,0 +1,250 @@
+/**
+ * Document Bounding Box Annotation Styles
+ *
+ * Styles for bounding box annotation on HTML/document displays.
+ */
+
+/* Document Display Base */
+.document-display {
+    position: relative;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: white;
+}
+
+.document-content {
+    padding: 20px;
+}
+
+/* Bounding Box Mode */
+.document-bbox-mode {
+    padding: 0;
+}
+
+.document-bbox-mode .document-content {
+    padding: 20px;
+}
+
+/* Bounding Box Toolbar */
+.document-bbox-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: #333;
+    color: white;
+    border-bottom: 1px solid #444;
+}
+
+.document-bbox-tools {
+    display: flex;
+    gap: 8px;
+}
+
+.document-bbox-toolbar button {
+    background: #555;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.2s;
+}
+
+.document-bbox-toolbar button:hover {
+    background: #666;
+}
+
+.document-bbox-toolbar button.active {
+    background: #0066cc;
+}
+
+.document-bbox-draw-btn.active {
+    background: #28a745;
+}
+
+.document-bbox-select-btn.active {
+    background: #17a2b8;
+}
+
+.document-bbox-delete-btn:hover {
+    background: #dc3545;
+}
+
+.document-bbox-info {
+    font-size: 13px;
+    color: #ccc;
+}
+
+/* Bounding Box Container */
+.document-bbox-container {
+    position: relative;
+    cursor: crosshair;
+}
+
+.document-bbox-container.selecting {
+    cursor: pointer;
+}
+
+.document-bbox-content {
+    position: relative;
+    z-index: 1;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* Bounding Box Canvas Overlay */
+.document-bbox-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: all;
+    z-index: 10;
+}
+
+/* Collapsible Documents */
+.document-collapsible {
+    border: none;
+}
+
+.document-summary {
+    padding: 10px 15px;
+    background: #f8f9fa;
+    cursor: pointer;
+    font-weight: 500;
+    border-bottom: 1px solid #ddd;
+}
+
+.document-summary:hover {
+    background: #e9ecef;
+}
+
+/* Document Themes */
+.document-theme-default .document-content {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.6;
+}
+
+.document-theme-minimal .document-content {
+    font-family: Georgia, serif;
+    line-height: 1.8;
+    max-width: 700px;
+    margin: 0 auto;
+}
+
+.document-theme-print .document-content {
+    font-family: "Times New Roman", Times, serif;
+    line-height: 1.5;
+}
+
+/* Document Outline */
+.document-outline {
+    position: sticky;
+    top: 0;
+    padding: 15px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #ddd;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.outline-title {
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: #333;
+}
+
+.outline-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.outline-list li {
+    margin: 4px 0;
+}
+
+.outline-link {
+    color: #0066cc;
+    text-decoration: none;
+    font-size: 13px;
+}
+
+.outline-link:hover {
+    text-decoration: underline;
+}
+
+.outline-level-1 { padding-left: 0; }
+.outline-level-2 { padding-left: 15px; }
+.outline-level-3 { padding-left: 30px; }
+.outline-level-4 { padding-left: 45px; }
+.outline-level-5 { padding-left: 60px; }
+.outline-level-6 { padding-left: 75px; }
+
+/* Document Metadata */
+.document-metadata {
+    padding: 8px 15px;
+    background: #f8f9fa;
+    border-top: 1px solid #ddd;
+    font-size: 12px;
+    color: #666;
+}
+
+/* Bounding Box Styles (drawn on canvas) */
+/* These are for any HTML overlay elements */
+.document-bbox-overlay {
+    position: absolute;
+    border: 2px solid #0066cc;
+    background: rgba(0, 102, 204, 0.1);
+    pointer-events: none;
+    z-index: 5;
+}
+
+.document-bbox-overlay.selected {
+    border-color: #28a745;
+    background: rgba(40, 167, 69, 0.15);
+}
+
+.document-bbox-label {
+    position: absolute;
+    top: -20px;
+    left: 0;
+    font-size: 11px;
+    background: #0066cc;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+}
+
+.document-bbox-overlay.selected .document-bbox-label {
+    background: #28a745;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .document-bbox-toolbar {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .document-bbox-tools {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+}
+
+/* Print Styles */
+@media print {
+    .document-bbox-toolbar,
+    .document-bbox-canvas {
+        display: none;
+    }
+
+    .document-display {
+        border: none;
+    }
+}

@@ -112,6 +112,8 @@ class SchemaRegistry:
         Raises:
             ValueError: If annotation_type is missing or not supported
         """
+        import json as json_module
+
         annotation_type = annotation_scheme.get("annotation_type")
         if not annotation_type:
             raise ValueError("annotation_scheme must have 'annotation_type' field")
@@ -125,7 +127,52 @@ class SchemaRegistry:
             )
 
         logger.debug(f"Generating layout for annotation type: {annotation_type}")
-        return schema.generator(annotation_scheme)
+        html, keybindings = schema.generator(annotation_scheme)
+
+        # Wrap HTML with display_logic attributes if present
+        html = self._wrap_with_display_logic(html, annotation_scheme)
+
+        return html, keybindings
+
+    def _wrap_with_display_logic(self, html: str, annotation_scheme: Dict[str, Any]) -> str:
+        """
+        Wrap the generated HTML with display_logic attributes and container if needed.
+
+        If the annotation scheme has display_logic, wraps the HTML in a container
+        div with data-display-logic attribute containing the serialized logic,
+        and applies the initial hidden state.
+
+        Args:
+            html: The generated HTML from the schema generator
+            annotation_scheme: The annotation scheme configuration
+
+        Returns:
+            The HTML, possibly wrapped with display_logic container
+        """
+        import json as json_module
+        from html import escape
+
+        display_logic = annotation_scheme.get("display_logic")
+        if not display_logic:
+            return html
+
+        schema_name = annotation_scheme.get("name", "")
+
+        # Serialize display_logic to JSON for the data attribute
+        display_logic_json = json_module.dumps(display_logic)
+        # Escape for HTML attribute (single quotes in JSON are safe)
+        display_logic_escaped = escape(display_logic_json)
+
+        # Wrap in a container with display logic attributes
+        # Initially hidden - the frontend JS will evaluate and show if conditions are met
+        wrapped_html = f'''<div class="display-logic-container display-logic-hidden"
+     data-display-logic="{display_logic_escaped}"
+     data-schema-name="{escape(schema_name)}"
+     data-display-logic-target="true">
+{html}
+</div>'''
+
+        return wrapped_html
 
     def list_schemas(self) -> List[Dict[str, Any]]:
         """
@@ -191,6 +238,12 @@ def _register_builtin_schemas():
     from .image_annotation import generate_image_annotation_layout
     from .audio_annotation import generate_audio_annotation_layout
     from .video_annotation import generate_video_annotation_layout
+    from .pairwise import generate_pairwise_layout
+    from .coreference import generate_coreference_layout
+    from .tree_annotation import generate_tree_annotation_layout
+    from .triage import generate_triage_layout
+    from .event_annotation import generate_event_annotation_layout
+    from .tiered_annotation import generate_tiered_annotation_layout
 
     schemas = [
         SchemaDefinition(
@@ -253,9 +306,9 @@ def _register_builtin_schemas():
             name="span",
             generator=generate_span_layout,
             required_fields=["name", "description", "labels"],
-            optional_fields=["sequential_key_binding", "bad_text_label", "title"],
+            optional_fields=["sequential_key_binding", "bad_text_label", "title", "allow_discontinuous", "entity_linking"],
             supports_keybindings=True,
-            description="Text span annotation/highlighting"
+            description="Text span annotation/highlighting with optional entity linking to knowledge bases"
         ),
         SchemaDefinition(
             name="select",
@@ -301,9 +354,9 @@ def _register_builtin_schemas():
             name="video_annotation",
             generator=generate_video_annotation_layout,
             required_fields=["name", "description"],
-            optional_fields=["mode", "labels", "segment_schemes", "min_segments", "max_segments", "timeline_height", "overview_height", "zoom_enabled", "playback_rate_control", "frame_stepping", "show_timecode", "video_fps"],
+            optional_fields=["mode", "labels", "segment_schemes", "min_segments", "max_segments", "timeline_height", "overview_height", "zoom_enabled", "playback_rate_control", "frame_stepping", "show_timecode", "video_fps", "tracking_options"],
             supports_keybindings=True,
-            description="Video annotation with temporal segments, frame classification, and keyframes"
+            description="Video annotation with temporal segments, frame classification, keyframes, and object tracking"
         ),
         SchemaDefinition(
             name="span_link",
@@ -312,6 +365,54 @@ def _register_builtin_schemas():
             optional_fields=["visual_display"],
             supports_keybindings=False,
             description="Create relationships/links between spans (e.g., PERSON works_for ORGANIZATION)"
+        ),
+        SchemaDefinition(
+            name="pairwise",
+            generator=generate_pairwise_layout,
+            required_fields=["name", "description"],
+            optional_fields=["mode", "items_key", "items", "show_labels", "labels", "allow_tie", "tie_label", "sequential_key_binding", "scale", "label_requirement"],
+            supports_keybindings=True,
+            description="Pairwise comparison of two items (binary selection or scale rating)"
+        ),
+        SchemaDefinition(
+            name="coreference",
+            generator=generate_coreference_layout,
+            required_fields=["name", "description", "span_schema"],
+            optional_fields=["entity_types", "allow_singletons", "visual_display"],
+            supports_keybindings=False,
+            description="Coreference chain annotation for grouping mentions of the same entity"
+        ),
+        SchemaDefinition(
+            name="tree_annotation",
+            generator=generate_tree_annotation_layout,
+            required_fields=["name", "description"],
+            optional_fields=["node_scheme", "path_selection", "branch_comparison"],
+            supports_keybindings=False,
+            description="Annotation of conversation tree nodes with path selection"
+        ),
+        SchemaDefinition(
+            name="triage",
+            generator=generate_triage_layout,
+            required_fields=["name", "description"],
+            optional_fields=["accept_label", "reject_label", "skip_label", "auto_advance", "show_progress", "accept_key", "reject_key", "skip_key"],
+            supports_keybindings=True,
+            description="Binary accept/reject triage for rapid data curation"
+        ),
+        SchemaDefinition(
+            name="event_annotation",
+            generator=generate_event_annotation_layout,
+            required_fields=["name", "description", "event_types", "span_schema"],
+            optional_fields=["visual_display"],
+            supports_keybindings=False,
+            description="N-ary event annotation with triggers and typed arguments"
+        ),
+        SchemaDefinition(
+            name="tiered_annotation",
+            generator=generate_tiered_annotation_layout,
+            required_fields=["name", "description", "tiers", "source_field"],
+            optional_fields=["media_type", "tier_height", "show_tier_labels", "collapsed_tiers", "zoom_enabled", "playback_rate_control", "overview_height"],
+            supports_keybindings=True,
+            description="Hierarchical multi-tier annotation for audio/video (ELAN-style)"
         ),
     ]
 

@@ -3,7 +3,7 @@ Selenium UI tests for the Adjudication Demo with pre-loaded data.
 
 Unlike test_adjudication_ui.py which uses a simulator to generate
 annotations, this test relies on the pre-loaded user_state.json files
-in the simple-adjudication example. It validates the full browser
+in the adjudication example. It validates the full browser
 experience with the demo config.
 """
 
@@ -25,7 +25,7 @@ REPO_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..")
 )
 DEMO_DIR = os.path.join(
-    REPO_ROOT, "project-hub", "simple_examples", "simple-adjudication"
+    REPO_ROOT, "examples", "advanced", "adjudication"
 )
 CONFIG_FILE = os.path.join(DEMO_DIR, "config.yaml")
 

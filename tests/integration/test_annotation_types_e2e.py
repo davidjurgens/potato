@@ -116,7 +116,7 @@ class TestRadioButtonE2E:
     @pytest.fixture
     def server(self, base_port):
         """Start server with single choice config."""
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-single-choice-selection.yaml"
+        config_path = PROJECT_ROOT / "examples" / "classification" / "single-choice" / "config.yaml"
         server = IntegrationTestServer(str(config_path), port=base_port)
         success, error = server.start()
         if not success:
@@ -194,7 +194,7 @@ class TestCheckboxE2E:
     @pytest.fixture
     def server(self, base_port):
         """Start server with checkbox config."""
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-check-box.yaml"
+        config_path = PROJECT_ROOT / "examples" / "classification" / "check-box" / "config.yaml"
         server = IntegrationTestServer(str(config_path), port=base_port)
         success, error = server.start()
         if not success:
@@ -276,7 +276,7 @@ class TestLikertScaleE2E:
     @pytest.fixture
     def server(self, base_port):
         """Start server with Likert config."""
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-likert.yaml"
+        config_path = PROJECT_ROOT / "examples" / "classification" / "likert" / "config.yaml"
         server = IntegrationTestServer(str(config_path), port=base_port)
         success, error = server.start()
         if not success:
@@ -327,7 +327,7 @@ class TestSliderE2E:
     @pytest.fixture
     def server(self, base_port):
         """Start server with slider config."""
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-slider.yaml"
+        config_path = PROJECT_ROOT / "examples" / "classification" / "slider" / "config.yaml"
         server = IntegrationTestServer(str(config_path), port=base_port)
         success, error = server.start()
         if not success:
@@ -367,7 +367,7 @@ class TestTextInputE2E:
     @pytest.fixture
     def server(self, base_port):
         """Start server with text box config."""
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-text-box.yaml"
+        config_path = PROJECT_ROOT / "examples" / "classification" / "text-box" / "config.yaml"
         server = IntegrationTestServer(str(config_path), port=base_port)
         success, error = server.start()
         if not success:
@@ -423,7 +423,7 @@ class TestSpanAnnotationE2E:
     @pytest.fixture
     def server(self, base_port):
         """Start server with span labeling config."""
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-span-labeling.yaml"
+        config_path = PROJECT_ROOT / "examples" / "span" / "span-labeling" / "config.yaml"
         server = IntegrationTestServer(str(config_path), port=base_port)
         success, error = server.start()
         if not success:
@@ -528,7 +528,7 @@ class TestMultirateE2E:
     @pytest.fixture
     def server(self, base_port):
         """Start server with multirate config."""
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-multirate.yaml"
+        config_path = PROJECT_ROOT / "examples" / "classification" / "multirate" / "config.yaml"
         server = IntegrationTestServer(str(config_path), port=base_port)
         success, error = server.start()
         if not success:
@@ -569,7 +569,7 @@ class TestMixedAnnotationTypesE2E:
     @pytest.fixture
     def server(self, base_port):
         """Start server with all-phases config (has multiple annotation types)."""
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "all-phases-example.yaml"
+        config_path = PROJECT_ROOT / "examples" / "advanced" / "all-phases-example" / "config.yaml"
         server = IntegrationTestServer(str(config_path), port=base_port)
         success, error = server.start()
         if not success:
@@ -645,7 +645,7 @@ class TestHTMLAnnotationE2E:
     @pytest.fixture
     def server(self, base_port):
         """Start server with HTML annotation config."""
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-html-annotation.yaml"
+        config_path = PROJECT_ROOT / "examples" / "advanced" / "html-annotation" / "config.yaml"
         server = IntegrationTestServer(str(config_path), port=base_port)
         success, error = server.start()
         if not success:

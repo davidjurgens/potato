@@ -1,7 +1,7 @@
 """
 Selenium UI tests for the MACE Competence Estimation Demo.
 
-Uses the pre-loaded user_state.json files from the simple-mace-demo
+Uses the pre-loaded user_state.json files from the mace-demo
 example. Tests the annotation UI workflow and verifies MACE API
 results are accessible and correct.
 
@@ -34,7 +34,7 @@ REPO_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..")
 )
 DEMO_DIR = os.path.join(
-    REPO_ROOT, "project-hub", "simple_examples", "simple-mace-demo"
+    REPO_ROOT, "examples", "advanced", "mace-demo"
 )
 CONFIG_FILE = os.path.join(DEMO_DIR, "config.yaml")
 ADMIN_KEY = "demo-mace-key"

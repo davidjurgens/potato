@@ -1500,6 +1500,28 @@ def annotate():
 
         else:
             logger.warning('go_to action requested but no go_to value provided')
+    elif action == "jump_to_unannotated":
+        # Find the next unannotated instance and jump to it
+        next_idx = user_state.find_next_unannotated_index()
+        if next_idx is not None:
+            logger.debug(f"Jumping to next unannotated instance at index {next_idx}")
+            user_state.go_to_index(next_idx)
+        else:
+            logger.debug(f"No unannotated instances found for user {username}")
+            # Return a JSON response indicating no unannotated items
+            if request.is_json:
+                return jsonify({"status": "no_unannotated", "message": "All items have been annotated"})
+    elif action == "jump_to_unannotated_prev":
+        # Find the previous unannotated instance and jump to it
+        prev_idx = user_state.find_prev_unannotated_index()
+        if prev_idx is not None:
+            logger.debug(f"Jumping to previous unannotated instance at index {prev_idx}")
+            user_state.go_to_index(prev_idx)
+        else:
+            logger.debug(f"No unannotated instances found for user {username}")
+            # Return a JSON response indicating no unannotated items
+            if request.is_json:
+                return jsonify({"status": "no_unannotated", "message": "All items have been annotated"})
     else:
         logger.debug(f'Action "{action}" - no specific handling')
 
@@ -2896,15 +2918,58 @@ def get_current_instance():
         instance_id = current_instance.get_id()
         logger.debug(f"Current instance ID: {instance_id}")
 
+        # Include raw data for schemas that need access to media URLs
+        raw_data = current_instance.get_data()
+
         return jsonify({
             "instance_id": instance_id,
             "current_index": user_state.get_current_instance_index(),
-            "total_instances": len(user_state.instance_id_ordering)
+            "total_instances": len(user_state.instance_id_ordering),
+            "data": raw_data  # Include full instance data
         })
 
     except Exception as e:
         logger.error(f"Error getting current instance: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/instance_data", methods=["GET"])
+def get_instance_data():
+    """Get the full raw data for the current instance.
+
+    Returns all fields from the original data file (e.g., audio_url, video_url, etc.)
+    This is used by annotation schemas that need access to media URLs.
+    """
+    logger.debug(f"=== GET_INSTANCE_DATA START ===")
+
+    if 'username' not in session:
+        logger.warning("Get instance data without active session")
+        return jsonify({"error": "No active session"}), 401
+
+    username = session['username']
+    logger.debug(f"Username: {username}")
+
+    try:
+        user_state = get_user_state(username)
+        if not user_state:
+            logger.error(f"User state not found for user: {username}")
+            return jsonify({"error": "User state not found"}), 404
+
+        current_instance = user_state.get_current_instance()
+        if not current_instance:
+            logger.error(f"No current instance for user: {username}")
+            return jsonify({"error": "No current instance"}), 404
+
+        # Get the raw data from the instance
+        raw_data = current_instance.get_data()
+        logger.debug(f"Returning instance data with keys: {list(raw_data.keys())}")
+
+        return jsonify(raw_data)
+
+    except Exception as e:
+        logger.error(f"Error getting instance data: {e}")
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route("/api/spans/<instance_id>")
 def get_span_data(instance_id):
@@ -3026,6 +3091,22 @@ def get_span_data(instance_id):
         }
         if span_target_field:
             span_entry['target_field'] = span_target_field
+
+        # Include additional_parts for discontinuous spans
+        additional_parts = span.get_additional_parts() if hasattr(span, 'get_additional_parts') else getattr(span, 'additional_parts', [])
+        if additional_parts:
+            span_entry['additional_parts'] = additional_parts
+
+        # Include entity linking data if present
+        kb_id = span.get_kb_id() if hasattr(span, 'get_kb_id') else getattr(span, 'kb_id', None)
+        kb_source = span.get_kb_source() if hasattr(span, 'get_kb_source') else getattr(span, 'kb_source', None)
+        kb_label = span.get_kb_label() if hasattr(span, 'get_kb_label') else getattr(span, 'kb_label', None)
+        if kb_id and kb_source:
+            span_entry['kb_id'] = kb_id
+            span_entry['kb_source'] = kb_source
+            if kb_label:
+                span_entry['kb_label'] = kb_label
+
         span_data.append(span_entry)
 
     response_data = {
@@ -3098,8 +3179,8 @@ def update_instance():
             "request_size": len(request.get_data()) if request.get_data() else 0
         }
 
-        # Check if this is the frontend format (annotations, span_annotations)
-        if "annotations" in request.json:
+        # Check if this is the frontend format (annotations, span_annotations, link_annotations, event_annotations)
+        if "annotations" in request.json or "span_annotations" in request.json or "link_annotations" in request.json or "event_annotations" in request.json:
             logger.debug("Processing frontend format (annotations, span_annotations)")
 
             # Handle label annotations from frontend format
@@ -3151,12 +3232,17 @@ def update_instance():
             span_annotations = request.json.get("span_annotations", [])
             for span_data in span_annotations:
                 if isinstance(span_data, dict) and "schema" in span_data:
+                    # Use provided ID or generate deterministic one to preserve span identity
+                    span_id = span_data.get("id") or span_data.get("span_id") or \
+                              f"{span_data['schema']}_{span_data['name']}_{span_data['start']}_{span_data['end']}"
+
                     span = SpanAnnotation(
                         span_data["schema"],
                         span_data["name"],
                         span_data.get("title", span_data["name"]),
                         int(span_data["start"]),
                         int(span_data["end"]),
+                        id=span_id,
                         target_field=span_data.get("target_field")
                     )
                     value = span_data.get("value")
@@ -3214,6 +3300,38 @@ def update_instance():
                     user_state.add_link_annotation(instance_id, link)
                     logger.debug(f"Added link annotation: {link}")
 
+            # Handle event annotations from frontend format
+            event_annotations = request.json.get("event_annotations", [])
+            logger.debug(f"Processing {len(event_annotations)} event annotations")
+            for event_data in event_annotations:
+                logger.debug(f"Processing event data: {event_data}")
+                if isinstance(event_data, dict) and "schema" in event_data and "event_type" in event_data:
+                    from potato.item_state_management import EventAnnotation
+
+                    # Log the incoming ID
+                    incoming_id = event_data.get("id")
+                    logger.debug(f"Incoming event ID: {incoming_id}")
+
+                    event = EventAnnotation(
+                        schema=event_data["schema"],
+                        event_type=event_data["event_type"],
+                        trigger_span_id=event_data.get("trigger_span_id", ""),
+                        arguments=event_data.get("arguments", []),
+                        id=incoming_id,
+                        properties=event_data.get("properties", {})
+                    )
+
+                    # Log the actual ID assigned
+                    logger.debug(f"Event object ID after creation: {event.get_id()}")
+
+                    # Add or update the event annotation
+                    user_state.add_event_annotation(instance_id, event)
+
+                    # Log current events count
+                    current_events = user_state.get_event_annotations(instance_id)
+                    logger.debug(f"Added event annotation. Total events for instance: {len(current_events)}")
+                    logger.debug(f"Current event IDs: {list(current_events.keys())}")
+
         # Check if this is the backend format (schema, state, type)
         elif "schema" in request.json and "state" in request.json and "type" in request.json:
             logger.debug("Processing backend format (schema, state, type)")
@@ -3244,8 +3362,21 @@ def update_instance():
 
                     # Get span_id or generate one if not provided
                     span_id = sv.get("span_id") or sv.get("id") or f"{schema_name}_{sv['name']}_{start_offset}_{end_offset}"
-                    span = SpanAnnotation(schema_name, sv["name"], sv.get("title", sv["name"]), start_offset, end_offset, span_id, target_field=sv.get("target_field"))
-                    
+
+                    # Get additional_parts for discontinuous spans
+                    additional_parts = sv.get("additional_parts", [])
+
+                    span = SpanAnnotation(
+                        schema_name,
+                        sv["name"],
+                        sv.get("title", sv["name"]),
+                        start_offset,
+                        end_offset,
+                        span_id,
+                        target_field=sv.get("target_field"),
+                        additional_parts=additional_parts
+                    )
+
                     value = sv.get("value")
 
                     # Get old value for comparison
@@ -3567,12 +3698,18 @@ def admin():
     # Store API key in session for future requests
     session['admin_api_key'] = api_key
 
+    # Check if embedding visualization is available
+    from potato.embedding_visualization import get_embedding_viz_manager
+    viz_manager = get_embedding_viz_manager()
+    embedding_viz_enabled = viz_manager is not None and viz_manager.enabled
+
     # Get basic context for the dashboard
     context = {
         "annotation_task_name": config.get("annotation_task_name", "Annotation Platform"),
         "debug_mode": config.get("debug", False),
         "admin_api_key": get_admin_api_key() or "",
         "mace_enabled": config.get("mace", {}).get("enabled", False),
+        "embedding_viz_enabled": embedding_viz_enabled,
     }
 
     return render_template("admin.html", **context)
@@ -4610,6 +4747,360 @@ def delete_link_annotation(instance_id, link_id):
         logger.debug(f"=== DELETE_LINK_ANNOTATION END ===")
 
 
+# ============================================================================
+# Event Annotation API Routes
+# ============================================================================
+
+@app.route("/api/events/<instance_id>")
+def get_event_annotations(instance_id):
+    """
+    Get event annotations for a specific instance.
+
+    Returns:
+        JSON with event annotations for the instance.
+    """
+    logger.debug(f"=== GET_EVENT_ANNOTATIONS START ===")
+    logger.debug(f"Instance ID: {instance_id}")
+
+    if 'username' not in session:
+        logger.warning("Get event annotations without active session")
+        return jsonify({"error": "No active session"}), 401
+
+    username = session['username']
+    logger.debug(f"Username: {username}")
+
+    try:
+        user_state = get_user_state(username)
+        if not user_state:
+            logger.error(f"User state not found for user: {username}")
+            return jsonify({"error": "User state not found"}), 404
+
+        # Normalize instance_id to string
+        instance_id = str(instance_id)
+
+        # Get event annotations for this instance
+        events = user_state.get_event_annotations(instance_id)
+
+        # Convert to serializable format
+        events_data = []
+        for event_id, event in events.items():
+            event_dict = event.to_dict()
+            events_data.append(event_dict)
+            logger.debug(f"  Event ID: {event_id}, data: {event_dict}")
+
+        logger.debug(f"Found {len(events_data)} event annotations for instance {instance_id}")
+        logger.debug(f"Event IDs in storage: {list(events.keys())}")
+
+        return jsonify({
+            "status": "success",
+            "instance_id": instance_id,
+            "events": events_data
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting event annotations: {e}")
+        return jsonify({"error": f"Failed to get event annotations: {str(e)}"}), 500
+
+    finally:
+        logger.debug(f"=== GET_EVENT_ANNOTATIONS END ===")
+
+
+@app.route("/api/events/<instance_id>/<event_id>", methods=["DELETE"])
+def delete_event_annotation(instance_id, event_id):
+    """
+    Delete a specific event annotation.
+
+    Args:
+        instance_id: The instance ID
+        event_id: The event ID to delete
+
+    Returns:
+        JSON with success/failure status.
+    """
+    logger.debug(f"=== DELETE_EVENT_ANNOTATION START ===")
+    logger.debug(f"Instance ID: {instance_id}, Event ID: {event_id}")
+
+    if 'username' not in session:
+        logger.warning("Delete event annotation without active session")
+        return jsonify({"error": "No active session"}), 401
+
+    username = session['username']
+    logger.debug(f"Username: {username}")
+
+    try:
+        user_state = get_user_state(username)
+        if not user_state:
+            logger.error(f"User state not found for user: {username}")
+            return jsonify({"error": "User state not found"}), 404
+
+        # Normalize instance_id to string
+        instance_id = str(instance_id)
+
+        # Try to remove the event
+        success = user_state.remove_event_annotation(instance_id, event_id)
+
+        if success:
+            logger.debug(f"Deleted event annotation: {event_id} from instance {instance_id}")
+            return jsonify({
+                "status": "success",
+                "message": f"Event {event_id} deleted successfully"
+            })
+        else:
+            logger.warning(f"Event not found: {event_id} in instance {instance_id}")
+            return jsonify({
+                "status": "error",
+                "message": f"Event {event_id} not found"
+            }), 404
+
+    except Exception as e:
+        logger.error(f"Error deleting event annotation: {e}")
+        return jsonify({"error": f"Failed to delete event annotation: {str(e)}"}), 500
+
+    finally:
+        logger.debug(f"=== DELETE_EVENT_ANNOTATION END ===")
+
+
+# ============================================================================
+# Entity Linking API Routes
+# ============================================================================
+
+@app.route("/api/entity_linking/search")
+def entity_linking_search():
+    """
+    Search a knowledge base for entities matching a query.
+
+    Query parameters:
+        q: Search query string (required)
+        kb: Knowledge base name (required, e.g., "wikidata", "umls")
+        limit: Maximum number of results (default: 10)
+
+    Returns:
+        JSON with list of matching entities.
+    """
+    logger.debug(f"=== ENTITY_LINKING_SEARCH START ===")
+
+    if 'username' not in session:
+        logger.warning("Entity linking search without active session")
+        return jsonify({"error": "No active session"}), 401
+
+    query = request.args.get('q', '').strip()
+    kb_name = request.args.get('kb', '').strip()
+    limit = request.args.get('limit', 10, type=int)
+
+    logger.debug(f"Query: '{query}', KB: '{kb_name}', Limit: {limit}")
+
+    if not query:
+        return jsonify({"error": "Search query 'q' is required"}), 400
+
+    if not kb_name:
+        return jsonify({"error": "Knowledge base 'kb' is required"}), 400
+
+    try:
+        from potato.knowledge_base import get_kb_manager
+
+        kb_manager = get_kb_manager()
+        results = kb_manager.search(query, kb_name, limit=limit)
+
+        # Convert to serializable format
+        entities = [entity.to_dict() for entity in results]
+
+        logger.debug(f"Found {len(entities)} entities for query '{query}'")
+
+        return jsonify({
+            "status": "success",
+            "query": query,
+            "kb": kb_name,
+            "results": entities
+        })
+
+    except Exception as e:
+        logger.error(f"Error in entity linking search: {e}")
+        return jsonify({"error": f"Search failed: {str(e)}"}), 500
+
+    finally:
+        logger.debug(f"=== ENTITY_LINKING_SEARCH END ===")
+
+
+@app.route("/api/entity_linking/entity/<kb_name>/<entity_id>")
+def entity_linking_get_entity(kb_name, entity_id):
+    """
+    Get detailed information about a specific entity.
+
+    Args:
+        kb_name: Knowledge base name (e.g., "wikidata", "umls")
+        entity_id: Entity ID within the knowledge base (e.g., "Q937")
+
+    Returns:
+        JSON with entity details.
+    """
+    logger.debug(f"=== ENTITY_LINKING_GET_ENTITY START ===")
+    logger.debug(f"KB: {kb_name}, Entity ID: {entity_id}")
+
+    if 'username' not in session:
+        logger.warning("Entity linking get_entity without active session")
+        return jsonify({"error": "No active session"}), 401
+
+    try:
+        from potato.knowledge_base import get_kb_manager
+
+        kb_manager = get_kb_manager()
+        client = kb_manager.get_client(kb_name)
+
+        if not client:
+            return jsonify({"error": f"Knowledge base '{kb_name}' not configured"}), 404
+
+        entity = client.get_entity(entity_id)
+
+        if not entity:
+            return jsonify({"error": f"Entity '{entity_id}' not found"}), 404
+
+        logger.debug(f"Found entity: {entity.label}")
+
+        return jsonify({
+            "status": "success",
+            "entity": entity.to_dict()
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting entity: {e}")
+        return jsonify({"error": f"Failed to get entity: {str(e)}"}), 500
+
+    finally:
+        logger.debug(f"=== ENTITY_LINKING_GET_ENTITY END ===")
+
+
+@app.route("/api/entity_linking/configured_kbs")
+def entity_linking_configured_kbs():
+    """
+    Get list of configured knowledge bases.
+
+    Returns:
+        JSON with list of available knowledge base names and types.
+    """
+    logger.debug(f"=== ENTITY_LINKING_CONFIGURED_KBS START ===")
+
+    if 'username' not in session:
+        logger.warning("Entity linking configured_kbs without active session")
+        return jsonify({"error": "No active session"}), 401
+
+    try:
+        from potato.knowledge_base import get_kb_manager
+
+        kb_manager = get_kb_manager()
+        kb_names = kb_manager.list_clients()
+
+        # Get config info for each KB
+        kbs = []
+        for name in kb_names:
+            config = kb_manager.get_config(name)
+            if config:
+                kbs.append({
+                    "name": name,
+                    "type": config.kb_type,
+                    "language": config.language
+                })
+
+        logger.debug(f"Found {len(kbs)} configured knowledge bases")
+
+        return jsonify({
+            "status": "success",
+            "knowledge_bases": kbs
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting configured KBs: {e}")
+        return jsonify({"error": f"Failed to get configured KBs: {str(e)}"}), 500
+
+    finally:
+        logger.debug(f"=== ENTITY_LINKING_CONFIGURED_KBS END ===")
+
+
+@app.route("/api/entity_linking/update_span", methods=["POST"])
+def entity_linking_update_span():
+    """
+    Update a span annotation with entity linking information.
+
+    Request body:
+        instance_id: Instance ID
+        span_id: Span annotation ID
+        kb_id: Knowledge base entity ID
+        kb_source: Knowledge base source name
+        kb_label: Human-readable entity label
+
+    Returns:
+        JSON with success/failure status.
+    """
+    logger.debug(f"=== ENTITY_LINKING_UPDATE_SPAN START ===")
+
+    if 'username' not in session:
+        logger.warning("Entity linking update_span without active session")
+        return jsonify({"error": "No active session"}), 401
+
+    username = session['username']
+
+    try:
+        data = request.json
+        instance_id = data.get('instance_id')
+        span_id = data.get('span_id')
+        kb_id = data.get('kb_id')
+        kb_source = data.get('kb_source')
+        kb_label = data.get('kb_label')
+
+        logger.debug(f"Updating span {span_id} with KB: {kb_source}:{kb_id}")
+
+        if not instance_id or not span_id:
+            return jsonify({"error": "instance_id and span_id are required"}), 400
+
+        user_state = get_user_state(username)
+        if not user_state:
+            return jsonify({"error": "User state not found"}), 404
+
+        # Get span annotations for this instance
+        span_annotations = user_state.get_span_annotations(str(instance_id))
+
+        # Debug: Log all existing span IDs
+        existing_ids = []
+        for span_key, span in span_annotations.items():
+            if hasattr(span_key, 'get_id'):
+                existing_ids.append(span_key.get_id())
+            elif isinstance(span_key, dict):
+                existing_ids.append(span_key.get('id', 'no-id'))
+        logger.debug(f"Looking for span_id={span_id}, existing IDs: {existing_ids}")
+
+        # Find the span with matching ID
+        # Note: span_key is the SpanAnnotation object, span is the value
+        updated = False
+        for span_key, span_value in span_annotations.items():
+            if hasattr(span_key, 'get_id') and span_key.get_id() == span_id:
+                # Update the span's KB link
+                span_key.set_entity_link(kb_id, kb_source, kb_label)
+                updated = True
+                logger.debug(f"Updated span {span_id} with entity link")
+                break
+            elif isinstance(span_key, dict) and span_key.get('id') == span_id:
+                span_key['kb_id'] = kb_id
+                span_key['kb_source'] = kb_source
+                span_key['kb_label'] = kb_label
+                updated = True
+                logger.debug(f"Updated span dict {span_id} with entity link")
+                break
+
+        if not updated:
+            return jsonify({"error": f"Span {span_id} not found"}), 404
+
+        return jsonify({
+            "status": "success",
+            "message": f"Span {span_id} linked to {kb_source}:{kb_id}"
+        })
+
+    except Exception as e:
+        logger.error(f"Error updating span with entity link: {e}")
+        return jsonify({"error": f"Failed to update span: {str(e)}"}), 500
+
+    finally:
+        logger.debug(f"=== ENTITY_LINKING_UPDATE_SPAN END ===")
+
+
 @app.route("/api/waveform/<cache_key>")
 def get_waveform_data(cache_key):
     """
@@ -5009,6 +5500,17 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/api/spans/<instance_id>/clear", "clear_span_annotations", clear_span_annotations, methods=["POST"])
     app.add_url_rule("/api/links/<instance_id>", "get_link_annotations", get_link_annotations, methods=["GET"])
     app.add_url_rule("/api/links/<instance_id>/<link_id>", "delete_link_annotation", delete_link_annotation, methods=["DELETE"])
+
+    # Event annotation API routes
+    app.add_url_rule("/api/events/<instance_id>", "get_event_annotations", get_event_annotations, methods=["GET"])
+    app.add_url_rule("/api/events/<instance_id>/<event_id>", "delete_event_annotation", delete_event_annotation, methods=["DELETE"])
+
+    # Entity linking API routes
+    app.add_url_rule("/api/entity_linking/search", "entity_linking_search", entity_linking_search, methods=["GET"])
+    app.add_url_rule("/api/entity_linking/entity/<kb_name>/<entity_id>", "entity_linking_get_entity", entity_linking_get_entity, methods=["GET"])
+    app.add_url_rule("/api/entity_linking/configured_kbs", "entity_linking_configured_kbs", entity_linking_configured_kbs, methods=["GET"])
+    app.add_url_rule("/api/entity_linking/update_span", "entity_linking_update_span", entity_linking_update_span, methods=["POST"])
+
     app.add_url_rule("/api/current_instance", "get_current_instance", get_current_instance, methods=["GET"])
     app.add_url_rule("/api/ai_assistant", "ai_assistant", ai_assistant, methods=["GET"])
     app.add_url_rule("/api/audio/proxy", "audio_proxy", audio_proxy, methods=["GET"])
@@ -5061,6 +5563,12 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/api/mace/overview", "admin_api_mace_overview", admin_api_mace_overview, methods=["GET"])
     app.add_url_rule("/admin/api/mace/predictions", "admin_api_mace_predictions", admin_api_mace_predictions, methods=["GET"])
     app.add_url_rule("/admin/api/mace/trigger", "admin_api_mace_trigger", admin_api_mace_trigger, methods=["POST"])
+
+    # Embedding visualization admin API routes
+    app.add_url_rule("/admin/api/embedding_viz/data", "admin_api_embedding_viz_data", admin_api_embedding_viz_data, methods=["GET"])
+    app.add_url_rule("/admin/api/embedding_viz/reorder", "admin_api_embedding_viz_reorder", admin_api_embedding_viz_reorder, methods=["POST"])
+    app.add_url_rule("/admin/api/embedding_viz/refresh", "admin_api_embedding_viz_refresh", admin_api_embedding_viz_refresh, methods=["POST"])
+    app.add_url_rule("/admin/api/embedding_viz/stats", "admin_api_embedding_viz_stats", admin_api_embedding_viz_stats, methods=["GET"])
 
     app.add_url_rule("/shutdown", "shutdown", shutdown, methods=["POST"])
 
@@ -5267,6 +5775,183 @@ def admin_api_mace_trigger():
         "schemas_processed": len(results),
         "schemas": list(results.keys()),
     })
+
+
+# =============================================================================
+# Embedding Visualization API Endpoints
+# =============================================================================
+
+@app.route('/admin/api/embedding_viz/data', methods=['GET'])
+def admin_api_embedding_viz_data():
+    """
+    Get visualization data for the embedding scatter plot.
+    Admin-only endpoint requiring API key.
+
+    Query Parameters:
+        force_refresh: If "true", force recomputation of UMAP projection
+
+    Returns:
+        JSON with points, labels, label_colors, and stats
+    """
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.embedding_visualization import get_embedding_viz_manager
+
+    viz_manager = get_embedding_viz_manager()
+    if not viz_manager:
+        return jsonify({
+            "error": "Embedding visualization not initialized. "
+                     "Ensure diversity_ordering is enabled in config."
+        }), 400
+
+    if not viz_manager.enabled:
+        return jsonify({
+            "error": "Embedding visualization disabled. "
+                     "Install umap-learn: pip install umap-learn"
+        }), 400
+
+    try:
+        force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
+        data = viz_manager.get_visualization_data(force_refresh=force_refresh)
+
+        # Convert to JSON-serializable format
+        points_json = []
+        for p in data.points:
+            points_json.append({
+                "instance_id": p.instance_id,
+                "x": p.x,
+                "y": p.y,
+                "label": p.label,
+                "label_source": p.label_source,
+                "preview": p.preview,
+                "preview_type": p.preview_type,
+                "annotated": p.annotated,
+                "annotation_count": p.annotation_count
+            })
+
+        return jsonify({
+            "points": points_json,
+            "labels": data.labels,
+            "label_colors": data.label_colors,
+            "stats": data.stats
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting embedding visualization data: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/admin/api/embedding_viz/reorder', methods=['POST'])
+def admin_api_embedding_viz_reorder():
+    """
+    Reorder the annotation queue based on selected instances.
+    Admin-only endpoint requiring API key.
+
+    JSON Body:
+        selections: List of selection groups, each with:
+            - instance_ids: List of selected instance IDs
+            - priority: Priority number (lower = higher priority)
+        interleave: Whether to interleave selections (default: true)
+
+    Returns:
+        JSON with success status, reordered_count, and new_order_preview
+    """
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.embedding_visualization import get_embedding_viz_manager
+
+    viz_manager = get_embedding_viz_manager()
+    if not viz_manager or not viz_manager.enabled:
+        return jsonify({"error": "Embedding visualization not available"}), 400
+
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+
+        selections = data.get("selections", [])
+        interleave = data.get("interleave", True)
+
+        if not selections:
+            return jsonify({"error": "No selections provided"}), 400
+
+        result = viz_manager.reorder_instances(selections, interleave=interleave)
+        return jsonify(result)
+
+    except Exception as e:
+        logger.error(f"Error reordering instances: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/admin/api/embedding_viz/refresh', methods=['POST'])
+def admin_api_embedding_viz_refresh():
+    """
+    Force re-computation of embeddings and UMAP projection.
+    Admin-only endpoint requiring API key.
+
+    JSON Body (optional):
+        force_recompute: If true, invalidate cache and recompute (default: true)
+
+    Returns:
+        JSON with status and statistics
+    """
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.embedding_visualization import get_embedding_viz_manager
+
+    viz_manager = get_embedding_viz_manager()
+    if not viz_manager or not viz_manager.enabled:
+        return jsonify({"error": "Embedding visualization not available"}), 400
+
+    try:
+        data = request.get_json() or {}
+        force_recompute = data.get("force_recompute", True)
+
+        if force_recompute:
+            viz_manager.invalidate_cache()
+
+        # Trigger recomputation by fetching data
+        viz_data = viz_manager.get_visualization_data(force_refresh=True)
+
+        return jsonify({
+            "status": "success",
+            "stats": viz_data.stats
+        })
+
+    except Exception as e:
+        logger.error(f"Error refreshing embedding visualization: {e}")
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route('/admin/api/embedding_viz/stats', methods=['GET'])
+def admin_api_embedding_viz_stats():
+    """
+    Get embedding visualization statistics.
+    Admin-only endpoint requiring API key.
+
+    Returns:
+        JSON with visualization manager statistics
+    """
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.embedding_visualization import get_embedding_viz_manager
+
+    viz_manager = get_embedding_viz_manager()
+    if not viz_manager:
+        return jsonify({
+            "enabled": False,
+            "error": "Embedding visualization not initialized"
+        })
+
+    return jsonify(viz_manager.get_stats())
 
 
 # =============================================================================

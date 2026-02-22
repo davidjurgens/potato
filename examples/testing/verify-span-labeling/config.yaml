@@ -1,0 +1,69 @@
+# Span Labeling Verification
+# Tests span annotation on document and code displays
+# Run: python potato/flask_server.py start examples/testing/verify-span-labeling/config.yaml -p 8000
+
+annotation_task_name: "Span Labeling Verification"
+
+task_dir: .
+
+data_files:
+  - data/span-test-items.jsonl
+
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+item_properties:
+  id_key: id
+  text_key: task
+
+# Instance display with span targets
+instance_display:
+  fields:
+    - key: task
+      type: text
+      label: "Instructions"
+    - key: document_text
+      type: document
+      label: "Document Content"
+      span_target: true
+      display_options:
+        max_height: 250
+        style_theme: default
+    - key: code_sample
+      type: code
+      label: "Code Sample"
+      span_target: true
+      display_options:
+        language: python
+        show_line_numbers: true
+        max_height: 250
+
+# Span annotation scheme
+annotation_schemes:
+  - annotation_type: span
+    name: entities
+    description: "Highlight and label entities in the text"
+    labels:
+      - name: PERSON
+        color: "#FF6B6B"
+        key_binding: p
+        tooltip: "Person name"
+      - name: ORGANIZATION
+        color: "#4ECDC4"
+        key_binding: o
+        tooltip: "Organization name"
+      - name: FUNCTION
+        color: "#45B7D1"
+        key_binding: f
+        tooltip: "Function or method name"
+      - name: VARIABLE
+        color: "#96CEB4"
+        key_binding: v
+        tooltip: "Variable name"
+
+user_config:
+  allow_all_users: true
+
+# Debug mode - auto-login and skip to annotation phase
+debug: true
+debug_phase: annotation

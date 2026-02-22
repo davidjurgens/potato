@@ -282,6 +282,11 @@ def _register_builtin_displays():
     from .audio_display import AudioDisplay
     from .dialogue_display import DialogueDisplay
     from .pairwise_display import PairwiseDisplay
+    from .pdf_display import PDFDisplay
+    from .document_display import DocumentDisplay
+    from .spreadsheet_display import SpreadsheetDisplay
+    from .code_display import CodeDisplay
+    from .conversation_tree_display import ConversationTreeDisplay
 
     displays = [
         DisplayDefinition(
@@ -371,6 +376,85 @@ def _register_builtin_displays():
             },
             supports_span_target=False,
             description="Side-by-side comparison display"
+        ),
+        DisplayDefinition(
+            name="pdf",
+            renderer=PDFDisplay(),
+            required_fields=["key"],
+            optional_fields={
+                "view_mode": "scroll",
+                "max_height": 700,
+                "max_width": None,
+                "text_layer": True,
+                "show_page_controls": True,
+                "initial_page": 1,
+                "zoom": "auto",
+            },
+            supports_span_target=True,
+            description="PDF document display with PDF.js rendering"
+        ),
+        DisplayDefinition(
+            name="document",
+            renderer=DocumentDisplay(),
+            required_fields=["key"],
+            optional_fields={
+                "collapsible": False,
+                "max_height": None,
+                "show_outline": False,
+                "preserve_structure": True,
+                "style_theme": "default",
+            },
+            supports_span_target=True,
+            description="Document display for DOCX, Markdown, and other formats"
+        ),
+        DisplayDefinition(
+            name="spreadsheet",
+            renderer=SpreadsheetDisplay(),
+            required_fields=["key"],
+            optional_fields={
+                "annotation_mode": "row",
+                "show_headers": True,
+                "max_height": 400,
+                "max_width": None,
+                "striped": True,
+                "hoverable": True,
+                "sortable": False,
+                "selectable": True,
+                "compact": False,
+            },
+            supports_span_target=True,
+            description="Spreadsheet/table display with row or cell annotation"
+        ),
+        DisplayDefinition(
+            name="code",
+            renderer=CodeDisplay(),
+            required_fields=["key"],
+            optional_fields={
+                "language": None,
+                "show_line_numbers": True,
+                "max_height": 500,
+                "max_width": None,
+                "wrap_lines": False,
+                "highlight_lines": None,
+                "start_line": 1,
+                "theme": "default",
+                "copy_button": True,
+            },
+            supports_span_target=True,
+            description="Source code display with syntax highlighting"
+        ),
+        DisplayDefinition(
+            name="conversation_tree",
+            renderer=ConversationTreeDisplay(),
+            required_fields=["key"],
+            optional_fields={
+                "collapsed_depth": 2,
+                "node_style": "card",
+                "show_node_ids": False,
+                "max_depth": None,
+            },
+            supports_span_target=False,
+            description="Conversation tree with collapsible branching nodes"
         ),
     ]
 

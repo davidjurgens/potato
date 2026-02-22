@@ -1,4 +1,0 @@
-{"id":"1","text":"Instructions:","schema": "pure_display", "choices": ["You can use the left arrow to move backward and use the right arrow to move forward."]}
-{"id":"2","text":"Please check the Answer box to start highlighting.","schema": "pure_display", "choices": ["<img src=\"img/how-to-highlight.gif\" width=700px height=300px>"]}
-{"id":"3","text":"You can re-annotate the same span to cancel it","schema": "pure_display", "choices": ["<img src=\"img/how-to-undo.gif\" width=700px height=300px>"]}
-{"id":"3","text":"You might see unanswerable questions, please choose no answer in this case.","schema": "pure_display", "choices": ["<img src=\"img/no-answer.gif\" width=700px height=300px>"]}

@@ -259,6 +259,37 @@ class InteractionTracker {
     }
 
     /**
+     * Track when an annotation becomes stale due to display logic changes.
+     * Stale annotations are annotations for schemas that were hidden because
+     * conditions changed (e.g., user changed a parent answer).
+     *
+     * @param {string} schemaName - Schema that became stale
+     * @param {*} value - The value that is now stale
+     * @param {string} reason - Why the schema became hidden (condition not met)
+     */
+    trackStaleAnnotation(schemaName, value, reason) {
+        this.addEvent('annotation_stale', `schema:${schemaName}`, {
+            stale_value: value,
+            reason: reason,
+            timestamp: new Date().toISOString()
+        });
+    }
+
+    /**
+     * Track display logic visibility changes.
+     * @param {string} schemaName - Schema whose visibility changed
+     * @param {boolean} visible - New visibility state
+     * @param {string} reason - Reason for visibility change
+     */
+    trackDisplayLogicChange(schemaName, visible, reason) {
+        this.addEvent('display_logic_change', `schema:${schemaName}`, {
+            visible: visible,
+            reason: reason,
+            timestamp: new Date().toISOString()
+        });
+    }
+
+    /**
      * Get a unique identifier for an element
      * @param {Element} element - DOM element
      * @returns {string|null} - Element identifier or null

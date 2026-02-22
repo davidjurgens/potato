@@ -49,7 +49,7 @@ The `BaseIntegrationTest` class (in `base.py`) provides:
 from tests.integration.base import BaseIntegrationTest
 
 class TestMyFeature(BaseIntegrationTest):
-    config_path = "project-hub/simple_examples/configs/simple-check-box.yaml"
+    config_path = "examples/classification/check-box/config.yaml"
     base_port = 9200
 
     def test_something(self):
@@ -151,7 +151,7 @@ Tests using the `config_file` fixture are automatically parametrized to run for 
 
 ```python
 def test_server_starts(self, config_file: Path):
-    # This test runs once for each config in project-hub/simple_examples/configs/
+    # This test runs once for each config in examples/
     server = IntegrationTestServer(str(config_file))
     ...
 ```
@@ -162,8 +162,8 @@ Some configs have known issues documented in `conftest.py`:
 
 ```python
 CONFIGS_WITH_KNOWN_ISSUES = {
-    "simple-audio-annotation": "Missing required field: site_dir",
-    "simple-pairwise-comparison": "TypeError in pairwise comparison annotation",
+    "audio-annotation": "Missing required field: site_dir",
+    "pairwise-comparison": "TypeError in pairwise comparison annotation",
 }
 ```
 
@@ -292,7 +292,7 @@ class TestMyFeature:
     @pytest.fixture
     def server(self, base_port):
         """Start server with config."""
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-check-box.yaml"
+        config_path = PROJECT_ROOT / "examples" / "classification" / "check-box" / "config.yaml"
         server = IntegrationTestServer(str(config_path), port=base_port)
         success, error = server.start()
         if not success:

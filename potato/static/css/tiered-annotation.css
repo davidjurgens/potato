@@ -1,0 +1,600 @@
+/**
+ * Tiered Annotation Styles
+ *
+ * Styles for the hierarchical multi-tier annotation interface.
+ * Supports ELAN-style tiered annotation for audio/video content.
+ */
+
+/* Container */
+.tiered-annotation-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 10px;
+}
+
+.tiered-annotation-container fieldset {
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 15px;
+}
+
+.tiered-annotation-container legend {
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+    padding: 0 8px;
+}
+
+/* Media Panel */
+.tiered-media-panel {
+    background: #1a1a1a;
+    border-radius: 6px;
+    padding: 10px;
+    display: flex;
+    justify-content: center;
+}
+
+.tiered-media-player {
+    max-width: 100%;
+    max-height: 300px;
+}
+
+.tiered-audio-player {
+    width: 100%;
+    height: 40px;
+}
+
+.tiered-video-player {
+    max-height: 280px;
+}
+
+/* Tier Toolbar */
+.tier-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 10px 12px;
+    background: #f5f5f5;
+    border-radius: 6px;
+    flex-wrap: wrap;
+}
+
+.tier-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 200px;
+}
+
+.tier-toolbar-center {
+    flex: 1;
+    min-width: 200px;
+}
+
+.tier-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.tier-select-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: #555;
+    white-space: nowrap;
+}
+
+.tier-select {
+    padding: 5px 10px;
+    font-size: 13px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: white;
+    min-width: 120px;
+}
+
+.tier-select:focus {
+    outline: none;
+    border-color: #4ECDC4;
+    box-shadow: 0 0 0 2px rgba(78, 205, 196, 0.2);
+}
+
+/* Label Buttons */
+.label-buttons-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.label-button {
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: 4px;
+    border: 2px solid;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.label-button:hover {
+    filter: brightness(0.95);
+    transform: translateY(-1px);
+}
+
+.label-button.active {
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.15);
+    transform: translateY(-1px);
+}
+
+/* Playback Controls */
+.playback-rate-control {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+}
+
+.playback-rate-control label {
+    color: #666;
+}
+
+.playback-rate-select {
+    padding: 3px 6px;
+    font-size: 12px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+}
+
+.zoom-control {
+    display: flex;
+    gap: 3px;
+}
+
+.zoom-control .btn {
+    padding: 3px 8px;
+    font-size: 11px;
+}
+
+.time-display {
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    color: #333;
+    background: white;
+    padding: 4px 8px;
+    border-radius: 3px;
+    border: 1px solid #ddd;
+}
+
+.time-separator {
+    color: #999;
+    margin: 0 4px;
+}
+
+/* Timeline Container */
+.tiered-timeline-container {
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+    background: white;
+}
+
+/* Waveform Overview (full media at-a-glance) */
+.waveform-overview-container {
+    border-bottom: 1px solid #eee;
+    background: #f9f9f9;
+}
+
+.waveform-overview {
+    height: 40px;
+    position: relative;
+}
+
+/* Fallback message when Peaks.js hasn't rendered overview yet */
+.waveform-overview::before {
+    content: 'Loading overview...';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #888;
+    font-size: 11px;
+    font-style: italic;
+}
+
+/* Hide fallback when waveform content is present */
+.waveform-overview:has(canvas)::before {
+    display: none;
+}
+
+/* Zoomed Timeline View (for fine-grained editing) */
+.zoomed-timeline-container {
+    border-bottom: 1px solid #ddd;
+    background: #fff;
+    padding: 8px;
+}
+
+.zoomed-timeline-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    font-size: 12px;
+}
+
+.zoomed-timeline-label {
+    font-weight: 500;
+    color: #666;
+}
+
+.zoomed-timeline-range {
+    font-family: 'Courier New', monospace;
+    color: #888;
+    font-size: 11px;
+}
+
+/* Peaks.js zoomview waveform */
+.zoomed-waveform {
+    height: 60px;
+    background: linear-gradient(to bottom, #f0f4f8 0%, #e8ecf0 100%);
+    border: 1px solid #d0d4d8;
+    border-bottom: none;
+    border-radius: 4px 4px 0 0;
+    margin-bottom: 0;
+    position: relative;
+}
+
+/* Fallback message when Peaks.js hasn't rendered yet */
+.zoomed-waveform::before {
+    content: 'Loading waveform...';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #888;
+    font-size: 11px;
+    font-style: italic;
+}
+
+/* Hide fallback when waveform content is present (Peaks.js creates canvas elements) */
+.zoomed-waveform:has(canvas)::before {
+    display: none;
+}
+
+.zoomed-timeline-scroll {
+    position: relative;
+    height: 100px;
+    background: #f8f9fa;
+    border: 1px solid #d0d4d8;
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    overflow: hidden;
+}
+
+.zoomed-timeline-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: crosshair;
+}
+
+.zoomed-timeline-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.zoomed-timeline-controls .btn {
+    padding: 2px 8px;
+    font-size: 12px;
+}
+
+.zoomed-timeline-slider {
+    flex: 1;
+    height: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #e0e0e0;
+    border-radius: 3px;
+    outline: none;
+}
+
+.zoomed-timeline-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: #4ECDC4;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.zoomed-timeline-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: #4ECDC4;
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+}
+
+/* Tier Rows */
+.tier-rows-container {
+    display: flex;
+    flex-direction: column;
+}
+
+.tier-row {
+    display: flex;
+    border-bottom: 1px solid #eee;
+    transition: background-color 0.15s ease;
+}
+
+.tier-row:last-child {
+    border-bottom: none;
+}
+
+.tier-row.active {
+    background: #e8f5f4;
+}
+
+.tier-row.active .tier-label {
+    background: #d4efed;
+}
+
+.tier-row.collapsed {
+    height: 24px !important;
+}
+
+.tier-row.collapsed .tier-canvas-container {
+    display: none;
+}
+
+/* Dependent tier styling */
+.tier-row.tier-dependent {
+    background: #fafafa;
+}
+
+.tier-row.tier-dependent .tier-label {
+    padding-left: 20px;
+}
+
+.tier-row.tier-dependent .tier-label::before {
+    content: '↳';
+    position: absolute;
+    left: 8px;
+    color: #999;
+    font-size: 11px;
+}
+
+/* Tier Label */
+.tier-label {
+    width: 120px;
+    min-width: 120px;
+    padding: 5px 10px;
+    background: #f9f9f9;
+    font-weight: 500;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-right: 1px solid #ddd;
+    position: relative;
+}
+
+.tier-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+
+.tier-collapse-btn {
+    background: none;
+    border: none;
+    padding: 2px 4px;
+    cursor: pointer;
+    color: #888;
+    font-size: 10px;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+}
+
+.tier-collapse-btn:hover {
+    opacity: 1;
+}
+
+/* Tier Canvas */
+.tier-canvas-container {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+}
+
+.tier-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: crosshair;
+}
+
+.tier-row.active .tier-canvas {
+    cursor: crosshair;
+}
+
+/* Time Axis */
+.time-axis {
+    height: 20px;
+    background: #f5f5f5;
+    border-top: 1px solid #ddd;
+    padding-left: 120px;
+    font-size: 10px;
+    color: #666;
+    display: flex;
+    align-items: center;
+}
+
+/* Annotation List Panel */
+.tiered-annotation-list-panel {
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.annotation-list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: #f5f5f5;
+    border-bottom: 1px solid #ddd;
+}
+
+.annotation-list-title {
+    font-weight: 500;
+    font-size: 13px;
+    color: #333;
+}
+
+.annotation-list-toggle {
+    padding: 2px 6px;
+    font-size: 10px;
+}
+
+.annotation-list {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.annotation-list.collapsed {
+    display: none;
+}
+
+.annotation-list-tier-header {
+    padding: 6px 12px;
+    background: #f9f9f9;
+    font-size: 11px;
+    font-weight: 600;
+    color: #666;
+    border-bottom: 1px solid #eee;
+}
+
+.annotation-list-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    transition: background-color 0.1s;
+}
+
+.annotation-list-item:last-child {
+    border-bottom: none;
+}
+
+.annotation-list-item:hover {
+    background: #f8f8f8;
+}
+
+.annotation-list-item.selected {
+    background: #e8f5f4;
+}
+
+.annotation-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.annotation-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #333;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.annotation-time {
+    font-size: 11px;
+    font-family: 'Courier New', monospace;
+    color: #666;
+    white-space: nowrap;
+}
+
+.annotation-delete-btn {
+    background: none;
+    border: none;
+    color: #999;
+    padding: 2px 4px;
+    cursor: pointer;
+    font-size: 10px;
+    opacity: 0.6;
+    transition: opacity 0.15s, color 0.15s;
+}
+
+.annotation-delete-btn:hover {
+    opacity: 1;
+    color: #e74c3c;
+}
+
+/* Empty state */
+.annotation-list:empty::after {
+    content: 'No annotations yet. Select a label and drag on the timeline to create annotations.';
+    display: block;
+    padding: 20px;
+    text-align: center;
+    color: #999;
+    font-size: 12px;
+    font-style: italic;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .tier-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .tier-toolbar-left,
+    .tier-toolbar-center,
+    .tier-toolbar-right {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .tier-label {
+        width: 80px;
+        min-width: 80px;
+        font-size: 11px;
+    }
+
+    .time-axis {
+        padding-left: 80px;
+    }
+}
+
+/* Focus states for accessibility */
+.tier-select:focus,
+.label-button:focus,
+.playback-rate-select:focus,
+.zoom-control .btn:focus {
+    outline: 2px solid #4ECDC4;
+    outline-offset: 2px;
+}
+
+/* Animation for new annotations */
+@keyframes annotation-flash {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+.annotation-list-item.new {
+    animation: annotation-flash 0.3s ease-in-out 2;
+}

@@ -1,0 +1,121 @@
+# Simple Dependency Tree Annotation Example
+# Run from repo root:
+#   python potato/flask_server.py start examples/span/dependency-tree/config.yaml -p 8000
+
+annotation_task_name: "Dependency Tree Annotation"
+
+data_files:
+  - data/sentences.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+# Use 2-column layout: POS tags on left, dependency links on right
+layout:
+  grid:
+    columns: 2
+    gap: "1rem"
+
+annotation_schemes:
+  # First: Define token spans with POS tags
+  - annotation_type: span
+    name: tokens
+    description: "Highlight individual tokens and assign POS tags"
+    layout:
+      columns: 1
+    labels:
+      - name: NOUN
+        tooltip: "Nouns (cat, dog, idea)"
+        key_value: "n"
+      - name: VERB
+        tooltip: "Verbs (run, eat, think)"
+        key_value: "v"
+      - name: ADJ
+        tooltip: "Adjectives (big, red, happy)"
+        key_value: "a"
+      - name: ADV
+        tooltip: "Adverbs (quickly, very, well)"
+        key_value: "r"
+      - name: DET
+        tooltip: "Determiners (the, a, this)"
+        key_value: "d"
+      - name: ADP
+        tooltip: "Adpositions/Prepositions (in, on, at)"
+        key_value: "p"
+      - name: PRON
+        tooltip: "Pronouns (he, she, it)"
+        key_value: "o"
+      - name: PUNCT
+        tooltip: "Punctuation (., !, ?)"
+        key_value: "."
+    sequential_key_binding: false
+
+  # Second: Define dependency relations between tokens
+  - annotation_type: span_link
+    name: dependencies
+    description: "Create dependency relations between tokens (click head first, then dependent)"
+    layout:
+      columns: 1
+    span_schema: tokens
+    link_types:
+      # Core Arguments
+      - name: nsubj
+        directed: true
+        color: "#dc2626"
+        allowed_target_labels: ["VERB"]
+      - name: obj
+        directed: true
+        color: "#22c55e"
+        allowed_target_labels: ["VERB"]
+      - name: iobj
+        directed: true
+        color: "#10b981"
+        allowed_target_labels: ["VERB"]
+      # Modifiers
+      - name: amod
+        directed: true
+        color: "#3b82f6"
+        allowed_target_labels: ["NOUN", "PRON"]
+      - name: advmod
+        directed: true
+        color: "#8b5cf6"
+        allowed_target_labels: ["VERB", "ADJ", "ADV"]
+      - name: nmod
+        directed: true
+        color: "#f59e0b"
+        allowed_target_labels: ["NOUN", "VERB"]
+      # Function Words
+      - name: det
+        directed: true
+        color: "#6b7280"
+        allowed_source_labels: ["DET"]
+        allowed_target_labels: ["NOUN"]
+      - name: case
+        directed: true
+        color: "#a855f7"
+        allowed_source_labels: ["ADP"]
+      # Other
+      - name: punct
+        directed: true
+        color: "#9ca3af"
+        allowed_source_labels: ["PUNCT"]
+      - name: root
+        directed: true
+        color: "#ef4444"
+    visual_display:
+      enabled: true
+      arc_position: above
+      show_labels: true
+      # Options: "single_line" (horizontal scroll, best for dependencies)
+      #          "bracket" (wrapped text with bracket-style arcs)
+      multi_line_mode: single_line
+
+# User authentication
+user_config:
+  allow_all_users: true
+
+task_dir: .
+output_annotation_dir: annotation_output
+
+port: 8000

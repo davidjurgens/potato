@@ -1,0 +1,52 @@
+[
+  {
+    "id": "entity_001",
+    "text": "Albert Einstein was born in Ulm, Germany in 1879. He developed the theory of relativity while working at the Swiss Patent Office in Bern.",
+    "context": "Biography excerpt"
+  },
+  {
+    "id": "entity_002",
+    "text": "Marie Curie won two Nobel Prizes, one in Physics (1903) and one in Chemistry (1911). She conducted research at the University of Paris.",
+    "context": "Scientific achievements"
+  },
+  {
+    "id": "entity_003",
+    "text": "The Apollo 11 mission, led by NASA, successfully landed on the Moon on July 20, 1969. Neil Armstrong and Buzz Aldrin became the first humans to walk on the lunar surface.",
+    "context": "Space exploration"
+  },
+  {
+    "id": "entity_004",
+    "text": "Shakespeare wrote Hamlet while living in London during the Elizabethan era. The Globe Theatre was where many of his plays were first performed.",
+    "context": "Literary history"
+  },
+  {
+    "id": "entity_005",
+    "text": "The World Health Organization (WHO), headquartered in Geneva, Switzerland, coordinates international health efforts and provides guidance on pandemic response.",
+    "context": "International organizations"
+  },
+  {
+    "id": "entity_006",
+    "text": "During World War II, Winston Churchill served as Prime Minister of the United Kingdom. He delivered famous speeches from the Houses of Parliament in London.",
+    "context": "Historical events"
+  },
+  {
+    "id": "entity_007",
+    "text": "Mount Everest, located in the Himalayas on the border between Nepal and Tibet, was first summited by Edmund Hillary and Tenzing Norgay in 1953.",
+    "context": "Geography and exploration"
+  },
+  {
+    "id": "entity_008",
+    "text": "The European Union was established by the Maastricht Treaty in 1992. Its headquarters are located in Brussels, Belgium.",
+    "context": "Political organizations"
+  },
+  {
+    "id": "entity_009",
+    "text": "Leonardo da Vinci painted the Mona Lisa during the Italian Renaissance. The painting is now displayed at the Louvre Museum in Paris, France.",
+    "context": "Art history"
+  },
+  {
+    "id": "entity_010",
+    "text": "Tesla, Inc., founded by Elon Musk, is headquartered in Austin, Texas. The company produces electric vehicles and operates the Gigafactory in Nevada.",
+    "context": "Modern business"
+  }
+]

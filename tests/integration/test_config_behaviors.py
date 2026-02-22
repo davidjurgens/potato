@@ -292,13 +292,13 @@ class TestPairwiseComparisonRendering:
         """
         Pairwise comparison data (lists) should render with A./B. prefixes.
 
-        This test uses the existing simple-pairwise-comparison example config.
+        This test uses the existing pairwise-comparison example config.
         The bug would have caused a crash when rendering list text data.
         """
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-pairwise-comparison.yaml"
+        config_path = PROJECT_ROOT / "examples" / "classification" / "pairwise-comparison" / "config.yaml"
 
         if not config_path.exists():
-            pytest.skip("simple-pairwise-comparison.yaml not found")
+            pytest.skip("pairwise-comparison config not found")
 
         server = IntegrationTestServer(str(config_path), port=base_port)
 
@@ -388,11 +388,11 @@ class TestAnnotationTypeRendering:
         This test would have caught the 'unsupported annotation type' error
         from the hardcoded dict in front_end.py.
         """
-        # Use the existing simple-audio-annotation example if available
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-audio-annotation.yaml"
+        # Use the existing audio-annotation example if available
+        config_path = PROJECT_ROOT / "examples" / "audio" / "audio-annotation" / "config.yaml"
 
         if not config_path.exists():
-            pytest.skip("simple-audio-annotation.yaml not found")
+            pytest.skip("audio-annotation config not found")
 
         server = IntegrationTestServer(str(config_path), port=base_port)
 
@@ -423,10 +423,10 @@ class TestAnnotationTypeRendering:
         """
         Server with image_annotation config should start successfully.
         """
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-image-annotation.yaml"
+        config_path = PROJECT_ROOT / "examples" / "image" / "image-annotation" / "config.yaml"
 
         if not config_path.exists():
-            pytest.skip("simple-image-annotation.yaml not found")
+            pytest.skip("image-annotation config not found")
 
         server = IntegrationTestServer(str(config_path), port=base_port)
 
@@ -453,17 +453,17 @@ class TestAnnotationTypeRendering:
         """
         Audio annotation page should render without 'unsupported type' error.
 
-        This test uses the existing simple-audio-annotation example.
+        This test uses the existing audio-annotation example.
         The bug would have caused 'unsupported annotation type' error.
 
         NOTE: The server start test is the main test for the schema registry bug.
         This test verifies end-to-end flow but may fail due to unrelated config
         issues (e.g., working directory, data files).
         """
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-audio-annotation.yaml"
+        config_path = PROJECT_ROOT / "examples" / "audio" / "audio-annotation" / "config.yaml"
 
         if not config_path.exists():
-            pytest.skip("simple-audio-annotation.yaml not found")
+            pytest.skip("audio-annotation config not found")
 
         server = IntegrationTestServer(str(config_path), port=base_port)
 
@@ -530,16 +530,16 @@ class TestAnnotationTypeRendering:
         """
         Image annotation page should render without 'unsupported type' error.
 
-        This test uses the existing simple-image-annotation example.
+        This test uses the existing image-annotation example.
 
         NOTE: The server start test is the main test for the schema registry bug.
         This test verifies end-to-end flow but may fail due to unrelated config
         issues (e.g., working directory, data files).
         """
-        config_path = PROJECT_ROOT / "project-hub" / "simple_examples" / "configs" / "simple-image-annotation.yaml"
+        config_path = PROJECT_ROOT / "examples" / "image" / "image-annotation" / "config.yaml"
 
         if not config_path.exists():
-            pytest.skip("simple-image-annotation.yaml not found")
+            pytest.skip("image-annotation config not found")
 
         server = IntegrationTestServer(str(config_path), port=base_port)
 

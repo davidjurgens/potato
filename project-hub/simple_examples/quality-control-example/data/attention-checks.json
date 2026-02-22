@@ -1,5 +1,0 @@
-{"id": "attn_001", "text": "This is a quality check item. Please select 'Positive' to confirm you are reading the text carefully.", "expected_answer": {"sentiment": "positive"}}
-{"id": "attn_002", "text": "Attention check: The correct answer for this item is 'Negative'. Please select it now to continue.", "expected_answer": {"sentiment": "negative"}}
-{"id": "attn_003", "text": "Reading check: This item requires you to select 'Neutral' as your response. Thank you for your careful attention.", "expected_answer": {"sentiment": "neutral"}}
-{"id": "attn_004", "text": "I am incredibly happy and thrilled with this amazing product! [QUALITY CHECK: Select 'Positive']", "expected_answer": {"sentiment": "positive"}}
-{"id": "attn_005", "text": "This is absolutely terrible and the worst thing ever. [QUALITY CHECK: Select 'Negative']", "expected_answer": {"sentiment": "negative"}}

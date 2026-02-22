@@ -1,0 +1,153 @@
+# Customer Service Dialogue QA
+#
+# A sophisticated dialogue quality assessment interface demonstrating:
+#   - Speaker-colored conversation display
+#   - Collapsible context panel with case metadata
+#   - Overall conversation quality assessment
+#   - Professional QA workflow UI
+#
+# Note: For per-turn ratings, see the documentation on extending dialogue_display.py.
+# This example focuses on overall conversation assessment.
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/custom-layouts/dialogue-qa/config.yaml -p 8000
+
+annotation_task_name: "Customer Service Quality Assessment"
+
+# Data configuration
+data_files:
+  - data/conversations.json
+
+item_properties:
+  id_key: id
+  text_key: context
+
+# Task directory
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: jsonl
+
+# Custom layout file for sophisticated UI
+task_layout: layouts/custom_task_layout.html
+
+# Instance Display Configuration
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    - key: context
+      type: text
+      label: "Case Context"
+      display_options:
+        collapsible: true
+        collapsed_by_default: false
+
+    - key: conversation
+      type: dialogue
+      label: "Conversation"
+      display_options:
+        alternating_shading: false
+        speaker_extraction: true
+        show_turn_numbers: true
+        per_turn_ratings:
+          speakers: ["Agent"]
+          schema_name: "turn_quality"
+          scheme:
+            type: likert
+            size: 5
+            labels: ["Poor", "Excellent"]
+
+# Annotation schemes - rendered in custom layout
+annotation_schemes:
+
+  # Resolution Assessment
+  - annotation_type: radio
+    name: resolution
+    description: "Was the customer's issue resolved?"
+    labels:
+      - name: full
+        tooltip: "Issue completely resolved to customer satisfaction"
+      - name: partial
+        tooltip: "Issue partially addressed but not fully resolved"
+      - name: none
+        tooltip: "Issue was not resolved"
+
+  # Customer Effort Score
+  - annotation_type: radio
+    name: customer_effort
+    description: "How much effort did the customer need to expend?"
+    labels:
+      - name: low
+        tooltip: "Minimal effort - smooth interaction"
+      - name: medium
+        tooltip: "Some effort required but reasonable"
+      - name: high
+        tooltip: "Significant effort - frustrating experience"
+
+  # Agent Professionalism
+  - annotation_type: likert
+    name: professionalism
+    description: "Rate the agent's professionalism"
+    min_label: Poor
+    max_label: Excellent
+    size: 5
+
+  # Agent Helpfulness
+  - annotation_type: likert
+    name: helpfulness
+    description: "Rate the agent's helpfulness"
+    min_label: Not helpful
+    max_label: Very helpful
+    size: 5
+
+  # Agent Empathy
+  - annotation_type: likert
+    name: empathy
+    description: "Rate the agent's empathy and understanding"
+    min_label: Cold
+    max_label: Very empathetic
+    size: 5
+
+  # Recommendation
+  - annotation_type: radio
+    name: recommend_agent
+    description: "Would you recommend this agent for training new hires?"
+    labels:
+      - name: "yes"
+        tooltip: "Yes, this is an exemplary interaction"
+      - name: "no"
+        tooltip: "No, there are areas for improvement"
+
+  # Quality Issues (multi-select)
+  - annotation_type: multiselect
+    name: quality_issues
+    description: "Select any quality issues observed"
+    labels:
+      - name: script_deviation
+        tooltip: "Agent deviated from expected script/process"
+      - name: policy_violation
+        tooltip: "Agent violated company policy"
+      - name: missed_opportunity
+        tooltip: "Agent missed upsell or retention opportunity"
+      - name: incorrect_info
+        tooltip: "Agent provided incorrect information"
+      - name: tone_issues
+        tooltip: "Agent tone was inappropriate"
+
+  # QA Notes
+  - annotation_type: text
+    name: qa_notes
+    description: "Additional QA notes and observations"
+    labels:
+      - notes
+    textarea:
+      'on': true
+      rows: 4
+      cols: 50
+
+# User configuration
+user_config:
+  allow_all_users: true
+  require_password: false

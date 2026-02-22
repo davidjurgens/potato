@@ -1,7 +1,7 @@
 """
 Server integration tests for the MACE Competence Estimation Demo.
 
-Starts the server with the real simple-mace-demo config (which has
+Starts the server with the real mace-demo config (which has
 pre-loaded annotations from 5 annotators of varying quality) and
 validates that MACE correctly differentiates annotator competence
 and predicts labels.
@@ -37,7 +37,7 @@ REPO_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..")
 )
 DEMO_DIR = os.path.join(
-    REPO_ROOT, "project-hub", "simple_examples", "simple-mace-demo"
+    REPO_ROOT, "examples", "advanced", "mace-demo"
 )
 CONFIG_FILE = os.path.join(DEMO_DIR, "config.yaml")
 
@@ -64,7 +64,7 @@ class TestMACEDemo:
 
     @pytest.fixture(scope="class", autouse=True)
     def flask_server(self, request):
-        """Start the server using the real simple-mace-demo config."""
+        """Start the server using the real mace-demo config."""
         # Clean any cached MACE results
         mace_output = os.path.join(DEMO_DIR, "annotation_output", "mace")
         if os.path.exists(mace_output):

@@ -1,0 +1,61 @@
+# Document Bounding Box Annotation Example
+# Demonstrates drawing bounding boxes on HTML/document content
+# Run: python potato/flask_server.py start examples/image/document-bbox/config.yaml -p 8000
+
+annotation_task_name: "Document Region Annotation"
+
+task_dir: .
+
+data_files:
+  - data/document-examples.jsonl
+
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+item_properties:
+  id_key: id
+  text_key: task
+
+# Instance display with document bounding box mode
+instance_display:
+  fields:
+    - key: task
+      type: text
+      label: "Instructions"
+    - key: document_content
+      type: document
+      label: "Document"
+      display_options:
+        annotation_mode: bounding_box
+        max_height: 500
+        bbox_min_size: 10
+        show_bbox_labels: true
+
+# Annotation schemes - select label type for bounding boxes
+annotation_schemes:
+  - annotation_type: radio
+    name: region_type
+    description: "Select the type of region you are annotating"
+    horizontal: true
+    labels:
+      - name: TITLE
+        tooltip: "A title or heading"
+        key_binding: t
+      - name: PARAGRAPH
+        tooltip: "A text paragraph"
+        key_binding: p
+      - name: LIST
+        tooltip: "A bulleted or numbered list"
+        key_binding: l
+      - name: QUOTE
+        tooltip: "A quote or citation"
+        key_binding: q
+      - name: OTHER
+        tooltip: "Other region type"
+        key_binding: o
+
+user_config:
+  allow_all_users: true
+
+debug: true
+debug_phase: annotation

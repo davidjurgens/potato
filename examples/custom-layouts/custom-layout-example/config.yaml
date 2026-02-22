@@ -1,0 +1,87 @@
+# Custom Layout Example
+#
+# This example demonstrates how to customize the annotation interface layout.
+# Potato auto-generates a task_layout.html file that you can edit to:
+#   - Rearrange annotation schemas
+#   - Add custom styling (CSS)
+#   - Create multi-column layouts
+#   - Add section headers, instructions, or images
+#   - Use Bootstrap/Shadcn classes for styling
+#
+# How it works:
+#   1. Run the server once - Potato generates layouts/task_layout.html
+#   2. Edit the generated HTML file to customize the layout
+#   3. Restart the server - your changes are preserved
+#   4. If you change annotation_schemes in the config, Potato regenerates the file
+#      (your edits will be overwritten - back them up first!)
+#
+# Alternatively, you can specify a custom layout file directly:
+#   task_layout: custom-layout-example/custom_task_layout.html
+#
+# Run with:
+#   cd examples/
+#   python ../../potato/flask_server.py start config.yaml -p 8000
+
+annotation_task_name: Custom Layout Example
+task_dir: .
+output_annotation_dir: annotation_output/custom-layout-example/
+output_annotation_format: jsonl
+
+# Point to a custom layout file (optional - if not set, Potato auto-generates one)
+task_layout: layouts/custom_task_layout.html
+
+data_files:
+  - data/toy-example.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+site_dir: default
+
+# These annotation schemes are referenced in the custom layout file
+# The layout file controls HOW they are displayed
+annotation_schemes:
+
+  # Primary classification task
+  - annotation_type: radio
+    name: sentiment
+    description: "Overall sentiment of the text"
+    labels:
+      - name: positive
+        key_value: "1"
+      - name: neutral
+        key_value: "2"
+      - name: negative
+        key_value: "3"
+    sequential_key_binding: true
+
+  # Secondary attributes (multiple choice)
+  - annotation_type: multiselect
+    name: attributes
+    description: "Text attributes (select all that apply)"
+    labels:
+      - formal
+      - emotional
+      - factual
+      - persuasive
+    sequential_key_binding: true
+
+  # Confidence rating
+  - annotation_type: likert
+    name: confidence
+    description: "How confident are you in your sentiment rating?"
+    min_label: Not confident
+    max_label: Very confident
+    size: 5
+
+  # Optional comments
+  - annotation_type: text
+    name: comments
+    description: "Additional comments (optional)"
+    labels:
+      - ""
+    textarea:
+      'on': true
+      rows: 3
+      cols: 50

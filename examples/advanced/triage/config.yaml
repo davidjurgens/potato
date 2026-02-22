@@ -1,0 +1,36 @@
+port: 9001
+server_name: potato annotator
+annotation_task_name: Simple Triage Example
+task_dir: .
+output_annotation_dir: annotation_output/simple-triage/
+output_annotation_format: json
+annotation_codebook_url: ''
+
+data_files:
+  - data/triage-example.json
+
+item_properties:
+  id_key: id
+  text_key: text
+  context_key: context
+
+user_config:
+  allow_all_users: true
+  users: []
+
+# Time alert disabled for rapid triage
+alert_time_each_instance: 0
+
+annotation_schemes:
+  # Triage annotation - accept, reject, or skip each item
+  - annotation_type: triage
+    name: data_quality
+    description: Is this data sample suitable for training?
+    # Auto-advance to next item after selection (default: true)
+    auto_advance: true
+    # Show progress bar (default: true)
+    show_progress: true
+    # Default keyboard shortcuts: 1=Keep, 2=Discard, 3=Unsure
+    # (adjacent keys for fast one-hand operation)
+
+site_dir: default

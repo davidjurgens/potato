@@ -31,6 +31,8 @@ class SpanLinkManager {
     }
 
     init() {
+        console.log('[SpanLinkManager] init() called for schema:', this.schemaName);
+
         if (!this.container) {
             console.warn(`SpanLinkManager: Container not found for schema ${this.schemaName}`);
             return;
@@ -38,6 +40,7 @@ class SpanLinkManager {
 
         // Parse link type configurations
         this.parseLinkTypeConfigs();
+        console.log('[SpanLinkManager] Link type configs:', this.linkTypeConfig);
 
         // Set up event listeners
         this.setupEventListeners();
@@ -45,10 +48,74 @@ class SpanLinkManager {
         // Create arc rendering container
         this.createArcsContainer();
 
+        // Set up observer to re-render arcs when spans are added/removed
+        this.setupSpanObserver();
+
         // Load existing links if any
         this.loadExistingLinks();
 
-        console.log(`SpanLinkManager initialized for schema: ${this.schemaName}`);
+        console.log(`[SpanLinkManager] Initialization complete for schema: ${this.schemaName}`);
+        console.log('[SpanLinkManager] Post-init state:', {
+            hasArcsContainer: !!this.arcsContainer,
+            hasArcSpacer: !!this.arcSpacer,
+            hasTextWrapper: !!this.textWrapper
+        });
+    }
+
+    /**
+     * Set up MutationObserver to watch for span overlay changes.
+     * Re-renders arcs when spans are added, removed, or modified.
+     */
+    setupSpanObserver() {
+        const targetNode = this.textWrapper || document.getElementById('instance-text');
+        if (!targetNode) return;
+
+        // Debounce re-renders to avoid excessive updates
+        let renderTimeout = null;
+        const debouncedRender = () => {
+            if (renderTimeout) clearTimeout(renderTimeout);
+            renderTimeout = setTimeout(() => {
+                if (this.links.length > 0) {
+                    console.log('[SpanLinkManager] Span change detected, re-rendering arcs');
+                    this.renderArcs();
+                }
+            }, 100);
+        };
+
+        this.spanObserver = new MutationObserver((mutations) => {
+            // Check if any mutation involves span overlays
+            const hasSpanChanges = mutations.some(mutation => {
+                // Check added nodes
+                for (const node of mutation.addedNodes) {
+                    if (node.nodeType === Node.ELEMENT_NODE) {
+                        if (node.classList?.contains('span-overlay-pure') ||
+                            node.classList?.contains('span-overlay') ||
+                            node.querySelector?.('.span-overlay-pure, .span-overlay')) {
+                            return true;
+                        }
+                    }
+                }
+                // Check removed nodes
+                for (const node of mutation.removedNodes) {
+                    if (node.nodeType === Node.ELEMENT_NODE) {
+                        if (node.classList?.contains('span-overlay-pure') ||
+                            node.classList?.contains('span-overlay')) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            });
+
+            if (hasSpanChanges) {
+                debouncedRender();
+            }
+        });
+
+        this.spanObserver.observe(targetNode, {
+            childList: true,
+            subtree: true
+        });
     }
 
     parseLinkTypeConfigs() {
@@ -81,10 +148,18 @@ class SpanLinkManager {
             this.createButton.addEventListener('click', () => this.createLink());
         }
 
-        // Clear button
+        // Clear button - exits link mode entirely so user can create new spans
         if (this.clearButton) {
-            this.clearButton.addEventListener('click', () => this.clearSelection());
+            this.clearButton.addEventListener('click', () => this.exitLinkMode());
         }
+
+        // Escape key exits link mode
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.isLinkMode) {
+                e.preventDefault();
+                this.exitLinkMode();
+            }
+        });
 
         // Show arcs toggle
         if (this.showArcsCheckbox) {
@@ -138,21 +213,83 @@ class SpanLinkManager {
     }
 
     createArcsContainer() {
+        console.log('[SpanLinkManager] createArcsContainer() called');
+
         // Check if arc visualization is enabled
         const showArcs = this.container.dataset.showArcs !== 'false';
-        if (!showArcs) return;
+        console.log('[SpanLinkManager] showArcs:', showArcs);
+        if (!showArcs) {
+            console.log('[SpanLinkManager] Arc visualization disabled');
+            return;
+        }
 
         // Find the instance text container to place arcs relative to it
         const instanceText = document.getElementById('instance-text');
-        if (!instanceText) return;
+        console.log('[SpanLinkManager] instanceText element:', instanceText);
+        if (!instanceText) {
+            console.error('[SpanLinkManager] No instance-text element found!');
+            return;
+        }
 
-        // Create SVG container for arcs
+        // Check if wrapper structure already exists (e.g., from previous initialization)
+        const existingWrapper = instanceText.querySelector('.span-link-text-wrapper');
+        if (existingWrapper) {
+            console.log('[SpanLinkManager] Wrapper structure already exists, reusing');
+            this.textWrapper = existingWrapper;
+            this.arcSpacer = instanceText.querySelector('.span-link-arc-spacer');
+            this.arcsContainer = instanceText.querySelector('.span-link-arcs-container');
+            return;
+        }
+
+        // Store configuration for later use
+        this.arcPosition = this.container.dataset.arcPosition || 'above';
+        this.multiLineMode = this.container.dataset.multiLineMode || 'bracket';
+        this.instanceText = instanceText;
+
+        if (this.arcPosition === 'above') {
+            if (this.multiLineMode === 'single_line') {
+                // Single-line mode: display text on one line with horizontal scroll
+                instanceText.style.whiteSpace = 'nowrap';
+                instanceText.style.overflowX = 'auto';
+                instanceText.classList.add('dependency-single-line-mode');
+            } else {
+                // Bracket mode: wrapped text with bracket-style arcs for multi-line
+                instanceText.classList.add('dependency-bracket-mode');
+            }
+        }
+
+        // Create a wrapper structure for reliable arc positioning:
+        // 1. Arc spacer div (takes up vertical space for arcs)
+        // 2. Text wrapper (contains the actual text content)
+        // 3. Arc SVG overlay (positioned absolutely over the spacer)
+
+        // Wrap existing content in a text wrapper
+        this.textWrapper = document.createElement('div');
+        this.textWrapper.className = 'span-link-text-wrapper';
+        this.textWrapper.style.cssText = 'position: relative;';
+
+        // Move all existing children into the wrapper
+        while (instanceText.firstChild) {
+            this.textWrapper.appendChild(instanceText.firstChild);
+        }
+
+        // Create spacer div for arc area (will be sized dynamically)
+        this.arcSpacer = document.createElement('div');
+        this.arcSpacer.className = 'span-link-arc-spacer';
+        this.arcSpacer.style.cssText = `
+            position: relative;
+            width: 100%;
+            height: 100px;
+            min-height: 100px;
+        `;
+
+        // Create SVG container for arcs - inside the spacer
         this.arcsContainer = document.createElement('div');
         this.arcsContainer.id = `${this.schemaName}_arcs`;
         this.arcsContainer.className = 'span-link-arcs-container';
         this.arcsContainer.style.cssText = `
             position: absolute;
-            top: 0;
+            bottom: 0;
             left: 0;
             width: 100%;
             height: 100%;
@@ -161,13 +298,27 @@ class SpanLinkManager {
             z-index: 100;
         `;
 
-        // Make instance-text position relative if not already
-        const instanceTextStyle = window.getComputedStyle(instanceText);
-        if (instanceTextStyle.position === 'static') {
-            instanceText.style.position = 'relative';
-        }
+        // Assemble the structure
+        this.arcSpacer.appendChild(this.arcsContainer);
+        instanceText.appendChild(this.arcSpacer);
+        instanceText.appendChild(this.textWrapper);
 
-        instanceText.appendChild(this.arcsContainer);
+        console.log('[SpanLinkManager] Created arc container structure with spacer');
+    }
+
+    /**
+     * Dynamically update the arc spacer height based on required arc height
+     */
+    updateArcSpacerHeight(requiredHeight) {
+        if (!this.arcSpacer) return;
+
+        // Add margin for labels (25px) and buffer (15px)
+        const totalHeight = requiredHeight + 40;
+
+        console.log(`[SpanLinkManager] Setting arc spacer height: ${totalHeight}px (arc height: ${requiredHeight}px)`);
+
+        this.arcSpacer.style.height = `${totalHeight}px`;
+        this.arcSpacer.style.minHeight = `${totalHeight}px`;
     }
 
     enterLinkMode() {
@@ -389,6 +540,17 @@ class SpanLinkManager {
 
         const config = this.linkTypeConfig[this.currentLinkType] || {};
 
+        // Extract span positions for repair matching on reload
+        const spanPositions = this.selectedSpans.map(s => {
+            if (s.element) {
+                return {
+                    start: parseInt(s.element.dataset.start),
+                    end: parseInt(s.element.dataset.end)
+                };
+            }
+            return null;
+        });
+
         const link = {
             id: `link_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             schema: this.schemaName,
@@ -398,7 +560,8 @@ class SpanLinkManager {
             properties: {
                 color: config.color,
                 span_labels: this.selectedSpans.map(s => s.label),
-                span_texts: this.selectedSpans.map(s => s.text.substring(0, 30))
+                span_texts: this.selectedSpans.map(s => s.text.substring(0, 30)),
+                span_positions: spanPositions  // For fallback matching when span IDs change
             }
         };
 
@@ -431,6 +594,7 @@ class SpanLinkManager {
                 },
                 body: JSON.stringify({
                     instance_id: instanceId,
+                    annotations: {},  // Required for frontend format detection
                     link_annotations: [link]
                 })
             });
@@ -473,9 +637,14 @@ class SpanLinkManager {
 
     async loadExistingLinks() {
         const instanceId = document.getElementById('instance_id')?.value;
-        if (!instanceId) return;
+        console.log('[SpanLinkManager] loadExistingLinks called, instanceId:', instanceId);
+        if (!instanceId) {
+            console.warn('[SpanLinkManager] No instance ID, skipping load');
+            return;
+        }
 
         try {
+            console.log('[SpanLinkManager] Fetching links from API...');
             const response = await fetch(`/api/links/${instanceId}`);
             if (!response.ok) {
                 throw new Error(`HTTP error ${response.status}`);
@@ -486,12 +655,186 @@ class SpanLinkManager {
 
             // Update UI
             this.updateLinkList();
-            this.renderArcs();
 
-            console.log(`Loaded ${this.links.length} existing links`);
+            console.log(`[SpanLinkManager] Loaded ${this.links.length} existing links:`, this.links);
+
+            // Render arcs after waiting for spans to be created
+            // Span overlays are created asynchronously by span-manager.js
+            if (this.links.length > 0) {
+                console.log('[SpanLinkManager] Starting waitForSpansAndRender...');
+                this.waitForSpansAndRender();
+            } else {
+                console.log('[SpanLinkManager] No links to render');
+            }
         } catch (error) {
-            console.error('Error loading links:', error);
+            console.error('[SpanLinkManager] Error loading links:', error);
         }
+    }
+
+    /**
+     * Try to repair orphaned link span_ids by matching with current spans.
+     * This handles the case where spans were recreated with new UUIDs.
+     * Uses span positions (start/end) and labels for precise matching.
+     */
+    repairOrphanedLinks() {
+        const currentSpanIds = new Set(Object.keys(this.getSpanPositions()));
+        let repaired = false;
+
+        this.links.forEach(link => {
+            const orphanedIds = link.span_ids.filter(id => !currentSpanIds.has(id));
+
+            if (orphanedIds.length > 0) {
+                console.log('[SpanLinkManager] Found orphaned span IDs in link:', orphanedIds);
+
+                // Get all current spans from DOM
+                const allOverlays = document.querySelectorAll(
+                    '.span-overlay-pure, .span-overlay, .span-overlay-ai, .span-highlight'
+                );
+
+                // Build lookup by position (start, end, label) for precise matching
+                const spansByPosition = new Map();
+                allOverlays.forEach(overlay => {
+                    const start = overlay.dataset.start;
+                    const end = overlay.dataset.end;
+                    const label = overlay.dataset.label;
+                    const id = overlay.dataset.annotationId || overlay.dataset.spanId;
+                    if (start && end && label && id) {
+                        const key = `${start}_${end}_${label}`;
+                        spansByPosition.set(key, id);
+                    }
+                });
+
+                // Get stored span metadata
+                const spanPositions = link.properties?.span_positions || [];
+                const spanLabels = link.properties?.span_labels || [];
+
+                const repairs = [];
+                orphanedIds.forEach(orphanedId => {
+                    const orphanedIdx = link.span_ids.indexOf(orphanedId);
+                    const position = spanPositions[orphanedIdx];
+                    const label = spanLabels[orphanedIdx];
+
+                    // Try to match by position and label first (most precise)
+                    if (position && label) {
+                        const key = `${position.start}_${position.end}_${label}`;
+                        const newId = spansByPosition.get(key);
+
+                        if (newId && !link.span_ids.includes(newId)) {
+                            console.log(`[SpanLinkManager] Repairing by position: ${orphanedId} -> ${newId} (${key})`);
+                            repairs.push({ old: orphanedId, new: newId });
+                            return;
+                        }
+                    }
+
+                    // Fallback: match by label only if position matching fails
+                    if (label) {
+                        for (const overlay of allOverlays) {
+                            const overlayId = overlay.dataset.annotationId || overlay.dataset.spanId;
+                            const overlayLabel = overlay.dataset.label;
+
+                            if (overlayLabel === label &&
+                                !link.span_ids.includes(overlayId) &&
+                                !repairs.some(r => r.new === overlayId)) {
+                                console.log(`[SpanLinkManager] Repairing by label fallback: ${orphanedId} -> ${overlayId} (label: ${label})`);
+                                repairs.push({ old: orphanedId, new: overlayId });
+                                break;
+                            }
+                        }
+                    }
+                });
+
+                // Apply repairs
+                repairs.forEach(repair => {
+                    const idx = link.span_ids.indexOf(repair.old);
+                    if (idx !== -1) {
+                        link.span_ids[idx] = repair.new;
+                        repaired = true;
+                    }
+                });
+            }
+        });
+
+        if (repaired) {
+            console.log('[SpanLinkManager] Links repaired, re-rendering');
+        }
+
+        return repaired;
+    }
+
+    /**
+     * Wait for span overlays to exist, then render arcs.
+     * This handles the timing issue where span-manager.js creates spans asynchronously.
+     */
+    waitForSpansAndRender() {
+        console.log('[SpanLinkManager] waitForSpansAndRender() called');
+
+        if (this.links.length === 0) {
+            console.log('[SpanLinkManager] No links to render');
+            return;
+        }
+
+        // Get the span IDs we need to render
+        const neededSpanIds = new Set();
+        this.links.forEach(link => {
+            link.span_ids.forEach(id => neededSpanIds.add(id));
+        });
+
+        console.log('[SpanLinkManager] Waiting for spans:', [...neededSpanIds]);
+
+        // Check if spans exist
+        const checkSpans = () => {
+            const positions = this.getSpanPositions();
+            const foundIds = Object.keys(positions);
+            const allFound = [...neededSpanIds].every(id => foundIds.includes(id));
+
+            console.log(`[SpanLinkManager] Span check: found ${foundIds.length} spans, need ${neededSpanIds.size}, allFound=${allFound}`);
+            console.log('[SpanLinkManager] Found span IDs:', foundIds);
+            console.log('[SpanLinkManager] Needed span IDs:', [...neededSpanIds]);
+
+            if (allFound || foundIds.length > 0) {
+                console.log('[SpanLinkManager] Spans found, rendering arcs');
+                // Try to repair orphaned links before rendering
+                this.repairOrphanedLinks();
+                this.renderArcs();
+                return true;
+            }
+            return false;
+        };
+
+        // Try immediately
+        console.log('[SpanLinkManager] Attempting immediate span check...');
+        if (checkSpans()) {
+            console.log('[SpanLinkManager] Immediate check succeeded');
+            return;
+        }
+
+        console.log('[SpanLinkManager] Immediate check failed, starting retry loop');
+
+        // Retry with delays (spans might be loading async)
+        const delays = [100, 250, 500, 1000, 2000];
+        let attempt = 0;
+
+        const retry = () => {
+            if (attempt >= delays.length) {
+                console.warn('[SpanLinkManager] Gave up waiting for spans after all retries');
+                console.log('[SpanLinkManager] Final span overlay count:', document.querySelectorAll('.span-overlay-pure, .span-overlay').length);
+                // Render anyway to show the link list even if arcs can't be drawn
+                this.renderArcs();
+                return;
+            }
+
+            setTimeout(() => {
+                console.log(`[SpanLinkManager] Retry attempt ${attempt + 1}/${delays.length} after ${delays[attempt]}ms`);
+                if (!checkSpans()) {
+                    attempt++;
+                    retry();
+                } else {
+                    console.log('[SpanLinkManager] Retry succeeded on attempt', attempt + 1);
+                }
+            }, delays[attempt]);
+        };
+
+        retry();
     }
 
     /**
@@ -518,8 +861,8 @@ class SpanLinkManager {
         if (this.selectedSpansDisplay) {
             if (this.selectedSpans.length === 0) {
                 const instruction = this.isLinkMode
-                    ? '<p class="link-mode-instruction">Click on the <strong>colored highlights in the text above</strong> to select spans for linking</p>'
-                    : '<p class="no-selection-message">Select a link type, then click on highlighted spans in the text</p>';
+                    ? '<p class="link-mode-instruction">Click on <strong>highlighted spans</strong> to select them for linking. Press <kbd>Esc</kbd> or click "Exit Link Mode" to create new spans.</p>'
+                    : '<p class="no-selection-message">Select a link type to start linking spans</p>';
                 this.selectedSpansDisplay.innerHTML = instruction;
             } else {
                 const spansHtml = this.selectedSpans.map((span, index) => {
@@ -600,19 +943,60 @@ class SpanLinkManager {
     }
 
     renderArcs() {
-        if (!this.arcsContainer) return;
+        console.log('[SpanLinkManager] renderArcs() called');
+        console.log('[SpanLinkManager] arcsContainer exists:', !!this.arcsContainer);
+        console.log('[SpanLinkManager] arcSpacer exists:', !!this.arcSpacer);
+        console.log('[SpanLinkManager] textWrapper exists:', !!this.textWrapper);
+        console.log('[SpanLinkManager] links count:', this.links.length);
+
+        if (!this.arcsContainer) {
+            console.error('[SpanLinkManager] No arcsContainer! createArcsContainer may have failed');
+            return;
+        }
 
         // Clear existing arcs
         this.arcsContainer.innerHTML = '';
 
-        if (this.links.length === 0) return;
+        if (this.links.length === 0) {
+            // Reset to minimum spacer height when no links
+            console.log('[SpanLinkManager] No links, resetting spacer height');
+            this.updateArcSpacerHeight(60);
+            return;
+        }
 
-        // Get span positions
+        // Get span positions relative to text wrapper
         const spanPositions = this.getSpanPositions();
+        console.log('[SpanLinkManager] Span positions:', spanPositions);
+        console.log('[SpanLinkManager] Links to render:', this.links);
 
-        // Create SVG
+        // First pass: calculate maximum arc height needed
+        let maxArcHeight = 60; // minimum
+        this.links.forEach(link => {
+            const spanIds = link.span_ids;
+            if (spanIds.length >= 2) {
+                const pos1 = spanPositions[spanIds[0]];
+                const pos2 = spanPositions[spanIds[1]];
+                if (pos1 && pos2) {
+                    const x1 = pos1.x + pos1.width / 2;
+                    const x2 = pos2.x + pos2.width / 2;
+                    // Arc height is proportional to horizontal distance
+                    const arcHeight = Math.max(40, Math.min(Math.abs(x2 - x1) / 2, 120));
+                    maxArcHeight = Math.max(maxArcHeight, arcHeight);
+                }
+            }
+        });
+
+        // Update arc spacer height
+        this.updateArcSpacerHeight(maxArcHeight);
+
+        // Get spacer height for positioning arcs from bottom of spacer
+        const spacerHeight = parseInt(this.arcSpacer.style.height) || (maxArcHeight + 40);
+
+        // Create SVG sized to fit the spacer
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        svg.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible;';
+        svg.setAttribute('width', '100%');
+        svg.setAttribute('height', spacerHeight);
+        svg.style.cssText = 'position: absolute; bottom: 0; left: 0; pointer-events: none; overflow: visible;';
 
         // Add arrow marker definition
         const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
@@ -624,6 +1008,7 @@ class SpanLinkManager {
         svg.appendChild(defs);
 
         // Draw arcs for each link
+        // Arcs start at bottom of spacer (y = spacerHeight) and curve upward
         this.links.forEach(link => {
             const config = this.linkTypeConfig[link.link_type] || {};
             const color = config.color || '#dc2626';
@@ -636,21 +1021,75 @@ class SpanLinkManager {
                 const pos1 = spanPositions[spanIds[0]];
                 const pos2 = spanPositions[spanIds[1]];
 
-                if (!pos1 || !pos2) return;
+                console.log('[SpanLinkManager] Drawing arc between:', spanIds[0], pos1, 'and', spanIds[1], pos2);
 
+                if (!pos1 || !pos2) {
+                    console.log('[SpanLinkManager] Missing position, skipping arc');
+                    return;
+                }
+
+                // X positions from span centers
                 const x1 = pos1.x + pos1.width / 2;
-                const y1 = pos1.y;
                 const x2 = pos2.x + pos2.width / 2;
-                const y2 = pos2.y;
 
-                const midX = (x1 + x2) / 2;
-                const arcHeight = Math.min(Math.abs(x2 - x1) / 3, 40);
+                // Y positions: arcs start at bottom of spacer and curve up
+                const anchorY = spacerHeight; // Bottom of spacer where arcs connect to text
+
+                console.log('[SpanLinkManager] Arc coordinates: x1=', x1, 'x2=', x2, 'anchorY=', anchorY, 'spacerHeight=', spacerHeight);
 
                 const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                path.setAttribute('d', `M ${x1} ${y1} Q ${midX} ${y1 - arcHeight} ${x2} ${y2}`);
+
+                // Check if spans are on different lines (Y positions differ significantly)
+                const sameLineThreshold = 10; // pixels
+                const isMultiLine = Math.abs(pos2.y - pos1.y) > sameLineThreshold;
+
+                // Get multi-line mode from config
+                const multiLineMode = this.container.dataset.multiLineMode || 'bracket';
+
+                let pathD;
+                let labelY;
+                let labelX = (x1 + x2) / 2;
+
+                if (isMultiLine && multiLineMode === 'bracket') {
+                    // Bracket-style arc for multi-line: goes up, across at top, then down
+                    const cornerRadius = 8;
+                    const topY = 20; // Position near top of spacer
+
+                    const goingRight = x2 > x1;
+
+                    if (goingRight) {
+                        pathD = `M ${x1} ${anchorY}
+                                 L ${x1} ${topY + cornerRadius}
+                                 Q ${x1} ${topY}, ${x1 + cornerRadius} ${topY}
+                                 L ${x2 - cornerRadius} ${topY}
+                                 Q ${x2} ${topY}, ${x2} ${topY + cornerRadius}
+                                 L ${x2} ${anchorY}`;
+                    } else {
+                        pathD = `M ${x1} ${anchorY}
+                                 L ${x1} ${topY + cornerRadius}
+                                 Q ${x1} ${topY}, ${x1 - cornerRadius} ${topY}
+                                 L ${x2 + cornerRadius} ${topY}
+                                 Q ${x2} ${topY}, ${x2} ${topY + cornerRadius}
+                                 L ${x2} ${anchorY}`;
+                    }
+
+                    labelY = topY - 5;
+                    labelX = (x1 + x2) / 2;
+                } else {
+                    // Same-line arc: simple quadratic bezier curve
+                    const midX = (x1 + x2) / 2;
+                    const arcHeight = Math.max(40, Math.min(Math.abs(x2 - x1) / 2, 120));
+                    const controlY = anchorY - arcHeight; // Control point above anchor
+
+                    pathD = `M ${x1} ${anchorY} Q ${midX} ${controlY} ${x2} ${anchorY}`;
+                    labelY = controlY - 5;
+                    labelX = midX;
+                }
+
+                path.setAttribute('d', pathD);
                 path.setAttribute('fill', 'none');
                 path.setAttribute('stroke', color);
-                path.setAttribute('stroke-width', '2');
+                path.setAttribute('stroke-width', '2.5');
                 path.setAttribute('class', 'span-link-arc');
                 path.dataset.linkId = link.id;
 
@@ -660,13 +1099,50 @@ class SpanLinkManager {
                 }
 
                 svg.appendChild(path);
+
+                // Add label on arc if showLabels is enabled
+                const showLabels = this.container.dataset.showLabels !== 'false';
+                if (showLabels && link.link_type) {
+                    // Create a unique path ID for textPath reference
+                    const pathId = `arc-path-${link.id}`;
+                    path.setAttribute('id', pathId);
+
+                    // labelX and labelY were already calculated above for both modes
+
+                    // Create text element for the label
+                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    text.setAttribute('x', labelX);
+                    text.setAttribute('y', labelY);
+                    text.setAttribute('text-anchor', 'middle');
+                    text.setAttribute('class', 'span-link-label');
+                    text.setAttribute('fill', color);
+                    text.style.fontSize = '11px';
+                    text.style.fontWeight = '500';
+                    text.style.pointerEvents = 'none';
+                    text.textContent = link.link_type;
+
+                    // Add background rect for readability
+                    const bbox = { width: link.link_type.length * 7 + 6, height: 14 };
+                    const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    bgRect.setAttribute('x', labelX - bbox.width / 2);
+                    bgRect.setAttribute('y', labelY - 10);
+                    bgRect.setAttribute('width', bbox.width);
+                    bgRect.setAttribute('height', bbox.height);
+                    bgRect.setAttribute('fill', 'white');
+                    bgRect.setAttribute('rx', '3');
+                    bgRect.setAttribute('class', 'span-link-label-bg');
+                    bgRect.style.pointerEvents = 'none';
+
+                    svg.appendChild(bgRect);
+                    svg.appendChild(text);
+                }
             } else {
                 // N-ary link - connect to central point
                 const validPositions = spanIds.map(id => spanPositions[id]).filter(Boolean);
                 if (validPositions.length < 2) return;
 
                 const centerX = validPositions.reduce((sum, p) => sum + p.x + p.width / 2, 0) / validPositions.length;
-                const centerY = Math.min(...validPositions.map(p => p.y)) - 25;
+                const centerY = spacerHeight / 2; // Center of spacer
 
                 spanIds.forEach(spanId => {
                     const pos = spanPositions[spanId];
@@ -674,7 +1150,7 @@ class SpanLinkManager {
 
                     const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
                     line.setAttribute('x1', pos.x + pos.width / 2);
-                    line.setAttribute('y1', pos.y);
+                    line.setAttribute('y1', spacerHeight); // Bottom of spacer
                     line.setAttribute('x2', centerX);
                     line.setAttribute('y2', centerY);
                     line.setAttribute('stroke', color);
@@ -700,22 +1176,68 @@ class SpanLinkManager {
 
     getSpanPositions() {
         const positions = {};
-        const instanceText = document.getElementById('instance-text');
-        if (!instanceText) return positions;
 
-        const containerRect = instanceText.getBoundingClientRect();
+        // Get positions relative to text wrapper (not instance-text)
+        const referenceContainer = this.textWrapper || document.getElementById('instance-text');
+        console.log('[SpanLinkManager] getSpanPositions: referenceContainer:', referenceContainer?.className || referenceContainer?.id);
+        if (!referenceContainer) {
+            console.warn('[SpanLinkManager] getSpanPositions: No reference container!');
+            return positions;
+        }
+
+        const containerRect = referenceContainer.getBoundingClientRect();
+        console.log('[SpanLinkManager] getSpanPositions: containerRect:', containerRect);
+
+        // Count span overlays
+        const allOverlays = document.querySelectorAll('.span-overlay-pure, .span-overlay, .span-overlay-ai, .span-highlight');
+        console.log('[SpanLinkManager] getSpanPositions: Total overlays found:', allOverlays.length);
 
         document.querySelectorAll('.span-overlay-pure, .span-overlay, .span-overlay-ai, .span-highlight').forEach(overlay => {
             const spanId = overlay.dataset.spanId || overlay.dataset.annotationId;
             if (!spanId) return;
 
-            const rect = overlay.getBoundingClientRect();
-            positions[spanId] = {
-                x: rect.left - containerRect.left,
-                y: rect.top - containerRect.top,
-                width: rect.width,
-                height: rect.height
-            };
+            // The overlay container may have zero dimensions - get bounds from highlight segments
+            const segments = overlay.querySelectorAll('.span-highlight-segment');
+            let rect;
+
+            if (segments.length > 0) {
+                // Calculate bounding box from all segments (handles multi-line spans)
+                let minLeft = Infinity, minTop = Infinity, maxRight = -Infinity, maxBottom = -Infinity;
+                segments.forEach(segment => {
+                    const segRect = segment.getBoundingClientRect();
+                    if (segRect.width > 0 && segRect.height > 0) {
+                        minLeft = Math.min(minLeft, segRect.left);
+                        minTop = Math.min(minTop, segRect.top);
+                        maxRight = Math.max(maxRight, segRect.right);
+                        maxBottom = Math.max(maxBottom, segRect.bottom);
+                    }
+                });
+
+                if (minLeft !== Infinity) {
+                    rect = {
+                        left: minLeft,
+                        top: minTop,
+                        right: maxRight,
+                        bottom: maxBottom,
+                        width: maxRight - minLeft,
+                        height: maxBottom - minTop
+                    };
+                }
+            }
+
+            // Fallback to overlay bounds if no segments found
+            if (!rect) {
+                rect = overlay.getBoundingClientRect();
+            }
+
+            if (rect.width > 0 && rect.height > 0) {
+                positions[spanId] = {
+                    x: rect.left - containerRect.left,
+                    y: rect.top - containerRect.top,
+                    width: rect.width,
+                    height: rect.height
+                };
+            }
         });
 
         return positions;

@@ -1,0 +1,23 @@
+# AI Endpoint Configuration
+# Copy this file to ai-config.yaml and fill in your endpoint details.
+# ai-config.yaml is gitignored and will not be committed.
+
+# --- Option A: Local Ollama (default for this demo) ---
+endpoint_type: ollama
+model: qwen3:0.6b
+# base_url: http://localhost:11434  # default for Ollama
+
+# --- Option B: vLLM server ---
+# endpoint_type: vllm
+# model: Qwen/Qwen3-4B
+# base_url: http://your-server:8001
+
+# --- Option C: OpenAI ---
+# endpoint_type: openai
+# model: gpt-4o-mini
+# api_key: ${OPENAI_API_KEY}
+
+# --- Option D: Anthropic ---
+# endpoint_type: anthropic
+# model: claude-sonnet-4-20250514
+# api_key: ${ANTHROPIC_API_KEY}

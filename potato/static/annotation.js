@@ -66,6 +66,303 @@ let deepDebugState = {
 };
 
 /**
+ * FormLayoutManager - Manages annotation form grid layout
+ *
+ * Handles:
+ * - CSS grid configuration from layout config
+ * - Form grouping with collapsible sections
+ * - Explicit ordering of forms
+ * - Responsive breakpoint customization
+ */
+class FormLayoutManager {
+    constructor() {
+        this.config = null;
+        this.initialized = false;
+    }
+
+    /**
+     * Initialize the layout manager with configuration
+     * @param {Object} layoutConfig - Layout configuration from server
+     */
+    initialize(layoutConfig = {}) {
+        this.config = this.mergeDefaults(layoutConfig);
+        this.applyGridProperties();
+        this.wrapFormsInLayoutContainer();
+        this.setupGroups();
+        this.applyOrdering();
+        this.setupResponsiveBreakpoints();
+        this.initialized = true;
+        debugLog('[FormLayoutManager] Initialized with config:', this.config);
+    }
+
+    /**
+     * Merge user config with sensible defaults
+     */
+    mergeDefaults(config) {
+        return {
+            grid: {
+                columns: 2,
+                gap: '1rem',
+                row_gap: null,
+                align_items: 'start',
+                ...config?.grid
+            },
+            breakpoints: {
+                mobile: 480,
+                tablet: 768,
+                ...config?.breakpoints
+            },
+            styling: {
+                align_items: 'start',
+                content_align: 'left',
+                group_background_odd: '#fafafa',
+                group_background_even: '#f8f9fc',
+                group_padding: '0.5rem 0.75rem',
+                form_padding: '0.375rem 0.5rem',
+                ...config?.styling
+            },
+            groups: config?.groups || [],
+            order: config?.order || null
+        };
+    }
+
+    /**
+     * Apply grid and styling CSS custom properties to document root
+     */
+    applyGridProperties() {
+        const root = document.documentElement;
+
+        // Grid properties
+        root.style.setProperty('--layout-columns', this.config.grid.columns);
+        root.style.setProperty('--layout-gap', this.config.grid.gap);
+        root.style.setProperty('--layout-row-gap', this.config.grid.row_gap || this.config.grid.gap);
+
+        // Alignment (use styling.align_items if present, fallback to grid.align_items)
+        const alignItems = this.config.styling.align_items || this.config.grid.align_items || 'start';
+        root.style.setProperty('--layout-align', alignItems);
+
+        // Content alignment
+        root.style.setProperty('--layout-content-align', this.config.styling.content_align);
+
+        // Group background colors
+        root.style.setProperty('--group-bg-odd', this.config.styling.group_background_odd);
+        root.style.setProperty('--group-bg-even', this.config.styling.group_background_even);
+
+        // Padding
+        root.style.setProperty('--group-padding', this.config.styling.group_padding);
+        root.style.setProperty('--form-padding', this.config.styling.form_padding);
+    }
+
+    /**
+     * Wrap annotation forms in a layout container
+     */
+    wrapFormsInLayoutContainer() {
+        const container = document.getElementById('annotation-forms');
+        if (!container) return;
+
+        // Check if already wrapped
+        if (container.querySelector('.annotation-forms-layout')) {
+            debugLog('[FormLayoutManager] Layout container already exists');
+            return;
+        }
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'annotation-forms-layout';
+
+        // Get all annotation forms
+        const forms = container.querySelectorAll('.annotation-form');
+        if (forms.length === 0) {
+            debugLog('[FormLayoutManager] No annotation forms found');
+            return;
+        }
+
+        // Move forms into wrapper
+        forms.forEach(form => {
+            // Set default data-grid-columns if not present
+            if (!form.hasAttribute('data-grid-columns')) {
+                form.setAttribute('data-grid-columns', '1');
+            }
+            wrapper.appendChild(form);
+        });
+
+        // Insert wrapper at the beginning of the container (after any pairwise display)
+        const pairwiseDisplay = container.querySelector('.pairwise-items-display-container');
+        if (pairwiseDisplay) {
+            pairwiseDisplay.after(wrapper);
+        } else {
+            container.insertBefore(wrapper, container.firstChild);
+        }
+
+        debugLog('[FormLayoutManager] Wrapped', forms.length, 'forms in layout container');
+    }
+
+    /**
+     * Setup form groups with headers and collapsible behavior
+     */
+    setupGroups() {
+        if (!this.config.groups || this.config.groups.length === 0) return;
+
+        const container = document.querySelector('.annotation-forms-layout') ||
+                          document.querySelector('.annotation-forms-grid');
+        if (!container) return;
+
+        this.config.groups.forEach(groupConfig => {
+            const groupElement = this.createGroupElement(groupConfig, container);
+            if (groupElement) {
+                // Move specified schemas into the group
+                groupConfig.schemas.forEach(schemaName => {
+                    const form = container.querySelector(`[data-schema-name="${schemaName}"]`);
+                    if (form) {
+                        const content = groupElement.querySelector('.annotation-form-group-content');
+                        if (content) {
+                            content.appendChild(form);
+                        }
+                    }
+                });
+
+                // Insert the group into the container
+                container.appendChild(groupElement);
+            }
+        });
+
+        debugLog('[FormLayoutManager] Setup', this.config.groups.length, 'groups');
+    }
+
+    /**
+     * Create a group element with header and content container
+     */
+    createGroupElement(groupConfig, container) {
+        const group = document.createElement('div');
+        group.className = 'annotation-form-group';
+        group.id = `group-${groupConfig.id}`;
+
+        // Apply per-group custom background color if specified
+        if (groupConfig.background_color) {
+            group.style.setProperty('--group-bg', groupConfig.background_color);
+            group.style.backgroundColor = groupConfig.background_color;
+        }
+
+        if (groupConfig.collapsed_default) {
+            group.classList.add('collapsed');
+        }
+
+        let headerHtml = `
+            <div class="annotation-form-group-header">
+                <div>
+                    ${groupConfig.title ? `<h4 class="annotation-form-group-title">${this.escapeHtml(groupConfig.title)}</h4>` : ''}
+                    ${groupConfig.description ? `<p class="annotation-form-group-description">${this.escapeHtml(groupConfig.description)}</p>` : ''}
+                </div>
+        `;
+
+        if (groupConfig.collapsible) {
+            headerHtml += `
+                <button type="button" class="annotation-form-group-toggle" aria-label="Toggle group">
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+            `;
+        }
+
+        headerHtml += '</div>';
+
+        group.innerHTML = headerHtml + '<div class="annotation-form-group-content"></div>';
+
+        // Setup toggle behavior
+        if (groupConfig.collapsible) {
+            const toggle = group.querySelector('.annotation-form-group-toggle');
+            toggle.addEventListener('click', () => {
+                group.classList.toggle('collapsed');
+            });
+        }
+
+        return group;
+    }
+
+    /**
+     * Apply explicit ordering to forms
+     */
+    applyOrdering() {
+        const container = document.querySelector('.annotation-forms-layout') ||
+                          document.querySelector('.annotation-forms-grid');
+        if (!container) return;
+
+        // Apply order from config.order array
+        if (this.config.order && Array.isArray(this.config.order)) {
+            this.config.order.forEach((schemaName, index) => {
+                const form = container.querySelector(`[data-schema-name="${schemaName}"]`);
+                if (form) {
+                    form.style.order = index;
+                }
+            });
+        }
+
+        // Also apply order from data-grid-order attributes
+        const formsWithOrder = container.querySelectorAll('[data-grid-order]');
+        formsWithOrder.forEach(form => {
+            const order = parseInt(form.getAttribute('data-grid-order'), 10);
+            if (!isNaN(order)) {
+                form.style.order = order;
+            }
+        });
+    }
+
+    /**
+     * Setup custom responsive breakpoints via media query injection
+     */
+    setupResponsiveBreakpoints() {
+        const mobile = this.config.breakpoints.mobile;
+        const tablet = this.config.breakpoints.tablet;
+
+        // Only inject custom breakpoints if they differ from defaults
+        if (mobile !== 480 || tablet !== 768) {
+            const styleId = 'layout-breakpoints-custom';
+            let styleEl = document.getElementById(styleId);
+            if (!styleEl) {
+                styleEl = document.createElement('style');
+                styleEl.id = styleId;
+                document.head.appendChild(styleEl);
+            }
+
+            styleEl.textContent = `
+                @media (max-width: ${mobile}px) {
+                    .annotation-forms-layout,
+                    .annotation-forms-grid {
+                        --layout-columns: 1 !important;
+                    }
+                    .annotation-forms-layout .annotation-form[data-grid-columns],
+                    .annotation-forms-grid .annotation-form[data-grid-columns] {
+                        grid-column: span 1 !important;
+                    }
+                }
+                @media (min-width: ${mobile + 1}px) and (max-width: ${tablet}px) {
+                    .annotation-forms-layout .annotation-form[data-grid-columns="3"],
+                    .annotation-forms-layout .annotation-form[data-grid-columns="4"],
+                    .annotation-forms-layout .annotation-form[data-grid-columns="5"],
+                    .annotation-forms-layout .annotation-form[data-grid-columns="6"],
+                    .annotation-forms-grid .annotation-form[data-grid-columns="3"],
+                    .annotation-forms-grid .annotation-form[data-grid-columns="4"],
+                    .annotation-forms-grid .annotation-form[data-grid-columns="5"],
+                    .annotation-forms-grid .annotation-form[data-grid-columns="6"] {
+                        grid-column: span 2;
+                    }
+                }
+            `;
+        }
+    }
+
+    /**
+     * Helper to escape HTML
+     */
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+}
+
+// Global FormLayoutManager instance
+window.formLayoutManager = new FormLayoutManager();
+
+/**
  * Deep debug logging for navigation events - only logs when debug mode is enabled
  */
 function logDeepDebug(action, extraData = {}) {
@@ -133,6 +430,18 @@ document.addEventListener('DOMContentLoaded', function () {
     validateRequiredFields();
     // Initialize span manager integration
     initializeSpanManagerIntegration();
+    // Initialize display logic for conditional schemas
+    if (typeof initDisplayLogic === 'function') {
+        initDisplayLogic();
+    }
+    // Initialize form layout manager (if layout config is available)
+    // Layout config is passed via ui_config from the server
+    const layoutConfig = window.config?.ui_config?.layout || window.config?.layout;
+    if (layoutConfig) {
+        window.formLayoutManager.initialize(layoutConfig);
+    }
+    // Initialize pairwise annotation
+    initPairwiseAnnotation();
 });
 
 /**
@@ -298,6 +607,26 @@ function setupEventListeners() {
                 if (radio.onclick) {
                     radio.onclick.apply(radio);
                 }
+                return;
+            }
+        }
+
+        // Check pairwise tiles (binary mode)
+        const pairwiseTiles = document.querySelectorAll('.pairwise-tile');
+        for (const tile of pairwiseTiles) {
+            const dataKey = tile.getAttribute('data-key');
+            if (dataKey && key === dataKey) {
+                selectPairwiseTile(tile);
+                return;
+            }
+        }
+
+        // Check pairwise tie/neither buttons
+        const pairwiseButtons = document.querySelectorAll('.pairwise-tie-btn, .pairwise-neither-btn');
+        for (const btn of pairwiseButtons) {
+            const dataKey = btn.getAttribute('data-key');
+            if (dataKey && key === dataKey) {
+                selectPairwiseOption(btn);
                 return;
             }
         }
@@ -576,6 +905,9 @@ async function loadCurrentInstance() {
         loadAnnotations();
         generateAnnotationForms();
         aiAssistantManger.getAiAssistantName();
+
+        // Populate pairwise item boxes after forms are generated
+        populatePairwiseTileContent();
 
         // Load span annotations
         debugLog('🔍 [DEBUG] loadCurrentInstance() - About to call loadSpanAnnotations()');
@@ -1420,6 +1752,19 @@ function syncAnnotationsFromDOM() {
         }
     });
 
+    // Sync hidden inputs (used by triage and other custom schemas)
+    const hiddenInputs = document.querySelectorAll('input[type="hidden"].annotation-input');
+    hiddenInputs.forEach(input => {
+        const schema = input.getAttribute('schema');
+        const labelName = input.getAttribute('label_name');
+        if (schema && labelName && input.value) {
+            if (!currentAnnotations[schema]) {
+                currentAnnotations[schema] = {};
+            }
+            currentAnnotations[schema][labelName] = input.value;
+        }
+    });
+
     debugLog('[DEBUG] syncAnnotationsFromDOM: synced annotations:', currentAnnotations);
 }
 
@@ -1484,6 +1829,12 @@ function setupInputEventListeners() {
                     handleInputChange(event.target);
                 }, 1000);
             });
+        } else if (inputType === 'hidden') {
+            // Hidden inputs (used by triage and other custom schemas) - listen for change events
+            input.addEventListener('change', function (event) {
+                handleInputChange(event.target);
+            });
+            debugLog(`Set up event listener for hidden input:`, input.id);
         }
     });
 }
@@ -1563,6 +1914,11 @@ function handleInputChange(element) {
     // Update the current annotations
     updateAnnotation(schema, labelName, value);
     debugLog(`Updated annotation: ${schema}.${labelName} = ${value}`);
+
+    // Evaluate display logic for conditional schemas
+    if (displayLogicManager) {
+        displayLogicManager.evaluateForSchema(schema);
+    }
 
     // Auto-save
     clearTimeout(textSaveTimer);
@@ -1664,6 +2020,9 @@ function populateInputValues() {
         }
     });
 
+    // Populate pairwise annotations
+    restorePairwiseAnnotations();
+
     validateRequiredFields();
 }
 
@@ -1744,6 +2103,10 @@ function extractSpanAnnotationsFromDOM() {
 
         const targetField = overlay.getAttribute('data-target-field') || '';
 
+        // Extract span ID to preserve identity across saves
+        const spanId = overlay.getAttribute('data-annotation-id') ||
+                       overlay.getAttribute('data-span-id');
+
         spanAnnotations.push({
             schema: schema,
             name: label,
@@ -1751,7 +2114,8 @@ function extractSpanAnnotationsFromDOM() {
             end: end,
             title: title,
             value: coveredText,
-            target_field: targetField
+            target_field: targetField,
+            id: spanId
         });
     }
 
@@ -3155,8 +3519,547 @@ function testAggressiveFirefoxFix() {
 
 
 
+/**
+ * Jump to the previous unannotated instance.
+ * Saves current annotations and navigates to the first unannotated item before the current position.
+ * If all items are annotated, shows a notification.
+ */
+async function jumpToUnannotatedPrev() {
+    debugLog('[NAV] jumpToUnannotatedPrev - ENTRY POINT');
+
+    if (isLoading) {
+        debugLog('[NAV] jumpToUnannotatedPrev - Navigation blocked, still loading');
+        return;
+    }
+
+    setLoading(true);
+    debugLog('[NAV] jumpToUnannotatedPrev - Loading set to true');
+
+    // Track navigation event
+    if (window.interactionTracker) {
+        window.interactionTracker.trackNavigation('jump_to_unannotated_prev', currentInstance?.id, null);
+    }
+
+    try {
+        // Save annotations before navigating away
+        debugLog('[NAV] jumpToUnannotatedPrev - Saving annotations before navigation');
+        await saveAnnotations();
+
+        // Use the correct endpoint and payload for navigation
+        const response = await fetch('/annotate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                action: 'jump_to_unannotated_prev',
+                instance_id: currentInstance?.id
+            })
+        });
+
+        if (response.ok) {
+            // Check if the response indicates no unannotated items
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                const result = await response.json();
+                if (result.status === 'no_unannotated') {
+                    debugLog('[NAV] jumpToUnannotatedPrev - All items annotated');
+                    showNotification('All items have been annotated!', 'info');
+                    setLoading(false);
+                    return;
+                }
+            }
+
+            debugLog('[NAV] jumpToUnannotatedPrev - Navigation successful, reloading page');
+            window.location.reload();
+        } else {
+            console.error('[NAV] jumpToUnannotatedPrev - Navigation failed:', response.status);
+            setLoading(false);
+        }
+    } catch (error) {
+        console.error('[NAV] jumpToUnannotatedPrev - Navigation error:', error);
+        setLoading(false);
+    }
+}
+
+/**
+ * Jump to the next unannotated instance.
+ * Saves current annotations and navigates to the first unannotated item after the current position.
+ * If all items are annotated, shows a notification.
+ */
+async function jumpToUnannotated() {
+    debugLog('[NAV] jumpToUnannotated - ENTRY POINT');
+
+    if (isLoading) {
+        debugLog('[NAV] jumpToUnannotated - Navigation blocked, still loading');
+        return;
+    }
+
+    setLoading(true);
+    debugLog('[NAV] jumpToUnannotated - Loading set to true');
+
+    // Track navigation event
+    if (window.interactionTracker) {
+        window.interactionTracker.trackNavigation('jump_to_unannotated', currentInstance?.id, null);
+    }
+
+    try {
+        // Save annotations before navigating away
+        debugLog('[NAV] jumpToUnannotated - Saving annotations before navigation');
+        await saveAnnotations();
+
+        // Use the correct endpoint and payload for navigation
+        const response = await fetch('/annotate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                action: 'jump_to_unannotated',
+                instance_id: currentInstance?.id
+            })
+        });
+
+        if (response.ok) {
+            // Check if the response indicates no unannotated items
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                const result = await response.json();
+                if (result.status === 'no_unannotated') {
+                    debugLog('[NAV] jumpToUnannotated - All items annotated');
+                    showNotification('All items have been annotated!', 'info');
+                    setLoading(false);
+                    return;
+                }
+            }
+
+            debugLog('[NAV] jumpToUnannotated - Navigation successful, reloading page');
+            window.location.reload();
+        } else {
+            console.error('[NAV] jumpToUnannotated - Navigation failed:', response.status);
+            setLoading(false);
+        }
+    } catch (error) {
+        console.error('[NAV] jumpToUnannotated - Navigation error:', error);
+        setLoading(false);
+    }
+}
+
+/**
+ * Show a notification message to the user.
+ * @param {string} message - The message to display
+ * @param {string} type - The type of notification ('info', 'success', 'warning', 'error')
+ */
+function showNotification(message, type = 'info') {
+    // Check if a notification container exists, create if not
+    let container = document.getElementById('notification-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'notification-container';
+        container.style.cssText = 'position: fixed; top: 80px; right: 20px; z-index: 9999;';
+        document.body.appendChild(container);
+    }
+
+    // Create the notification element
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.style.cssText = `
+        padding: 12px 20px;
+        margin-bottom: 10px;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 500;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        animation: slideIn 0.3s ease;
+        background-color: ${type === 'info' ? '#e0f2fe' : type === 'success' ? '#dcfce7' : type === 'warning' ? '#fef3c7' : '#fee2e2'};
+        color: ${type === 'info' ? '#0369a1' : type === 'success' ? '#166534' : type === 'warning' ? '#92400e' : '#dc2626'};
+        border: 1px solid ${type === 'info' ? '#7dd3fc' : type === 'success' ? '#86efac' : type === 'warning' ? '#fcd34d' : '#fca5a5'};
+    `;
+    notification.textContent = message;
+
+    container.appendChild(notification);
+
+    // Auto-remove after 4 seconds
+    setTimeout(() => {
+        notification.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => notification.remove(), 300);
+    }, 4000);
+}
+
 // Make the function available globally for debugging
 window.testAggressiveFirefoxFix = testAggressiveFirefoxFix;
 window.navigateToNext = navigateToNext;
 window.navigateToPrevious = navigateToPrevious;
+window.jumpToUnannotated = jumpToUnannotated;
+window.jumpToUnannotatedPrev = jumpToUnannotatedPrev;
+window.showNotification = showNotification;
 window.loadCurrentInstance = loadCurrentInstance;
+
+// ========================================
+// PAIRWISE ANNOTATION HANDLERS
+// ========================================
+
+/**
+ * Initialize pairwise annotation interface.
+ * Called after DOMContentLoaded and after forms are generated.
+ */
+function initPairwiseAnnotation() {
+    debugLog('[PAIRWISE] Initializing pairwise annotation');
+
+    // Setup tile click handlers for binary mode
+    document.querySelectorAll('.pairwise-tile').forEach(tile => {
+        tile.addEventListener('click', function() {
+            selectPairwiseTile(this);
+        });
+
+        // Keyboard support (Enter/Space)
+        tile.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                selectPairwiseTile(this);
+            }
+        });
+    });
+
+    // Setup tie/neither button handlers
+    document.querySelectorAll('.pairwise-tie-btn, .pairwise-neither-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            selectPairwiseOption(this);
+        });
+    });
+
+    // Populate pairwise tile content from instance data
+    populatePairwiseTileContent();
+
+    debugLog('[PAIRWISE] Initialization complete');
+}
+
+/**
+ * Populate pairwise tile content from the current instance data.
+ */
+function populatePairwiseTileContent() {
+    const pairwiseForms = document.querySelectorAll('.annotation-form.pairwise');
+
+    if (pairwiseForms.length === 0) {
+        return;
+    }
+
+    // Get items from instance text
+    let items = null;
+    const instanceText = document.getElementById('instance-text');
+
+    if (instanceText) {
+        const textContent = instanceText.querySelector('#text-content');
+        const contentElement = textContent || instanceText;
+
+        // Method 1: Check for data-item-index attributes
+        const listItems = contentElement.querySelectorAll('[data-item-index]');
+        if (listItems.length >= 2) {
+            items = Array.from(listItems).map(el => el.textContent.trim());
+        }
+
+        // Method 2: Parse HTML with <b>A.</b> / <b>B.</b> markers (list_as_text format)
+        if (!items) {
+            const html = contentElement.innerHTML;
+            const parts = html.split(/<br\s*\/?>\s*<br\s*\/?>/i);
+            if (parts.length >= 2) {
+                items = parts.map(part => {
+                    const temp = document.createElement('div');
+                    temp.innerHTML = part;
+                    let text = temp.textContent || '';
+                    text = text.replace(/^[A-Z]\.\s*/, '').trim();
+                    return text;
+                }).filter(t => t.length > 0);
+                if (items.length < 2) items = null;
+            }
+        }
+
+        // Method 3: Parse text content directly with regex
+        if (!items) {
+            const rawText = contentElement.textContent || '';
+            const regex = /([A-Z])\.\s*([\s\S]*?)(?=(?:[A-Z]\.\s)|$)/g;
+            const matches = [];
+            let match;
+            while ((match = regex.exec(rawText)) !== null) {
+                const text = match[2].trim();
+                if (text.length > 0) matches.push(text);
+            }
+            if (matches.length >= 2) items = matches;
+        }
+    }
+
+    // Method 4: Try window.currentInstanceData
+    if (!items) {
+        const firstForm = pairwiseForms[0];
+        const itemsKey = firstForm.getAttribute('data-items-key') || 'text';
+        if (window.currentInstanceData && window.currentInstanceData[itemsKey]) {
+            const data = window.currentInstanceData[itemsKey];
+            if (Array.isArray(data) && data.length >= 2) items = data;
+        }
+    }
+
+    if (items && items.length >= 2) {
+        // Create pairwise items display ONCE at top (if not exists)
+        createPairwiseItemsDisplay(items, pairwiseForms[0]);
+
+        // Wrap pairwise forms in a flex container for side-by-side layout
+        wrapPairwiseFormsInFlexContainer(pairwiseForms);
+
+        // Hide the "Text to Annotate" section
+        const instanceTextContainer = document.querySelector('.instance-text-container');
+        if (instanceTextContainer) {
+            instanceTextContainer.style.display = 'none';
+        }
+        // Also hide the "Text to Annotate" heading
+        const textHeading = document.querySelector('h5.mb-3');
+        if (textHeading && textHeading.textContent.includes('Text to Annotate')) {
+            textHeading.style.display = 'none';
+        }
+    }
+}
+
+/**
+ * Wrap ALL annotation forms in a grid container for layout control.
+ * Forms can specify column span via data-grid-columns attribute.
+ * This enables side-by-side layout for multiple annotation schemas.
+ *
+ * Note: If FormLayoutManager is initialized, it handles wrapping.
+ * This function provides fallback behavior for backwards compatibility.
+ */
+function wrapPairwiseFormsInFlexContainer(pairwiseForms) {
+    // Check if FormLayoutManager already handled this
+    if (window.formLayoutManager && window.formLayoutManager.initialized) {
+        debugLog('[wrapPairwiseFormsInFlexContainer] Skipping - FormLayoutManager active');
+        return;
+    }
+
+    // Check if wrapper already exists
+    if (document.querySelector('.annotation-forms-layout') ||
+        document.querySelector('.annotation-forms-grid')) {
+        return;
+    }
+
+    // Get ALL annotation forms in the container
+    const annotationFormsContainer = document.getElementById('annotation-forms');
+    if (!annotationFormsContainer) return;
+
+    const allForms = annotationFormsContainer.querySelectorAll('.annotation-form');
+    if (allForms.length < 2) {
+        return; // No need to wrap if only one form
+    }
+
+    // Create a wrapper div with grid layout
+    const wrapper = document.createElement('div');
+    wrapper.className = 'pairwise-forms-wrapper annotation-forms-grid';
+
+    // Insert wrapper at the end of the pairwise items display (if exists) or at start
+    const pairwiseDisplay = annotationFormsContainer.querySelector('.pairwise-items-display-container');
+    if (pairwiseDisplay) {
+        pairwiseDisplay.after(wrapper);
+    } else {
+        annotationFormsContainer.insertBefore(wrapper, annotationFormsContainer.firstChild);
+    }
+
+    // Move ALL annotation forms into the wrapper
+    allForms.forEach(form => {
+        // Set default grid column if not specified
+        if (!form.hasAttribute('data-grid-columns')) {
+            form.setAttribute('data-grid-columns', '1');
+        }
+        wrapper.appendChild(form);
+    });
+}
+
+/**
+ * Create a single pairwise items display at the top of the annotation forms.
+ */
+function createPairwiseItemsDisplay(items, referenceForm) {
+    // Check if display already exists
+    if (document.querySelector('.pairwise-items-display-container')) {
+        // Just update the content
+        const boxes = document.querySelectorAll('.pairwise-items-display-container .pairwise-item-box');
+        boxes.forEach((box, index) => {
+            if (index < items.length) box.textContent = items[index];
+        });
+        return;
+    }
+
+    // Get labels from the first pairwise form
+    const labels = ['Response A', 'Response B'];
+
+    // Create the display container
+    const displayContainer = document.createElement('div');
+    displayContainer.className = 'pairwise-items-display-container';
+    displayContainer.innerHTML = `
+        <div class="pairwise-items-display">
+            <div class="pairwise-item-wrapper">
+                <div class="pairwise-item-title">${labels[0]}</div>
+                <div class="pairwise-item-box">${escapeHtml(items[0])}</div>
+            </div>
+            <div class="pairwise-item-wrapper">
+                <div class="pairwise-item-title">${labels[1]}</div>
+                <div class="pairwise-item-box">${escapeHtml(items[1])}</div>
+            </div>
+        </div>
+    `;
+
+    // Insert before the first pairwise form
+    const annotationForms = document.getElementById('annotation-forms');
+    if (annotationForms) {
+        annotationForms.insertBefore(displayContainer, annotationForms.firstChild);
+    }
+}
+
+/**
+ * Simple HTML escape function.
+ */
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+/**
+ * Select a pairwise tile (binary mode).
+ * @param {HTMLElement} tile - The tile element clicked
+ */
+function selectPairwiseTile(tile) {
+    const schema = tile.getAttribute('data-schema');
+    const value = tile.getAttribute('data-value');
+    const form = tile.closest('form');
+
+    if (!form) return;
+
+    debugLog(`[PAIRWISE] Selecting tile: schema=${schema}, value=${value}`);
+
+    // Deselect all tiles and buttons in this form
+    form.querySelectorAll('.pairwise-tile').forEach(t => t.classList.remove('selected'));
+    form.querySelectorAll('.pairwise-tie-btn, .pairwise-neither-btn').forEach(b => b.classList.remove('selected'));
+
+    // Select this tile
+    tile.classList.add('selected');
+
+    // Update hidden input
+    const hiddenInput = form.querySelector('.pairwise-value');
+    if (hiddenInput) {
+        hiddenInput.value = value;
+        // Trigger annotation save
+        registerAnnotation(hiddenInput);
+        // Trigger change event for validation
+        hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    // Update validation
+    validateRequiredFields();
+}
+
+/**
+ * Select a pairwise option button (tie/neither).
+ * @param {HTMLElement} btn - The button element clicked
+ */
+function selectPairwiseOption(btn) {
+    const schema = btn.getAttribute('data-schema');
+    const value = btn.getAttribute('data-value');
+    const form = btn.closest('form');
+
+    if (!form) return;
+
+    debugLog(`[PAIRWISE] Selecting option: schema=${schema}, value=${value}`);
+
+    // Deselect all tiles and buttons in this form
+    form.querySelectorAll('.pairwise-tile').forEach(t => t.classList.remove('selected'));
+    form.querySelectorAll('.pairwise-tie-btn, .pairwise-neither-btn').forEach(b => b.classList.remove('selected'));
+
+    // Select this button
+    btn.classList.add('selected');
+
+    // Update hidden input
+    const hiddenInput = form.querySelector('.pairwise-value');
+    if (hiddenInput) {
+        hiddenInput.value = value;
+        // Trigger annotation save
+        registerAnnotation(hiddenInput);
+        // Trigger change event for validation
+        hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    // Update validation
+    validateRequiredFields();
+}
+
+/**
+ * Update the pairwise scale display when slider value changes.
+ * @param {HTMLElement} slider - The slider input element
+ */
+function updatePairwiseScaleDisplay(slider) {
+    const form = slider.closest('form');
+    if (!form) return;
+
+    const valueDisplay = form.querySelector('.pairwise-scale-current-value');
+    if (valueDisplay) {
+        valueDisplay.textContent = slider.value;
+    }
+}
+
+/**
+ * Restore pairwise annotation state from saved annotations.
+ * Called during populateInputValues.
+ */
+function restorePairwiseAnnotations() {
+    if (!currentAnnotations) return;
+
+    debugLog('[PAIRWISE] Restoring pairwise annotations');
+
+    // Restore binary mode selections
+    document.querySelectorAll('.annotation-form.pairwise-binary').forEach(form => {
+        const hiddenInput = form.querySelector('.pairwise-value');
+        if (!hiddenInput) return;
+
+        const schema = hiddenInput.getAttribute('schema');
+        const labelName = hiddenInput.getAttribute('label_name');
+
+        if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
+            const savedValue = currentAnnotations[schema][labelName];
+            hiddenInput.value = savedValue;
+
+            // Select the appropriate tile or button
+            if (savedValue === 'tie' || savedValue === 'neither') {
+                const optionBtn = form.querySelector(`.pairwise-tie-btn[data-value="${savedValue}"], .pairwise-neither-btn[data-value="${savedValue}"]`);
+                if (optionBtn) {
+                    optionBtn.classList.add('selected');
+                }
+            } else {
+                const tile = form.querySelector(`.pairwise-tile[data-value="${savedValue}"]`);
+                if (tile) {
+                    tile.classList.add('selected');
+                }
+            }
+
+            debugLog(`[PAIRWISE] Restored binary selection: ${schema}/${labelName} = ${savedValue}`);
+        }
+    });
+
+    // Restore scale mode values
+    document.querySelectorAll('.annotation-form.pairwise-scale').forEach(form => {
+        const slider = form.querySelector('.pairwise-scale-slider');
+        if (!slider) return;
+
+        const schema = slider.getAttribute('schema');
+        const labelName = slider.getAttribute('label_name');
+
+        if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
+            const savedValue = currentAnnotations[schema][labelName];
+            slider.value = savedValue;
+            updatePairwiseScaleDisplay(slider);
+
+            debugLog(`[PAIRWISE] Restored scale value: ${schema}/${labelName} = ${savedValue}`);
+        }
+    });
+}
+
+// Export pairwise functions globally
+window.initPairwiseAnnotation = initPairwiseAnnotation;
+window.selectPairwiseTile = selectPairwiseTile;
+window.selectPairwiseOption = selectPairwiseOption;
+window.updatePairwiseScaleDisplay = updatePairwiseScaleDisplay;
+window.restorePairwiseAnnotations = restorePairwiseAnnotations;

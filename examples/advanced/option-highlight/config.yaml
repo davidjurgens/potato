@@ -1,0 +1,92 @@
+# Option Highlighting Example - 10 Emotion Options
+# Demonstrates LLM-based option highlighting for emotion classification
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/advanced/option-highlight/config.yaml -p 8000
+
+annotation_task_name: "Emotion Classification with AI Highlighting"
+
+# Server settings
+port: 8000
+
+# Data configuration
+data_files:
+  - data/emotion_examples.json
+
+# Item properties
+item_properties:
+  id_key: "id"
+  text_key: "text"
+
+# Output configuration
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+# AI Support Configuration - using Ollama with qwen3:0.6b
+ai_support:
+  enabled: true
+  endpoint_type: "ollama"
+
+  ai_config:
+    model: "qwen3:0.6b"
+    base_url: "http://localhost:11434"
+    temperature: 0.3
+    max_tokens: 256
+    include:
+      all: true
+
+  # Option highlighting configuration
+  option_highlighting:
+    enabled: true
+    top_k: 3                    # Highlight top 3 most likely emotions
+    dim_opacity: 0.4            # Dimmed options at 40% opacity
+    auto_apply: true            # Apply automatically on page load
+    schemas: null               # Apply to all schemas
+    prefetch_count: 10          # Prefetch 10 items ahead
+
+  # Cache configuration for prefetching
+  cache_config:
+    disk_cache:
+      enabled: true
+      path: annotation_output/ai_cache.json
+    prefetch:
+      warm_up_page_count: 5    # Prefetch first 5 items on startup
+      on_next: 3               # Prefetch 3 items when moving forward
+      on_prev: 1               # Prefetch 1 item when moving backward
+
+# User authentication
+user_config:
+  allow_all_users: true
+
+# Annotation schemes - 10 emotion options
+annotation_schemes:
+  - name: "emotion"
+    annotation_type: "radio"
+    description: "What is the PRIMARY emotion expressed in this text? (AI will highlight the 3 most likely options)"
+    labels:
+      - name: "Joy"
+        tooltip: "Happiness, excitement, elation, delight"
+      - name: "Sadness"
+        tooltip: "Grief, sorrow, melancholy, despair"
+      - name: "Anger"
+        tooltip: "Frustration, rage, irritation, annoyance"
+      - name: "Fear"
+        tooltip: "Anxiety, terror, worry, nervousness"
+      - name: "Surprise"
+        tooltip: "Shock, astonishment, amazement, wonder"
+      - name: "Disgust"
+        tooltip: "Revulsion, contempt, distaste, loathing"
+      - name: "Trust"
+        tooltip: "Confidence, admiration, acceptance, faith"
+      - name: "Anticipation"
+        tooltip: "Expectation, interest, vigilance, eagerness"
+      - name: "Love"
+        tooltip: "Affection, tenderness, caring, adoration"
+      - name: "Neutral"
+        tooltip: "No strong emotion, ambivalent, matter-of-fact"
+
+# UI Configuration
+ui_config:
+  enable_keyboard_shortcuts: true
+  show_task_counter: true

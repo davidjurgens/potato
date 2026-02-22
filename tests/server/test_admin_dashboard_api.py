@@ -33,7 +33,7 @@ class TestAdminDashboardAPI:
         """Start the MACE demo server for testing."""
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "project-hub", "simple_examples", "simple-mace-demo", "config.yaml"
+            "examples", "advanced", "mace-demo", "config.yaml"
         )
         server = FlaskTestServer(port=9020, config_file=config_path)
         if not server.start():
@@ -423,7 +423,7 @@ class TestAdminAPIAuth:
         """Start server for auth testing."""
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "project-hub", "simple_examples", "simple-mace-demo", "config.yaml"
+            "examples", "advanced", "mace-demo", "config.yaml"
         )
         server = FlaskTestServer(port=9021, config_file=config_path)
         if not server.start():

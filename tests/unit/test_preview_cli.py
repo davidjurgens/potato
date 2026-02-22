@@ -349,7 +349,7 @@ class TestCLIIntegration:
 
     def test_simple_checkbox_config(self):
         """Test with the simple checkbox example config."""
-        config_path = 'project-hub/simple_examples/configs/simple-check-box.yaml'
+        config_path = 'examples/classification/check-box/config.yaml'
         if os.path.exists(config_path):
             config = load_config(config_path)
             schemes = get_annotation_schemes(config)
@@ -369,7 +369,7 @@ class TestCLIIntegration:
 
     def test_radio_button_config(self):
         """Test with the radio button example config."""
-        config_path = 'project-hub/simple_examples/configs/simple-radio-buttons.yaml'
+        config_path = 'examples/classification/single-choice/config.yaml'
         if os.path.exists(config_path):
             config = load_config(config_path)
             schemes = get_annotation_schemes(config)

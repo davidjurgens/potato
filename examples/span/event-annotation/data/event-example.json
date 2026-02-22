@@ -1,0 +1,22 @@
+[
+  {
+    "id": "event_1",
+    "text": "John Smith attacked the government building with a rifle yesterday in downtown Chicago."
+  },
+  {
+    "id": "event_2",
+    "text": "Microsoft hired Sarah Johnson as their new Chief Technology Officer last month."
+  },
+  {
+    "id": "event_3",
+    "text": "The CEO traveled from New York to London for the annual conference."
+  },
+  {
+    "id": "event_4",
+    "text": "The rebels attacked the military base near the border, killing several soldiers."
+  },
+  {
+    "id": "event_5",
+    "text": "Apple announced that they hired James Chen, a former Google engineer, to lead their AI research team in Cupertino."
+  }
+]

@@ -581,6 +581,9 @@
           {% if mace_enabled %}
           <div class="admin-tab" data-tab="mace">MACE</div>
           {% endif %}
+          {% if embedding_viz_enabled %}
+          <div class="admin-tab" data-tab="embedding-viz">Embeddings</div>
+          {% endif %}
           <div class="admin-tab" data-tab="config">Configuration</div>
         </div>
 
@@ -792,6 +795,68 @@
           </div>
         </div>
 
+        <!-- Embedding Visualization Tab -->
+        {% if embedding_viz_enabled %}
+        <div class="admin-tab-content" id="embedding-viz">
+          <!-- Stats Bar -->
+          <div class="dashboard-grid" id="embedding-viz-stats" style="margin-bottom: 1rem;">
+            <div class="dashboard-card">
+              <h3>Loading...</h3>
+            </div>
+          </div>
+
+          <!-- Main Content Area -->
+          <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+            <!-- Scatter Plot Container -->
+            <div style="flex: 2; min-width: 600px;">
+              <div class="dashboard-card" style="position: relative; min-height: 500px;">
+                <div id="embedding-viz-loader" style="display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.8); z-index: 10; justify-content: center; align-items: center;">
+                  <div class="loading-spinner" style="width: 40px; height: 40px; border: 4px solid #e5e7eb; border-top-color: #3b82f6;"></div>
+                </div>
+                <div id="embedding-viz-error" style="display: none;"></div>
+                <div id="embedding-viz-chart" style="width: 100%; height: 500px;"></div>
+              </div>
+            </div>
+
+            <!-- Side Panel -->
+            <div style="flex: 1; min-width: 300px;">
+              <!-- Preview Panel -->
+              <div class="dashboard-card" style="margin-bottom: 1rem;">
+                <h3 style="margin: 0 0 0.5rem 0; font-size: 0.875rem; color: var(--muted-foreground);">INSTANCE PREVIEW</h3>
+                <div id="embedding-viz-preview">
+                  <p style="color: var(--muted-foreground);">Hover over a point to see details</p>
+                </div>
+              </div>
+
+              <!-- Selection Panel -->
+              <div class="dashboard-card">
+                <h3 style="margin: 0 0 0.5rem 0; font-size: 0.875rem; color: var(--muted-foreground);">SELECTION QUEUE</h3>
+                <div id="embedding-viz-selection-panel">
+                  <div class="selection-empty">
+                    <p style="color: var(--muted-foreground);">Use lasso or box selection to select points</p>
+                    <p style="font-size: 0.75rem; color: var(--muted-foreground);">Selected items will be prioritized for annotation</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Controls -->
+              <div class="dashboard-card" style="margin-top: 1rem;">
+                <h3 style="margin: 0 0 0.5rem 0; font-size: 0.875rem; color: var(--muted-foreground);">CONTROLS</h3>
+                <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                  <button class="shadcn-button shadcn-button-primary" onclick="embeddingViz && embeddingViz.refresh(true)" style="width: 100%;">
+                    Refresh Visualization
+                  </button>
+                  <select id="embedding-viz-label-source" onchange="changeEmbeddingVizLabelSource()" style="padding: 0.5rem; border: 1px solid var(--border); border-radius: var(--radius);">
+                    <option value="mace">Color by MACE Labels</option>
+                    <option value="majority">Color by Majority Vote</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
         <!-- Configuration Tab -->
         {% if mace_enabled %}
         <div class="admin-tab-content" id="mace">
@@ -968,6 +1033,9 @@
             break;
           case "mace":
             loadMace();
+            break;
+          case "embedding-viz":
+            loadEmbeddingVisualization();
             break;
           case "config":
             loadConfig();
@@ -2071,6 +2139,66 @@
         fetch("/admin", { method: "GET" }).then(() => {
           window.location.href = "/admin";
         });
+      }
+
+      // =============================================
+      // Embedding Visualization Functions
+      // =============================================
+      let embeddingVizLoaded = false;
+
+      async function loadEmbeddingVisualization() {
+        if (embeddingVizLoaded && typeof embeddingViz !== 'undefined' && embeddingViz) {
+          return;
+        }
+
+        // Load Plotly.js if not already loaded
+        if (typeof Plotly === 'undefined') {
+          await loadScript('https://cdn.plot.ly/plotly-2.27.0.min.js');
+        }
+
+        // Load embedding-viz.js if not already loaded
+        if (typeof initEmbeddingVisualization === 'undefined') {
+          await loadScript('/static/js/embedding-viz.js');
+        }
+
+        // Initialize the visualization
+        try {
+          const apiKey = "{{ admin_api_key }}";
+          initEmbeddingVisualization('embedding-viz-chart', apiKey);
+          embeddingVizLoaded = true;
+        } catch (error) {
+          console.error('Failed to initialize embedding visualization:', error);
+          document.getElementById('embedding-viz-error').innerHTML = `
+            <div class="error-message">
+              <strong>Error:</strong> ${error.message || 'Failed to load visualization'}
+            </div>
+          `;
+          document.getElementById('embedding-viz-error').style.display = 'block';
+        }
+      }
+
+      function loadScript(src) {
+        return new Promise((resolve, reject) => {
+          const existing = document.querySelector(`script[src="${src}"]`);
+          if (existing) {
+            resolve();
+            return;
+          }
+          const script = document.createElement('script');
+          script.src = src;
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.appendChild(script);
+        });
+      }
+
+      function changeEmbeddingVizLabelSource() {
+        const select = document.getElementById('embedding-viz-label-source');
+        if (select && typeof embeddingViz !== 'undefined' && embeddingViz) {
+          // For now, just refresh - a more advanced implementation would
+          // pass the label source to the backend
+          embeddingViz.refresh(true);
+        }
       }
     </script>
   </body>

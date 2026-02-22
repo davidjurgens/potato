@@ -539,7 +539,7 @@ Use Prolific's preview feature to test the full worker experience, then launch y
 
 ## Example Projects
 
-Check out these example projects in the [project-hub](https://github.com/davidjurgens/potato/tree/master/project-hub):
+Check out these example projects in the [potato-showcase](https://github.com/davidjurgens/potato-showcase) repository:
 
 - **prolific_api_example**: Full Prolific API integration example
 - **match_finding**: Simple URL-direct login setup

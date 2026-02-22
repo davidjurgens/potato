@@ -1,0 +1,87 @@
+port: 8080
+server_name: LLM Response Preference Annotation
+annotation_task_name: LLM Response Quality Comparison
+task_dir: .
+output_annotation_dir: annotation_output/llm-preference/
+output_annotation_format: json
+
+data_files:
+  - data/llm_responses.json
+
+item_properties:
+  id_key: id
+  text_key: responses
+  context_key: prompt
+
+# Display responses side by side with A/B labels
+list_as_text:
+  text_list_prefix_type: alphabet
+
+user_config:
+  allow_all_users: true
+  users: []
+
+annotation_schemes:
+  # 6-point scale for overall preference (no neutral option - forced choice)
+  - annotation_type: pairwise
+    name: overall_preference
+    description: "Overall, which response is better?"
+    mode: scale
+    items_key: responses
+    labels:
+      - "Response A"
+      - "Response B"
+    scale:
+      min: 1
+      max: 6
+      step: 1
+      default: 3
+      labels:
+        min: "A is much better"
+        max: "B is much better"
+        center: ""
+    label_requirement:
+      required: true
+    layout:
+      columns: 1  # Takes 1 column in the 2-column grid
+
+  # Binary choice for helpfulness
+  - annotation_type: pairwise
+    name: helpfulness
+    description: "Which response is more helpful for the user's actual need?"
+    mode: binary
+    items_key: responses
+    labels:
+      - "A"
+      - "B"
+    allow_tie: true
+    tie_label: "Equally helpful"
+    sequential_key_binding: true
+    layout:
+      columns: 1
+
+  # Binary choice for tone/style
+  - annotation_type: pairwise
+    name: tone
+    description: "Which response has a more appropriate tone?"
+    mode: binary
+    items_key: responses
+    labels:
+      - "A"
+      - "B"
+    allow_tie: true
+    tie_label: "Both appropriate"
+    sequential_key_binding: false
+    layout:
+      columns: 1
+
+  # Optional free-text justification
+  - annotation_type: text
+    name: justification
+    description: "Briefly explain your preference (optional)"
+    label_requirement:
+      required: false
+    layout:
+      columns: 2  # Spans full width (2 columns)
+
+site_dir: default

@@ -11,6 +11,9 @@ Image annotation allows annotators to mark regions on images using bounding boxe
 - **Polygon**: Draw multi-point polygons for precise object boundaries
 - **Freeform Drawing**: Free-hand drawing for irregular shapes
 - **Landmark Points**: Mark specific points of interest on images
+- **Segmentation Brush**: Pixel-level mask painting for semantic segmentation
+- **Fill Tool**: Flood-fill enclosed regions with a label
+- **Eraser**: Remove mask regions
 - **Zoom & Pan**: Navigate large images with ease
 - **Label Assignment**: Assign category labels to each annotation
 - **Keyboard Shortcuts**: Fast annotation with customizable hotkeys
@@ -53,6 +56,9 @@ annotation_schemes:
 | `max_annotations` | integer | `null` | Maximum allowed annotations |
 | `freeform_brush_size` | integer | `5` | Default brush size for freeform tool |
 | `freeform_simplify` | float | `2.0` | Path simplification tolerance |
+| `brush_size` | integer | `20` | Default brush size for segmentation (1-100) |
+| `eraser_size` | integer | `20` | Default eraser size for segmentation (1-100) |
+| `mask_opacity` | float | `0.5` | Mask overlay opacity (0-1) |
 
 ### Available Tools
 
@@ -62,6 +68,9 @@ annotation_schemes:
 | `polygon` | `p` | Multi-point polygons |
 | `freeform` | `f` | Free-hand drawing |
 | `landmark` | `l` | Single point markers |
+| `brush` | `m` | Segmentation brush for pixel-level masks |
+| `eraser` | `e` | Eraser for removing mask regions |
+| `fill` | `g` | Flood fill for enclosed regions |
 
 ### Label Configuration
 
@@ -137,6 +146,67 @@ Annotations are saved as JSON with the following structure:
 }
 ```
 
+## Segmentation Masks
+
+For pixel-level semantic segmentation tasks, use the brush, eraser, and fill tools. These create mask overlays that are stored as RLE (Run-Length Encoding) for efficiency.
+
+### Segmentation Configuration Example
+
+```yaml
+annotation_schemes:
+  - annotation_type: image_annotation
+    name: segmentation
+    description: "Paint regions using the brush tool"
+    tools:
+      - brush      # Pixel-level painting
+      - eraser     # Remove mask regions
+      - fill       # Fill enclosed areas
+      - polygon    # Precise polygon boundaries
+    labels:
+      - name: foreground
+        color: "#FF6B6B"
+        key_value: "1"
+      - name: background
+        color: "#4ECDC4"
+        key_value: "2"
+    brush_size: 20        # Default brush size
+    eraser_size: 20       # Default eraser size
+    mask_opacity: 0.5     # Overlay transparency
+```
+
+### Segmentation Output Format
+
+Mask data is stored as RLE (Run-Length Encoding) for efficient storage:
+
+```json
+{
+  "segmentation": {
+    "annotations": [...],
+    "masks": {
+      "foreground": {
+        "rle": [0, 100, 50, 200, 25, ...],
+        "width": 800,
+        "height": 600,
+        "color": "#FF6B6B"
+      },
+      "background": {
+        "rle": [50, 150, 100, 300, ...],
+        "width": 800,
+        "height": 600,
+        "color": "#4ECDC4"
+      }
+    }
+  }
+}
+```
+
+### Segmentation Tips
+
+1. **Brush Size**: Use a larger brush (40-60) for filling large areas, smaller brush (5-15) for precise edges
+2. **Eraser**: Switch to eraser to fix mistakes without deleting the entire mask
+3. **Fill Tool**: Use after drawing a boundary with polygon or brush to quickly fill enclosed regions
+4. **Layer Order**: Masks are rendered in label order; later labels appear on top
+
 ## Keyboard Shortcuts
 
 | Key | Action |
@@ -145,6 +215,9 @@ Annotations are saved as JSON with the following structure:
 | `p` | Select polygon tool |
 | `f` | Select freeform tool |
 | `l` | Select landmark tool |
+| `m` | Select segmentation brush tool |
+| `e` | Select eraser tool |
+| `g` | Select fill tool |
 | `1-9` | Select label by number |
 | `Delete` | Delete selected annotation |
 | `Ctrl+Z` | Undo |
@@ -180,7 +253,7 @@ Shows all annotations with:
 
 ## Example Project
 
-See `project-hub/simple_examples/configs/simple-image-annotation.yaml` for a complete working example.
+See `examples/image/image-annotation/config.yaml` for a complete working example.
 
 ## Tips for Administrators
 

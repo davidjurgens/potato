@@ -1,0 +1,132 @@
+# Conditional Schema Branching Example
+#
+# This example demonstrates how to use display_logic to show/hide annotation
+# schemas based on annotator responses. This is useful for:
+# - Follow-up questions when a specific answer is selected
+# - Branching survey-style annotation flows
+# - Conditional explanations or additional details
+
+annotation_task_name: "Conditional Logic Demo - PII Detection"
+
+# Data configuration
+data_files:
+  - path: "data/pii-examples.json"
+    format: json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+# Output directory
+task_dir: "."
+output_annotation_dir: "annotation_output"
+output_annotation_format: json
+
+# Authentication
+user_config:
+  require_password: false
+  allow_free_usernames: true
+
+# Annotation schemes with conditional branching
+annotation_schemes:
+  # Primary question - always visible
+  - annotation_type: radio
+    name: contains_pii
+    description: "Does this text contain personally identifiable information (PII)?"
+    labels:
+      - name: "Yes"
+        key_binding: y
+      - name: "No"
+        key_binding: n
+      - name: "Uncertain"
+        key_binding: u
+
+  # Conditional: Appears when contains_pii = "Yes" or "Uncertain"
+  - annotation_type: multiselect
+    name: pii_types
+    description: "What types of PII are present? (select all that apply)"
+    labels:
+      - name: "Name"
+        key_binding: "1"
+      - name: "Email"
+        key_binding: "2"
+      - name: "Phone"
+        key_binding: "3"
+      - name: "Address"
+        key_binding: "4"
+      - name: "SSN"
+        key_binding: "5"
+      - name: "Credit Card"
+        key_binding: "6"
+      - name: "Other"
+        key_binding: "7"
+    display_logic:
+      show_when:
+        - schema: contains_pii
+          operator: equals
+          value: ["Yes", "Uncertain"]
+
+  # Conditional: Appears when "Other" is selected in pii_types
+  - annotation_type: text
+    name: other_pii_description
+    description: "Describe the other type of PII you found:"
+    display_logic:
+      show_when:
+        - schema: pii_types
+          operator: contains
+          value: "Other"
+
+  # Conditional: Appears when "SSN" is selected in pii_types
+  - annotation_type: radio
+    name: ssn_context
+    description: "Is the SSN used in an appropriate context?"
+    labels:
+      - name: "Yes, appropriate use"
+      - name: "No, inappropriate"
+      - name: "Cannot determine"
+    display_logic:
+      show_when:
+        - schema: pii_types
+          operator: contains
+          value: "SSN"
+
+  # Conditional: Appears when contains_pii = "No"
+  - annotation_type: slider
+    name: confidence
+    description: "How confident are you that there is NO PII in this text?"
+    min_value: 1
+    max_value: 10
+    starting_value: 5
+    display_logic:
+      show_when:
+        - schema: contains_pii
+          operator: equals
+          value: "No"
+
+  # Conditional: Appears when confidence is low (1-3)
+  - annotation_type: text
+    name: uncertainty_reason
+    description: "What makes you uncertain? (Optional)"
+    display_logic:
+      show_when:
+        - schema: confidence
+          operator: in_range
+          value: [1, 3]
+
+  # Conditional: Appears when contains_pii = "Uncertain"
+  - annotation_type: radio
+    name: review_needed
+    description: "Should this item be reviewed by another annotator?"
+    labels:
+      - name: "Yes, needs review"
+      - name: "No, I'm confident enough"
+    display_logic:
+      show_when:
+        - schema: contains_pii
+          operator: equals
+          value: "Uncertain"
+
+  # Always visible - final feedback
+  - annotation_type: text
+    name: notes
+    description: "Any additional notes about this text (optional):"

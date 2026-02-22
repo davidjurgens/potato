@@ -141,7 +141,7 @@ keyword_highlight_settings:
 
 ### Example
 
-See the [keyword-highlights-example](https://github.com/davidjurgens/potato/tree/master/project-hub/simple_examples/keyword-highlights-example) in the project hub for a complete working example.
+See the [keyword-highlights-example](https://github.com/davidjurgens/potato/tree/master/examples/ai-assisted/keyword-highlights) for a complete working example.
 
 ## Tooltips
 
@@ -309,6 +309,6 @@ a mapping from the scheme name to labels. For example:
 {"id":"2","text":"Great work!","label_suggestions": {"sentiment": "positive", "explanation": "Because I think "}}
 ```
 
-You can check out our [example project](https://github.com/davidjurgens/potato/tree/master/project-hub/label_suggestions) in project hub regarding how to set up label suggestions
+You can check out our [example project](https://github.com/davidjurgens/potato-showcase/tree/master/label_suggestions) in the potato-showcase repository regarding how to set up label suggestions
 
 ![Alt text](img/label_suggestions.png)

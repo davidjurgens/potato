@@ -31,12 +31,16 @@ Potato supports annotation across multiple data types:
 | **Video** | Frame-by-frame annotation, temporal segments, playback sync ([docs](docs/video_annotation.md)) |
 | **Images** | Region labeling, classification, comparison tasks ([docs](docs/image_annotation.md)) |
 | **Dialogue** | Turn-level annotation, conversation threading |
+| **Documents** | PDF, Word, Markdown with coordinate mapping ([docs](docs/format_support.md)) |
+| **Code** | Syntax-highlighted source code annotation ([docs](docs/format_support.md)) |
+| **Spreadsheets** | Row/cell-level tabular data annotation ([docs](docs/format_support.md)) |
 
 ### Annotation Schemes
 - **Classification**: Radio buttons, checkboxes, Likert scales
 - **Span Annotation**: Highlight and label text spans with keyboard shortcuts
 - **Pairwise Comparison**: Side-by-side comparisons, best-worst scaling
 - **Free Text**: Text boxes with validation and character limits
+- **Conditional Logic**: Show/hide questions based on prior answers ([docs](docs/conditional_logic.md))
 
 ### AI-Powered Assistance
 - **Label Suggestions**: LLM-powered pre-annotations to speed up work
@@ -88,7 +92,7 @@ cd potato
 pip install -r requirements.txt
 
 # Start a simple annotation task
-python potato/flask_server.py start project-hub/simple_examples/configs/simple-check-box.yaml -p 8000
+python potato/flask_server.py start examples/classification/check-box/config.yaml -p 8000
 ```
 
 Then open [http://localhost:8000](http://localhost:8000) in your browser.
@@ -102,6 +106,8 @@ Then open [http://localhost:8000](http://localhost:8000) in your browser.
 | [Getting Started](https://potatoannotator.readthedocs.io/en/latest/usage/) | Installation and first project setup |
 | [Configuration Guide](https://potatoannotator.readthedocs.io/en/latest/schemas_and_templates/) | YAML configuration options |
 | [Annotation Schemas](https://potatoannotator.readthedocs.io/en/latest/schemas_and_templates/) | Radio, checkbox, span, likert, and more |
+| [Conditional Logic](docs/conditional_logic.md) | Show/hide questions based on answers |
+| [Format Support](docs/format_support.md) | PDF, Word, code, spreadsheet annotation |
 | [Data Formats](https://potatoannotator.readthedocs.io/en/latest/data_format/) | Input/output data specifications |
 | [AI Support](docs/ai_support.md) | LLM integration for label suggestions |
 | [Quality Control](docs/quality_control.md) | Attention checks and gold standards |
@@ -114,27 +120,34 @@ Then open [http://localhost:8000](http://localhost:8000) in your browser.
 
 ## Example Projects
 
-Ready-to-use annotation setups in [`project-hub/`](project-hub/):
+Ready-to-use annotation templates organized by type in [`examples/`](examples/):
 
-| Project | Description | Config |
-|---------|-------------|--------|
-| [Sentiment Analysis](project-hub/sentiment_analysis/) | Document-level sentiment classification | Radio buttons |
-| [Dialogue Analysis](project-hub/dialogue_analysis/) | Span labeling in conversations | Span annotation |
-| [Summarization Eval](project-hub/summarization_evaluation/) | Compare and rate summaries | Likert + pairwise |
-| [Question Answering](project-hub/question_answering/) | Extract answer spans | Span + checkbox |
-| [Simple Examples](project-hub/simple_examples/) | Minimal configs for each schema type | Various |
+| Category | Examples | Description |
+|----------|----------|-------------|
+| [Classification](examples/classification/) | Radio, checkbox, Likert, slider, pairwise | Label selection and rating tasks |
+| [Span](examples/span/) | Span labeling, linking, coreference, NER | Text span annotation |
+| [Audio](examples/audio/) | Audio annotation, classification, tiered | Audio annotation with waveforms |
+| [Video](examples/video/) | Video annotation, tracking, frame-level | Video annotation with playback |
+| [Image](examples/image/) | Image, PDF, document annotation | Image and document annotation |
+| [Advanced](examples/advanced/) | Multi-modal, quality control, adjudication | Complex features and workflows |
+| [AI-Assisted](examples/ai-assisted/) | AI keywords, Ollama integration | AI/ML-powered annotation |
+| [Custom Layouts](examples/custom-layouts/) | Content moderation, dialogue QA | Layout customization |
 
-### Annotation Guidelines Showcase
+### Research Project Showcase
 
-Looking for real-world examples? The **[Potato Showcase](https://github.com/davidjurgens/potato-showcase/)** contains a curated gallery of annotation guidelines and configurations from published research projects. Browse examples of:
-- Annotation codebooks and instructions
-- Complex multi-schema configurations
-- Quality control setups
-- Custom UI configurations
+Looking for real-world examples from published research? The **[Potato Showcase](https://github.com/davidjurgens/potato-showcase/)** contains paper-specific annotation projects including sentiment analysis, dialogue analysis, summarization evaluation, and more.
 
-See [all example projects](https://potatoannotator.readthedocs.io/en/latest/example-projects/) in the documentation.
+Use `potato list all` to see downloadable projects, or `potato get <project>` to fetch one.
 
 ---
+
+## What's New in v2.1
+
+- **Conditional Logic**: Show/hide annotation questions based on prior answers
+- **Document Formats**: PDF, Word, Markdown annotation with coordinate mapping
+- **Code Annotation**: Syntax-highlighted source code with line-level spans
+- **Spreadsheet Support**: Row and cell-level tabular data annotation
+- **Bounding Box Annotation**: Draw boxes on PDFs and documents
 
 ## What's New in v2.0
 
@@ -166,7 +179,7 @@ potato/
 ├── simulator/           # User simulation for testing
 └── quality_control.py   # QC validation logic
 
-project-hub/             # Example annotation projects
+examples/                # Annotation templates by type
 tests/                   # Test suite
 docs/                    # Documentation
 ```
@@ -193,14 +206,14 @@ pytest --cov=potato --cov-report=html
 ## Support
 
 - **Issues**: [GitHub Issues](https://github.com/davidjurgens/potato/issues)
-- **Questions**: pedropei@umich.edu or jurgens@umich.edu
+- **Questions**: jurgens@umich.edu
 - **Documentation**: [potatoannotator.readthedocs.io](https://potatoannotator.readthedocs.io/)
 
 ---
 
 ## License
 
-Potato is dual-licensed under [Polyform Shield](LICENSE) for non-commercial use. Commercial licensing is available—contact jurgens@umich.edu for details.
+Potato is licensed under [Polyform Shield](LICENSE). Short-summary: Non-commercial applications can use Potato however they want. Commercial applications can use Potato to annotate all they want, but cannot integrate Potato into a commecial product. 
 
 <details>
 <summary>License FAQ</summary>
@@ -208,7 +221,7 @@ Potato is dual-licensed under [Polyform Shield](LICENSE) for non-commercial use.
 | Use Case | Allowed? |
 |----------|----------|
 | Academic research | Yes |
-| Internal company annotation | Yes |
+| Company annotation | Yes |
 | Fork for personal development | Yes |
 | Integration in open-source pipelines | Yes |
 | Commercial annotation service | Contact us |

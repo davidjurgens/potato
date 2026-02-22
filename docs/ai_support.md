@@ -123,6 +123,7 @@ ai_support:
 | Option | Type | Required | Description |
 |--------|------|----------|-------------|
 | `enabled` | boolean | Yes | Enable/disable AI support |
+| `ai_config_file` | string | No | Path to external AI config file (see [External AI Config File](#external-ai-config-file)) |
 | `endpoint_type` | string | Yes | The LLM provider to use |
 | `ai_config.model` | string | No | Model name (uses provider default if not specified) |
 | `ai_config.api_key` | string | Yes* | API key for cloud providers |
@@ -406,6 +407,103 @@ Then set the environment variable:
 ```bash
 export OPENAI_API_KEY="sk-..."
 ```
+
+## External AI Config File
+
+For better security and portability, you can move endpoint-specific details (API keys, server URLs, model names) into a separate `ai-config.yaml` file. This file is gitignored by default, so secrets and environment-specific URLs never get committed to version control.
+
+### How It Works
+
+Your main `config.yaml` references the external file:
+
+```yaml
+# config.yaml - committed to git, no secrets
+ai_support:
+  enabled: true
+  ai_config_file: ai-config.yaml   # Path relative to config.yaml
+
+  ai_config:
+    # Non-secret defaults stay here
+    temperature: 0.7
+    max_tokens: 150
+    include:
+      all: true
+```
+
+The external `ai-config.yaml` provides endpoint details:
+
+```yaml
+# ai-config.yaml - gitignored, user/environment-specific
+endpoint_type: ollama
+model: qwen3:0.6b
+base_url: http://localhost:11434
+```
+
+### Merge Behavior
+
+When `ai_config_file` is specified:
+
+1. The external YAML file is loaded (path resolved relative to the main config file's directory)
+2. `endpoint_type` from the external file sets `ai_support.endpoint_type`
+3. All other values from the external file are merged into `ai_support.ai_config`, with external values taking precedence over inline values
+4. Environment variable substitution (`${VAR_NAME}`) is applied to both files
+
+This means your inline `ai_config` provides defaults (temperature, max_tokens, include settings) while the external file provides secrets and environment-specific values.
+
+### Fallback Behavior
+
+- **File missing**: If `ai_config_file` is set but the file doesn't exist, AI support is automatically disabled with a warning (the server still starts normally)
+- **No `ai_config_file`**: Current behavior is unchanged -- everything is read from the inline config
+- **Environment variables**: `${VAR_NAME}` syntax works in both files
+
+### Example: Local Ollama
+
+```yaml
+# ai-config.yaml
+endpoint_type: ollama
+model: qwen3:0.6b
+```
+
+### Example: Remote vLLM Server
+
+```yaml
+# ai-config.yaml
+endpoint_type: vllm
+model: Qwen/Qwen3-4B
+base_url: http://your-gpu-server:8001
+```
+
+### Example: OpenAI with Environment Variable
+
+```yaml
+# ai-config.yaml
+endpoint_type: openai
+model: gpt-4o-mini
+api_key: ${OPENAI_API_KEY}
+```
+
+### Example: Anthropic
+
+```yaml
+# ai-config.yaml
+endpoint_type: anthropic
+model: claude-sonnet-4-20250514
+api_key: ${ANTHROPIC_API_KEY}
+```
+
+### Setting Up
+
+All AI-enabled examples include an `ai-config.yaml.example` template. To get started:
+
+```bash
+# Copy the template
+cp ai-config.yaml.example ai-config.yaml
+
+# Edit with your endpoint details
+nano ai-config.yaml
+```
+
+The `ai-config.yaml` and `ai-config*.yaml` patterns are in `.gitignore`, so your file will never be accidentally committed.
 
 ## Usage in Annotation Interface
 

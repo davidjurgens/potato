@@ -154,13 +154,13 @@ Content-Type: application/json
 
 A complete example is available at:
 ```
-project-hub/simple_examples/simple-option-highlight/
+examples/advanced/option-highlight/
 ```
 
 Run it:
 ```bash
 export OPENAI_API_KEY="your-api-key"
-python potato/flask_server.py start project-hub/simple_examples/simple-option-highlight/config.yaml -p 8000
+python potato/flask_server.py start examples/advanced/option-highlight/config.yaml -p 8000
 ```
 
 ## Best Practices

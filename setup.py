@@ -16,7 +16,7 @@ def read_requirements():
 
 setup(
     name="potato-annotation",
-    version='2.1.0',
+    version='2.2.0',
     author="Potato Development Team",
     author_email="jurgens@umich.edu",
     description="A flexible, stand-alone, web-based platform for text annotation tasks",

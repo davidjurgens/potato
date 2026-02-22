@@ -6,6 +6,7 @@ Uses Peaks.js for waveform visualization and segment management.
 
 Features:
 - Waveform visualization (amplitude display)
+- Spectrogram visualization (frequency display) - optional
 - Region/segment selection and playback
 - Zoom and pan for long audio files
 - Two annotation modes:
@@ -40,6 +41,17 @@ DEFAULT_COLORS = [
 # Valid annotation modes
 VALID_MODES = ["label", "questions", "both"]
 
+# Default spectrogram options
+DEFAULT_SPECTROGRAM_OPTIONS = {
+    "fft_size": 2048,
+    "hop_length": 512,
+    "frequency_range": [0, 8000],
+    "color_map": "viridis",
+}
+
+# Valid color maps for spectrogram
+VALID_COLOR_MAPS = ["viridis", "magma", "plasma", "inferno", "grayscale"]
+
 
 def generate_audio_annotation_layout(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tuple[str, str]]]:
     """
@@ -56,6 +68,13 @@ def generate_audio_annotation_layout(annotation_scheme: Dict[str, Any]) -> Tuple
             - max_segments: Maximum allowed segments (default: null/unlimited)
             - zoom_enabled: Whether to enable zoom (default: True)
             - playback_rate_control: Show playback speed controls (default: False)
+            - waveform: Whether to show waveform (default: True)
+            - spectrogram: Whether to show spectrogram (default: False)
+            - spectrogram_options: Spectrogram configuration (optional):
+                - fft_size: FFT window size (default: 2048)
+                - hop_length: Hop length between FFT windows (default: 512)
+                - frequency_range: [min_hz, max_hz] (default: [0, 8000])
+                - color_map: Color mapping ("viridis", "magma", "plasma", "inferno", "grayscale")
 
     Returns:
         tuple: (html_string, key_bindings)
@@ -110,6 +129,16 @@ def _generate_audio_annotation_layout_internal(annotation_scheme: Dict[str, Any]
     zoom_enabled = annotation_scheme.get('zoom_enabled', True)
     playback_rate_control = annotation_scheme.get('playback_rate_control', False)
 
+    # Waveform and spectrogram display options
+    show_waveform = annotation_scheme.get('waveform', True)
+    show_spectrogram = annotation_scheme.get('spectrogram', False)
+
+    # Process spectrogram options with defaults
+    spectrogram_options = _process_spectrogram_options(
+        annotation_scheme.get('spectrogram_options', {}),
+        schema_name
+    )
+
     # source_field: Links this annotation schema to a display field from instance_display
     source_field = annotation_scheme.get("source_field", "")
 
@@ -124,6 +153,9 @@ def _generate_audio_annotation_layout_internal(annotation_scheme: Dict[str, Any]
         "zoomEnabled": zoom_enabled,
         "playbackRateControl": playback_rate_control,
         "sourceField": source_field,
+        "waveform": show_waveform,
+        "spectrogram": show_spectrogram,
+        "spectrogramOptions": spectrogram_options,
     }
 
     # Generate HTML
@@ -167,6 +199,69 @@ def _process_labels(labels_config: List) -> List[Dict[str, Any]]:
     return processed
 
 
+def _process_spectrogram_options(options: Dict[str, Any], schema_name: str) -> Dict[str, Any]:
+    """
+    Process and validate spectrogram configuration options.
+
+    Args:
+        options: User-provided spectrogram options
+        schema_name: Schema name for error messages
+
+    Returns:
+        Validated and merged spectrogram options with defaults
+    """
+    # Start with defaults
+    processed = dict(DEFAULT_SPECTROGRAM_OPTIONS)
+
+    if not options:
+        return processed
+
+    # Validate and merge fft_size
+    if 'fft_size' in options:
+        fft_size = options['fft_size']
+        if isinstance(fft_size, int) and fft_size > 0:
+            # Ensure power of 2 for FFT efficiency
+            if fft_size & (fft_size - 1) == 0:
+                processed['fft_size'] = fft_size
+            else:
+                logger.warning(
+                    f"fft_size {fft_size} is not a power of 2 in schema {schema_name}, "
+                    f"using default {DEFAULT_SPECTROGRAM_OPTIONS['fft_size']}"
+                )
+
+    # Validate and merge hop_length
+    if 'hop_length' in options:
+        hop_length = options['hop_length']
+        if isinstance(hop_length, int) and hop_length > 0:
+            processed['hop_length'] = hop_length
+
+    # Validate and merge frequency_range
+    if 'frequency_range' in options:
+        freq_range = options['frequency_range']
+        if (isinstance(freq_range, (list, tuple)) and len(freq_range) == 2
+                and all(isinstance(f, (int, float)) for f in freq_range)
+                and freq_range[0] < freq_range[1]):
+            processed['frequency_range'] = list(freq_range)
+        else:
+            logger.warning(
+                f"Invalid frequency_range {freq_range} in schema {schema_name}, "
+                f"using default {DEFAULT_SPECTROGRAM_OPTIONS['frequency_range']}"
+            )
+
+    # Validate and merge color_map
+    if 'color_map' in options:
+        color_map = options['color_map']
+        if color_map in VALID_COLOR_MAPS:
+            processed['color_map'] = color_map
+        else:
+            logger.warning(
+                f"Invalid color_map '{color_map}' in schema {schema_name}, "
+                f"must be one of {VALID_COLOR_MAPS}. Using default '{DEFAULT_SPECTROGRAM_OPTIONS['color_map']}'"
+            )
+
+    return processed
+
+
 def _generate_html(
     annotation_scheme: Dict[str, Any],
     js_config: Dict[str, Any],
@@ -180,6 +275,10 @@ def _generate_html(
     escaped_name = escape_html_content(schema_name)
     description = escape_html_content(annotation_scheme.get('description', ''))
     config_json = json.dumps(js_config)
+
+    # Determine display mode
+    show_waveform = js_config.get('waveform', True)
+    show_spectrogram = js_config.get('spectrogram', False)
 
     # Generate label buttons (for label/both modes)
     label_selector = ""
@@ -207,6 +306,22 @@ def _generate_html(
     source_field = annotation_scheme.get("source_field", "")
     source_field_attr = f' data-source-field="{escape_html_content(source_field)}"' if source_field else ""
 
+    # Generate spectrogram HTML if enabled
+    spectrogram_html = ""
+    if show_spectrogram:
+        spectrogram_html = f'''
+                    <!-- Spectrogram visualization -->
+                    <div class="spectrogram-section">
+                        <div class="spectrogram-label" style="font-size: 0.85em; color: #666; margin-bottom: 4px; margin-top: 12px;">
+                            Spectrogram (frequency analysis)
+                        </div>
+                        <div id="spectrogram-{escaped_name}" class="spectrogram-container">
+                            <canvas id="spectrogram-canvas-{escaped_name}" class="spectrogram-canvas"></canvas>
+                            <canvas id="spectrogram-playhead-{escaped_name}" class="spectrogram-playhead-canvas"></canvas>
+                        </div>
+                    </div>
+        '''
+
     html = f'''
     <form id="{escaped_name}" class="annotation-form audio-annotation" action="/action_page.php"{source_field_attr}>
         <fieldset schema="{escaped_name}">
@@ -223,6 +338,8 @@ def _generate_html(
                     <!-- 2. Zoomed waveform below -->
                     <div class="zoomview-label" style="font-size: 0.85em; color: #666; margin-bottom: 4px;">Zoomed View (right-click drag to annotate)</div>
                     <div id="waveform-{escaped_name}" class="waveform-container"></div>
+
+                    {spectrogram_html}
                 </div>
 
                 <!-- 3. Toolbar with annotation buttons -->
@@ -381,6 +498,9 @@ def _generate_html(
                         var inputId = 'input-{escaped_name}';
                         var segmentListId = 'segment-list-{escaped_name}';
                         var questionsId = 'segment-questions-{escaped_name}';
+                        var spectrogramId = config.spectrogram ? 'spectrogram-{escaped_name}' : null;
+                        var spectrogramCanvasId = config.spectrogram ? 'spectrogram-canvas-{escaped_name}' : null;
+                        var spectrogramPlayheadId = config.spectrogram ? 'spectrogram-playhead-{escaped_name}' : null;
 
                         // Get audio URL from various sources
                         var audioUrl = null;
@@ -452,6 +572,9 @@ def _generate_html(
                             inputId: inputId,
                             segmentListId: segmentListId,
                             questionsId: questionsId,
+                            spectrogramId: spectrogramId,
+                            spectrogramCanvasId: spectrogramCanvasId,
+                            spectrogramPlayheadId: spectrogramPlayheadId,
                             config: config
                         }});
 

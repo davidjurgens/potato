@@ -118,7 +118,7 @@ def create_test_config(
     optional_fields = [
         "max_annotations_per_user", "assignment_strategy", "output_annotation_format",
         "random_seed", "admin_api_key", "max_annotations_per_item",
-        "icl_labeling", "adjudication", "mace"
+        "icl_labeling", "adjudication", "mace", "list_as_text"
     ]
     for field in optional_fields:
         if field in kwargs:
@@ -304,9 +304,10 @@ class TestConfigManager:
     Context manager for creating and cleaning up test configurations.
     """
 
-    def __init__(self, test_name: str, annotation_schemes: List[Dict[str, Any]], **kwargs):
+    def __init__(self, test_name: str, annotation_schemes: List[Dict[str, Any]], num_instances: int = 2, **kwargs):
         self.test_name = test_name
         self.annotation_schemes = annotation_schemes
+        self.num_instances = num_instances
         self.kwargs = kwargs
         self.test_dir = None
         self.config_file = None
@@ -316,10 +317,10 @@ class TestConfigManager:
         # Create test directory
         self.test_dir = create_test_directory(self.test_name)
 
-        # Create test data
+        # Create test data with requested number of instances
         test_data = [
-            {"id": "1", "text": "Test item 1"},
-            {"id": "2", "text": "Test item 2"}
+            {"id": str(i + 1), "text": f"Test item {i + 1}"}
+            for i in range(self.num_instances)
         ]
         self.data_file = create_test_data_file(self.test_dir, test_data)
 
@@ -469,6 +470,58 @@ def create_image_annotation_config(test_dir: str, **kwargs) -> Tuple[str, str]:
         annotation_schemes,
         data_files=[data_file],
         item_properties={"id_key": "id", "text_key": "image_url"},
+        **kwargs
+    )
+
+    return config_file, data_file
+
+
+def create_segmentation_annotation_config(test_dir: str, **kwargs) -> Tuple[str, str]:
+    """
+    Create a test configuration with segmentation mask annotation support.
+
+    This config includes brush, eraser, and fill tools for pixel-level mask annotation.
+
+    Args:
+        test_dir: Directory to create the config in
+        **kwargs: Additional config options
+
+    Returns:
+        Tuple of (config_file_path, data_file_path)
+    """
+    # Create test data with image URLs
+    test_data = [
+        {"id": "seg_001", "image": "https://picsum.photos/id/1011/400/300"},
+        {"id": "seg_002", "image": "https://picsum.photos/id/1025/400/300"},
+    ]
+
+    data_file = create_test_data_file(test_dir, test_data, filename="segmentation_data.jsonl")
+
+    # Create segmentation annotation scheme with brush/mask tools
+    annotation_schemes = [
+        {
+            "annotation_type": "image_annotation",
+            "name": "segmentation",
+            "description": "Paint regions in the image using the brush tool",
+            "source_field": "image",
+            "tools": ["brush", "eraser", "fill", "bbox"],
+            "labels": [
+                {"name": "foreground", "color": "#FF6B6B", "key_value": "1"},
+                {"name": "background", "color": "#4ECDC4", "key_value": "2"},
+            ],
+            "zoom_enabled": True,
+            "pan_enabled": True,
+            "brush_size": 20,
+            "eraser_size": 20,
+            "mask_opacity": 0.5
+        }
+    ]
+
+    config_file = create_test_config(
+        test_dir,
+        annotation_schemes,
+        data_files=[data_file],
+        item_properties={"id_key": "id", "text_key": "image"},
         **kwargs
     )
 

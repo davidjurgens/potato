@@ -73,7 +73,7 @@ Potato includes three sophisticated example layouts demonstrating advanced custo
 
 ### 1. Content Moderation Dashboard
 
-**Location**: `project-hub/layout-examples/content-moderation/`
+**Location**: `examples/custom-layouts/content-moderation/`
 
 **Features**:
 - Warning banner header with content metadata
@@ -83,12 +83,12 @@ Potato includes three sophisticated example layouts demonstrating advanced custo
 
 **Run**:
 ```bash
-python potato/flask_server.py start project-hub/layout-examples/content-moderation/config.yaml -p 8000
+python potato/flask_server.py start examples/custom-layouts/content-moderation/config.yaml -p 8000
 ```
 
 ### 2. Customer Service Dialogue QA
 
-**Location**: `project-hub/layout-examples/dialogue-qa/`
+**Location**: `examples/custom-layouts/dialogue-qa/`
 
 **Features**:
 - Case header with metadata badges
@@ -99,12 +99,12 @@ python potato/flask_server.py start project-hub/layout-examples/content-moderati
 
 **Run**:
 ```bash
-python potato/flask_server.py start project-hub/layout-examples/dialogue-qa/config.yaml -p 8000
+python potato/flask_server.py start examples/custom-layouts/dialogue-qa/config.yaml -p 8000
 ```
 
 ### 3. Medical Image Review
 
-**Location**: `project-hub/layout-examples/medical-review/`
+**Location**: `examples/custom-layouts/medical-review/`
 
 **Features**:
 - Professional medical UI styling
@@ -115,7 +115,7 @@ python potato/flask_server.py start project-hub/layout-examples/dialogue-qa/conf
 
 **Run**:
 ```bash
-python potato/flask_server.py start project-hub/layout-examples/medical-review/config.yaml -p 8000
+python potato/flask_server.py start examples/custom-layouts/medical-review/config.yaml -p 8000
 ```
 
 ## CSS Techniques

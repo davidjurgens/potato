@@ -1,0 +1,23 @@
+[
+  {
+    "id": "code_001",
+    "description": "Function to calculate the factorial of a number",
+    "code": "def factorial(n):\n    if n < 0:\n        return None\n    if n == 0:\n        return 1\n    result = 1\n    for i in range(1, n + 1):\n        result *= i\n    return result\n\n# Example usage\nprint(factorial(5))  # Output: 120",
+    "language": "python",
+    "filename": "math_utils.py"
+  },
+  {
+    "id": "code_002",
+    "description": "User authentication function",
+    "code": "def authenticate(username, password):\n    # TODO: Add proper validation\n    users = {\n        'admin': 'password123',\n        'user': '12345'\n    }\n    if username in users and users[username] == password:\n        return True\n    return False\n\ndef login(u, p):\n    if authenticate(u, p):\n        print('Welcome!')\n    else:\n        print('Invalid')",
+    "language": "python",
+    "filename": "auth.py"
+  },
+  {
+    "id": "code_003",
+    "description": "Data processing pipeline with list comprehensions",
+    "code": "import json\n\ndef process_data(raw_data):\n    \"\"\"\n    Process raw data and return cleaned results.\n    \n    Args:\n        raw_data: List of dictionaries with 'value' keys\n        \n    Returns:\n        List of processed values\n    \"\"\"\n    if not raw_data:\n        return []\n    \n    # Filter out invalid entries\n    valid_data = [d for d in raw_data if d.get('value') is not None]\n    \n    # Extract and transform values\n    results = [\n        {\n            'id': d.get('id', 'unknown'),\n            'processed_value': float(d['value']) * 100\n        }\n        for d in valid_data\n        if isinstance(d.get('value'), (int, float))\n    ]\n    \n    return results",
+    "language": "python",
+    "filename": "pipeline.py"
+  }
+]

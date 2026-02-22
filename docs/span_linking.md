@@ -115,13 +115,12 @@ visual_display:
 ## Example
 
 See the complete working example at:
-- Config: `project-hub/simple_examples/simple-span-linking/config.yaml`
-- Data: `project-hub/simple_examples/simple-span-linking/data.json`
+- Config: `examples/span/span-linking/config.yaml`
+- Data: `examples/span/span-linking/data/span-linking-example.json`
 
 To run:
 ```bash
-cd project-hub/simple_examples
-python ../../potato/flask_server.py start simple-span-linking/config.yaml -p 9001
+python potato/flask_server.py start examples/span/span-linking/config.yaml -p 9001
 ```
 
 ## Data Format
