@@ -437,12 +437,21 @@ def populate_dynamic_multirate(html_str, instance_data):
             search_end = min(len(html_str), match.end() + 500)
             local_html = html_str[search_start:search_end]
 
-            old_attr = "data-options-values='[]'"
-            if old_attr in local_html:
+            # Handle both single-quoted and double-quoted attributes
+            # (BeautifulSoup may convert single quotes to double quotes)
+            old_attr_single = "data-options-values='[]'"
+            old_attr_double = 'data-options-values="[]"'
+            if old_attr_single in local_html:
                 html_str = html_str[:search_start] + local_html.replace(
-                    old_attr,
+                    old_attr_single,
                     f"data-options-values='{options_attr}'",
-                    1,  # Replace only the first occurrence in this window
+                    1,
+                ) + html_str[search_end:]
+            elif old_attr_double in local_html:
+                html_str = html_str[:search_start] + local_html.replace(
+                    old_attr_double,
+                    f'data-options-values="{options_attr}"',
+                    1,
                 ) + html_str[search_end:]
 
     return html_str
