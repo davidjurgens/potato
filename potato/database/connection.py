@@ -169,6 +169,9 @@ class DatabaseManager:
                     span_title VARCHAR(255),
                     start_pos INT NOT NULL,
                     end_pos INT NOT NULL,
+                    kb_id VARCHAR(255) DEFAULT NULL,
+                    kb_source VARCHAR(255) DEFAULT NULL,
+                    kb_label VARCHAR(512) DEFAULT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     INDEX idx_user_instance (user_id, instance_id),
                     FOREIGN KEY (user_id) REFERENCES user_states(user_id) ON DELETE CASCADE

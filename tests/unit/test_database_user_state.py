@@ -239,8 +239,8 @@ class TestMysqlUserState:
         """Test getting span annotations."""
         mock_manager, mock_conn, mock_cursor = mock_db_manager
         mock_cursor.fetchall.return_value = [
-            ("schema1", "span1", "title1", 0, 10),
-            ("schema1", "span2", "title2", 20, 30)
+            ("schema1", "span1", "title1", 0, 10, None, None, None),
+            ("schema1", "span2", "title2", 20, 30, None, None, None)
         ]
 
         user_state = MysqlUserState("test_user", mock_manager)

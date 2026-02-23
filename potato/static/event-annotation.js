@@ -325,7 +325,7 @@ class EventAnnotationManager {
         // Find and unmark the span
         const spanData = this.arguments[role];
         if (spanData) {
-            const overlay = document.querySelector(`[data-annotation-id="${spanData.id}"]`);
+            const overlay = document.querySelector(`[data-annotation-id="${CSS.escape(spanData.id)}"]`);
             if (overlay) {
                 overlay.classList.remove('event-argument-selected');
             }
@@ -448,7 +448,7 @@ class EventAnnotationManager {
 
         // Check if spans have valid positions
         const lastEvent = this.events[this.events.length - 1];
-        const triggerOverlay = document.querySelector(`[data-annotation-id="${lastEvent.trigger_span_id}"]`);
+        const triggerOverlay = document.querySelector(`[data-annotation-id="${CSS.escape(lastEvent.trigger_span_id)}"]`);
 
         if (!triggerOverlay) {
             console.warn(`[EventAnnotationManager] Trigger overlay not found: ${lastEvent.trigger_span_id}`);
@@ -572,7 +572,7 @@ class EventAnnotationManager {
                 // Check if we can get valid positions
                 if (this.events.length > 0) {
                     const firstEvent = this.events[0];
-                    const triggerOverlay = document.querySelector(`[data-annotation-id="${firstEvent.trigger_span_id}"]`);
+                    const triggerOverlay = document.querySelector(`[data-annotation-id="${CSS.escape(firstEvent.trigger_span_id)}"]`);
 
                     if (triggerOverlay && this.textWrapper) {
                         const rect = triggerOverlay.getBoundingClientRect();
@@ -869,7 +869,7 @@ class EventAnnotationManager {
     }
 
     getSpanTextById(spanId) {
-        const overlay = document.querySelector(`[data-annotation-id="${spanId}"]`);
+        const overlay = document.querySelector(`[data-annotation-id="${CSS.escape(spanId)}"]`);
         if (overlay) {
             return this.getSpanText(overlay);
         }
@@ -1004,7 +1004,7 @@ class EventAnnotationManager {
 
             // Get trigger position
             console.log(`[EventAnnotationManager] Looking for trigger: ${event.trigger_span_id}`);
-            const triggerOverlay = document.querySelector(`[data-annotation-id="${event.trigger_span_id}"]`);
+            const triggerOverlay = document.querySelector(`[data-annotation-id="${CSS.escape(event.trigger_span_id)}"]`);
             if (!triggerOverlay) {
                 console.warn(`[EventAnnotationManager] Trigger overlay not found: ${event.trigger_span_id}`);
                 continue;
@@ -1046,7 +1046,7 @@ class EventAnnotationManager {
 
             // Draw spokes to arguments
             for (const arg of event.arguments || []) {
-                const argOverlay = document.querySelector(`[data-annotation-id="${arg.span_id}"]`);
+                const argOverlay = document.querySelector(`[data-annotation-id="${CSS.escape(arg.span_id)}"]`);
                 if (!argOverlay) continue;
 
                 const argRect = this.getSpanPosition(argOverlay, useCachedPositions);

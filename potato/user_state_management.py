@@ -1176,7 +1176,14 @@ class UserState:
             return Label(d['schema'], d['name'])
 
         def to_span(d: dict[str,str]) -> SpanAnnotation:
-            return SpanAnnotation(d['schema'], d['name'], d['title'], int(d['start']), int(d['end']))
+            return SpanAnnotation(
+                d['schema'], d['name'], d['title'], int(d['start']), int(d['end']),
+                id=d.get('id'), target_field=d.get('target_field'),
+                format_coords=d.get('format_coords'),
+                additional_parts=d.get('additional_parts'),
+                kb_id=d.get('kb_id'), kb_source=d.get('kb_source'),
+                kb_label=d.get('kb_label'),
+            )
 
         def to_phase_and_page(t: tuple[str,str]) -> tuple[UserPhase,str]:
             return (UserPhase.fromstr(t[0]), t[1])
@@ -1902,10 +1909,14 @@ class InMemoryUserState(UserState):
 
     def get_all_annotations(self) -> dict[Item, list[SpanAnnotation|Label]]:
         """
-        Returns all annotations (label and span) for all annotated instances
+        Returns all annotations (label, span, link, and event) for all annotated instances
         """
         labeled = set(self.instance_id_to_label_to_value.keys()) | set(
             self.instance_id_to_span_to_value.keys()
+        ) | set(
+            self.instance_id_to_link_to_value.keys()
+        ) | set(
+            self.instance_id_to_event_to_value.keys()
         )
 
         anns = {}
@@ -1916,8 +1927,14 @@ class InMemoryUserState(UserState):
             spans = {}
             if iid in self.instance_id_to_span_to_value:
                 spans = self.instance_id_to_span_to_value[iid]
+            links = {}
+            if iid in self.instance_id_to_link_to_value:
+                links = self.instance_id_to_link_to_value[iid]
+            events = {}
+            if iid in self.instance_id_to_event_to_value:
+                events = self.instance_id_to_event_to_value[iid]
 
-            anns[iid] = {"labels": labels, "spans": spans}
+            anns[iid] = {"labels": labels, "spans": spans, "links": links, "events": events}
 
         return anns
 
@@ -1945,8 +1962,10 @@ class InMemoryUserState(UserState):
         return self.user_id
 
     def get_annotated_instance_ids(self) -> set[str]:
-        return set(self.instance_id_to_label_to_value.keys())\
-                    | set(self.instance_id_to_span_to_value.keys())
+        return set(self.instance_id_to_label_to_value.keys()) \
+                    | set(self.instance_id_to_span_to_value.keys()) \
+                    | set(self.instance_id_to_link_to_value.keys()) \
+                    | set(self.instance_id_to_event_to_value.keys())
 
     def get_annotation_count(self) -> int:
         '''Returns the total number of instances annotated by this user.'''
@@ -1985,12 +2004,16 @@ class InMemoryUserState(UserState):
     def has_annotated(self, instance_id: str) -> bool:
         '''Returns True if the user has annotated the instance with the given ID'''
         return instance_id in self.instance_id_to_label_to_value \
-            or instance_id in self.instance_id_to_span_to_value
+            or instance_id in self.instance_id_to_span_to_value \
+            or instance_id in self.instance_id_to_link_to_value \
+            or instance_id in self.instance_id_to_event_to_value
 
     def clear_all_annotations(self) -> None:
         '''Clears all annotations for this user'''
         self.instance_id_to_label_to_value.clear()
         self.instance_id_to_span_to_value.clear()
+        self.instance_id_to_link_to_value.clear()
+        self.instance_id_to_event_to_value.clear()
         self.instance_id_to_behavioral_data.clear()
         self.ai_hints.clear()
 
@@ -2404,7 +2427,14 @@ class InMemoryUserState(UserState):
             return Label(d['schema'], d['name'])
 
         def to_span(d: dict[str,str]) -> SpanAnnotation:
-            return SpanAnnotation(d['schema'], d['name'], d['title'], int(d['start']), int(d['end']))
+            return SpanAnnotation(
+                d['schema'], d['name'], d['title'], int(d['start']), int(d['end']),
+                id=d.get('id'), target_field=d.get('target_field'),
+                format_coords=d.get('format_coords'),
+                additional_parts=d.get('additional_parts'),
+                kb_id=d.get('kb_id'), kb_source=d.get('kb_source'),
+                kb_label=d.get('kb_label'),
+            )
 
         def to_phase_and_page(t: tuple[str,str]) -> tuple[UserPhase,str]:
             return (UserPhase.fromstr(t[0]), t[1])

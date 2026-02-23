@@ -548,7 +548,7 @@ class AIAssistantManager {
 
         // Get the annotation form to find the schema name
         // The form's id attribute is the schema name (e.g., "sentiment")
-        const annotationForm = document.querySelector(`.annotation-form[data-annotation-id="${annotationId}"]`);
+        const annotationForm = document.querySelector(`.annotation-form[data-annotation-id="${CSS.escape(String(annotationId))}"]`);
         const schemaName = annotationForm?.id || annotationForm?.dataset.schemaName || 'default';
 
         // Find keywords in text and create highlight data
@@ -709,7 +709,7 @@ class AIAssistantManager {
         this.clearLabelHighlights(annotationId);
 
         // Find the annotation form with this ID
-        const annotationForm = document.querySelector(`.annotation-form[data-annotation-id="${annotationId}"]`);
+        const annotationForm = document.querySelector(`.annotation-form[data-annotation-id="${CSS.escape(String(annotationId))}"]`);
         if (!annotationForm) {
             console.warn('[AIAssistant] Annotation form not found for ID:', annotationId);
             return;

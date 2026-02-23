@@ -1564,7 +1564,17 @@ def get_ai_suggestion():
     username = session['username']
     user_state = get_user_state(username)
     ais = get_ai_cache_manager()
-    annotation_id = int(request.args.get('annotationId'))
+
+    try:
+        annotation_id = int(request.args.get('annotationId'))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid annotationId"}), 400
+
+    # Validate annotation_id is within range
+    num_schemes = len(config.get("annotation_schemes", []))
+    if annotation_id < 0 or annotation_id >= num_schemes:
+        return jsonify({"error": "annotationId out of range"}), 400
+
     ai_assistant = request.args.get('aiAssistant')
 
     instance_id = user_state.get_current_instance_index()
@@ -4778,6 +4788,11 @@ def get_event_annotations(instance_id):
         # Normalize instance_id to string
         instance_id = str(instance_id)
 
+        # Verify the user is assigned this instance
+        if instance_id not in user_state.get_assigned_instance_ids():
+            logger.warning(f"User {username} not assigned to instance {instance_id}")
+            return jsonify({"error": "Instance not assigned to user"}), 403
+
         # Get event annotations for this instance
         events = user_state.get_event_annotations(instance_id)
 
@@ -4835,6 +4850,11 @@ def delete_event_annotation(instance_id, event_id):
 
         # Normalize instance_id to string
         instance_id = str(instance_id)
+
+        # Verify the user is assigned this instance
+        if instance_id not in user_state.get_assigned_instance_ids():
+            logger.warning(f"User {username} not assigned to instance {instance_id}")
+            return jsonify({"error": "Instance not assigned to user"}), 403
 
         # Try to remove the event
         success = user_state.remove_event_annotation(instance_id, event_id)
@@ -5050,6 +5070,13 @@ def entity_linking_update_span():
 
         if not instance_id or not span_id:
             return jsonify({"error": "instance_id and span_id are required"}), 400
+
+        # Validate string types and enforce length limits
+        MAX_FIELD_LEN = 1024
+        for field_name, field_val in [("span_id", span_id), ("kb_id", kb_id),
+                                       ("kb_source", kb_source), ("kb_label", kb_label)]:
+            if field_val is not None and (not isinstance(field_val, str) or len(field_val) > MAX_FIELD_LEN):
+                return jsonify({"error": f"Invalid {field_name}"}), 400
 
         user_state = get_user_state(username)
         if not user_state:

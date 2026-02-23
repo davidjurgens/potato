@@ -162,15 +162,29 @@ class AiCacheManager:
         # Disk cache configuration
         self.disk_cache_enabled = cache_config["disk_cache"]["enabled"]
 
-        # Disk cache configuration
         if self.disk_cache_enabled and not cache_config["disk_cache"]["path"]:
             raise Exception("You have enable disk cache, but you did not specific the path!")
-        self.disk_persistence_path = cache_config["disk_cache"]["path"] 
-        
-        # Prefetch configuration
-        self.warm_up_page_count = cache_config["prefetch"]["warm_up_page_count"]
-        self.prefetch_page_count_on_next = cache_config["prefetch"]["on_next"]
-        self.prefetch_page_count_on_prev = cache_config["prefetch"]["on_prev"]
+        self.disk_persistence_path = cache_config["disk_cache"]["path"]
+
+        # Validate cache path stays within task directory
+        if self.disk_persistence_path:
+            task_dir = os.path.abspath(config.get("task_dir", "."))
+            cache_abs = os.path.abspath(
+                os.path.join(task_dir, self.disk_persistence_path)
+                if not os.path.isabs(self.disk_persistence_path)
+                else self.disk_persistence_path
+            )
+            if not cache_abs.startswith(task_dir + os.sep) and cache_abs != task_dir:
+                raise ValueError(
+                    f"Cache path '{self.disk_persistence_path}' resolves to "
+                    f"'{cache_abs}' which is outside the task directory "
+                    f"'{task_dir}'. Path traversal is not allowed."
+                )
+
+        # Prefetch configuration — clamp to sane ranges
+        self.warm_up_page_count = max(0, min(int(cache_config["prefetch"]["warm_up_page_count"]), 10000))
+        self.prefetch_page_count_on_next = max(0, min(int(cache_config["prefetch"]["on_next"]), 10000))
+        self.prefetch_page_count_on_prev = max(0, min(int(cache_config["prefetch"]["on_prev"]), 10000))
 
         # Option highlighting configuration
         option_highlighting = ai_support.get("option_highlighting", {})
@@ -179,8 +193,10 @@ class AiCacheManager:
         self.option_highlighting_dim_opacity = option_highlighting.get("dim_opacity", 0.4)
         self.option_highlighting_auto_apply = option_highlighting.get("auto_apply", True)
         self.option_highlighting_schemas = option_highlighting.get("schemas", None)  # None means all
-        # Prefetch count for option highlighting (default 20 for LLM latency)
-        self.option_highlighting_prefetch_count = option_highlighting.get("prefetch_count", 20)
+        # Prefetch count for option highlighting — clamp to sane range
+        self.option_highlighting_prefetch_count = max(0, min(
+            int(option_highlighting.get("prefetch_count", 20)), 10000
+        ))
         
         # Threading
         self.in_progress = {}

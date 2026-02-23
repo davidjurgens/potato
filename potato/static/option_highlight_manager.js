@@ -235,7 +235,7 @@ class OptionHighlightManager {
      * @param {string|number} annotationId - The annotation ID
      */
     clearHighlights(annotationId) {
-        const form = document.querySelector(`.annotation-form[data-annotation-id="${annotationId}"]`);
+        const form = document.querySelector(`.annotation-form[data-annotation-id="${CSS.escape(String(annotationId))}"]`);
         if (!form) return;
 
         form.querySelectorAll('.option-highlighted, .option-dimmed').forEach(el => {

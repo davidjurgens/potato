@@ -515,7 +515,7 @@
             if (response.ok) {
                 // Update the span overlay element
                 const spanElement = document.querySelector(
-                    `.span-overlay-pure[data-annotation-id="${EntityLinking.currentSpanId}"]`
+                    `.span-overlay-pure[data-annotation-id="${CSS.escape(EntityLinking.currentSpanId)}"]`
                 );
 
                 if (spanElement) {
@@ -791,7 +791,7 @@
             if (response.ok) {
                 // Update the span overlay element
                 const spanElement = document.querySelector(
-                    `.span-overlay-pure[data-annotation-id="${EntityLinking.currentSpanId}"]`
+                    `.span-overlay-pure[data-annotation-id="${CSS.escape(EntityLinking.currentSpanId)}"]`
                 );
 
                 if (spanElement) {
@@ -847,7 +847,7 @@
             if (response.ok) {
                 // Update the span overlay element
                 const spanElement = document.querySelector(
-                    `.span-overlay-pure[data-annotation-id="${EntityLinking.currentSpanId}"]`
+                    `.span-overlay-pure[data-annotation-id="${CSS.escape(EntityLinking.currentSpanId)}"]`
                 );
 
                 if (spanElement) {
