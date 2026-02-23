@@ -57,14 +57,16 @@ class TestResolveAndValidateUrl:
         """Test that valid HTTPS URL passes."""
         # Use a well-known public URL
         url = "https://example.com/data.json"
-        result = resolve_and_validate_url(url, block_private_ips=True)
-        assert result == url
+        result_url, validated_ips = resolve_and_validate_url(url, block_private_ips=True)
+        assert result_url == url
+        assert isinstance(validated_ips, list)
 
     def test_valid_http_url(self):
         """Test that valid HTTP URL passes."""
         url = "http://example.com/data.json"
-        result = resolve_and_validate_url(url, block_private_ips=True)
-        assert result == url
+        result_url, validated_ips = resolve_and_validate_url(url, block_private_ips=True)
+        assert result_url == url
+        assert isinstance(validated_ips, list)
 
     def test_invalid_scheme_ftp(self):
         """Test that FTP scheme is rejected."""
@@ -100,8 +102,9 @@ class TestResolveAndValidateUrl:
         """Test that private IPs work when blocking is disabled."""
         # localhost should resolve without error when blocking is disabled
         url = "http://localhost/api"
-        result = resolve_and_validate_url(url, block_private_ips=False)
-        assert result == url
+        result_url, validated_ips = resolve_and_validate_url(url, block_private_ips=False)
+        assert result_url == url
+        assert validated_ips == []
 
     def test_unresolvable_host(self):
         """Test that unresolvable host raises error."""

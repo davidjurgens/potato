@@ -72,8 +72,41 @@ def _is_image_url(text: str) -> bool:
     return False
 
 def _get_image_data_from_url(url: str) -> ImageData:
-    """Download image from URL and return as ImageData."""
+    """Download image from URL and return as ImageData.
+
+    Includes SSRF protection to prevent fetching from private/internal IPs.
+    """
     import base64
+    import ipaddress
+    import socket
+    from urllib.parse import urlparse
+
+    # SSRF protection: validate URL scheme and resolve hostname
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ('http', 'https'):
+            logger.warning(f"Blocked non-HTTP image URL: {url[:100]}")
+            return None
+
+        hostname = parsed.hostname
+        if hostname:
+            addr_info = socket.getaddrinfo(hostname, None)
+            for info in addr_info:
+                ip_str = info[4][0]
+                try:
+                    ip = ipaddress.ip_address(ip_str)
+                    if ip.is_private or ip.is_loopback or ip.is_link_local:
+                        logger.warning(
+                            f"Blocked image URL resolving to private IP: "
+                            f"{hostname} -> {ip_str}"
+                        )
+                        return None
+                except ValueError:
+                    pass
+    except Exception as e:
+        logger.warning(f"Failed to validate image URL {url[:100]}: {e}")
+        return None
+
     try:
         response = requests.get(url, timeout=30)
         response.raise_for_status()
@@ -1014,10 +1047,15 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         output_format_name = prompt_config.get("output_format", "option_highlight")
         output_format = self.model_manager.get_model_class_by_name(output_format_name)
 
-        # Build the prompt
+        # Build the prompt with clear delimiters to mitigate prompt injection.
+        # The user content is wrapped in XML-style tags so the LLM can
+        # distinguish between instructions and untrusted data.
+        delimited_text = (
+            f"<user_content>\n{text}\n</user_content>"
+        )
         template = Template(prompt_template)
         prompt = template.safe_substitute(
-            text=text,
+            text=delimited_text,
             description=description,
             labels=", ".join(label_names),
             top_k=top_k

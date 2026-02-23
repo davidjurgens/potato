@@ -6,6 +6,7 @@ supporting PostgreSQL, MySQL, SQLite, and other databases.
 """
 
 import logging
+import re
 from typing import Any, Dict, Iterator, List, Optional
 from urllib.parse import quote_plus
 
@@ -59,6 +60,29 @@ class DatabaseSource(DataSource):
             except ImportError:
                 cls._HAS_SQLALCHEMY = False
         return cls._HAS_SQLALCHEMY
+
+    # Pattern for safe SQL identifiers (table/column names)
+    # Allows: word chars, dots for schema.table, backticks/brackets for quoted identifiers
+    _SAFE_IDENTIFIER_RE = re.compile(r'\A[\w][\w.$]*\Z', re.ASCII)
+
+    @staticmethod
+    def _validate_identifier(name: str) -> str:
+        """
+        Validate a SQL identifier (table or column name) against injection.
+
+        Only allows alphanumeric characters, underscores, dots (for schema.table),
+        and dollar signs. Rejects anything else to prevent SQL injection.
+
+        Raises:
+            ValueError: If the identifier contains unsafe characters
+        """
+        if not name or not DatabaseSource._SAFE_IDENTIFIER_RE.match(name):
+            raise ValueError(
+                f"Invalid SQL identifier: '{name}'. "
+                f"Only alphanumeric characters, underscores, dots, and "
+                f"dollar signs are allowed."
+            )
+        return name
 
     # Dialect to driver mapping
     DIALECT_DRIVERS = {
@@ -121,6 +145,13 @@ class DatabaseSource(DataSource):
         # Must have query OR table
         if not self._query and not self._table:
             errors.append("Either 'query' or 'table' is required")
+
+        # Validate table name if provided (prevent SQL injection)
+        if self._table:
+            try:
+                self._validate_identifier(self._table)
+            except ValueError as e:
+                errors.append(str(e))
 
         return errors
 
@@ -186,16 +217,16 @@ class DatabaseSource(DataSource):
         if self._query:
             base_query = self._query.rstrip(';')
         else:
-            # Build simple SELECT from table
-            base_query = f"SELECT * FROM {self._table}"
+            # Validate table name to prevent SQL injection
+            safe_table = self._validate_identifier(self._table)
+            base_query = f"SELECT * FROM {safe_table}"
 
-        # Add pagination
+        # Add pagination using validated integer values
         if limit is not None or offset > 0:
-            # Wrap in subquery for safety
             if limit is not None:
-                base_query += f" LIMIT {limit}"
+                base_query += f" LIMIT {int(limit)}"
             if offset > 0:
-                base_query += f" OFFSET {offset}"
+                base_query += f" OFFSET {int(offset)}"
 
         return base_query
 
@@ -244,10 +275,12 @@ class DatabaseSource(DataSource):
             engine = self._get_engine()
 
             if self._query:
-                # Wrap query in count
+                # Wrap query in count (query is admin-provided from YAML config)
                 count_query = f"SELECT COUNT(*) FROM ({self._query.rstrip(';')}) AS subquery"
             else:
-                count_query = f"SELECT COUNT(*) FROM {self._table}"
+                # Validate table name to prevent SQL injection
+                safe_table = self._validate_identifier(self._table)
+                count_query = f"SELECT COUNT(*) FROM {safe_table}"
 
             with engine.connect() as connection:
                 result = connection.execute(text(count_query))

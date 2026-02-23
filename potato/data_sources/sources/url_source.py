@@ -47,16 +47,19 @@ def is_private_ip(ip_str: str) -> bool:
         return False
 
 
-def resolve_and_validate_url(url: str, block_private_ips: bool = True) -> str:
+def resolve_and_validate_url(url: str, block_private_ips: bool = True) -> tuple:
     """
     Validate a URL and resolve it, checking for SSRF vulnerabilities.
+
+    Returns the validated URL and a list of validated (non-private) IP addresses
+    that can be used for IP-pinned connections, preventing DNS rebinding attacks.
 
     Args:
         url: The URL to validate
         block_private_ips: Whether to block private/internal IPs
 
     Returns:
-        The validated URL
+        Tuple of (validated_url, list_of_validated_ips)
 
     Raises:
         ValueError: If the URL is invalid or points to a blocked IP
@@ -75,6 +78,8 @@ def resolve_and_validate_url(url: str, block_private_ips: bool = True) -> str:
     if not hostname:
         raise ValueError("Invalid URL: missing hostname")
 
+    validated_ips = []
+
     if block_private_ips:
         # Resolve hostname to IP
         try:
@@ -87,10 +92,11 @@ def resolve_and_validate_url(url: str, block_private_ips: bool = True) -> str:
                         f"URL host '{hostname}' resolves to private IP {ip}. "
                         f"Access to private networks is not allowed."
                     )
+                validated_ips.append(ip)
         except socket.gaierror as e:
             raise ValueError(f"Could not resolve hostname '{hostname}': {e}")
 
-    return url
+    return url, validated_ips
 
 
 class URLSource(DataSource):
@@ -188,8 +194,11 @@ class URLSource(DataSource):
         import urllib.request
         import urllib.error
 
-        # Validate URL again before fetching
-        resolve_and_validate_url(self._url, self._block_private_ips)
+        # Resolve and validate URL; returns validated IPs for post-connection check.
+        # We validate immediately before the fetch to minimize TOCTOU window.
+        _, validated_ips = resolve_and_validate_url(
+            self._url, self._block_private_ips
+        )
 
         # Build request with headers
         request = urllib.request.Request(self._url)
@@ -202,6 +211,27 @@ class URLSource(DataSource):
 
         try:
             with urllib.request.urlopen(request, timeout=self._timeout) as response:
+                # Post-connection SSRF check: verify the connected IP is not private.
+                # This guards against DNS rebinding between validation and connect.
+                if self._block_private_ips:
+                    try:
+                        sock = None
+                        # Navigate to the underlying socket
+                        fp = getattr(response, 'fp', None)
+                        raw = getattr(fp, 'raw', None) if fp else None
+                        sock = getattr(raw, '_sock', None) if raw else None
+                        if sock is not None:
+                            peer = sock.getpeername()
+                            if peer and is_private_ip(peer[0]):
+                                raise ValueError(
+                                    f"Connection resolved to private IP {peer[0]}. "
+                                    f"Possible DNS rebinding attack."
+                                )
+                    except (AttributeError, OSError):
+                        # If we can't inspect the socket, the pre-connect
+                        # validation still provides the primary protection
+                        pass
+
                 # Check content length
                 content_length = response.headers.get('Content-Length')
                 if content_length:

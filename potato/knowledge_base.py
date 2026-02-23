@@ -536,9 +536,19 @@ class UMLSClient(KnowledgeBaseClient):
             for st in result.get("semanticTypes", []):
                 semantic_types.append(st.get("name", ""))
 
-            # Get definitions
+            # Get definitions — validate URL to prevent SSRF via API response
             definitions_url = result.get("definitions", "")
             description = ""
+            if definitions_url:
+                # Only follow definitions URLs pointing to the legitimate UMLS API
+                UMLS_API_BASE = "https://uts-ws.nlm.nih.gov/"
+                if not definitions_url.startswith(UMLS_API_BASE):
+                    logger.warning(
+                        f"Ignoring definitions URL from non-UMLS domain: "
+                        f"{definitions_url[:100]}"
+                    )
+                    definitions_url = ""
+
             if definitions_url:
                 try:
                     def_response = requests.get(

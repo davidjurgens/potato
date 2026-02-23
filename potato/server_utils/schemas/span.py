@@ -494,7 +494,7 @@ def render_span_annotations(text, span_annotations, target_field=None):
             kb_attr = ""
             kb_class = ""
             if kb_id:
-                kb_attr = f' data-kb-id="{kb_id}" data-kb-source="{kb_source}"'
+                kb_attr = f' data-kb-id="{escape_html_content(kb_id)}" data-kb-source="{escape_html_content(kb_source)}"'
                 if kb_label:
                     kb_attr += f' data-kb-label="{escape_html_content(kb_label)}"'
                 kb_class = ' has-entity-link'
