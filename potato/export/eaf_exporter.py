@@ -215,6 +215,7 @@ class EAFExporter(BaseExporter):
 
         # Create reverse mapping for looking up slot IDs
         time_to_slot = {v: k for k, v in time_slots.items()}
+        initial_slot_count = len(time_to_slot)
 
         # TIER elements
         tiers = schema.get("tiers", [])
@@ -229,6 +230,18 @@ class EAFExporter(BaseExporter):
                 time_to_slot,
                 annotation_id_counter
             )
+
+        # Add any dynamically created time slots to TIME_ORDER
+        if len(time_to_slot) > initial_slot_count:
+            slot_to_time = {v: k for k, v in time_to_slot.items()}
+            new_slots = sorted(
+                [(sid, slot_to_time[sid]) for sid in slot_to_time if sid not in time_slots],
+                key=lambda x: x[1]
+            )
+            for slot_id, time_ms in new_slots:
+                ts = ET.SubElement(time_order, "TIME_SLOT")
+                ts.set("TIME_SLOT_ID", slot_id)
+                ts.set("TIME_VALUE", str(int(time_ms)))
 
         # LINGUISTIC_TYPE elements
         self._create_linguistic_types(root, tiers)

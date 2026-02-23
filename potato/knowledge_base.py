@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
 import logging
 import json
+import urllib.parse
 
 logger = logging.getLogger(__name__)
 
@@ -384,7 +385,7 @@ class WikidataClient(KnowledgeBaseClient):
             if wiki_key in sitelinks:
                 wiki_title = sitelinks[wiki_key].get("title", "")
                 if wiki_title:
-                    url = f"https://{self.config.language}.wikipedia.org/wiki/{wiki_title.replace(' ', '_')}"
+                    url = f"https://{self.config.language}.wikipedia.org/wiki/{urllib.parse.quote(wiki_title.replace(' ', '_'), safe='')}"
 
             if not url:
                 url = f"{self.WIKIDATA_ENTITY_URL}{entity_id}"

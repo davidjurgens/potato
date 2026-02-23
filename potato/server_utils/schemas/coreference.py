@@ -115,7 +115,7 @@ def _generate_coreference_layout_internal(annotation_scheme, horizontal=False):
     schematic = f"""
     <div id="{escape_html_content(scheme_name)}" class="coref-container annotation-form"
          data-annotation-type="coreference"
-         data-annotation-id="{annotation_scheme.get('annotation_id', scheme_name)}"
+         data-annotation-id="{escape_html_content(str(annotation_scheme.get('annotation_id', scheme_name)))}"
          data-span-schema="{escape_html_content(span_schema)}"
          data-allow-singletons="{str(allow_singletons).lower()}"
          data-highlight-mode="{escape_html_content(highlight_mode)}"

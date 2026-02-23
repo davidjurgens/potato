@@ -83,7 +83,8 @@ class YOLOExporter(BaseExporter):
                 continue
 
             file_name = get_image_filename(item) or instance_id
-            stem = os.path.splitext(os.path.basename(file_name))[0]
+            raw_stem = os.path.splitext(os.path.basename(file_name))[0]
+            stem = "".join(c if c.isalnum() or c in "-_." else "_" for c in raw_stem)
 
             if stem not in image_labels:
                 image_labels[stem] = []

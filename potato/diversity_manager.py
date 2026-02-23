@@ -501,7 +501,8 @@ class DiversityManager:
                 return None
 
             # Return first available item from the cluster
-            return available_by_cluster[next_cluster][0]
+            items = available_by_cluster.get(next_cluster, [])
+            return items[0] if items else None
 
     def generate_diverse_ordering(
         self,

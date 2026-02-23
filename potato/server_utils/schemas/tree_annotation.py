@@ -90,7 +90,7 @@ def _generate_tree_annotation_layout_internal(annotation_scheme, horizontal=Fals
     schematic = f"""
     <div id="{escape_html_content(scheme_name)}" class="tree-ann-container annotation-form"
          data-annotation-type="tree_annotation"
-         data-annotation-id="{annotation_scheme.get('annotation_id', scheme_name)}"
+         data-annotation-id="{escape_html_content(str(annotation_scheme.get('annotation_id', scheme_name)))}"
          data-tree-ann-config='{escape_html_content(config_data)}'>
 
         <div class="tree-ann-header">

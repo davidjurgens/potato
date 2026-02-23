@@ -534,7 +534,7 @@ def generate_slider_layout_internal(annotation_scheme):
     max_tick = annotation_scheme.get("maxTick", 8)
 
     schematic = f"""
-    <form id="{identifiers['schema']}" class="annotation-form slider" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" >
+    <form id="{identifiers['schema']}" class="annotation-form slider" action="/action_page.php" data-annotation-id="{escape_html_content(str(annotation_scheme["annotation_id"]))}" >
             {get_ai_wrapper()}
         <fieldset schema="{identifiers['schema']}">
             <legend class="custom-slider-title">{annotation_scheme['description']}</legend>

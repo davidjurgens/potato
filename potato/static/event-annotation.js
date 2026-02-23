@@ -834,13 +834,16 @@ class EventAnnotationManager {
         let html = '';
         for (const event of this.events) {
             const config = this.eventTypeConfigs[event.event_type] || {};
-            const color = event.properties?.color || config.color || '#dc2626';
+            const rawColor = event.properties?.color || config.color || '#dc2626';
+            // Sanitize color: only allow hex colors, named colors, and rgb/hsl functions
+            const color = /^(#[0-9a-fA-F]{3,8}|[a-zA-Z]+|rgba?\([^)]+\)|hsla?\([^)]+\))$/.test(rawColor) ? rawColor : '#dc2626';
+            const safeEventId = this.escapeHtml(event.id);
 
             html += `
-                <div class="event-item" data-event-id="${event.id}" style="--event-color: ${color}">
+                <div class="event-item" data-event-id="${safeEventId}" style="--event-color: ${color}">
                     <div class="event-item-header">
                         <span class="event-type-badge" style="background-color: ${color}">${this.escapeHtml(event.event_type)}</span>
-                        <button class="event-delete-btn" onclick="window.eventAnnotationManagers['${this.schemaName}'].deleteEvent('${event.id}')" title="Delete event">
+                        <button class="event-delete-btn" data-event-id="${safeEventId}" title="Delete event">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="18" y1="6" x2="6" y2="18"></line>
                                 <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -866,6 +869,14 @@ class EventAnnotationManager {
         }
 
         this.eventList.innerHTML = html;
+
+        // Attach delete handlers via event delegation (avoids inline onclick XSS risk)
+        this.eventList.querySelectorAll('.event-delete-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const eventId = btn.getAttribute('data-event-id');
+                if (eventId) this.deleteEvent(eventId);
+            });
+        });
     }
 
     getSpanTextById(spanId) {

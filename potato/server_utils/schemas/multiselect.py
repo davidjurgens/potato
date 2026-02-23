@@ -72,7 +72,7 @@ def _generate_multiselect_layout_internal(annotation_scheme):
 
     # Initialize form wrapper
     schematic = f"""
-    <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form multiselect shadcn-multiselect-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" data-annotation-type="multiselect" data-schema-name="{escape_html_content(annotation_scheme['name'])}" {layout_attrs}>
+    <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form multiselect shadcn-multiselect-container" action="/action_page.php" data-annotation-id="{escape_html_content(str(annotation_scheme["annotation_id"]))}" data-annotation-type="multiselect" data-schema-name="{escape_html_content(annotation_scheme['name'])}" {layout_attrs}>
         {get_ai_wrapper()}
         <fieldset schema="{escape_html_content(annotation_scheme['name'])}">
             <legend class="shadcn-multiselect-title">{escape_html_content(annotation_scheme['description'])}</legend>

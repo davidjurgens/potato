@@ -64,7 +64,8 @@ class PascalVOCExporter(BaseExporter):
             item = context.items.get(instance_id, {})
             width, height = get_image_dimensions(item)
             file_name = get_image_filename(item) or instance_id
-            stem = os.path.splitext(os.path.basename(file_name))[0]
+            raw_stem = os.path.splitext(os.path.basename(file_name))[0]
+            stem = "".join(c if c.isalnum() or c in "-_." else "_" for c in raw_stem)
 
             root = Element("annotation")
 

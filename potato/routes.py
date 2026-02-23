@@ -790,12 +790,8 @@ def submit_annotation():
         return jsonify({"status": "success", "message": "Annotation saved successfully", "annotations_processed": annotations_processed})
 
     except Exception as e:
-        logger.error(f"Error saving annotation: {str(e)}")
-        logger.debug(f"Exception details: {type(e).__name__}: {str(e)}")
-        import traceback
-        logger.debug(f"Traceback: {traceback.format_exc()}")
-        traceback.print_exc()
-        return jsonify({"status": "error", "message": f"Failed to save annotation: {str(e)}"})
+        logger.error(f"Error saving annotation: {type(e).__name__}: {str(e)}", exc_info=True)
+        return jsonify({"status": "error", "message": "Failed to save annotation"})
 
 @app.route("/register", methods=["POST"])
 def register():
@@ -1454,7 +1450,7 @@ def annotate():
         else:
             logger.debug(f"POST form data: {dict(request.form)}")
 
-    if request.is_json and 'action' in request.json:
+    if request.is_json and request.json and 'action' in request.json:
        logger.debug(f"Action from JSON: {request.json['action']}")
        action = request.json['action']
     else:
@@ -1565,6 +1561,9 @@ def get_ai_suggestion():
     user_state = get_user_state(username)
     ais = get_ai_cache_manager()
 
+    if ais is None:
+        return jsonify({"error": "AI support not enabled"}), 400
+
     try:
         annotation_id = int(request.args.get('annotationId'))
     except (ValueError, TypeError):
@@ -1625,8 +1624,14 @@ def get_option_highlights(annotation_id):
     # Get option highlights
     result = ais.get_option_highlights(instance_id, annotation_id)
 
-    # Add configuration info for frontend
-    result["config"] = ais.get_option_highlighting_config()
+    # Add only frontend-needed configuration info (exclude internal schema details)
+    full_config = ais.get_option_highlighting_config()
+    result["config"] = {
+        "enabled": full_config.get("enabled", False),
+        "top_k": full_config.get("top_k", 3),
+        "dim_opacity": full_config.get("dim_opacity", 0.3),
+        "auto_apply": full_config.get("auto_apply", False),
+    }
 
     return jsonify(result)
 
@@ -3438,6 +3443,17 @@ def update_instance():
                             for span_to_delete in spans_to_delete:
                                 del user_state.instance_id_to_span_to_value[instance_id][span_to_delete]
                                 logger.debug(f"Deleted span annotation: {span_to_delete}")
+
+                                # Clean up orphaned events referencing this span
+                                deleted_span_id = span_to_delete.get_id()
+                                if instance_id in user_state.instance_id_to_event_to_value:
+                                    orphaned_events = [
+                                        evt for evt in user_state.instance_id_to_event_to_value[instance_id]
+                                        if deleted_span_id in evt.get_all_span_ids()
+                                    ]
+                                    for evt in orphaned_events:
+                                        del user_state.instance_id_to_event_to_value[instance_id][evt]
+                                        logger.debug(f"Removed orphaned event {evt.get_id()} referencing deleted span {deleted_span_id}")
                     else:
                         # Add or update the span annotation
                         user_state.add_span_annotation(instance_id, span, value)
@@ -4645,7 +4661,7 @@ def clear_span_annotations(instance_id):
 
     except Exception as e:
         logger.error(f"Error clearing span annotations: {e}")
-        return jsonify({"error": f"Failed to clear span annotations: {str(e)}"}), 500
+        return jsonify({"error": "Failed to clear span annotations"}), 500
 
     finally:
         logger.debug(f"=== CLEAR_SPAN_ANNOTATIONS END ===")
@@ -4696,7 +4712,7 @@ def get_link_annotations(instance_id):
 
     except Exception as e:
         logger.error(f"Error getting link annotations: {e}")
-        return jsonify({"error": f"Failed to get link annotations: {str(e)}"}), 500
+        return jsonify({"error": "Failed to get link annotations"}), 500
 
     finally:
         logger.debug(f"=== GET_LINK_ANNOTATIONS END ===")
@@ -4751,7 +4767,7 @@ def delete_link_annotation(instance_id, link_id):
 
     except Exception as e:
         logger.error(f"Error deleting link annotation: {e}")
-        return jsonify({"error": f"Failed to delete link annotation: {str(e)}"}), 500
+        return jsonify({"error": "Failed to delete link annotation"}), 500
 
     finally:
         logger.debug(f"=== DELETE_LINK_ANNOTATION END ===")
@@ -4814,7 +4830,7 @@ def get_event_annotations(instance_id):
 
     except Exception as e:
         logger.error(f"Error getting event annotations: {e}")
-        return jsonify({"error": f"Failed to get event annotations: {str(e)}"}), 500
+        return jsonify({"error": "Failed to get event annotations"}), 500
 
     finally:
         logger.debug(f"=== GET_EVENT_ANNOTATIONS END ===")
@@ -4874,7 +4890,7 @@ def delete_event_annotation(instance_id, event_id):
 
     except Exception as e:
         logger.error(f"Error deleting event annotation: {e}")
-        return jsonify({"error": f"Failed to delete event annotation: {str(e)}"}), 500
+        return jsonify({"error": "Failed to delete event annotation"}), 500
 
     finally:
         logger.debug(f"=== DELETE_EVENT_ANNOTATION END ===")
@@ -4935,7 +4951,7 @@ def entity_linking_search():
 
     except Exception as e:
         logger.error(f"Error in entity linking search: {e}")
-        return jsonify({"error": f"Search failed: {str(e)}"}), 500
+        return jsonify({"error": "Search failed"}), 500
 
     finally:
         logger.debug(f"=== ENTITY_LINKING_SEARCH END ===")
@@ -4983,7 +4999,7 @@ def entity_linking_get_entity(kb_name, entity_id):
 
     except Exception as e:
         logger.error(f"Error getting entity: {e}")
-        return jsonify({"error": f"Failed to get entity: {str(e)}"}), 500
+        return jsonify({"error": "Failed to get entity"}), 500
 
     finally:
         logger.debug(f"=== ENTITY_LINKING_GET_ENTITY END ===")
@@ -5029,7 +5045,7 @@ def entity_linking_configured_kbs():
 
     except Exception as e:
         logger.error(f"Error getting configured KBs: {e}")
-        return jsonify({"error": f"Failed to get configured KBs: {str(e)}"}), 500
+        return jsonify({"error": "Failed to get configured KBs"}), 500
 
     finally:
         logger.debug(f"=== ENTITY_LINKING_CONFIGURED_KBS END ===")
@@ -5122,7 +5138,7 @@ def entity_linking_update_span():
 
     except Exception as e:
         logger.error(f"Error updating span with entity link: {e}")
-        return jsonify({"error": f"Failed to update span: {str(e)}"}), 500
+        return jsonify({"error": "Failed to update span"}), 500
 
     finally:
         logger.debug(f"=== ENTITY_LINKING_UPDATE_SPAN END ===")
@@ -5172,7 +5188,7 @@ def get_waveform_data(cache_key):
 
     except Exception as e:
         logger.error(f"Error serving waveform data: {e}")
-        return jsonify({"error": f"Failed to serve waveform data: {str(e)}"}), 500
+        return jsonify({"error": "Failed to serve waveform data"}), 500
 
     finally:
         logger.debug(f"=== GET_WAVEFORM_DATA END ===")
@@ -5424,7 +5440,7 @@ def audio_proxy():
         return jsonify({"error": "Request timed out"}), 504
     except req.exceptions.RequestException as e:
         logger.error(f"Error fetching audio {audio_url}: {e}")
-        return jsonify({"error": f"Failed to fetch audio: {str(e)}"}), 502
+        return jsonify({"error": "Failed to fetch audio"}), 502
 
 
 @app.route("/api/ai_assistant", methods=["GET"])
