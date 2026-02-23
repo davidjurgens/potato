@@ -2569,10 +2569,42 @@ fieldset[schema] {
   white-space: nowrap;
 }
 
+/* Multi-dimension per-turn rating group */
+.per-turn-rating-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.1);
+}
+
+.per-turn-rating-group .per-turn-rating {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.ptr-schema-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  white-space: nowrap;
+  min-width: 80px;
+}
+
 /* Dark mode per-turn ratings */
 @media (prefers-color-scheme: dark) {
   .per-turn-rating {
     border-top-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .per-turn-rating-group {
+    border-top-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .ptr-schema-label {
+    color: #94a3b8;
   }
 
   .ptr-value {

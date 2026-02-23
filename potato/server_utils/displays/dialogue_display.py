@@ -70,10 +70,19 @@ class DialogueDisplay(BaseDisplay):
 
         # Determine which speakers get per-turn ratings
         rated_speakers = set()
-        rating_config = {}
+        rating_schemes = []
         if per_turn_ratings:
             rated_speakers = set(per_turn_ratings.get("speakers", []))
-            rating_config = per_turn_ratings.get("scheme", {})
+            # Support both single-scheme and multi-scheme formats
+            if "schemes" in per_turn_ratings:
+                # New multi-dimension format
+                rating_schemes = per_turn_ratings["schemes"]
+            elif "scheme" in per_turn_ratings:
+                # Legacy single-scheme format: wrap in list
+                rating_schemes = [{
+                    "schema_name": per_turn_ratings.get("schema_name", "per_turn_ratings"),
+                    "scheme": per_turn_ratings["scheme"],
+                }]
 
         # Build HTML for each turn
         turn_html_list = []
@@ -109,10 +118,23 @@ class DialogueDisplay(BaseDisplay):
                 text_id = f'id="turn-text-{field_key}-{i}"'
                 span_attrs = f'data-original-text="{escaped_text}" data-turn-index="{i}"'
 
-            # Per-turn rating widget
+            # Per-turn rating widgets (one or more per rated turn)
             rating_html = ""
-            if per_turn_ratings and speaker in rated_speakers:
-                rating_html = self._render_turn_rating(field_key, i, rating_config)
+            if per_turn_ratings and speaker in rated_speakers and rating_schemes:
+                if len(rating_schemes) == 1:
+                    rating_html = self._render_turn_rating(
+                        field_key, i, rating_schemes[0].get("scheme", {}),
+                        rating_schemes[0].get("schema_name", "per_turn_ratings")
+                    )
+                else:
+                    # Multi-dimension: wrap multiple ratings in a group
+                    parts = []
+                    for scheme_entry in rating_schemes:
+                        parts.append(self._render_turn_rating(
+                            field_key, i, scheme_entry.get("scheme", {}),
+                            scheme_entry.get("schema_name", "")
+                        ))
+                    rating_html = f'<div class="per-turn-rating-group">{"".join(parts)}</div>'
 
             turn_html = f'''
             <div class="{' '.join(turn_classes)}" data-speaker-index="{speaker_index}">
@@ -127,16 +149,22 @@ class DialogueDisplay(BaseDisplay):
         # Combine all turns
         all_turns_html = "\n".join(turn_html_list)
 
-        # Hidden input for storing per-turn rating data
+        # Hidden inputs for storing per-turn rating data (one per scheme)
         hidden_input_html = ""
-        if per_turn_ratings:
-            schema_name = html.escape(per_turn_ratings.get("schema_name", "per_turn_ratings"), quote=True)
-            hidden_input_html = f'''
-            <input type="hidden" class="annotation-data-input"
-                   name="{schema_name}"
-                   id="per-turn-ratings-{field_key}"
-                   value="" />
-            '''
+        if per_turn_ratings and rating_schemes:
+            hidden_parts = []
+            for scheme_entry in rating_schemes:
+                schema_name = html.escape(
+                    scheme_entry.get("schema_name", "per_turn_ratings"), quote=True
+                )
+                hidden_parts.append(
+                    f'<input type="hidden" class="annotation-data-input per-turn-hidden"'
+                    f' name="{schema_name}"'
+                    f' id="per-turn-ratings-{field_key}-{schema_name}"'
+                    f' data-schema-name="{schema_name}"'
+                    f' value="" />'
+                )
+            hidden_input_html = "\n".join(hidden_parts)
 
         # Wrap in container
         container_classes = ["dialogue-display-content"]
@@ -152,7 +180,9 @@ class DialogueDisplay(BaseDisplay):
         </div>
         '''
 
-    def _render_turn_rating(self, field_key: str, turn_index: int, rating_config: Dict[str, Any]) -> str:
+    def _render_turn_rating(self, field_key: str, turn_index: int,
+                           rating_config: Dict[str, Any],
+                           schema_name: str = "") -> str:
         """
         Render an inline rating widget for a dialogue turn.
 
@@ -160,11 +190,11 @@ class DialogueDisplay(BaseDisplay):
             field_key: The field key for the dialogue
             turn_index: The index of the turn
             rating_config: Configuration for the rating widget
+            schema_name: Schema name for multi-dimension support
 
         Returns:
             HTML string for the rating widget
         """
-        rating_type = rating_config.get("type", "likert")
         size = rating_config.get("size", 5)
         labels = rating_config.get("labels", [])
         min_label = labels[0] if len(labels) > 0 else ""
@@ -172,6 +202,7 @@ class DialogueDisplay(BaseDisplay):
 
         escaped_min = html.escape(str(min_label))
         escaped_max = html.escape(str(max_label))
+        escaped_schema = html.escape(str(schema_name), quote=True)
 
         # Build rating circles/stars
         rating_items = []
@@ -179,6 +210,7 @@ class DialogueDisplay(BaseDisplay):
             rating_items.append(
                 f'<span class="ptr-value" data-field="{field_key}" '
                 f'data-turn="{turn_index}" data-value="{v}" '
+                f'data-schema="{escaped_schema}" '
                 f'title="{v}">{v}</span>'
             )
 
@@ -187,8 +219,16 @@ class DialogueDisplay(BaseDisplay):
         min_html = f'<span class="ptr-label ptr-min">{escaped_min}</span>' if min_label else ""
         max_html = f'<span class="ptr-label ptr-max">{escaped_max}</span>' if max_label else ""
 
+        # Schema label for multi-dimension mode
+        schema_label_html = ""
+        if schema_name:
+            readable_name = schema_name.replace("_", " ").title()
+            escaped_readable = html.escape(readable_name)
+            schema_label_html = f'<span class="ptr-schema-label">{escaped_readable}:</span>'
+
         return f'''
-        <div class="per-turn-rating" data-field="{field_key}" data-turn="{turn_index}">
+        <div class="per-turn-rating" data-field="{field_key}" data-turn="{turn_index}" data-schema="{escaped_schema}">
+            {schema_label_html}
             {min_html}
             <div class="ptr-values">{items_html}</div>
             {max_html}

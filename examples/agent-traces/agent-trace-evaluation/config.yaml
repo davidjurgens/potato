@@ -50,11 +50,17 @@ instance_display:
         alternating_shading: true
         per_turn_ratings:
           speakers: ["Agent (Action)"]
-          schema_name: "action_correctness"
-          scheme:
-            type: likert
-            size: 3
-            labels: ["Wrong", "Right"]
+          schemes:
+            - schema_name: action_correctness
+              scheme:
+                type: likert
+                size: 3
+                labels: ["Wrong", "Right"]
+            - schema_name: reasoning_quality
+              scheme:
+                type: likert
+                size: 5
+                labels: ["Poor", "Excellent"]
 
 # Annotation Schemes - Comprehensive agent evaluation
 annotation_schemes:

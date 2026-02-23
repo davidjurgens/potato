@@ -1,10 +1,12 @@
 """
-Tests for the agent_trace and gallery display types.
+Tests for the agent_trace, gallery, and dialogue display types
+(including multi-dimension per_turn_ratings).
 """
 
 import pytest
 
 from potato.server_utils.displays.agent_trace_display import AgentTraceDisplay
+from potato.server_utils.displays.dialogue_display import DialogueDisplay
 from potato.server_utils.displays.gallery_display import GalleryDisplay
 from potato.server_utils.displays.registry import display_registry
 
@@ -264,3 +266,143 @@ class TestDisplayRegistryCompleteness:
     def test_gallery_in_supported_types(self):
         types = display_registry.get_supported_types()
         assert "gallery" in types
+
+
+class TestDialoguePerTurnRatings:
+    """Tests for per_turn_ratings in DialogueDisplay, including multi-dimension."""
+
+    def setup_method(self):
+        self.display = DialogueDisplay()
+        self.dialogue_data = [
+            {"speaker": "Agent (Thought)", "text": "I need to search."},
+            {"speaker": "Agent (Action)", "text": "search(query='test')"},
+            {"speaker": "Environment", "text": "Found 3 results."},
+            {"speaker": "Agent (Action)", "text": "click(result=1)"},
+        ]
+
+    def test_single_scheme_legacy_format(self):
+        """Legacy single-scheme format should still work."""
+        field_config = {
+            "key": "conversation",
+            "display_options": {
+                "per_turn_ratings": {
+                    "speakers": ["Agent (Action)"],
+                    "schema_name": "correctness",
+                    "scheme": {"type": "likert", "size": 3, "labels": ["Wrong", "Right"]},
+                }
+            }
+        }
+        html = self.display.render(field_config, self.dialogue_data)
+
+        # Should have per-turn ratings
+        assert "has-per-turn-ratings" in html
+        assert "per-turn-rating" in html
+        # Should have ptr-value elements for rated turns
+        assert 'data-schema="correctness"' in html
+        # Should have hidden input for the schema
+        assert 'name="correctness"' in html
+        assert "per-turn-hidden" in html
+
+    def test_multi_scheme_format(self):
+        """Multi-dimension schemes should render multiple ratings per turn."""
+        field_config = {
+            "key": "conversation",
+            "display_options": {
+                "per_turn_ratings": {
+                    "speakers": ["Agent (Action)"],
+                    "schemes": [
+                        {
+                            "schema_name": "correctness",
+                            "scheme": {"type": "likert", "size": 3, "labels": ["Wrong", "Right"]},
+                        },
+                        {
+                            "schema_name": "reasoning",
+                            "scheme": {"type": "likert", "size": 5, "labels": ["Poor", "Excellent"]},
+                        },
+                    ]
+                }
+            }
+        }
+        html = self.display.render(field_config, self.dialogue_data)
+
+        # Should have the multi-dimension group wrapper
+        assert "per-turn-rating-group" in html
+        # Should have both schema names
+        assert 'data-schema="correctness"' in html
+        assert 'data-schema="reasoning"' in html
+        # Should have two hidden inputs
+        assert 'name="correctness"' in html
+        assert 'name="reasoning"' in html
+        # Should have schema labels
+        assert "Correctness:" in html
+        assert "Reasoning:" in html
+
+    def test_multi_scheme_hidden_inputs(self):
+        """Each scheme should get its own hidden input."""
+        field_config = {
+            "key": "conv",
+            "display_options": {
+                "per_turn_ratings": {
+                    "speakers": ["Agent (Action)"],
+                    "schemes": [
+                        {"schema_name": "s1", "scheme": {"size": 3}},
+                        {"schema_name": "s2", "scheme": {"size": 5}},
+                    ]
+                }
+            }
+        }
+        html = self.display.render(field_config, self.dialogue_data)
+
+        assert 'data-schema-name="s1"' in html
+        assert 'data-schema-name="s2"' in html
+
+    def test_only_rated_speakers_get_ratings(self):
+        """Only turns with rated speakers should get rating widgets."""
+        field_config = {
+            "key": "conversation",
+            "display_options": {
+                "per_turn_ratings": {
+                    "speakers": ["Agent (Action)"],
+                    "schema_name": "test",
+                    "scheme": {"size": 3},
+                }
+            }
+        }
+        html = self.display.render(field_config, self.dialogue_data)
+
+        # Agent (Action) has turn indices 1 and 3
+        assert 'data-turn="1"' in html
+        assert 'data-turn="3"' in html
+        # Agent (Thought) and Environment should NOT have ratings
+        # (turn 0 and 2 should not have ptr-value elements)
+        assert 'data-turn="0"' not in html.split("ptr-value")[0] or \
+               html.count('data-turn="0"') == 0  # turn 0 is Thought, no rating
+
+    def test_no_per_turn_ratings(self):
+        """Without per_turn_ratings config, no rating widgets should appear."""
+        field_config = {"key": "conversation"}
+        html = self.display.render(field_config, self.dialogue_data)
+
+        assert "per-turn-rating" not in html
+        assert "ptr-value" not in html
+        assert "has-per-turn-ratings" not in html
+
+    def test_scheme_sizes_match(self):
+        """Each scheme should generate the correct number of rating values."""
+        field_config = {
+            "key": "conv",
+            "display_options": {
+                "per_turn_ratings": {
+                    "speakers": ["Agent (Action)"],
+                    "schemes": [
+                        {"schema_name": "s3", "scheme": {"size": 3}},
+                        {"schema_name": "s7", "scheme": {"size": 7}},
+                    ]
+                }
+            }
+        }
+        html = self.display.render(field_config, self.dialogue_data)
+
+        # 2 action turns x 3 values = 6 for s3, 2 x 7 = 14 for s7
+        assert html.count('data-schema="s3"') == 2 * 3 + 2  # values + rating divs
+        assert html.count('data-schema="s7"') == 2 * 7 + 2  # values + rating divs

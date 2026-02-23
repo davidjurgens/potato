@@ -251,7 +251,9 @@ The MAST taxonomy (NeurIPS 2025, kappa=0.88) defines 14 failure modes:
 
 ### Per-Step Ratings (via per_turn_ratings)
 
-Per-turn ratings add inline Likert widgets to specific speakers in the dialogue:
+Per-turn ratings add inline Likert widgets to specific speakers in the dialogue.
+
+**Single dimension** (one rating per step):
 
 ```yaml
 # In the dialogue display_options:
@@ -263,6 +265,27 @@ per_turn_ratings:
     size: 3
     labels: ["Wrong", "Right"]
 ```
+
+**Multi-dimension** (multiple ratings per step):
+
+```yaml
+# In the dialogue display_options:
+per_turn_ratings:
+  speakers: ["Agent (Action)"]
+  schemes:
+    - schema_name: action_correctness
+      scheme:
+        type: likert
+        size: 3
+        labels: ["Wrong", "Right"]
+    - schema_name: reasoning_quality
+      scheme:
+        type: likert
+        size: 5
+        labels: ["Poor", "Excellent"]
+```
+
+Each scheme gets its own hidden input and annotation column. This is useful for evaluating multiple dimensions of step quality simultaneously (e.g., correctness and reasoning quality).
 
 ### Dynamic Multirate (options_from_data)
 

@@ -184,16 +184,29 @@
         }
 
         /**
-         * Initialize per-turn rating widgets in dialogue displays
+         * Initialize per-turn rating widgets in dialogue displays.
+         * Supports both single-schema and multi-schema (multi-dimension) per-turn ratings.
+         * Each schema stores its values in its own hidden input.
          */
         initPerTurnRatings() {
             const containers = document.querySelectorAll('.has-per-turn-ratings');
             containers.forEach(container => {
                 const fieldKey = container.dataset.fieldKey;
-                const ratingValues = {};  // {turnIndex: value}
 
-                // Find the hidden input for this field
-                const hiddenInput = container.querySelector('.annotation-data-input');
+                // Collect all hidden inputs keyed by schema name
+                const hiddenInputs = {};
+                container.querySelectorAll('.per-turn-hidden').forEach(input => {
+                    const schemaName = input.dataset.schemaName;
+                    if (schemaName) {
+                        hiddenInputs[schemaName] = input;
+                    }
+                });
+
+                // Fall back to single hidden input (legacy format)
+                const singleHiddenInput = container.querySelector('.annotation-data-input:not(.per-turn-hidden)');
+
+                // Rating values keyed by schema: {schemaName: {turnIndex: value}}
+                const ratingValuesBySchema = {};
 
                 // Handle click on rating values
                 container.querySelectorAll('.ptr-value').forEach(el => {
@@ -201,30 +214,42 @@
                         e.preventDefault();
                         const turn = el.dataset.turn;
                         const value = parseInt(el.dataset.value, 10);
+                        const schema = el.dataset.schema || '';
+
+                        // Initialize schema bucket
+                        if (!ratingValuesBySchema[schema]) {
+                            ratingValuesBySchema[schema] = {};
+                        }
+                        const schemaValues = ratingValuesBySchema[schema];
 
                         // Toggle: clicking same value deselects
-                        if (ratingValues[turn] === value) {
-                            delete ratingValues[turn];
+                        if (schemaValues[turn] === value) {
+                            delete schemaValues[turn];
                         } else {
-                            ratingValues[turn] = value;
+                            schemaValues[turn] = value;
                         }
 
-                        // Update visual state for this turn's ratings
-                        container.querySelectorAll(`.ptr-value[data-turn="${turn}"]`).forEach(v => {
+                        // Update visual state for this turn + schema combination
+                        const selector = `.ptr-value[data-turn="${turn}"][data-schema="${schema}"]`;
+                        container.querySelectorAll(selector).forEach(v => {
                             const vVal = parseInt(v.dataset.value, 10);
-                            if (ratingValues[turn] && vVal <= ratingValues[turn]) {
+                            if (schemaValues[turn] && vVal <= schemaValues[turn]) {
                                 v.classList.add('ptr-selected');
                             } else {
                                 v.classList.remove('ptr-selected');
                             }
                         });
 
-                        // Update hidden input with aggregated data
-                        if (hiddenInput) {
-                            hiddenInput.value = JSON.stringify(ratingValues);
+                        // Update the corresponding hidden input
+                        if (schema && hiddenInputs[schema]) {
+                            hiddenInputs[schema].value = JSON.stringify(schemaValues);
+                        } else if (singleHiddenInput) {
+                            singleHiddenInput.value = JSON.stringify(schemaValues);
                         }
 
-                        console.log('[InstanceDisplay] Per-turn rating:', fieldKey, 'turn', turn, '=', ratingValues[turn] || 'cleared');
+                        console.log('[InstanceDisplay] Per-turn rating:', fieldKey,
+                            schema ? `schema=${schema}` : '', 'turn', turn, '=',
+                            schemaValues[turn] || 'cleared');
                     });
                 });
             });
