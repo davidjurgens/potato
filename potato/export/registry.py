@@ -123,6 +123,7 @@ def _register_builtin_exporters():
     from .eaf_exporter import EAFExporter
     from .textgrid_exporter import TextGridExporter
     from .agent_eval_exporter import AgentEvalExporter
+    from .parquet_exporter import ParquetExporter
 
     exporters = [
         COCOExporter(),
@@ -134,6 +135,7 @@ def _register_builtin_exporters():
         EAFExporter(),
         TextGridExporter(),
         AgentEvalExporter(),
+        ParquetExporter(),
     ]
 
     for exporter in exporters:
