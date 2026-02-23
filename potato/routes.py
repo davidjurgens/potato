@@ -3444,16 +3444,24 @@ def update_instance():
                                 del user_state.instance_id_to_span_to_value[instance_id][span_to_delete]
                                 logger.debug(f"Deleted span annotation: {span_to_delete}")
 
-                                # Clean up orphaned events referencing this span
+                                # Clean up orphaned links and events referencing this span
                                 deleted_span_id = span_to_delete.get_id()
+                                if instance_id in user_state.instance_id_to_link_to_value:
+                                    orphaned_links = [
+                                        link_id for link_id, link in user_state.instance_id_to_link_to_value[instance_id].items()
+                                        if deleted_span_id in link.get_span_ids()
+                                    ]
+                                    for link_id in orphaned_links:
+                                        del user_state.instance_id_to_link_to_value[instance_id][link_id]
+                                        logger.debug(f"Removed orphaned link {link_id} referencing deleted span {deleted_span_id}")
                                 if instance_id in user_state.instance_id_to_event_to_value:
                                     orphaned_events = [
-                                        evt for evt in user_state.instance_id_to_event_to_value[instance_id]
+                                        evt_id for evt_id, evt in user_state.instance_id_to_event_to_value[instance_id].items()
                                         if deleted_span_id in evt.get_all_span_ids()
                                     ]
-                                    for evt in orphaned_events:
-                                        del user_state.instance_id_to_event_to_value[instance_id][evt]
-                                        logger.debug(f"Removed orphaned event {evt.get_id()} referencing deleted span {deleted_span_id}")
+                                    for evt_id in orphaned_events:
+                                        del user_state.instance_id_to_event_to_value[instance_id][evt_id]
+                                        logger.debug(f"Removed orphaned event {evt_id} referencing deleted span {deleted_span_id}")
                     else:
                         # Add or update the span annotation
                         user_state.add_span_annotation(instance_id, span, value)
