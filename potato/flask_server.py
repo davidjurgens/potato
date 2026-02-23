@@ -1928,6 +1928,16 @@ def render_page_with_annotations(username) -> str:
 
     rendered_html = str(soup)
 
+    # Populate dynamic multirate options from instance data
+    has_dynamic_multirate = any(
+        scheme.get('options_from_data')
+        for scheme in config.get('annotation_schemes', [])
+        if scheme.get('annotation_type') == 'multirate'
+    )
+    if has_dynamic_multirate:
+        from potato.server_utils.schemas.multirate import populate_dynamic_multirate
+        rendered_html = populate_dynamic_multirate(rendered_html, item.get_data())
+
     return rendered_html
 
 def get_label_suggestions(item, config, schema_content_to_prefill) -> set[SuggestedResponse]:

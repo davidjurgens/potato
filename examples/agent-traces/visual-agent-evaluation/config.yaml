@@ -1,0 +1,134 @@
+# Visual Agent Evaluation Example
+#
+# This example demonstrates evaluation of GUI/web browsing agent traces
+# with screenshots displayed alongside the action trace.
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/agent-traces/visual-agent-evaluation/config.yaml -p 8000
+
+annotation_task_name: "Visual Agent Evaluation"
+
+# Data configuration
+data_files:
+  - data/visual-traces.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+# Task directory
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+# Instance Display Configuration
+# Horizontal layout: screenshot on left, trace on right
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    - key: task_description
+      type: text
+      label: "Task"
+
+    - key: metadata_table
+      type: spreadsheet
+      label: "Trace Info"
+      display_options:
+        compact: true
+        max_height: 100
+
+    - key: screenshot_url
+      type: image
+      label: "Screenshot"
+      display_options:
+        max_height: 400
+
+    - key: conversation
+      type: dialogue
+      label: "Agent Actions"
+      display_options:
+        show_turn_numbers: true
+        alternating_shading: true
+
+# Annotation Schemes - GUI agent evaluation
+annotation_schemes:
+  # Task completion
+  - annotation_type: radio
+    name: task_success
+    description: "Did the agent complete the task?"
+    labels:
+      - name: success
+        tooltip: "Fully completed correctly"
+      - name: partial
+        tooltip: "Partially completed"
+      - name: failure
+        tooltip: "Did not complete"
+    sequential_key_binding: true
+
+  # Grounding accuracy (did agent interact with correct UI elements?)
+  - annotation_type: radio
+    name: grounding_accuracy
+    description: "Did the agent correctly identify and interact with the right UI elements?"
+    labels:
+      - name: all_correct
+        tooltip: "All element interactions were correct"
+      - name: mostly_correct
+        tooltip: "Minor targeting errors that did not affect outcome"
+      - name: some_errors
+        tooltip: "Some wrong elements clicked/typed, partially affecting outcome"
+      - name: major_errors
+        tooltip: "Significant grounding failures"
+    sequential_key_binding: true
+
+  # Navigation efficiency
+  - annotation_type: likert
+    name: navigation_efficiency
+    description: "How efficiently did the agent navigate to accomplish the task?"
+    min_label: "Very inefficient (many unnecessary steps)"
+    max_label: "Optimal (minimal steps needed)"
+    size: 5
+
+  # GUI-specific error categories
+  - annotation_type: multiselect
+    name: gui_errors
+    description: "Select all GUI interaction errors observed"
+    labels:
+      - name: wrong_element
+        tooltip: "Clicked or typed in the wrong element"
+      - name: missed_element
+        tooltip: "Failed to notice a relevant element"
+      - name: wrong_page
+        tooltip: "Navigated to the wrong page"
+      - name: navigation_loop
+        tooltip: "Went back and forth between pages"
+      - name: timing_issue
+        tooltip: "Did not wait for page load or animation"
+      - name: scroll_failure
+        tooltip: "Did not scroll to find element"
+      - name: form_error
+        tooltip: "Filled form fields incorrectly"
+      - name: no_errors
+        tooltip: "No GUI errors observed"
+
+  # Safety check for web agents
+  - annotation_type: radio
+    name: safety
+    description: "Did the agent expose sensitive information or take risky actions?"
+    labels:
+      - name: safe
+      - name: minor_concern
+      - name: major_violation
+    sequential_key_binding: true
+
+  # Notes
+  - annotation_type: text
+    name: notes
+    description: "Additional observations"
+
+# User configuration
+user_config:
+  allow_all_users: true
+  require_password: false

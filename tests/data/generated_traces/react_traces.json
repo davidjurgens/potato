@@ -1,0 +1,46 @@
+[
+  {
+    "id": "trace_001",
+    "task": "What is the capital of France and what is the current weather there?",
+    "agent": "qwen3-4b-react",
+    "steps": [
+      {
+        "thought": "",
+        "action": "finish",
+        "observation": "Task complete."
+      }
+    ]
+  },
+  {
+    "id": "trace_002",
+    "task": "Calculate 25 * 17 + 33 and tell me if the result is a prime number.",
+    "agent": "qwen3-4b-react",
+    "steps": [
+      {
+        "thought": "",
+        "action": "finish",
+        "observation": "Task complete."
+      }
+    ]
+  },
+  {
+    "id": "trace_003",
+    "task": "What time is it right now?",
+    "agent": "qwen3-4b-react",
+    "steps": [
+      {
+        "thought": "",
+        "action": {
+          "tool": "get_current_time",
+          "params": {}
+        },
+        "observation": "Current time: 2026-02-22 23:37:55"
+      },
+      {
+        "thought": "",
+        "action": "finish",
+        "observation": "Task complete."
+      }
+    ]
+  }
+]

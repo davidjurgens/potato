@@ -38,6 +38,10 @@
 - [Category Assignment](category_assignment.md) - Category-based item assignment
 - [Surveyflow](surveyflow.md) - Pre/post annotation surveys
 
+## Agent Evaluation
+
+- [Agent Traces](agent_traces.md) - Evaluate AI agent traces and trajectories
+
 ## AI & Intelligence
 
 - [AI Support](ai_support.md) - AI-powered label suggestions
@@ -106,6 +110,7 @@
 | Annotate coreference chains | [Coreference Annotation](coreference_annotation.md) |
 | Annotate conversation trees | [Conversation Tree Annotation](conversation_tree_annotation.md) |
 | Navigate efficiently through items | [Annotation Navigation](annotation_navigation.md) |
+| Evaluate AI agent traces | [Agent Traces](agent_traces.md) |
 | Export to COCO/YOLO/CoNLL | [Export Formats](export_formats.md) |
 
 ---
@@ -130,4 +135,5 @@ See the [examples](https://github.com/davidjurgens/potato/tree/main/examples) di
 - `video/` - Video annotation examples
 - `audio/` - Audio annotation examples
 - `advanced/` - Advanced features (conditional logic, quality control, etc.)
+- `agent-traces/` - Agent trace evaluation examples (RAG, GUI agents, comparisons)
 - `custom-layouts/` - Sophisticated custom layout examples

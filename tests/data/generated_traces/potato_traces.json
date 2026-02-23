@@ -1,0 +1,97 @@
+[
+  {
+    "id": "trace_001",
+    "task_description": "What is the capital of France and what is the current weather there?",
+    "agent_name": "qwen3-4b-react",
+    "metadata_table": [
+      {
+        "Property": "Agent",
+        "Value": "qwen3:4b"
+      },
+      {
+        "Property": "Steps",
+        "Value": "1"
+      },
+      {
+        "Property": "Model",
+        "Value": "Ollama/qwen3:4b"
+      }
+    ],
+    "conversation": [
+      {
+        "speaker": "Agent (Action)",
+        "text": "finish()"
+      },
+      {
+        "speaker": "Environment",
+        "text": "Task complete."
+      }
+    ]
+  },
+  {
+    "id": "trace_002",
+    "task_description": "Calculate 25 * 17 + 33 and tell me if the result is a prime number.",
+    "agent_name": "qwen3-4b-react",
+    "metadata_table": [
+      {
+        "Property": "Agent",
+        "Value": "qwen3:4b"
+      },
+      {
+        "Property": "Steps",
+        "Value": "1"
+      },
+      {
+        "Property": "Model",
+        "Value": "Ollama/qwen3:4b"
+      }
+    ],
+    "conversation": [
+      {
+        "speaker": "Agent (Action)",
+        "text": "finish()"
+      },
+      {
+        "speaker": "Environment",
+        "text": "Task complete."
+      }
+    ]
+  },
+  {
+    "id": "trace_003",
+    "task_description": "What time is it right now?",
+    "agent_name": "qwen3-4b-react",
+    "metadata_table": [
+      {
+        "Property": "Agent",
+        "Value": "qwen3:4b"
+      },
+      {
+        "Property": "Steps",
+        "Value": "2"
+      },
+      {
+        "Property": "Model",
+        "Value": "Ollama/qwen3:4b"
+      }
+    ],
+    "conversation": [
+      {
+        "speaker": "Agent (Action)",
+        "text": "get_current_time({})"
+      },
+      {
+        "speaker": "Environment",
+        "text": "Current time: 2026-02-22 23:37:55"
+      },
+      {
+        "speaker": "Agent (Action)",
+        "text": "finish()"
+      },
+      {
+        "speaker": "Environment",
+        "text": "Task complete."
+      }
+    ]
+  }
+]

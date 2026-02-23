@@ -1,0 +1,138 @@
+[
+  {
+    "id": "run-001",
+    "name": "agent",
+    "run_type": "chain",
+    "inputs": {
+      "input": "What is the capital of France and what is the current weather there?"
+    },
+    "outputs": {
+      "output": ""
+    },
+    "child_runs": [
+      {
+        "id": "run-001-llm-0",
+        "name": "ChatOllama",
+        "run_type": "llm",
+        "inputs": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What is the capital of France and what is the current weather there?"
+            }
+          ]
+        },
+        "outputs": {
+          "generations": [
+            [
+              {
+                "text": ""
+              }
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "run-002",
+    "name": "agent",
+    "run_type": "chain",
+    "inputs": {
+      "input": "Calculate 25 * 17 + 33 and tell me if the result is a prime number."
+    },
+    "outputs": {
+      "output": ""
+    },
+    "child_runs": [
+      {
+        "id": "run-002-llm-0",
+        "name": "ChatOllama",
+        "run_type": "llm",
+        "inputs": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "Calculate 25 * 17 + 33 and tell me if the result is a prime number."
+            }
+          ]
+        },
+        "outputs": {
+          "generations": [
+            [
+              {
+                "text": ""
+              }
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "run-003",
+    "name": "agent",
+    "run_type": "chain",
+    "inputs": {
+      "input": "What time is it right now?"
+    },
+    "outputs": {
+      "output": ""
+    },
+    "child_runs": [
+      {
+        "id": "run-003-llm-0",
+        "name": "ChatOllama",
+        "run_type": "llm",
+        "inputs": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What time is it right now?"
+            }
+          ]
+        },
+        "outputs": {
+          "generations": [
+            [
+              {
+                "text": ""
+              }
+            ]
+          ]
+        }
+      },
+      {
+        "id": "run-003-tool-0",
+        "name": "get_current_time",
+        "run_type": "tool",
+        "inputs": {},
+        "outputs": {
+          "output": "Current time: 2026-02-22 23:37:55"
+        }
+      },
+      {
+        "id": "run-003-llm-1",
+        "name": "ChatOllama",
+        "run_type": "llm",
+        "inputs": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What time is it right now?"
+            }
+          ]
+        },
+        "outputs": {
+          "generations": [
+            [
+              {
+                "text": ""
+              }
+            ]
+          ]
+        }
+      }
+    ]
+  }
+]

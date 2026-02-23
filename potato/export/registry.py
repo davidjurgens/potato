@@ -122,6 +122,7 @@ def _register_builtin_exporters():
     from .mask_exporter import MaskExporter
     from .eaf_exporter import EAFExporter
     from .textgrid_exporter import TextGridExporter
+    from .agent_eval_exporter import AgentEvalExporter
 
     exporters = [
         COCOExporter(),
@@ -132,6 +133,7 @@ def _register_builtin_exporters():
         MaskExporter(),
         EAFExporter(),
         TextGridExporter(),
+        AgentEvalExporter(),
     ]
 
     for exporter in exporters:

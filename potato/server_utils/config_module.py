@@ -575,15 +575,25 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
             raise ConfigValidationError(f"{path}.labels cannot be empty")
 
     elif annotation_type == 'multirate':
-        required_multirate_fields = ['options', 'labels']
-        missing_multirate_fields = [field for field in required_multirate_fields if field not in scheme]
-        if missing_multirate_fields:
-            raise ConfigValidationError(f"{path} missing required fields for multirate: {', '.join(missing_multirate_fields)}")
+        # multirate requires 'labels' always, and either 'options' or 'options_from_data'
+        if 'labels' not in scheme:
+            raise ConfigValidationError(f"{path} missing required field for multirate: labels")
 
-        if not isinstance(scheme['options'], list):
-            raise ConfigValidationError(f"{path}.options must be a list")
-        if not scheme['options']:
-            raise ConfigValidationError(f"{path}.options cannot be empty")
+        has_options = 'options' in scheme
+        has_options_from_data = 'options_from_data' in scheme
+
+        if not has_options and not has_options_from_data:
+            raise ConfigValidationError(f"{path} must have either 'options' or 'options_from_data' for multirate")
+
+        if has_options:
+            if not isinstance(scheme['options'], list):
+                raise ConfigValidationError(f"{path}.options must be a list")
+            if not scheme['options']:
+                raise ConfigValidationError(f"{path}.options cannot be empty")
+
+        if has_options_from_data:
+            if not isinstance(scheme['options_from_data'], str) or not scheme['options_from_data'].strip():
+                raise ConfigValidationError(f"{path}.options_from_data must be a non-empty string (instance data field name)")
 
         if not isinstance(scheme['labels'], list):
             raise ConfigValidationError(f"{path}.labels must be a list")
@@ -2740,7 +2750,8 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
     # Valid display types - keep in sync with display registry
     valid_display_types = [
         "text", "html", "image", "video", "audio", "dialogue", "pairwise",
-        "pdf", "document", "spreadsheet", "code"
+        "pdf", "document", "spreadsheet", "code", "agent_trace", "gallery",
+        "conversation_tree"
     ]
 
     for i, field in enumerate(fields):
@@ -2773,7 +2784,7 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
         # Validate span_target
         if field.get("span_target"):
             # Types that support span annotation targets
-            span_target_types = ["text", "dialogue", "pdf", "document", "spreadsheet", "code"]
+            span_target_types = ["text", "dialogue", "pdf", "document", "spreadsheet", "code", "agent_trace"]
             if field_type not in span_target_types:
                 raise ConfigValidationError(
                     f"instance_display.fields[{i}].span_target is set but type '{field_type}' "
