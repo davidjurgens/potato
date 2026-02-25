@@ -95,6 +95,13 @@ def clear_all_global_state():
     except ImportError:
         pass
 
+    # Agent session manager
+    try:
+        from potato.agent_proxy import clear_agent_session_manager
+        clear_agent_session_manager()
+    except ImportError:
+        pass
+
 class FlaskTestServer:
     """A test server that can be started and stopped for integration tests."""
 
@@ -511,6 +518,16 @@ class FlaskTestServer:
                         print("[DEBUG] MACE manager initialized successfully")
                     except Exception as e:
                         print(f"[DEBUG] Error initializing MACE manager: {e}")
+
+                # Initialize agent session manager if configured
+                if "agent_proxy" in config:
+                    try:
+                        from potato.agent_proxy import init_agent_session_manager, clear_agent_session_manager
+                        clear_agent_session_manager()
+                        init_agent_session_manager(config)
+                        print("[DEBUG] Agent session manager initialized successfully")
+                    except Exception as e:
+                        print(f"[DEBUG] Error initializing agent session manager: {e}")
 
                 # Create a fresh Flask app instance with explicit static folder
                 static_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../potato/static'))

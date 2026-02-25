@@ -289,6 +289,7 @@ def _register_builtin_displays():
     from .conversation_tree_display import ConversationTreeDisplay
     from .agent_trace_display import AgentTraceDisplay
     from .gallery_display import GalleryDisplay
+    from .interactive_chat_display import InteractiveChatDisplay
 
     displays = [
         DisplayDefinition(
@@ -488,6 +489,16 @@ def _register_builtin_displays():
             },
             supports_span_target=False,
             description="Scrollable image gallery with captions"
+        ),
+        DisplayDefinition(
+            name="interactive_chat",
+            renderer=InteractiveChatDisplay(),
+            required_fields=["key"],
+            optional_fields={
+                "placeholder_text": "Start chatting with the agent to begin the task.",
+            },
+            supports_span_target=True,
+            description="Interactive agent chat with post-interaction trace display"
         ),
     ]
 

@@ -68,6 +68,11 @@
     <!-- Tiered Annotation Styles (ELAN-style hierarchical annotation) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tiered-annotation.css') }}">
 
+    {% if agent_proxy_enabled | default(false) %}
+    <!-- Agent Chat Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/agent-chat.css') }}">
+    {% endif %}
+
     <!-- jQuery (required for span annotation) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
 </head>
@@ -227,6 +232,9 @@
                     <div id="annotation-forms">
                         {{ TASK_LAYOUT }}
                     </div>
+
+                    <!-- Structured data elements (var_elems) -->
+                    {{ var_elems | safe }}
                 </div>
             </div>
         </div>
@@ -327,7 +335,7 @@
     {% if has_instance_display | default(false) %}
     <script src="{{ url_for('static', filename='instance-display.js') }}?v=2"></script>
     {% endif %}
-    <script src="{{ url_for('static', filename='annotation.js') }}?v=15"></script>
+    <script src="{{ url_for('static', filename='annotation.js') }}?v=19"></script>
 
     <!-- Fabric.js for image annotation (loaded from CDN) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
@@ -380,6 +388,11 @@
 
     <!-- PDF bounding box annotation -->
     <script src="{{ url_for('static', filename='pdf-bbox.js') }}?v=2"></script>
+
+    {% if agent_proxy_enabled | default(false) %}
+    <!-- Agent Chat UI -->
+    <script src="{{ url_for('static', filename='agent-chat.js') }}?v=1"></script>
+    {% endif %}
 
     <!-- Global keyboard debug (temporary) -->
     <script>

@@ -1550,7 +1550,12 @@ def annotate():
 
     logger.debug("=== ANNOTATE ROUTE END ===")
     # Render the page with any existing annotations
-    return render_page_with_annotations(username)
+    # Prevent browser caching so window.location.reload() always gets fresh content
+    # (browsers may serve stale cached GET responses after JS-triggered reloads)
+    response = make_response(render_page_with_annotations(username))
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    return response
 
 @app.route('/get_ai_suggestion', methods=['GET'])
 def get_ai_suggestion():
@@ -2844,6 +2849,207 @@ def api_icl_record_verification():
         return jsonify({'error': str(e)}), 500
 
 
+########################################################################
+# Agent Chat Routes
+########################################################################
+
+def _get_agent_sandbox():
+    """Get the safety sandbox for agent interactions."""
+    from potato.agent_proxy import SafetySandbox
+    agent_config = config.get("agent_proxy", {})
+    return SafetySandbox(agent_config)
+
+
+def _get_or_create_agent_session(username, instance_id):
+    """Get an existing agent session or create a new one."""
+    from potato.agent_proxy import (
+        get_agent_session_manager, AgentProxyFactory
+    )
+    mgr = get_agent_session_manager()
+    session_obj = mgr.get_session(username, instance_id)
+    if session_obj:
+        return session_obj
+
+    # Create a new session
+    proxy = AgentProxyFactory.create(config)
+    item = get_item_state_manager().get_item(instance_id)
+    task_desc = ""
+    if item:
+        data = item.get_data()
+        # Look for task_description in item data
+        task_desc = data.get("task_description", data.get("text", ""))
+        if isinstance(task_desc, list):
+            task_desc = " ".join(str(t) for t in task_desc)
+
+    return mgr.create_session(username, instance_id, proxy, str(task_desc))
+
+
+@app.route("/agent_chat/send", methods=["POST"])
+def agent_chat_send():
+    """Send a message to the agent and get a response."""
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    username = session['username']
+    user_state = get_user_state(username)
+
+    if user_state.get_phase() != UserPhase.ANNOTATION:
+        return jsonify({"error": "Not in annotation phase"}), 400
+
+    data = request.get_json(silent=True) or {}
+    message = data.get("message", "").strip()
+    if not message:
+        return jsonify({"error": "Empty message"}), 400
+
+    item = user_state.get_current_instance()
+    instance_id = item.get_id()
+
+    try:
+        sandbox = _get_agent_sandbox()
+
+        # Get or create session
+        agent_session = _get_or_create_agent_session(username, instance_id)
+
+        if agent_session.finished:
+            return jsonify({"error": "Chat session already finished"}), 400
+
+        # Safety checks
+        sandbox.check_step_limit(agent_session.step_count)
+        sandbox.check_session_timeout(agent_session.started_at)
+        sandbox.check_rate_limit(username)
+
+        # Record user message
+        from potato.agent_proxy import AgentMessage
+        user_msg = AgentMessage(role="user", content=message)
+        agent_session.messages.append(user_msg)
+
+        # Send to agent (blocking)
+        response = agent_session.proxy.send_message(
+            message, agent_session.proxy_context
+        )
+        agent_session.messages.append(response.message)
+        agent_session.step_count += 1
+
+        return jsonify({
+            "content": response.message.content,
+            "role": response.message.role,
+            "step_count": agent_session.step_count,
+            "max_steps": sandbox.max_steps,
+            "error": response.error,
+        })
+
+    except Exception as e:
+        logger.error(f"Agent chat send error: {e}")
+        error_msg = str(e)
+        return jsonify({"error": error_msg}), 400
+
+
+@app.route("/agent_chat/finish", methods=["POST"])
+def agent_chat_finish():
+    """Finish the chat and write conversation data to the item."""
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    username = session['username']
+    user_state = get_user_state(username)
+
+    if user_state.get_phase() != UserPhase.ANNOTATION:
+        return jsonify({"error": "Not in annotation phase"}), 400
+
+    item = user_state.get_current_instance()
+    instance_id = item.get_id()
+
+    try:
+        from potato.agent_proxy import get_agent_session_manager
+        mgr = get_agent_session_manager()
+        agent_session = mgr.get_session(username, instance_id)
+
+        if not agent_session:
+            return jsonify({"error": "No active chat session"}), 400
+
+        if agent_session.finished:
+            return jsonify({"error": "Chat session already finished"}), 400
+
+        # Convert messages to conversation data (agent_trace format)
+        conversation = []
+        for msg in agent_session.messages:
+            speaker = "User" if msg.role == "user" else "Agent"
+            if msg.role == "error":
+                speaker = "System (Error)"
+            conversation.append({
+                "speaker": speaker,
+                "text": msg.content,
+                "timestamp": msg.timestamp,
+            })
+
+        # Write conversation into item data
+        item_data = item.get_data()
+        # Find the conversation field key from instance_display config
+        conv_key = "conversation"
+        display_fields = config.get("instance_display", {}).get("fields", [])
+        for field in display_fields:
+            if field.get("type") == "interactive_chat":
+                conv_key = field.get("key", "conversation")
+                break
+
+        item_data[conv_key] = conversation
+
+        # Mark session as finished
+        agent_session.finished = True
+
+        logger.info(
+            f"Agent chat finished for user={username}, instance={instance_id}, "
+            f"steps={agent_session.step_count}, messages={len(conversation)}"
+        )
+
+        return jsonify({"success": True, "message_count": len(conversation)})
+
+    except Exception as e:
+        logger.error(f"Agent chat finish error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/agent_chat/status", methods=["GET"])
+def agent_chat_status():
+    """Get the current agent chat session status (for page refresh recovery)."""
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    username = session['username']
+    user_state = get_user_state(username)
+
+    if user_state.get_phase() != UserPhase.ANNOTATION:
+        return jsonify({"active": False})
+
+    item = user_state.get_current_instance()
+    instance_id = item.get_id()
+
+    try:
+        from potato.agent_proxy import get_agent_session_manager
+        mgr = get_agent_session_manager()
+        agent_session = mgr.get_session(username, instance_id)
+
+        if not agent_session or agent_session.finished:
+            return jsonify({"active": False})
+
+        sandbox = _get_agent_sandbox()
+
+        messages = [
+            {"role": msg.role, "content": msg.content}
+            for msg in agent_session.messages
+        ]
+
+        return jsonify({
+            "active": True,
+            "messages": messages,
+            "step_count": agent_session.step_count,
+            "max_steps": sandbox.max_steps,
+        })
+
+    except Exception:
+        return jsonify({"active": False})
+
+
 @app.route("/go_to", methods=["GET", "POST"])
 def go_to():
     """
@@ -2864,7 +3070,11 @@ def go_to():
         logger.debug(f'POST -> GO_TO: {request.form}')
         go_to_id(username, request.form.get("go_to"))
 
-    return render_page_with_annotations(username)
+    # Prevent browser caching so window.location.reload() always gets fresh content
+    response = make_response(render_page_with_annotations(username))
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    return response
 
 @app.route('/get_annotations', methods=['GET'])
 def get_annotations():
@@ -3743,6 +3953,7 @@ def admin():
         "debug_mode": config.get("debug", False),
         "admin_api_key": get_admin_api_key() or "",
         "mace_enabled": config.get("mace", {}).get("enabled", False),
+        "bws_enabled": bool(config.get("bws_config")),
         "embedding_viz_enabled": embedding_viz_enabled,
     }
 
@@ -5610,6 +5821,10 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/adjudicate/api/similar/<instance_id>", "adjudicate_api_similar", adjudicate_api_similar, methods=["GET"])
     app.add_url_rule("/admin/api/adjudication", "admin_api_adjudication", admin_api_adjudication, methods=["GET"])
 
+    # BWS scoring admin API routes
+    app.add_url_rule("/admin/api/bws_scoring", "admin_api_bws_scoring", admin_api_bws_scoring, methods=["GET"])
+    app.add_url_rule("/admin/api/bws_scoring/generate", "admin_api_bws_scoring_generate", admin_api_bws_scoring_generate, methods=["POST"])
+
     # MACE admin API routes
     app.add_url_rule("/admin/api/mace/overview", "admin_api_mace_overview", admin_api_mace_overview, methods=["GET"])
     app.add_url_rule("/admin/api/mace/predictions", "admin_api_mace_predictions", admin_api_mace_predictions, methods=["GET"])
@@ -5620,6 +5835,11 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/api/embedding_viz/reorder", "admin_api_embedding_viz_reorder", admin_api_embedding_viz_reorder, methods=["POST"])
     app.add_url_rule("/admin/api/embedding_viz/refresh", "admin_api_embedding_viz_refresh", admin_api_embedding_viz_refresh, methods=["POST"])
     app.add_url_rule("/admin/api/embedding_viz/stats", "admin_api_embedding_viz_stats", admin_api_embedding_viz_stats, methods=["GET"])
+
+    # Agent chat routes (interactive agent testing)
+    app.add_url_rule("/agent_chat/send", "agent_chat_send", agent_chat_send, methods=["POST"])
+    app.add_url_rule("/agent_chat/finish", "agent_chat_finish", agent_chat_finish, methods=["POST"])
+    app.add_url_rule("/agent_chat/status", "agent_chat_status", agent_chat_status, methods=["GET"])
 
     app.add_url_rule("/shutdown", "shutdown", shutdown, methods=["POST"])
 
@@ -5776,6 +5996,150 @@ def admin_api_adjudication():
 
     overview = admin_dashboard.get_adjudication_overview()
     return jsonify(overview)
+
+
+# ============================================================================
+# BWS Scoring Admin API Routes
+# ============================================================================
+
+@app.route('/admin/api/bws_scoring', methods=['GET'])
+def admin_api_bws_scoring():
+    """Get current BWS scoring status and cached scores."""
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    if not config.get("bws_config"):
+        return jsonify({"error": "BWS not configured"}), 400
+
+    return jsonify({
+        "total_items": len(config.get("_bws_pool_items", [])),
+        "total_annotations": 0,
+        "method": config.get("bws_config", {}).get("scoring", {}).get("method", "counting"),
+        "scores": [],
+    })
+
+
+@app.route('/admin/api/bws_scoring/generate', methods=['POST'])
+def admin_api_bws_scoring_generate():
+    """Generate BWS scores from current annotations."""
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    if not config.get("bws_config"):
+        return jsonify({"error": "BWS not configured"}), 400
+
+    method = request.args.get("method", "counting")
+
+    from potato.bws_scoring import BwsScorer, write_scores
+
+    # Collect annotations from all users
+    pool_items = config.get("_bws_pool_items", [])
+    id_key = config["item_properties"]["id_key"]
+    text_key = config["item_properties"]["text_key"]
+
+    # Find BWS schema name
+    bws_schema_name = None
+    for scheme in config.get("annotation_schemes", []):
+        if scheme.get("annotation_type") == "bws":
+            bws_schema_name = scheme["name"]
+            break
+
+    if not bws_schema_name:
+        return jsonify({"error": "No BWS annotation scheme found"}), 400
+
+    # Collect annotations from all user states
+    ism = get_item_state_manager()
+    usm = get_user_state_manager()
+    annotations = []
+
+    # Build a lookup of instance_id -> bws_items from items
+    instance_bws_items = {}
+    for item in ism.items():
+        item_data = item.get_data()
+        bws_items = item_data.get("_bws_items", [])
+        if bws_items:
+            instance_bws_items[item.get_id()] = bws_items
+
+    # Iterate all user states to collect annotations
+    for user_state in usm.get_all_users():
+        username = user_state.get_user_id()
+        label_store = getattr(user_state, 'instance_id_to_label_to_value', {})
+
+        for instance_id, labels in label_store.items():
+            bws_items = instance_bws_items.get(instance_id, [])
+            if not bws_items:
+                continue
+
+            # Labels is {Label -> value} dict. Find best/worst for this schema.
+            best_val = None
+            worst_val = None
+            for label_obj, value in labels.items():
+                if label_obj.get_schema() == bws_schema_name:
+                    if label_obj.get_name() == "best":
+                        best_val = value
+                    elif label_obj.get_name() == "worst":
+                        worst_val = value
+
+            if best_val and worst_val:
+                annotations.append({
+                    "instance_id": instance_id,
+                    "bws_items": bws_items,
+                    "best": best_val,
+                    "worst": worst_val,
+                    "annotator": username,
+                })
+
+    if not annotations:
+        return jsonify({
+            "status": "success",
+            "total_items": len(pool_items),
+            "total_annotations": 0,
+            "method": method,
+            "scores": [],
+            "message": "No BWS annotations found yet",
+        })
+
+    try:
+        scorer = BwsScorer(annotations, pool_items, id_key, text_key)
+        scores_dict = scorer.score(method)
+    except ImportError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": f"Scoring failed: {e}"}), 500
+
+    # Write scores file
+    output_dir = config.get("output_annotation_dir", "annotation_output")
+    output_path = os.path.join(output_dir, "bws_scores.tsv")
+    try:
+        write_scores(scores_dict, output_path)
+    except Exception as e:
+        logger.warning(f"Failed to write BWS scores file: {e}")
+
+    # Sort and format for response
+    sorted_scores = sorted(
+        scores_dict.items(), key=lambda x: x[1]["score"], reverse=True
+    )
+    scores_list = []
+    for rank, (item_id, data) in enumerate(sorted_scores, 1):
+        scores_list.append({
+            "rank": rank,
+            "item_id": item_id,
+            "text": data.get("text", "")[:200],
+            "score": round(data["score"], 6),
+            "best_count": data.get("best_count"),
+            "worst_count": data.get("worst_count"),
+            "appearances": data.get("appearances"),
+        })
+
+    return jsonify({
+        "status": "success",
+        "total_items": len(pool_items),
+        "total_annotations": len(annotations),
+        "method": method,
+        "scores": scores_list,
+    })
 
 
 # ============================================================================

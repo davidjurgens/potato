@@ -578,6 +578,9 @@
           <div class="admin-tab" data-tab="questions">Questions</div>
           <div class="admin-tab" data-tab="behavioral">Behavioral</div>
           <div class="admin-tab" data-tab="crowdsourcing">Crowdsourcing</div>
+          {% if bws_enabled %}
+          <div class="admin-tab" data-tab="bws-scoring">BWS Scoring</div>
+          {% endif %}
           {% if mace_enabled %}
           <div class="admin-tab" data-tab="mace">MACE</div>
           {% endif %}
@@ -857,6 +860,52 @@
         </div>
         {% endif %}
 
+        {% if bws_enabled %}
+        <div class="admin-tab-content" id="bws-scoring">
+          <div class="dashboard-grid" id="bwsScoringGrid">
+            <p style="color: var(--muted-foreground);">Loading BWS scoring data...</p>
+          </div>
+
+          <div class="dashboard-card" style="margin-bottom: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <h3 style="margin: 0;">BWS Item Scores</h3>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <select id="bwsScoringMethod" class="shadcn-input" style="width: auto; padding: 6px 12px;">
+                  <option value="counting">Counting</option>
+                  <option value="bradley_terry">Bradley-Terry</option>
+                  <option value="plackett_luce">Plackett-Luce</option>
+                </select>
+                <button class="shadcn-button shadcn-button-primary" onclick="generateBwsScores()">
+                  Generate Scores
+                </button>
+              </div>
+            </div>
+            <p style="color: var(--muted-foreground); margin-bottom: 1rem;">
+              Compute item scores from best-worst annotations. Counting is the default method (no dependencies).
+              Bradley-Terry and Plackett-Luce require the <code>choix</code> package.
+            </p>
+            <div class="admin-table-container">
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>Rank</th>
+                    <th>Item ID</th>
+                    <th>Text</th>
+                    <th>Score</th>
+                    <th>Best Count</th>
+                    <th>Worst Count</th>
+                    <th>Appearances</th>
+                  </tr>
+                </thead>
+                <tbody id="bwsScoresBody">
+                  <tr><td colspan="7" style="color: var(--muted-foreground);">Click "Generate Scores" to compute BWS scores</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
         <!-- Configuration Tab -->
         {% if mace_enabled %}
         <div class="admin-tab-content" id="mace">
@@ -1030,6 +1079,9 @@
             break;
           case "crowdsourcing":
             loadCrowdsourcing();
+            break;
+          case "bws-scoring":
+            loadBwsScoring();
             break;
           case "mace":
             loadMace();
@@ -1953,6 +2005,82 @@
             showError("Failed to update configuration");
           }
         });
+
+      // BWS Scoring functions
+      async function loadBwsScoring() {
+        try {
+          const data = await makeApiRequest("/admin/api/bws_scoring");
+          displayBwsScoring(data);
+        } catch (error) {
+          console.error("Error loading BWS scoring data:", error);
+          showError("Failed to load BWS scoring data");
+        }
+      }
+
+      async function generateBwsScores() {
+        try {
+          const method = document.getElementById('bwsScoringMethod').value;
+          const btn = document.querySelector('#bws-scoring .shadcn-button-primary');
+          if (btn) { btn.textContent = 'Computing...'; btn.disabled = true; }
+          const result = await makeApiRequest(`/admin/api/bws_scoring/generate?method=${method}`, { method: "POST" });
+          if (result.status === "success") {
+            displayBwsScoring(result);
+          } else {
+            showError(result.error || "BWS score generation failed");
+          }
+          if (btn) { btn.textContent = 'Generate Scores'; btn.disabled = false; }
+        } catch (error) {
+          console.error("Error generating BWS scores:", error);
+          showError("Failed to generate BWS scores");
+          const btn = document.querySelector('#bws-scoring .shadcn-button-primary');
+          if (btn) { btn.textContent = 'Generate Scores'; btn.disabled = false; }
+        }
+      }
+
+      function displayBwsScoring(data) {
+        const grid = document.getElementById("bwsScoringGrid");
+        const tbody = document.getElementById("bwsScoresBody");
+
+        if (!data || data.error) {
+          grid.innerHTML = '<p style="color: var(--muted-foreground);">BWS scoring not available.</p>';
+          return;
+        }
+
+        // Summary cards
+        grid.innerHTML = `
+          <div class="dashboard-card">
+            <div class="stat-number">${data.total_items || 0}</div>
+            <div class="description">Pool Items</div>
+          </div>
+          <div class="dashboard-card">
+            <div class="stat-number">${data.total_annotations || 0}</div>
+            <div class="description">BWS Annotations</div>
+          </div>
+          <div class="dashboard-card">
+            <div class="stat-number">${data.method || 'counting'}</div>
+            <div class="description">Scoring Method</div>
+          </div>
+        `;
+
+        // Scores table
+        const scores = data.scores || [];
+        if (scores.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" style="color: var(--muted-foreground);">Click "Generate Scores" to compute BWS scores</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = scores.map((row, i) => `
+          <tr>
+            <td>${row.rank || i + 1}</td>
+            <td><code>${row.item_id || ''}</code></td>
+            <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${row.text || ''}</td>
+            <td><strong>${typeof row.score === 'number' ? row.score.toFixed(4) : row.score || ''}</strong></td>
+            <td>${row.best_count !== undefined ? row.best_count : ''}</td>
+            <td>${row.worst_count !== undefined ? row.worst_count : ''}</td>
+            <td>${row.appearances !== undefined ? row.appearances : ''}</td>
+          </tr>
+        `).join('');
+      }
 
       // MACE functions
       async function loadMace() {

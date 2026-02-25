@@ -490,6 +490,42 @@ def load_instance_data(config: dict):
 
         logger.debug("Loaded %d instances from %s" % (line_no, data_fname))
 
+    # If BWS config is present, generate tuples from pool items
+    bws_config = config.get("bws_config")
+    if bws_config:
+        from potato.bws_tuple_generator import BwsTupleGenerator
+
+        # Collect all loaded pool items
+        pool_items = [item.get_data() for item in ism.items()]
+
+        # Store pool items for scoring later
+        config["_bws_pool_items"] = [dict(item) for item in pool_items]
+
+        generator = BwsTupleGenerator(
+            pool_items=pool_items,
+            id_key=id_key,
+            text_key=text_key,
+            tuple_size=bws_config.get("tuple_size", 4),
+            num_tuples=bws_config.get("num_tuples"),
+            seed=bws_config.get("seed", 42),
+            min_item_appearances=bws_config.get("min_item_appearances"),
+        )
+        generator.validate()
+        tuples = generator.generate()
+
+        # Clear pool items and replace with generated tuples
+        ism.clear()
+        for t in tuples:
+            ism.add_item(str(t[id_key]), t)
+
+        # Update max annotations per user for the new tuple count
+        max_annotations_per_user = config.get(
+            "max_annotations_per_user", len(ism.get_instance_ids())
+        )
+        get_user_state_manager().set_max_annotations_per_user(max_annotations_per_user)
+
+        logger.info(f"BWS: Replaced {len(pool_items)} pool items with {len(tuples)} tuples")
+
     # For each item, render the text to display in the UI ahead of time.
     _render_displayed_text(text_key)
 
@@ -1591,6 +1627,10 @@ def render_page_with_annotations(username) -> str:
     label_suggestion_json = get_label_suggestions(item, config, schema_content_to_prefill)
 
     var_elems["suggestions"] = list(label_suggestion_json)
+
+    # Pass BWS items data to frontend JS
+    if config.get("bws_config"):
+        var_elems["bws_items"] = item.get_data().get("_bws_items", [])
     # Fill in the kwargs that the user wanted us to include when rendering the page
     kwargs = {}
     for kw in config["item_properties"].get("kwargs", []):
@@ -1682,6 +1722,9 @@ def render_page_with_annotations(username) -> str:
     # Check if AI support is enabled (for conditional loading of visual_ai_assistant.js)
     ai_enabled = config.get("ai_support", {}).get("enabled", False)
 
+    # Check if agent proxy is configured (for conditional loading of agent-chat.js/css)
+    agent_proxy_enabled = "agent_proxy" in config
+
     # Get pre-annotation configuration
     pre_annotation_config = {}
     if qc_manager:
@@ -1737,6 +1780,8 @@ def render_page_with_annotations(username) -> str:
         display_raw=display_template_vars.get("display_raw", {}),
         span_targets=display_template_vars.get("span_targets", []),
         multi_span_mode=display_template_vars.get("multi_span_mode", False),
+        # Agent proxy (for conditional loading of agent-chat assets)
+        agent_proxy_enabled=agent_proxy_enabled,
         # Adjudication: show link for adjudicators
         is_adjudicator=_is_user_adjudicator(username),
         # Annotation status indicator
@@ -2623,6 +2668,12 @@ def run_server(args):
     # Initialize knowledge base manager for entity linking
     init_kb_manager(config)
     logger.info("Knowledge base manager initialized")
+
+    # Initialize agent session manager if agent_proxy is configured
+    if "agent_proxy" in config:
+        from potato.agent_proxy import init_agent_session_manager
+        init_agent_session_manager(config)
+        logger.info(f"Agent session manager initialized (proxy type: {config['agent_proxy'].get('type', 'unknown')})")
 
     # Initialize ExpertiseManager for dynamic category assignment
     category_assignment = config.get('category_assignment', {})
