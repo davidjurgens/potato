@@ -691,21 +691,22 @@ class UserStateManager:
         if "phases" in self.config and "order" in self.config["phases"]:
             # Use config phase order
             config_phase_order = self.config["phases"]["order"]
-            # Convert config phase names to UserPhase enums
+            # Convert config phase names to UserPhase enums.
+            # "annotation" in the order is always included — it's handled
+            # by the annotate route, not the phase template system.
             config_phases = []
             for phase_name in config_phase_order:
-                if phase_name in self.config["phases"]:
+                if phase_name == "annotation":
+                    if UserPhase.ANNOTATION not in config_phases:
+                        config_phases.append(UserPhase.ANNOTATION)
+                elif phase_name in self.config["phases"]:
                     phase_type_str = self.config["phases"][phase_name]["type"]
                     phase_type = UserPhase.fromstr(phase_type_str)
                     if phase_type in self.phase_type_to_name_to_page:
                         config_phases.append(phase_type)
-                    else:
-                        pass # Phase not found in phase_type_to_name_to_page
-                else:
-                    pass # Phase not found in config phases
 
-            # Add ANNOTATION phase if it's not in config but exists in phase_type_to_name_to_page
-            if UserPhase.ANNOTATION in self.phase_type_to_name_to_page and UserPhase.ANNOTATION not in config_phases:
+            # Add ANNOTATION phase at the end if not already present
+            if UserPhase.ANNOTATION not in config_phases:
                 config_phases.append(UserPhase.ANNOTATION)
 
             # Find current phase in config order
@@ -713,13 +714,24 @@ class UserStateManager:
                 cur_phase_index = config_phases.index(cur_phase)
                 if cur_phase_index < len(config_phases) - 1:
                     next_phase = config_phases[cur_phase_index + 1]
+                    # ANNOTATION phase is handled by the annotate route
+                    # and doesn't have entries in phase_type_to_name_to_page
+                    if next_phase == UserPhase.ANNOTATION:
+                        return next_phase, None
                     # Use the first page in the next phase
                     next_page = list(self.phase_type_to_name_to_page[next_phase].keys())[0]
                     return next_phase, next_page
                 else:
                     pass # Current phase is last in config order
             else:
-                pass # Current phase not found in config_phases
+                # Current phase not in config_phases (e.g., LOGIN).
+                # Advance to the first config phase.
+                if config_phases:
+                    first_phase = config_phases[0]
+                    if first_phase == UserPhase.ANNOTATION:
+                        return first_phase, None
+                    first_page = list(self.phase_type_to_name_to_page[first_phase].keys())[0]
+                    return first_phase, first_page
         else:
             # Fallback to enum order if no config order is specified
             all_phases = [p for p in list(UserPhase) if p in self.phase_type_to_name_to_page]

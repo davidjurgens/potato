@@ -90,7 +90,7 @@ def _generate_video_layout_internal(annotation_scheme):
 
     # Initialize form wrapper
     schematic = f"""
-        <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form video" action="/action_page.php" data-annotation-id="{escape_html_content(str(annotation_scheme["annotation_id"]))}" {layout_attrs}>
+        <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form video" action="/action_page.php" data-annotation-id="{escape_html_content(str(annotation_scheme.get("annotation_id", "")))}" {layout_attrs}>
                  {get_ai_wrapper()}
             <fieldset schema="{escape_html_content(annotation_scheme['name'])}">
                 <legend>{escape_html_content(annotation_scheme['description'])}</legend>

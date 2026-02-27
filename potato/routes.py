@@ -240,6 +240,44 @@ def validate_admin_api_key(provided_key: str) -> bool:
     import hmac
     return hmac.compare_digest(str(provided_key or ""), expected_key)
 
+
+# -------------------------------------------------------------------
+# Local media file serving
+# -------------------------------------------------------------------
+
+def serve_media(filepath):
+    """Serve a local media file from the project's media directory.
+
+    Serves files from a ``media/`` directory (or custom path set via
+    ``media_directory`` in config) relative to the task directory.  This
+    lets data files reference local images, audio, and video with paths
+    like ``/media/image_01.jpg`` instead of requiring external URLs.
+    """
+    from flask import send_from_directory, abort
+
+    task_dir = config.get("task_dir", ".")
+    media_subdir = config.get("media_directory", "media")
+
+    # Resolve relative to task_dir
+    if os.path.isabs(media_subdir):
+        media_dir = media_subdir
+    else:
+        media_dir = os.path.join(task_dir, media_subdir)
+
+    media_dir = os.path.realpath(media_dir)
+
+    # Security: ensure the resolved file is inside media_dir
+    requested = os.path.realpath(os.path.join(media_dir, filepath))
+    if not requested.startswith(media_dir + os.sep) and requested != media_dir:
+        logger.warning(f"Media path traversal blocked: {filepath}")
+        abort(403)
+
+    if not os.path.isfile(requested):
+        abort(404)
+
+    return send_from_directory(media_dir, filepath)
+
+
 @app.route("/", methods=["GET", "POST"])
 def home():
     """
@@ -1371,14 +1409,8 @@ def prestudy():
 
     # Show the current prestudy page
     else:
-        # Get the page the user is currently on
-        phase, page = user_state.get_current_phase_and_page()
-        logger.debug(f'GET <-- PRESTUDY: phase, page: {phase}, {page}')
-
-        # Look up the html template for the current page
-        usm = get_user_state_manager()
-        prestudy_html_fname = usm.get_phase_html_fname(phase, page)
-        return render_template(prestudy_html_fname)
+        logger.debug("GET <-- PRESTUDY")
+        return get_current_page_html(config, username)
 
 @app.route("/annotate", methods=["GET", "POST"])
 def annotate():
@@ -3853,15 +3885,8 @@ def poststudy():
 
     # Show the current poststudy page
     else:
-        # Get the page the user is currently on
-        phase, page = user_state.get_current_phase_and_page()
-        logger.debug(f'POSTSTUDY GET: phase, page: {phase}, {page}')
-
-        usm = get_user_state_manager()
-        # Look up the html template for the current page
-        html_fname = usm.get_phase_html_fname(phase, page)
-        # Render the page
-        return render_template(html_fname)
+        logger.debug("GET <-- POSTSTUDY")
+        return get_current_page_html(config, username)
 
 @app.route("/done", methods=["GET", "POST"])
 def done():
@@ -5726,6 +5751,7 @@ def configure_routes(flask_app, app_config):
     app.permanent_session_lifetime = timedelta(days=config.get("session_lifetime_days", 7))
 
     # Register all routes with the flask app instance
+    app.add_url_rule("/media/<path:filepath>", "serve_media", serve_media)
     app.add_url_rule("/", "home", home, methods=["GET", "POST"])
     app.add_url_rule("/auth", "auth", auth, methods=["GET", "POST"])
     app.add_url_rule("/passwordless-login", "passwordless_login", passwordless_login, methods=["GET", "POST"])

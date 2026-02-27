@@ -88,7 +88,7 @@ def _generate_likert_layout_internal(annotation_scheme):
 
     # Initialize form wrapper
     schematic = f"""
-    <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form likert shadcn-likert-container" action="/action_page.php" data-annotation-id="{escape_html_content(str(annotation_scheme["annotation_id"]))}" data-annotation-type="likert" data-schema-name="{escape_html_content(annotation_scheme['name'])}" {layout_attrs}>
+    <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form likert shadcn-likert-container" action="/action_page.php" data-annotation-id="{escape_html_content(str(annotation_scheme.get("annotation_id", "")))}" data-annotation-type="likert" data-schema-name="{escape_html_content(annotation_scheme['name'])}" {layout_attrs}>
         {get_ai_wrapper()}
         <fieldset schema="{escape_html_content(annotation_scheme['name'])}">
             <legend class="shadcn-likert-title">{escape_html_content(annotation_scheme['description'])}</legend>

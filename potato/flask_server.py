@@ -1134,6 +1134,16 @@ def load_phase_data(config: dict) -> None:
 
     for phase_name in phase_order:
         try:
+            # Skip 'annotation' — it's handled by the main annotation flow,
+            # not the phase loader. It can appear in the order for sequencing
+            # but doesn't need a phase dict entry.
+            if phase_name not in phases_dict:
+                if phase_name == "annotation":
+                    logger.debug(f"Skipping phase '{phase_name}' in loader (handled by main annotation flow)")
+                else:
+                    logger.warning(f"Phase '{phase_name}' in order but not defined in phases config, skipping")
+                continue
+
             phase = phases_dict[phase_name]
 
             # Handle new format with annotation_schemes directly in phase
@@ -1168,18 +1178,56 @@ def load_phase_data(config: dict) -> None:
 
                 phase_type = UserPhase.fromstr(phase['type'])
 
+                # Instructions phase with an HTML file: register the HTML
+                # directly as a template rather than parsing it as annotation
+                # schemes.
+                if phase_type == UserPhase.INSTRUCTIONS and "file" in phase and phase['file']:
+                    phase_file = get_abs_or_rel_path(phase['file'], config)
+                    if phase_file.endswith(('.html', '.htm')):
+                        logger.debug(f"Instructions phase '{phase_name}' using HTML file: {phase_file}")
+                        # Read the HTML and write it as a generated template
+                        with open(phase_file, 'rt') as f:
+                            instructions_html = f.read()
+
+                        # Wrap in a minimal page template for consistency
+                        cur_program_dir = os.path.dirname(os.path.abspath(__file__))
+                        from server_utils.front_end import get_html
+                        html_template_file = os.path.join(cur_program_dir, 'templates', 'base_template_v2.html')
+                        header_file = os.path.join(cur_program_dir, 'templates', 'header.html')
+                        html_template = get_html(html_template_file, config)
+                        header = get_html(header_file, config)
+                        html_template = html_template.replace("{{ HEADER }}", header)
+                        html_template = html_template.replace("{{ TASK_LAYOUT }}", instructions_html)
+                        html_template = html_template.replace("{{annotation_codebook}}", "")
+                        html_template = html_template.replace("{{annotation_task_name}}",
+                                                              config.get("annotation_task_name", ""))
+                        html_template = html_template.replace("{{keybindings}}", "")
+                        html_template = html_template.replace("{{statistics_nav}}", "")
+
+                        site_name = (
+                            "_".join(config["annotation_task_name"].split(" "))
+                            + "-" + "%s.html" % phase_name
+                        )
+                        generated_dir = os.path.join(config["site_dir"], "generated")
+                        if not os.path.exists(generated_dir):
+                            os.makedirs(generated_dir)
+                        output_html_fname = os.path.join(generated_dir, site_name)
+                        with open(output_html_fname, "wt") as outf:
+                            outf.write(html_template)
+
+                        user_state_manager = get_user_state_manager()
+                        user_state_manager.add_phase(phase_type, phase_name, site_name)
+                        logger.debug(f"Registered instructions phase {phase_name} with HTML {site_name}")
+                        continue
+
                 # Training and annotation phases can work without a file
-                # They use the main annotation schemes from the config
+                # They use the main annotation schemes from the config.
+                # Training files typically contain training data items (with
+                # gold_label), not annotation schemes — so always use the main
+                # annotation schemes for the training phase layout.
                 if phase_type in [UserPhase.TRAINING, UserPhase.ANNOTATION]:
-                    if "file" not in phase or not phase['file']:
-                        # Use the main annotation schemes for training/annotation
-                        phase_labeling_schemes = config.get('annotation_schemes', [])
-                        logger.debug(f"Phase {phase_name} using main annotation schemes")
-                    else:
-                        # Use the file if specified
-                        phase_scheme_fname = get_abs_or_rel_path(phase['file'], config)
-                        logger.debug(f"Resolved phase file for {phase_name}: {phase_scheme_fname}")
-                        phase_labeling_schemes = get_phase_annotation_schemes(phase_scheme_fname)
+                    phase_labeling_schemes = config.get('annotation_schemes', [])
+                    logger.debug(f"Phase {phase_name} using main annotation schemes")
                 else:
                     # Other phases (prestudy, poststudy, etc.)
                     # Support instrument/instruments keys for standard survey instruments
@@ -1528,6 +1576,11 @@ def get_current_page_html(config, username):
     # For phase pages, many annotation-specific fields can be empty/default
     context = {
         'username': username,
+        'annotation_task_name': config.get('annotation_task_name', ''),
+        'debug_mode': config.get('debug', False),
+        'ui_debug': config.get('ui_debug', False),
+        'server_debug': config.get('server_debug', False),
+        'debug_phase': config.get('debug_phase', None),
         'instance': '',
         'instance_plain_text': '',
         'instance_id': '',
@@ -1705,10 +1758,11 @@ def render_page_with_annotations(username) -> str:
         for scheme in config.get("annotation_schemes", [])
     )
 
-    # Detect if any annotation scheme is audio_annotation type
-    # This is used to customize the display (show "Audio to Annotate:" instead of "Text to Annotate:")
+    # Detect if any annotation scheme is audio_annotation type (or tiered_annotation with audio media)
+    # This is used to customize the display (hide "Text to Annotate:" for audio-focused tasks)
     has_audio_annotation = any(
         scheme.get("annotation_type") == "audio_annotation"
+        or (scheme.get("annotation_type") == "tiered_annotation" and scheme.get("media_type") == "audio")
         for scheme in config.get("annotation_schemes", [])
     )
 

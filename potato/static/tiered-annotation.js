@@ -491,8 +491,14 @@ class TieredAnnotationManager {
             return;
         }
 
+        const sameTier = (tierName === this.activeTier);
         this.activeTier = tierName;
-        this.activeLabel = tier.labels?.[0]?.name || null;
+        // Preserve current label if staying on the same tier and the label is valid for this tier
+        if (sameTier && this.activeLabel && tier.labels?.some(l => l.name === this.activeLabel)) {
+            // Keep current label
+        } else {
+            this.activeLabel = tier.labels?.[0]?.name || null;
+        }
 
         // Update tier selector
         if (this.tierSelectEl) {

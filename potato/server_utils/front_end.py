@@ -143,6 +143,12 @@ def generate_schematic(annotation_scheme):
     Uses the schema registry to look up the generator function for the
     annotation type.
     """
+    # Ensure annotation_id is set before any schema generator runs.
+    # This is the single bottleneck before all generators, so it serves as a
+    # safety net for any caller that doesn't pre-assign annotation_id.
+    if "annotation_id" not in annotation_scheme:
+        annotation_scheme["annotation_id"] = 0
+
     # Figure out which kind of tasks we're doing and build the input frame
     annotation_type = annotation_scheme["annotation_type"]
 
@@ -473,6 +479,14 @@ def generate_html_from_schematic(annotation_schemas: list[dict],
         html_template = html_template.replace(
             '<div class="navbar-nav">', '<div class="navbar-nav" hidden>'
         )
+
+    # Assign annotation_id to each scheme if not already set.
+    # The main annotation path (generate_annotation_html_template) does this for
+    # config["annotation_schemes"], but phase schemas loaded from JSON files
+    # (consent, prestudy, etc.) arrive here without annotation_id set.
+    for idx, annotation_scheme in enumerate(annotation_schemas):
+        if "annotation_id" not in annotation_scheme:
+            annotation_scheme["annotation_id"] = idx
 
     # Handle annotation layout generation for surveyflow phases
     # Check if user provided a custom task_layout file (either from config or phase)
