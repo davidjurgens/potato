@@ -1,4 +1,11 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+
 :root {
+  /* Typography */
+  --font-sans: 'Outfit', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', 'Fira Code', monospace;
+
+  /* Colors */
   --background: #ffffff;
   --foreground: #09090b;
   --card: #ffffff;
@@ -31,8 +38,9 @@
   --text-color: #374151;
   --success-color: #10b981;
   --border-radius: 0.5rem;
-  --box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-  --transition: all 0.2s ease;
+  --box-shadow: 0 1px 2px rgba(0,0,0,0.03), 0 2px 8px rgba(0,0,0,0.06);
+  --box-shadow-lg: 0 4px 16px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+  --transition: all 0.15s ease;
   --section-padding-top: 100px;
 
   /* Overlay Z-Index Hierarchy (higher = on top)
@@ -47,7 +55,10 @@
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.6;
 }
 
 /* Shadcn-style button */
@@ -89,30 +100,57 @@ body {
   color: var(--primary);
 }
 
+.shadcn-button:active {
+  transform: scale(0.97);
+}
+
+.shadcn-button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
 /* Annotation status indicator (navbar badge) */
 .annotation-status-indicator {
   display: flex;
   align-items: center;
-  margin-right: 1rem;
 }
 
 .status-badge {
-  padding: 4px 10px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
+}
+
+.status-badge::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
 }
 
 .status-badge.labeled {
-  background-color: #dcfce7;
-  color: #166534;
+  background-color: rgba(16, 185, 129, 0.12);
+  color: #065f46;
+}
+
+.status-badge.labeled::before {
+  background-color: #10b981;
 }
 
 .status-badge.unlabeled {
-  background-color: #fef3c7;
+  background-color: rgba(245, 158, 11, 0.12);
   color: #92400e;
+}
+
+.status-badge.unlabeled::before {
+  background-color: #f59e0b;
 }
 
 /* Skip to unannotated button hover states */
@@ -147,7 +185,7 @@ body {
 /* Card styling */
 .shadcn-card {
   min-height: 250px;
-  max-height: calc(100vh - 180px);
+  max-height: calc(100vh - 140px);
   background-color: var(--card);
   border-radius: var(--radius);
   border: 1px solid var(--border);
@@ -541,7 +579,7 @@ input[type="range"]::-moz-range-thumb {
   padding: 0.5rem 0.75rem;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   width: fit-content;
   max-width: 100%;
   font-family: ui-sans-serif, system-ui, sans-serif;
@@ -678,7 +716,7 @@ input[type="range"]::-moz-range-thumb {
   padding: 0.5rem 0.75rem;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   width: fit-content;
   max-width: 100%;
   font-family: ui-sans-serif, system-ui, sans-serif;
@@ -749,13 +787,40 @@ input[type="range"]::-moz-range-thumb {
   color: var(--foreground);
 }
 
-.shadcn-multiselect-key {
+/* Unified keybinding badge used by all schema types */
+.keybinding-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   margin-left: 0.25rem;
-  padding: 0.1rem 0.3rem;
+  padding: 0.1rem 0.35rem;
   font-size: 0.7rem;
+  font-weight: 500;
+  font-family: var(--font-mono);
   background-color: var(--muted);
   border-radius: 0.25rem;
   color: var(--muted-foreground);
+  min-width: 1.2em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+/* Backward-compat alias */
+.shadcn-multiselect-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 0.25rem;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  font-family: var(--font-mono);
+  background-color: var(--muted);
+  border-radius: 0.25rem;
+  color: var(--muted-foreground);
+  min-width: 1.2em;
+  text-align: center;
+  text-transform: uppercase;
 }
 
 .shadcn-multiselect-free-response {
@@ -791,7 +856,7 @@ input[type="range"]::-moz-range-thumb {
   padding: 0.5rem 0.75rem;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   width: fit-content;
   max-width: 100%;
   font-family: ui-sans-serif, system-ui, sans-serif;
@@ -3542,5 +3607,510 @@ body.has-pairwise-display #instance-text {
   background-color: rgba(220, 38, 38, 0.06);
   border-radius: var(--radius);
   border: 1px solid rgba(220, 38, 38, 0.2);
+}
+
+
+/* =====================================================
+   POTATO DESIGN SYSTEM - Layout & Navigation
+   ===================================================== */
+
+/* ===== NAVBAR ===== */
+
+.potato-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 1030;
+  background-color: var(--primary-color);
+  padding: 0 1rem;
+  height: 52px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+}
+
+.potato-navbar .navbar-inner {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  width: 100%;
+  gap: 1rem;
+}
+
+.potato-navbar .navbar-brand {
+  flex-shrink: 0;
+}
+
+.potato-navbar .navbar-brand .task-name {
+  font-weight: 700;
+  color: var(--light-color);
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+}
+
+.potato-navbar .navbar-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 0.75rem;
+}
+
+.potato-navbar .navbar-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(255,255,255,0.2);
+  flex-shrink: 0;
+}
+
+.potato-navbar .progress-section {
+  color: var(--light-color);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.potato-navbar .progress-section .progress-label {
+  opacity: 0.65;
+  margin-right: 0.25rem;
+}
+
+.potato-navbar .nav-controls {
+  display: flex;
+  gap: 3px;
+}
+
+.potato-navbar .nav-control-btn {
+  height: 28px;
+  width: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.1);
+  color: var(--light-color);
+  border: 1px solid rgba(255,255,255,0.12);
+  cursor: pointer;
+  transition: background 0.15s ease;
+  font-size: 0.7rem;
+}
+
+.potato-navbar .nav-control-btn:hover {
+  background: rgba(255,255,255,0.22);
+}
+
+.potato-navbar .goto-section {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.potato-navbar .goto-section input {
+  width: 48px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.08);
+  color: var(--light-color);
+  font-size: 0.8rem;
+  font-family: var(--font-sans);
+  text-align: center;
+  padding: 0 4px;
+}
+
+.potato-navbar .goto-section input::placeholder {
+  color: rgba(255,255,255,0.35);
+}
+
+.potato-navbar .goto-section input:focus {
+  outline: none;
+  border-color: rgba(255,255,255,0.45);
+  background: rgba(255,255,255,0.14);
+}
+
+.potato-navbar .goto-btn {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.88);
+  color: var(--primary-color);
+  border: none;
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.potato-navbar .goto-btn:hover {
+  background: white;
+}
+
+.potato-navbar .navbar-end {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.potato-navbar .user-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255,255,255,0.1);
+  padding: 0.3rem 0.6rem 0.3rem 0.75rem;
+  border-radius: 999px;
+  color: var(--light-color);
+  font-size: 0.8rem;
+}
+
+.potato-navbar .user-pill .username {
+  font-weight: 500;
+}
+
+.potato-navbar .logout-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 5px;
+  background: rgba(255,255,255,0.88);
+  color: var(--primary-color);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+
+.potato-navbar .logout-btn:hover {
+  background: white;
+  color: var(--primary-color);
+}
+
+.potato-navbar .adjudicate-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 5px;
+  background: rgba(255,255,255,0.15);
+  color: var(--light-color);
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-decoration: none;
+  border: 1px solid rgba(255,255,255,0.15);
+  transition: background 0.15s ease;
+}
+
+.potato-navbar .adjudicate-btn:hover {
+  background: rgba(255,255,255,0.25);
+  color: white;
+}
+
+/* ===== NAVIGATION BUTTONS ===== */
+
+.potato-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6rem 0;
+}
+
+/* ===== FOOTER ===== */
+
+.potato-footer {
+  padding: 0.75rem 0;
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--muted-foreground);
+  border-top: 1px solid var(--border);
+  margin-top: 0.25rem;
+}
+
+.potato-footer a {
+  color: var(--primary);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.potato-footer a:hover {
+  color: var(--secondary-color);
+}
+
+.potato-footer .footer-sep {
+  display: inline-block;
+  margin: 0 0.5rem;
+  color: var(--border);
+}
+
+/* ===== STANDALONE PAGES (login, done, error) ===== */
+
+.potato-page-center {
+  min-height: 100vh;
+  background: var(--light-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.potato-page-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--box-shadow-lg);
+  width: 100%;
+  max-width: 420px;
+  padding: 2rem;
+}
+
+.potato-page-card-wide {
+  max-width: 560px;
+}
+
+.potato-page-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.25rem;
+}
+
+.potato-page-icon i {
+  font-size: 1.5rem;
+}
+
+.potato-page-icon-success {
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.potato-page-icon-success i {
+  color: var(--success-color);
+}
+
+.potato-page-icon-error {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.potato-page-icon-error i {
+  color: var(--destructive);
+}
+
+.potato-page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--heading-color);
+  letter-spacing: -0.02em;
+  margin-bottom: 0.5rem;
+}
+
+.potato-page-subtitle {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  margin-bottom: 1.5rem;
+}
+
+/* ===== FORM STYLES FOR STANDALONE PAGES ===== */
+
+.potato-form-group {
+  margin-bottom: 1.15rem;
+}
+
+.potato-form-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--foreground);
+  margin-bottom: 0.3rem;
+}
+
+.potato-form-input {
+  width: 100%;
+  border: 1px solid var(--input);
+  border-radius: var(--radius);
+  padding: 0.55rem 0.75rem;
+  font-size: 0.875rem;
+  font-family: var(--font-sans);
+  color: var(--foreground);
+  background: var(--background);
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.potato-form-input:focus {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.12);
+}
+
+.potato-form-input::placeholder {
+  color: var(--muted-foreground);
+}
+
+.potato-form-submit {
+  width: 100%;
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius);
+  background: var(--primary);
+  color: white;
+  font-weight: 600;
+  font-size: 0.875rem;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: all 0.15s ease;
+}
+
+.potato-form-submit:hover {
+  background: var(--secondary-color);
+}
+
+.potato-form-submit:active {
+  transform: scale(0.98);
+}
+
+/* Login page tabs */
+.potato-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  margin: -0.5rem -0.5rem 1.5rem;
+  padding: 0 0.5rem;
+}
+
+.potato-tab {
+  padding: 0.75rem 1rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  cursor: pointer;
+  color: var(--muted-foreground);
+  border: none;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s ease;
+  background: none;
+  font-family: var(--font-sans);
+}
+
+.potato-tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.potato-tab:hover:not(.active) {
+  color: var(--foreground);
+}
+
+/* Alert styles for standalone pages */
+.potato-alert {
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.potato-alert-error {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: var(--destructive);
+}
+
+.potato-alert-success {
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  color: #065f46;
+}
+
+.potato-alert-info {
+  background: rgba(110, 86, 207, 0.06);
+  border: 1px solid rgba(110, 86, 207, 0.15);
+  color: var(--primary);
+}
+
+/* ===== SCHEMA CONTAINER CONSISTENCY ===== */
+
+/* Ensure consistent font across all annotation forms */
+.annotation-form {
+  font-family: var(--font-sans);
+}
+
+/* Annotation forms: responsive multi-column flow */
+#annotation-forms {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+#annotation-forms > .annotation_schema {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+/* Fit-content schemas flow side-by-side; full-width schemas break the row */
+#annotation-forms .shadcn-radio-container,
+#annotation-forms .shadcn-multiselect-container,
+#annotation-forms .shadcn-likert-container {
+  width: fit-content;
+  max-width: 100%;
+  align-items: flex-start;
+}
+
+/* These schemas need full width (textareas, span overlays, etc.) */
+#annotation-forms .shadcn-textbox-container,
+#annotation-forms .shadcn-span-container,
+#annotation-forms .shadcn-number-container,
+#annotation-forms .shadcn-select-container {
+  width: 100%;
+}
+
+/* ===== ANIMATION UTILITIES ===== */
+
+@keyframes potato-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.potato-fade-in {
+  animation: potato-fade-in 0.25s ease-out;
+}
+
+@keyframes potato-status-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+/* ===== RESPONSIVE NAVBAR ===== */
+
+@media (max-width: 900px) {
+  .potato-navbar .navbar-center {
+    gap: 0.5rem;
+  }
+
+  .potato-navbar .goto-section {
+    display: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .potato-navbar {
+    height: auto;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .potato-navbar .navbar-inner {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .potato-navbar .navbar-center {
+    order: 3;
+    flex-basis: 100%;
+    justify-content: center;
+  }
+
+  .potato-nav .shadcn-button {
+    font-size: 0.8rem;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+    height: 2.25rem;
+  }
 }
 

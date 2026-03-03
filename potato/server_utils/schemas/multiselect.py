@@ -19,7 +19,6 @@ from potato.ai.ai_help_wrapper import get_ai_wrapper, get_dynamic_ai_help
 from .identifier_utils import (
     safe_generate_layout,
     generate_element_identifier,
-    generate_element_value,
     generate_validation_attribute,
     escape_html_content,
     generate_layout_attributes
@@ -91,6 +90,14 @@ def _generate_multiselect_layout_internal(annotation_scheme):
     # Add grid with appropriate columns
     schematic += f'<div class="shadcn-multiselect-grid" style="grid-template-columns: repeat({n_columns}, 1fr);">'
 
+    # Check for pre-allocated keys from the centralized allocator
+    allocated_keys = annotation_scheme.get("_allocated_keys", None)
+    allocated_map = {}
+    if allocated_keys:
+        for entry in allocated_keys:
+            if entry.get("key"):
+                allocated_map[entry["label"]] = entry["key"]
+
     # Generate checkbox inputs for each label
     for i, label_data in enumerate(annotation_scheme["labels"], 1):
         # Extract label information
@@ -98,39 +105,53 @@ def _generate_multiselect_layout_internal(annotation_scheme):
 
         # Generate consistent identifiers
         identifiers = generate_element_identifier(annotation_scheme["name"], label, "checkbox")
-        key_value = generate_element_value(label_data, i, annotation_scheme)
         validation = generate_validation_attribute(annotation_scheme, label)
+
+        # The value attribute stores the label name for annotation purposes
+        label_value = label
 
         # Handle tooltips
         tooltip = ""
         if isinstance(label_data, Mapping):
             tooltip = _generate_tooltip(label_data)
 
-            # Handle keyboard shortcuts
+            # Handle explicit per-label keyboard shortcuts
             if "key_value" in label_data:
-                key_value = label_data["key_value"]
-                if key_value in key2label:
-                    logger.warning(f"Keyboard input conflict: {key_value}")
+                shortcut_key = str(label_data["key_value"])
+                if shortcut_key in key2label:
+                    logger.warning(f"Keyboard input conflict: {shortcut_key}")
                     continue
-                key2label[key_value] = label
-                label2key[label] = key_value
-                key_bindings.append((key_value, f"{identifiers['schema']}: {label}"))
-                logger.debug(f"Added key binding '{key_value}' for label '{label}'")
+                key2label[shortcut_key] = label
+                label2key[label] = shortcut_key
+                key_bindings.append((shortcut_key, f"{identifiers['schema']}: {label}"))
+                logger.debug(f"Added key binding '{shortcut_key}' for label '{label}'")
 
-        # Handle sequential key bindings
-        if (annotation_scheme.get("sequential_key_binding")
-            and len(annotation_scheme["labels"]) <= 10):
-            key_value = str(i % 10)
-            key2label[key_value] = label
-            label2key[label] = key_value
-            key_bindings.append((key_value, f"{identifiers['schema']}: {label}"))
-            logger.debug(f"Added sequential key binding '{key_value}' for label '{label}'")
+        # Use pre-allocated keys if available
+        if label in allocated_map and label not in label2key:
+            shortcut_key = allocated_map[label]
+            key2label[shortcut_key] = label
+            label2key[label] = shortcut_key
+            key_bindings.append((shortcut_key, f"{identifiers['schema']}: {label}"))
+            logger.debug(f"Added allocated key binding '{shortcut_key}' for label '{label}'")
+        elif not allocated_keys:
+            # Fallback: sequential key bindings when no allocator was used
+            if (annotation_scheme.get("sequential_key_binding")
+                and len(annotation_scheme["labels"]) <= 10
+                and label not in label2key):
+                shortcut_key = str(i % 10)
+                key2label[shortcut_key] = label
+                label2key[label] = shortcut_key
+                key_bindings.append((shortcut_key, f"{identifiers['schema']}: {label}"))
+                logger.debug(f"Added sequential key binding '{shortcut_key}' for label '{label}'")
 
         # Format label content
         label_content = _format_label_content(label_data, annotation_scheme)
 
         # Display keyboard shortcut if available
-        key_display = f'<span class="shadcn-multiselect-key">{label2key[label].upper()}</span>' if label in label2key else ''
+        key_display = f'<span class="keybinding-badge shadcn-multiselect-key">{label2key[label].upper()}</span>' if label in label2key else ''
+
+        # Build data-key attribute for JS keybinding matching
+        data_key_attr = f' data-key="{label2key[label]}"' if label in label2key else ''
 
         # Generate checkbox input
         schematic += f"""
@@ -139,11 +160,11 @@ def _generate_multiselect_layout_internal(annotation_scheme):
                        type="checkbox"
                        id="{identifiers['id']}"
                        name="{identifiers['name']}"
-                       value="{escape_html_content(key_value)}"
+                       value="{escape_html_content(label_value)}"
                        label_name="{identifiers['label_name']}"
                        schema="{identifiers['schema']}"
                        onclick="whetherNone(this);registerAnnotation(this)"
-                       validation="{validation}">
+                       validation="{validation}"{data_key_attr}>
                 <label for="{identifiers['id']}" {tooltip} schema="{identifiers['schema']}" class="shadcn-multiselect-label">
                     {label_content} {key_display}
                 </label>

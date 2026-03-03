@@ -17,6 +17,7 @@ sys.path.append(str(path_root))
 
 from potato.server_utils.config_module import config
 from potato.server_utils.schemas.registry import schema_registry
+from potato.server_utils.schemas.keybinding_allocator import allocate_keybindings
 
 logger = logging.getLogger(__name__)
 
@@ -261,6 +262,13 @@ def generate_annotation_html_template(config: dict) -> str:
     for idx, annotation_scheme in enumerate(annotation_schemes):
         annotation_scheme["annotation_id"] = idx
 
+    # Pre-allocate non-conflicting keybindings across all schemas
+    allocation = allocate_keybindings(annotation_schemes)
+    for annotation_scheme in annotation_schemes:
+        name = annotation_scheme.get("name", "")
+        if name in allocation:
+            annotation_scheme["_allocated_keys"] = allocation[name]
+
     # Keep track of all the keybindings we have
     all_keybindings = [("&#8592;", "Move backward"), ("&#8594;", "Move forward")]
 
@@ -487,6 +495,13 @@ def generate_html_from_schematic(annotation_schemas: list[dict],
     for idx, annotation_scheme in enumerate(annotation_schemas):
         if "annotation_id" not in annotation_scheme:
             annotation_scheme["annotation_id"] = idx
+
+    # Pre-allocate non-conflicting keybindings across all schemas
+    allocation = allocate_keybindings(annotation_schemas)
+    for annotation_scheme in annotation_schemas:
+        name = annotation_scheme.get("name", "")
+        if name in allocation:
+            annotation_scheme["_allocated_keys"] = allocation[name]
 
     # Handle annotation layout generation for surveyflow phases
     # Check if user provided a custom task_layout file (either from config or phase)

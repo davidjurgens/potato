@@ -18,7 +18,6 @@ from potato.server_utils.config_module import config
 from .identifier_utils import (
     safe_generate_layout,
     generate_element_identifier,
-    generate_element_value,
     generate_validation_attribute,
     escape_html_content,
     generate_layout_attributes
@@ -86,6 +85,14 @@ def _generate_radio_layout_internal(annotation_scheme, horizontal=False):
     label2key = {}
     key_bindings = []
 
+    # Check for pre-allocated keys from the centralized allocator
+    allocated_keys = annotation_scheme.get("_allocated_keys", None)
+    allocated_map = {}
+    if allocated_keys:
+        for entry in allocated_keys:
+            if entry.get("key"):
+                allocated_map[entry["label"]] = entry["key"]
+
     # Generate radio inputs for each label
     for i, label_data in enumerate(annotation_scheme["labels"], 1):
         # Extract label information
@@ -93,48 +100,56 @@ def _generate_radio_layout_internal(annotation_scheme, horizontal=False):
 
         # Generate consistent identifiers
         identifiers = generate_element_identifier(schema_name, label, "radio")
-        key_value = generate_element_value(label_data, i, annotation_scheme)
+        label_value = label  # Use label name as value for annotation storage
         validation = generate_validation_attribute(annotation_scheme)
 
         # Debug logging
         logger.debug(f"Schema: {schema_name}, Label: {label}, Validation: '{validation}'")
         logger.debug(f"Label requirement: {annotation_scheme.get('label_requirement', 'NOT_FOUND')}")
 
-        # Handle tooltips and keyboard shortcuts
+        # Handle tooltips and explicit per-label keyboard shortcuts
         tooltip = ""
         if isinstance(label_data, Mapping):
             tooltip = _generate_tooltip(label_data)
 
-            # Handle keyboard shortcuts
+            # Handle explicit keyboard shortcuts
             if "key_value" in label_data:
-                key_value = label_data["key_value"]
-                if key_value in key2label:
-                    logger.warning(f"Keyboard input conflict: {key_value}")
+                shortcut_key = str(label_data["key_value"])
+                if shortcut_key in key2label:
+                    logger.warning(f"Keyboard input conflict: {shortcut_key}")
                     continue
-                key2label[key_value] = label
-                label2key[label] = key_value
-                key_bindings.append((key_value, f"{identifiers['schema']}: {label}"))
-                logger.debug(f"Added key binding '{key_value}' for label '{label}'")
+                key2label[shortcut_key] = label
+                label2key[label] = shortcut_key
+                key_bindings.append((shortcut_key, f"{identifiers['schema']}: {label}"))
+                logger.debug(f"Added key binding '{shortcut_key}' for label '{label}'")
 
-        # Handle sequential key bindings
-        # Auto-enable for single schema with ≤10 options, or when explicitly set
-        num_schemas = len(config.get("annotation_schemes", []))
-        num_labels = len(annotation_scheme["labels"])
-        auto_sequential = (num_schemas == 1 and num_labels <= 10)
-        explicit_sequential = annotation_scheme.get("sequential_key_binding", False)
-
-        if (auto_sequential or explicit_sequential) and num_labels <= 10:
-            shortcut_key = str(i % 10)  # Use separate variable for shortcut
+        # Use pre-allocated keys if available
+        if label in allocated_map and label not in label2key:
+            shortcut_key = allocated_map[label]
             key2label[shortcut_key] = label
             label2key[label] = shortcut_key
             key_bindings.append((shortcut_key, f"{identifiers['schema']}: {label}"))
-            logger.debug(f"Added sequential key binding '{shortcut_key}' for label '{label}'")
+            logger.debug(f"Added allocated key binding '{shortcut_key}' for label '{label}'")
+        elif not allocated_keys and label not in label2key:
+            # Fallback: sequential key bindings when no allocator was used
+            num_schemas = len(config.get("annotation_schemes", []))
+            num_labels = len(annotation_scheme["labels"])
+            auto_sequential = (num_schemas == 1 and num_labels <= 10)
+            explicit_sequential = annotation_scheme.get("sequential_key_binding", False)
 
-        # Format label content with optional keyboard shortcut display
-        label_content = label
+            if (auto_sequential or explicit_sequential) and num_labels <= 10:
+                shortcut_key = str(i % 10)
+                key2label[shortcut_key] = label
+                label2key[label] = shortcut_key
+                key_bindings.append((shortcut_key, f"{identifiers['schema']}: {label}"))
+                logger.debug(f"Added sequential key binding '{shortcut_key}' for label '{label}'")
+
+        # Format label content with optional keyboard shortcut badge
+        label_content = escape_html_content(label)
         data_key_attr = ""
+        key_badge = ""
         if label in label2key:
-            label_content = f"{label_content} [{label2key[label].upper()}]"
+            key_badge = f' <span class="keybinding-badge">{label2key[label].upper()}</span>'
             data_key_attr = f'data-key="{label2key[label]}"'
 
         # Generate radio input
@@ -144,14 +159,14 @@ def _generate_radio_layout_internal(annotation_scheme, horizontal=False):
                        type="radio"
                        id="{identifiers['id']}"
                        name="{identifiers['name']}"
-                       value="{escape_html_content(key_value)}"
+                       value="{escape_html_content(label_value)}"
                        selection_constraint="single"
                        schema="{identifiers['schema']}"
                        label_name="{identifiers['label_name']}"
                        onclick="onlyOne(this);registerAnnotation(this);"
                        validation="{validation}"
                        {data_key_attr}>
-                <label for="{identifiers['id']}" class="shadcn-radio-label" {tooltip}>{escape_html_content(label_content)}</label>
+                <label for="{identifiers['id']}" class="shadcn-radio-label" {tooltip}>{label_content}{key_badge}</label>
             </div>
         """
 

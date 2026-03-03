@@ -619,10 +619,11 @@ function setupEventListeners() {
 
         const key = e.key.toLowerCase();
 
-        // Check checkboxes first
+        // Check checkboxes (match on data-key attribute, not value)
         const checkboxes = document.querySelectorAll('input[type="checkbox"]');
         for (const checkbox of checkboxes) {
-            if (key === checkbox.value.toLowerCase()) {
+            const dataKey = checkbox.getAttribute('data-key');
+            if (dataKey && key === dataKey.toLowerCase()) {
                 checkbox.checked = !checkbox.checked;
                 // Trigger change event so annotation state gets updated
                 checkbox.dispatchEvent(new Event('change', { bubbles: true }));
@@ -633,11 +634,11 @@ function setupEventListeners() {
             }
         }
 
-        // Check radio buttons
+        // Check radio buttons (match on data-key attribute)
         const radios = document.querySelectorAll('input[type="radio"]');
         for (const radio of radios) {
             const dataKey = radio.getAttribute('data-key');
-            if (key === radio.value.toLowerCase() || (dataKey && key === dataKey)) {
+            if (dataKey && key === dataKey.toLowerCase()) {
                 radio.checked = true;
                 // Trigger change event so annotation state gets updated
                 radio.dispatchEvent(new Event('change', { bubbles: true }));

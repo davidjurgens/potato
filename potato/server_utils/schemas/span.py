@@ -10,7 +10,6 @@ from potato.server_utils.config_module import config
 from .identifier_utils import (
     safe_generate_layout,
     generate_element_identifier,
-    generate_element_value,
     generate_validation_attribute,
     escape_html_content,
     generate_layout_attributes
@@ -194,6 +193,14 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
     key_bindings = []
     span_title = annotation_scheme.get("title", "")
 
+    # Check for pre-allocated keys from the centralized allocator
+    allocated_keys = annotation_scheme.get("_allocated_keys", None)
+    allocated_map = {}
+    if allocated_keys:
+        for entry in allocated_keys:
+            if entry.get("key"):
+                allocated_map[entry["label"]] = entry["key"]
+
     # Setup validation
     validation = generate_validation_attribute(annotation_scheme)
     span_color = "var(--primary-color)"
@@ -207,7 +214,7 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
             tooltip = ""
         else:
             label = label_data["name"]
-            key_value = label_data.get("key_value", str(i))
+            key_value = label_data.get("key_value", label)
             tooltip = _generate_tooltip(label_data)
 
         # Check for color mappings
@@ -222,16 +229,23 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
             span_counter += 1
             set_span_color(scheme_name, label, span_color)
 
-        # Handle sequential key bindings
-        if (
-            "sequential_key_binding" in annotation_scheme
-            and annotation_scheme["sequential_key_binding"]
-            and len(annotation_scheme["labels"]) <= 10
-        ):
-            key_value = str(i % 10)
-            key2label[key_value] = label
-            label2key[label] = key_value
-            key_bindings.append((key_value, f"{scheme_name}: {label}"))
+        # Handle keybinding allocation
+        if label in allocated_map and label not in label2key:
+            shortcut_key = allocated_map[label]
+            key2label[shortcut_key] = label
+            label2key[label] = shortcut_key
+            key_bindings.append((shortcut_key, f"{scheme_name}: {label}"))
+        elif not allocated_keys and label not in label2key:
+            # Fallback: sequential key bindings when no allocator was used
+            if (
+                "sequential_key_binding" in annotation_scheme
+                and annotation_scheme["sequential_key_binding"]
+                and len(annotation_scheme["labels"]) <= 10
+            ):
+                shortcut_key = str(i % 10)
+                key2label[shortcut_key] = label
+                label2key[label] = shortcut_key
+                key_bindings.append((shortcut_key, f"{scheme_name}: {label}"))
 
         # Format label content
         if "displaying_score" in annotation_scheme and annotation_scheme["displaying_score"]:

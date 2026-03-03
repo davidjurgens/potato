@@ -83,6 +83,14 @@ def _generate_likert_layout_internal(annotation_scheme):
     key_bindings = []
     validation = generate_validation_attribute(annotation_scheme)
 
+    # Check for pre-allocated keys from the centralized allocator
+    allocated_keys = annotation_scheme.get("_allocated_keys", None)
+    allocated_map = {}
+    if allocated_keys:
+        for entry in allocated_keys:
+            if entry.get("key"):
+                allocated_map[entry["label"]] = entry["key"]
+
     # Get layout attributes for grid positioning
     layout_attrs = generate_layout_attributes(annotation_scheme)
 
@@ -104,8 +112,12 @@ def _generate_likert_layout_internal(annotation_scheme):
         identifiers = generate_element_identifier(annotation_scheme['name'], label, "radio")
         key_value = generate_element_value(label, i, annotation_scheme)
 
-        # Handle key bindings for scales with less than 10 points
-        if (annotation_scheme.get("sequential_key_binding")
+        # Handle key bindings: use allocated keys if available, else fallback
+        if label in allocated_map:
+            shortcut_key = allocated_map[label]
+            key_bindings.append((shortcut_key, f"{identifiers['schema']}: {shortcut_key}"))
+            logger.debug(f"Added allocated key binding '{shortcut_key}' for point {i}")
+        elif not allocated_keys and (annotation_scheme.get("sequential_key_binding")
             and annotation_scheme["size"] < 10):
             key_bindings.append((key_value, f"{identifiers['schema']}: {key_value}"))
             logger.debug(f"Added key binding '{key_value}' for point {i}")
