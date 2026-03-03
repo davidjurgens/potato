@@ -113,7 +113,7 @@ class BaseSoloModeSeleniumTest(unittest.TestCase):
                         'endpoint_type': 'ollama',
                         'model': OLLAMA_MODEL,
                         'endpoint_url': OLLAMA_HOST,
-                        'max_tokens': 256,
+                        'max_tokens': 1024,
                         'temperature': 0.1,
                     }
                 ],
