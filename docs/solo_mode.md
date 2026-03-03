@@ -15,6 +15,12 @@ Solo Mode provides a streamlined workflow where a human annotator works alongsid
 - **Uncertainty-Based Selection**: Prioritize instances where LLM is uncertain
 - **Progressive Autonomy**: Transition to autonomous LLM labeling as agreement improves
 - **Final Validation**: Validate a sample of LLM-only labels
+- **[Edge Case Rule Discovery](solo_mode_advanced.md#edge-case-rule-discovery)**: Co-DETECT-inspired automatic rule extraction from low-confidence predictions
+- **[Labeling Functions](solo_mode_advanced.md#labeling-functions)**: ALCHEmist-style pattern extraction for zero-cost labeling via majority voting
+- **[Confidence Routing](solo_mode_advanced.md#confidence-routing)**: Cascaded model escalation from cheap to expensive models
+- **[Refinement Loop](solo_mode_advanced.md#refinement-loop)**: Automated confusion analysis → guideline suggestion → prompt revision cycles
+- **[Confusion Analysis](solo_mode_advanced.md#confusion-analysis)**: Enriched confusion patterns with root cause analysis
+- **[Prompt Optimizer](solo_mode_advanced.md#prompt-optimizer)**: DSPy-style automatic prompt improvement from labeled examples
 
 ## Configuration
 
@@ -242,6 +248,18 @@ Exports all annotations and predictions.
 2. Review confusion patterns
 3. Adjust prompts when accuracy drops
 4. Validate LLM-only labels periodically
+
+## Advanced Features
+
+Solo Mode includes several advanced subsystems for automated quality improvement, cost optimization, and deeper analysis. These features work together to progressively refine annotation quality with minimal human effort.
+
+Key advanced capabilities include:
+- **Edge case rule discovery** and **labeling functions** for reducing LLM API costs
+- **Confidence routing** for cascading instances through cheap-to-expensive model tiers
+- **Automated refinement loops** that analyze confusion patterns and revise prompts
+- **Schema-specific agreement thresholds** for Likert, multiselect, text, and span annotations
+
+For full configuration details, see [Solo Mode Advanced Features](solo_mode_advanced.md).
 
 ## Troubleshooting
 

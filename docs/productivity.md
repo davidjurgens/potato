@@ -35,6 +35,131 @@ For example,
 ]
 ```
 
+## Keybinding Allocator
+
+When multiple annotation schemas appear on the same page, keyboard shortcuts can conflict. The keybinding allocator automatically assigns non-conflicting keys across all schemas by drawing from separate key pools.
+
+### Keybinding Strategies
+
+Each schema can declare its keybinding strategy via the `keybinding_strategy` field:
+
+| Strategy | Description |
+|----------|-------------|
+| `sequential` | Labels are assigned keys in order from a key pool (default) |
+| `mnemonic` | Keys are assigned based on the first available character of each label name |
+| `none` | No keybindings are allocated for this schema |
+
+```yaml
+annotation_schemes:
+  - annotation_type: "radio"
+    name: "sentiment"
+    keybinding_strategy: "sequential"  # or "mnemonic" or "none"
+    labels: ["positive", "negative", "neutral"]
+```
+
+If `keybinding_strategy` is not set, schemas with `sequential_key_binding: true` default to `sequential`.
+
+### Multi-Schema Key Pools
+
+For sequential allocation, keys are drawn from three pools corresponding to QWERTY keyboard rows. Each schema that needs sequential keys gets its own pool:
+
+| Pool | Row | Keys | Capacity |
+|------|-----|------|----------|
+| Pool 0 | Number row | `1 2 3 4 5 6 7 8 9 0` | 10 |
+| Pool 1 | Top letter row | `q w e r t y u i o p` | 10 |
+| Pool 2 | Home row | `a s d f g h j k l` | 9 |
+
+The first schema needing sequential keys gets Pool 0 (numbers), the second gets Pool 1 (top row letters), and the third gets Pool 2 (home row). If a pool doesn't have enough keys for all labels, the allocator searches other pools for one with sufficient capacity.
+
+### Sequential Strategy Example
+
+With two schemas on the same page:
+
+```yaml
+annotation_schemes:
+  - annotation_type: "radio"
+    name: "sentiment"
+    keybinding_strategy: "sequential"
+    labels: ["positive", "negative", "neutral"]
+    # Gets Pool 0: positive=1, negative=2, neutral=3
+
+  - annotation_type: "multiselect"
+    name: "topics"
+    keybinding_strategy: "sequential"
+    labels: ["politics", "sports", "technology", "science"]
+    # Gets Pool 1: politics=q, sports=w, technology=e, science=r
+```
+
+### Mnemonic Strategy Example
+
+Labels get keys based on their first available character:
+
+```yaml
+annotation_schemes:
+  - annotation_type: "radio"
+    name: "quality"
+    keybinding_strategy: "mnemonic"
+    labels: ["quality", "price", "service", "ambiance"]
+    # quality=q, price=p, service=s, ambiance=a
+```
+
+If the first character is already taken, subsequent characters are tried. If no character from the label name is available, the next free letter from `a-z` is used.
+
+### Explicit Key Overrides
+
+The `key_value` field on individual labels always takes priority over automatic allocation. Explicitly set keys are reserved globally before any automatic allocation begins:
+
+```yaml
+annotation_schemes:
+  - annotation_type: "radio"
+    name: "sentiment"
+    keybinding_strategy: "sequential"
+    labels:
+      - name: "positive"
+        key_value: "p"      # Explicit: always "p"
+      - name: "negative"
+        key_value: "n"      # Explicit: always "n"
+      - "neutral"            # Auto-assigned from remaining pool keys
+```
+
+### Self-Managed Schemas
+
+Some schema types manage their own keybindings internally and are skipped by the allocator. Their known keys are still reserved to prevent conflicts:
+
+| Schema Type | Reserved Keys |
+|-------------|--------------|
+| `pairwise` | `1`, `2`, `0` |
+| `bws` | `1`–`tuple_size` (numbers) and `a`–corresponding letter (alphabetic). Default `tuple_size=4` reserves `1, 2, 3, 4, a, b, c, d` |
+| `triage` | Managed internally |
+
+### Complete Multi-Schema Example
+
+Three schemas with different strategies on the same page:
+
+```yaml
+annotation_schemes:
+  # Schema 1: Sequential — gets Pool 0 (numbers)
+  - annotation_type: "radio"
+    name: "sentiment"
+    keybinding_strategy: "sequential"
+    labels: ["positive", "negative", "neutral"]
+    # positive=1, negative=2, neutral=3
+
+  # Schema 2: Mnemonic — draws from a-z (excluding globally used keys)
+  - annotation_type: "multiselect"
+    name: "aspects"
+    keybinding_strategy: "mnemonic"
+    labels: ["food", "service", "value", "atmosphere"]
+    # food=f, service=s, value=v, atmosphere=a
+
+  # Schema 3: Sequential — gets Pool 1 (top row letters, minus any used by mnemonic)
+  - annotation_type: "radio"
+    name: "recommend"
+    keybinding_strategy: "sequential"
+    labels: ["yes", "no", "maybe"]
+    # yes=q, no=w, maybe=e (f,s,v,a already taken by mnemonic schema)
+```
+
 ## Admin Keyword Highlights
 
 Potato supports admin-defined keyword highlights to help annotators identify relevant words and phrases in the text. Keywords are displayed as colored bordered boxes around matching text when an instance loads.

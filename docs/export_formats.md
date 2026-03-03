@@ -311,6 +311,100 @@ export/
 python -m potato.export -c config.yaml -f mask -o ./mask_export/
 ```
 
+### Parquet (parquet)
+
+Columnar format for efficient analytics. Produces structured tables for annotations, spans, and source items.
+
+**Best for:** Large-scale analysis with pandas, DuckDB, Spark, or any Arrow-compatible tool
+
+**Requires:** `pyarrow >= 12.0.0` (`pip install pyarrow`)
+
+**Output Structure:**
+```
+export/
+├── annotations.parquet    # One row per (instance_id, user_id) pair
+├── spans.parquet          # One row per span annotation (if spans exist)
+└── items.parquet          # One row per original data item (optional)
+```
+
+**annotations.parquet schema:**
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `instance_id` | string | The annotated item's ID |
+| `user_id` | string | The annotator's ID |
+| *\<schema_name\>* | varies | One column per annotation schema, type depends on schema |
+
+Schema columns are flattened by annotation type:
+- **radio/select** → `string` (the selected label)
+- **likert/slider/number** → `float64`
+- **multiselect** → `list<string>` (selected labels)
+- **text** → `string`
+
+**spans.parquet schema:**
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `instance_id` | string | The annotated item's ID |
+| `user_id` | string | The annotator's ID |
+| `schema_name` | string | Name of the span annotation schema |
+| `start` | int | Character offset where the span begins |
+| `end` | int | Character offset where the span ends |
+| `label` | string | The span's label |
+| `text` | string | The text content of the span |
+
+**items.parquet schema:**
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `item_id` | string | The item's ID |
+| *\<field_name\>* | varies | One column per field in the original data (nested dicts/lists are JSON-serialized) |
+
+**Usage:**
+```bash
+python -m potato.export -c config.yaml -f parquet -o ./parquet_export/
+```
+
+**Options:**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `compression` | `snappy` | Compression codec: `snappy`, `gzip`, `zstd`, `lz4`, or `none` |
+| `include_items` | `true` | Generate `items.parquet` with source data |
+| `include_spans` | `true` | Generate `spans.parquet` (if span annotations exist) |
+| `row_group_size` | PyArrow default | Row group size for `annotations.parquet` |
+
+```bash
+# Export with gzip compression, skip items table
+python -m potato.export -c config.yaml -f parquet -o ./parquet_export/ \
+    --option compression=gzip --option include_items=false
+```
+
+**Reading with pandas:**
+```python
+import pandas as pd
+
+annotations = pd.read_parquet("export/annotations.parquet")
+spans = pd.read_parquet("export/spans.parquet")
+items = pd.read_parquet("export/items.parquet")
+
+# Filter to a specific annotator
+user_anns = annotations[annotations["user_id"] == "annotator_1"]
+```
+
+**Reading with DuckDB:**
+```sql
+-- Direct query without loading into memory
+SELECT instance_id, sentiment, COUNT(*) as n
+FROM 'export/annotations.parquet'
+GROUP BY instance_id, sentiment;
+
+-- Join annotations with source items
+SELECT a.instance_id, a.sentiment, i.text
+FROM 'export/annotations.parquet' a
+JOIN 'export/items.parquet' i ON a.instance_id = i.item_id;
+```
+
 ## Programmatic Export
 
 Use the export registry directly in Python:
@@ -369,13 +463,13 @@ export_registry.register(MyExporter())
 
 ## Format Compatibility Matrix
 
-| Annotation Type | COCO | YOLO | Pascal VOC | CoNLL-2003 | CoNLL-U | Mask |
-|----------------|------|------|------------|------------|---------|------|
-| Bounding boxes | Yes | Yes | Yes | - | - | - |
-| Polygons | Yes | - | - | - | - | Yes |
-| Keypoints | Yes | - | - | - | - | - |
-| Text spans | - | - | - | Yes | Yes | - |
-| Classifications | Partial | - | - | - | - | - |
+| Annotation Type | COCO | YOLO | Pascal VOC | CoNLL-2003 | CoNLL-U | Mask | Parquet |
+|----------------|------|------|------------|------------|---------|------|---------|
+| Bounding boxes | Yes | Yes | Yes | - | - | - | Yes |
+| Polygons | Yes | - | - | - | - | Yes | Yes |
+| Keypoints | Yes | - | - | - | - | - | Yes |
+| Text spans | - | - | - | Yes | Yes | - | Yes |
+| Classifications | Partial | - | - | - | - | - | Yes |
 
 ## Best Practices
 

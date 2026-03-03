@@ -42,6 +42,12 @@
 
 - [Agent Traces](agent_traces.md) - Evaluate AI agent traces and trajectories
 
+## Solo Mode
+
+- [Solo Mode](solo_mode.md) - Human-LLM collaborative annotation workflow
+- [Solo Mode Advanced Features](solo_mode_advanced.md) - Edge case rules, labeling functions, confidence routing
+- [Solo Mode Developer Guide](solo_mode_developer_guide.md) - Architecture and extension points
+
 ## AI & Intelligence
 
 - [AI Support](ai_support.md) - AI-powered label suggestions
@@ -82,6 +88,12 @@
 
 - [Productivity](productivity.md) - Tooltips, shortcuts, and highlights
 
+## Release Notes
+
+- [v2.2.0](releasenotes/v2.2.0.md) - Comprehensive Annotation & Export Platform
+- [v2.1.0](releasenotes/v2.1.0.md) - Adjudication & Multi-Modal Annotation
+- [v2.0.0](releasenotes/v2.0.0.md) - Backend Refactor
+
 ## Contributing
 
 - [Contributing Guide](open-sourcing.md) - How to contribute to Potato
@@ -111,6 +123,8 @@
 | Annotate conversation trees | [Conversation Tree Annotation](conversation_tree_annotation.md) |
 | Navigate efficiently through items | [Annotation Navigation](annotation_navigation.md) |
 | Evaluate AI agent traces | [Agent Traces](agent_traces.md) |
+| Use Solo Mode for collaborative annotation | [Solo Mode](solo_mode.md) |
+| Export annotations to Parquet | [Export Formats](export_formats.md#parquet) |
 | Export to COCO/YOLO/CoNLL | [Export Formats](export_formats.md) |
 
 ---
