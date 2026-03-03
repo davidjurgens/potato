@@ -1,0 +1,73 @@
+# Task 14: ELAN-Style Tiered Annotation
+# Port 8014 - Hierarchical multi-tier annotation on audio
+
+annotation_task_name: "ELAN-Style Tiered Annotation"
+
+data_files:
+  - "data/audio.json"
+
+item_properties:
+  id_key: "id"
+  text_key: "text"
+  audio_key: "audio_url"
+
+task_dir: "."
+output_annotation_dir: "annotation_output"
+output_annotation_format: json
+
+user_config:
+  allow_anonymous: true
+
+annotation_schemes:
+  - annotation_type: tiered_annotation
+    name: linguistic_tiers
+    description: "Annotate speech with hierarchical tiers"
+    source_field: "audio_url"
+    media_type: audio
+    tiers:
+      - name: utterance
+        tier_type: independent
+        description: "Speaker utterances"
+        labels:
+          - name: Speaker_A
+            color: "#4ECDC4"
+            tooltip: "Utterance by Speaker A"
+          - name: Speaker_B
+            color: "#FF6B6B"
+            tooltip: "Utterance by Speaker B"
+          - name: Overlap
+            color: "#F39C12"
+            tooltip: "Overlapping speech"
+
+      - name: word
+        tier_type: dependent
+        parent_tier: utterance
+        constraint_type: time_subdivision
+        description: "Word-level transcription"
+        labels:
+          - name: Content
+            color: "#95E1D3"
+            tooltip: "Content word"
+          - name: Function
+            color: "#AA96DA"
+            tooltip: "Function word (articles, prepositions, etc.)"
+
+      - name: emotion
+        tier_type: independent
+        description: "Emotional tone segments"
+        labels:
+          - name: Neutral
+            color: "#C0C0C0"
+          - name: Happy
+            color: "#FFD700"
+          - name: Sad
+            color: "#6495ED"
+          - name: Angry
+            color: "#FF4500"
+
+    tier_height: 50
+    show_tier_labels: true
+    zoom_enabled: true
+    playback_rate_control: true
+
+debug: true

@@ -1,0 +1,89 @@
+# Task 02: Toxicity Detection with Conditional Logic
+# Port 8002 - Demonstrates display_logic for conditional schema visibility
+
+annotation_task_name: "Toxicity Detection with Conditional Logic"
+
+data_files:
+  - "data/comments.json"
+
+item_properties:
+  id_key: "id"
+  text_key: "text"
+
+task_dir: "."
+output_annotation_dir: "annotation_output"
+output_annotation_format: json
+
+user_config:
+  allow_anonymous: true
+
+annotation_schemes:
+  # Primary question - always visible
+  - annotation_type: radio
+    name: is_toxic
+    description: "Is this comment toxic?"
+    labels:
+      - name: "Yes"
+        key_binding: "y"
+      - name: "No"
+        key_binding: "n"
+      - name: "Borderline"
+        key_binding: "b"
+
+  # Shows when is_toxic = Yes or Borderline
+  - annotation_type: multiselect
+    name: toxicity_types
+    description: "What types of toxicity are present? (select all that apply)"
+    labels:
+      - name: "insult"
+        key_binding: "1"
+      - name: "threat"
+        key_binding: "2"
+      - name: "profanity"
+        key_binding: "3"
+      - name: "harassment"
+        key_binding: "4"
+      - name: "hate_speech"
+        key_binding: "5"
+      - name: "other"
+        key_binding: "6"
+    display_logic:
+      show_when:
+        - schema: is_toxic
+          operator: equals
+          value: ["Yes", "Borderline"]
+
+  # Shows when toxicity_types contains "other"
+  - annotation_type: text
+    name: other_description
+    description: "Describe the other type of toxicity:"
+    display_logic:
+      show_when:
+        - schema: toxicity_types
+          operator: contains
+          value: "other"
+
+  # Shows when is_toxic = No
+  - annotation_type: slider
+    name: confidence
+    description: "How confident are you that this is NOT toxic?"
+    min_value: 1
+    max_value: 10
+    starting_value: 5
+    display_logic:
+      show_when:
+        - schema: is_toxic
+          operator: equals
+          value: "No"
+
+  # Shows when confidence slider is low (1-3)
+  - annotation_type: text
+    name: uncertainty_reason
+    description: "What makes you uncertain? (Optional)"
+    display_logic:
+      show_when:
+        - schema: confidence
+          operator: in_range
+          value: [1, 3]
+
+debug: true

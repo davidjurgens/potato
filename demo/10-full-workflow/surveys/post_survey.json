@@ -1,0 +1,17 @@
+[
+    {
+        "id": "1",
+        "name": "task_difficulty",
+        "description": "How difficult did you find this annotation task?",
+        "annotation_type": "likert",
+        "min_label": "Very easy",
+        "max_label": "Very difficult",
+        "size": 5
+    },
+    {
+        "id": "2",
+        "name": "feedback",
+        "description": "Please share any feedback about this annotation task (optional):",
+        "annotation_type": "text"
+    }
+]

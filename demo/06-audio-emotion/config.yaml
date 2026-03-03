@@ -1,0 +1,56 @@
+# Task 06: Audio Speaker Segmentation
+# Port 8006 - Tiered annotation for speaker segments + topic classification
+
+annotation_task_name: "Audio Speaker Segmentation"
+
+data_files:
+  - "data/audio.json"
+
+item_properties:
+  id_key: "id"
+  text_key: "text"
+  audio_key: "audio_url"
+
+task_dir: "."
+output_annotation_dir: "annotation_output"
+output_annotation_format: json
+
+user_config:
+  allow_anonymous: true
+
+annotation_schemes:
+  - annotation_type: tiered_annotation
+    name: speakers
+    description: "Label speaker segments in the audio"
+    source_field: "audio_url"
+    media_type: audio
+    tiers:
+      - name: speaker
+        tier_type: independent
+        description: "Who is speaking?"
+        labels:
+          - name: Host
+            color: "#4ECDC4"
+            tooltip: "Host / interviewer"
+          - name: Guest
+            color: "#FF6B6B"
+            tooltip: "Guest / interviewee"
+
+    tier_height: 50
+    show_tier_labels: true
+    zoom_enabled: true
+    playback_rate_control: true
+
+  - annotation_type: radio
+    name: topic
+    description: "What is the primary topic of this discussion?"
+    labels:
+      - "politics"
+      - "science"
+      - "culture"
+      - "sports"
+      - "business"
+      - "other"
+    sequential_key_binding: true
+
+debug: true

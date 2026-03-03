@@ -1,0 +1,5 @@
+[
+  {"id": "tier_01", "text": "Conversation sample 1: Two speakers discussing a topic with occasional overlap.", "audio_url": "/media/audio_01.wav"},
+  {"id": "tier_02", "text": "Conversation sample 2: Interview-style dialogue with clear speaker turns.", "audio_url": "/media/audio_02.wav"},
+  {"id": "tier_03", "text": "Conversation sample 3: Brief exchange with varied emotional tones.", "audio_url": "/media/audio_03.wav"}
+]

@@ -1,0 +1,60 @@
+# Task 01: Sentiment Analysis + Admin Dashboard + MACE
+# Port 8001 - Standard UI, admin dashboard, MACE competence scores
+
+annotation_task_name: "Sentiment Analysis + Admin Dashboard"
+
+data_files:
+  - "data/reviews.json"
+
+item_properties:
+  id_key: "id"
+  text_key: "text"
+
+task_dir: "."
+output_annotation_dir: "annotation_output"
+output_annotation_format: json
+
+max_annotations_per_item: 10
+
+user_config:
+  allow_anonymous: true
+
+admin_api_key: "demo-key"
+
+annotation_schemes:
+  - annotation_type: "radio"
+    name: "sentiment"
+    description: "What is the overall sentiment of this review?"
+    labels:
+      - "positive"
+      - "negative"
+      - "neutral"
+      - "mixed"
+    sequential_key_binding: true
+
+  - annotation_type: "multiselect"
+    name: "topics"
+    description: "What topics are discussed? (Select all that apply)"
+    labels:
+      - "quality"
+      - "price"
+      - "service"
+      - "design"
+      - "durability"
+    sequential_key_binding: true
+
+  - annotation_type: "text"
+    name: "summary"
+    description: "Brief summary of the review (optional):"
+    textarea:
+      'on': true
+      rows: 2
+      cols: 50
+
+mace:
+  enabled: true
+  trigger_every_n: 5
+  min_annotations_per_item: 3
+  min_items: 3
+
+debug: true

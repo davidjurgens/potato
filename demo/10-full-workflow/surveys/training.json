@@ -1,0 +1,20 @@
+[
+    {
+        "id": "train_01",
+        "text": "Water boils at 100 degrees Celsius at sea level.",
+        "gold_label": "True",
+        "gold_reason": "This is a well-established fact in physics. Water boils at 100°C (212°F) at standard atmospheric pressure (1 atm)."
+    },
+    {
+        "id": "train_02",
+        "text": "Bats are completely blind and rely solely on echolocation.",
+        "gold_label": "False",
+        "gold_reason": "All bat species can see. Many fruit bats have excellent vision. Echolocation is used in addition to vision, not as a replacement."
+    },
+    {
+        "id": "train_03",
+        "text": "The speed of light in a vacuum is approximately 300,000 kilometers per second.",
+        "gold_label": "True",
+        "gold_reason": "The speed of light is approximately 299,792 km/s, commonly rounded to 300,000 km/s. This is correct."
+    }
+]

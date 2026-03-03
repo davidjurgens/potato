@@ -1,0 +1,5 @@
+[
+  {"id": "video_01", "text": "Short animated clip with colorful characters and playful action scenes.", "video_url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"},
+  {"id": "video_02", "text": "Underwater footage showing aquatic life and flowing water patterns.", "video_url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4"},
+  {"id": "video_03", "text": "Brief scene showing natural landscapes with warm earth tones.", "video_url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4"}
+]

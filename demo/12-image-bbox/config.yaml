@@ -1,0 +1,45 @@
+# Task 12: Image Bounding Box Annotation
+# Port 8012 - Draw bounding boxes around objects in images
+
+annotation_task_name: "Image Bounding Box Annotation"
+
+data_files:
+  - "data/images.json"
+
+item_properties:
+  id_key: "id"
+  text_key: "image_url"
+
+task_dir: "."
+output_annotation_dir: "annotation_output"
+output_annotation_format: json
+
+user_config:
+  allow_anonymous: true
+
+annotation_schemes:
+  - annotation_type: image_annotation
+    name: object_detection
+    description: "Draw bounding boxes around objects you see in the image."
+    tools:
+      - bbox
+    labels:
+      - name: person
+        color: "#FF6B6B"
+        key_value: "1"
+      - name: vehicle
+        color: "#4ECDC4"
+        key_value: "2"
+      - name: animal
+        color: "#45B7D1"
+        key_value: "3"
+      - name: building
+        color: "#96CEB4"
+        key_value: "4"
+      - name: vegetation
+        color: "#A8E6CF"
+        key_value: "5"
+    zoom_enabled: true
+    pan_enabled: true
+
+debug: true

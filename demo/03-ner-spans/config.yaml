@@ -1,0 +1,42 @@
+# Task 03: Named Entity Recognition - Span Annotation
+# Port 8003 - Color-coded span annotation for NER
+
+annotation_task_name: "Named Entity Recognition"
+
+data_files:
+  - "data/news.json"
+
+item_properties:
+  id_key: "id"
+  text_key: "text"
+
+task_dir: "."
+output_annotation_dir: "annotation_output"
+output_annotation_format: json
+
+user_config:
+  allow_anonymous: true
+
+annotation_schemes:
+  - annotation_type: span
+    name: entities
+    description: "Highlight named entities in the text"
+    labels:
+      - name: PERSON
+        color: "#FF6B6B"
+        tooltip: "Person names (Tim Cook, Dr. Sarah Chen)"
+      - name: ORG
+        color: "#4ECDC4"
+        tooltip: "Organizations (Apple, United Nations, MIT)"
+      - name: LOC
+        color: "#45B7D1"
+        tooltip: "Locations (Cupertino, New York, Berlin)"
+      - name: DATE
+        color: "#96CEB4"
+        tooltip: "Dates and times (March 15th, next quarter)"
+      - name: MONEY
+        color: "#FFEAA7"
+        tooltip: "Monetary values ($2 billion, $100 million)"
+    sequential_key_binding: true
+
+debug: true

@@ -1,0 +1,47 @@
+# Task 05: Image Classification
+# Port 8005 - Image display with annotation
+
+annotation_task_name: "Image Classification"
+
+data_files:
+  - "data/images.json"
+
+item_properties:
+  id_key: "id"
+  text_key: "text"
+
+task_dir: "."
+output_annotation_dir: "annotation_output"
+output_annotation_format: json
+
+instance_display:
+  fields:
+    - key: image_url
+      type: image
+      label: "Image"
+      display_options:
+        max_height: 500px
+
+user_config:
+  allow_anonymous: true
+
+annotation_schemes:
+  - annotation_type: radio
+    name: scene_type
+    description: "What type of scene is shown in this image?"
+    labels:
+      - "landscape"
+      - "urban"
+      - "portrait"
+      - "still_life"
+      - "abstract"
+    sequential_key_binding: true
+
+  - annotation_type: likert
+    name: aesthetic_quality
+    description: "Rate the aesthetic quality of this image"
+    min_label: "Very Poor"
+    max_label: "Excellent"
+    size: 7
+
+debug: true

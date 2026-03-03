@@ -1,0 +1,55 @@
+# Task 11: Text Classification + Slider
+# Port 8011 - Radio + slider + multirate combo
+
+annotation_task_name: "News Headline Classification"
+
+data_files:
+  - "data/headlines.json"
+
+item_properties:
+  id_key: "id"
+  text_key: "text"
+
+task_dir: "."
+output_annotation_dir: "annotation_output"
+output_annotation_format: json
+
+user_config:
+  allow_anonymous: true
+
+annotation_schemes:
+  - annotation_type: radio
+    name: headline_category
+    description: "What category does this headline belong to?"
+    labels:
+      - "Politics"
+      - "Sports"
+      - "Technology"
+      - "Entertainment"
+      - "Science"
+      - "Business"
+    sequential_key_binding: true
+
+  - annotation_type: slider
+    name: sensationalism
+    description: "How sensational is this headline?"
+    min_value: 1
+    max_value: 10
+    starting_value: 5
+
+  - annotation_type: multirate
+    name: quality_aspects
+    description: "Rate the following quality aspects of this headline:"
+    options:
+      - "Clarity"
+      - "Accuracy"
+      - "Bias"
+      - "Completeness"
+    labels:
+      - "Strongly Disagree"
+      - "Disagree"
+      - "Neutral"
+      - "Agree"
+      - "Strongly Agree"
+
+debug: true

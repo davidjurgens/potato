@@ -1,0 +1,20 @@
+[
+    {
+        "id": "1",
+        "name": "nlp_familiarity",
+        "description": "How familiar are you with natural language processing (NLP)?",
+        "annotation_type": "likert",
+        "min_label": "Not at all familiar",
+        "max_label": "Expert level",
+        "size": 5,
+        "label_requirement": {"required": true}
+    },
+    {
+        "id": "2",
+        "name": "native_language",
+        "description": "Is English your native language?",
+        "annotation_type": "radio",
+        "labels": ["Yes", "No"],
+        "label_requirement": {"required": true}
+    }
+]

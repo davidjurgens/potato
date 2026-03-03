@@ -1,0 +1,133 @@
+# Task 15: Agentic Chat — Interactive Agent Annotation
+# Port 8015 - Live chat with a simulated agent, then evaluate the interaction
+#
+# This demo showcases Potato's interactive agent chat feature:
+# 1. Annotator sees a task description and context
+# 2. Has a live conversation with a simulated agent (echo proxy)
+# 3. Clicks "Finish & Annotate" to end the chat
+# 4. The conversation is displayed as a dialogue with per-turn ratings
+# 5. Annotator evaluates the overall interaction quality
+
+annotation_task_name: "Agentic Chat — Interactive Agent Evaluation"
+
+data_files:
+  - "data/tasks.json"
+
+item_properties:
+  id_key: "id"
+  text_key: "task_description"
+
+task_dir: "."
+output_annotation_dir: "annotation_output"
+output_annotation_format: json
+
+# Agent proxy configuration — echo proxy for demo (no external API needed)
+agent_proxy:
+  type: echo
+  responses:
+    - "Thanks for reaching out! I understand your situation. Let me look into this for you right away."
+    - "I've checked our records and found some relevant information. Based on what you've described, here's what I can do."
+    - "I have a couple of options for you. Would you like me to walk you through them, or do you have a preference?"
+    - "Great choice. Let me process that for you now. This should just take a moment."
+    - "All done! I've taken care of everything on my end. Is there anything else I can help you with today?"
+    - "You're welcome! If you have any other questions in the future, don't hesitate to reach out. Have a great day!"
+  sandbox:
+    max_steps: 12
+    max_session_seconds: 300
+    request_timeout_seconds: 30
+    rate_limit_per_minute: 15
+
+# Display configuration — task description + context + interactive chat panel
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    - key: task_description
+      type: text
+      label: "Your Task"
+
+    - key: context
+      type: text
+      label: "Context"
+
+    - key: conversation
+      type: interactive_chat
+      label: "Agent Chat"
+      display_options:
+        placeholder_text: "Type your message to the agent..."
+        show_turn_numbers: true
+        alternating_shading: true
+        per_turn_ratings:
+          speakers: ["Agent"]
+          schemes:
+            - schema_name: turn_helpfulness
+              scheme:
+                type: likert
+                size: 3
+                labels: ["Unhelpful", "Helpful"]
+            - schema_name: turn_relevance
+              scheme:
+                type: likert
+                size: 3
+                labels: ["Off-topic", "Relevant"]
+
+# Annotation schemas — shown after finishing the chat
+annotation_schemes:
+  - annotation_type: radio
+    name: task_success
+    description: "Did the agent successfully address your request?"
+    labels:
+      - name: "Success"
+        tooltip: "Agent fully addressed the request"
+        key_binding: "1"
+      - name: "Partial"
+        tooltip: "Agent made some progress but didn't fully resolve it"
+        key_binding: "2"
+      - name: "Failure"
+        tooltip: "Agent failed to meaningfully address the request"
+        key_binding: "3"
+
+  - annotation_type: likert
+    name: naturalness
+    description: "How natural and conversational did the interaction feel?"
+    size: 5
+    min_label: "Very Robotic"
+    max_label: "Very Natural"
+
+  - annotation_type: likert
+    name: helpfulness
+    description: "How helpful was the agent overall?"
+    size: 5
+    min_label: "Not Helpful"
+    max_label: "Very Helpful"
+
+  - annotation_type: multiselect
+    name: issues
+    description: "Did you observe any of these issues? (select all that apply)"
+    labels:
+      - name: "generic_responses"
+        tooltip: "Agent gave vague or template-like answers"
+      - name: "ignored_context"
+        tooltip: "Agent didn't use the provided context"
+      - name: "repetitive"
+        tooltip: "Agent repeated itself or gave redundant info"
+      - name: "wrong_info"
+        tooltip: "Agent provided incorrect information"
+      - name: "no_issues"
+        tooltip: "No issues observed"
+    sequential_key_binding: true
+
+  - annotation_type: text
+    name: comments
+    description: "Any additional comments about the interaction?"
+    textarea:
+      'on': true
+      rows: 3
+      cols: 50
+
+user_config:
+  allow_anonymous: true
+
+debug: true

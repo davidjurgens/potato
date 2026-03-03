@@ -1,0 +1,52 @@
+# Task 07: Video Content Analysis
+# Port 8007 - Video playback with annotation
+
+annotation_task_name: "Video Content Analysis"
+
+data_files:
+  - "data/videos.json"
+
+item_properties:
+  id_key: "id"
+  text_key: "text"
+
+task_dir: "."
+output_annotation_dir: "annotation_output"
+output_annotation_format: json
+
+instance_display:
+  fields:
+    - key: video_url
+      type: video
+      label: "Video"
+      display_options:
+        max_width: 640
+        controls: true
+
+user_config:
+  allow_anonymous: true
+
+annotation_schemes:
+  - annotation_type: radio
+    name: content_type
+    description: "What type of content is shown in this video?"
+    labels:
+      - "animation"
+      - "nature"
+      - "people"
+      - "other"
+    sequential_key_binding: true
+
+  - annotation_type: multiselect
+    name: visual_elements
+    description: "What visual elements are present? (select all that apply)"
+    labels:
+      - "animals"
+      - "water"
+      - "sky"
+      - "vegetation"
+      - "buildings"
+      - "text_overlay"
+    sequential_key_binding: true
+
+debug: true

@@ -1,0 +1,63 @@
+# Task 09: Adjudication Interface
+# Port 8009 - Adjudication queue with disagreement resolution
+
+annotation_task_name: "Sentiment Adjudication Demo"
+
+data_files:
+  - "data/reviews.json"
+
+item_properties:
+  id_key: "id"
+  text_key: "text"
+
+task_dir: "."
+output_annotation_dir: "annotation_output"
+output_annotation_format: json
+
+max_annotations_per_item: 5
+
+user_config:
+  allow_anonymous: true
+
+admin_api_key: "demo-adj-key"
+
+annotation_schemes:
+  - annotation_type: radio
+    name: sentiment
+    description: "What is the overall sentiment of this text?"
+    labels:
+      - "positive"
+      - "negative"
+      - "neutral"
+      - "mixed"
+    sequential_key_binding: true
+
+  - annotation_type: multiselect
+    name: topics
+    description: "What topics are discussed? (select all that apply)"
+    labels:
+      - "food"
+      - "service"
+      - "price"
+      - "ambiance"
+    sequential_key_binding: true
+
+adjudication:
+  enabled: true
+  adjudicator_users:
+    - "adjudicator"
+  min_annotations: 2
+  agreement_threshold: 0.75
+  show_all_items: true
+  show_annotator_names: true
+  show_timing_data: true
+  require_confidence: true
+  error_taxonomy:
+    - "ambiguous_text"
+    - "guideline_gap"
+    - "annotator_error"
+    - "edge_case"
+    - "subjective_disagreement"
+  output_subdir: "adjudication"
+
+debug: true

@@ -1,0 +1,62 @@
+# Task 10: Full Workflow - All Phases
+# Port 8010 - Consent → Instructions → Training → Pre-survey → Annotation → Post-survey
+
+annotation_task_name: "Fact-Checking: Full Workflow Demo"
+
+data_files:
+  - "data/claims.json"
+
+item_properties:
+  id_key: "id"
+  text_key: "text"
+
+task_dir: "."
+output_annotation_dir: "annotation_output"
+output_annotation_format: json
+
+user_config:
+  allow_all_users: true
+  users: []
+
+phases:
+  order:
+    - consent
+    - instructions
+    - training
+    - prestudy
+    - annotation
+    - poststudy
+  consent:
+    type: consent
+    file: surveys/consent.json
+  instructions:
+    type: instructions
+    file: surveys/instructions.html
+  training:
+    type: training
+    file: surveys/training.json
+  prestudy:
+    type: prestudy
+    file: surveys/pre_survey.json
+  poststudy:
+    type: poststudy
+    file: surveys/post_survey.json
+
+annotation_schemes:
+  - annotation_type: radio
+    name: veracity
+    description: "Is this claim true, false, or unverifiable?"
+    labels:
+      - name: "True"
+        key_binding: "t"
+      - name: "False"
+        key_binding: "f"
+      - name: "Unverifiable"
+        key_binding: "u"
+
+  - annotation_type: likert
+    name: confidence
+    description: "How confident are you in your judgment?"
+    min_label: "Not confident"
+    max_label: "Very confident"
+    size: 5

@@ -1,0 +1,60 @@
+# Task 08: Multimodal - Video + Span-Annotatable Transcript
+# Port 8008 - Horizontal layout with video and span annotation
+
+annotation_task_name: "Multimodal Video + Transcript Annotation"
+
+data_files:
+  - "data/clips.json"
+
+item_properties:
+  id_key: "id"
+  text_key: "transcript"
+
+task_dir: "."
+output_annotation_dir: "annotation_output"
+output_annotation_format: json
+
+instance_display:
+  layout:
+    direction: horizontal
+    gap: 24px
+  fields:
+    - key: video_url
+      type: video
+      display_options:
+        max_width: "45%"
+        controls: true
+    - key: transcript
+      type: text
+      label: "Transcript"
+      span_target: true
+
+user_config:
+  allow_anonymous: true
+
+annotation_schemes:
+  - annotation_type: radio
+    name: quality
+    description: "Overall quality of the presentation"
+    labels:
+      - "excellent"
+      - "good"
+      - "needs_improvement"
+    sequential_key_binding: true
+
+  - annotation_type: span
+    name: argument_structure
+    description: "Highlight argument structure in the transcript"
+    labels:
+      - name: main_argument
+        color: "#3b82f6"
+        tooltip: "The main claim or thesis"
+      - name: evidence
+        color: "#22c55e"
+        tooltip: "Supporting evidence or data"
+      - name: conclusion
+        color: "#f59e0b"
+        tooltip: "Concluding statement or implication"
+    sequential_key_binding: true
+
+debug: true

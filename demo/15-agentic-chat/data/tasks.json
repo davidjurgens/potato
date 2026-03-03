@@ -1,0 +1,50 @@
+[
+  {
+    "id": "agent_task_01",
+    "task_description": "You are a customer who bought a laptop online that arrived with a cracked screen. Contact the support agent to get a replacement or refund.",
+    "context": "Order #LPT-29481, purchased 3 days ago, $899 laptop",
+    "conversation": null
+  },
+  {
+    "id": "agent_task_02",
+    "task_description": "You need help planning a vegetarian dinner party for 8 guests this Saturday. Ask the agent for a menu with appetizer, main course, and dessert.",
+    "context": "Budget: $150 total, one guest has a nut allergy",
+    "conversation": null
+  },
+  {
+    "id": "agent_task_03",
+    "task_description": "You are a new employee trying to set up your company email on your phone. Ask the IT support agent for step-by-step instructions.",
+    "context": "Company uses Outlook 365, you have an iPhone 15",
+    "conversation": null
+  },
+  {
+    "id": "agent_task_04",
+    "task_description": "You want to book a weekend getaway for two people. Ask the travel agent to find options within a 3-hour drive of Chicago under $300/night.",
+    "context": "Dates: next Saturday-Sunday, prefer somewhere with outdoor activities",
+    "conversation": null
+  },
+  {
+    "id": "agent_task_05",
+    "task_description": "You are debugging a Python script that throws a 'RecursionError: maximum recursion depth exceeded'. Ask the coding assistant for help diagnosing and fixing it.",
+    "context": "The script processes nested JSON files with deeply nested structures",
+    "conversation": null
+  },
+  {
+    "id": "agent_task_06",
+    "task_description": "You need to cancel a gym membership that has been charging you $49/month for 6 months after you thought you cancelled. Negotiate a partial refund.",
+    "context": "FitLife Gym, member since January 2025, attempted cancellation in August 2025",
+    "conversation": null
+  },
+  {
+    "id": "agent_task_07",
+    "task_description": "Ask the medical information agent about the differences between common cold and flu symptoms, and when you should see a doctor.",
+    "context": "You have had a sore throat and mild fever for 2 days",
+    "conversation": null
+  },
+  {
+    "id": "agent_task_08",
+    "task_description": "You are a small business owner looking to create a basic website. Ask the agent to recommend a platform and walk you through the first steps.",
+    "context": "Bakery business, no coding experience, budget under $20/month",
+    "conversation": null
+  }
+]

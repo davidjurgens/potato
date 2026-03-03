@@ -1,0 +1,6 @@
+[
+  {"id": "audio_01", "text": "Podcast clip 1: Interview segment on recent policy developments.", "audio_url": "/media/audio_01.wav"},
+  {"id": "audio_02", "text": "Podcast clip 2: Discussion about a new scientific discovery.", "audio_url": "/media/audio_02.wav"},
+  {"id": "audio_03", "text": "Podcast clip 3: Conversation about trends in the tech industry.", "audio_url": "/media/audio_03.wav"},
+  {"id": "audio_04", "text": "Podcast clip 4: Panel discussion on the upcoming sports season.", "audio_url": "/media/audio_04.wav"}
+]

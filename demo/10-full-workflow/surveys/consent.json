@@ -1,0 +1,18 @@
+[
+    {
+        "id": "1",
+        "name": "age_consent",
+        "description": "I certify that I am at least 18 years of age.",
+        "annotation_type": "radio",
+        "labels": ["I agree", "I disagree"],
+        "label_requirement": {"required_label": ["I agree"]}
+    },
+    {
+        "id": "2",
+        "name": "data_consent",
+        "description": "I consent to having my annotations used for research purposes. All data will be anonymized.",
+        "annotation_type": "radio",
+        "labels": ["I consent", "I do not consent"],
+        "label_requirement": {"required_label": ["I consent"]}
+    }
+]
