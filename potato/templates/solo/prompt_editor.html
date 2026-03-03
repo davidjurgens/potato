@@ -1,0 +1,168 @@
+{% extends "solo/base_solo.html" %}
+
+{% block title %}Prompt Editor - Solo Mode{% endblock %}
+
+{% block extra_head %}
+<style>
+    .prompt-editor {
+        font-family: monospace;
+        min-height: 300px;
+        background: #2d2d2d;
+        color: #f8f8f2;
+        border-radius: 4px;
+        padding: 15px;
+    }
+
+    .prompt-history {
+        max-height: 300px;
+        overflow-y: auto;
+    }
+
+    .history-item {
+        padding: 10px;
+        border-bottom: 1px solid #eee;
+        cursor: pointer;
+    }
+
+    .history-item:hover {
+        background: #f5f5f5;
+    }
+
+    .history-item.active {
+        background: #e3f2fd;
+    }
+
+    .version-tag {
+        display: inline-block;
+        background: #007bff;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 3px;
+        font-size: 12px;
+        margin-right: 10px;
+    }
+
+    .source-tag {
+        display: inline-block;
+        background: #6c757d;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 3px;
+        font-size: 12px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Review Annotation Prompt</h1>
+
+<p>Review and edit the generated annotation prompt. This prompt will guide both you and the LLM during annotation.</p>
+
+<form id="prompt-form" method="POST" action="{{ url_for('solo_mode.prompt_editor') }}">
+    <input type="hidden" name="action" id="form-action" value="update">
+
+    <div class="form-group">
+        <label for="prompt">Annotation Prompt</label>
+        <textarea
+            id="prompt"
+            name="prompt"
+            class="prompt-editor"
+            rows="15"
+        >{{ current_prompt }}</textarea>
+    </div>
+
+    <div style="margin-bottom: 20px;">
+        <button type="button" class="btn btn-secondary" onclick="savePrompt()">Save Changes</button>
+        <span id="save-status" style="margin-left: 10px; color: #28a745;"></span>
+    </div>
+
+    <div class="solo-nav">
+        <a href="{{ url_for('solo_mode.setup') }}" class="btn btn-secondary">&larr; Back to Setup</a>
+        <div>
+            <button type="button" class="btn btn-secondary" onclick="skipToAnnotation()">Skip Edge Cases</button>
+            <button type="button" class="btn btn-primary" onclick="advancePhase()">Generate Edge Cases &rarr;</button>
+        </div>
+    </div>
+</form>
+{% endblock %}
+
+{% block sidebar %}
+<div class="solo-sidebar">
+    <h3>Prompt History</h3>
+    <div class="prompt-history">
+        {% if prompt_history %}
+            {% for revision in prompt_history|reverse %}
+            <div class="history-item" onclick="loadVersion({{ revision.version }})">
+                <span class="version-tag">v{{ revision.version }}</span>
+                <span class="source-tag">{{ revision.source }}</span>
+                <div style="font-size: 12px; color: #666; margin-top: 5px;">
+                    {{ revision.timestamp[:19] }}
+                </div>
+                <div style="font-size: 13px; margin-top: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                    {{ revision.prompt[:50] }}...
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <p style="color: #666; font-size: 14px;">No previous versions</p>
+        {% endif %}
+    </div>
+
+    <h3 style="margin-top: 20px;">Tips</h3>
+    <ul style="font-size: 14px; color: #666; padding-left: 20px;">
+        <li>Be specific about edge cases</li>
+        <li>Include examples if helpful</li>
+        <li>Define what each label means</li>
+        <li>Mention what to do when uncertain</li>
+    </ul>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const promptHistory = {{ prompt_history|tojson|safe }};
+
+    function savePrompt() {
+        const form = document.getElementById('prompt-form');
+        const formData = new FormData(form);
+        formData.set('action', 'update');
+
+        fetch('{{ url_for("solo_mode.prompt_editor") }}', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('save-status').textContent = 'Saved!';
+                setTimeout(() => {
+                    document.getElementById('save-status').textContent = '';
+                }, 2000);
+            } else {
+                alert('Error: ' + (data.error || 'Failed to save'));
+            }
+        })
+        .catch(err => {
+            alert('Error saving prompt');
+            console.error(err);
+        });
+    }
+
+    function advancePhase() {
+        document.getElementById('form-action').value = 'advance';
+        document.getElementById('prompt-form').submit();
+    }
+
+    function skipToAnnotation() {
+        document.getElementById('form-action').value = 'skip_to_annotation';
+        document.getElementById('prompt-form').submit();
+    }
+
+    function loadVersion(version) {
+        const revision = promptHistory.find(r => r.version === version);
+        if (revision) {
+            document.getElementById('prompt').value = revision.prompt;
+        }
+    }
+</script>
+{% endblock %}

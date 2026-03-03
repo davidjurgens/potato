@@ -5869,6 +5869,14 @@ def configure_routes(flask_app, app_config):
 
     app.add_url_rule("/shutdown", "shutdown", shutdown, methods=["POST"])
 
+    # Register Solo Mode blueprint if not already registered
+    if 'solo_mode' not in app.blueprints:
+        try:
+            from potato.solo_mode.routes import solo_mode_bp
+            app.register_blueprint(solo_mode_bp)
+        except ImportError:
+            pass
+
 # ============================================================================
 # Adjudication Routes
 # ============================================================================

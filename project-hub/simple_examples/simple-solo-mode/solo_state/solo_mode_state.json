@@ -1,0 +1,28 @@
+{
+  "task_description": "I want to classify customer reviews as positive, negative, or neutral. A positive review expresses satisfaction with the product or service. A negative review expresses dissatisfaction or complaints. A neutral review is factual without strong sentiment.",
+  "current_prompt_version": 1,
+  "prompt_versions": [
+    {
+      "version": 1,
+      "prompt_text": "Label the following text according to this task: I want to classify customer reviews as positive, negative, or neutral. A positive review expresses satisfaction with the product or service. A negative review expresses dissatisfaction or complaints. A neutral review is factual without strong sentiment.",
+      "created_at": "2026-02-18T18:42:30.347738",
+      "created_by": "user_setup",
+      "source_description": "Initial prompt from task description",
+      "parent_version": null,
+      "validation_accuracy": null
+    }
+  ],
+  "predictions": {},
+  "human_labeled_ids": [],
+  "llm_labeled_ids": [],
+  "disagreement_ids": [],
+  "validation_sample_ids": [],
+  "edge_case_ids": [],
+  "edge_case_labels": {},
+  "agreement_metrics": {
+    "total_compared": 0,
+    "agreements": 0,
+    "disagreements": 0,
+    "agreement_rate": 0.0
+  }
+}

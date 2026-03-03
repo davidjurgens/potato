@@ -1,0 +1,251 @@
+{% extends "solo/base_solo.html" %}
+
+{% block title %}Resolve Disagreement - Solo Mode{% endblock %}
+
+{% block extra_head %}
+<style>
+    .comparison-view {
+        display: flex;
+        gap: 20px;
+        margin: 20px 0;
+    }
+
+    .comparison-panel {
+        flex: 1;
+        padding: 20px;
+        border-radius: 8px;
+    }
+
+    .human-panel {
+        background: #e3f2fd;
+        border: 2px solid #2196f3;
+    }
+
+    .llm-panel {
+        background: #fff3e0;
+        border: 2px solid #ff9800;
+    }
+
+    .panel-header {
+        font-weight: bold;
+        font-size: 16px;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .panel-icon {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 12px;
+    }
+
+    .human-icon { background: #2196f3; }
+    .llm-icon { background: #ff9800; }
+
+    .panel-label {
+        font-size: 24px;
+        text-align: center;
+        padding: 15px;
+        background: rgba(255,255,255,0.5);
+        border-radius: 4px;
+        margin-top: 10px;
+    }
+
+    .resolution-options {
+        display: flex;
+        gap: 15px;
+        margin: 20px 0;
+        flex-wrap: wrap;
+    }
+
+    .resolution-btn {
+        flex: 1;
+        min-width: 200px;
+        padding: 15px 20px;
+        border: 2px solid #ddd;
+        background: white;
+        border-radius: 8px;
+        cursor: pointer;
+        text-align: center;
+        transition: all 0.2s ease;
+    }
+
+    .resolution-btn:hover {
+        border-color: #007bff;
+    }
+
+    .resolution-btn.selected {
+        border-color: #007bff;
+        background: #e3f2fd;
+    }
+
+    .resolution-btn h4 {
+        margin: 0 0 5px 0;
+    }
+
+    .resolution-btn p {
+        margin: 0;
+        font-size: 13px;
+        color: #666;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Resolve Disagreement</h1>
+
+<p>You and the LLM disagree on the label for this instance. Please review both labels and decide which is correct.</p>
+
+{% if disagreement %}
+<form method="POST" action="{{ url_for('solo_mode.disagreements') }}">
+    <input type="hidden" name="disagreement_id" value="{{ disagreement.id }}">
+    <input type="hidden" name="resolution" id="resolution-value" value="">
+
+    <div class="instance-text">
+        {{ disagreement.text }}
+    </div>
+
+    <div class="comparison-view">
+        <div class="comparison-panel human-panel">
+            <div class="panel-header">
+                <span class="panel-icon human-icon">H</span>
+                Your Label
+            </div>
+            <div class="panel-label">{{ disagreement.human_label }}</div>
+        </div>
+
+        <div class="comparison-panel llm-panel">
+            <div class="panel-header">
+                <span class="panel-icon llm-icon">AI</span>
+                LLM Label
+            </div>
+            <div class="panel-label">{{ disagreement.llm_label }}</div>
+            {% if disagreement.llm_reasoning %}
+            <p style="margin-top: 15px; font-size: 14px; color: #666;">
+                <strong>Reasoning:</strong> {{ disagreement.llm_reasoning }}
+            </p>
+            {% endif %}
+        </div>
+    </div>
+
+    <h3>How would you like to resolve this?</h3>
+    <div class="resolution-options">
+        <button type="button" class="resolution-btn" data-resolution="human" onclick="selectResolution('human')">
+            <h4>Keep Your Label</h4>
+            <p>Use "{{ disagreement.human_label }}" as the final label</p>
+        </button>
+
+        <button type="button" class="resolution-btn" data-resolution="llm" onclick="selectResolution('llm')">
+            <h4>Accept LLM Label</h4>
+            <p>Use "{{ disagreement.llm_label }}" as the final label</p>
+        </button>
+
+        <button type="button" class="resolution-btn" data-resolution="other" onclick="showOtherOptions()">
+            <h4>Choose Different Label</h4>
+            <p>Neither label is correct</p>
+        </button>
+    </div>
+
+    <div id="other-labels" style="display: none; margin: 20px 0;">
+        <h4>Select the correct label:</h4>
+        <div class="label-buttons">
+            {% for label in labels %}
+            {% if label != disagreement.human_label and label != disagreement.llm_label %}
+            <button type="button" class="label-btn" data-label="{{ label }}" onclick="selectOtherLabel('{{ label }}')">{{ label }}</button>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label for="notes">Notes (optional)</label>
+        <textarea
+            id="notes"
+            name="notes"
+            placeholder="Explain your reasoning..."
+            rows="3"
+        ></textarea>
+    </div>
+
+    <div class="solo-nav">
+        <a href="{{ url_for('solo_mode.annotate') }}" class="btn btn-secondary">&larr; Skip for Now</a>
+        <button type="submit" class="btn btn-primary" id="submit-btn" disabled>Resolve &amp; Continue</button>
+    </div>
+</form>
+{% else %}
+<div class="alert alert-success">
+    <p>No pending disagreements!</p>
+</div>
+<div class="solo-nav">
+    <span></span>
+    <a href="{{ url_for('solo_mode.annotate') }}" class="btn btn-primary">Continue Annotating &rarr;</a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block stats %}
+{{ super() }}
+<div class="stat-item">
+    <span class="stat-label">Pending</span>
+    <span class="stat-value">{{ disagreement.pending_count if disagreement else 0 }}</span>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function selectResolution(type) {
+        // Remove selected from all
+        document.querySelectorAll('.resolution-btn').forEach(btn => {
+            btn.classList.remove('selected');
+        });
+
+        // Select this one
+        document.querySelector(`[data-resolution="${type}"]`).classList.add('selected');
+
+        // Set value
+        if (type === 'human') {
+            document.getElementById('resolution-value').value = '{{ disagreement.human_label if disagreement else "" }}';
+        } else if (type === 'llm') {
+            document.getElementById('resolution-value').value = '{{ disagreement.llm_label if disagreement else "" }}';
+        }
+
+        // Hide other options if not "other"
+        if (type !== 'other') {
+            document.getElementById('other-labels').style.display = 'none';
+            document.getElementById('submit-btn').disabled = false;
+        }
+    }
+
+    function showOtherOptions() {
+        // Remove selected from all
+        document.querySelectorAll('.resolution-btn').forEach(btn => {
+            btn.classList.remove('selected');
+        });
+
+        // Select "other"
+        document.querySelector('[data-resolution="other"]').classList.add('selected');
+
+        // Show other labels
+        document.getElementById('other-labels').style.display = 'block';
+
+        // Disable submit until label selected
+        document.getElementById('submit-btn').disabled = true;
+    }
+
+    function selectOtherLabel(label) {
+        document.querySelectorAll('.label-btn').forEach(btn => {
+            btn.classList.remove('selected');
+        });
+        event.target.classList.add('selected');
+        document.getElementById('resolution-value').value = label;
+        document.getElementById('submit-btn').disabled = false;
+    }
+</script>
+{% endblock %}

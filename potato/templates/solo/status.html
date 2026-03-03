@@ -1,0 +1,1281 @@
+{% extends "solo/base_solo.html" %}
+
+{% block title %}Dashboard - Solo Mode{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* ── Admin-style Tab Navigation ─────────────────────────── */
+    .solo-tabs {
+        display: flex;
+        background: var(--card, white);
+        border-radius: var(--radius, 0.5rem);
+        padding: 0.25rem;
+        margin-bottom: 1.5rem;
+        box-shadow: var(--box-shadow, 0 1px 3px rgba(0,0,0,0.1));
+    }
+
+    .solo-tab {
+        flex: 1;
+        padding: 0.625rem 1rem;
+        text-align: center;
+        border-radius: var(--radius, 0.5rem);
+        cursor: pointer;
+        transition: var(--transition, all 0.2s ease);
+        font-weight: 500;
+        font-size: 0.875rem;
+        color: var(--muted-foreground, #71717a);
+        user-select: none;
+    }
+
+    .solo-tab.active {
+        background-color: var(--primary, #6e56cf);
+        color: var(--primary-foreground, white);
+    }
+
+    .solo-tab:hover:not(.active) {
+        background-color: var(--muted, #f4f4f5);
+        color: var(--foreground, #09090b);
+    }
+
+    .solo-tab-content {
+        display: none;
+    }
+
+    .solo-tab-content.active {
+        display: block;
+    }
+
+    /* ── Dashboard Card Grid ────────────────────────────────── */
+    .dashboard-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 1.25rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .dashboard-card {
+        background: var(--card, white);
+        border-radius: var(--radius, 0.5rem);
+        padding: 1.25rem;
+        box-shadow: var(--box-shadow, 0 1px 3px rgba(0,0,0,0.1));
+        border: 1px solid var(--border, #e4e4e7);
+    }
+
+    .dashboard-card h3 {
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--muted-foreground, #71717a);
+        margin: 0 0 0.375rem 0;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .card-value {
+        font-size: 1.75rem;
+        font-weight: 600;
+        color: var(--heading-color, #09090b);
+        margin: 0;
+        line-height: 1.2;
+    }
+
+    .card-description {
+        font-size: 0.8125rem;
+        color: var(--text-color, #374151);
+        margin: 0.375rem 0 0 0;
+    }
+
+    .text-success { color: var(--success-color, #10b981); }
+    .text-warning { color: #f59e0b; }
+    .text-danger { color: var(--destructive, #ef4444); }
+
+    /* ── Progress Bar ───────────────────────────────────────── */
+    .progress-track {
+        background: var(--muted, #f4f4f5);
+        height: 8px;
+        border-radius: 4px;
+        overflow: hidden;
+        margin: 0.75rem 0;
+    }
+
+    .progress-fill {
+        height: 100%;
+        border-radius: 4px;
+        background: var(--primary, #6e56cf);
+        transition: width 0.4s ease;
+    }
+
+    /* ── Metric Rows ────────────────────────────────────────── */
+    .metric-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid var(--border, #e4e4e7);
+        font-size: 0.875rem;
+    }
+
+    .metric-row:last-child { border-bottom: none; }
+    .metric-row span { color: var(--muted-foreground, #71717a); }
+    .metric-row strong { color: var(--heading-color, #09090b); }
+
+    /* ── Status Badges ──────────────────────────────────────── */
+    .status-badge {
+        display: inline-block;
+        padding: 0.2rem 0.5rem;
+        border-radius: var(--radius, 0.5rem);
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+
+    .status-active {
+        background: rgba(16, 185, 129, 0.1);
+        color: var(--success-color, #10b981);
+    }
+
+    .status-pending {
+        background: rgba(245, 158, 11, 0.1);
+        color: #f59e0b;
+    }
+
+    .status-approved {
+        background: rgba(16, 185, 129, 0.1);
+        color: var(--success-color, #10b981);
+    }
+
+    .status-rejected {
+        background: rgba(239, 68, 68, 0.1);
+        color: var(--destructive, #ef4444);
+    }
+
+    .status-inactive {
+        background: var(--muted, #f4f4f5);
+        color: var(--muted-foreground, #71717a);
+    }
+
+    /* ── Phase Badge ────────────────────────────────────────── */
+    .phase-indicator {
+        display: inline-block;
+        padding: 0.375rem 0.875rem;
+        background: var(--primary, #6e56cf);
+        color: var(--primary-foreground, white);
+        border-radius: 1rem;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        text-transform: capitalize;
+    }
+
+    .phase-indicator.completed {
+        background: var(--success-color, #10b981);
+    }
+
+    /* ── Admin-style Table ──────────────────────────────────── */
+    .admin-table-container {
+        background: var(--card, white);
+        border-radius: var(--radius, 0.5rem);
+        box-shadow: var(--box-shadow, 0 1px 3px rgba(0,0,0,0.1));
+        overflow: hidden;
+        border: 1px solid var(--border, #e4e4e7);
+    }
+
+    .admin-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .admin-table th,
+    .admin-table td {
+        padding: 0.625rem 1rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border, #e4e4e7);
+        font-size: 0.8125rem;
+    }
+
+    .admin-table th {
+        background: var(--muted, #f4f4f5);
+        font-weight: 500;
+        color: var(--muted-foreground, #71717a);
+    }
+
+    .admin-table tbody tr:hover {
+        background: var(--muted, #f4f4f5);
+    }
+
+    .rule-text-cell {
+        max-width: 300px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .empty-cell {
+        text-align: center;
+        color: var(--muted-foreground, #71717a);
+        padding: 2rem !important;
+    }
+
+    /* ── Category Review Cards ──────────────────────────────── */
+    .category-card {
+        background: var(--card, white);
+        border: 1px solid var(--border, #e4e4e7);
+        border-radius: var(--radius, 0.5rem);
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+        box-shadow: var(--box-shadow, 0 1px 3px rgba(0,0,0,0.1));
+    }
+
+    .category-card h4 {
+        margin: 0 0 0.75rem 0;
+        font-size: 0.8125rem;
+        color: var(--muted-foreground, #71717a);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+
+    .category-summary {
+        font-size: 1rem;
+        padding: 0.75rem 1rem;
+        background: var(--muted, #f4f4f5);
+        border-left: 3px solid var(--primary, #6e56cf);
+        border-radius: 0 var(--radius, 0.5rem) var(--radius, 0.5rem) 0;
+        margin-bottom: 1rem;
+        line-height: 1.4;
+    }
+
+    .member-toggle {
+        cursor: pointer;
+        color: var(--primary, #6e56cf);
+        font-size: 0.8125rem;
+        border: none;
+        background: none;
+        padding: 0;
+        text-decoration: underline;
+    }
+
+    .member-list {
+        display: none;
+        margin-top: 0.5rem;
+        padding-left: 1rem;
+        border-left: 2px solid var(--border, #e4e4e7);
+    }
+
+    .member-list.visible { display: block; }
+
+    .member-item {
+        padding: 0.375rem 0;
+        font-size: 0.8125rem;
+        color: var(--text-color, #374151);
+        border-bottom: 1px solid var(--muted, #f4f4f5);
+    }
+
+    .member-item:last-child { border-bottom: none; }
+
+    .member-item .source-info {
+        font-size: 0.6875rem;
+        color: var(--muted-foreground, #71717a);
+        margin-top: 2px;
+    }
+
+    .review-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 1rem;
+        align-items: center;
+    }
+
+    .review-actions textarea {
+        flex: 1;
+        padding: 0.375rem 0.625rem;
+        border: 1px solid var(--border, #e4e4e7);
+        border-radius: var(--radius, 0.5rem);
+        resize: none;
+        height: 2.25rem;
+        font-size: 0.8125rem;
+    }
+
+    .btn-approve {
+        background: var(--success-color, #10b981);
+        color: white;
+        border: none;
+        padding: 0.5rem 1.25rem;
+        border-radius: var(--radius, 0.5rem);
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 0.8125rem;
+    }
+
+    .btn-approve:hover { filter: brightness(0.9); }
+
+    .btn-reject {
+        background: var(--destructive, #ef4444);
+        color: white;
+        border: none;
+        padding: 0.5rem 1.25rem;
+        border-radius: var(--radius, 0.5rem);
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 0.8125rem;
+    }
+
+    .btn-reject:hover { filter: brightness(0.9); }
+
+    /* ── Apply Section ──────────────────────────────────────── */
+    .apply-section {
+        margin-top: 1.25rem;
+        padding: 1rem;
+        background: rgba(16, 185, 129, 0.06);
+        border: 1px solid rgba(16, 185, 129, 0.2);
+        border-radius: var(--radius, 0.5rem);
+        text-align: center;
+    }
+
+    .apply-section p {
+        margin: 0 0 0.75rem 0;
+        font-size: 0.875rem;
+        color: var(--text-color, #374151);
+    }
+
+    /* ── Viz Tab Layout ─────────────────────────────────────── */
+    .viz-layout {
+        display: flex;
+        gap: 1.25rem;
+        flex-wrap: wrap;
+    }
+
+    .viz-chart-panel {
+        flex: 2;
+        min-width: 400px;
+    }
+
+    .viz-side-panel {
+        flex: 1;
+        min-width: 260px;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .detail-header {
+        margin: 0 0 0.5rem 0;
+        font-size: 0.75rem;
+        color: var(--muted-foreground, #71717a);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .detail-rule-text {
+        font-weight: 600;
+        font-size: 0.9375rem;
+        margin-bottom: 0.75rem;
+        line-height: 1.4;
+    }
+
+    .detail-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.375rem 0;
+        border-bottom: 1px solid var(--border, #e4e4e7);
+        font-size: 0.8125rem;
+    }
+
+    .detail-row:last-child { border-bottom: none; }
+    .detail-row span { color: var(--muted-foreground, #71717a); }
+
+    /* ── Action Buttons ─────────────────────────────────────── */
+    .action-bar {
+        display: flex;
+        gap: 0.75rem;
+        margin-top: 1.5rem;
+        flex-wrap: wrap;
+    }
+
+    .action-bar .btn {
+        font-size: 0.8125rem;
+        padding: 0.5rem 1rem;
+    }
+
+    /* ── Responsive ─────────────────────────────────────────── */
+    /* ── Confusion Heatmap ──────────────────────────────────── */
+    .heatmap-cell {
+        stroke: var(--card, white);
+        stroke-width: 1.5px;
+        cursor: pointer;
+        transition: opacity 0.15s;
+    }
+
+    .heatmap-cell:hover {
+        opacity: 0.8;
+        stroke: var(--heading-color, #09090b);
+        stroke-width: 2px;
+    }
+
+    .heatmap-label {
+        font-size: 0.75rem;
+        fill: var(--muted-foreground, #71717a);
+    }
+
+    .heatmap-count {
+        font-size: 0.6875rem;
+        fill: var(--card, white);
+        text-anchor: middle;
+        pointer-events: none;
+        font-weight: 600;
+    }
+
+    .heatmap-count.dark-text {
+        fill: var(--heading-color, #09090b);
+    }
+
+    .suggest-btn {
+        background: var(--primary, #6e56cf);
+        color: var(--primary-foreground, white);
+        border: none;
+        padding: 0.375rem 0.875rem;
+        border-radius: var(--radius, 0.5rem);
+        cursor: pointer;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+
+    .suggest-btn:hover { filter: brightness(0.9); }
+
+    .suggest-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .confusion-example {
+        padding: 0.5rem;
+        margin-bottom: 0.5rem;
+        background: var(--muted, #f4f4f5);
+        border-radius: var(--radius, 0.5rem);
+        font-size: 0.8125rem;
+    }
+
+    .confusion-example .example-text {
+        line-height: 1.4;
+        margin-bottom: 0.25rem;
+    }
+
+    .confusion-example .example-meta {
+        font-size: 0.6875rem;
+        color: var(--muted-foreground, #71717a);
+    }
+
+    .root-cause-box {
+        padding: 0.75rem;
+        background: rgba(110, 86, 207, 0.06);
+        border-left: 3px solid var(--primary, #6e56cf);
+        border-radius: 0 var(--radius, 0.5rem) var(--radius, 0.5rem) 0;
+        font-size: 0.8125rem;
+        line-height: 1.4;
+        margin-top: 0.5rem;
+    }
+
+    /* ── Labeling Function Toggle ─────────────────────────── */
+    .lf-toggle {
+        position: relative;
+        display: inline-block;
+        width: 36px;
+        height: 20px;
+        cursor: pointer;
+    }
+
+    .lf-toggle input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+
+    .lf-toggle .slider {
+        position: absolute;
+        inset: 0;
+        background: var(--muted, #f4f4f5);
+        border-radius: 20px;
+        transition: background 0.2s;
+    }
+
+    .lf-toggle .slider::before {
+        content: "";
+        position: absolute;
+        height: 16px;
+        width: 16px;
+        left: 2px;
+        bottom: 2px;
+        background: white;
+        border-radius: 50%;
+        transition: transform 0.2s;
+    }
+
+    .lf-toggle input:checked + .slider {
+        background: var(--success-color, #10b981);
+    }
+
+    .lf-toggle input:checked + .slider::before {
+        transform: translateX(16px);
+    }
+
+    .lf-pattern-text {
+        max-width: 350px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .lf-label-badge {
+        display: inline-block;
+        padding: 0.15rem 0.5rem;
+        border-radius: 1rem;
+        font-size: 0.6875rem;
+        font-weight: 600;
+        background: rgba(110, 86, 207, 0.1);
+        color: var(--primary, #6e56cf);
+    }
+
+    /* ── Disagreement Explorer ─────────────────────────────── */
+    .scatter-dot {
+        cursor: pointer;
+        transition: opacity 0.15s;
+    }
+
+    .scatter-dot:hover {
+        opacity: 0.7;
+        stroke: var(--heading-color, #09090b);
+        stroke-width: 1.5px;
+    }
+
+    .scatter-tooltip {
+        position: absolute;
+        background: var(--card, white);
+        border: 1px solid var(--border, #e4e4e7);
+        border-radius: var(--radius, 0.5rem);
+        padding: 0.5rem 0.75rem;
+        font-size: 0.75rem;
+        pointer-events: none;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+        max-width: 280px;
+        z-index: 100;
+    }
+
+    .scatter-tooltip .tooltip-label {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+
+    .scatter-tooltip .tooltip-meta {
+        color: var(--muted-foreground, #71717a);
+        font-size: 0.6875rem;
+    }
+
+    .timeline-bar {
+        transition: opacity 0.15s;
+        cursor: pointer;
+    }
+
+    .timeline-bar:hover {
+        opacity: 0.7;
+    }
+
+    .trend-badge {
+        display: inline-block;
+        padding: 0.2rem 0.625rem;
+        border-radius: 1rem;
+        font-size: 0.6875rem;
+        font-weight: 600;
+    }
+
+    .trend-improving {
+        background: rgba(16, 185, 129, 0.1);
+        color: var(--success-color, #10b981);
+    }
+
+    .trend-declining {
+        background: rgba(239, 68, 68, 0.1);
+        color: var(--danger-color, #ef4444);
+    }
+
+    .trend-stable {
+        background: var(--muted, #f4f4f5);
+        color: var(--muted-foreground, #71717a);
+    }
+
+    .disagree-item {
+        padding: 0.75rem;
+        margin-bottom: 0.5rem;
+        background: var(--muted, #f4f4f5);
+        border-radius: var(--radius, 0.5rem);
+        border-left: 3px solid var(--danger-color, #ef4444);
+        font-size: 0.8125rem;
+    }
+
+    .disagree-item.resolved {
+        border-left-color: var(--success-color, #10b981);
+        opacity: 0.7;
+    }
+
+    .disagree-item .disagree-text {
+        line-height: 1.4;
+        margin-bottom: 0.375rem;
+    }
+
+    .disagree-item .disagree-labels {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 0.25rem;
+        font-size: 0.75rem;
+    }
+
+    .label-pill {
+        display: inline-block;
+        padding: 0.1rem 0.5rem;
+        border-radius: 1rem;
+        font-size: 0.6875rem;
+        font-weight: 600;
+    }
+
+    .label-pill.llm {
+        background: rgba(110, 86, 207, 0.1);
+        color: var(--primary, #6e56cf);
+    }
+
+    .label-pill.human {
+        background: rgba(16, 185, 129, 0.1);
+        color: var(--success-color, #10b981);
+    }
+
+    .disagree-item .disagree-meta {
+        font-size: 0.6875rem;
+        color: var(--muted-foreground, #71717a);
+    }
+
+    .filter-bar {
+        display: flex;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .filter-bar select {
+        padding: 0.375rem 0.75rem;
+        border: 1px solid var(--border, #e4e4e7);
+        border-radius: var(--radius, 0.5rem);
+        font-size: 0.8125rem;
+        background: var(--card, white);
+    }
+
+    @media (max-width: 768px) {
+        .dashboard-grid {
+            grid-template-columns: 1fr;
+        }
+        .viz-layout {
+            flex-direction: column;
+        }
+        .solo-tabs {
+            flex-wrap: wrap;
+        }
+        .solo-tab {
+            flex-basis: 33.33%;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Phase Indicator ────────────────────────────────────── #}
+<div style="text-align: center; margin-bottom: 1.5rem;">
+    <span class="phase-indicator {% if phase == 'completed' %}completed{% endif %}" id="ov-phase-badge">
+        <span id="ov-phase">{{ phase_name|replace('_', ' ')|title }}</span>
+    </span>
+</div>
+
+{# ── Tab Navigation ─────────────────────────────────────── #}
+<div class="solo-tabs">
+    <div class="solo-tab active" data-tab="overview">Overview</div>
+    <div class="solo-tab" data-tab="confusion">Confusion</div>
+    <div class="solo-tab" data-tab="labeling-fns">Labeling Fns</div>
+    <div class="solo-tab" data-tab="disagreements">Disagreements</div>
+    <div class="solo-tab" data-tab="rules">Edge Case Rules</div>
+    <div class="solo-tab" data-tab="clusters">Rule Clusters</div>
+</div>
+
+
+{# ════════════════════════════════════════════════════════════
+   OVERVIEW TAB
+   ════════════════════════════════════════════════════════════ #}
+<div class="solo-tab-content active" id="tab-overview">
+
+    <div class="dashboard-grid">
+
+        {# Annotation Progress Card #}
+        <div class="dashboard-card">
+            <h3>Annotation Progress</h3>
+            {% if annotation_stats %}
+            {% set total = annotation_stats.human_labeled + annotation_stats.llm_labeled + annotation_stats.remaining %}
+            {% set pct = ((annotation_stats.human_labeled + annotation_stats.llm_labeled) / total * 100) if total > 0 else 0 %}
+            <p class="card-value" id="ov-progress-text">{{ pct|int }}%</p>
+            <div class="progress-track">
+                <div class="progress-fill" id="ov-progress-bar"
+                     style="width: {{ pct|int }}%; {% if pct >= 80 %}background: var(--success-color, #10b981);{% endif %}">
+                </div>
+            </div>
+            <div class="metric-row">
+                <span>Human</span>
+                <strong id="ov-human">{{ annotation_stats.human_labeled }}</strong>
+            </div>
+            <div class="metric-row">
+                <span>LLM</span>
+                <strong id="ov-llm">{{ annotation_stats.llm_labeled }}</strong>
+            </div>
+            <div class="metric-row">
+                <span>Remaining</span>
+                <strong id="ov-remaining">{{ annotation_stats.remaining }}</strong>
+            </div>
+            {% else %}
+            <p class="card-description">No annotation data yet</p>
+            {% endif %}
+        </div>
+
+        {# Agreement Card #}
+        <div class="dashboard-card">
+            <h3>Agreement</h3>
+            {% if agreement_metrics %}
+            {% set rate = agreement_metrics.agreement_rate or 0 %}
+            <p class="card-value {% if rate >= 0.9 %}text-success{% elif rate >= 0.7 %}text-warning{% else %}text-danger{% endif %}"
+               id="ov-agreement">{{ (rate * 100)|int }}%</p>
+            <div class="metric-row">
+                <span>Comparisons</span>
+                <strong id="ov-comparisons">{{ agreement_metrics.total_compared }}</strong>
+            </div>
+            <div class="metric-row">
+                <span>Agreements</span>
+                <strong id="ov-agreements">{{ agreement_metrics.agreements }}</strong>
+            </div>
+            <div class="metric-row">
+                <span>Disagreements</span>
+                <strong id="ov-disagreements">{{ agreement_metrics.disagreements }}</strong>
+            </div>
+            {% else %}
+            <p class="card-description">No agreement data yet</p>
+            {% endif %}
+        </div>
+
+        {# LLM Labeling Card #}
+        <div class="dashboard-card">
+            <h3>LLM Labeling</h3>
+            {% if llm_stats %}
+            <div class="metric-row">
+                <span>Labeled</span>
+                <strong id="ov-llm-labeled">{{ llm_stats.labeled_count }}</strong>
+            </div>
+            <div class="metric-row">
+                <span>Queue</span>
+                <strong id="ov-llm-queue">{{ llm_stats.queue_size }}</strong>
+            </div>
+            <div class="metric-row">
+                <span>Errors</span>
+                <strong id="ov-llm-errors">{{ llm_stats.error_count }}</strong>
+            </div>
+            <div class="metric-row">
+                <span>Status</span>
+                <strong>
+                    {% if llm_stats.is_paused %}
+                    <span class="status-badge status-pending" id="ov-llm-status">Paused</span>
+                    {% elif llm_stats.is_running %}
+                    <span class="status-badge status-active" id="ov-llm-status">Running</span>
+                    {% else %}
+                    <span class="status-badge status-inactive" id="ov-llm-status">Stopped</span>
+                    {% endif %}
+                </strong>
+            </div>
+            {% else %}
+            <p class="card-description">LLM labeling not started</p>
+            {% endif %}
+        </div>
+
+        {# Edge Case Rules Summary Card #}
+        {% if edge_case_rule_stats and edge_case_rule_stats.total_rules > 0 %}
+        <div class="dashboard-card">
+            <h3>Edge Case Rules</h3>
+            <p class="card-value">{{ edge_case_rule_stats.total_rules }}</p>
+            <p class="card-description">rules discovered</p>
+            <div class="metric-row" style="margin-top: 0.5rem;">
+                <span>Categories</span>
+                <strong>{{ edge_case_rule_stats.total_categories }}</strong>
+            </div>
+            <div class="metric-row">
+                <span>Pending</span>
+                <strong>{{ edge_case_rule_stats.pending_categories }}</strong>
+            </div>
+            <div class="metric-row">
+                <span>Approved</span>
+                <strong>{{ edge_case_rule_stats.approved_categories }}</strong>
+            </div>
+        </div>
+        {% endif %}
+
+        {# Refinement Loop Card #}
+        <div class="dashboard-card" id="refinement-card" style="display: none;">
+            <h3>Guideline Refinement</h3>
+            <p class="card-value" id="ov-refinement-cycles">0</p>
+            <p class="card-description" id="ov-refinement-desc">cycles completed</p>
+            <div class="metric-row" style="margin-top: 0.5rem;">
+                <span>Status</span>
+                <strong id="ov-refinement-status">
+                    <span class="status-badge status-active">Active</span>
+                </strong>
+            </div>
+            <div class="metric-row">
+                <span>Last Improvement</span>
+                <strong id="ov-refinement-improvement">—</strong>
+            </div>
+            <div class="metric-row">
+                <span>Next Check In</span>
+                <strong id="ov-refinement-next">—</strong>
+            </div>
+            <div style="margin-top: 0.75rem; display: flex; gap: 0.5rem;">
+                <button class="btn btn-primary" style="flex: 1; font-size: 0.75rem; padding: 0.375rem;"
+                        onclick="soloDashboard.triggerRefinement()">
+                    Trigger Cycle
+                </button>
+                <button class="btn btn-secondary" style="flex: 1; font-size: 0.75rem; padding: 0.375rem;"
+                        id="ov-refinement-reset-btn" style="display: none;"
+                        onclick="soloDashboard.resetRefinement()">
+                    Reset
+                </button>
+            </div>
+        </div>
+
+        {# Labeling Functions Card #}
+        <div class="dashboard-card" id="lf-card" style="display: none;">
+            <h3>Labeling Functions</h3>
+            <p class="card-value" id="ov-lf-count">0</p>
+            <p class="card-description" id="ov-lf-desc">functions extracted</p>
+            <div class="metric-row" style="margin-top: 0.5rem;">
+                <span>Instances Labeled</span>
+                <strong id="ov-lf-labeled">0</strong>
+            </div>
+            <div class="metric-row">
+                <span>API Calls Saved</span>
+                <strong id="ov-lf-saved" class="text-success">0</strong>
+            </div>
+            <div style="margin-top: 0.75rem;">
+                <button class="btn btn-primary" style="width: 100%; font-size: 0.75rem; padding: 0.375rem;"
+                        onclick="soloDashboard.extractLabelingFunctions()">
+                    Extract Functions
+                </button>
+            </div>
+        </div>
+
+        {# Confidence Routing Card #}
+        {% if llm_stats and llm_stats.confidence_routing and llm_stats.confidence_routing.enabled %}
+        <div class="dashboard-card" id="routing-card">
+            <h3>Confidence Routing</h3>
+            <div class="metric-row">
+                <span>Total Routed</span>
+                <strong id="ov-routing-total">{{ llm_stats.confidence_routing.total_routed }}</strong>
+            </div>
+            <div class="metric-row">
+                <span>Human Routed</span>
+                <strong id="ov-routing-human">{{ llm_stats.confidence_routing.human_routed_count }}</strong>
+            </div>
+            {% for tier in llm_stats.confidence_routing.tiers %}
+            <div class="metric-row">
+                <span>{{ tier.name or 'Tier ' ~ loop.index }}</span>
+                <strong>{{ tier.instances_accepted }} accepted ({{ (tier.acceptance_rate * 100)|int }}%)</strong>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {# Validation Progress Card #}
+        {% if validation_progress and validation_progress.total_samples > 0 %}
+        <div class="dashboard-card">
+            <h3>Final Validation</h3>
+            <p class="card-value">{{ validation_progress.percent_complete|int }}%</p>
+            <div class="progress-track">
+                <div class="progress-fill" style="width: {{ validation_progress.percent_complete }}%;"></div>
+            </div>
+            <div class="metric-row">
+                <span>Validated</span>
+                <strong>{{ validation_progress.validated }} / {{ validation_progress.total_samples }}</strong>
+            </div>
+            <div class="metric-row">
+                <span>Accuracy</span>
+                <strong>{{ (validation_progress.validation_accuracy * 100)|int }}%</strong>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    {# Action Buttons #}
+    <div class="action-bar">
+        {% if phase == 'setup' %}
+            <a href="{{ url_for('solo_mode.setup') }}" class="btn btn-primary">Start Setup</a>
+        {% elif phase == 'prompt_review' %}
+            <a href="{{ url_for('solo_mode.prompt_editor') }}" class="btn btn-primary">Edit Prompt</a>
+        {% elif phase in ['edge_case_synthesis', 'edge_case_labeling'] %}
+            <a href="{{ url_for('solo_mode.edge_cases') }}" class="btn btn-primary">Continue Edge Cases</a>
+        {% elif phase in ['parallel_annotation', 'active_annotation'] %}
+            <a href="{{ url_for('solo_mode.annotate') }}" class="btn btn-primary">Continue Annotating</a>
+        {% elif phase == 'disagreement_resolution' %}
+            <a href="{{ url_for('solo_mode.disagreements') }}" class="btn btn-primary">Resolve Disagreements</a>
+        {% elif phase == 'periodic_review' %}
+            <a href="{{ url_for('solo_mode.review') }}" class="btn btn-primary">Continue Review</a>
+        {% elif phase == 'rule_review' %}
+            <a href="{{ url_for('solo_mode.rule_review') }}" class="btn btn-primary">Review Edge Case Rules</a>
+        {% elif phase == 'final_validation' %}
+            <a href="{{ url_for('solo_mode.validation') }}" class="btn btn-primary">Continue Validation</a>
+        {% elif phase == 'completed' %}
+            <a href="{{ url_for('solo_mode.api_export') }}" class="btn btn-success">Export Data</a>
+        {% endif %}
+        <a href="{{ url_for('solo_mode.api_status') }}" class="btn btn-secondary">API Status</a>
+    </div>
+</div>
+
+
+{# ════════════════════════════════════════════════════════════
+   CONFUSION TAB
+   ════════════════════════════════════════════════════════════ #}
+<div class="solo-tab-content" id="tab-confusion">
+
+    {# Summary Cards #}
+    <div class="dashboard-grid">
+        <div class="dashboard-card">
+            <h3>Total Disagreements</h3>
+            <p class="card-value text-danger" id="confusion-total-disagreements">0</p>
+        </div>
+        <div class="dashboard-card">
+            <h3>Distinct Patterns</h3>
+            <p class="card-value" id="confusion-distinct-patterns">0</p>
+        </div>
+        <div class="dashboard-card">
+            <h3>Top Confusion</h3>
+            <p class="card-value" id="confusion-top-pattern" style="font-size: 1.25rem;">—</p>
+            <p class="card-description" id="confusion-top-count"></p>
+        </div>
+    </div>
+
+    {# Heatmap + Side Panel #}
+    <div class="viz-layout">
+        <div class="viz-chart-panel">
+            <div class="dashboard-card" style="min-height: 400px; position: relative;">
+                <h3>Confusion Heatmap</h3>
+                <div id="confusion-heatmap" style="width: 100%; height: 380px;"></div>
+            </div>
+        </div>
+
+        <div class="viz-side-panel">
+            <div class="dashboard-card" id="confusion-detail-panel">
+                <h4 class="detail-header">Pattern Details</h4>
+                <p style="color: var(--muted-foreground, #71717a); font-size: 0.8125rem;">
+                    Click a heatmap cell to see details
+                </p>
+            </div>
+
+            <div class="dashboard-card" id="label-accuracy-table">
+                <h4 class="detail-header">Per-Label Accuracy</h4>
+                <div id="label-accuracy-rows"></div>
+            </div>
+        </div>
+    </div>
+
+    {# Patterns Table #}
+    <h3 style="font-size: 1rem; margin: 1.5rem 0 0.75rem; color: var(--heading-color, #09090b);">
+        Confusion Patterns
+    </h3>
+    <div class="admin-table-container">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>LLM Predicted</th>
+                    <th>Human Corrected</th>
+                    <th>Count</th>
+                    <th>% of Errors</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="confusion-patterns-body">
+                <tr><td colspan="5" class="empty-cell">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+
+{# ════════════════════════════════════════════════════════════
+   LABELING FUNCTIONS TAB
+   ════════════════════════════════════════════════════════════ #}
+<div class="solo-tab-content" id="tab-labeling-fns">
+
+    {# Summary Cards #}
+    <div class="dashboard-grid">
+        <div class="dashboard-card">
+            <h3>Total Functions</h3>
+            <p class="card-value" id="lf-total-count">0</p>
+        </div>
+        <div class="dashboard-card">
+            <h3>Enabled</h3>
+            <p class="card-value text-success" id="lf-enabled-count">0</p>
+        </div>
+        <div class="dashboard-card">
+            <h3>Instances Labeled</h3>
+            <p class="card-value" id="lf-instances-labeled">0</p>
+            <p class="card-description" id="lf-abstained-desc"></p>
+        </div>
+        <div class="dashboard-card">
+            <h3>Avg Confidence</h3>
+            <p class="card-value" id="lf-avg-confidence">—</p>
+        </div>
+    </div>
+
+    {# Actions #}
+    <div style="margin-bottom: 1.25rem; display: flex; gap: 0.75rem;">
+        <button class="btn btn-primary" style="font-size: 0.8125rem;"
+                onclick="soloDashboard.extractLabelingFunctions()">
+            Extract from Predictions
+        </button>
+    </div>
+
+    {# Functions Table #}
+    <div class="admin-table-container">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Pattern</th>
+                    <th>Label</th>
+                    <th>Confidence</th>
+                    <th>Coverage</th>
+                    <th>Enabled</th>
+                </tr>
+            </thead>
+            <tbody id="lf-table-body">
+                <tr><td colspan="5" class="empty-cell">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+
+{# ════════════════════════════════════════════════════════════
+   DISAGREEMENT EXPLORER TAB
+   ════════════════════════════════════════════════════════════ #}
+<div class="solo-tab-content" id="tab-disagreements">
+
+    {# Summary Cards #}
+    <div class="dashboard-grid">
+        <div class="dashboard-card">
+            <h3>Total Compared</h3>
+            <p class="card-value" id="disagree-total-compared">0</p>
+        </div>
+        <div class="dashboard-card">
+            <h3>Disagreements</h3>
+            <p class="card-value text-danger" id="disagree-total-disagreements">0</p>
+        </div>
+        <div class="dashboard-card">
+            <h3>Disagreement Rate</h3>
+            <p class="card-value" id="disagree-rate">0%</p>
+        </div>
+        <div class="dashboard-card">
+            <h3>Avg Disagree Confidence</h3>
+            <p class="card-value" id="disagree-avg-conf">—</p>
+        </div>
+    </div>
+
+    {# Scatter + Timeline #}
+    <div class="viz-layout">
+        <div class="viz-chart-panel">
+            <div class="dashboard-card" style="min-height: 380px; position: relative;">
+                <h3>Confidence vs Agreement</h3>
+                <div id="disagree-scatter" style="width: 100%; height: 350px; position: relative;"></div>
+            </div>
+        </div>
+
+        <div class="viz-side-panel">
+            <div class="dashboard-card" style="min-height: 200px;">
+                <h3>Agreement Timeline</h3>
+                <div id="disagree-timeline" style="width: 100%; height: 180px;"></div>
+                <div style="margin-top: 0.5rem; text-align: center;">
+                    <span id="disagree-trend-badge" class="trend-badge trend-stable">Stable</span>
+                </div>
+            </div>
+
+            <div class="dashboard-card">
+                <h4 class="detail-header">Per-Label Breakdown</h4>
+                <div id="disagree-label-breakdown"></div>
+            </div>
+        </div>
+    </div>
+
+    {# Filter + Disagreement List #}
+    <h3 style="font-size: 1rem; margin: 1.5rem 0 0.75rem; color: var(--heading-color, #09090b);">
+        Disagreement Details
+    </h3>
+    <div class="filter-bar">
+        <label style="font-size: 0.8125rem; color: var(--muted-foreground);">Filter by label:</label>
+        <select id="disagree-label-filter" onchange="soloDashboard.filterDisagreements()">
+            <option value="">All labels</option>
+        </select>
+    </div>
+    <div id="disagree-list">
+        <p style="color: var(--muted-foreground); font-size: 0.8125rem;">Loading...</p>
+    </div>
+</div>
+
+
+{# ════════════════════════════════════════════════════════════
+   EDGE CASE RULES TAB
+   ════════════════════════════════════════════════════════════ #}
+<div class="solo-tab-content" id="tab-rules">
+
+    {# Stats Cards #}
+    <div class="dashboard-grid">
+        <div class="dashboard-card">
+            <h3>Rules Discovered</h3>
+            <p class="card-value" id="rules-total">{{ edge_case_rule_stats.total_rules if edge_case_rule_stats else 0 }}</p>
+        </div>
+        <div class="dashboard-card">
+            <h3>Categories</h3>
+            <p class="card-value" id="rules-categories">{{ edge_case_rule_stats.total_categories if edge_case_rule_stats else 0 }}</p>
+        </div>
+        <div class="dashboard-card">
+            <h3>Pending Review</h3>
+            <p class="card-value text-warning" id="rules-pending">{{ edge_case_rule_stats.pending_categories if edge_case_rule_stats else 0 }}</p>
+        </div>
+        <div class="dashboard-card">
+            <h3>Approved</h3>
+            <p class="card-value text-success" id="rules-approved">{{ approved_count }}</p>
+        </div>
+    </div>
+
+    {# Pending Categories for Review #}
+    {% if pending_categories %}
+    <h3 style="font-size: 1rem; margin-bottom: 0.75rem; color: var(--heading-color, #09090b);">
+        Pending Categories
+    </h3>
+    {% for item in pending_categories %}
+    <div class="category-card">
+        <h4>Category {{ item.category.id[:8] }}</h4>
+        <div class="category-summary">{{ item.category.summary_rule }}</div>
+
+        <div>
+            <button class="member-toggle"
+                    onclick="this.nextElementSibling.classList.toggle('visible')">
+                Show {{ item.member_rules|length }} individual rules
+            </button>
+            <div class="member-list">
+                {% for rule in item.member_rules %}
+                <div class="member-item">
+                    {{ rule.rule_text }}
+                    <div class="source-info">
+                        Instance: {{ rule.instance_id }} |
+                        Confidence: {{ (rule.source_confidence * 100)|int }}%
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <form method="POST" action="{{ url_for('solo_mode.rule_review') }}" class="review-actions">
+            <input type="hidden" name="category_id" value="{{ item.category.id }}">
+            <textarea name="notes" placeholder="Optional notes..."></textarea>
+            <button type="submit" name="action" value="approve" class="btn-approve">Approve</button>
+            <button type="submit" name="action" value="reject" class="btn-reject">Reject</button>
+        </form>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="dashboard-card" style="text-align: center; padding: 2rem;">
+        <p style="color: var(--muted-foreground, #71717a);">No pending categories to review.</p>
+    </div>
+    {% endif %}
+
+    {# Apply Approved Rules #}
+    {% if approved_count > 0 %}
+    <div class="apply-section">
+        <p>{{ approved_count }} approved categories ready to incorporate into annotation prompt.</p>
+        <button class="btn btn-primary" onclick="soloDashboard.applyRules()">
+            Apply Approved Rules to Prompt
+        </button>
+    </div>
+    {% endif %}
+
+    {# Rules Table #}
+    <h3 style="font-size: 1rem; margin: 1.5rem 0 0.75rem; color: var(--heading-color, #09090b);">
+        All Rules
+    </h3>
+    <div class="admin-table-container">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Rule Text</th>
+                    <th>Instance</th>
+                    <th>Confidence</th>
+                    <th>Cluster</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="rules-table-body">
+                <tr><td colspan="5" class="empty-cell">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+
+{# ════════════════════════════════════════════════════════════
+   RULE CLUSTERS TAB
+   ════════════════════════════════════════════════════════════ #}
+<div class="solo-tab-content" id="tab-clusters">
+
+    <div class="viz-layout">
+        {# Scatter Plot #}
+        <div class="viz-chart-panel">
+            <div class="dashboard-card" style="min-height: 480px; position: relative;">
+                <h3>Rule Embedding Space</h3>
+                <div id="rule-cluster-chart" style="width: 100%; height: 450px;"></div>
+            </div>
+        </div>
+
+        {# Side Panel #}
+        <div class="viz-side-panel">
+            <div class="dashboard-card" id="rule-detail-panel">
+                <h4 class="detail-header">Rule Details</h4>
+                <p style="color: var(--muted-foreground, #71717a); font-size: 0.8125rem;">
+                    Click a point to see details
+                </p>
+            </div>
+
+            <div class="dashboard-card">
+                <h4 class="detail-header">Controls</h4>
+                <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                    <button class="btn btn-primary" style="width: 100%; font-size: 0.8125rem;"
+                            onclick="soloDashboard.viz && soloDashboard.viz.refresh(true)">
+                        Refresh Visualization
+                    </button>
+                    <button class="btn btn-secondary" style="width: 100%; font-size: 0.8125rem;"
+                            onclick="soloDashboard.triggerClustering()">
+                        Trigger Re-clustering
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block sidebar %}
+{# No sidebar — use full width for dashboard #}
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="{{ url_for('static', filename='js/solo-viz.js') }}"></script>
+<script src="{{ url_for('static', filename='js/solo-dashboard.js') }}"></script>
+<script>
+    var soloDashboard = new SoloDashboard();
+    document.addEventListener('DOMContentLoaded', function() {
+        soloDashboard.init();
+    });
+</script>
+{% endblock %}
