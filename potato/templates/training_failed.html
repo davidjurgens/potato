@@ -17,7 +17,7 @@
     <!-- Training Failed specific styles -->
     <style>
         .failed-header {
-            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            background: linear-gradient(135deg, var(--destructive) 0%, #c82333 100%);
             color: white;
             padding: 2rem 0;
             margin-bottom: 2rem;
@@ -84,31 +84,20 @@
 
 <body>
     <!-- Header navigation bar -->
-    <nav class="navbar sticky-top shadow-sm" style="background-color: var(--primary-color); padding: 0.75rem 1rem; margin-bottom: 1.5rem;">
-        <div class="container-fluid d-flex align-items-center">
-            <!-- Task name (left aligned) -->
+    <nav class="potato-navbar" role="navigation" style="margin-bottom: 1.5rem;">
+        <div class="navbar-inner">
             <div class="navbar-brand">
-                <span class="fw-bold" style="color: var(--light-color); font-size: 1.25rem">{{annotation_task_name}}</span>
+                <span class="task-name">{{annotation_task_name}}</span>
             </div>
-
-            <!-- Middle section -->
-            <div class="d-flex align-items-center justify-content-center flex-grow-1">
-                <div class="d-flex align-items-center" style="color: var(--light-color);">
-                    <span><i class="fas fa-times-circle me-2"></i>Training Not Passed</span>
-                </div>
+            <div class="navbar-center">
+                <span style="color: var(--light-color); font-size: 0.85rem;">
+                    <i class="fas fa-times-circle me-2"></i>Training Not Passed
+                </span>
             </div>
-
-            <!-- User info and logout (right aligned) -->
-            <div class="d-flex align-items-center"
-                 style="background-color: rgba(255, 255, 255, 0.15); padding: 0.5rem 1rem; border-radius: var(--radius);">
-                <div class="me-3" style="color: var(--light-color)">
-                    <span>Logged in as <span class="fw-medium">{{username}}</span></span>
-                </div>
-                <div class="border-start" style="padding-left: 20px; height: 24px; display: flex; align-items: center;">
-                    <a href="/logout" class="shadcn-button"
-                       style="background-color: var(--light-color); color: var(--primary-color); height: auto; padding: 0.25rem 0.75rem !important; font-size: 0.875rem; min-width: 60px; text-align: center; border: none; text-decoration: none;">
-                        Logout
-                    </a>
+            <div class="navbar-end">
+                <div class="user-pill">
+                    <span class="username">{{username}}</span>
+                    <a href="/logout" class="logout-btn">Logout</a>
                 </div>
             </div>
         </div>
@@ -204,14 +193,12 @@
         </div>
 
         <!-- Footer -->
-        <hr style="color: var(--border)">
-        <footer class="py-2 text-center" style="font-size: 0.75rem; color: var(--muted-foreground)">
-            Copyright &copy; 2025
-            <a href="https://blablablab.si.umich.edu/" style="color: var(--primary); text-decoration: none">Blablablab</a>
-            <span class="mx-2">|</span>
-            <a href="https://github.com/davidjurgens/potato" style="color: var(--primary); text-decoration: none">Chat with us on GitHub</a>
-            <span class="mx-2">|</span>
-            <a href="https://github.com/davidjurgens/potato#cite-us" style="color: var(--primary); text-decoration: none">Cite Us</a>
+        <footer class="potato-footer">
+            &copy; 2025 <a href="https://blablablab.si.umich.edu/">Blablablab</a>
+            <span class="footer-sep">&middot;</span>
+            <a href="https://github.com/davidjurgens/potato">GitHub</a>
+            <span class="footer-sep">&middot;</span>
+            <a href="https://github.com/davidjurgens/potato#cite-us">Cite Us</a>
         </footer>
     </div>
 

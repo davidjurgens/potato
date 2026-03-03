@@ -20,26 +20,19 @@
 
 <body>
     <!-- Header navigation bar -->
-    <nav class="navbar sticky-top shadow-sm" style="background-color: var(--primary-color); padding: 0.75rem 1rem; margin-bottom: 0;">
-        <div class="container-fluid d-flex align-items-center">
+    <nav class="potato-navbar" role="navigation" style="margin-bottom: 0;">
+        <div class="navbar-inner">
             <div class="navbar-brand">
-                <span class="fw-bold" style="color: var(--light-color); font-size: 1.25rem">
-                    {{ annotation_task_name }} — Adjudication
-                </span>
+                <span class="task-name">{{ annotation_task_name }} — Adjudication</span>
             </div>
-
-            <div class="d-flex align-items-center gap-3">
-                <a href="/annotate" class="btn btn-sm" style="background: rgba(255,255,255,0.15); color: white; border: none;">
+            <div class="navbar-end" style="margin-left: auto;">
+                <a href="/annotate" class="adjudicate-btn">
                     <i class="fas fa-edit"></i> Annotate
                 </a>
-                <div style="background-color: rgba(255, 255, 255, 0.15); padding: 0.5rem 1rem; border-radius: var(--radius);">
-                    <span style="color: var(--light-color)">
-                        <i class="fas fa-gavel"></i>
-                        <span class="fw-medium">{{ username }}</span>
-                    </span>
-                    <a href="/logout" class="btn btn-sm ms-2" style="background: var(--light-color); color: var(--primary-color);">
-                        Logout
-                    </a>
+                <div class="user-pill">
+                    <i class="fas fa-gavel" style="font-size: 0.7rem;"></i>
+                    <span class="username">{{ username }}</span>
+                    <a href="/logout" class="logout-btn">Logout</a>
                 </div>
             </div>
         </div>

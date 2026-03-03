@@ -79,78 +79,58 @@
 
 <body>
     <!-- Header navigation bar -->
-    <nav class="navbar sticky-top shadow-sm" style="background-color: var(--primary-color); padding: 0.75rem 1rem; margin-bottom: 0.75rem;">
-        <div class="container-fluid d-flex align-items-center">
-            <!-- Task name (left aligned) -->
+    <nav class="potato-navbar" role="navigation">
+        <div class="navbar-inner">
             <div class="navbar-brand">
-                <span class="fw-bold" style="color: var(--light-color); font-size: 1.25rem">{{annotation_task_name}}</span>
+                <span class="task-name">{{annotation_task_name}}</span>
             </div>
 
-            <!-- Middle section with progress and navigation -->
-            <div class="d-flex align-items-center justify-content-center flex-grow-1 gap-4">
-                <!-- Annotation status indicator -->
+            <div class="navbar-center">
                 <div class="annotation-status-indicator" id="annotation-status">
                     <span class="status-badge {{ 'labeled' if instance_has_annotations else 'unlabeled' }}">
                         {{ 'Labeled' if instance_has_annotations else 'Not labeled' }}
                     </span>
                 </div>
 
-                <!-- Progress counter -->
-                <div class="d-flex align-items-center" style="color: var(--light-color); margin-right: 40px">
-                    <span>Progress: <span class="fw-medium" id="progress-counter">{{finished}}/{{total_count}}</span></span>
+                <div class="navbar-divider"></div>
+
+                <div class="progress-section">
+                    <span class="progress-label">Progress</span>
+                    <span class="fw-medium" id="progress-counter">{{finished}}/{{total_count}}</span>
                 </div>
 
-                <!-- Jump to item form -->
-                <div style="margin-left: 40px">
-                    <div class="d-flex align-items-center">
-                        <label for="go_to" class="me-2" style="color: var(--light-color); margin-bottom: 0">Go to:</label>
-                        <input type="number" id="go_to" class="form-control form-control-sm me-2"
-                               style="width: 70px; height: 31px; border: none; border-radius: var(--radius);"
-                               value="" min="0" required>
-                        <button type="button" class="shadcn-button" id="go-to-btn"
-                                style="height: 31px; line-height: 1; padding: 0 0.75rem; background-color: var(--light-color); color: var(--primary-color); border: none;">
-                            Go
-                        </button>
-                    </div>
-                </div>
+                <div class="navbar-divider"></div>
 
-                <!-- Skip to unannotated buttons -->
-                <div class="d-flex align-items-center" style="margin-left: 20px; gap: 8px;">
-                    <button type="button" class="shadcn-button" id="jump-unannotated-prev-btn"
-                            onclick="jumpToUnannotatedPrev()"
-                            style="height: 31px; line-height: 1; padding: 0 0.75rem; background-color: rgba(255,255,255,0.2); color: var(--light-color); border: 1px solid rgba(255,255,255,0.3);"
-                            title="Skip to previous unannotated item">
+                <div class="nav-controls">
+                    <button type="button" class="nav-control-btn" id="jump-unannotated-prev-btn"
+                            onclick="jumpToUnannotatedPrev()" title="Previous unannotated">
                         <i class="fas fa-backward"></i>
                     </button>
-                    <button type="button" class="shadcn-button" id="jump-unannotated-btn"
-                            onclick="jumpToUnannotated()"
-                            style="height: 31px; line-height: 1; padding: 0 0.75rem; background-color: rgba(255,255,255,0.2); color: var(--light-color); border: 1px solid rgba(255,255,255,0.3);"
-                            title="Skip to next unannotated item">
+                    <button type="button" class="nav-control-btn" id="jump-unannotated-btn"
+                            onclick="jumpToUnannotated()" title="Next unannotated">
                         <i class="fas fa-forward"></i>
                     </button>
                 </div>
+
+                <div class="navbar-divider"></div>
+
+                <div class="goto-section">
+                    <input type="number" id="go_to" placeholder="#"
+                           value="" min="0" max="{{total_count}}" required
+                           onfocusin="user_input()" onfocusout="user_input_leave()">
+                    <button type="button" class="goto-btn" id="go-to-btn">Go</button>
+                </div>
             </div>
 
-            <!-- User info and logout (right aligned) -->
-            <div class="d-flex align-items-center"
-                 style="background-color: rgba(255, 255, 255, 0.15); padding: 0.5rem 1rem; border-radius: var(--radius);">
-                <div class="me-3" style="color: var(--light-color)">
-                    <span>Logged in as <span class="fw-medium" id="username-display">{{username}}</span></span>
-                </div>
+            <div class="navbar-end">
                 {% if is_adjudicator %}
-                <div class="border-start me-2" style="padding-left: 20px; height: 24px; display: flex; align-items: center;">
-                    <a href="/adjudicate" class="shadcn-button"
-                       style="background-color: rgba(255,255,255,0.25); color: var(--light-color); height: auto; padding: 0.25rem 0.75rem !important; font-size: 0.875rem; min-width: 60px; text-align: center; border: none; text-decoration: none;"
-                       title="Adjudication Mode">
-                        <i class="fas fa-gavel"></i> Adjudicate
-                    </a>
-                </div>
+                <a href="/adjudicate" class="adjudicate-btn" title="Adjudication Mode">
+                    <i class="fas fa-gavel"></i> Adjudicate
+                </a>
                 {% endif %}
-                <div class="border-start" style="padding-left: 20px; height: 24px; display: flex; align-items: center;">
-                    <a href="/logout" class="shadcn-button"
-                       style="background-color: var(--light-color); color: var(--primary-color); height: auto; padding: 0.25rem 0.75rem !important; font-size: 0.875rem; min-width: 60px; text-align: center; border: none; text-decoration: none;">
-                        Logout
-                    </a>
+                <div class="user-pill">
+                    <span class="username" id="username-display">{{username}}</span>
+                    <a href="/logout" class="logout-btn">Logout</a>
                 </div>
             </div>
         </div>
@@ -240,33 +220,22 @@
         </div>
 
         <!-- Navigation buttons -->
-        <div class="my-2">
-            <div class="d-flex justify-content-between align-items-center">
-                <!-- Previous button -->
-                <div>
-                    <button class="shadcn-button shadcn-button-outline me-2" id="prev-btn" onclick="navigateToPrevious()">
-                        <i class="fas fa-arrow-left me-2"></i>Previous
-                    </button>
-                </div>
-
-                <!-- Next button -->
-                <div>
-                    <button class="shadcn-button shadcn-button-primary" id="next-btn" onclick="navigateToNext()">
-                        Next<i class="fas fa-arrow-right ms-2"></i>
-                    </button>
-                </div>
-            </div>
+        <div class="potato-nav">
+            <button class="shadcn-button shadcn-button-outline" id="prev-btn" onclick="navigateToPrevious()">
+                <i class="fas fa-arrow-left me-2"></i>Previous
+            </button>
+            <button class="shadcn-button shadcn-button-primary" id="next-btn" onclick="navigateToNext()">
+                Next<i class="fas fa-arrow-right ms-2"></i>
+            </button>
         </div>
 
         <!-- Footer -->
-        <hr style="color: var(--border)">
-        <footer class="py-2 text-center" style="font-size: 0.75rem; color: var(--muted-foreground)">
-            Copyright &copy; 2025
-            <a href="https://blablablab.si.umich.edu/" style="color: var(--primary); text-decoration: none">Blablablab</a>
-            <span class="mx-2">|</span>
-            <a href="https://github.com/davidjurgens/potato" style="color: var(--primary); text-decoration: none">Chat with us on GitHub</a>
-            <span class="mx-2">|</span>
-            <a href="https://github.com/davidjurgens/potato#cite-us" style="color: var(--primary); text-decoration: none">Cite Us</a>
+        <footer class="potato-footer">
+            &copy; 2025 <a href="https://blablablab.si.umich.edu/">Blablablab</a>
+            <span class="footer-sep">&middot;</span>
+            <a href="https://github.com/davidjurgens/potato">GitHub</a>
+            <span class="footer-sep">&middot;</span>
+            <a href="https://github.com/davidjurgens/potato#cite-us">Cite Us</a>
         </footer>
     </div>
 
