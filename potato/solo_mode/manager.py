@@ -214,6 +214,7 @@ class SoloModeManager:
         self._validation_tracker = None
         self._llm_labeling_thread = None
         self._prompt_optimizer = None
+        self._confidence_router = None
 
         # State persistence
         self._state_file = 'solo_mode_state.json'
@@ -312,6 +313,19 @@ class SoloModeManager:
                 examples_getter=self._get_labeled_examples_for_optimization,
             )
         return self._prompt_optimizer
+
+    @property
+    def confidence_router(self):
+        """Lazy-initialized confidence router for cascaded escalation."""
+        if self._confidence_router is None and self.config.confidence_routing.enabled:
+            from .confidence_router import ConfidenceRouter
+            from .llm_labeler import LLMLabelingThread
+            self._confidence_router = ConfidenceRouter(
+                routing_config=self.config.confidence_routing,
+                label_fn=self.llm_labeling_thread._label_instance,
+                endpoint_factory=LLMLabelingThread.create_endpoint_from_model_config,
+            )
+        return self._confidence_router
 
     def _get_labeled_examples_for_optimization(self) -> List[Dict[str, Any]]:
         """Get labeled examples for prompt optimization."""
@@ -1112,8 +1126,62 @@ class SoloModeManager:
 
     def _label_batch(self, batch_size: int) -> int:
         """Label a batch of instances. Returns number labeled."""
-        # Placeholder - full implementation uses LLM endpoints
-        return 0
+        instances = self._get_instances_for_labeling(batch_size)
+        if not instances:
+            return 0
+
+        labeled = 0
+        router = self.confidence_router
+        if router is not None:
+            for inst in instances:
+                result = router.route_instance(
+                    inst['instance_id'], inst['text'], inst['schema_name']
+                )
+                if result.accepted and result.labeling_result:
+                    self._handle_labeling_result(result.labeling_result)
+                    labeled += 1
+        else:
+            for inst in instances:
+                result = self.llm_labeling_thread._label_instance(
+                    inst['instance_id'], inst['text'], inst['schema_name']
+                )
+                if result and not result.error:
+                    self._handle_labeling_result(result)
+                    labeled += 1
+        return labeled
+
+    def _get_instances_for_labeling(self, batch_size: int) -> List[Dict[str, Any]]:
+        """Get unlabeled instances for background labeling.
+
+        Returns:
+            List of dicts with instance_id, text, and schema_name.
+        """
+        try:
+            from potato.item_state_management import get_item_state_manager
+            ism = get_item_state_manager()
+        except Exception:
+            return []
+
+        schemes = self.app_config.get('annotation_schemes', [])
+        schema_name = schemes[0].get('name', 'default') if schemes else 'default'
+
+        instances = []
+        with self._lock:
+            for instance_id in ism.instance_id_ordering:
+                if instance_id in self.llm_labeled_ids:
+                    continue
+                if instance_id in self.human_labeled_ids:
+                    continue
+                text = self._get_instance_text(instance_id)
+                if text:
+                    instances.append({
+                        'instance_id': instance_id,
+                        'text': text,
+                        'schema_name': schema_name,
+                    })
+                if len(instances) >= batch_size:
+                    break
+        return instances
 
     # === Validation ===
 
@@ -1178,6 +1246,10 @@ class SoloModeManager:
             # Include edge case rule manager state inline
             if self._edge_case_rule_manager is not None:
                 state['edge_case_rule_data'] = self._edge_case_rule_manager.to_dict()
+
+            # Include confidence routing stats (informational only)
+            if self._confidence_router is not None:
+                state['confidence_routing_stats'] = self._confidence_router.get_stats()
 
             # Atomic write
             temp_path = filepath + '.tmp'
@@ -1378,13 +1450,19 @@ class SoloModeManager:
     def get_llm_labeling_stats(self) -> Dict[str, Any]:
         """Get LLM labeling statistics."""
         with self._lock:
-            return {
+            stats = {
                 'labeled_count': len(self.llm_labeled_ids),
                 'queue_size': 0,  # Placeholder
                 'error_count': 0,  # Placeholder
                 'is_paused': not self.is_background_labeling_running(),
                 'is_running': self.is_background_labeling_running(),
             }
+            stats['confidence_routing'] = (
+                self._confidence_router.get_stats()
+                if self._confidence_router is not None
+                else {'enabled': False}
+            )
+            return stats
 
     def get_validation_progress(self) -> Dict[str, Any]:
         """Get validation progress."""
@@ -1517,6 +1595,11 @@ class SoloModeManager:
                     self.edge_case_rule_manager.get_stats()
                     if self._edge_case_rule_manager is not None
                     else {'total_rules': 0, 'total_categories': 0}
+                ),
+                'confidence_routing': (
+                    self._confidence_router.get_stats()
+                    if self._confidence_router is not None
+                    else {'enabled': False}
                 ),
                 'thresholds': {
                     'end_human_annotation_agreement': self.config.thresholds.end_human_annotation_agreement,

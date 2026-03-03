@@ -1271,3 +1271,200 @@ class TestSoloModeManagerInstanceSelection:
 
         assert result in {'i1', 'i2', 'i3'}
         mock_ecr.get_rule_instance_ids.assert_called_once()
+
+
+class TestLabelBatch:
+    """Tests for _label_batch with and without confidence routing."""
+
+    def test_label_batch_without_routing(self):
+        """_label_batch labels instances using LLM thread when routing disabled."""
+        mgr = _make_manager()
+
+        mock_ism = MagicMock()
+        mock_ism.instance_id_ordering = ['i1', 'i2']
+        mock_ism.get_item_by_id.return_value = {'text': 'test text'}
+
+        from potato.solo_mode.llm_labeler import LabelingResult
+        mock_result = LabelingResult(
+            instance_id='i1',
+            schema_name='sentiment',
+            label='positive',
+            confidence=0.9,
+            uncertainty=0.1,
+            reasoning='Clear positive',
+            prompt_version=1,
+            model_name='test-model',
+        )
+
+        mock_thread = MagicMock()
+        mock_thread._label_instance.return_value = mock_result
+        mgr._llm_labeling_thread = mock_thread
+
+        with patch('potato.item_state_management.get_item_state_manager',
+                    return_value=mock_ism):
+            count = mgr._label_batch(10)
+
+        assert count == 2
+        assert mock_thread._label_instance.call_count == 2
+
+    def test_label_batch_with_routing(self):
+        """_label_batch uses confidence router when routing enabled."""
+        solo_config = _make_solo_config(
+            confidence_routing={
+                'enabled': True,
+                'tiers': [
+                    {'name': 'fast', 'model': {'endpoint_type': 'openai', 'model': 'test'},
+                     'confidence_threshold': 0.8},
+                ],
+            }
+        )
+        mgr = _make_manager(solo_config=solo_config)
+
+        mock_ism = MagicMock()
+        mock_ism.instance_id_ordering = ['i1']
+        mock_ism.get_item_by_id.return_value = {'text': 'test text'}
+
+        from potato.solo_mode.confidence_router import RoutingResult
+        from potato.solo_mode.llm_labeler import LabelingResult
+
+        mock_labeling_result = LabelingResult(
+            instance_id='i1',
+            schema_name='sentiment',
+            label='positive',
+            confidence=0.9,
+            uncertainty=0.1,
+            reasoning='Clear',
+            prompt_version=1,
+            model_name='test',
+        )
+        mock_routing_result = RoutingResult(
+            instance_id='i1',
+            accepted=True,
+            tier_index=0,
+            tier_name='fast',
+            labeling_result=mock_labeling_result,
+        )
+
+        mock_router = MagicMock()
+        mock_router.route_instance.return_value = mock_routing_result
+        mgr._confidence_router = mock_router
+
+        with patch('potato.item_state_management.get_item_state_manager',
+                    return_value=mock_ism):
+            count = mgr._label_batch(10)
+
+        assert count == 1
+        mock_router.route_instance.assert_called_once()
+
+    def test_label_batch_returns_zero_when_no_instances(self):
+        """_label_batch returns 0 when no instances available."""
+        mgr = _make_manager()
+
+        mock_ism = MagicMock()
+        mock_ism.instance_id_ordering = []
+
+        with patch('potato.item_state_management.get_item_state_manager',
+                    return_value=mock_ism):
+            count = mgr._label_batch(10)
+
+        assert count == 0
+
+    def test_label_batch_skips_already_labeled(self):
+        """_label_batch skips instances already labeled by LLM or human."""
+        mgr = _make_manager()
+        mgr.llm_labeled_ids = {'i1'}
+        mgr.human_labeled_ids = {'i2'}
+
+        mock_ism = MagicMock()
+        mock_ism.instance_id_ordering = ['i1', 'i2', 'i3']
+        mock_ism.get_item_by_id.return_value = {'text': 'test text'}
+
+        from potato.solo_mode.llm_labeler import LabelingResult
+        mock_result = LabelingResult(
+            instance_id='i3',
+            schema_name='sentiment',
+            label='neutral',
+            confidence=0.8,
+            uncertainty=0.2,
+            reasoning='ok',
+            prompt_version=1,
+            model_name='test',
+        )
+
+        mock_thread = MagicMock()
+        mock_thread._label_instance.return_value = mock_result
+        mgr._llm_labeling_thread = mock_thread
+
+        with patch('potato.item_state_management.get_item_state_manager',
+                    return_value=mock_ism):
+            count = mgr._label_batch(10)
+
+        assert count == 1
+        mock_thread._label_instance.assert_called_once()
+
+    def test_label_batch_error_result_not_counted(self):
+        """_label_batch doesn't count error results as labeled."""
+        mgr = _make_manager()
+
+        mock_ism = MagicMock()
+        mock_ism.instance_id_ordering = ['i1']
+        mock_ism.get_item_by_id.return_value = {'text': 'test text'}
+
+        from potato.solo_mode.llm_labeler import LabelingResult
+        error_result = LabelingResult(
+            instance_id='i1',
+            schema_name='sentiment',
+            label=None,
+            confidence=0,
+            uncertainty=1,
+            reasoning='',
+            prompt_version=0,
+            model_name='',
+            error='Rate limited',
+        )
+
+        mock_thread = MagicMock()
+        mock_thread._label_instance.return_value = error_result
+        mgr._llm_labeling_thread = mock_thread
+
+        with patch('potato.item_state_management.get_item_state_manager',
+                    return_value=mock_ism):
+            count = mgr._label_batch(10)
+
+        assert count == 0
+
+
+class TestLLMLabelingStatsWithRouting:
+    """Tests for get_llm_labeling_stats with confidence routing."""
+
+    def test_stats_include_routing_disabled(self):
+        """Stats include confidence_routing: {enabled: false} when no router."""
+        mgr = _make_manager()
+        stats = mgr.get_llm_labeling_stats()
+        assert 'confidence_routing' in stats
+        assert stats['confidence_routing']['enabled'] is False
+
+    def test_stats_include_routing_enabled(self):
+        """Stats include full routing stats when router exists."""
+        mgr = _make_manager()
+        mock_router = MagicMock()
+        mock_router.get_stats.return_value = {
+            'enabled': True,
+            'num_tiers': 2,
+            'tiers': [],
+            'human_routed_count': 5,
+            'total_routed': 100,
+        }
+        mgr._confidence_router = mock_router
+
+        stats = mgr.get_llm_labeling_stats()
+        assert stats['confidence_routing']['enabled'] is True
+        assert stats['confidence_routing']['total_routed'] == 100
+        assert stats['confidence_routing']['human_routed_count'] == 5
+
+    def test_status_includes_routing(self):
+        """get_status() includes confidence_routing key."""
+        mgr = _make_manager()
+        status = mgr.get_status()
+        assert 'confidence_routing' in status
+        assert status['confidence_routing']['enabled'] is False

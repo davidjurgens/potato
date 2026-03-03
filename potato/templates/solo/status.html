@@ -1,247 +1,767 @@
 {% extends "solo/base_solo.html" %}
 
-{% block title %}Status - Solo Mode{% endblock %}
+{% block title %}Dashboard - Solo Mode{% endblock %}
 
 {% block extra_head %}
 <style>
-    .status-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: 20px;
-        margin-top: 20px;
-    }
-
-    .status-card {
-        background: white;
-        border-radius: 8px;
-        padding: 20px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-
-    .status-card h3 {
-        margin-top: 0;
-        padding-bottom: 10px;
-        border-bottom: 1px solid #eee;
-    }
-
-    .big-number {
-        font-size: 48px;
-        font-weight: bold;
-        text-align: center;
-        margin: 20px 0;
-    }
-
-    .big-number.success { color: #28a745; }
-    .big-number.warning { color: #ffc107; }
-    .big-number.danger { color: #dc3545; }
-    .big-number.primary { color: #007bff; }
-
-    .metric-row {
+    /* ── Admin-style Tab Navigation ─────────────────────────── */
+    .solo-tabs {
         display: flex;
-        justify-content: space-between;
-        padding: 10px 0;
-        border-bottom: 1px solid #eee;
+        background: var(--card, white);
+        border-radius: var(--radius, 0.5rem);
+        padding: 0.25rem;
+        margin-bottom: 1.5rem;
+        box-shadow: var(--box-shadow, 0 1px 3px rgba(0,0,0,0.1));
     }
 
-    .metric-row:last-child {
-        border-bottom: none;
+    .solo-tab {
+        flex: 1;
+        padding: 0.625rem 1rem;
+        text-align: center;
+        border-radius: var(--radius, 0.5rem);
+        cursor: pointer;
+        transition: var(--transition, all 0.2s ease);
+        font-weight: 500;
+        font-size: 0.875rem;
+        color: var(--muted-foreground, #71717a);
+        user-select: none;
     }
 
-    .progress-bar {
-        background: #eee;
-        height: 24px;
-        border-radius: 12px;
+    .solo-tab.active {
+        background-color: var(--primary, #6e56cf);
+        color: var(--primary-foreground, white);
+    }
+
+    .solo-tab:hover:not(.active) {
+        background-color: var(--muted, #f4f4f5);
+        color: var(--foreground, #09090b);
+    }
+
+    .solo-tab-content {
+        display: none;
+    }
+
+    .solo-tab-content.active {
+        display: block;
+    }
+
+    /* ── Dashboard Card Grid ────────────────────────────────── */
+    .dashboard-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 1.25rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .dashboard-card {
+        background: var(--card, white);
+        border-radius: var(--radius, 0.5rem);
+        padding: 1.25rem;
+        box-shadow: var(--box-shadow, 0 1px 3px rgba(0,0,0,0.1));
+        border: 1px solid var(--border, #e4e4e7);
+    }
+
+    .dashboard-card h3 {
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--muted-foreground, #71717a);
+        margin: 0 0 0.375rem 0;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .card-value {
+        font-size: 1.75rem;
+        font-weight: 600;
+        color: var(--heading-color, #09090b);
+        margin: 0;
+        line-height: 1.2;
+    }
+
+    .card-description {
+        font-size: 0.8125rem;
+        color: var(--text-color, #374151);
+        margin: 0.375rem 0 0 0;
+    }
+
+    .text-success { color: var(--success-color, #10b981); }
+    .text-warning { color: #f59e0b; }
+    .text-danger { color: var(--destructive, #ef4444); }
+
+    /* ── Progress Bar ───────────────────────────────────────── */
+    .progress-track {
+        background: var(--muted, #f4f4f5);
+        height: 8px;
+        border-radius: 4px;
         overflow: hidden;
-        margin: 15px 0;
+        margin: 0.75rem 0;
     }
 
     .progress-fill {
         height: 100%;
-        border-radius: 12px;
-        text-align: center;
-        color: white;
-        line-height: 24px;
-        font-size: 12px;
-        font-weight: bold;
+        border-radius: 4px;
+        background: var(--primary, #6e56cf);
+        transition: width 0.4s ease;
     }
 
-    .phase-badge {
-        display: inline-block;
-        padding: 8px 16px;
-        background: #007bff;
-        color: white;
-        border-radius: 20px;
-        font-size: 14px;
-        font-weight: bold;
-    }
-
-    .phase-badge.completed {
-        background: #28a745;
-    }
-
-    .action-buttons {
+    /* ── Metric Rows ────────────────────────────────────────── */
+    .metric-row {
         display: flex;
-        gap: 10px;
-        margin-top: 20px;
+        justify-content: space-between;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid var(--border, #e4e4e7);
+        font-size: 0.875rem;
+    }
+
+    .metric-row:last-child { border-bottom: none; }
+    .metric-row span { color: var(--muted-foreground, #71717a); }
+    .metric-row strong { color: var(--heading-color, #09090b); }
+
+    /* ── Status Badges ──────────────────────────────────────── */
+    .status-badge {
+        display: inline-block;
+        padding: 0.2rem 0.5rem;
+        border-radius: var(--radius, 0.5rem);
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+
+    .status-active {
+        background: rgba(16, 185, 129, 0.1);
+        color: var(--success-color, #10b981);
+    }
+
+    .status-pending {
+        background: rgba(245, 158, 11, 0.1);
+        color: #f59e0b;
+    }
+
+    .status-approved {
+        background: rgba(16, 185, 129, 0.1);
+        color: var(--success-color, #10b981);
+    }
+
+    .status-rejected {
+        background: rgba(239, 68, 68, 0.1);
+        color: var(--destructive, #ef4444);
+    }
+
+    .status-inactive {
+        background: var(--muted, #f4f4f5);
+        color: var(--muted-foreground, #71717a);
+    }
+
+    /* ── Phase Badge ────────────────────────────────────────── */
+    .phase-indicator {
+        display: inline-block;
+        padding: 0.375rem 0.875rem;
+        background: var(--primary, #6e56cf);
+        color: var(--primary-foreground, white);
+        border-radius: 1rem;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        text-transform: capitalize;
+    }
+
+    .phase-indicator.completed {
+        background: var(--success-color, #10b981);
+    }
+
+    /* ── Admin-style Table ──────────────────────────────────── */
+    .admin-table-container {
+        background: var(--card, white);
+        border-radius: var(--radius, 0.5rem);
+        box-shadow: var(--box-shadow, 0 1px 3px rgba(0,0,0,0.1));
+        overflow: hidden;
+        border: 1px solid var(--border, #e4e4e7);
+    }
+
+    .admin-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .admin-table th,
+    .admin-table td {
+        padding: 0.625rem 1rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border, #e4e4e7);
+        font-size: 0.8125rem;
+    }
+
+    .admin-table th {
+        background: var(--muted, #f4f4f5);
+        font-weight: 500;
+        color: var(--muted-foreground, #71717a);
+    }
+
+    .admin-table tbody tr:hover {
+        background: var(--muted, #f4f4f5);
+    }
+
+    .rule-text-cell {
+        max-width: 300px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .empty-cell {
+        text-align: center;
+        color: var(--muted-foreground, #71717a);
+        padding: 2rem !important;
+    }
+
+    /* ── Category Review Cards ──────────────────────────────── */
+    .category-card {
+        background: var(--card, white);
+        border: 1px solid var(--border, #e4e4e7);
+        border-radius: var(--radius, 0.5rem);
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+        box-shadow: var(--box-shadow, 0 1px 3px rgba(0,0,0,0.1));
+    }
+
+    .category-card h4 {
+        margin: 0 0 0.75rem 0;
+        font-size: 0.8125rem;
+        color: var(--muted-foreground, #71717a);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+
+    .category-summary {
+        font-size: 1rem;
+        padding: 0.75rem 1rem;
+        background: var(--muted, #f4f4f5);
+        border-left: 3px solid var(--primary, #6e56cf);
+        border-radius: 0 var(--radius, 0.5rem) var(--radius, 0.5rem) 0;
+        margin-bottom: 1rem;
+        line-height: 1.4;
+    }
+
+    .member-toggle {
+        cursor: pointer;
+        color: var(--primary, #6e56cf);
+        font-size: 0.8125rem;
+        border: none;
+        background: none;
+        padding: 0;
+        text-decoration: underline;
+    }
+
+    .member-list {
+        display: none;
+        margin-top: 0.5rem;
+        padding-left: 1rem;
+        border-left: 2px solid var(--border, #e4e4e7);
+    }
+
+    .member-list.visible { display: block; }
+
+    .member-item {
+        padding: 0.375rem 0;
+        font-size: 0.8125rem;
+        color: var(--text-color, #374151);
+        border-bottom: 1px solid var(--muted, #f4f4f5);
+    }
+
+    .member-item:last-child { border-bottom: none; }
+
+    .member-item .source-info {
+        font-size: 0.6875rem;
+        color: var(--muted-foreground, #71717a);
+        margin-top: 2px;
+    }
+
+    .review-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 1rem;
+        align-items: center;
+    }
+
+    .review-actions textarea {
+        flex: 1;
+        padding: 0.375rem 0.625rem;
+        border: 1px solid var(--border, #e4e4e7);
+        border-radius: var(--radius, 0.5rem);
+        resize: none;
+        height: 2.25rem;
+        font-size: 0.8125rem;
+    }
+
+    .btn-approve {
+        background: var(--success-color, #10b981);
+        color: white;
+        border: none;
+        padding: 0.5rem 1.25rem;
+        border-radius: var(--radius, 0.5rem);
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 0.8125rem;
+    }
+
+    .btn-approve:hover { filter: brightness(0.9); }
+
+    .btn-reject {
+        background: var(--destructive, #ef4444);
+        color: white;
+        border: none;
+        padding: 0.5rem 1.25rem;
+        border-radius: var(--radius, 0.5rem);
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 0.8125rem;
+    }
+
+    .btn-reject:hover { filter: brightness(0.9); }
+
+    /* ── Apply Section ──────────────────────────────────────── */
+    .apply-section {
+        margin-top: 1.25rem;
+        padding: 1rem;
+        background: rgba(16, 185, 129, 0.06);
+        border: 1px solid rgba(16, 185, 129, 0.2);
+        border-radius: var(--radius, 0.5rem);
+        text-align: center;
+    }
+
+    .apply-section p {
+        margin: 0 0 0.75rem 0;
+        font-size: 0.875rem;
+        color: var(--text-color, #374151);
+    }
+
+    /* ── Viz Tab Layout ─────────────────────────────────────── */
+    .viz-layout {
+        display: flex;
+        gap: 1.25rem;
+        flex-wrap: wrap;
+    }
+
+    .viz-chart-panel {
+        flex: 2;
+        min-width: 400px;
+    }
+
+    .viz-side-panel {
+        flex: 1;
+        min-width: 260px;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .detail-header {
+        margin: 0 0 0.5rem 0;
+        font-size: 0.75rem;
+        color: var(--muted-foreground, #71717a);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .detail-rule-text {
+        font-weight: 600;
+        font-size: 0.9375rem;
+        margin-bottom: 0.75rem;
+        line-height: 1.4;
+    }
+
+    .detail-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.375rem 0;
+        border-bottom: 1px solid var(--border, #e4e4e7);
+        font-size: 0.8125rem;
+    }
+
+    .detail-row:last-child { border-bottom: none; }
+    .detail-row span { color: var(--muted-foreground, #71717a); }
+
+    /* ── Action Buttons ─────────────────────────────────────── */
+    .action-bar {
+        display: flex;
+        gap: 0.75rem;
+        margin-top: 1.5rem;
+        flex-wrap: wrap;
+    }
+
+    .action-bar .btn {
+        font-size: 0.8125rem;
+        padding: 0.5rem 1rem;
+    }
+
+    /* ── Responsive ─────────────────────────────────────────── */
+    @media (max-width: 768px) {
+        .dashboard-grid {
+            grid-template-columns: 1fr;
+        }
+        .viz-layout {
+            flex-direction: column;
+        }
+        .solo-tabs {
+            flex-wrap: wrap;
+        }
+        .solo-tab {
+            flex-basis: 33.33%;
+        }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<h1>Solo Mode Status</h1>
 
-<div style="text-align: center; margin-bottom: 30px;">
-    <span class="phase-badge {% if phase == 'completed' %}completed{% endif %}">
-        {{ phase_name|replace('_', ' ')|title }}
+{# ── Phase Indicator ────────────────────────────────────── #}
+<div style="text-align: center; margin-bottom: 1.5rem;">
+    <span class="phase-indicator {% if phase == 'completed' %}completed{% endif %}" id="ov-phase-badge">
+        <span id="ov-phase">{{ phase_name|replace('_', ' ')|title }}</span>
     </span>
 </div>
 
-<div class="status-grid">
-    <!-- Annotation Progress -->
-    <div class="status-card">
-        <h3>Annotation Progress</h3>
-        {% if annotation_stats %}
-        <div class="progress-bar">
+{# ── Tab Navigation ─────────────────────────────────────── #}
+<div class="solo-tabs">
+    <div class="solo-tab active" data-tab="overview">Overview</div>
+    <div class="solo-tab" data-tab="rules">Edge Case Rules</div>
+    <div class="solo-tab" data-tab="clusters">Rule Clusters</div>
+</div>
+
+
+{# ════════════════════════════════════════════════════════════
+   OVERVIEW TAB
+   ════════════════════════════════════════════════════════════ #}
+<div class="solo-tab-content active" id="tab-overview">
+
+    <div class="dashboard-grid">
+
+        {# Annotation Progress Card #}
+        <div class="dashboard-card">
+            <h3>Annotation Progress</h3>
+            {% if annotation_stats %}
             {% set total = annotation_stats.human_labeled + annotation_stats.llm_labeled + annotation_stats.remaining %}
-            {% set progress = ((annotation_stats.human_labeled + annotation_stats.llm_labeled) / total * 100) if total > 0 else 0 %}
-            <div class="progress-fill" style="width: {{ progress }}%; background: #28a745;">
-                {{ progress|int }}%
+            {% set pct = ((annotation_stats.human_labeled + annotation_stats.llm_labeled) / total * 100) if total > 0 else 0 %}
+            <p class="card-value" id="ov-progress-text">{{ pct|int }}%</p>
+            <div class="progress-track">
+                <div class="progress-fill" id="ov-progress-bar"
+                     style="width: {{ pct|int }}%; {% if pct >= 80 %}background: var(--success-color, #10b981);{% endif %}">
+                </div>
+            </div>
+            <div class="metric-row">
+                <span>Human</span>
+                <strong id="ov-human">{{ annotation_stats.human_labeled }}</strong>
+            </div>
+            <div class="metric-row">
+                <span>LLM</span>
+                <strong id="ov-llm">{{ annotation_stats.llm_labeled }}</strong>
+            </div>
+            <div class="metric-row">
+                <span>Remaining</span>
+                <strong id="ov-remaining">{{ annotation_stats.remaining }}</strong>
+            </div>
+            {% else %}
+            <p class="card-description">No annotation data yet</p>
+            {% endif %}
+        </div>
+
+        {# Agreement Card #}
+        <div class="dashboard-card">
+            <h3>Agreement</h3>
+            {% if agreement_metrics %}
+            {% set rate = agreement_metrics.agreement_rate or 0 %}
+            <p class="card-value {% if rate >= 0.9 %}text-success{% elif rate >= 0.7 %}text-warning{% else %}text-danger{% endif %}"
+               id="ov-agreement">{{ (rate * 100)|int }}%</p>
+            <div class="metric-row">
+                <span>Comparisons</span>
+                <strong id="ov-comparisons">{{ agreement_metrics.total_compared }}</strong>
+            </div>
+            <div class="metric-row">
+                <span>Agreements</span>
+                <strong id="ov-agreements">{{ agreement_metrics.agreements }}</strong>
+            </div>
+            <div class="metric-row">
+                <span>Disagreements</span>
+                <strong id="ov-disagreements">{{ agreement_metrics.disagreements }}</strong>
+            </div>
+            {% else %}
+            <p class="card-description">No agreement data yet</p>
+            {% endif %}
+        </div>
+
+        {# LLM Labeling Card #}
+        <div class="dashboard-card">
+            <h3>LLM Labeling</h3>
+            {% if llm_stats %}
+            <div class="metric-row">
+                <span>Labeled</span>
+                <strong id="ov-llm-labeled">{{ llm_stats.labeled_count }}</strong>
+            </div>
+            <div class="metric-row">
+                <span>Queue</span>
+                <strong id="ov-llm-queue">{{ llm_stats.queue_size }}</strong>
+            </div>
+            <div class="metric-row">
+                <span>Errors</span>
+                <strong id="ov-llm-errors">{{ llm_stats.error_count }}</strong>
+            </div>
+            <div class="metric-row">
+                <span>Status</span>
+                <strong>
+                    {% if llm_stats.is_paused %}
+                    <span class="status-badge status-pending" id="ov-llm-status">Paused</span>
+                    {% elif llm_stats.is_running %}
+                    <span class="status-badge status-active" id="ov-llm-status">Running</span>
+                    {% else %}
+                    <span class="status-badge status-inactive" id="ov-llm-status">Stopped</span>
+                    {% endif %}
+                </strong>
+            </div>
+            {% else %}
+            <p class="card-description">LLM labeling not started</p>
+            {% endif %}
+        </div>
+
+        {# Edge Case Rules Summary Card #}
+        {% if edge_case_rule_stats and edge_case_rule_stats.total_rules > 0 %}
+        <div class="dashboard-card">
+            <h3>Edge Case Rules</h3>
+            <p class="card-value">{{ edge_case_rule_stats.total_rules }}</p>
+            <p class="card-description">rules discovered</p>
+            <div class="metric-row" style="margin-top: 0.5rem;">
+                <span>Categories</span>
+                <strong>{{ edge_case_rule_stats.total_categories }}</strong>
+            </div>
+            <div class="metric-row">
+                <span>Pending</span>
+                <strong>{{ edge_case_rule_stats.pending_categories }}</strong>
+            </div>
+            <div class="metric-row">
+                <span>Approved</span>
+                <strong>{{ edge_case_rule_stats.approved_categories }}</strong>
+            </div>
+        </div>
+        {% endif %}
+
+        {# Confidence Routing Card #}
+        {% if llm_stats and llm_stats.confidence_routing and llm_stats.confidence_routing.enabled %}
+        <div class="dashboard-card" id="routing-card">
+            <h3>Confidence Routing</h3>
+            <div class="metric-row">
+                <span>Total Routed</span>
+                <strong id="ov-routing-total">{{ llm_stats.confidence_routing.total_routed }}</strong>
+            </div>
+            <div class="metric-row">
+                <span>Human Routed</span>
+                <strong id="ov-routing-human">{{ llm_stats.confidence_routing.human_routed_count }}</strong>
+            </div>
+            {% for tier in llm_stats.confidence_routing.tiers %}
+            <div class="metric-row">
+                <span>{{ tier.name or 'Tier ' ~ loop.index }}</span>
+                <strong>{{ tier.instances_accepted }} accepted ({{ (tier.acceptance_rate * 100)|int }}%)</strong>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {# Validation Progress Card #}
+        {% if validation_progress and validation_progress.total_samples > 0 %}
+        <div class="dashboard-card">
+            <h3>Final Validation</h3>
+            <p class="card-value">{{ validation_progress.percent_complete|int }}%</p>
+            <div class="progress-track">
+                <div class="progress-fill" style="width: {{ validation_progress.percent_complete }}%;"></div>
+            </div>
+            <div class="metric-row">
+                <span>Validated</span>
+                <strong>{{ validation_progress.validated }} / {{ validation_progress.total_samples }}</strong>
+            </div>
+            <div class="metric-row">
+                <span>Accuracy</span>
+                <strong>{{ (validation_progress.validation_accuracy * 100)|int }}%</strong>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    {# Action Buttons #}
+    <div class="action-bar">
+        {% if phase == 'setup' %}
+            <a href="{{ url_for('solo_mode.setup') }}" class="btn btn-primary">Start Setup</a>
+        {% elif phase == 'prompt_review' %}
+            <a href="{{ url_for('solo_mode.prompt_editor') }}" class="btn btn-primary">Edit Prompt</a>
+        {% elif phase in ['edge_case_synthesis', 'edge_case_labeling'] %}
+            <a href="{{ url_for('solo_mode.edge_cases') }}" class="btn btn-primary">Continue Edge Cases</a>
+        {% elif phase in ['parallel_annotation', 'active_annotation'] %}
+            <a href="{{ url_for('solo_mode.annotate') }}" class="btn btn-primary">Continue Annotating</a>
+        {% elif phase == 'disagreement_resolution' %}
+            <a href="{{ url_for('solo_mode.disagreements') }}" class="btn btn-primary">Resolve Disagreements</a>
+        {% elif phase == 'periodic_review' %}
+            <a href="{{ url_for('solo_mode.review') }}" class="btn btn-primary">Continue Review</a>
+        {% elif phase == 'rule_review' %}
+            <a href="{{ url_for('solo_mode.rule_review') }}" class="btn btn-primary">Review Edge Case Rules</a>
+        {% elif phase == 'final_validation' %}
+            <a href="{{ url_for('solo_mode.validation') }}" class="btn btn-primary">Continue Validation</a>
+        {% elif phase == 'completed' %}
+            <a href="{{ url_for('solo_mode.api_export') }}" class="btn btn-success">Export Data</a>
+        {% endif %}
+        <a href="{{ url_for('solo_mode.api_status') }}" class="btn btn-secondary">API Status</a>
+    </div>
+</div>
+
+
+{# ════════════════════════════════════════════════════════════
+   EDGE CASE RULES TAB
+   ════════════════════════════════════════════════════════════ #}
+<div class="solo-tab-content" id="tab-rules">
+
+    {# Stats Cards #}
+    <div class="dashboard-grid">
+        <div class="dashboard-card">
+            <h3>Rules Discovered</h3>
+            <p class="card-value" id="rules-total">{{ edge_case_rule_stats.total_rules if edge_case_rule_stats else 0 }}</p>
+        </div>
+        <div class="dashboard-card">
+            <h3>Categories</h3>
+            <p class="card-value" id="rules-categories">{{ edge_case_rule_stats.total_categories if edge_case_rule_stats else 0 }}</p>
+        </div>
+        <div class="dashboard-card">
+            <h3>Pending Review</h3>
+            <p class="card-value text-warning" id="rules-pending">{{ edge_case_rule_stats.pending_categories if edge_case_rule_stats else 0 }}</p>
+        </div>
+        <div class="dashboard-card">
+            <h3>Approved</h3>
+            <p class="card-value text-success" id="rules-approved">{{ approved_count }}</p>
+        </div>
+    </div>
+
+    {# Pending Categories for Review #}
+    {% if pending_categories %}
+    <h3 style="font-size: 1rem; margin-bottom: 0.75rem; color: var(--heading-color, #09090b);">
+        Pending Categories
+    </h3>
+    {% for item in pending_categories %}
+    <div class="category-card">
+        <h4>Category {{ item.category.id[:8] }}</h4>
+        <div class="category-summary">{{ item.category.summary_rule }}</div>
+
+        <div>
+            <button class="member-toggle"
+                    onclick="this.nextElementSibling.classList.toggle('visible')">
+                Show {{ item.member_rules|length }} individual rules
+            </button>
+            <div class="member-list">
+                {% for rule in item.member_rules %}
+                <div class="member-item">
+                    {{ rule.rule_text }}
+                    <div class="source-info">
+                        Instance: {{ rule.instance_id }} |
+                        Confidence: {{ (rule.source_confidence * 100)|int }}%
+                    </div>
+                </div>
+                {% endfor %}
             </div>
         </div>
 
-        <div class="metric-row">
-            <span>Human Labeled</span>
-            <strong>{{ annotation_stats.human_labeled }}</strong>
-        </div>
-        <div class="metric-row">
-            <span>LLM Labeled</span>
-            <strong>{{ annotation_stats.llm_labeled }}</strong>
-        </div>
-        <div class="metric-row">
-            <span>Remaining</span>
-            <strong>{{ annotation_stats.remaining }}</strong>
-        </div>
-        <div class="metric-row">
-            <span>Total</span>
-            <strong>{{ total }}</strong>
-        </div>
-        {% else %}
-        <p style="color: #666;">No annotation data yet</p>
-        {% endif %}
+        <form method="POST" action="{{ url_for('solo_mode.rule_review') }}" class="review-actions">
+            <input type="hidden" name="category_id" value="{{ item.category.id }}">
+            <textarea name="notes" placeholder="Optional notes..."></textarea>
+            <button type="submit" name="action" value="approve" class="btn-approve">Approve</button>
+            <button type="submit" name="action" value="reject" class="btn-reject">Reject</button>
+        </form>
     </div>
-
-    <!-- Agreement Metrics -->
-    <div class="status-card">
-        <h3>Agreement</h3>
-        {% if agreement_metrics %}
-        {% set rate = agreement_metrics.agreement_rate or 0 %}
-        <div class="big-number {% if rate >= 0.9 %}success{% elif rate >= 0.7 %}warning{% else %}danger{% endif %}">
-            {{ (rate * 100)|int }}%
-        </div>
-
-        <div class="metric-row">
-            <span>Comparisons</span>
-            <strong>{{ agreement_metrics.total_compared }}</strong>
-        </div>
-        <div class="metric-row">
-            <span>Agreements</span>
-            <strong>{{ agreement_metrics.agreements }}</strong>
-        </div>
-        <div class="metric-row">
-            <span>Disagreements</span>
-            <strong>{{ agreement_metrics.disagreements }}</strong>
-        </div>
-        <div class="metric-row">
-            <span>Trend</span>
-            <strong>{{ agreement_metrics.trend|title }}</strong>
-        </div>
-        {% else %}
-        <p style="color: #666;">No agreement data yet</p>
-        {% endif %}
+    {% endfor %}
+    {% else %}
+    <div class="dashboard-card" style="text-align: center; padding: 2rem;">
+        <p style="color: var(--muted-foreground, #71717a);">No pending categories to review.</p>
     </div>
+    {% endif %}
 
-    <!-- LLM Labeling Stats -->
-    <div class="status-card">
-        <h3>LLM Labeling</h3>
-        {% if llm_stats %}
-        <div class="metric-row">
-            <span>Total Labeled</span>
-            <strong>{{ llm_stats.labeled_count }}</strong>
-        </div>
-        <div class="metric-row">
-            <span>Queue Size</span>
-            <strong>{{ llm_stats.queue_size }}</strong>
-        </div>
-        <div class="metric-row">
-            <span>Errors</span>
-            <strong>{{ llm_stats.error_count }}</strong>
-        </div>
-        <div class="metric-row">
-            <span>Status</span>
-            <strong>
-                {% if llm_stats.is_paused %}
-                    Paused
-                {% elif llm_stats.is_running %}
-                    Running
-                {% else %}
-                    Stopped
-                {% endif %}
-            </strong>
-        </div>
-        {% else %}
-        <p style="color: #666;">LLM labeling not started</p>
-        {% endif %}
+    {# Apply Approved Rules #}
+    {% if approved_count > 0 %}
+    <div class="apply-section">
+        <p>{{ approved_count }} approved categories ready to incorporate into annotation prompt.</p>
+        <button class="btn btn-primary" onclick="soloDashboard.applyRules()">
+            Apply Approved Rules to Prompt
+        </button>
     </div>
+    {% endif %}
 
-    <!-- Validation Progress -->
-    {% if validation_progress and validation_progress.total_samples > 0 %}
-    <div class="status-card">
-        <h3>Final Validation</h3>
-        <div class="progress-bar">
-            <div class="progress-fill" style="width: {{ validation_progress.percent_complete }}%; background: #007bff;">
-                {{ validation_progress.percent_complete|int }}%
+    {# Rules Table #}
+    <h3 style="font-size: 1rem; margin: 1.5rem 0 0.75rem; color: var(--heading-color, #09090b);">
+        All Rules
+    </h3>
+    <div class="admin-table-container">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Rule Text</th>
+                    <th>Instance</th>
+                    <th>Confidence</th>
+                    <th>Cluster</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="rules-table-body">
+                <tr><td colspan="5" class="empty-cell">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+
+{# ════════════════════════════════════════════════════════════
+   RULE CLUSTERS TAB
+   ════════════════════════════════════════════════════════════ #}
+<div class="solo-tab-content" id="tab-clusters">
+
+    <div class="viz-layout">
+        {# Scatter Plot #}
+        <div class="viz-chart-panel">
+            <div class="dashboard-card" style="min-height: 480px; position: relative;">
+                <h3>Rule Embedding Space</h3>
+                <div id="rule-cluster-chart" style="width: 100%; height: 450px;"></div>
             </div>
         </div>
 
-        <div class="metric-row">
-            <span>Validated</span>
-            <strong>{{ validation_progress.validated }} / {{ validation_progress.total_samples }}</strong>
-        </div>
-        <div class="metric-row">
-            <span>Agreements</span>
-            <strong>{{ validation_progress.agreements }}</strong>
-        </div>
-        <div class="metric-row">
-            <span>Accuracy</span>
-            <strong>{{ (validation_progress.validation_accuracy * 100)|int }}%</strong>
+        {# Side Panel #}
+        <div class="viz-side-panel">
+            <div class="dashboard-card" id="rule-detail-panel">
+                <h4 class="detail-header">Rule Details</h4>
+                <p style="color: var(--muted-foreground, #71717a); font-size: 0.8125rem;">
+                    Click a point to see details
+                </p>
+            </div>
+
+            <div class="dashboard-card">
+                <h4 class="detail-header">Controls</h4>
+                <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                    <button class="btn btn-primary" style="width: 100%; font-size: 0.8125rem;"
+                            onclick="soloDashboard.viz && soloDashboard.viz.refresh(true)">
+                        Refresh Visualization
+                    </button>
+                    <button class="btn btn-secondary" style="width: 100%; font-size: 0.8125rem;"
+                            onclick="soloDashboard.triggerClustering()">
+                        Trigger Re-clustering
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
-    {% endif %}
 </div>
 
-<div class="action-buttons">
-    {% if phase == 'setup' %}
-        <a href="{{ url_for('solo_mode.setup') }}" class="btn btn-primary">Start Setup</a>
-    {% elif phase == 'prompt_review' %}
-        <a href="{{ url_for('solo_mode.prompt_editor') }}" class="btn btn-primary">Edit Prompt</a>
-    {% elif phase in ['edge_case_synthesis', 'edge_case_labeling'] %}
-        <a href="{{ url_for('solo_mode.edge_cases') }}" class="btn btn-primary">Continue Edge Cases</a>
-    {% elif phase in ['parallel_annotation', 'active_annotation'] %}
-        <a href="{{ url_for('solo_mode.annotate') }}" class="btn btn-primary">Continue Annotating</a>
-    {% elif phase == 'disagreement_resolution' %}
-        <a href="{{ url_for('solo_mode.disagreements') }}" class="btn btn-primary">Resolve Disagreements</a>
-    {% elif phase == 'periodic_review' %}
-        <a href="{{ url_for('solo_mode.review') }}" class="btn btn-primary">Continue Review</a>
-    {% elif phase == 'final_validation' %}
-        <a href="{{ url_for('solo_mode.validation') }}" class="btn btn-primary">Continue Validation</a>
-    {% elif phase == 'completed' %}
-        <a href="{{ url_for('solo_mode.api_export') }}" class="btn btn-success">Export Data</a>
-    {% endif %}
-
-    <a href="{{ url_for('solo_mode.api_status') }}" class="btn btn-secondary">View API Status</a>
-</div>
 {% endblock %}
 
 {% block sidebar %}
-<!-- No sidebar on status page - use full width -->
+{# No sidebar — use full width for dashboard #}
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="{{ url_for('static', filename='js/solo-viz.js') }}"></script>
+<script src="{{ url_for('static', filename='js/solo-dashboard.js') }}"></script>
+<script>
+    var soloDashboard = new SoloDashboard();
+    document.addEventListener('DOMContentLoaded', function() {
+        soloDashboard.init();
+    });
+</script>
 {% endblock %}

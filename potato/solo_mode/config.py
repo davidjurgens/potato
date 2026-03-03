@@ -123,6 +123,25 @@ class EdgeCaseRuleConfig:
 
 
 @dataclass
+class ConfidenceTierConfig:
+    """A single tier in the confidence routing cascade."""
+    model: 'ModelConfig' = None
+    confidence_threshold: float = 0.8  # 0.0-1.0, minimum confidence to accept
+    name: str = ""  # e.g. "fast", "strong"
+
+    def __post_init__(self):
+        if self.model is None:
+            self.model = ModelConfig(endpoint_type='openai', model='')
+
+
+@dataclass
+class ConfidenceRoutingConfig:
+    """Cascaded confidence escalation config."""
+    enabled: bool = False
+    tiers: List['ConfidenceTierConfig'] = field(default_factory=list)
+
+
+@dataclass
 class EmbeddingConfig:
     """Configuration for embedding model (used for diversity)."""
     model_name: str = "all-MiniLM-L6-v2"
@@ -164,6 +183,9 @@ class SoloModeConfig:
 
     # Edge case rule discovery (Co-DETECT-style)
     edge_case_rules: EdgeCaseRuleConfig = field(default_factory=EdgeCaseRuleConfig)
+
+    # Cascaded confidence routing
+    confidence_routing: ConfidenceRoutingConfig = field(default_factory=ConfidenceRoutingConfig)
 
     # Output directory for Solo Mode state
     state_dir: Optional[str] = None
@@ -329,6 +351,20 @@ def parse_solo_mode_config(config_data: Dict[str, Any]) -> SoloModeConfig:
         max_reannotations_per_instance=ecr_data.get('max_reannotations_per_instance', 2),
     )
 
+    # Parse confidence routing config
+    cr_data = sm.get('confidence_routing', {})
+    cr_tiers = []
+    for tier_data in cr_data.get('tiers', []):
+        cr_tiers.append(ConfidenceTierConfig(
+            model=_parse_model_config(tier_data.get('model', {})),
+            confidence_threshold=tier_data.get('confidence_threshold', 0.8),
+            name=tier_data.get('name', ''),
+        ))
+    confidence_routing = ConfidenceRoutingConfig(
+        enabled=cr_data.get('enabled', False),
+        tiers=cr_tiers,
+    )
+
     # Determine state directory
     state_dir = sm.get('state_dir')
     if not state_dir:
@@ -346,5 +382,6 @@ def parse_solo_mode_config(config_data: Dict[str, Any]) -> SoloModeConfig:
         batches=batches,
         prompt_optimization=prompt_optimization,
         edge_case_rules=edge_case_rules,
+        confidence_routing=confidence_routing,
         state_dir=state_dir,
     )

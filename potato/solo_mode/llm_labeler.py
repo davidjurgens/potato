@@ -33,9 +33,15 @@ class LabelingResult:
     timestamp: datetime = field(default_factory=datetime.now)
     error: Optional[str] = None
 
+    # Edge case rule discovery (Co-DETECT-style)
+    is_edge_case: bool = False
+    edge_case_rule: Optional[str] = None      # "When <condition> -> <action>"
+    edge_case_condition: Optional[str] = None  # The <condition> part
+    edge_case_action: Optional[str] = None     # The <action> part
+
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dictionary."""
-        return {
+        result = {
             'instance_id': self.instance_id,
             'schema_name': self.schema_name,
             'label': self.label,
@@ -47,6 +53,12 @@ class LabelingResult:
             'timestamp': self.timestamp.isoformat(),
             'error': self.error,
         }
+        if self.is_edge_case:
+            result['is_edge_case'] = True
+            result['edge_case_rule'] = self.edge_case_rule
+            result['edge_case_condition'] = self.edge_case_condition
+            result['edge_case_action'] = self.edge_case_action
+        return result
 
 
 class LLMLabelingThread(threading.Thread):
@@ -63,6 +75,7 @@ class LLMLabelingThread(threading.Thread):
         solo_config: Any,
         prompt_getter: callable,
         result_callback: callable,
+        prompt_version_getter: Optional[callable] = None,
     ):
         """
         Initialize the labeling thread.
@@ -72,6 +85,7 @@ class LLMLabelingThread(threading.Thread):
             solo_config: SoloModeConfig instance
             prompt_getter: Callable that returns the current prompt text
             result_callback: Callable to handle labeling results
+            prompt_version_getter: Optional callable that returns current prompt version int
         """
         super().__init__(name="LLMLabelingThread", daemon=True)
 
@@ -79,6 +93,7 @@ class LLMLabelingThread(threading.Thread):
         self.solo_config = solo_config
         self.prompt_getter = prompt_getter
         self.result_callback = result_callback
+        self.prompt_version_getter = prompt_version_getter
 
         # Threading control
         self._stop_event = threading.Event()
@@ -262,14 +277,37 @@ class LLMLabelingThread(threading.Thread):
 
         logger.info("LLM labeling thread stopped")
 
+    @staticmethod
+    def create_endpoint_from_model_config(model_config):
+        """Create an AI endpoint from a ModelConfig."""
+        from potato.ai.ai_endpoint import AIEndpointFactory
+        endpoint_config = {
+            'ai_support': {
+                'enabled': True,
+                'endpoint_type': model_config.endpoint_type,
+                'ai_config': {
+                    'model': model_config.model,
+                    'max_tokens': model_config.max_tokens,
+                    'temperature': model_config.temperature,
+                }
+            }
+        }
+        if model_config.api_key:
+            endpoint_config['ai_support']['ai_config']['api_key'] = model_config.api_key
+        if model_config.base_url:
+            endpoint_config['ai_support']['ai_config']['base_url'] = model_config.base_url
+        return AIEndpointFactory.create_endpoint(endpoint_config)
+
     def _label_instance(
         self,
         instance_id: str,
         text: str,
-        schema_name: str
+        schema_name: str,
+        endpoint=None,
     ) -> Optional[LabelingResult]:
         """Label a single instance."""
-        endpoint = self._get_endpoint()
+        if endpoint is None:
+            endpoint = self._get_endpoint()
         if endpoint is None:
             return None
 
@@ -291,7 +329,34 @@ class LLMLabelingThread(threading.Thread):
 
             # Build labeling prompt
             labels = self._extract_labels(schema_info)
-            full_prompt = f"""{prompt}
+
+            # Check if edge case rule extraction is enabled
+            ecr_config = getattr(self.solo_config, 'edge_case_rules', None)
+            request_edge_case = (
+                ecr_config is not None
+                and ecr_config.enabled
+                and ecr_config.auto_extract_on_labeling
+            )
+
+            if request_edge_case:
+                full_prompt = f"""{prompt}
+
+Text to label:
+{text}
+
+Available labels: {labels}
+
+Respond with JSON. If you are uncertain about the label (confidence below 75), also identify a generalizable edge case rule that describes when this type of ambiguity occurs:
+{{
+    "label": "<your label or -1 if unclassifiable>",
+    "confidence": <0-100>,
+    "reasoning": "<brief explanation>",
+    "is_edge_case": <true if this is an ambiguous/edge case, false otherwise>,
+    "edge_case_rule": "<When [condition] -> [action]> (only if is_edge_case is true)"
+}}
+"""
+            else:
+                full_prompt = f"""{prompt}
 
 Text to label:
 {text}
@@ -363,6 +428,28 @@ Respond with JSON:
                 except Exception as e:
                     logger.debug(f"Uncertainty estimation failed: {e}")
 
+            # Extract edge case rule if present
+            is_edge_case = False
+            edge_case_rule = None
+            edge_case_condition = None
+            edge_case_action = None
+
+            if request_edge_case and response_data.get('is_edge_case'):
+                raw_rule = response_data.get('edge_case_rule', '')
+                if raw_rule:
+                    is_edge_case = True
+                    edge_case_rule = raw_rule
+                    edge_case_condition, edge_case_action = (
+                        self._parse_edge_case_rule(raw_rule)
+                    )
+
+            prompt_version = 0
+            if self.prompt_version_getter:
+                try:
+                    prompt_version = self.prompt_version_getter()
+                except Exception:
+                    pass
+
             return LabelingResult(
                 instance_id=instance_id,
                 schema_name=schema_name,
@@ -370,8 +457,12 @@ Respond with JSON:
                 confidence=confidence,
                 uncertainty=uncertainty,
                 reasoning=reasoning,
-                prompt_version=0,  # TODO: Get from prompt manager
+                prompt_version=prompt_version,
                 model_name=getattr(endpoint, 'model', ''),
+                is_edge_case=is_edge_case,
+                edge_case_rule=edge_case_rule,
+                edge_case_condition=edge_case_condition,
+                edge_case_action=edge_case_action,
             )
 
         except Exception as e:
@@ -417,6 +508,32 @@ Respond with JSON:
             if v.lower().strip() == label_lower:
                 return v
         return None
+
+    def _parse_edge_case_rule(self, rule_text: str) -> tuple:
+        """Parse a rule in 'When <condition> -> <action>' format.
+
+        Returns:
+            Tuple of (condition, action). Falls back to (rule_text, "") if
+            the format doesn't match.
+        """
+        # Try "When <condition> -> <action>" format
+        match = re.match(
+            r'[Ww]hen\s+(.+?)\s*->\s*(.+)',
+            rule_text.strip()
+        )
+        if match:
+            return match.group(1).strip(), match.group(2).strip()
+
+        # Try "If <condition>, then <action>" format
+        match = re.match(
+            r'[Ii]f\s+(.+?),?\s+then\s+(.+)',
+            rule_text.strip()
+        )
+        if match:
+            return match.group(1).strip(), match.group(2).strip()
+
+        # Fallback: use full text as condition
+        return rule_text.strip(), ""
 
     def _parse_json_response(self, response: str) -> Dict[str, Any]:
         """Parse JSON from response."""
