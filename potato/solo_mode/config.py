@@ -135,6 +135,37 @@ class ConfidenceTierConfig:
 
 
 @dataclass
+class ConfusionAnalysisConfig:
+    """Configuration for confusion pattern analysis dashboard."""
+    enabled: bool = True
+    min_instances_for_pattern: int = 3
+    max_patterns: int = 20
+    auto_suggest_guidelines: bool = False
+
+
+@dataclass
+class RefinementLoopConfig:
+    """Configuration for the iterative guideline refinement loop."""
+    enabled: bool = True
+    trigger_interval: int = 50          # Check every N human annotations
+    min_improvement: float = 0.02       # Minimum agreement rate improvement to continue
+    max_cycles: int = 5                 # Maximum refinement cycles before alerting
+    patience: int = 2                   # Cycles without improvement before stopping
+    auto_apply_suggestions: bool = False  # Auto-apply LLM guideline suggestions
+
+
+@dataclass
+class LabelingFunctionConfig:
+    """Configuration for labeling function extraction (ALCHEmist-style)."""
+    enabled: bool = True
+    min_confidence: float = 0.85       # Minimum LLM confidence to consider for extraction
+    min_coverage: int = 3              # Minimum instances a pattern must match
+    max_functions: int = 50            # Maximum labeling functions to maintain
+    auto_extract: bool = True          # Auto-extract during labeling
+    vote_threshold: float = 0.5        # Fraction of matching functions needed for label
+
+
+@dataclass
 class ConfidenceRoutingConfig:
     """Cascaded confidence escalation config."""
     enabled: bool = False
@@ -184,8 +215,17 @@ class SoloModeConfig:
     # Edge case rule discovery (Co-DETECT-style)
     edge_case_rules: EdgeCaseRuleConfig = field(default_factory=EdgeCaseRuleConfig)
 
+    # Labeling function extraction (ALCHEmist-style)
+    labeling_functions: LabelingFunctionConfig = field(default_factory=LabelingFunctionConfig)
+
     # Cascaded confidence routing
     confidence_routing: ConfidenceRoutingConfig = field(default_factory=ConfidenceRoutingConfig)
+
+    # Confusion analysis dashboard
+    confusion_analysis: ConfusionAnalysisConfig = field(default_factory=ConfusionAnalysisConfig)
+
+    # Iterative guideline refinement loop
+    refinement_loop: RefinementLoopConfig = field(default_factory=RefinementLoopConfig)
 
     # Output directory for Solo Mode state
     state_dir: Optional[str] = None
@@ -351,6 +391,17 @@ def parse_solo_mode_config(config_data: Dict[str, Any]) -> SoloModeConfig:
         max_reannotations_per_instance=ecr_data.get('max_reannotations_per_instance', 2),
     )
 
+    # Parse labeling function config
+    lf_data = sm.get('labeling_functions', {})
+    labeling_functions = LabelingFunctionConfig(
+        enabled=lf_data.get('enabled', True),
+        min_confidence=lf_data.get('min_confidence', 0.85),
+        min_coverage=lf_data.get('min_coverage', 3),
+        max_functions=lf_data.get('max_functions', 50),
+        auto_extract=lf_data.get('auto_extract', True),
+        vote_threshold=lf_data.get('vote_threshold', 0.5),
+    )
+
     # Parse confidence routing config
     cr_data = sm.get('confidence_routing', {})
     cr_tiers = []
@@ -363,6 +414,26 @@ def parse_solo_mode_config(config_data: Dict[str, Any]) -> SoloModeConfig:
     confidence_routing = ConfidenceRoutingConfig(
         enabled=cr_data.get('enabled', False),
         tiers=cr_tiers,
+    )
+
+    # Parse refinement loop config
+    rl_data = sm.get('refinement_loop', {})
+    refinement_loop = RefinementLoopConfig(
+        enabled=rl_data.get('enabled', True),
+        trigger_interval=rl_data.get('trigger_interval', 50),
+        min_improvement=rl_data.get('min_improvement', 0.02),
+        max_cycles=rl_data.get('max_cycles', 5),
+        patience=rl_data.get('patience', 2),
+        auto_apply_suggestions=rl_data.get('auto_apply_suggestions', False),
+    )
+
+    # Parse confusion analysis config
+    ca_data = sm.get('confusion_analysis', {})
+    confusion_analysis = ConfusionAnalysisConfig(
+        enabled=ca_data.get('enabled', True),
+        min_instances_for_pattern=ca_data.get('min_instances_for_pattern', 3),
+        max_patterns=ca_data.get('max_patterns', 20),
+        auto_suggest_guidelines=ca_data.get('auto_suggest_guidelines', False),
     )
 
     # Determine state directory
@@ -382,6 +453,9 @@ def parse_solo_mode_config(config_data: Dict[str, Any]) -> SoloModeConfig:
         batches=batches,
         prompt_optimization=prompt_optimization,
         edge_case_rules=edge_case_rules,
+        labeling_functions=labeling_functions,
         confidence_routing=confidence_routing,
+        confusion_analysis=confusion_analysis,
+        refinement_loop=refinement_loop,
         state_dir=state_dir,
     )

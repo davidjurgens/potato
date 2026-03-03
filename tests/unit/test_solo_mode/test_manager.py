@@ -1468,3 +1468,191 @@ class TestLLMLabelingStatsWithRouting:
         status = mgr.get_status()
         assert 'confidence_routing' in status
         assert status['confidence_routing']['enabled'] is False
+
+
+# === Confusion Analysis Tests ===
+
+
+class TestSoloModeManagerConfusionAnalysis:
+    """Tests for get_confusion_analysis_full()."""
+
+    def test_disabled_returns_enabled_false(self):
+        """When confusion analysis is disabled, returns {enabled: False}."""
+        config = _make_solo_config(confusion_analysis={'enabled': False})
+        mgr = _make_manager(solo_config=config)
+        result = mgr.get_confusion_analysis_full()
+        assert result == {'enabled': False}
+
+    def test_returns_correct_structure(self):
+        """Returns dict with expected keys when enabled."""
+        mgr = _make_manager()
+
+        # Mock the validation tracker
+        mock_tracker = MagicMock()
+        mock_metrics = MagicMock()
+        mock_metrics.confusion_matrix = {}
+        mock_metrics.total_compared = 0
+        mock_tracker.get_metrics.return_value = mock_metrics
+        mock_tracker.get_comparison_history.return_value = []
+        mock_tracker.get_label_accuracy.return_value = {}
+        mgr._validation_tracker = mock_tracker
+
+        result = mgr.get_confusion_analysis_full()
+
+        assert result['enabled'] is True
+        assert 'matrix_data' in result
+        assert 'patterns' in result
+        assert 'total_disagreements' in result
+        assert 'total_compared' in result
+
+    def test_enriches_patterns_with_examples(self):
+        """Patterns include examples when comparison history has disagreements."""
+        config = _make_solo_config(confusion_analysis={'min_instances_for_pattern': 1})
+        mgr = _make_manager(solo_config=config)
+
+        mock_tracker = MagicMock()
+        mock_metrics = MagicMock()
+        mock_metrics.confusion_matrix = {('positive', 'negative'): 2}
+        mock_metrics.total_compared = 5
+        mock_tracker.get_metrics.return_value = mock_metrics
+        mock_tracker.get_comparison_history.return_value = [
+            {'instance_id': 'i1', 'llm_label': 'positive', 'human_label': 'negative',
+             'schema_name': 'sentiment', 'agrees': False},
+            {'instance_id': 'i2', 'llm_label': 'positive', 'human_label': 'negative',
+             'schema_name': 'sentiment', 'agrees': False},
+            {'instance_id': 'i3', 'llm_label': 'positive', 'human_label': 'positive',
+             'schema_name': 'sentiment', 'agrees': True},
+        ]
+        mock_tracker.get_label_accuracy.return_value = {'positive': 0.5, 'negative': 1.0}
+        mgr._validation_tracker = mock_tracker
+
+        # Add predictions
+        pred = _make_prediction('i1', 'sentiment', 'positive', 0.7)
+        mgr.set_llm_prediction('i1', 'sentiment', pred)
+
+        with patch.object(mgr, '_get_instance_text', return_value='Sample text'):
+            result = mgr.get_confusion_analysis_full()
+
+        assert result['enabled'] is True
+        assert result['total_disagreements'] == 2
+        assert result['total_compared'] == 5
+        assert len(result['patterns']) >= 1
+
+        pattern = result['patterns'][0]
+        assert pattern['predicted_label'] == 'positive'
+        assert pattern['actual_label'] == 'negative'
+        assert pattern['count'] == 2
+
+    def test_matrix_data_has_all_labels(self):
+        """Matrix data includes cells for all label combinations."""
+        mgr = _make_manager()
+
+        mock_tracker = MagicMock()
+        mock_metrics = MagicMock()
+        mock_metrics.confusion_matrix = {}
+        mock_metrics.total_compared = 0
+        mock_tracker.get_metrics.return_value = mock_metrics
+        mock_tracker.get_comparison_history.return_value = []
+        mock_tracker.get_label_accuracy.return_value = {}
+        mgr._validation_tracker = mock_tracker
+
+        result = mgr.get_confusion_analysis_full()
+
+        matrix = result['matrix_data']
+        labels = matrix['labels']
+        assert 'positive' in labels
+        assert 'negative' in labels
+        assert 'neutral' in labels
+        # 3 labels = 9 cells
+        assert len(matrix['cells']) == 9
+
+    def test_confusion_analyzer_lazy_init(self):
+        """confusion_analyzer property creates instance lazily."""
+        mgr = _make_manager()
+        assert mgr._confusion_analyzer is None
+        analyzer = mgr.confusion_analyzer
+        assert analyzer is not None
+        # Second access returns same instance
+        assert mgr.confusion_analyzer is analyzer
+
+
+# === Refinement Loop Tests ===
+
+
+class TestSoloModeManagerRefinementLoop:
+    """Tests for refinement loop integration in manager."""
+
+    def test_refinement_loop_lazy_init(self):
+        """refinement_loop property creates instance lazily."""
+        mgr = _make_manager()
+        assert mgr._refinement_loop is None
+        loop = mgr.refinement_loop
+        assert loop is not None
+        assert mgr.refinement_loop is loop
+
+    def test_get_refinement_status_disabled(self):
+        """Returns {enabled: False} when refinement loop is disabled."""
+        config = _make_solo_config(refinement_loop={'enabled': False})
+        mgr = _make_manager(solo_config=config)
+        status = mgr.get_refinement_status()
+        assert status == {'enabled': False}
+
+    def test_get_refinement_status_enabled(self):
+        """Returns status dict when enabled."""
+        mgr = _make_manager()
+        status = mgr.get_refinement_status()
+        assert status['enabled'] is True
+        assert status['total_cycles'] == 0
+        assert status['is_stopped'] is False
+
+    def test_maybe_trigger_refinement_counts(self):
+        """_maybe_trigger_refinement respects trigger_interval."""
+        config = _make_solo_config(refinement_loop={
+            'trigger_interval': 1000,  # High so it won't trigger
+        })
+        mgr = _make_manager(solo_config=config)
+
+        # Record one annotation — should not trigger (interval=1000)
+        mgr.refinement_loop.record_annotation()
+        assert mgr.refinement_loop._annotations_since_last_check == 1
+
+    def test_trigger_refinement_cycle_when_disabled(self):
+        """trigger_refinement_cycle returns error when analysis not available."""
+        config = _make_solo_config(
+            confusion_analysis={'enabled': False},
+        )
+        mgr = _make_manager(solo_config=config)
+
+        # Mock validation tracker
+        mock_tracker = MagicMock()
+        mock_metrics = MagicMock()
+        mock_metrics.agreement_rate = 0.7
+        mock_tracker.get_metrics.return_value = mock_metrics
+        mock_tracker.get_comparison_history.return_value = []
+        mock_tracker.get_label_accuracy.return_value = {}
+        mgr._validation_tracker = mock_tracker
+
+        result = mgr.trigger_refinement_cycle()
+        assert result['success'] is False
+
+    def test_trigger_refinement_cycle_no_patterns(self):
+        """Returns message when no confusion patterns found."""
+        mgr = _make_manager()
+
+        mock_tracker = MagicMock()
+        mock_metrics = MagicMock()
+        mock_metrics.agreement_rate = 0.9
+        mock_metrics.confusion_matrix = {}
+        mock_metrics.total_compared = 100
+        mock_tracker.get_metrics.return_value = mock_metrics
+        mock_tracker.get_comparison_history.return_value = [
+            {'instance_id': f'i{i}', 'llm_label': 'positive',
+             'human_label': 'positive', 'agrees': True}
+            for i in range(100)
+        ]
+        mock_tracker.get_label_accuracy.return_value = {'positive': 1.0}
+        mgr._validation_tracker = mock_tracker
+
+        result = mgr.trigger_refinement_cycle()
+        assert result['success'] is True
+        assert 'No confusion patterns' in result.get('message', '')

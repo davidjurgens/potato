@@ -84,8 +84,11 @@ def setup():
                 source_description='Initial prompt from task description'
             )
 
-            # Advance to prompt review phase
-            manager.advance_to_phase(SoloPhase.PROMPT_REVIEW)
+            # Advance to prompt review phase (ignore if already past setup)
+            try:
+                manager.advance_to_phase(SoloPhase.PROMPT_REVIEW)
+            except ValueError:
+                pass  # Already past setup phase
 
             return redirect(url_for('solo_mode.prompt_editor'))
 
@@ -456,6 +459,76 @@ def validation():
     )
 
 
+@solo_mode_bp.route('/rules', methods=['GET', 'POST'])
+@login_required
+@solo_mode_required
+def rule_review():
+    """
+    Edge case rule review page.
+
+    GET: Display aggregated categories for review
+    POST: Submit approval/rejection for a category
+    """
+    manager = get_solo_mode_manager()
+
+    if request.method == 'POST':
+        category_id = request.form.get('category_id')
+        action = request.form.get('action')  # 'approve' or 'reject'
+        notes = request.form.get('notes', '')
+
+        if category_id and action:
+            ecr = manager.edge_case_rule_manager
+            if action == 'approve':
+                ecr.approve_category(category_id, notes)
+            elif action == 'reject':
+                ecr.reject_category(category_id, notes)
+
+            # Check if more categories pending
+            pending = ecr.get_pending_categories()
+            if not pending:
+                # All reviewed - return to annotation
+                current_phase = manager.get_current_phase()
+                if current_phase == SoloPhase.RULE_REVIEW:
+                    manager.advance_to_phase(
+                        SoloPhase.ACTIVE_ANNOTATION,
+                        reason="All rule categories reviewed"
+                    )
+                return redirect(url_for('solo_mode.annotate'))
+
+            return redirect(url_for('solo_mode.rule_review'))
+
+        return jsonify({'error': 'Missing category_id or action'}), 400
+
+    # Get rule data
+    ecr = manager.edge_case_rule_manager
+    pending = ecr.get_pending_categories()
+    approved = ecr.get_approved_categories()
+    rejected = ecr.get_rejected_categories()
+    stats = ecr.get_stats()
+
+    # Build category details with member rules
+    categories_with_rules = []
+    for cat in pending:
+        member_rules = []
+        for rid in cat.member_rule_ids:
+            rule = ecr.get_rule(rid)
+            if rule:
+                member_rules.append(rule.to_dict())
+        categories_with_rules.append({
+            'category': cat.to_dict(),
+            'member_rules': member_rules,
+        })
+
+    return render_template(
+        'solo/rule_review.html',
+        pending_categories=categories_with_rules,
+        approved_count=len(approved),
+        rejected_count=len(rejected),
+        stats=stats,
+        phase=manager.get_current_phase().value,
+    )
+
+
 @solo_mode_bp.route('/status')
 @login_required
 @solo_mode_required
@@ -463,13 +536,35 @@ def status():
     """
     Solo Mode status dashboard.
 
-    Displays:
-    - Current phase
-    - Annotation progress
-    - Agreement metrics
-    - LLM labeling stats
+    Tabbed dashboard with:
+    - Overview: annotation progress, agreement, LLM stats
+    - Edge Case Rules: inline rule review with approve/reject
+    - Rule Clusters: D3.js scatter plot visualization
     """
     manager = get_solo_mode_manager()
+
+    # Edge case rule data
+    edge_case_rule_stats = None
+    pending_categories = []
+    approved_count = 0
+    rejected_count = 0
+
+    if manager._edge_case_rule_manager is not None:
+        ecr = manager.edge_case_rule_manager
+        edge_case_rule_stats = ecr.get_stats()
+        approved_count = len(ecr.get_approved_categories())
+        rejected_count = len(ecr.get_rejected_categories())
+
+        for cat in ecr.get_pending_categories():
+            member_rules = []
+            for rid in cat.member_rule_ids:
+                rule = ecr.get_rule(rid)
+                if rule:
+                    member_rules.append(rule.to_dict())
+            pending_categories.append({
+                'category': cat.to_dict(),
+                'member_rules': member_rules,
+            })
 
     return render_template(
         'solo/status.html',
@@ -479,6 +574,10 @@ def status():
         agreement_metrics=manager.get_agreement_metrics(),
         llm_stats=manager.get_llm_labeling_stats(),
         validation_progress=manager.get_validation_progress(),
+        edge_case_rule_stats=edge_case_rule_stats,
+        pending_categories=pending_categories,
+        approved_count=approved_count,
+        rejected_count=rejected_count,
     )
 
 
@@ -570,7 +669,7 @@ def api_advance_phase():
                 'current_phase': manager.get_current_phase().value,
             }), 400
 
-    except ValueError:
+    except (ValueError, KeyError):
         return jsonify({'error': f'Unknown phase: {target_phase}'}), 400
 
 
@@ -636,13 +735,15 @@ def api_disagreements():
     manager = get_solo_mode_manager()
 
     if manager.disagreement_resolver:
+        stats = manager.disagreement_resolver.get_stats()
+        pending = manager.disagreement_resolver.get_pending_disagreements()
         return jsonify({
-            'pending': len(manager.disagreement_resolver.get_pending_disagreements()),
-            'resolved': len(manager.disagreement_resolver.get_resolved_disagreements()),
-            'all': manager.disagreement_resolver.get_all_disagreements(),
+            'pending': len(pending),
+            'resolved': stats.get('resolved', 0),
+            'stats': stats,
         })
 
-    return jsonify({'pending': 0, 'resolved': 0, 'all': []})
+    return jsonify({'pending': 0, 'resolved': 0, 'stats': {}})
 
 
 @solo_mode_bp.route('/api/edge-cases')
@@ -661,16 +762,417 @@ def api_edge_cases():
     })
 
 
+@solo_mode_bp.route('/api/rules')
+@solo_mode_required
+def api_rules():
+    """Get all edge case rules and their status."""
+    manager = get_solo_mode_manager()
+    ecr = manager.edge_case_rule_manager
+
+    rules = [r.to_dict() for r in ecr.get_all_rules()]
+    return jsonify({
+        'rules': rules,
+        'stats': ecr.get_stats(),
+    })
+
+
+@solo_mode_bp.route('/api/rules/categories')
+@solo_mode_required
+def api_rules_categories():
+    """Get aggregated edge case rule categories."""
+    manager = get_solo_mode_manager()
+    ecr = manager.edge_case_rule_manager
+
+    categories = []
+    for cat in ecr.get_all_categories():
+        member_rules = []
+        for rid in cat.member_rule_ids:
+            rule = ecr.get_rule(rid)
+            if rule:
+                member_rules.append(rule.to_dict())
+        categories.append({
+            'category': cat.to_dict(),
+            'member_rules': member_rules,
+        })
+
+    return jsonify({'categories': categories})
+
+
+@solo_mode_bp.route('/api/rules/approve', methods=['POST'])
+@solo_mode_required
+def api_rules_approve():
+    """Approve or reject an edge case rule category."""
+    manager = get_solo_mode_manager()
+    ecr = manager.edge_case_rule_manager
+
+    data = request.json or {}
+    category_id = data.get('category_id')
+    action = data.get('action', 'approve')
+    notes = data.get('notes', '')
+
+    if not category_id:
+        return jsonify({'error': 'Missing category_id'}), 400
+
+    if action == 'approve':
+        success = ecr.approve_category(category_id, notes)
+    elif action == 'reject':
+        success = ecr.reject_category(category_id, notes)
+    else:
+        return jsonify({'error': f'Invalid action: {action}'}), 400
+
+    return jsonify({'success': success})
+
+
+@solo_mode_bp.route('/api/rules/apply', methods=['POST'])
+@solo_mode_required
+def api_rules_apply():
+    """Inject approved rules into the annotation prompt."""
+    manager = get_solo_mode_manager()
+
+    try:
+        result = manager.apply_approved_rules()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@solo_mode_bp.route('/api/rules/cluster', methods=['POST'])
+@solo_mode_required
+def api_rules_cluster():
+    """Manually trigger rule clustering."""
+    manager = get_solo_mode_manager()
+    manager._trigger_rule_clustering()
+    return jsonify({'success': True, 'message': 'Clustering triggered'})
+
+
+@solo_mode_bp.route('/api/rules/viz-data')
+@solo_mode_required
+def api_rules_viz_data():
+    """Return 2D-projected rule embeddings for D3 scatter plot visualization."""
+    manager = get_solo_mode_manager()
+    ecr = manager.edge_case_rule_manager
+    rules = ecr.get_all_rules()
+
+    if not rules:
+        return jsonify({'points': [], 'clusters': []})
+
+    # Project to 2D
+    try:
+        from .rule_clusterer import RuleClusterer
+        clusterer = RuleClusterer(manager.config, manager.solo_config)
+        coords = clusterer.project_to_2d(rules)
+    except Exception as e:
+        logger.warning(f"Rule projection failed: {e}")
+        coords = [(0.0, 0.0)] * len(rules)
+
+    # Build points
+    points = []
+    for i, rule in enumerate(rules):
+        x, y = coords[i] if i < len(coords) else (0.0, 0.0)
+        cat = ecr.get_category_for_rule(rule.id)
+        points.append({
+            'x': float(x),
+            'y': float(y),
+            'rule_id': rule.id,
+            'rule_text': rule.rule_text,
+            'cluster_id': rule.cluster_id,
+            'category_id': cat.id if cat else None,
+            'category_summary': cat.summary_rule if cat else None,
+            'confidence': rule.source_confidence,
+            'instance_id': rule.instance_id,
+            'approved': rule.approved,
+            'reviewed': rule.reviewed,
+        })
+
+    # Build cluster info with centroids
+    clusters = []
+    for cat in ecr.get_all_categories():
+        member_indices = [
+            i for i, r in enumerate(rules) if r.cluster_id == cat.id
+        ]
+        if member_indices:
+            cx = sum(coords[i][0] for i in member_indices) / len(member_indices)
+            cy = sum(coords[i][1] for i in member_indices) / len(member_indices)
+        else:
+            cx, cy = 0.0, 0.0
+
+        clusters.append({
+            'id': cat.id,
+            'summary_rule': cat.summary_rule,
+            'centroid_x': float(cx),
+            'centroid_y': float(cy),
+            'size': len(cat.member_rule_ids),
+            'approved': cat.approved,
+            'reviewed': cat.reviewed,
+        })
+
+    return jsonify({'points': points, 'clusters': clusters})
+
+
 @solo_mode_bp.route('/api/confusion-analysis')
 @solo_mode_required
 def api_confusion_analysis():
-    """Get confusion pattern analysis."""
+    """Get full confusion analysis with enriched patterns and heatmap data."""
     manager = get_solo_mode_manager()
 
-    if manager.validation_tracker:
-        return jsonify(manager.validation_tracker.get_confusion_analysis())
+    try:
+        return jsonify(manager.get_confusion_analysis_full())
+    except Exception as e:
+        logger.error(f"Confusion analysis failed: {e}")
+        return jsonify({'enabled': False, 'error': str(e)}), 500
 
-    return jsonify({'patterns': [], 'most_confused': None})
+
+@solo_mode_bp.route('/api/confusion-analysis/root-cause', methods=['POST'])
+@solo_mode_required
+def api_confusion_root_cause():
+    """Generate root cause analysis for a confusion pattern."""
+    manager = get_solo_mode_manager()
+
+    data = request.json or {}
+    predicted = data.get('predicted_label')
+    actual = data.get('actual_label')
+
+    if not predicted or not actual:
+        return jsonify({'error': 'Missing predicted_label or actual_label'}), 400
+
+    # Find the pattern
+    analysis = manager.get_confusion_analysis_full()
+    if not analysis.get('enabled'):
+        return jsonify({'error': 'Confusion analysis not enabled'}), 400
+
+    pattern_data = None
+    for p in analysis.get('patterns', []):
+        if p['predicted_label'] == predicted and p['actual_label'] == actual:
+            pattern_data = p
+            break
+
+    if pattern_data is None:
+        return jsonify({'error': f'Pattern {predicted}->{actual} not found'}), 404
+
+    # Build a ConfusionPattern from the data
+    from .confusion_analyzer import ConfusionPattern, ConfusionExample
+    pattern = ConfusionPattern(
+        predicted_label=predicted,
+        actual_label=actual,
+        count=pattern_data['count'],
+        percent=pattern_data['percent'],
+        examples=[
+            ConfusionExample(
+                instance_id=e['instance_id'],
+                text=e.get('text', ''),
+                llm_reasoning=e.get('llm_reasoning'),
+                llm_confidence=e.get('llm_confidence'),
+            )
+            for e in pattern_data.get('examples', [])
+        ],
+    )
+
+    analyzer = manager.confusion_analyzer
+    root_cause = analyzer.generate_root_cause(pattern)
+
+    if root_cause is None:
+        return jsonify({
+            'error': 'No LLM endpoint available for root cause analysis'
+        }), 503
+
+    return jsonify({'success': True, 'root_cause': root_cause})
+
+
+@solo_mode_bp.route('/api/confusion-analysis/suggest-guideline', methods=['POST'])
+@solo_mode_required
+def api_confusion_suggest_guideline():
+    """Suggest a guideline to address a confusion pattern."""
+    manager = get_solo_mode_manager()
+
+    data = request.json or {}
+    predicted = data.get('predicted_label')
+    actual = data.get('actual_label')
+
+    if not predicted or not actual:
+        return jsonify({'error': 'Missing predicted_label or actual_label'}), 400
+
+    # Find the pattern
+    analysis = manager.get_confusion_analysis_full()
+    if not analysis.get('enabled'):
+        return jsonify({'error': 'Confusion analysis not enabled'}), 400
+
+    pattern_data = None
+    for p in analysis.get('patterns', []):
+        if p['predicted_label'] == predicted and p['actual_label'] == actual:
+            pattern_data = p
+            break
+
+    if pattern_data is None:
+        return jsonify({'error': f'Pattern {predicted}->{actual} not found'}), 404
+
+    from .confusion_analyzer import ConfusionPattern, ConfusionExample
+    pattern = ConfusionPattern(
+        predicted_label=predicted,
+        actual_label=actual,
+        count=pattern_data['count'],
+        percent=pattern_data['percent'],
+        examples=[
+            ConfusionExample(
+                instance_id=e['instance_id'],
+                text=e.get('text', ''),
+                llm_reasoning=e.get('llm_reasoning'),
+                llm_confidence=e.get('llm_confidence'),
+            )
+            for e in pattern_data.get('examples', [])
+        ],
+        root_cause=pattern_data.get('root_cause'),
+    )
+
+    analyzer = manager.confusion_analyzer
+
+    # Generate root cause first if not already available
+    if not pattern.root_cause:
+        pattern.root_cause = analyzer.generate_root_cause(pattern)
+
+    current_prompt = manager.get_current_prompt_text()
+    suggestion = analyzer.suggest_guideline(pattern, current_prompt)
+
+    if suggestion is None:
+        return jsonify({
+            'error': 'No LLM endpoint available for guideline suggestion'
+        }), 503
+
+    return jsonify({
+        'success': True,
+        'suggestion': suggestion,
+        'root_cause': pattern.root_cause,
+    })
+
+
+@solo_mode_bp.route('/api/refinement-status')
+@solo_mode_required
+def api_refinement_status():
+    """Get refinement loop status and cycle history."""
+    manager = get_solo_mode_manager()
+    return jsonify(manager.get_refinement_status())
+
+
+@solo_mode_bp.route('/api/refinement/trigger', methods=['POST'])
+@solo_mode_required
+def api_refinement_trigger():
+    """Manually trigger a refinement cycle."""
+    manager = get_solo_mode_manager()
+
+    if not manager.config.refinement_loop.enabled:
+        return jsonify({'error': 'Refinement loop not enabled'}), 400
+
+    try:
+        result = manager.trigger_refinement_cycle()
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Refinement trigger failed: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@solo_mode_bp.route('/api/refinement/reset', methods=['POST'])
+@solo_mode_required
+def api_refinement_reset():
+    """Reset the refinement loop, allowing new cycles."""
+    manager = get_solo_mode_manager()
+
+    if not manager.config.refinement_loop.enabled:
+        return jsonify({'error': 'Refinement loop not enabled'}), 400
+
+    manager.refinement_loop.reset()
+    return jsonify({'success': True, 'message': 'Refinement loop reset'})
+
+
+@solo_mode_bp.route('/api/labeling-functions')
+@solo_mode_required
+def api_labeling_functions():
+    """Get all labeling functions and their stats."""
+    manager = get_solo_mode_manager()
+
+    status = manager.get_labeling_function_status()
+    if not status.get('enabled'):
+        return jsonify({'enabled': False})
+
+    functions = [
+        f.to_dict()
+        for f in manager.labeling_function_manager.get_all_functions()
+    ]
+
+    return jsonify({
+        **status,
+        'functions': functions,
+    })
+
+
+@solo_mode_bp.route('/api/labeling-functions/extract', methods=['POST'])
+@solo_mode_required
+def api_labeling_functions_extract():
+    """Trigger labeling function extraction from high-confidence predictions."""
+    manager = get_solo_mode_manager()
+
+    if not manager.config.labeling_functions.enabled:
+        return jsonify({'error': 'Labeling functions not enabled'}), 400
+
+    try:
+        result = manager.extract_labeling_functions()
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Labeling function extraction failed: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@solo_mode_bp.route('/api/labeling-functions/<function_id>/toggle', methods=['POST'])
+@solo_mode_required
+def api_labeling_function_toggle(function_id):
+    """Toggle a labeling function's enabled state."""
+    manager = get_solo_mode_manager()
+
+    if not manager.config.labeling_functions.enabled:
+        return jsonify({'error': 'Labeling functions not enabled'}), 400
+
+    new_state = manager.labeling_function_manager.toggle_function(function_id)
+    if new_state is None:
+        return jsonify({'error': f'Function {function_id} not found'}), 404
+
+    return jsonify({'success': True, 'function_id': function_id, 'enabled': new_state})
+
+
+@solo_mode_bp.route('/api/labeling-functions/stats')
+@solo_mode_required
+def api_labeling_functions_stats():
+    """Get labeling function statistics."""
+    manager = get_solo_mode_manager()
+    return jsonify(manager.get_labeling_function_status())
+
+
+@solo_mode_bp.route('/api/disagreement-explorer')
+@solo_mode_required
+def api_disagreement_explorer():
+    """Get disagreement explorer data with scatter plots and label breakdowns."""
+    manager = get_solo_mode_manager()
+    label_filter = request.args.get('label')
+
+    try:
+        data = manager.get_disagreement_explorer_data(label_filter=label_filter)
+        return jsonify(data)
+    except Exception as e:
+        logger.error(f"Disagreement explorer failed: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@solo_mode_bp.route('/api/disagreement-timeline')
+@solo_mode_required
+def api_disagreement_timeline():
+    """Get temporal disagreement trend data."""
+    manager = get_solo_mode_manager()
+    bucket_size = request.args.get('bucket_size', 10, type=int)
+    bucket_size = max(2, min(bucket_size, 100))
+
+    try:
+        data = manager.get_disagreement_timeline(bucket_size=bucket_size)
+        return jsonify(data)
+    except Exception as e:
+        logger.error(f"Disagreement timeline failed: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 @solo_mode_bp.route('/api/export')
@@ -679,25 +1181,31 @@ def api_export():
     """Export all Solo Mode data."""
     manager = get_solo_mode_manager()
 
+    # Serialize predictions to plain dicts
+    predictions = manager.get_all_llm_predictions()
+    serialized_predictions = {
+        iid: {s: p.to_dict() for s, p in schemas.items()}
+        for iid, schemas in predictions.items()
+    }
+
     export_data = {
         'phase': manager.get_current_phase().value,
         'annotations': manager.get_all_annotations(),
-        'llm_predictions': manager.get_all_llm_predictions(),
+        'llm_predictions': serialized_predictions,
         'disagreements': (
-            manager.disagreement_resolver.get_all_disagreements()
-            if manager.disagreement_resolver else []
+            manager.disagreement_resolver.get_stats()
+            if manager._disagreement_resolver is not None else {}
         ),
-        'agreement_metrics': manager.get_agreement_metrics(),
-        'prompt_history': [],
+        'agreement_metrics': manager.get_agreement_metrics().to_dict(),
+        'prompt_history': [
+            {
+                'version': pv.version,
+                'prompt': pv.prompt_text,
+                'source': pv.created_by,
+                'timestamp': pv.created_at.isoformat(),
+            }
+            for pv in manager.get_all_prompt_versions()
+        ],
     }
-
-    if manager.prompt_manager:
-        for rev in manager.prompt_manager.revision_history:
-            export_data['prompt_history'].append({
-                'version': rev.version,
-                'prompt': rev.prompt_text,
-                'source': rev.source,
-                'timestamp': rev.timestamp.isoformat(),
-            })
 
     return jsonify(export_data)

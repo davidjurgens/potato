@@ -228,6 +228,11 @@ class ValidationTracker:
         with self._lock:
             return self._metrics
 
+    def get_comparison_history(self) -> List[Dict[str, Any]]:
+        """Get the full comparison history."""
+        with self._lock:
+            return list(self._comparison_history)
+
     def should_end_human_annotation(self) -> bool:
         """
         Check if agreement threshold is met for ending human annotation.

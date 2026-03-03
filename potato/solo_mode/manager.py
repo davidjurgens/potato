@@ -215,6 +215,10 @@ class SoloModeManager:
         self._llm_labeling_thread = None
         self._prompt_optimizer = None
         self._confidence_router = None
+        self._confusion_analyzer = None
+        self._refinement_loop = None
+        self._labeling_function_manager = None
+        self._disagreement_explorer = None
 
         # State persistence
         self._state_file = 'solo_mode_state.json'
@@ -354,6 +358,134 @@ class SoloModeManager:
             )
         return self._guideline_updater
 
+    @property
+    def confusion_analyzer(self):
+        """Lazy-initialized confusion analyzer."""
+        if not hasattr(self, '_confusion_analyzer') or self._confusion_analyzer is None:
+            from .confusion_analyzer import ConfusionAnalyzer
+            self._confusion_analyzer = ConfusionAnalyzer(
+                self.app_config, self.config
+            )
+        return self._confusion_analyzer
+
+    @property
+    def refinement_loop(self):
+        """Lazy-initialized refinement loop."""
+        if not hasattr(self, '_refinement_loop') or self._refinement_loop is None:
+            from .refinement_loop import RefinementLoop
+            self._refinement_loop = RefinementLoop(
+                self.config, self.app_config
+            )
+        return self._refinement_loop
+
+    @property
+    def labeling_function_manager(self):
+        """Lazy-initialized labeling function manager."""
+        if (not hasattr(self, '_labeling_function_manager')
+                or self._labeling_function_manager is None):
+            from .labeling_functions import LabelingFunctionManager
+            self._labeling_function_manager = LabelingFunctionManager(
+                self.app_config, self.config
+            )
+        return self._labeling_function_manager
+
+    @property
+    def disagreement_explorer(self):
+        """Lazy-initialized disagreement explorer."""
+        if (not hasattr(self, '_disagreement_explorer')
+                or self._disagreement_explorer is None):
+            from .disagreement_explorer import DisagreementExplorer
+            self._disagreement_explorer = DisagreementExplorer(
+                self.app_config, self.config
+            )
+        return self._disagreement_explorer
+
+    def get_confusion_analysis_full(self) -> Dict[str, Any]:
+        """Get full confusion analysis for the dashboard.
+
+        Returns:
+            Dict with enabled, matrix_data, patterns, totals.
+        """
+        ca_config = self.config.confusion_analysis
+        if not ca_config.enabled:
+            return {'enabled': False}
+
+        tracker = self.validation_tracker
+        metrics = tracker.get_metrics()
+        confusion_matrix = metrics.confusion_matrix
+        comparison_history = tracker.get_comparison_history()
+        label_accuracy = tracker.get_label_accuracy()
+
+        # Get all labels from config
+        labels = self.get_available_labels()
+
+        # Enriched patterns
+        analyzer = self.confusion_analyzer
+        patterns = analyzer.analyze(
+            comparison_history=comparison_history,
+            predictions=self.predictions,
+            text_getter=self._get_instance_text,
+        )
+
+        # Heatmap data
+        matrix_data = analyzer.get_confusion_matrix_data(
+            confusion_matrix, labels, label_accuracy
+        )
+
+        total_disagreements = sum(
+            1 for r in comparison_history if not r.get('agrees')
+        )
+
+        return {
+            'enabled': True,
+            'matrix_data': matrix_data,
+            'patterns': [p.to_dict() for p in patterns],
+            'total_disagreements': total_disagreements,
+            'total_compared': metrics.total_compared,
+        }
+
+    def get_disagreement_explorer_data(
+        self, label_filter: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Get disagreement explorer data for the dashboard.
+
+        Args:
+            label_filter: Optional label to filter results by.
+
+        Returns:
+            Dict with scatter_points, disagreements, label_breakdown, summary.
+        """
+        tracker = self.validation_tracker
+        comparison_history = tracker.get_comparison_history()
+
+        explorer = self.disagreement_explorer
+        return explorer.get_explorer_data(
+            predictions=self.predictions,
+            comparison_history=comparison_history,
+            text_getter=self._get_instance_text,
+            label_filter=label_filter,
+        )
+
+    def get_disagreement_timeline(
+        self, bucket_size: int = 10
+    ) -> Dict[str, Any]:
+        """Get temporal disagreement trend data.
+
+        Args:
+            bucket_size: Number of comparisons per time bucket.
+
+        Returns:
+            Dict with buckets, trend, total, bucket_size.
+        """
+        tracker = self.validation_tracker
+        comparison_history = tracker.get_comparison_history()
+
+        explorer = self.disagreement_explorer
+        return explorer.get_timeline(
+            comparison_history=comparison_history,
+            bucket_size=bucket_size,
+        )
+
     def _handle_labeling_result(self, result) -> None:
         """Handle a labeling result from the LLM labeling thread."""
         if result.error:
@@ -391,6 +523,9 @@ class SoloModeManager:
 
             # Check if we should trigger clustering
             self._maybe_trigger_rule_clustering()
+
+        # Check if we should extract labeling functions
+        self._maybe_extract_labeling_functions()
 
     def _maybe_trigger_rule_clustering(self) -> None:
         """Check if enough unclustered rules have accumulated to trigger clustering."""
@@ -531,6 +666,230 @@ class SoloModeManager:
 
         logger.info(f"Queued {len(candidates)} instances for re-annotation")
         return len(candidates)
+
+    # === Refinement Loop ===
+
+    def _maybe_trigger_refinement(self) -> None:
+        """Check if the refinement loop should trigger after an annotation."""
+        if not self.config.refinement_loop.enabled:
+            return
+
+        loop = self.refinement_loop
+        if not loop.record_annotation():
+            return
+
+        # Run in background thread to avoid blocking annotation flow
+        thread = threading.Thread(
+            target=self._run_refinement_cycle,
+            name="RefinementCycleThread",
+            daemon=True,
+        )
+        thread.start()
+
+    def _run_refinement_cycle(self) -> None:
+        """Execute a refinement cycle in a background thread."""
+        try:
+            self.trigger_refinement_cycle()
+        except Exception as e:
+            logger.error(f"Background refinement cycle failed: {e}")
+
+    def trigger_refinement_cycle(self) -> Dict[str, Any]:
+        """Manually or automatically trigger a refinement cycle.
+
+        Returns:
+            Dict with cycle results.
+        """
+        loop = self.refinement_loop
+
+        if loop.is_stopped:
+            return {
+                'success': False,
+                'error': f'Refinement loop stopped: {loop.stop_reason}',
+            }
+
+        # Get current state
+        metrics = self.get_agreement_metrics()
+        agreement_rate = metrics.agreement_rate if hasattr(metrics, 'agreement_rate') else 0.0
+        prompt_version = self.current_prompt_version
+
+        # Check for post-cycle metrics from previous cycle
+        loop.record_post_cycle_metrics(agreement_rate)
+
+        # Get confusion patterns
+        analysis = self.get_confusion_analysis_full()
+        if not analysis.get('enabled'):
+            return {'success': False, 'error': 'Confusion analysis not enabled'}
+
+        # Build ConfusionPattern objects from the enriched data
+        from .confusion_analyzer import ConfusionPattern, ConfusionExample
+        patterns = []
+        for p_data in analysis.get('patterns', []):
+            patterns.append(ConfusionPattern(
+                predicted_label=p_data['predicted_label'],
+                actual_label=p_data['actual_label'],
+                count=p_data['count'],
+                percent=p_data['percent'],
+                examples=[
+                    ConfusionExample(
+                        instance_id=e['instance_id'],
+                        text=e.get('text', ''),
+                        llm_reasoning=e.get('llm_reasoning'),
+                        llm_confidence=e.get('llm_confidence'),
+                    )
+                    for e in p_data.get('examples', [])
+                ],
+            ))
+
+        if not patterns:
+            return {'success': True, 'message': 'No confusion patterns found'}
+
+        # Define how to apply suggestions
+        def apply_suggestions(suggestions: List[str]) -> Dict[str, Any]:
+            current_prompt = self.get_current_prompt_text()
+            # Build a combined guidelines section from suggestions
+            rules_section = "\n".join(f"- {s}" for s in suggestions)
+            updated = current_prompt + (
+                f"\n\n## Refinement Guidelines\n\n"
+                f"Based on observed confusion patterns:\n{rules_section}\n"
+            )
+            old_version = self.current_prompt_version
+            new_pv = self.create_prompt_version(
+                updated,
+                created_by='refinement_loop',
+                source_description=(
+                    f"Refinement cycle: {len(suggestions)} guideline suggestions"
+                ),
+            )
+            result = {
+                'success': True,
+                'new_prompt_version': new_pv.version,
+                'categories_incorporated': len(suggestions),
+                'reannotation_count': 0,
+            }
+            # Trigger re-annotation of low-confidence instances
+            if self.config.edge_case_rules.reannotation_enabled:
+                reannotated = self._trigger_reannotation(old_version)
+                result['reannotation_count'] = reannotated
+
+            return result
+
+        # Define suggestion generator
+        analyzer = self.confusion_analyzer
+
+        def generate_suggestion(pattern, current_prompt):
+            return analyzer.suggest_guideline(pattern, current_prompt)
+
+        # Run the cycle
+        cycle = loop.run_cycle(
+            agreement_rate=agreement_rate,
+            prompt_version=prompt_version,
+            confusion_patterns=patterns,
+            apply_suggestions_fn=apply_suggestions,
+            generate_suggestion_fn=generate_suggestion,
+            current_prompt=self.get_current_prompt_text(),
+        )
+
+        logger.info(
+            f"Refinement cycle {cycle.cycle_number} completed: "
+            f"status={cycle.status}, suggestions={cycle.suggestions_generated}"
+        )
+
+        return {
+            'success': True,
+            'cycle': cycle.to_dict(),
+        }
+
+    def get_refinement_status(self) -> Dict[str, Any]:
+        """Get the refinement loop status."""
+        if not self.config.refinement_loop.enabled:
+            return {'enabled': False}
+
+        return self.refinement_loop.get_status()
+
+    # === Labeling Functions ===
+
+    def get_labeling_function_status(self) -> Dict[str, Any]:
+        """Get labeling function statistics."""
+        if not self.config.labeling_functions.enabled:
+            return {'enabled': False}
+
+        return self.labeling_function_manager.get_stats()
+
+    def extract_labeling_functions(self) -> Dict[str, Any]:
+        """Extract labeling functions from high-confidence predictions.
+
+        Returns:
+            Dict with success status and extracted function count.
+        """
+        if not self.config.labeling_functions.enabled:
+            return {'success': False, 'error': 'Labeling functions not enabled'}
+
+        min_conf = self.config.labeling_functions.min_confidence
+
+        # Build prediction list from stored predictions
+        pred_list = []
+        with self._lock:
+            for instance_id, schemas in self.predictions.items():
+                for schema_name, pred in schemas.items():
+                    if pred.confidence_score >= min_conf:
+                        pred_list.append({
+                            'instance_id': instance_id,
+                            'text': self._get_instance_text(instance_id),
+                            'predicted_label': str(pred.predicted_label),
+                            'confidence': pred.confidence_score,
+                            'reasoning': pred.reasoning,
+                        })
+
+        if not pred_list:
+            return {
+                'success': True,
+                'extracted': 0,
+                'message': 'No high-confidence predictions available',
+            }
+
+        new_fns = self.labeling_function_manager.extract_functions(pred_list)
+
+        return {
+            'success': True,
+            'extracted': len(new_fns),
+            'total': len(self.labeling_function_manager.get_all_functions()),
+            'functions': [f.to_dict() for f in new_fns],
+        }
+
+    def _maybe_extract_labeling_functions(self) -> None:
+        """Check if auto-extraction should trigger after labeling."""
+        lf_config = self.config.labeling_functions
+        if not lf_config.enabled or not lf_config.auto_extract:
+            return
+
+        # Auto-extract every 100 new LLM labels if we have enough data
+        with self._lock:
+            total_predictions = sum(
+                1 for schemas in self.predictions.values()
+                for pred in schemas.values()
+                if pred.confidence_score >= lf_config.min_confidence
+            )
+
+        mgr = self.labeling_function_manager
+        existing = len(mgr.get_all_functions())
+
+        # Extract when we have enough new data and don't already have many functions
+        if total_predictions >= 20 and existing < lf_config.max_functions:
+            # Only extract if we have significantly more predictions than functions
+            if total_predictions >= (existing + 1) * 10:
+                thread = threading.Thread(
+                    target=self._run_labeling_function_extraction,
+                    name="LabelingFunctionExtractionThread",
+                    daemon=True,
+                )
+                thread.start()
+
+    def _run_labeling_function_extraction(self) -> None:
+        """Run labeling function extraction in a background thread."""
+        try:
+            self.extract_labeling_functions()
+        except Exception as e:
+            logger.error(f"Background labeling function extraction failed: {e}")
 
     # === Phase Control ===
 
@@ -1125,15 +1484,48 @@ class SoloModeManager:
             self._stop_labeling.wait(5)
 
     def _label_batch(self, batch_size: int) -> int:
-        """Label a batch of instances. Returns number labeled."""
+        """Label a batch of instances. Returns number labeled.
+
+        Tries labeling functions first (cheap, no API calls), then
+        falls through to LLM labeling for remaining instances.
+        """
         instances = self._get_instances_for_labeling(batch_size)
         if not instances:
             return 0
 
         labeled = 0
+
+        # Try labeling functions first (no API cost)
+        remaining = instances
+        if self.config.labeling_functions.enabled:
+            lf_results, remaining = self.labeling_function_manager.apply_batch(
+                instances
+            )
+            for result in lf_results:
+                # Record as LLM prediction with labeling_function source
+                schemas = self.app_config.get('annotation_schemes', [])
+                schema_name = (
+                    schemas[0].get('name', 'default') if schemas else 'default'
+                )
+                prediction = LLMPrediction(
+                    instance_id=result.instance_id,
+                    schema_name=schema_name,
+                    predicted_label=result.label,
+                    confidence_score=result.vote_agreement,
+                    uncertainty_score=1.0 - result.vote_agreement,
+                    prompt_version=self.current_prompt_version,
+                    model_name='labeling_function',
+                    reasoning=f"Labeled by {len(result.votes)} labeling functions",
+                )
+                self.set_llm_prediction(
+                    result.instance_id, schema_name, prediction
+                )
+                labeled += 1
+
+        # Label remaining with LLM
         router = self.confidence_router
         if router is not None:
-            for inst in instances:
+            for inst in remaining:
                 result = router.route_instance(
                     inst['instance_id'], inst['text'], inst['schema_name']
                 )
@@ -1141,7 +1533,7 @@ class SoloModeManager:
                     self._handle_labeling_result(result.labeling_result)
                     labeled += 1
         else:
-            for inst in instances:
+            for inst in remaining:
                 result = self.llm_labeling_thread._label_instance(
                     inst['instance_id'], inst['text'], inst['schema_name']
                 )
@@ -1446,6 +1838,9 @@ class SoloModeManager:
         schemes = self.app_config.get('annotation_schemes', [])
         schema_name = schemes[0].get('name', 'default') if schemes else 'default'
         self.record_human_label(instance_id, schema_name, annotation, user_id)
+
+        # Check if refinement loop should trigger
+        self._maybe_trigger_refinement()
 
     def get_llm_labeling_stats(self) -> Dict[str, Any]:
         """Get LLM labeling statistics."""

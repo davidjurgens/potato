@@ -45,6 +45,7 @@ class SoloPhase(Enum):
     # Active annotation with periodic review
     ACTIVE_ANNOTATION = auto()          # Main annotation phase
     PERIODIC_REVIEW = auto()            # Review low-confidence LLM labels
+    RULE_REVIEW = auto()                # Review discovered edge case rules
 
     # Autonomous completion
     AUTONOMOUS_LABELING = auto()        # LLM labels remaining data
@@ -79,11 +80,17 @@ PHASE_TRANSITIONS: Dict[SoloPhase, Set[SoloPhase]] = {
     },
     SoloPhase.ACTIVE_ANNOTATION: {
         SoloPhase.PERIODIC_REVIEW,
+        SoloPhase.RULE_REVIEW,
         SoloPhase.AUTONOMOUS_LABELING,
     },
     SoloPhase.PERIODIC_REVIEW: {
         SoloPhase.ACTIVE_ANNOTATION,
+        SoloPhase.RULE_REVIEW,
         SoloPhase.PROMPT_REVIEW,  # If prompt needs revision
+    },
+    SoloPhase.RULE_REVIEW: {
+        SoloPhase.ACTIVE_ANNOTATION,
+        SoloPhase.PROMPT_REVIEW,  # If major changes needed
     },
     SoloPhase.AUTONOMOUS_LABELING: {SoloPhase.FINAL_VALIDATION},
     SoloPhase.FINAL_VALIDATION: {
