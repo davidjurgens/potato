@@ -1,0 +1,27 @@
+[
+  {
+    "id": "task_1",
+    "task_description": "Book a round-trip flight from New York to London for next Monday, returning Friday. Budget is under $800.",
+    "conversation": null
+  },
+  {
+    "id": "task_2",
+    "task_description": "Find a pet-friendly hotel in downtown San Francisco for 3 nights starting this Saturday. Maximum $200/night.",
+    "conversation": null
+  },
+  {
+    "id": "task_3",
+    "task_description": "Plan a day trip itinerary in Tokyo that includes visiting a temple, a market, and a park. Start at 9 AM.",
+    "conversation": null
+  },
+  {
+    "id": "task_4",
+    "task_description": "Help me draft a professional email declining a meeting invitation while suggesting an alternative time next week.",
+    "conversation": null
+  },
+  {
+    "id": "task_5",
+    "task_description": "Research and compare three laptop options under $1500 suitable for software development. Summarize pros and cons.",
+    "conversation": null
+  }
+]

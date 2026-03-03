@@ -1,0 +1,93 @@
+annotation_task_name: "Interactive Agent Testing"
+
+data_files:
+  - data/tasks.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+# Agent proxy configuration (echo for demo/testing)
+agent_proxy:
+  type: echo
+  responses:
+    - "I understand your request. Let me look into that for you."
+    - "I found several options. Let me narrow them down based on your requirements."
+    - "Here's what I recommend based on my research."
+    - "Would you like me to proceed with that, or would you prefer to adjust any of the criteria?"
+    - "Great, I've completed the task. Is there anything else you'd like me to help with?"
+  sandbox:
+    max_steps: 20
+    max_session_seconds: 600
+    request_timeout_seconds: 60
+    rate_limit_per_minute: 10
+
+# Display configuration
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    - key: task_description
+      type: text
+      label: "Task Description"
+
+    - key: conversation
+      type: interactive_chat
+      label: "Agent Interaction"
+      display_options:
+        show_turn_numbers: true
+        per_turn_ratings:
+          speakers: ["Agent"]
+          schemes:
+            - schema_name: turn_helpfulness
+              scheme:
+                type: likert
+                size: 3
+                labels: ["Unhelpful", "Helpful"]
+            - schema_name: turn_accuracy
+              scheme:
+                type: likert
+                size: 3
+                labels: ["Inaccurate", "Accurate"]
+
+# Annotation schemas (shown after finishing the chat)
+annotation_schemes:
+  - annotation_type: radio
+    name: task_success
+    description: "Did the agent successfully complete the task?"
+    labels:
+      - name: success
+        tooltip: "Agent fully completed the requested task"
+      - name: partial
+        tooltip: "Agent partially completed the task or made progress"
+      - name: failure
+        tooltip: "Agent failed to make meaningful progress"
+
+  - annotation_type: likert
+    name: naturalness
+    description: "How natural did the conversation feel?"
+    size: 5
+    min_label: "Very Unnatural"
+    max_label: "Very Natural"
+
+  - annotation_type: likert
+    name: helpfulness
+    description: "How helpful was the agent?"
+    size: 5
+    min_label: "Not Helpful"
+    max_label: "Very Helpful"
+
+  - annotation_type: text
+    name: comments
+    description: "Any additional comments about the interaction?"
+
+# User configuration
+user_config:
+  allow_all_users: true
+  require_password: false
