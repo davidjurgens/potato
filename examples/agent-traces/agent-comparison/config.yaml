@@ -1,0 +1,133 @@
+# Agent Comparison (Pairwise A/B) Example
+#
+# This example demonstrates side-by-side comparison of two agent traces
+# on the same task, using the pairwise display and pairwise annotation schema.
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/agent-traces/agent-comparison/config.yaml -p 8000
+
+annotation_task_name: "Agent Trace Comparison"
+
+# Data configuration
+data_files:
+  - data/agent-comparisons.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+# Task directory
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+# Instance Display Configuration
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    - key: task_description
+      type: text
+      label: "Task"
+
+    - key: traces
+      type: dialogue
+      label: "Agent Traces (A then B)"
+      display_options:
+        show_turn_numbers: true
+        alternating_shading: true
+
+# Annotation Schemes - Pairwise comparison
+annotation_schemes:
+  # Overall preference
+  - annotation_type: radio
+    name: overall_preference
+    description: "Which agent performed better overall?"
+    labels:
+      - name: agent_a_much_better
+        tooltip: "Agent A was clearly better"
+      - name: agent_a_slightly_better
+        tooltip: "Agent A was slightly better"
+      - name: tie
+        tooltip: "Both were equally good"
+      - name: agent_b_slightly_better
+        tooltip: "Agent B was slightly better"
+      - name: agent_b_much_better
+        tooltip: "Agent B was clearly better"
+    sequential_key_binding: true
+
+  # Completeness comparison
+  - annotation_type: radio
+    name: completeness
+    description: "Which agent provided a more complete answer?"
+    labels:
+      - name: agent_a
+      - name: tie
+      - name: agent_b
+    sequential_key_binding: true
+
+  # Efficiency comparison
+  - annotation_type: radio
+    name: efficiency
+    description: "Which agent was more efficient (fewer unnecessary steps)?"
+    labels:
+      - name: agent_a
+      - name: tie
+      - name: agent_b
+    sequential_key_binding: true
+
+  # Accuracy comparison
+  - annotation_type: radio
+    name: accuracy
+    description: "Which agent's output was more accurate?"
+    labels:
+      - name: agent_a
+      - name: tie
+      - name: agent_b
+    sequential_key_binding: true
+
+  # Helpfulness of final response
+  - annotation_type: radio
+    name: helpfulness
+    description: "Which agent's final response was more helpful to the user?"
+    labels:
+      - name: agent_a
+      - name: tie
+      - name: agent_b
+    sequential_key_binding: true
+
+  # Multirate: Per-dimension ratings for both agents
+  - annotation_type: multirate
+    name: dimension_ratings
+    description: "Rate each agent on these dimensions (1=Poor, 5=Excellent)"
+    options:
+      - name: agent_a_correctness
+        label: "Agent A - Correctness"
+      - name: agent_a_efficiency
+        label: "Agent A - Efficiency"
+      - name: agent_a_communication
+        label: "Agent A - Communication"
+      - name: agent_b_correctness
+        label: "Agent B - Correctness"
+      - name: agent_b_efficiency
+        label: "Agent B - Efficiency"
+      - name: agent_b_communication
+        label: "Agent B - Communication"
+    labels:
+      - "1"
+      - "2"
+      - "3"
+      - "4"
+      - "5"
+
+  # Notes
+  - annotation_type: text
+    name: preference_reason
+    description: "Why do you prefer one agent over the other?"
+
+# User configuration
+user_config:
+  allow_all_users: true
+  require_password: false

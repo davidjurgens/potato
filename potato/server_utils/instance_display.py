@@ -50,7 +50,7 @@ class InstanceDisplayRenderer:
         self.layout = self.display_config.get("layout", {})
 
         # Extract span targets - types that support span annotation
-        span_target_types = ["text", "dialogue", "pdf", "document", "spreadsheet", "code"]
+        span_target_types = ["text", "dialogue", "pdf", "document", "spreadsheet", "code", "agent_trace", "interactive_chat"]
         self.span_targets = [
             f["key"] for f in self.fields
             if f.get("span_target") and f.get("type") in span_target_types

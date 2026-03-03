@@ -72,7 +72,7 @@ def _generate_multiselect_layout_internal(annotation_scheme):
 
     # Initialize form wrapper
     schematic = f"""
-    <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form multiselect shadcn-multiselect-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" data-annotation-type="multiselect" data-schema-name="{escape_html_content(annotation_scheme['name'])}" {layout_attrs}>
+    <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form multiselect shadcn-multiselect-container" action="/action_page.php" data-annotation-id="{escape_html_content(str(annotation_scheme.get("annotation_id", "")))}" data-annotation-type="multiselect" data-schema-name="{escape_html_content(annotation_scheme['name'])}" {layout_attrs}>
         {get_ai_wrapper()}
         <fieldset schema="{escape_html_content(annotation_scheme['name'])}">
             <legend class="shadcn-multiselect-title">{escape_html_content(annotation_scheme['description'])}</legend>
@@ -220,7 +220,8 @@ def _generate_free_response(annotation_scheme, n_columns):
         str: HTML for free response field
     """
     free_response_identifiers = generate_element_identifier(annotation_scheme["name"], "free_response", "text")
-    instruction = annotation_scheme["has_free_response"].get("instruction", "Other")
+    free_response_config = annotation_scheme["has_free_response"]
+    instruction = free_response_config.get("instruction", "Other") if isinstance(free_response_config, dict) else "Other"
 
     return f"""
         <div class="shadcn-multiselect-free-response" style="grid-column: 1 / -1;">

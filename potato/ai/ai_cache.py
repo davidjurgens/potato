@@ -72,8 +72,41 @@ def _is_image_url(text: str) -> bool:
     return False
 
 def _get_image_data_from_url(url: str) -> ImageData:
-    """Download image from URL and return as ImageData."""
+    """Download image from URL and return as ImageData.
+
+    Includes SSRF protection to prevent fetching from private/internal IPs.
+    """
     import base64
+    import ipaddress
+    import socket
+    from urllib.parse import urlparse
+
+    # SSRF protection: validate URL scheme and resolve hostname
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ('http', 'https'):
+            logger.warning(f"Blocked non-HTTP image URL: {url[:100]}")
+            return None
+
+        hostname = parsed.hostname
+        if hostname:
+            addr_info = socket.getaddrinfo(hostname, None)
+            for info in addr_info:
+                ip_str = info[4][0]
+                try:
+                    ip = ipaddress.ip_address(ip_str)
+                    if ip.is_private or ip.is_loopback or ip.is_link_local:
+                        logger.warning(
+                            f"Blocked image URL resolving to private IP: "
+                            f"{hostname} -> {ip_str}"
+                        )
+                        return None
+                except ValueError:
+                    pass
+    except Exception as e:
+        logger.warning(f"Failed to validate image URL {url[:100]}: {e}")
+        return None
+
     try:
         response = requests.get(url, timeout=30)
         response.raise_for_status()
@@ -129,15 +162,29 @@ class AiCacheManager:
         # Disk cache configuration
         self.disk_cache_enabled = cache_config["disk_cache"]["enabled"]
 
-        # Disk cache configuration
         if self.disk_cache_enabled and not cache_config["disk_cache"]["path"]:
             raise Exception("You have enable disk cache, but you did not specific the path!")
-        self.disk_persistence_path = cache_config["disk_cache"]["path"] 
-        
-        # Prefetch configuration
-        self.warm_up_page_count = cache_config["prefetch"]["warm_up_page_count"]
-        self.prefetch_page_count_on_next = cache_config["prefetch"]["on_next"]
-        self.prefetch_page_count_on_prev = cache_config["prefetch"]["on_prev"]
+        self.disk_persistence_path = cache_config["disk_cache"]["path"]
+
+        # Validate cache path stays within task directory
+        if self.disk_persistence_path:
+            task_dir = os.path.abspath(config.get("task_dir", "."))
+            cache_abs = os.path.abspath(
+                os.path.join(task_dir, self.disk_persistence_path)
+                if not os.path.isabs(self.disk_persistence_path)
+                else self.disk_persistence_path
+            )
+            if not cache_abs.startswith(task_dir + os.sep) and cache_abs != task_dir:
+                raise ValueError(
+                    f"Cache path '{self.disk_persistence_path}' resolves to "
+                    f"'{cache_abs}' which is outside the task directory "
+                    f"'{task_dir}'. Path traversal is not allowed."
+                )
+
+        # Prefetch configuration — clamp to sane ranges
+        self.warm_up_page_count = max(0, min(int(cache_config["prefetch"]["warm_up_page_count"]), 10000))
+        self.prefetch_page_count_on_next = max(0, min(int(cache_config["prefetch"]["on_next"]), 10000))
+        self.prefetch_page_count_on_prev = max(0, min(int(cache_config["prefetch"]["on_prev"]), 10000))
 
         # Option highlighting configuration
         option_highlighting = ai_support.get("option_highlighting", {})
@@ -146,8 +193,10 @@ class AiCacheManager:
         self.option_highlighting_dim_opacity = option_highlighting.get("dim_opacity", 0.4)
         self.option_highlighting_auto_apply = option_highlighting.get("auto_apply", True)
         self.option_highlighting_schemas = option_highlighting.get("schemas", None)  # None means all
-        # Prefetch count for option highlighting (default 20 for LLM latency)
-        self.option_highlighting_prefetch_count = option_highlighting.get("prefetch_count", 20)
+        # Prefetch count for option highlighting — clamp to sane range
+        self.option_highlighting_prefetch_count = max(0, min(
+            int(option_highlighting.get("prefetch_count", 20)), 10000
+        ))
         
         # Threading
         self.in_progress = {}
@@ -1014,10 +1063,15 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         output_format_name = prompt_config.get("output_format", "option_highlight")
         output_format = self.model_manager.get_model_class_by_name(output_format_name)
 
-        # Build the prompt
+        # Build the prompt with clear delimiters to mitigate prompt injection.
+        # The user content is wrapped in XML-style tags so the LLM can
+        # distinguish between instructions and untrusted data.
+        delimited_text = (
+            f"<user_content>\n{text}\n</user_content>"
+        )
         template = Template(prompt_template)
         prompt = template.safe_substitute(
-            text=text,
+            text=delimited_text,
             description=description,
             labels=", ".join(label_names),
             top_k=top_k

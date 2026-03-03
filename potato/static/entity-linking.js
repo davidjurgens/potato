@@ -346,10 +346,10 @@
         tooltip.className = 'el-entity-tooltip';
         tooltip.innerHTML = `
             <div class="el-tooltip-header">
-                <span class="el-tooltip-kb">${kbSource}</span>
-                <span class="el-tooltip-id">${kbId}</span>
+                <span class="el-tooltip-kb">${escapeHtml(kbSource)}</span>
+                <span class="el-tooltip-id">${escapeHtml(kbId)}</span>
             </div>
-            <div class="el-tooltip-label">${kbLabel || 'Loading...'}</div>
+            <div class="el-tooltip-label">${escapeHtml(kbLabel || 'Loading...')}</div>
         `;
 
         // Position tooltip near the span
@@ -515,7 +515,7 @@
             if (response.ok) {
                 // Update the span overlay element
                 const spanElement = document.querySelector(
-                    `.span-overlay-pure[data-annotation-id="${EntityLinking.currentSpanId}"]`
+                    `.span-overlay-pure[data-annotation-id="${CSS.escape(EntityLinking.currentSpanId)}"]`
                 );
 
                 if (spanElement) {
@@ -548,9 +548,9 @@
         const entityDiv = document.getElementById('el-current-entity');
 
         entityDiv.innerHTML = `
-            <span class="el-current-kb">${kbSource}</span>:
-            <span class="el-current-id">${kbId}</span>
-            ${kbLabel ? `<br><span class="el-current-label">${kbLabel}</span>` : ''}
+            <span class="el-current-kb">${escapeHtml(kbSource)}</span>:
+            <span class="el-current-id">${escapeHtml(kbId)}</span>
+            ${kbLabel ? `<br><span class="el-current-label">${escapeHtml(kbLabel)}</span>` : ''}
         `;
 
         container.style.display = 'block';
@@ -791,7 +791,7 @@
             if (response.ok) {
                 // Update the span overlay element
                 const spanElement = document.querySelector(
-                    `.span-overlay-pure[data-annotation-id="${EntityLinking.currentSpanId}"]`
+                    `.span-overlay-pure[data-annotation-id="${CSS.escape(EntityLinking.currentSpanId)}"]`
                 );
 
                 if (spanElement) {
@@ -847,7 +847,7 @@
             if (response.ok) {
                 // Update the span overlay element
                 const spanElement = document.querySelector(
-                    `.span-overlay-pure[data-annotation-id="${EntityLinking.currentSpanId}"]`
+                    `.span-overlay-pure[data-annotation-id="${CSS.escape(EntityLinking.currentSpanId)}"]`
                 );
 
                 if (spanElement) {

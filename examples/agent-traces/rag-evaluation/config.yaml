@@ -1,0 +1,146 @@
+# RAG Pipeline Evaluation Example
+#
+# This example demonstrates evaluation of Retrieval-Augmented Generation (RAG)
+# pipeline traces, including retrieval relevance, answer faithfulness, and
+# citation accuracy using span annotation.
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/agent-traces/rag-evaluation/config.yaml -p 8000
+
+annotation_task_name: "RAG Pipeline Evaluation"
+
+# Data configuration
+data_files:
+  - data/rag-traces.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+# Task directory
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+# Instance Display Configuration
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    - key: task_description
+      type: text
+      label: "User Query"
+
+    - key: metadata_table
+      type: spreadsheet
+      label: "Pipeline Info"
+      display_options:
+        compact: true
+        max_height: 100
+
+    - key: conversation
+      type: dialogue
+      label: "RAG Trace (Query -> Retrieval -> Synthesis)"
+      span_target: true
+      display_options:
+        show_turn_numbers: true
+        alternating_shading: true
+
+# Annotation Schemes - RAG evaluation dimensions
+annotation_schemes:
+  # Retrieval relevance (per-document assessment via multirate)
+  - annotation_type: multirate
+    name: retrieval_relevance
+    description: "Rate the relevance of each retrieved document to the query"
+    options:
+      - name: doc_1
+        label: "Document 1"
+      - name: doc_2
+        label: "Document 2"
+      - name: doc_3
+        label: "Document 3"
+      - name: doc_4
+        label: "Document 4 (if present)"
+    labels:
+      - "Irrelevant"
+      - "Somewhat"
+      - "Relevant"
+      - "Highly Relevant"
+
+  # Answer faithfulness
+  - annotation_type: likert
+    name: faithfulness
+    description: "Is the synthesized answer faithful to the retrieved documents? (No unsupported claims)"
+    min_label: "Many unsupported claims"
+    max_label: "Fully faithful"
+    size: 5
+
+  # Answer completeness
+  - annotation_type: likert
+    name: completeness
+    description: "Does the answer cover all important aspects from the retrieved documents?"
+    min_label: "Very incomplete"
+    max_label: "Comprehensive"
+    size: 5
+
+  # Citation accuracy
+  - annotation_type: radio
+    name: citation_quality
+    description: "How well does the answer attribute claims to source documents?"
+    labels:
+      - name: excellent
+        tooltip: "All claims properly attributed to correct sources"
+      - name: good
+        tooltip: "Most claims attributed, minor issues"
+      - name: fair
+        tooltip: "Some attributions missing or incorrect"
+      - name: poor
+        tooltip: "Few or no attributions, or many incorrect ones"
+    sequential_key_binding: true
+
+  # Span annotation for citation/faithfulness issues
+  - annotation_type: span
+    name: citation_spans
+    description: "Highlight any issues in the synthesized answer"
+    labels:
+      - name: unsupported_claim
+        tooltip: "Claim not supported by any retrieved document"
+      - name: wrong_attribution
+        tooltip: "Claim attributed to wrong document"
+      - name: hallucination
+        tooltip: "Factually incorrect or fabricated information"
+      - name: missing_nuance
+        tooltip: "Source information oversimplified or distorted"
+
+  # Answer quality overall
+  - annotation_type: likert
+    name: answer_quality
+    description: "Overall quality of the synthesized answer"
+    min_label: "Very poor"
+    max_label: "Excellent"
+    size: 5
+
+  # Would the answer mislead the user?
+  - annotation_type: radio
+    name: misleading
+    description: "Could this answer mislead the user?"
+    labels:
+      - name: not_misleading
+        tooltip: "Answer is accurate and balanced"
+      - name: slightly_misleading
+        tooltip: "Minor inaccuracies or imbalances"
+      - name: misleading
+        tooltip: "Answer could lead to wrong conclusions"
+    sequential_key_binding: true
+
+  # Notes
+  - annotation_type: text
+    name: notes
+    description: "Additional observations about the RAG pipeline trace"
+
+# User configuration
+user_config:
+  allow_all_users: true
+  require_password: false

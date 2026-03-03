@@ -70,11 +70,14 @@ def generate_annotation_layout_file(config: dict, annotation_schemes: list[dict]
         schema_layouts += schema_layout + "\n"
         all_keybindings.extend(keybindings)
 
-    # Compute config hash
+    # Compute combined hash (config + schema content) for cache invalidation
     config_hash = compute_config_md5(config)
+    schema_content_hash = hashlib.md5()
+    schema_content_hash.update(schema_layouts.encode('utf-8'))
+    combined_hash = f"{config_hash}_{schema_content_hash.hexdigest()}"
 
-    # Create the layout HTML content with config hash at the top
-    layout_content = f"""<!-- CONFIG_HASH: {config_hash} -->
+    # Create the layout HTML content with combined hash at the top
+    layout_content = f"""<!-- CONFIG_HASH: {combined_hash} -->
 <!-- Generated annotation layout file -->
 <!-- This file was automatically generated based on the annotation schemes in your config -->
 <!-- You can customize this file to modify the layout of your annotation interface -->
@@ -103,7 +106,15 @@ def get_or_generate_annotation_layout(config: dict, annotation_schemes: list[dic
     layout_dir = os.path.join(task_dir, DEFAULT_ANNOTATION_LAYOUT_SUBDIR)
     layout_file_path = os.path.join(layout_dir, DEFAULT_ANNOTATION_LAYOUT_FILENAME)
 
-    current_hash = compute_config_md5(config)
+    config_hash = compute_config_md5(config)
+
+    # Also hash the actual generated schema content to detect code changes
+    # (e.g., if bws.py changes separators, the config hash won't change but the output will)
+    schema_content_hash = hashlib.md5()
+    for annotation_scheme in annotation_schemes:
+        layout_html, _ = generate_schematic(annotation_scheme)
+        schema_content_hash.update(layout_html.encode('utf-8'))
+    combined_hash = f"{config_hash}_{schema_content_hash.hexdigest()}"
 
     # Check if the layout file already exists and if the hash matches
     if os.path.exists(layout_file_path):
@@ -112,11 +123,11 @@ def get_or_generate_annotation_layout(config: dict, annotation_schemes: list[dic
                 line = f.readline()
                 if line.startswith("<!-- CONFIG_HASH:"):
                     file_hash = line.strip().split(":", 1)[1].replace('-->', '').strip()
-                    if file_hash == current_hash:
+                    if file_hash == combined_hash:
                         logger.info(f"Using existing annotation layout file: {layout_file_path} (hash match)")
                         return layout_file_path
                     else:
-                        logger.info(f"Config hash mismatch, regenerating annotation layout file: {layout_file_path}")
+                        logger.info(f"Hash mismatch (config or schema code changed), regenerating: {layout_file_path}")
                     break
 
     # Generate the layout file if it doesn't exist or hash mismatches
@@ -132,6 +143,12 @@ def generate_schematic(annotation_scheme):
     Uses the schema registry to look up the generator function for the
     annotation type.
     """
+    # Ensure annotation_id is set before any schema generator runs.
+    # This is the single bottleneck before all generators, so it serves as a
+    # safety net for any caller that doesn't pre-assign annotation_id.
+    if "annotation_id" not in annotation_scheme:
+        annotation_scheme["annotation_id"] = 0
+
     # Figure out which kind of tasks we're doing and build the input frame
     annotation_type = annotation_scheme["annotation_type"]
 
@@ -462,6 +479,14 @@ def generate_html_from_schematic(annotation_schemas: list[dict],
         html_template = html_template.replace(
             '<div class="navbar-nav">', '<div class="navbar-nav" hidden>'
         )
+
+    # Assign annotation_id to each scheme if not already set.
+    # The main annotation path (generate_annotation_html_template) does this for
+    # config["annotation_schemes"], but phase schemas loaded from JSON files
+    # (consent, prestudy, etc.) arrive here without annotation_id set.
+    for idx, annotation_scheme in enumerate(annotation_schemas):
+        if "annotation_id" not in annotation_scheme:
+            annotation_scheme["annotation_id"] = idx
 
     # Handle annotation layout generation for surveyflow phases
     # Check if user provided a custom task_layout file (either from config or phase)

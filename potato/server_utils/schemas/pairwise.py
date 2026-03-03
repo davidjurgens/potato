@@ -120,7 +120,7 @@ def _generate_binary_mode(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[
     data_key_b = 'data-key="2"' if enable_keybindings else ""
 
     schematic = f"""
-    <form id="{escaped_schema}" class="annotation-form pairwise pairwise-binary" action="/action_page.php" data-annotation-id="{annotation_scheme.get('annotation_id', '')}" {data_attrs} {layout_attrs}>
+    <form id="{escaped_schema}" class="annotation-form pairwise pairwise-binary" action="/action_page.php" data-annotation-id="{escape_html_content(str(annotation_scheme.get('annotation_id', '')))}" {data_attrs} {layout_attrs}>
         {get_ai_wrapper()}
         <fieldset schema="{escaped_schema}">
             <legend class="pairwise-question">{escaped_description}</legend>
@@ -226,7 +226,7 @@ def _generate_scale_mode(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[T
     label_b = escape_html_content(labels[1])
 
     schematic = f"""
-    <form id="{escaped_schema}" class="annotation-form pairwise pairwise-scale" action="/action_page.php" data-annotation-id="{annotation_scheme.get('annotation_id', '')}" {data_attrs} {layout_attrs}>
+    <form id="{escaped_schema}" class="annotation-form pairwise pairwise-scale" action="/action_page.php" data-annotation-id="{escape_html_content(str(annotation_scheme.get('annotation_id', '')))}" {data_attrs} {layout_attrs}>
         {get_ai_wrapper()}
         <fieldset schema="{escaped_schema}">
             <legend class="pairwise-question">{escaped_description}</legend>

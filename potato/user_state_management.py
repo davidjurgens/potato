@@ -691,21 +691,23 @@ class UserStateManager:
         if "phases" in self.config and "order" in self.config["phases"]:
             # Use config phase order
             config_phase_order = self.config["phases"]["order"]
-            # Convert config phase names to UserPhase enums
+            # Convert config phase names to UserPhase enums.
+            # "annotation" in the order is always included — it's handled
+            # by the annotate route, not the phase template system.
             config_phases = []
             for phase_name in config_phase_order:
-                if phase_name in self.config["phases"]:
+                if phase_name == "annotation":
+                    if UserPhase.ANNOTATION not in config_phases:
+                        config_phases.append(UserPhase.ANNOTATION)
+                elif phase_name in self.config["phases"]:
                     phase_type_str = self.config["phases"][phase_name]["type"]
                     phase_type = UserPhase.fromstr(phase_type_str)
                     if phase_type in self.phase_type_to_name_to_page:
-                        config_phases.append(phase_type)
-                    else:
-                        pass # Phase not found in phase_type_to_name_to_page
-                else:
-                    pass # Phase not found in config phases
+                        if phase_type not in config_phases:
+                            config_phases.append(phase_type)
 
-            # Add ANNOTATION phase if it's not in config but exists in phase_type_to_name_to_page
-            if UserPhase.ANNOTATION in self.phase_type_to_name_to_page and UserPhase.ANNOTATION not in config_phases:
+            # Add ANNOTATION phase at the end if not already present
+            if UserPhase.ANNOTATION not in config_phases:
                 config_phases.append(UserPhase.ANNOTATION)
 
             # Find current phase in config order
@@ -713,13 +715,24 @@ class UserStateManager:
                 cur_phase_index = config_phases.index(cur_phase)
                 if cur_phase_index < len(config_phases) - 1:
                     next_phase = config_phases[cur_phase_index + 1]
+                    # ANNOTATION phase is handled by the annotate route
+                    # and doesn't have entries in phase_type_to_name_to_page
+                    if next_phase == UserPhase.ANNOTATION:
+                        return next_phase, None
                     # Use the first page in the next phase
                     next_page = list(self.phase_type_to_name_to_page[next_phase].keys())[0]
                     return next_phase, next_page
                 else:
                     pass # Current phase is last in config order
             else:
-                pass # Current phase not found in config_phases
+                # Current phase not in config_phases (e.g., LOGIN).
+                # Advance to the first config phase.
+                if config_phases:
+                    first_phase = config_phases[0]
+                    if first_phase == UserPhase.ANNOTATION:
+                        return first_phase, None
+                    first_page = list(self.phase_type_to_name_to_page[first_phase].keys())[0]
+                    return first_phase, first_page
         else:
             # Fallback to enum order if no config order is specified
             all_phases = [p for p in list(UserPhase) if p in self.phase_type_to_name_to_page]
@@ -1176,7 +1189,14 @@ class UserState:
             return Label(d['schema'], d['name'])
 
         def to_span(d: dict[str,str]) -> SpanAnnotation:
-            return SpanAnnotation(d['schema'], d['name'], d['title'], int(d['start']), int(d['end']))
+            return SpanAnnotation(
+                d['schema'], d['name'], d['title'], int(d['start']), int(d['end']),
+                id=d.get('id'), target_field=d.get('target_field'),
+                format_coords=d.get('format_coords'),
+                additional_parts=d.get('additional_parts'),
+                kb_id=d.get('kb_id'), kb_source=d.get('kb_source'),
+                kb_label=d.get('kb_label'),
+            )
 
         def to_phase_and_page(t: tuple[str,str]) -> tuple[UserPhase,str]:
             return (UserPhase.fromstr(t[0]), t[1])
@@ -1902,10 +1922,14 @@ class InMemoryUserState(UserState):
 
     def get_all_annotations(self) -> dict[Item, list[SpanAnnotation|Label]]:
         """
-        Returns all annotations (label and span) for all annotated instances
+        Returns all annotations (label, span, link, and event) for all annotated instances
         """
         labeled = set(self.instance_id_to_label_to_value.keys()) | set(
             self.instance_id_to_span_to_value.keys()
+        ) | set(
+            self.instance_id_to_link_to_value.keys()
+        ) | set(
+            self.instance_id_to_event_to_value.keys()
         )
 
         anns = {}
@@ -1916,8 +1940,14 @@ class InMemoryUserState(UserState):
             spans = {}
             if iid in self.instance_id_to_span_to_value:
                 spans = self.instance_id_to_span_to_value[iid]
+            links = {}
+            if iid in self.instance_id_to_link_to_value:
+                links = self.instance_id_to_link_to_value[iid]
+            events = {}
+            if iid in self.instance_id_to_event_to_value:
+                events = self.instance_id_to_event_to_value[iid]
 
-            anns[iid] = {"labels": labels, "spans": spans}
+            anns[iid] = {"labels": labels, "spans": spans, "links": links, "events": events}
 
         return anns
 
@@ -1945,8 +1975,10 @@ class InMemoryUserState(UserState):
         return self.user_id
 
     def get_annotated_instance_ids(self) -> set[str]:
-        return set(self.instance_id_to_label_to_value.keys())\
-                    | set(self.instance_id_to_span_to_value.keys())
+        return set(self.instance_id_to_label_to_value.keys()) \
+                    | set(self.instance_id_to_span_to_value.keys()) \
+                    | set(self.instance_id_to_link_to_value.keys()) \
+                    | set(self.instance_id_to_event_to_value.keys())
 
     def get_annotation_count(self) -> int:
         '''Returns the total number of instances annotated by this user.'''
@@ -1985,12 +2017,16 @@ class InMemoryUserState(UserState):
     def has_annotated(self, instance_id: str) -> bool:
         '''Returns True if the user has annotated the instance with the given ID'''
         return instance_id in self.instance_id_to_label_to_value \
-            or instance_id in self.instance_id_to_span_to_value
+            or instance_id in self.instance_id_to_span_to_value \
+            or instance_id in self.instance_id_to_link_to_value \
+            or instance_id in self.instance_id_to_event_to_value
 
     def clear_all_annotations(self) -> None:
         '''Clears all annotations for this user'''
         self.instance_id_to_label_to_value.clear()
         self.instance_id_to_span_to_value.clear()
+        self.instance_id_to_link_to_value.clear()
+        self.instance_id_to_event_to_value.clear()
         self.instance_id_to_behavioral_data.clear()
         self.ai_hints.clear()
 
@@ -2404,7 +2440,14 @@ class InMemoryUserState(UserState):
             return Label(d['schema'], d['name'])
 
         def to_span(d: dict[str,str]) -> SpanAnnotation:
-            return SpanAnnotation(d['schema'], d['name'], d['title'], int(d['start']), int(d['end']))
+            return SpanAnnotation(
+                d['schema'], d['name'], d['title'], int(d['start']), int(d['end']),
+                id=d.get('id'), target_field=d.get('target_field'),
+                format_coords=d.get('format_coords'),
+                additional_parts=d.get('additional_parts'),
+                kb_id=d.get('kb_id'), kb_source=d.get('kb_source'),
+                kb_label=d.get('kb_label'),
+            )
 
         def to_phase_and_page(t: tuple[str,str]) -> tuple[UserPhase,str]:
             return (UserPhase.fromstr(t[0]), t[1])

@@ -106,10 +106,10 @@ def normalize_bbox(x: float, y: float, w: float, h: float,
     """
     if img_w <= 0 or img_h <= 0:
         return (0, 0, 0, 0)
-    cx = (x + w / 2) / img_w
-    cy = (y + h / 2) / img_h
-    nw = w / img_w
-    nh = h / img_h
+    cx = max(0.0, min(1.0, (x + w / 2) / img_w))
+    cy = max(0.0, min(1.0, (y + h / 2) / img_h))
+    nw = max(0.0, min(1.0, w / img_w))
+    nh = max(0.0, min(1.0, h / img_h))
     return (cx, cy, nw, nh)
 
 
@@ -164,19 +164,23 @@ def get_image_dimensions(item: dict, default_width: int = 0,
         Tuple of (width, height)
     """
     # Check common field patterns
+    width = default_width
     for w_key in ("image_width", "width", "img_width", "w"):
         if w_key in item:
-            width = int(item[w_key])
+            try:
+                width = int(item[w_key])
+            except (ValueError, TypeError):
+                pass
             break
-    else:
-        width = default_width
 
+    height = default_height
     for h_key in ("image_height", "height", "img_height", "h"):
         if h_key in item:
-            height = int(item[h_key])
+            try:
+                height = int(item[h_key])
+            except (ValueError, TypeError):
+                pass
             break
-    else:
-        height = default_height
 
     return (width, height)
 

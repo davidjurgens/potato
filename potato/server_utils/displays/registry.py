@@ -287,6 +287,9 @@ def _register_builtin_displays():
     from .spreadsheet_display import SpreadsheetDisplay
     from .code_display import CodeDisplay
     from .conversation_tree_display import ConversationTreeDisplay
+    from .agent_trace_display import AgentTraceDisplay
+    from .gallery_display import GalleryDisplay
+    from .interactive_chat_display import InteractiveChatDisplay
 
     displays = [
         DisplayDefinition(
@@ -455,6 +458,47 @@ def _register_builtin_displays():
             },
             supports_span_target=False,
             description="Conversation tree with collapsible branching nodes"
+        ),
+        DisplayDefinition(
+            name="agent_trace",
+            renderer=AgentTraceDisplay(),
+            required_fields=["key"],
+            optional_fields={
+                "show_timestamps": False,
+                "collapse_observations": False,
+                "step_type_colors": None,
+                "show_screenshots": True,
+                "show_step_numbers": True,
+                "show_summary": True,
+                "compact": False,
+            },
+            supports_span_target=True,
+            description="Agent trace display with step cards and type badges"
+        ),
+        DisplayDefinition(
+            name="gallery",
+            renderer=GalleryDisplay(),
+            required_fields=["key"],
+            optional_fields={
+                "layout": "horizontal",
+                "thumbnail_size": 300,
+                "show_captions": True,
+                "zoomable": True,
+                "max_height": 400,
+                "columns": 3,
+            },
+            supports_span_target=False,
+            description="Scrollable image gallery with captions"
+        ),
+        DisplayDefinition(
+            name="interactive_chat",
+            renderer=InteractiveChatDisplay(),
+            required_fields=["key"],
+            optional_fields={
+                "placeholder_text": "Start chatting with the agent to begin the task.",
+            },
+            supports_span_target=True,
+            description="Interactive agent chat with post-interaction trace display"
         ),
     ]
 

@@ -202,6 +202,10 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Validate layout configuration if present
     validate_layout_config(config_data)
 
+    # Validate BWS configuration if present
+    if 'bws_config' in config_data:
+        _validate_bws_config(config_data)
+
     # Validate MACE configuration if present
     if 'mace' in config_data:
         _validate_mace_config(config_data)
@@ -399,6 +403,47 @@ def _validate_keyword_highlight_for_images(config_data: Dict[str, Any]) -> None:
             )
 
 
+def _validate_bws_config(config_data: Dict[str, Any]) -> None:
+    """
+    Validate Best-Worst Scaling configuration.
+
+    Args:
+        config_data: The configuration data
+
+    Raises:
+        ConfigValidationError: If the BWS config is invalid
+    """
+    bws = config_data['bws_config']
+    if not isinstance(bws, dict):
+        raise ConfigValidationError("bws_config must be a dictionary")
+
+    if 'tuple_size' in bws:
+        if not isinstance(bws['tuple_size'], int) or bws['tuple_size'] < 2:
+            raise ConfigValidationError("bws_config.tuple_size must be an integer >= 2")
+
+    if 'seed' in bws:
+        if not isinstance(bws['seed'], int):
+            raise ConfigValidationError("bws_config.seed must be an integer")
+
+    if 'num_tuples' in bws and bws['num_tuples'] is not None:
+        if not isinstance(bws['num_tuples'], int) or bws['num_tuples'] < 1:
+            raise ConfigValidationError("bws_config.num_tuples must be a positive integer or null")
+
+    if 'min_item_appearances' in bws and bws['min_item_appearances'] is not None:
+        if not isinstance(bws['min_item_appearances'], int) or bws['min_item_appearances'] < 1:
+            raise ConfigValidationError("bws_config.min_item_appearances must be a positive integer or null")
+
+    # Validate scoring config if present
+    scoring = bws.get('scoring', {})
+    if scoring:
+        if not isinstance(scoring, dict):
+            raise ConfigValidationError("bws_config.scoring must be a dictionary")
+        valid_methods = ['counting', 'bradley_terry', 'plackett_luce']
+        method = scoring.get('method', 'counting')
+        if method not in valid_methods:
+            raise ConfigValidationError(f"bws_config.scoring.method must be one of: {valid_methods}")
+
+
 def _validate_mace_config(config_data: Dict[str, Any]) -> None:
     """
     Validate MACE competence estimation configuration.
@@ -528,7 +573,7 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
 
     # Validate annotation_type
     # Note: Keep in sync with potato.server_utils.schemas.registry
-    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'span_link', 'select', 'number', 'multirate', 'pure_display', 'video', 'image_annotation', 'audio_annotation', 'video_annotation', 'pairwise', 'coreference', 'tree_annotation', 'triage', 'event_annotation', 'tiered_annotation']
+    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'span_link', 'select', 'number', 'multirate', 'pure_display', 'video', 'image_annotation', 'audio_annotation', 'video_annotation', 'pairwise', 'coreference', 'tree_annotation', 'triage', 'event_annotation', 'tiered_annotation', 'bws']
     if scheme['annotation_type'] not in valid_types:
         raise ConfigValidationError(f"{path}.annotation_type must be one of: {', '.join(valid_types)}")
 
@@ -575,15 +620,25 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
             raise ConfigValidationError(f"{path}.labels cannot be empty")
 
     elif annotation_type == 'multirate':
-        required_multirate_fields = ['options', 'labels']
-        missing_multirate_fields = [field for field in required_multirate_fields if field not in scheme]
-        if missing_multirate_fields:
-            raise ConfigValidationError(f"{path} missing required fields for multirate: {', '.join(missing_multirate_fields)}")
+        # multirate requires 'labels' always, and either 'options' or 'options_from_data'
+        if 'labels' not in scheme:
+            raise ConfigValidationError(f"{path} missing required field for multirate: labels")
 
-        if not isinstance(scheme['options'], list):
-            raise ConfigValidationError(f"{path}.options must be a list")
-        if not scheme['options']:
-            raise ConfigValidationError(f"{path}.options cannot be empty")
+        has_options = 'options' in scheme
+        has_options_from_data = 'options_from_data' in scheme
+
+        if not has_options and not has_options_from_data:
+            raise ConfigValidationError(f"{path} must have either 'options' or 'options_from_data' for multirate")
+
+        if has_options:
+            if not isinstance(scheme['options'], list):
+                raise ConfigValidationError(f"{path}.options must be a list")
+            if not scheme['options']:
+                raise ConfigValidationError(f"{path}.options cannot be empty")
+
+        if has_options_from_data:
+            if not isinstance(scheme['options_from_data'], str) or not scheme['options_from_data'].strip():
+                raise ConfigValidationError(f"{path}.options_from_data must be a non-empty string (instance data field name)")
 
         if not isinstance(scheme['labels'], list):
             raise ConfigValidationError(f"{path}.labels must be a list")
@@ -790,6 +845,12 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
                 scale_labels = scale['labels']
                 if not isinstance(scale_labels, dict):
                     raise ConfigValidationError(f"{path}.scale.labels must be a dictionary")
+
+    elif annotation_type == 'bws':
+        # Validate tuple_size
+        if 'tuple_size' in scheme:
+            if not isinstance(scheme['tuple_size'], int) or scheme['tuple_size'] < 2:
+                raise ConfigValidationError(f"{path}.tuple_size must be an integer >= 2")
 
     # Validate display_logic if present
     if 'display_logic' in scheme:
@@ -2740,7 +2801,8 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
     # Valid display types - keep in sync with display registry
     valid_display_types = [
         "text", "html", "image", "video", "audio", "dialogue", "pairwise",
-        "pdf", "document", "spreadsheet", "code"
+        "pdf", "document", "spreadsheet", "code", "agent_trace", "gallery",
+        "conversation_tree", "interactive_chat"
     ]
 
     for i, field in enumerate(fields):
@@ -2773,7 +2835,7 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
         # Validate span_target
         if field.get("span_target"):
             # Types that support span annotation targets
-            span_target_types = ["text", "dialogue", "pdf", "document", "spreadsheet", "code"]
+            span_target_types = ["text", "dialogue", "pdf", "document", "spreadsheet", "code", "agent_trace", "interactive_chat"]
             if field_type not in span_target_types:
                 raise ConfigValidationError(
                     f"instance_display.fields[{i}].span_target is set but type '{field_type}' "

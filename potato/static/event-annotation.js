@@ -325,7 +325,7 @@ class EventAnnotationManager {
         // Find and unmark the span
         const spanData = this.arguments[role];
         if (spanData) {
-            const overlay = document.querySelector(`[data-annotation-id="${spanData.id}"]`);
+            const overlay = document.querySelector(`[data-annotation-id="${CSS.escape(spanData.id)}"]`);
             if (overlay) {
                 overlay.classList.remove('event-argument-selected');
             }
@@ -448,7 +448,7 @@ class EventAnnotationManager {
 
         // Check if spans have valid positions
         const lastEvent = this.events[this.events.length - 1];
-        const triggerOverlay = document.querySelector(`[data-annotation-id="${lastEvent.trigger_span_id}"]`);
+        const triggerOverlay = document.querySelector(`[data-annotation-id="${CSS.escape(lastEvent.trigger_span_id)}"]`);
 
         if (!triggerOverlay) {
             console.warn(`[EventAnnotationManager] Trigger overlay not found: ${lastEvent.trigger_span_id}`);
@@ -572,7 +572,7 @@ class EventAnnotationManager {
                 // Check if we can get valid positions
                 if (this.events.length > 0) {
                     const firstEvent = this.events[0];
-                    const triggerOverlay = document.querySelector(`[data-annotation-id="${firstEvent.trigger_span_id}"]`);
+                    const triggerOverlay = document.querySelector(`[data-annotation-id="${CSS.escape(firstEvent.trigger_span_id)}"]`);
 
                     if (triggerOverlay && this.textWrapper) {
                         const rect = triggerOverlay.getBoundingClientRect();
@@ -834,13 +834,16 @@ class EventAnnotationManager {
         let html = '';
         for (const event of this.events) {
             const config = this.eventTypeConfigs[event.event_type] || {};
-            const color = event.properties?.color || config.color || '#dc2626';
+            const rawColor = event.properties?.color || config.color || '#dc2626';
+            // Sanitize color: only allow hex colors, named colors, and rgb/hsl functions
+            const color = /^(#[0-9a-fA-F]{3,8}|[a-zA-Z]+|rgba?\([^)]+\)|hsla?\([^)]+\))$/.test(rawColor) ? rawColor : '#dc2626';
+            const safeEventId = this.escapeHtml(event.id);
 
             html += `
-                <div class="event-item" data-event-id="${event.id}" style="--event-color: ${color}">
+                <div class="event-item" data-event-id="${safeEventId}" style="--event-color: ${color}">
                     <div class="event-item-header">
                         <span class="event-type-badge" style="background-color: ${color}">${this.escapeHtml(event.event_type)}</span>
-                        <button class="event-delete-btn" onclick="window.eventAnnotationManagers['${this.schemaName}'].deleteEvent('${event.id}')" title="Delete event">
+                        <button class="event-delete-btn" data-event-id="${safeEventId}" title="Delete event">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="18" y1="6" x2="6" y2="18"></line>
                                 <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -866,10 +869,18 @@ class EventAnnotationManager {
         }
 
         this.eventList.innerHTML = html;
+
+        // Attach delete handlers via event delegation (avoids inline onclick XSS risk)
+        this.eventList.querySelectorAll('.event-delete-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const eventId = btn.getAttribute('data-event-id');
+                if (eventId) this.deleteEvent(eventId);
+            });
+        });
     }
 
     getSpanTextById(spanId) {
-        const overlay = document.querySelector(`[data-annotation-id="${spanId}"]`);
+        const overlay = document.querySelector(`[data-annotation-id="${CSS.escape(spanId)}"]`);
         if (overlay) {
             return this.getSpanText(overlay);
         }
@@ -1004,7 +1015,7 @@ class EventAnnotationManager {
 
             // Get trigger position
             console.log(`[EventAnnotationManager] Looking for trigger: ${event.trigger_span_id}`);
-            const triggerOverlay = document.querySelector(`[data-annotation-id="${event.trigger_span_id}"]`);
+            const triggerOverlay = document.querySelector(`[data-annotation-id="${CSS.escape(event.trigger_span_id)}"]`);
             if (!triggerOverlay) {
                 console.warn(`[EventAnnotationManager] Trigger overlay not found: ${event.trigger_span_id}`);
                 continue;
@@ -1046,7 +1057,7 @@ class EventAnnotationManager {
 
             // Draw spokes to arguments
             for (const arg of event.arguments || []) {
-                const argOverlay = document.querySelector(`[data-annotation-id="${arg.span_id}"]`);
+                const argOverlay = document.querySelector(`[data-annotation-id="${CSS.escape(arg.span_id)}"]`);
                 if (!argOverlay) continue;
 
                 const argRect = this.getSpanPosition(argOverlay, useCachedPositions);

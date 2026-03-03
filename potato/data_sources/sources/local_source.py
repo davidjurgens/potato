@@ -55,18 +55,29 @@ class LocalFileSource(DataSource):
         return self._source_id
 
     def _resolve_path(self) -> str:
-        """Resolve the file path."""
+        """Resolve the file path, validating relative paths stay within the task directory."""
         if self._resolved_path:
             return self._resolved_path
 
         path = self._path
+        task_dir = os.path.abspath(self._raw_config.get("task_dir", "."))
 
-        # If path is relative, resolve against task_dir from config
+        # If path is relative, resolve against task_dir and validate containment
         if not os.path.isabs(path):
-            task_dir = self._raw_config.get("task_dir", ".")
-            path = os.path.join(task_dir, path)
+            resolved = os.path.abspath(os.path.join(task_dir, path))
 
-        self._resolved_path = os.path.abspath(path)
+            # Ensure the resolved path is within the task directory
+            if not resolved.startswith(task_dir + os.sep) and resolved != task_dir:
+                raise ValueError(
+                    f"Path '{self._path}' resolves to '{resolved}' which is "
+                    f"outside the task directory '{task_dir}'. "
+                    f"Path traversal is not allowed."
+                )
+        else:
+            # Absolute paths are used as-is (admin-provided via config)
+            resolved = os.path.abspath(path)
+
+        self._resolved_path = resolved
         return self._resolved_path
 
     def is_available(self) -> bool:

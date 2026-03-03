@@ -174,7 +174,7 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
     layout_attrs = generate_layout_attributes(annotation_scheme)
 
     schematic = f"""
-    <form id="{escape_html_content(scheme_name)}" class="annotation-form span shadcn-span-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}"{target_field_attr}{discontinuous_attr}{entity_linking_attr} {layout_attrs}>
+    <form id="{escape_html_content(scheme_name)}" class="annotation-form span shadcn-span-container" action="/action_page.php" data-annotation-id="{escape_html_content(str(annotation_scheme.get("annotation_id", "")))}"{target_field_attr}{discontinuous_attr}{entity_linking_attr} {layout_attrs}>
             {get_ai_wrapper()}
         <fieldset schema="{escape_html_content(scheme_name)}">
             <legend class="shadcn-span-title">{escape_html_content(annotation_scheme["description"])}</legend>
@@ -494,7 +494,7 @@ def render_span_annotations(text, span_annotations, target_field=None):
             kb_attr = ""
             kb_class = ""
             if kb_id:
-                kb_attr = f' data-kb-id="{kb_id}" data-kb-source="{kb_source}"'
+                kb_attr = f' data-kb-id="{escape_html_content(kb_id)}" data-kb-source="{escape_html_content(kb_source)}"'
                 if kb_label:
                     kb_attr += f' data-kb-label="{escape_html_content(kb_label)}"'
                 kb_class = ' has-entity-link'

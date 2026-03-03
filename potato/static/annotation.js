@@ -1,5 +1,4 @@
-// annotation.js - PERSISTENCE_FIX_20240124
-console.log('[PERSISTENCE FIX] annotation.js loaded - Version 20240124');
+// annotation.js
 
 // Debug logging utility - respects the debug setting from server config
 function debugLog(...args) {
@@ -54,6 +53,42 @@ const boundEventHandlers = {
 };
 
 let aiAssistantManger = new AIAssistantManager();
+
+/**
+ * Flush any pending debounced save synchronously using navigator.sendBeacon().
+ * Called from beforeunload and visibilitychange so annotations are not lost
+ * when the user refreshes or switches tabs before the 500ms debounce fires.
+ * sendBeacon is the W3C standard for fire-and-forget requests during page unload —
+ * regular fetch() is cancelled by browsers during unload.
+ */
+function flushPendingSave() {
+    if (!textSaveTimer || !currentInstance) return;
+    clearTimeout(textSaveTimer);
+    textSaveTimer = null;
+
+    syncAnnotationsFromDOM();
+
+    const labelAnnotations = {};
+    for (const [schema, labels] of Object.entries(currentAnnotations)) {
+        for (const [label, value] of Object.entries(labels)) {
+            labelAnnotations[`${schema}:${label}`] = value;
+        }
+    }
+
+    const payload = JSON.stringify({
+        instance_id: currentInstance.id,
+        annotations: labelAnnotations,
+        span_annotations: extractSpanAnnotationsFromDOM()
+    });
+
+    navigator.sendBeacon('/updateinstance',
+        new Blob([payload], {type: 'application/json'}));
+}
+
+window.addEventListener('beforeunload', flushPendingSave);
+document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'hidden') flushPendingSave();
+});
 
 // DEEP DEBUG: Enhanced tracking
 let deepDebugState = {
@@ -442,6 +477,8 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     // Initialize pairwise annotation
     initPairwiseAnnotation();
+    // Initialize BWS annotation
+    initBwsAnnotation();
 });
 
 /**
@@ -627,6 +664,16 @@ function setupEventListeners() {
             const dataKey = btn.getAttribute('data-key');
             if (dataKey && key === dataKey) {
                 selectPairwiseOption(btn);
+                return;
+            }
+        }
+
+        // Check BWS tiles (best: numbers, worst: letters)
+        const bwsTiles = document.querySelectorAll('.bws-tile');
+        for (const tile of bwsTiles) {
+            const dataKey = tile.getAttribute('data-key');
+            if (dataKey && key === dataKey) {
+                selectBwsTile(tile);
                 return;
             }
         }
@@ -1012,6 +1059,24 @@ function clearAllFormInputs() {
         input.value = '';
     });
 
+    // Clear hidden annotation inputs (BWS, triage, and other schemas using hidden inputs)
+    // Remove data-modified flag and clear values unless server has set them
+    const hiddenAnnotationInputs = document.querySelectorAll('input[type="hidden"].annotation-input');
+    hiddenAnnotationInputs.forEach(input => {
+        if (input.getAttribute('data-server-set') !== 'true') {
+            input.value = '';
+            input.removeAttribute('data-modified');
+            debugLog('🔍 Cleared hidden annotation input (browser-cached):', input.getAttribute('name'));
+        } else {
+            debugLog('🔍 Preserving server-provided hidden annotation input:', input.getAttribute('name'));
+        }
+    });
+
+    // Clear BWS tile selections
+    document.querySelectorAll('.bws-tile.selected').forEach(
+        tile => tile.classList.remove('selected')
+    );
+
     // Clear hidden annotation data inputs (image/audio/video annotations)
     // BUT only if they don't have server-provided data (data-server-set="true")
     // This prevents browser form restoration from persisting annotations across instances
@@ -1159,6 +1224,32 @@ async function loadAnnotations() {
             }
         });
 
+        // Read hidden input state from server-rendered HTML
+        // The server sets the 'value' attribute AND 'data-server-set' flag via BeautifulSoup
+        // for saved annotations. We MUST check for data-server-set to distinguish server-rendered
+        // values from browser-cached form state — browsers restore hidden input values across
+        // window.location.reload(), so getAttribute('value') alone is unreliable.
+        const hiddenInputs = document.querySelectorAll('input[type="hidden"].annotation-input');
+        hiddenInputs.forEach(input => {
+            const schema = input.getAttribute('schema');
+            const labelName = input.getAttribute('label_name');
+            const isServerSet = input.hasAttribute('data-server-set');
+            if (isServerSet) {
+                // Server explicitly set this value — trust it
+                const serverValue = input.getAttribute('value') || '';
+                input.value = serverValue;
+                if (schema && labelName && serverValue) {
+                    if (!currentAnnotations[schema]) {
+                        currentAnnotations[schema] = {};
+                    }
+                    currentAnnotations[schema][labelName] = serverValue;
+                }
+            } else {
+                // No server-set flag — clear any browser-cached value
+                input.value = '';
+            }
+        });
+
         debugLog('🔍 Annotations loaded from DOM:', currentAnnotations);
     } catch (error) {
         console.error('❌ Error loading annotations:', error);
@@ -1176,11 +1267,7 @@ function generateAnnotationForms() {
 }
 
 async function saveAnnotations() {
-    console.log('[PERSISTENCE FIX] saveAnnotations called');
-    console.log('[PERSISTENCE FIX] currentInstance:', currentInstance?.id);
-
     if (!currentInstance) {
-        console.log('[PERSISTENCE FIX] saveAnnotations - no currentInstance, returning');
         return;
     }
 
@@ -1201,10 +1288,7 @@ async function saveAnnotations() {
 
         // Sync currentAnnotations from DOM to ensure we have the latest state
         // This handles cases where change events may not have fired (e.g., JS clicks)
-        console.log('[PERSISTENCE FIX] before syncAnnotationsFromDOM:', JSON.stringify(currentAnnotations));
         syncAnnotationsFromDOM();
-        console.log('[PERSISTENCE FIX] after syncAnnotationsFromDOM:', JSON.stringify(currentAnnotations));
-
         // Save both label and span annotations via /updateinstance
         const spanAnnotations = extractSpanAnnotationsFromDOM();
         debugLog('[DEBUG] saveAnnotations: spanAnnotations to send:', spanAnnotations);
@@ -1217,7 +1301,6 @@ async function saveAnnotations() {
                 labelAnnotations[key] = value;
             }
         }
-
         // Also collect data from hidden annotation inputs (image/audio/video annotations)
         const hiddenInputs = document.querySelectorAll('.annotation-data-input');
         hiddenInputs.forEach(input => {
@@ -1483,9 +1566,7 @@ async function navigateToNext() {
 }
 
 async function navigateToInstance(instanceIndex) {
-    console.log('[PERSISTENCE FIX] navigateToInstance called with index:', instanceIndex);
     if (isLoading) {
-        console.log('[PERSISTENCE FIX] navigateToInstance - blocked, isLoading=true');
         return;
     }
 
@@ -1493,11 +1574,8 @@ async function navigateToInstance(instanceIndex) {
         setLoading(true);
 
         // Save annotations before navigating away (same as navigateToPrevious/Next)
-        console.log('[PERSISTENCE FIX] navigateToInstance - About to call saveAnnotations');
-        console.log('[PERSISTENCE FIX] currentAnnotations before save:', JSON.stringify(currentAnnotations));
         debugLog('[DEEP DEBUG NAV] navigateToInstance - Saving annotations before navigation');
         await saveAnnotations();
-        console.log('[PERSISTENCE FIX] navigateToInstance - saveAnnotations completed');
 
         // DEBUG: Track overlays before navigation
         debugTrackOverlays('BEFORE_GO_TO_NAVIGATION', currentInstance?.id);
@@ -1752,12 +1830,16 @@ function syncAnnotationsFromDOM() {
         }
     });
 
-    // Sync hidden inputs (used by triage and other custom schemas)
+    // Sync hidden inputs (used by BWS, triage, and other custom schemas)
+    // IMPORTANT: Only include hidden inputs explicitly set by user interaction (data-modified)
+    // or server-side annotation restore (data-server-set). Browsers restore hidden input .value
+    // across page reloads (form state caching), which would otherwise leak annotations between instances.
     const hiddenInputs = document.querySelectorAll('input[type="hidden"].annotation-input');
     hiddenInputs.forEach(input => {
         const schema = input.getAttribute('schema');
         const labelName = input.getAttribute('label_name');
-        if (schema && labelName && input.value) {
+        const isModified = input.hasAttribute('data-modified') || input.hasAttribute('data-server-set');
+        if (schema && labelName && input.value && isModified) {
             if (!currentAnnotations[schema]) {
                 currentAnnotations[schema] = {};
             }
@@ -1928,7 +2010,7 @@ function handleInputChange(element) {
 }
 
 function populateInputValues() {
-    if (!currentAnnotations || !userState) return;
+    if (!currentAnnotations) return;
 
     debugLog('🔍 Populating input values with annotations:', currentAnnotations);
 
@@ -2022,6 +2104,9 @@ function populateInputValues() {
 
     // Populate pairwise annotations
     restorePairwiseAnnotations();
+
+    // Populate BWS annotations
+    restoreBwsAnnotations();
 
     validateRequiredFields();
 }
@@ -4063,3 +4148,201 @@ window.selectPairwiseTile = selectPairwiseTile;
 window.selectPairwiseOption = selectPairwiseOption;
 window.updatePairwiseScaleDisplay = updatePairwiseScaleDisplay;
 window.restorePairwiseAnnotations = restorePairwiseAnnotations;
+
+// ========================================
+// BWS (BEST-WORST SCALING) ANNOTATION HANDLERS
+// ========================================
+
+/**
+ * Initialize BWS annotation interface.
+ * Called after DOMContentLoaded and after forms are generated.
+ */
+function initBwsAnnotation() {
+    const bwsForms = document.querySelectorAll('.annotation-form.bws');
+    if (bwsForms.length === 0) return;
+
+    debugLog('[BWS] Initializing BWS annotation');
+
+    // Setup tile click handlers
+    document.querySelectorAll('.bws-tile').forEach(tile => {
+        tile.addEventListener('click', function() {
+            selectBwsTile(this);
+        });
+        tile.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                selectBwsTile(this);
+            }
+        });
+    });
+
+    // Populate BWS items display from var_elems
+    populateBwsItemsDisplay();
+
+    debugLog('[BWS] Initialization complete');
+}
+
+/**
+ * Populate BWS items display from the bws_items var_elems data.
+ */
+function populateBwsItemsDisplay() {
+    const bwsForms = document.querySelectorAll('.annotation-form.bws');
+    if (bwsForms.length === 0) return;
+
+    // Read BWS items from var_elems <script> tag
+    let bwsItems = null;
+    const bwsItemsScript = document.getElementById('bws_items');
+    if (bwsItemsScript) {
+        try {
+            bwsItems = JSON.parse(bwsItemsScript.textContent);
+        } catch (e) {
+            debugLog('[BWS] Error parsing bws_items JSON:', e);
+        }
+    }
+
+    if (!bwsItems || !Array.isArray(bwsItems) || bwsItems.length === 0) {
+        debugLog('[BWS] No BWS items data found');
+        return;
+    }
+
+    debugLog('[BWS] Populating items display with', bwsItems.length, 'items');
+
+    // Build items display for each BWS form
+    bwsForms.forEach(form => {
+        const displayContainer = form.querySelector('.bws-items-display');
+        if (!displayContainer) return;
+
+        let html = '<div class="bws-items-list">';
+        bwsItems.forEach(item => {
+            const pos = escapeHtml(item.position || '');
+            const text = escapeHtml(item.text || '');
+            html += `
+                <div class="bws-item" data-position="${pos}">
+                    <span class="bws-item-label">${pos}.</span>
+                    <span class="bws-item-text">${text}</span>
+                </div>`;
+        });
+        html += '</div>';
+        displayContainer.innerHTML = html;
+    });
+
+    // Hide the standard "Text to Annotate" section
+    const instanceTextContainer = document.querySelector('.instance-text-container');
+    if (instanceTextContainer) {
+        instanceTextContainer.style.display = 'none';
+    }
+    const textHeading = document.querySelector('h5.mb-3');
+    if (textHeading && textHeading.textContent.includes('Text to Annotate')) {
+        textHeading.style.display = 'none';
+    }
+}
+
+/**
+ * Select a BWS tile (best or worst).
+ * @param {HTMLElement} tile - The tile element clicked
+ */
+function selectBwsTile(tile) {
+    const schema = tile.getAttribute('data-schema');
+    const value = tile.getAttribute('data-value');
+    const role = tile.getAttribute('data-role'); // "best" or "worst"
+    const form = tile.closest('form');
+
+    if (!form) return;
+
+    debugLog(`[BWS] Selecting tile: schema=${schema}, value=${value}, role=${role}`);
+
+    // Deselect all tiles of the same role in this form
+    const roleClass = role === 'best' ? '.bws-best-tile' : '.bws-worst-tile';
+    form.querySelectorAll(roleClass).forEach(t => t.classList.remove('selected'));
+
+    // Select this tile
+    tile.classList.add('selected');
+
+    // Update the corresponding hidden input
+    const labelName = role; // "best" or "worst"
+    const hiddenInput = form.querySelector(`.bws-value[label_name="${labelName}"]`);
+    if (hiddenInput) {
+        hiddenInput.value = value;
+        hiddenInput.setAttribute('data-modified', 'true');
+        registerAnnotation(hiddenInput);
+        hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    // Validate best != worst
+    validateBwsSelection(form);
+
+    // Update validation
+    validateRequiredFields();
+}
+
+/**
+ * Validate that best and worst selections are different.
+ * @param {HTMLElement} form - The BWS form
+ */
+function validateBwsSelection(form) {
+    const bestInput = form.querySelector('.bws-value[label_name="best"]');
+    const worstInput = form.querySelector('.bws-value[label_name="worst"]');
+    const errorDiv = form.querySelector('.bws-validation-error');
+
+    if (!bestInput || !worstInput) return;
+
+    const bestVal = bestInput.value;
+    const worstVal = worstInput.value;
+
+    if (bestVal && worstVal && bestVal === worstVal) {
+        if (errorDiv) errorDiv.style.display = 'block';
+        // Clear the more recently selected one — we detect by checking which role
+        // was just selected. Since we can't easily tell, clear worst.
+        worstInput.value = '';
+        form.querySelectorAll('.bws-worst-tile').forEach(t => t.classList.remove('selected'));
+        registerAnnotation(worstInput);
+        debugLog('[BWS] Validation error: best == worst, cleared worst');
+    } else {
+        if (errorDiv) errorDiv.style.display = 'none';
+    }
+}
+
+/**
+ * Restore BWS annotation state from saved annotations.
+ * Called during populateInputValues.
+ */
+function restoreBwsAnnotations() {
+    if (!currentAnnotations) return;
+
+    debugLog('[BWS] Restoring BWS annotations');
+
+    document.querySelectorAll('.annotation-form.bws').forEach(form => {
+        // Restore best
+        const bestInput = form.querySelector('.bws-value[label_name="best"]');
+        if (bestInput) {
+            const schema = bestInput.getAttribute('schema');
+            if (schema && currentAnnotations[schema] && currentAnnotations[schema]['best']) {
+                const savedValue = currentAnnotations[schema]['best'];
+                bestInput.value = savedValue;
+                bestInput.setAttribute('data-modified', 'true');
+                const tile = form.querySelector(`.bws-best-tile[data-value="${savedValue}"]`);
+                if (tile) tile.classList.add('selected');
+                debugLog(`[BWS] Restored best: ${schema}/best = ${savedValue}`);
+            }
+        }
+
+        // Restore worst
+        const worstInput = form.querySelector('.bws-value[label_name="worst"]');
+        if (worstInput) {
+            const schema = worstInput.getAttribute('schema');
+            if (schema && currentAnnotations[schema] && currentAnnotations[schema]['worst']) {
+                const savedValue = currentAnnotations[schema]['worst'];
+                worstInput.value = savedValue;
+                worstInput.setAttribute('data-modified', 'true');
+                const tile = form.querySelector(`.bws-worst-tile[data-value="${savedValue}"]`);
+                if (tile) tile.classList.add('selected');
+                debugLog(`[BWS] Restored worst: ${schema}/worst = ${savedValue}`);
+            }
+        }
+    });
+}
+
+// Export BWS functions globally
+window.initBwsAnnotation = initBwsAnnotation;
+window.selectBwsTile = selectBwsTile;
+window.restoreBwsAnnotations = restoreBwsAnnotations;

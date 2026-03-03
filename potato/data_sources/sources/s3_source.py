@@ -5,9 +5,12 @@ This module provides data loading from Amazon S3 buckets,
 supporting various authentication methods.
 """
 
+import ipaddress
 import json
 import logging
+import socket
 from typing import Any, Dict, Iterator, List, Optional
+from urllib.parse import urlparse
 
 from potato.data_sources.base import DataSource, SourceConfig
 
@@ -91,6 +94,37 @@ class S3Source(DataSource):
             errors.append(
                 "'access_key_id' is required when 'secret_access_key' is provided"
             )
+
+        # SSRF protection: validate endpoint_url does not point to private IPs
+        if self._endpoint_url:
+            try:
+                parsed = urlparse(self._endpoint_url)
+                if parsed.scheme not in ('http', 'https'):
+                    errors.append(
+                        f"Invalid endpoint_url scheme '{parsed.scheme}'. "
+                        f"Only http/https allowed."
+                    )
+                hostname = parsed.hostname
+                if hostname:
+                    try:
+                        addr_info = socket.getaddrinfo(hostname, None)
+                        for info in addr_info:
+                            ip_str = info[4][0]
+                            try:
+                                ip = ipaddress.ip_address(ip_str)
+                                if ip.is_loopback or ip.is_link_local:
+                                    errors.append(
+                                        f"endpoint_url host '{hostname}' resolves "
+                                        f"to blocked IP {ip_str}. Loopback and "
+                                        f"link-local addresses are not allowed."
+                                    )
+                            except ValueError:
+                                pass
+                    except socket.gaierror:
+                        # Can't resolve at validation time — will fail at connect
+                        pass
+            except Exception as e:
+                errors.append(f"Invalid endpoint_url: {e}")
 
         return errors
 

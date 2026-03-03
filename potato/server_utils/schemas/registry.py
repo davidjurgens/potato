@@ -244,6 +244,7 @@ def _register_builtin_schemas():
     from .triage import generate_triage_layout
     from .event_annotation import generate_event_annotation_layout
     from .tiered_annotation import generate_tiered_annotation_layout
+    from .bws import generate_bws_layout
 
     schemas = [
         SchemaDefinition(
@@ -413,6 +414,14 @@ def _register_builtin_schemas():
             optional_fields=["media_type", "tier_height", "show_tier_labels", "collapsed_tiers", "zoom_enabled", "playback_rate_control", "overview_height"],
             supports_keybindings=True,
             description="Hierarchical multi-tier annotation for audio/video (ELAN-style)"
+        ),
+        SchemaDefinition(
+            name="bws",
+            generator=generate_bws_layout,
+            required_fields=["name", "description"],
+            optional_fields=["best_description", "worst_description", "tuple_size", "sequential_key_binding", "label_requirement"],
+            supports_keybindings=True,
+            description="Best-Worst Scaling: select the best and worst item from a set"
         ),
     ]
 

@@ -47,7 +47,7 @@ def _generate_select_layout_internal(annotation_scheme):
     layout_attrs = generate_layout_attributes(annotation_scheme)
 
     schematic = (
-          f'<form id="{escape_html_content(annotation_scheme["name"])}" class="annotation-form select" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" data-annotation-type="select" data-schema-name="{escape_html_content(annotation_scheme["name"])}" {layout_attrs}>     {get_ai_wrapper()}'
+          f'<form id="{escape_html_content(annotation_scheme["name"])}" class="annotation-form select" action="/action_page.php" data-annotation-id="{escape_html_content(str(annotation_scheme.get("annotation_id", "")))}" data-annotation-type="select" data-schema-name="{escape_html_content(annotation_scheme["name"])}" {layout_attrs}>     {get_ai_wrapper()}'
         + "  <fieldset>"
         + f"  <legend>{escape_html_content(annotation_scheme['description'])}</legend>"
         + (

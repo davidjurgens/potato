@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
 import logging
 import json
+import urllib.parse
 
 logger = logging.getLogger(__name__)
 
@@ -384,7 +385,7 @@ class WikidataClient(KnowledgeBaseClient):
             if wiki_key in sitelinks:
                 wiki_title = sitelinks[wiki_key].get("title", "")
                 if wiki_title:
-                    url = f"https://{self.config.language}.wikipedia.org/wiki/{wiki_title.replace(' ', '_')}"
+                    url = f"https://{self.config.language}.wikipedia.org/wiki/{urllib.parse.quote(wiki_title.replace(' ', '_'), safe='')}"
 
             if not url:
                 url = f"{self.WIKIDATA_ENTITY_URL}{entity_id}"
@@ -536,9 +537,19 @@ class UMLSClient(KnowledgeBaseClient):
             for st in result.get("semanticTypes", []):
                 semantic_types.append(st.get("name", ""))
 
-            # Get definitions
+            # Get definitions — validate URL to prevent SSRF via API response
             definitions_url = result.get("definitions", "")
             description = ""
+            if definitions_url:
+                # Only follow definitions URLs pointing to the legitimate UMLS API
+                UMLS_API_BASE = "https://uts-ws.nlm.nih.gov/"
+                if not definitions_url.startswith(UMLS_API_BASE):
+                    logger.warning(
+                        f"Ignoring definitions URL from non-UMLS domain: "
+                        f"{definitions_url[:100]}"
+                    )
+                    definitions_url = ""
+
             if definitions_url:
                 try:
                     def_response = requests.get(

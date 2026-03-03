@@ -119,7 +119,7 @@ def _generate_span_link_layout_internal(annotation_scheme, horizontal=False):
     schematic = f"""
     <div id="{escape_html_content(scheme_name)}" class="span-link-container annotation-form"
          data-annotation-type="span_link"
-         data-annotation-id="{annotation_scheme.get('annotation_id', scheme_name)}"
+         data-annotation-id="{escape_html_content(str(annotation_scheme.get('annotation_id', scheme_name)))}"
          data-span-schema="{escape_html_content(span_schema)}"
          data-show-arcs="{str(show_arcs).lower()}"
          data-arc-position="{escape_html_content(arc_position)}"

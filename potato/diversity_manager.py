@@ -16,7 +16,6 @@ Key Components:
 import json
 import logging
 import os
-import pickle
 import queue
 import threading
 import time
@@ -165,12 +164,24 @@ class DiversityManager:
             return
 
         try:
+            import numpy as np
+
             cache_dir = self._get_cache_dir()
 
-            # Save embeddings as pickle (numpy arrays)
-            emb_path = os.path.join(cache_dir, "embeddings.pkl")
-            with open(emb_path, "wb") as f:
-                pickle.dump(self.embeddings, f)
+            # Save embeddings as numpy .npz (safe, unlike pickle)
+            emb_path = os.path.join(cache_dir, "embeddings.npz")
+            if self.embeddings:
+                ids = list(self.embeddings.keys())
+                vectors = np.array([self.embeddings[iid] for iid in ids])
+                np.savez(emb_path, ids=np.array(ids), vectors=vectors)
+            else:
+                # Save empty arrays
+                np.savez(emb_path, ids=np.array([]), vectors=np.array([]))
+
+            # Also remove legacy pickle file if it exists
+            legacy_pkl = os.path.join(cache_dir, "embeddings.pkl")
+            if os.path.exists(legacy_pkl):
+                os.remove(legacy_pkl)
 
             # Save cluster labels as JSON
             labels_path = os.path.join(cache_dir, "cluster_labels.json")
@@ -184,12 +195,29 @@ class DiversityManager:
     def _load_cache(self) -> None:
         """Load cached embeddings and cluster labels from disk."""
         try:
+            import numpy as np
+
             cache_dir = self._get_cache_dir()
 
-            emb_path = os.path.join(cache_dir, "embeddings.pkl")
+            # Load embeddings from numpy .npz (safe format)
+            emb_path = os.path.join(cache_dir, "embeddings.npz")
             if os.path.exists(emb_path):
-                with open(emb_path, "rb") as f:
-                    self.embeddings = pickle.load(f)
+                data = np.load(emb_path, allow_pickle=False)
+                ids = data["ids"]
+                vectors = data["vectors"]
+                if len(ids) > 0 and len(vectors) > 0:
+                    self.embeddings = {
+                        str(iid): vec for iid, vec in zip(ids, vectors)
+                    }
+                else:
+                    self.embeddings = {}
+            elif os.path.exists(os.path.join(cache_dir, "embeddings.pkl")):
+                # Legacy pickle file — refuse to load (security risk)
+                self.logger.warning(
+                    "Found legacy embeddings.pkl cache file. "
+                    "Refusing to load pickle files due to security risks. "
+                    "Embeddings will be recomputed and saved in safe .npz format."
+                )
 
             labels_path = os.path.join(cache_dir, "cluster_labels.json")
             if os.path.exists(labels_path):
@@ -473,7 +501,8 @@ class DiversityManager:
                 return None
 
             # Return first available item from the cluster
-            return available_by_cluster[next_cluster][0]
+            items = available_by_cluster.get(next_cluster, [])
+            return items[0] if items else None
 
     def generate_diverse_ordering(
         self,
@@ -530,11 +559,28 @@ class DiversityManager:
                     diverse_order.extend(sorted(remaining))
                     break
 
-            # Merge preserved items back at their original positions
-            result = diverse_order.copy()
-            for orig_idx, iid in sorted(preserved_positions):
-                insert_pos = min(orig_idx, len(result))
-                result.insert(insert_pos, iid)
+            # Merge preserved items back at their original positions using
+            # a slot-based approach. Pre-allocate slots for preserved items,
+            # then fill remaining slots with diverse items in order.
+            total_len = len(diverse_order) + len(preserved_positions)
+            result = [None] * total_len
+
+            # Place preserved items in their original slots
+            for orig_idx, iid in preserved_positions:
+                slot = min(orig_idx, total_len - 1)
+                result[slot] = iid
+
+            # Fill remaining slots with diverse items in order
+            diverse_iter = iter(diverse_order)
+            for i in range(total_len):
+                if result[i] is None:
+                    try:
+                        result[i] = next(diverse_iter)
+                    except StopIteration:
+                        break
+
+            # Remove any remaining None slots (shouldn't happen normally)
+            result = [x for x in result if x is not None]
 
             return result
 

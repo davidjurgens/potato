@@ -2067,17 +2067,19 @@ fieldset[schema] {
 
 /* Dark mode support for dialogue */
 @media (prefers-color-scheme: dark) {
+  .dialogue-turn.turn-even,
   .dialogue-turn-even {
-    background-color: #1e293b;
+    background-color: rgba(255, 255, 255, 0.05);
   }
 
+  .dialogue-turn.turn-odd,
   .dialogue-turn-odd {
-    background-color: #0f172a;
+    background-color: transparent;
     border-left-color: #334155;
   }
 
   .dialogue-turn:hover {
-    background-color: #293548;
+    background-color: rgba(255, 255, 255, 0.08);
   }
 
   /* Lighter speaker colors for dark mode */
@@ -2463,7 +2465,7 @@ fieldset[schema] {
 }
 
 .display-type-dialogue .dialogue-turn.turn-even {
-  background: var(--muted, #f4f4f5);
+  background: #f8f9fa;
 }
 
 .display-type-dialogue .dialogue-turn.turn-odd {
@@ -2569,10 +2571,42 @@ fieldset[schema] {
   white-space: nowrap;
 }
 
+/* Multi-dimension per-turn rating group */
+.per-turn-rating-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.1);
+}
+
+.per-turn-rating-group .per-turn-rating {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.ptr-schema-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  white-space: nowrap;
+  min-width: 80px;
+}
+
 /* Dark mode per-turn ratings */
 @media (prefers-color-scheme: dark) {
   .per-turn-rating {
     border-top-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .per-turn-rating-group {
+    border-top-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .ptr-schema-label {
+    color: #94a3b8;
   }
 
   .ptr-value {
@@ -3370,5 +3404,143 @@ body.has-pairwise-display #instance-text {
   color: #495057;
   min-width: 24px;
   text-align: right;
+}
+
+/* ========================================
+   BWS (Best-Worst Scaling) Styles
+   ======================================== */
+
+.bws-items-display {
+  margin-bottom: 16px;
+}
+
+.bws-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bws-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.bws-item-label {
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--primary);
+  min-width: 24px;
+  flex-shrink: 0;
+}
+
+.bws-item-text {
+  font-size: 0.95rem;
+  color: var(--foreground);
+  line-height: 1.5;
+}
+
+.bws-description {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.bws-selection-section {
+  margin-bottom: 12px;
+}
+
+.bws-selection-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--foreground);
+}
+
+.bws-best-label {
+  color: #16a34a;
+}
+
+.bws-worst-label {
+  color: #dc2626;
+}
+
+.bws-selection-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.bws-tile {
+  flex: 0 0 auto;
+  min-width: 60px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  background-color: var(--card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.bws-tile:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.bws-tile:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.2);
+}
+
+.bws-best-tile:hover {
+  border-color: #16a34a;
+}
+
+.bws-worst-tile:hover {
+  border-color: #dc2626;
+}
+
+.bws-best-tile.selected {
+  border-color: #16a34a;
+  background-color: rgba(22, 163, 74, 0.08);
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.15);
+}
+
+.bws-worst-tile.selected {
+  border-color: #dc2626;
+  background-color: rgba(220, 38, 38, 0.08);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);
+}
+
+.bws-tile-label {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--foreground);
+}
+
+.bws-tile-shortcut {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  background-color: var(--muted);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.bws-validation-error {
+  color: #dc2626;
+  font-size: 0.85rem;
+  margin-top: 8px;
+  padding: 6px 12px;
+  background-color: rgba(220, 38, 38, 0.06);
+  border-radius: var(--radius);
+  border: 1px solid rgba(220, 38, 38, 0.2);
 }
 

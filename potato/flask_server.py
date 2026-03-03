@@ -494,6 +494,42 @@ def load_instance_data(config: dict):
 
         logger.debug("Loaded %d instances from %s" % (line_no, data_fname))
 
+    # If BWS config is present, generate tuples from pool items
+    bws_config = config.get("bws_config")
+    if bws_config:
+        from potato.bws_tuple_generator import BwsTupleGenerator
+
+        # Collect all loaded pool items
+        pool_items = [item.get_data() for item in ism.items()]
+
+        # Store pool items for scoring later
+        config["_bws_pool_items"] = [dict(item) for item in pool_items]
+
+        generator = BwsTupleGenerator(
+            pool_items=pool_items,
+            id_key=id_key,
+            text_key=text_key,
+            tuple_size=bws_config.get("tuple_size", 4),
+            num_tuples=bws_config.get("num_tuples"),
+            seed=bws_config.get("seed", 42),
+            min_item_appearances=bws_config.get("min_item_appearances"),
+        )
+        generator.validate()
+        tuples = generator.generate()
+
+        # Clear pool items and replace with generated tuples
+        ism.clear()
+        for t in tuples:
+            ism.add_item(str(t[id_key]), t)
+
+        # Update max annotations per user for the new tuple count
+        max_annotations_per_user = config.get(
+            "max_annotations_per_user", len(ism.get_instance_ids())
+        )
+        get_user_state_manager().set_max_annotations_per_user(max_annotations_per_user)
+
+        logger.info(f"BWS: Replaced {len(pool_items)} pool items with {len(tuples)} tuples")
+
     # For each item, render the text to display in the UI ahead of time.
     _render_displayed_text(text_key)
 
@@ -1102,6 +1138,16 @@ def load_phase_data(config: dict) -> None:
 
     for phase_name in phase_order:
         try:
+            # Skip 'annotation' — it's handled by the main annotation flow,
+            # not the phase loader. It can appear in the order for sequencing
+            # but doesn't need a phase dict entry.
+            if phase_name not in phases_dict:
+                if phase_name == "annotation":
+                    logger.debug(f"Skipping phase '{phase_name}' in loader (handled by main annotation flow)")
+                else:
+                    logger.warning(f"Phase '{phase_name}' in order but not defined in phases config, skipping")
+                continue
+
             phase = phases_dict[phase_name]
 
             # Handle new format with annotation_schemes directly in phase
@@ -1136,18 +1182,56 @@ def load_phase_data(config: dict) -> None:
 
                 phase_type = UserPhase.fromstr(phase['type'])
 
+                # Instructions phase with an HTML file: register the HTML
+                # directly as a template rather than parsing it as annotation
+                # schemes.
+                if phase_type == UserPhase.INSTRUCTIONS and "file" in phase and phase['file']:
+                    phase_file = get_abs_or_rel_path(phase['file'], config)
+                    if phase_file.endswith(('.html', '.htm')):
+                        logger.debug(f"Instructions phase '{phase_name}' using HTML file: {phase_file}")
+                        # Read the HTML and write it as a generated template
+                        with open(phase_file, 'rt') as f:
+                            instructions_html = f.read()
+
+                        # Wrap in a minimal page template for consistency
+                        cur_program_dir = os.path.dirname(os.path.abspath(__file__))
+                        from server_utils.front_end import get_html
+                        html_template_file = os.path.join(cur_program_dir, 'templates', 'base_template_v2.html')
+                        header_file = os.path.join(cur_program_dir, 'templates', 'header.html')
+                        html_template = get_html(html_template_file, config)
+                        header = get_html(header_file, config)
+                        html_template = html_template.replace("{{ HEADER }}", header)
+                        html_template = html_template.replace("{{ TASK_LAYOUT }}", instructions_html)
+                        html_template = html_template.replace("{{annotation_codebook}}", "")
+                        html_template = html_template.replace("{{annotation_task_name}}",
+                                                              config.get("annotation_task_name", ""))
+                        html_template = html_template.replace("{{keybindings}}", "")
+                        html_template = html_template.replace("{{statistics_nav}}", "")
+
+                        site_name = (
+                            "_".join(config["annotation_task_name"].split(" "))
+                            + "-" + "%s.html" % phase_name
+                        )
+                        generated_dir = os.path.join(config["site_dir"], "generated")
+                        if not os.path.exists(generated_dir):
+                            os.makedirs(generated_dir)
+                        output_html_fname = os.path.join(generated_dir, site_name)
+                        with open(output_html_fname, "wt") as outf:
+                            outf.write(html_template)
+
+                        user_state_manager = get_user_state_manager()
+                        user_state_manager.add_phase(phase_type, phase_name, site_name)
+                        logger.debug(f"Registered instructions phase {phase_name} with HTML {site_name}")
+                        continue
+
                 # Training and annotation phases can work without a file
-                # They use the main annotation schemes from the config
+                # They use the main annotation schemes from the config.
+                # Training files typically contain training data items (with
+                # gold_label), not annotation schemes — so always use the main
+                # annotation schemes for the training phase layout.
                 if phase_type in [UserPhase.TRAINING, UserPhase.ANNOTATION]:
-                    if "file" not in phase or not phase['file']:
-                        # Use the main annotation schemes for training/annotation
-                        phase_labeling_schemes = config.get('annotation_schemes', [])
-                        logger.debug(f"Phase {phase_name} using main annotation schemes")
-                    else:
-                        # Use the file if specified
-                        phase_scheme_fname = get_abs_or_rel_path(phase['file'], config)
-                        logger.debug(f"Resolved phase file for {phase_name}: {phase_scheme_fname}")
-                        phase_labeling_schemes = get_phase_annotation_schemes(phase_scheme_fname)
+                    phase_labeling_schemes = config.get('annotation_schemes', [])
+                    logger.debug(f"Phase {phase_name} using main annotation schemes")
                 else:
                     # Other phases (prestudy, poststudy, etc.)
                     # Support instrument/instruments keys for standard survey instruments
@@ -1496,6 +1580,11 @@ def get_current_page_html(config, username):
     # For phase pages, many annotation-specific fields can be empty/default
     context = {
         'username': username,
+        'annotation_task_name': config.get('annotation_task_name', ''),
+        'debug_mode': config.get('debug', False),
+        'ui_debug': config.get('ui_debug', False),
+        'server_debug': config.get('server_debug', False),
+        'debug_phase': config.get('debug_phase', None),
         'instance': '',
         'instance_plain_text': '',
         'instance_id': '',
@@ -1595,6 +1684,10 @@ def render_page_with_annotations(username) -> str:
     label_suggestion_json = get_label_suggestions(item, config, schema_content_to_prefill)
 
     var_elems["suggestions"] = list(label_suggestion_json)
+
+    # Pass BWS items data to frontend JS
+    if config.get("bws_config"):
+        var_elems["bws_items"] = item.get_data().get("_bws_items", [])
     # Fill in the kwargs that the user wanted us to include when rendering the page
     kwargs = {}
     for kw in config["item_properties"].get("kwargs", []):
@@ -1669,10 +1762,11 @@ def render_page_with_annotations(username) -> str:
         for scheme in config.get("annotation_schemes", [])
     )
 
-    # Detect if any annotation scheme is audio_annotation type
-    # This is used to customize the display (show "Audio to Annotate:" instead of "Text to Annotate:")
+    # Detect if any annotation scheme is audio_annotation type (or tiered_annotation with audio media)
+    # This is used to customize the display (hide "Text to Annotate:" for audio-focused tasks)
     has_audio_annotation = any(
         scheme.get("annotation_type") == "audio_annotation"
+        or (scheme.get("annotation_type") == "tiered_annotation" and scheme.get("media_type") == "audio")
         for scheme in config.get("annotation_schemes", [])
     )
 
@@ -1685,6 +1779,9 @@ def render_page_with_annotations(username) -> str:
 
     # Check if AI support is enabled (for conditional loading of visual_ai_assistant.js)
     ai_enabled = config.get("ai_support", {}).get("enabled", False)
+
+    # Check if agent proxy is configured (for conditional loading of agent-chat.js/css)
+    agent_proxy_enabled = "agent_proxy" in config
 
     # Get pre-annotation configuration
     pre_annotation_config = {}
@@ -1741,6 +1838,8 @@ def render_page_with_annotations(username) -> str:
         display_raw=display_template_vars.get("display_raw", {}),
         span_targets=display_template_vars.get("span_targets", []),
         multi_span_mode=display_template_vars.get("multi_span_mode", False),
+        # Agent proxy (for conditional loading of agent-chat assets)
+        agent_proxy_enabled=agent_proxy_enabled,
         # Adjudication: show link for adjudicators
         is_adjudicator=_is_user_adjudicator(username),
         # Annotation status indicator
@@ -1931,6 +2030,16 @@ def render_page_with_annotations(username) -> str:
     soup = add_ai_hints(soup, instance_id)
 
     rendered_html = str(soup)
+
+    # Populate dynamic multirate options from instance data
+    has_dynamic_multirate = any(
+        scheme.get('options_from_data')
+        for scheme in config.get('annotation_schemes', [])
+        if scheme.get('annotation_type') == 'multirate'
+    )
+    if has_dynamic_multirate:
+        from potato.server_utils.schemas.multirate import populate_dynamic_multirate
+        rendered_html = populate_dynamic_multirate(rendered_html, item.get_data())
 
     return rendered_html
 
@@ -2626,6 +2735,12 @@ def run_server(args):
     # Initialize knowledge base manager for entity linking
     init_kb_manager(config)
     logger.info("Knowledge base manager initialized")
+
+    # Initialize agent session manager if agent_proxy is configured
+    if "agent_proxy" in config:
+        from potato.agent_proxy import init_agent_session_manager
+        init_agent_session_manager(config)
+        logger.info(f"Agent session manager initialized (proxy type: {config['agent_proxy'].get('type', 'unknown')})")
 
     # Initialize ExpertiseManager for dynamic category assignment
     category_assignment = config.get('category_assignment', {})

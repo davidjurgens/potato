@@ -20,6 +20,9 @@ from .pdf_display import PDFDisplay
 from .document_display import DocumentDisplay
 from .spreadsheet_display import SpreadsheetDisplay
 from .code_display import CodeDisplay
+from .agent_trace_display import AgentTraceDisplay
+from .gallery_display import GalleryDisplay
+from .interactive_chat_display import InteractiveChatDisplay
 
 __all__ = [
     'display_registry',
@@ -31,4 +34,7 @@ __all__ = [
     'DocumentDisplay',
     'SpreadsheetDisplay',
     'CodeDisplay',
+    'AgentTraceDisplay',
+    'GalleryDisplay',
+    'InteractiveChatDisplay',
 ]

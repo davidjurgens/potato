@@ -115,8 +115,8 @@ def _generate_event_annotation_layout_internal(annotation_scheme, horizontal=Fal
                        class="event-type-radio">
                 <label for="{escape_html_content(scheme_name)}_event_{escape_html_content(type_name)}"
                        class="event-type-label"
-                       style="--event-color: {color}">
-                    <span class="event-color-indicator" style="background-color: {color}"></span>
+                       style="--event-color: {escape_html_content(color)}">
+                    <span class="event-color-indicator" style="background-color: {escape_html_content(color)}"></span>
                     <span class="event-type-name">{escape_html_content(type_name)}</span>
                 </label>
             </div>
@@ -130,7 +130,7 @@ def _generate_event_annotation_layout_internal(annotation_scheme, horizontal=Fal
     schematic = f"""
     <div id="{escape_html_content(scheme_name)}" class="event-annotation-container annotation-form"
          data-annotation-type="event_annotation"
-         data-annotation-id="{annotation_scheme.get('annotation_id', scheme_name)}"
+         data-annotation-id="{escape_html_content(str(annotation_scheme.get('annotation_id', scheme_name)))}"
          data-span-schema="{escape_html_content(span_schema)}"
          data-show-arcs="{str(show_arcs).lower()}"
          data-arc-position="{escape_html_content(arc_position)}"

@@ -276,15 +276,20 @@ class MysqlUserState(UserState):
         with self.db_manager.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT schema_name, span_name, span_title, start_pos, end_pos
+                SELECT schema_name, span_name, span_title, start_pos, end_pos,
+                       kb_id, kb_source, kb_label
                 FROM span_annotations
                 WHERE user_id = %s AND instance_id = %s
             """, (self.user_id, instance_id))
 
             annotations = {}
             for row in cursor.fetchall():
-                schema_name, span_name, span_title, start_pos, end_pos = row
-                span = SpanAnnotation(schema_name, span_name, span_title, start_pos, end_pos)
+                schema_name, span_name, span_title, start_pos, end_pos, \
+                    kb_id, kb_source, kb_label = row
+                span = SpanAnnotation(
+                    schema_name, span_name, span_title, start_pos, end_pos,
+                    kb_id=kb_id, kb_source=kb_source, kb_label=kb_label,
+                )
                 annotations[span] = True  # Span annotations are boolean
 
             return annotations
@@ -382,14 +387,20 @@ class MysqlUserState(UserState):
                 cursor = conn.cursor()
                 cursor.execute("""
                     INSERT INTO span_annotations
-                    (user_id, instance_id, schema_name, span_name, span_title, start_pos, end_pos)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    (user_id, instance_id, schema_name, span_name, span_title, start_pos, end_pos,
+                     kb_id, kb_source, kb_label)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON DUPLICATE KEY UPDATE
                         span_title = VALUES(span_title),
                         start_pos = VALUES(start_pos),
-                        end_pos = VALUES(end_pos)
+                        end_pos = VALUES(end_pos),
+                        kb_id = VALUES(kb_id),
+                        kb_source = VALUES(kb_source),
+                        kb_label = VALUES(kb_label)
                 """, (self.user_id, instance_id, span.get_schema(), span.get_name(),
-                      span.get_title(), span.get_start(), span.get_end()))
+                      span.get_title(), span.get_start(), span.get_end(),
+                      getattr(span, 'kb_id', None), getattr(span, 'kb_source', None),
+                      getattr(span, 'kb_label', None)))
                 conn.commit()
         else:
             # For non-annotation phases, store in phase_annotations as JSON

@@ -649,7 +649,7 @@ class EventAnnotation:
         )
 
     def __str__(self):
-        args_str = ", ".join(f"{a['role']}:{a['span_id']}" for a in self.arguments)
+        args_str = ", ".join(f"{a.get('role', '?')}:{a.get('span_id', '?')}" for a in self.arguments)
         return f"EventAnnotation(schema:{self.schema}, type:{self.event_type}, trigger:{self.trigger_span_id}, args:[{args_str}], id:{self._id})"
 
     def __eq__(self, other):

@@ -74,7 +74,7 @@ def _generate_radio_layout_internal(annotation_scheme, horizontal=False):
     # Initialize form wrapper
     schema_name = annotation_scheme["name"]
     schematic = f"""
-    <form id="{escape_html_content(schema_name)}" class="annotation-form radio shadcn-radio-container" action="/action_page.php" data-annotation-id="{annotation_scheme["annotation_id"]}" data-annotation-type="radio" data-schema-name="{escape_html_content(schema_name)}" {layout_attrs}>
+    <form id="{escape_html_content(schema_name)}" class="annotation-form radio shadcn-radio-container" action="/action_page.php" data-annotation-id="{escape_html_content(str(annotation_scheme.get("annotation_id", "")))}" data-annotation-type="radio" data-schema-name="{escape_html_content(schema_name)}" {layout_attrs}>
         {get_ai_wrapper()}
         <fieldset schema="{escape_html_content(schema_name)}">
             <legend class="shadcn-radio-title">{escape_html_content(annotation_scheme['description'])}</legend>
@@ -161,7 +161,8 @@ def _generate_radio_layout_internal(annotation_scheme, horizontal=False):
     if annotation_scheme.get("has_free_response"):
         logger.debug("Adding free response field")
         free_response_identifiers = generate_element_identifier(schema_name, "free_response", "text")
-        instruction = annotation_scheme["has_free_response"].get("instruction", "Other")
+        free_response_config = annotation_scheme["has_free_response"]
+        instruction = free_response_config.get("instruction", "Other") if isinstance(free_response_config, dict) else "Other"
 
         schematic += f"""
             <div class="shadcn-radio-free-response">

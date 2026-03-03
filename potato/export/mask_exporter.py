@@ -94,7 +94,8 @@ class MaskExporter(BaseExporter):
                 continue
 
             file_name = get_image_filename(item) or instance_id
-            stem = os.path.splitext(os.path.basename(file_name))[0]
+            raw_stem = os.path.splitext(os.path.basename(file_name))[0]
+            stem = "".join(c if c.isalnum() or c in "-_." else "_" for c in raw_stem)
 
             for schema_name, objects in img_anns:
                 for obj in objects:
@@ -120,7 +121,8 @@ class MaskExporter(BaseExporter):
                             if x < width and y < height:
                                 pixels[x, y] = (color[0], color[1], color[2], 200)
 
-                    mask_file = os.path.join(output_path, f"{stem}_{label}_mask.png")
+                    safe_label = "".join(c if c.isalnum() or c in "-_." else "_" for c in label)
+                    mask_file = os.path.join(output_path, f"{stem}_{safe_label}_mask.png")
                     img.save(mask_file)
                     files_written.append(mask_file)
                     masks_exported += 1

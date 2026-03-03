@@ -240,6 +240,44 @@ def validate_admin_api_key(provided_key: str) -> bool:
     import hmac
     return hmac.compare_digest(str(provided_key or ""), expected_key)
 
+
+# -------------------------------------------------------------------
+# Local media file serving
+# -------------------------------------------------------------------
+
+def serve_media(filepath):
+    """Serve a local media file from the project's media directory.
+
+    Serves files from a ``media/`` directory (or custom path set via
+    ``media_directory`` in config) relative to the task directory.  This
+    lets data files reference local images, audio, and video with paths
+    like ``/media/image_01.jpg`` instead of requiring external URLs.
+    """
+    from flask import send_from_directory, abort
+
+    task_dir = config.get("task_dir", ".")
+    media_subdir = config.get("media_directory", "media")
+
+    # Resolve relative to task_dir
+    if os.path.isabs(media_subdir):
+        media_dir = media_subdir
+    else:
+        media_dir = os.path.join(task_dir, media_subdir)
+
+    media_dir = os.path.realpath(media_dir)
+
+    # Security: ensure the resolved file is inside media_dir
+    requested = os.path.realpath(os.path.join(media_dir, filepath))
+    if not requested.startswith(media_dir + os.sep) and requested != media_dir:
+        logger.warning(f"Media path traversal blocked: {filepath}")
+        abort(403)
+
+    if not os.path.isfile(requested):
+        abort(404)
+
+    return send_from_directory(media_dir, filepath)
+
+
 @app.route("/", methods=["GET", "POST"])
 def home():
     """
@@ -790,12 +828,8 @@ def submit_annotation():
         return jsonify({"status": "success", "message": "Annotation saved successfully", "annotations_processed": annotations_processed})
 
     except Exception as e:
-        logger.error(f"Error saving annotation: {str(e)}")
-        logger.debug(f"Exception details: {type(e).__name__}: {str(e)}")
-        import traceback
-        logger.debug(f"Traceback: {traceback.format_exc()}")
-        traceback.print_exc()
-        return jsonify({"status": "error", "message": f"Failed to save annotation: {str(e)}"})
+        logger.error(f"Error saving annotation: {type(e).__name__}: {str(e)}", exc_info=True)
+        return jsonify({"status": "error", "message": "Failed to save annotation"})
 
 @app.route("/register", methods=["POST"])
 def register():
@@ -1375,14 +1409,8 @@ def prestudy():
 
     # Show the current prestudy page
     else:
-        # Get the page the user is currently on
-        phase, page = user_state.get_current_phase_and_page()
-        logger.debug(f'GET <-- PRESTUDY: phase, page: {phase}, {page}')
-
-        # Look up the html template for the current page
-        usm = get_user_state_manager()
-        prestudy_html_fname = usm.get_phase_html_fname(phase, page)
-        return render_template(prestudy_html_fname)
+        logger.debug("GET <-- PRESTUDY")
+        return get_current_page_html(config, username)
 
 @app.route("/annotate", methods=["GET", "POST"])
 def annotate():
@@ -1454,7 +1482,7 @@ def annotate():
         else:
             logger.debug(f"POST form data: {dict(request.form)}")
 
-    if request.is_json and 'action' in request.json:
+    if request.is_json and request.json and 'action' in request.json:
        logger.debug(f"Action from JSON: {request.json['action']}")
        action = request.json['action']
     else:
@@ -1554,7 +1582,12 @@ def annotate():
 
     logger.debug("=== ANNOTATE ROUTE END ===")
     # Render the page with any existing annotations
-    return render_page_with_annotations(username)
+    # Prevent browser caching so window.location.reload() always gets fresh content
+    # (browsers may serve stale cached GET responses after JS-triggered reloads)
+    response = make_response(render_page_with_annotations(username))
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    return response
 
 @app.route('/get_ai_suggestion', methods=['GET'])
 def get_ai_suggestion():
@@ -1564,7 +1597,20 @@ def get_ai_suggestion():
     username = session['username']
     user_state = get_user_state(username)
     ais = get_ai_cache_manager()
-    annotation_id = int(request.args.get('annotationId'))
+
+    if ais is None:
+        return jsonify({"error": "AI support not enabled"}), 400
+
+    try:
+        annotation_id = int(request.args.get('annotationId'))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid annotationId"}), 400
+
+    # Validate annotation_id is within range
+    num_schemes = len(config.get("annotation_schemes", []))
+    if annotation_id < 0 or annotation_id >= num_schemes:
+        return jsonify({"error": "annotationId out of range"}), 400
+
     ai_assistant = request.args.get('aiAssistant')
 
     instance_id = user_state.get_current_instance_index()
@@ -1615,8 +1661,14 @@ def get_option_highlights(annotation_id):
     # Get option highlights
     result = ais.get_option_highlights(instance_id, annotation_id)
 
-    # Add configuration info for frontend
-    result["config"] = ais.get_option_highlighting_config()
+    # Add only frontend-needed configuration info (exclude internal schema details)
+    full_config = ais.get_option_highlighting_config()
+    result["config"] = {
+        "enabled": full_config.get("enabled", False),
+        "top_k": full_config.get("top_k", 3),
+        "dim_opacity": full_config.get("dim_opacity", 0.3),
+        "auto_apply": full_config.get("auto_apply", False),
+    }
 
     return jsonify(result)
 
@@ -2829,6 +2881,207 @@ def api_icl_record_verification():
         return jsonify({'error': str(e)}), 500
 
 
+########################################################################
+# Agent Chat Routes
+########################################################################
+
+def _get_agent_sandbox():
+    """Get the safety sandbox for agent interactions."""
+    from potato.agent_proxy import SafetySandbox
+    agent_config = config.get("agent_proxy", {})
+    return SafetySandbox(agent_config)
+
+
+def _get_or_create_agent_session(username, instance_id):
+    """Get an existing agent session or create a new one."""
+    from potato.agent_proxy import (
+        get_agent_session_manager, AgentProxyFactory
+    )
+    mgr = get_agent_session_manager()
+    session_obj = mgr.get_session(username, instance_id)
+    if session_obj:
+        return session_obj
+
+    # Create a new session
+    proxy = AgentProxyFactory.create(config)
+    item = get_item_state_manager().get_item(instance_id)
+    task_desc = ""
+    if item:
+        data = item.get_data()
+        # Look for task_description in item data
+        task_desc = data.get("task_description", data.get("text", ""))
+        if isinstance(task_desc, list):
+            task_desc = " ".join(str(t) for t in task_desc)
+
+    return mgr.create_session(username, instance_id, proxy, str(task_desc))
+
+
+@app.route("/agent_chat/send", methods=["POST"])
+def agent_chat_send():
+    """Send a message to the agent and get a response."""
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    username = session['username']
+    user_state = get_user_state(username)
+
+    if user_state.get_phase() != UserPhase.ANNOTATION:
+        return jsonify({"error": "Not in annotation phase"}), 400
+
+    data = request.get_json(silent=True) or {}
+    message = data.get("message", "").strip()
+    if not message:
+        return jsonify({"error": "Empty message"}), 400
+
+    item = user_state.get_current_instance()
+    instance_id = item.get_id()
+
+    try:
+        sandbox = _get_agent_sandbox()
+
+        # Get or create session
+        agent_session = _get_or_create_agent_session(username, instance_id)
+
+        if agent_session.finished:
+            return jsonify({"error": "Chat session already finished"}), 400
+
+        # Safety checks
+        sandbox.check_step_limit(agent_session.step_count)
+        sandbox.check_session_timeout(agent_session.started_at)
+        sandbox.check_rate_limit(username)
+
+        # Record user message
+        from potato.agent_proxy import AgentMessage
+        user_msg = AgentMessage(role="user", content=message)
+        agent_session.messages.append(user_msg)
+
+        # Send to agent (blocking)
+        response = agent_session.proxy.send_message(
+            message, agent_session.proxy_context
+        )
+        agent_session.messages.append(response.message)
+        agent_session.step_count += 1
+
+        return jsonify({
+            "content": response.message.content,
+            "role": response.message.role,
+            "step_count": agent_session.step_count,
+            "max_steps": sandbox.max_steps,
+            "error": response.error,
+        })
+
+    except Exception as e:
+        logger.error(f"Agent chat send error: {e}")
+        error_msg = str(e)
+        return jsonify({"error": error_msg}), 400
+
+
+@app.route("/agent_chat/finish", methods=["POST"])
+def agent_chat_finish():
+    """Finish the chat and write conversation data to the item."""
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    username = session['username']
+    user_state = get_user_state(username)
+
+    if user_state.get_phase() != UserPhase.ANNOTATION:
+        return jsonify({"error": "Not in annotation phase"}), 400
+
+    item = user_state.get_current_instance()
+    instance_id = item.get_id()
+
+    try:
+        from potato.agent_proxy import get_agent_session_manager
+        mgr = get_agent_session_manager()
+        agent_session = mgr.get_session(username, instance_id)
+
+        if not agent_session:
+            return jsonify({"error": "No active chat session"}), 400
+
+        if agent_session.finished:
+            return jsonify({"error": "Chat session already finished"}), 400
+
+        # Convert messages to conversation data (agent_trace format)
+        conversation = []
+        for msg in agent_session.messages:
+            speaker = "User" if msg.role == "user" else "Agent"
+            if msg.role == "error":
+                speaker = "System (Error)"
+            conversation.append({
+                "speaker": speaker,
+                "text": msg.content,
+                "timestamp": msg.timestamp,
+            })
+
+        # Write conversation into item data
+        item_data = item.get_data()
+        # Find the conversation field key from instance_display config
+        conv_key = "conversation"
+        display_fields = config.get("instance_display", {}).get("fields", [])
+        for field in display_fields:
+            if field.get("type") == "interactive_chat":
+                conv_key = field.get("key", "conversation")
+                break
+
+        item_data[conv_key] = conversation
+
+        # Mark session as finished
+        agent_session.finished = True
+
+        logger.info(
+            f"Agent chat finished for user={username}, instance={instance_id}, "
+            f"steps={agent_session.step_count}, messages={len(conversation)}"
+        )
+
+        return jsonify({"success": True, "message_count": len(conversation)})
+
+    except Exception as e:
+        logger.error(f"Agent chat finish error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/agent_chat/status", methods=["GET"])
+def agent_chat_status():
+    """Get the current agent chat session status (for page refresh recovery)."""
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    username = session['username']
+    user_state = get_user_state(username)
+
+    if user_state.get_phase() != UserPhase.ANNOTATION:
+        return jsonify({"active": False})
+
+    item = user_state.get_current_instance()
+    instance_id = item.get_id()
+
+    try:
+        from potato.agent_proxy import get_agent_session_manager
+        mgr = get_agent_session_manager()
+        agent_session = mgr.get_session(username, instance_id)
+
+        if not agent_session or agent_session.finished:
+            return jsonify({"active": False})
+
+        sandbox = _get_agent_sandbox()
+
+        messages = [
+            {"role": msg.role, "content": msg.content}
+            for msg in agent_session.messages
+        ]
+
+        return jsonify({
+            "active": True,
+            "messages": messages,
+            "step_count": agent_session.step_count,
+            "max_steps": sandbox.max_steps,
+        })
+
+    except Exception:
+        return jsonify({"active": False})
+
+
 @app.route("/go_to", methods=["GET", "POST"])
 def go_to():
     """
@@ -2849,7 +3102,11 @@ def go_to():
         logger.debug(f'POST -> GO_TO: {request.form}')
         go_to_id(username, request.form.get("go_to"))
 
-    return render_page_with_annotations(username)
+    # Prevent browser caching so window.location.reload() always gets fresh content
+    response = make_response(render_page_with_annotations(username))
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    return response
 
 @app.route('/get_annotations', methods=['GET'])
 def get_annotations():
@@ -3428,6 +3685,25 @@ def update_instance():
                             for span_to_delete in spans_to_delete:
                                 del user_state.instance_id_to_span_to_value[instance_id][span_to_delete]
                                 logger.debug(f"Deleted span annotation: {span_to_delete}")
+
+                                # Clean up orphaned links and events referencing this span
+                                deleted_span_id = span_to_delete.get_id()
+                                if instance_id in user_state.instance_id_to_link_to_value:
+                                    orphaned_links = [
+                                        link_id for link_id, link in user_state.instance_id_to_link_to_value[instance_id].items()
+                                        if deleted_span_id in link.get_span_ids()
+                                    ]
+                                    for link_id in orphaned_links:
+                                        del user_state.instance_id_to_link_to_value[instance_id][link_id]
+                                        logger.debug(f"Removed orphaned link {link_id} referencing deleted span {deleted_span_id}")
+                                if instance_id in user_state.instance_id_to_event_to_value:
+                                    orphaned_events = [
+                                        evt_id for evt_id, evt in user_state.instance_id_to_event_to_value[instance_id].items()
+                                        if deleted_span_id in evt.get_all_span_ids()
+                                    ]
+                                    for evt_id in orphaned_events:
+                                        del user_state.instance_id_to_event_to_value[instance_id][evt_id]
+                                        logger.debug(f"Removed orphaned event {evt_id} referencing deleted span {deleted_span_id}")
                     else:
                         # Add or update the span annotation
                         user_state.add_span_annotation(instance_id, span, value)
@@ -3609,15 +3885,8 @@ def poststudy():
 
     # Show the current poststudy page
     else:
-        # Get the page the user is currently on
-        phase, page = user_state.get_current_phase_and_page()
-        logger.debug(f'POSTSTUDY GET: phase, page: {phase}, {page}')
-
-        usm = get_user_state_manager()
-        # Look up the html template for the current page
-        html_fname = usm.get_phase_html_fname(phase, page)
-        # Render the page
-        return render_template(html_fname)
+        logger.debug("GET <-- POSTSTUDY")
+        return get_current_page_html(config, username)
 
 @app.route("/done", methods=["GET", "POST"])
 def done():
@@ -3709,6 +3978,7 @@ def admin():
         "debug_mode": config.get("debug", False),
         "admin_api_key": get_admin_api_key() or "",
         "mace_enabled": config.get("mace", {}).get("enabled", False),
+        "bws_enabled": bool(config.get("bws_config")),
         "embedding_viz_enabled": embedding_viz_enabled,
     }
 
@@ -4635,7 +4905,7 @@ def clear_span_annotations(instance_id):
 
     except Exception as e:
         logger.error(f"Error clearing span annotations: {e}")
-        return jsonify({"error": f"Failed to clear span annotations: {str(e)}"}), 500
+        return jsonify({"error": "Failed to clear span annotations"}), 500
 
     finally:
         logger.debug(f"=== CLEAR_SPAN_ANNOTATIONS END ===")
@@ -4686,7 +4956,7 @@ def get_link_annotations(instance_id):
 
     except Exception as e:
         logger.error(f"Error getting link annotations: {e}")
-        return jsonify({"error": f"Failed to get link annotations: {str(e)}"}), 500
+        return jsonify({"error": "Failed to get link annotations"}), 500
 
     finally:
         logger.debug(f"=== GET_LINK_ANNOTATIONS END ===")
@@ -4741,7 +5011,7 @@ def delete_link_annotation(instance_id, link_id):
 
     except Exception as e:
         logger.error(f"Error deleting link annotation: {e}")
-        return jsonify({"error": f"Failed to delete link annotation: {str(e)}"}), 500
+        return jsonify({"error": "Failed to delete link annotation"}), 500
 
     finally:
         logger.debug(f"=== DELETE_LINK_ANNOTATION END ===")
@@ -4778,6 +5048,11 @@ def get_event_annotations(instance_id):
         # Normalize instance_id to string
         instance_id = str(instance_id)
 
+        # Verify the user is assigned this instance
+        if instance_id not in user_state.get_assigned_instance_ids():
+            logger.warning(f"User {username} not assigned to instance {instance_id}")
+            return jsonify({"error": "Instance not assigned to user"}), 403
+
         # Get event annotations for this instance
         events = user_state.get_event_annotations(instance_id)
 
@@ -4799,7 +5074,7 @@ def get_event_annotations(instance_id):
 
     except Exception as e:
         logger.error(f"Error getting event annotations: {e}")
-        return jsonify({"error": f"Failed to get event annotations: {str(e)}"}), 500
+        return jsonify({"error": "Failed to get event annotations"}), 500
 
     finally:
         logger.debug(f"=== GET_EVENT_ANNOTATIONS END ===")
@@ -4836,6 +5111,11 @@ def delete_event_annotation(instance_id, event_id):
         # Normalize instance_id to string
         instance_id = str(instance_id)
 
+        # Verify the user is assigned this instance
+        if instance_id not in user_state.get_assigned_instance_ids():
+            logger.warning(f"User {username} not assigned to instance {instance_id}")
+            return jsonify({"error": "Instance not assigned to user"}), 403
+
         # Try to remove the event
         success = user_state.remove_event_annotation(instance_id, event_id)
 
@@ -4854,7 +5134,7 @@ def delete_event_annotation(instance_id, event_id):
 
     except Exception as e:
         logger.error(f"Error deleting event annotation: {e}")
-        return jsonify({"error": f"Failed to delete event annotation: {str(e)}"}), 500
+        return jsonify({"error": "Failed to delete event annotation"}), 500
 
     finally:
         logger.debug(f"=== DELETE_EVENT_ANNOTATION END ===")
@@ -4915,7 +5195,7 @@ def entity_linking_search():
 
     except Exception as e:
         logger.error(f"Error in entity linking search: {e}")
-        return jsonify({"error": f"Search failed: {str(e)}"}), 500
+        return jsonify({"error": "Search failed"}), 500
 
     finally:
         logger.debug(f"=== ENTITY_LINKING_SEARCH END ===")
@@ -4963,7 +5243,7 @@ def entity_linking_get_entity(kb_name, entity_id):
 
     except Exception as e:
         logger.error(f"Error getting entity: {e}")
-        return jsonify({"error": f"Failed to get entity: {str(e)}"}), 500
+        return jsonify({"error": "Failed to get entity"}), 500
 
     finally:
         logger.debug(f"=== ENTITY_LINKING_GET_ENTITY END ===")
@@ -5009,7 +5289,7 @@ def entity_linking_configured_kbs():
 
     except Exception as e:
         logger.error(f"Error getting configured KBs: {e}")
-        return jsonify({"error": f"Failed to get configured KBs: {str(e)}"}), 500
+        return jsonify({"error": "Failed to get configured KBs"}), 500
 
     finally:
         logger.debug(f"=== ENTITY_LINKING_CONFIGURED_KBS END ===")
@@ -5050,6 +5330,13 @@ def entity_linking_update_span():
 
         if not instance_id or not span_id:
             return jsonify({"error": "instance_id and span_id are required"}), 400
+
+        # Validate string types and enforce length limits
+        MAX_FIELD_LEN = 1024
+        for field_name, field_val in [("span_id", span_id), ("kb_id", kb_id),
+                                       ("kb_source", kb_source), ("kb_label", kb_label)]:
+            if field_val is not None and (not isinstance(field_val, str) or len(field_val) > MAX_FIELD_LEN):
+                return jsonify({"error": f"Invalid {field_name}"}), 400
 
         user_state = get_user_state(username)
         if not user_state:
@@ -5095,7 +5382,7 @@ def entity_linking_update_span():
 
     except Exception as e:
         logger.error(f"Error updating span with entity link: {e}")
-        return jsonify({"error": f"Failed to update span: {str(e)}"}), 500
+        return jsonify({"error": "Failed to update span"}), 500
 
     finally:
         logger.debug(f"=== ENTITY_LINKING_UPDATE_SPAN END ===")
@@ -5145,7 +5432,7 @@ def get_waveform_data(cache_key):
 
     except Exception as e:
         logger.error(f"Error serving waveform data: {e}")
-        return jsonify({"error": f"Failed to serve waveform data: {str(e)}"}), 500
+        return jsonify({"error": "Failed to serve waveform data"}), 500
 
     finally:
         logger.debug(f"=== GET_WAVEFORM_DATA END ===")
@@ -5397,7 +5684,7 @@ def audio_proxy():
         return jsonify({"error": "Request timed out"}), 504
     except req.exceptions.RequestException as e:
         logger.error(f"Error fetching audio {audio_url}: {e}")
-        return jsonify({"error": f"Failed to fetch audio: {str(e)}"}), 502
+        return jsonify({"error": "Failed to fetch audio"}), 502
 
 
 @app.route("/api/ai_assistant", methods=["GET"])
@@ -5464,6 +5751,7 @@ def configure_routes(flask_app, app_config):
     app.permanent_session_lifetime = timedelta(days=config.get("session_lifetime_days", 7))
 
     # Register all routes with the flask app instance
+    app.add_url_rule("/media/<path:filepath>", "serve_media", serve_media)
     app.add_url_rule("/", "home", home, methods=["GET", "POST"])
     app.add_url_rule("/auth", "auth", auth, methods=["GET", "POST"])
     app.add_url_rule("/passwordless-login", "passwordless_login", passwordless_login, methods=["GET", "POST"])
@@ -5559,6 +5847,10 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/adjudicate/api/similar/<instance_id>", "adjudicate_api_similar", adjudicate_api_similar, methods=["GET"])
     app.add_url_rule("/admin/api/adjudication", "admin_api_adjudication", admin_api_adjudication, methods=["GET"])
 
+    # BWS scoring admin API routes
+    app.add_url_rule("/admin/api/bws_scoring", "admin_api_bws_scoring", admin_api_bws_scoring, methods=["GET"])
+    app.add_url_rule("/admin/api/bws_scoring/generate", "admin_api_bws_scoring_generate", admin_api_bws_scoring_generate, methods=["POST"])
+
     # MACE admin API routes
     app.add_url_rule("/admin/api/mace/overview", "admin_api_mace_overview", admin_api_mace_overview, methods=["GET"])
     app.add_url_rule("/admin/api/mace/predictions", "admin_api_mace_predictions", admin_api_mace_predictions, methods=["GET"])
@@ -5569,6 +5861,11 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/api/embedding_viz/reorder", "admin_api_embedding_viz_reorder", admin_api_embedding_viz_reorder, methods=["POST"])
     app.add_url_rule("/admin/api/embedding_viz/refresh", "admin_api_embedding_viz_refresh", admin_api_embedding_viz_refresh, methods=["POST"])
     app.add_url_rule("/admin/api/embedding_viz/stats", "admin_api_embedding_viz_stats", admin_api_embedding_viz_stats, methods=["GET"])
+
+    # Agent chat routes (interactive agent testing)
+    app.add_url_rule("/agent_chat/send", "agent_chat_send", agent_chat_send, methods=["POST"])
+    app.add_url_rule("/agent_chat/finish", "agent_chat_finish", agent_chat_finish, methods=["POST"])
+    app.add_url_rule("/agent_chat/status", "agent_chat_status", agent_chat_status, methods=["GET"])
 
     app.add_url_rule("/shutdown", "shutdown", shutdown, methods=["POST"])
 
@@ -5733,6 +6030,150 @@ def admin_api_adjudication():
 
     overview = admin_dashboard.get_adjudication_overview()
     return jsonify(overview)
+
+
+# ============================================================================
+# BWS Scoring Admin API Routes
+# ============================================================================
+
+@app.route('/admin/api/bws_scoring', methods=['GET'])
+def admin_api_bws_scoring():
+    """Get current BWS scoring status and cached scores."""
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    if not config.get("bws_config"):
+        return jsonify({"error": "BWS not configured"}), 400
+
+    return jsonify({
+        "total_items": len(config.get("_bws_pool_items", [])),
+        "total_annotations": 0,
+        "method": config.get("bws_config", {}).get("scoring", {}).get("method", "counting"),
+        "scores": [],
+    })
+
+
+@app.route('/admin/api/bws_scoring/generate', methods=['POST'])
+def admin_api_bws_scoring_generate():
+    """Generate BWS scores from current annotations."""
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    if not config.get("bws_config"):
+        return jsonify({"error": "BWS not configured"}), 400
+
+    method = request.args.get("method", "counting")
+
+    from potato.bws_scoring import BwsScorer, write_scores
+
+    # Collect annotations from all users
+    pool_items = config.get("_bws_pool_items", [])
+    id_key = config["item_properties"]["id_key"]
+    text_key = config["item_properties"]["text_key"]
+
+    # Find BWS schema name
+    bws_schema_name = None
+    for scheme in config.get("annotation_schemes", []):
+        if scheme.get("annotation_type") == "bws":
+            bws_schema_name = scheme["name"]
+            break
+
+    if not bws_schema_name:
+        return jsonify({"error": "No BWS annotation scheme found"}), 400
+
+    # Collect annotations from all user states
+    ism = get_item_state_manager()
+    usm = get_user_state_manager()
+    annotations = []
+
+    # Build a lookup of instance_id -> bws_items from items
+    instance_bws_items = {}
+    for item in ism.items():
+        item_data = item.get_data()
+        bws_items = item_data.get("_bws_items", [])
+        if bws_items:
+            instance_bws_items[item.get_id()] = bws_items
+
+    # Iterate all user states to collect annotations
+    for user_state in usm.get_all_users():
+        username = user_state.get_user_id()
+        label_store = getattr(user_state, 'instance_id_to_label_to_value', {})
+
+        for instance_id, labels in label_store.items():
+            bws_items = instance_bws_items.get(instance_id, [])
+            if not bws_items:
+                continue
+
+            # Labels is {Label -> value} dict. Find best/worst for this schema.
+            best_val = None
+            worst_val = None
+            for label_obj, value in labels.items():
+                if label_obj.get_schema() == bws_schema_name:
+                    if label_obj.get_name() == "best":
+                        best_val = value
+                    elif label_obj.get_name() == "worst":
+                        worst_val = value
+
+            if best_val and worst_val:
+                annotations.append({
+                    "instance_id": instance_id,
+                    "bws_items": bws_items,
+                    "best": best_val,
+                    "worst": worst_val,
+                    "annotator": username,
+                })
+
+    if not annotations:
+        return jsonify({
+            "status": "success",
+            "total_items": len(pool_items),
+            "total_annotations": 0,
+            "method": method,
+            "scores": [],
+            "message": "No BWS annotations found yet",
+        })
+
+    try:
+        scorer = BwsScorer(annotations, pool_items, id_key, text_key)
+        scores_dict = scorer.score(method)
+    except ImportError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": f"Scoring failed: {e}"}), 500
+
+    # Write scores file
+    output_dir = config.get("output_annotation_dir", "annotation_output")
+    output_path = os.path.join(output_dir, "bws_scores.tsv")
+    try:
+        write_scores(scores_dict, output_path)
+    except Exception as e:
+        logger.warning(f"Failed to write BWS scores file: {e}")
+
+    # Sort and format for response
+    sorted_scores = sorted(
+        scores_dict.items(), key=lambda x: x[1]["score"], reverse=True
+    )
+    scores_list = []
+    for rank, (item_id, data) in enumerate(sorted_scores, 1):
+        scores_list.append({
+            "rank": rank,
+            "item_id": item_id,
+            "text": data.get("text", "")[:200],
+            "score": round(data["score"], 6),
+            "best_count": data.get("best_count"),
+            "worst_count": data.get("worst_count"),
+            "appearances": data.get("appearances"),
+        })
+
+    return jsonify({
+        "status": "success",
+        "total_items": len(pool_items),
+        "total_annotations": len(annotations),
+        "method": method,
+        "scores": scores_list,
+    })
 
 
 # ============================================================================
