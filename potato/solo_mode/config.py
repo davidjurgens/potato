@@ -70,6 +70,8 @@ class InstanceSelectionConfig:
     diversity_weight: float = 0.3
     random_weight: float = 0.2
     disagreement_weight: float = 0.1
+    edge_case_rule_weight: float = 0.0  # Instances matching edge case rule patterns
+    cartography_weight: float = 0.0     # Instances with high confidence variability
 
     def validate(self) -> None:
         """Validate that weights sum to 1.0."""
@@ -77,7 +79,9 @@ class InstanceSelectionConfig:
             self.low_confidence_weight +
             self.diversity_weight +
             self.random_weight +
-            self.disagreement_weight
+            self.disagreement_weight +
+            self.edge_case_rule_weight +
+            self.cartography_weight
         )
         if abs(total - 1.0) > 0.001:
             logger.warning(
@@ -103,6 +107,19 @@ class PromptOptimizationConfig:
     accuracy_weight: float = 0.7
     length_weight: float = 0.2
     consistency_weight: float = 0.1
+
+
+@dataclass
+class EdgeCaseRuleConfig:
+    """Configuration for Co-DETECT-style edge case rule discovery."""
+    enabled: bool = True
+    confidence_threshold: float = 0.75  # Extract rules when confidence below this
+    min_rules_for_clustering: int = 10  # Minimum rules before clustering triggers
+    target_cluster_size: int = 15       # Target items per cluster (Co-DETECT: 10-20)
+    auto_extract_on_labeling: bool = True  # Extract rules during LLM labeling
+    reannotation_enabled: bool = True
+    reannotation_confidence_threshold: float = 0.60  # Re-annotate instances below this
+    max_reannotations_per_instance: int = 2  # Prevent infinite loops
 
 
 @dataclass
@@ -144,6 +161,9 @@ class SoloModeConfig:
 
     # Prompt optimization
     prompt_optimization: PromptOptimizationConfig = field(default_factory=PromptOptimizationConfig)
+
+    # Edge case rule discovery (Co-DETECT-style)
+    edge_case_rules: EdgeCaseRuleConfig = field(default_factory=EdgeCaseRuleConfig)
 
     # Output directory for Solo Mode state
     state_dir: Optional[str] = None
@@ -273,6 +293,8 @@ def parse_solo_mode_config(config_data: Dict[str, Any]) -> SoloModeConfig:
         diversity_weight=sel_data.get('diversity_weight', 0.3),
         random_weight=sel_data.get('random_weight', 0.2),
         disagreement_weight=sel_data.get('disagreement_weight', 0.1),
+        edge_case_rule_weight=sel_data.get('edge_case_rule_weight', 0.0),
+        cartography_weight=sel_data.get('cartography_weight', 0.0),
     )
 
     # Parse batch config
@@ -294,6 +316,19 @@ def parse_solo_mode_config(config_data: Dict[str, Any]) -> SoloModeConfig:
         consistency_weight=opt_data.get('consistency_weight', 0.1),
     )
 
+    # Parse edge case rule config
+    ecr_data = sm.get('edge_case_rules', {})
+    edge_case_rules = EdgeCaseRuleConfig(
+        enabled=ecr_data.get('enabled', True),
+        confidence_threshold=ecr_data.get('confidence_threshold', 0.75),
+        min_rules_for_clustering=ecr_data.get('min_rules_for_clustering', 10),
+        target_cluster_size=ecr_data.get('target_cluster_size', 15),
+        auto_extract_on_labeling=ecr_data.get('auto_extract_on_labeling', True),
+        reannotation_enabled=ecr_data.get('reannotation_enabled', True),
+        reannotation_confidence_threshold=ecr_data.get('reannotation_confidence_threshold', 0.60),
+        max_reannotations_per_instance=ecr_data.get('max_reannotations_per_instance', 2),
+    )
+
     # Determine state directory
     state_dir = sm.get('state_dir')
     if not state_dir:
@@ -310,5 +345,6 @@ def parse_solo_mode_config(config_data: Dict[str, Any]) -> SoloModeConfig:
         instance_selection=instance_selection,
         batches=batches,
         prompt_optimization=prompt_optimization,
+        edge_case_rules=edge_case_rules,
         state_dir=state_dir,
     )

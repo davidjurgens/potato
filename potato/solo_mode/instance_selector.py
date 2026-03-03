@@ -22,6 +22,8 @@ class SelectionWeights:
     diverse: float = 0.3          # Diverse instances (embedding clusters)
     random: float = 0.2           # Random sample for calibration
     disagreement: float = 0.1    # Instances with prior disagreements
+    edge_case_rule: float = 0.0  # Instances matching edge case rule patterns
+    cartography: float = 0.0     # Instances with high confidence variability
 
     def validate(self) -> None:
         """Validate that weights sum to 1.0."""
@@ -29,7 +31,9 @@ class SelectionWeights:
             self.low_confidence +
             self.diverse +
             self.random +
-            self.disagreement
+            self.disagreement +
+            self.edge_case_rule +
+            self.cartography
         )
         if abs(total - 1.0) > 0.001:
             # Normalize
@@ -37,6 +41,8 @@ class SelectionWeights:
             self.diverse /= total
             self.random /= total
             self.disagreement /= total
+            self.edge_case_rule /= total
+            self.cartography /= total
             logger.warning(f"Normalized selection weights (original sum: {total})")
 
 
@@ -82,13 +88,20 @@ class InstanceSelector:
         self._diverse_pool: List[str] = []
         self._random_pool: List[str] = []
         self._disagreement_pool: List[str] = []
+        self._edge_case_rule_pool: List[str] = []
+        self._cartography_pool: List[str] = []
+
+        # Cache predictions for use in _select_lowest_confidence
+        self._predictions_cache: Dict[str, Dict[str, Any]] = {}
 
     def configure(
         self,
         low_confidence_weight: float = 0.4,
         diversity_weight: float = 0.3,
         random_weight: float = 0.2,
-        disagreement_weight: float = 0.1
+        disagreement_weight: float = 0.1,
+        edge_case_rule_weight: float = 0.0,
+        cartography_weight: float = 0.0,
     ) -> None:
         """Configure selection weights."""
         self.weights = SelectionWeights(
@@ -96,6 +109,8 @@ class InstanceSelector:
             diverse=diversity_weight,
             random=random_weight,
             disagreement=disagreement_weight,
+            edge_case_rule=edge_case_rule_weight,
+            cartography=cartography_weight,
         )
         self.weights.validate()
 
@@ -104,7 +119,9 @@ class InstanceSelector:
         available_ids: Set[str],
         llm_predictions: Optional[Dict[str, Dict[str, Any]]] = None,
         disagreement_ids: Optional[Set[str]] = None,
-        confidence_threshold: float = 0.5
+        confidence_threshold: float = 0.5,
+        edge_case_rule_ids: Optional[Set[str]] = None,
+        cartography_scores: Optional[Dict[str, float]] = None,
     ) -> None:
         """
         Refresh the selection pools based on current state.
@@ -114,15 +131,22 @@ class InstanceSelector:
             llm_predictions: Dict of instance_id -> schema -> prediction
             disagreement_ids: Set of instance IDs with disagreements
             confidence_threshold: Threshold for low confidence pool
+            edge_case_rule_ids: Set of instance IDs matching edge case rule patterns
+            cartography_scores: Dict of instance_id -> variability score
         """
         with self._lock:
             available_list = list(available_ids)
+
+            # Cache predictions for use in _select_lowest_confidence
+            self._predictions_cache = llm_predictions or {}
 
             # Clear pools
             self._low_confidence_pool = []
             self._diverse_pool = []
             self._random_pool = []
             self._disagreement_pool = []
+            self._edge_case_rule_pool = []
+            self._cartography_pool = []
 
             # Build low confidence pool
             if llm_predictions:
@@ -143,6 +167,22 @@ class InstanceSelector:
                     if iid in disagreement_ids
                 ]
 
+            # Build edge case rule pool
+            if edge_case_rule_ids:
+                self._edge_case_rule_pool = [
+                    iid for iid in available_list
+                    if iid in edge_case_rule_ids
+                ]
+
+            # Build cartography pool (high variability = ambiguous instances)
+            if cartography_scores:
+                scored = [
+                    (iid, score) for iid, score in cartography_scores.items()
+                    if iid in available_ids and score > 0
+                ]
+                scored.sort(key=lambda x: x[1], reverse=True)
+                self._cartography_pool = [iid for iid, _ in scored]
+
             # Diverse pool uses diversity manager if available
             self._diverse_pool = self._build_diverse_pool(available_list)
 
@@ -153,7 +193,9 @@ class InstanceSelector:
                 f"Refreshed pools: low_conf={len(self._low_confidence_pool)}, "
                 f"diverse={len(self._diverse_pool)}, "
                 f"random={len(self._random_pool)}, "
-                f"disagreement={len(self._disagreement_pool)}"
+                f"disagreement={len(self._disagreement_pool)}, "
+                f"edge_case_rule={len(self._edge_case_rule_pool)}, "
+                f"cartography={len(self._cartography_pool)}"
             )
 
     def _build_diverse_pool(self, available_ids: List[str]) -> List[str]:
@@ -219,6 +261,14 @@ class InstanceSelector:
                     iid for iid in self._disagreement_pool
                     if iid in available_ids and iid not in exclude
                 ],
+                'edge_case_rule': [
+                    iid for iid in self._edge_case_rule_pool
+                    if iid in available_ids and iid not in exclude
+                ],
+                'cartography': [
+                    iid for iid in self._cartography_pool
+                    if iid in available_ids and iid not in exclude
+                ],
             }
 
             # Select pool based on weights
@@ -243,6 +293,12 @@ class InstanceSelector:
             elif pool_name == 'disagreement':
                 # Random from disagreements
                 instance_id = self.random.choice(selected_pool)
+            elif pool_name == 'edge_case_rule':
+                # Random from edge case rule matches
+                instance_id = self.random.choice(selected_pool)
+            elif pool_name == 'cartography':
+                # Take first (already sorted by variability, highest first)
+                instance_id = selected_pool[0]
             else:  # random
                 instance_id = self.random.choice(selected_pool)
 
@@ -267,6 +323,8 @@ class InstanceSelector:
             'diverse': self.weights.diverse,
             'random': self.weights.random,
             'disagreement': self.weights.disagreement,
+            'edge_case_rule': self.weights.edge_case_rule,
+            'cartography': self.weights.cartography,
         }
 
         for name, pool in pools.items():
@@ -294,29 +352,19 @@ class InstanceSelector:
         return candidates[-1]
 
     def _select_lowest_confidence(self, pool: List[str]) -> str:
-        """Select the instance with lowest LLM confidence."""
-        try:
-            from potato.item_state_management import get_item_state_manager
+        """Select the instance with lowest LLM confidence from cached predictions."""
+        min_conf = float('inf')
+        best_id = pool[0]
 
-            ism = get_item_state_manager()
-            if ism is None:
-                return self.random.choice(pool)
-
-            min_conf = float('inf')
-            best_id = pool[0]
-
-            for instance_id in pool:
-                predictions = ism.get_llm_predictions(instance_id)
-                for pred in predictions.values():
+        for instance_id in pool:
+            if instance_id in self._predictions_cache:
+                for pred in self._predictions_cache[instance_id].values():
                     conf = pred.get('confidence_score', 1.0)
                     if conf < min_conf:
                         min_conf = conf
                         best_id = instance_id
 
-            return best_id
-
-        except Exception:
-            return self.random.choice(pool)
+        return best_id
 
     def _record_selection(self, instance_id: str, pool_name: str) -> None:
         """Record a selection for analytics."""
@@ -370,12 +418,16 @@ class InstanceSelector:
                     'diverse': len(self._diverse_pool),
                     'random': len(self._random_pool),
                     'disagreement': len(self._disagreement_pool),
+                    'edge_case_rule': len(self._edge_case_rule_pool),
+                    'cartography': len(self._cartography_pool),
                 },
                 'weights': {
                     'low_confidence': self.weights.low_confidence,
                     'diverse': self.weights.diverse,
                     'random': self.weights.random,
                     'disagreement': self.weights.disagreement,
+                    'edge_case_rule': self.weights.edge_case_rule,
+                    'cartography': self.weights.cartography,
                 },
             }
 

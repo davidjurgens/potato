@@ -189,6 +189,10 @@ class SoloModeManager:
         self.edge_case_ids: Set[str] = set()
         self.edge_case_labels: Dict[str, Dict[str, Any]] = {}  # instance_id -> schema -> label
 
+        # Cartography: confidence history per instance across prompt versions
+        # instance_id -> [(prompt_version, confidence_score), ...]
+        self.confidence_history: Dict[str, List[Tuple[int, float]]] = {}
+
         # Agreement metrics
         self.agreement_metrics = AgreementMetrics()
 
@@ -203,6 +207,7 @@ class SoloModeManager:
 
         # Component instances (lazy initialization)
         self._edge_case_synthesizer = None
+        self._edge_case_rule_manager = None
         self._prompt_manager = None
         self._instance_selector = None
         self._disagreement_resolver = None
@@ -228,6 +233,17 @@ class SoloModeManager:
         return self._edge_case_synthesizer
 
     @property
+    def edge_case_rule_manager(self):
+        """Lazy-initialized edge case rule manager."""
+        if self._edge_case_rule_manager is None:
+            from .edge_case_rules import EdgeCaseRuleManager
+            self._edge_case_rule_manager = EdgeCaseRuleManager(
+                state_dir=self.config.state_dir
+            )
+            self._edge_case_rule_manager.load_state()
+        return self._edge_case_rule_manager
+
+    @property
     def prompt_manager(self):
         """Lazy-initialized prompt manager."""
         if self._prompt_manager is None:
@@ -245,6 +261,8 @@ class SoloModeManager:
                 diverse=self.config.instance_selection.diversity_weight,
                 random=self.config.instance_selection.random_weight,
                 disagreement=self.config.instance_selection.disagreement_weight,
+                edge_case_rule=self.config.instance_selection.edge_case_rule_weight,
+                cartography=self.config.instance_selection.cartography_weight,
             )
             self._instance_selector = InstanceSelector(weights, self.app_config)
         return self._instance_selector
@@ -277,6 +295,7 @@ class SoloModeManager:
                 solo_config=self.config,
                 prompt_getter=self.get_current_prompt_text,
                 result_callback=self._handle_labeling_result,
+                prompt_version_getter=lambda: self.current_prompt_version,
             )
         return self._llm_labeling_thread
 
@@ -311,6 +330,16 @@ class SoloModeManager:
                         })
         return examples
 
+    @property
+    def guideline_updater(self):
+        """Lazy-initialized guideline updater."""
+        if not hasattr(self, '_guideline_updater') or self._guideline_updater is None:
+            from .guideline_updater import GuidelineUpdater
+            self._guideline_updater = GuidelineUpdater(
+                self.app_config, self.config
+            )
+        return self._guideline_updater
+
     def _handle_labeling_result(self, result) -> None:
         """Handle a labeling result from the LLM labeling thread."""
         if result.error:
@@ -328,6 +357,166 @@ class SoloModeManager:
             reasoning=result.reasoning,
         )
         self.set_llm_prediction(result.instance_id, result.schema_name, prediction)
+
+        # Record edge case rule if present
+        if (
+            result.is_edge_case
+            and result.edge_case_rule
+            and self.config.edge_case_rules.enabled
+        ):
+            self.edge_case_rule_manager.record_rule_from_labeling(
+                instance_id=result.instance_id,
+                rule_text=result.edge_case_rule,
+                condition=result.edge_case_condition or result.edge_case_rule,
+                action=result.edge_case_action or "",
+                confidence=result.confidence,
+                label=result.label,
+                prompt_version=result.prompt_version,
+                model_name=result.model_name,
+            )
+
+            # Check if we should trigger clustering
+            self._maybe_trigger_rule_clustering()
+
+    def _maybe_trigger_rule_clustering(self) -> None:
+        """Check if enough unclustered rules have accumulated to trigger clustering."""
+        ecr_config = self.config.edge_case_rules
+        unclustered = self.edge_case_rule_manager.get_unclustered_rules()
+        if len(unclustered) >= ecr_config.min_rules_for_clustering:
+            self._trigger_rule_clustering()
+
+    def _trigger_rule_clustering(self) -> None:
+        """Run the rule clustering pipeline in a background thread."""
+        def _run():
+            try:
+                from .rule_clusterer import RuleClusterer
+                clusterer = RuleClusterer(
+                    self.app_config,
+                    self.config,
+                )
+                rules = self.edge_case_rule_manager.get_unclustered_rules()
+                if not rules:
+                    return
+
+                categories = clusterer.run_full_pipeline(rules)
+
+                # Assign cluster IDs to rules and store categories
+                for category in categories:
+                    self.edge_case_rule_manager.add_category(category)
+                    for rule_id in category.member_rule_ids:
+                        self.edge_case_rule_manager.set_rule_cluster(
+                            rule_id, hash(category.id) % 10000
+                        )
+                self.edge_case_rule_manager._save_state()
+
+                logger.info(
+                    f"Rule clustering complete: {len(categories)} categories "
+                    f"from {len(rules)} rules"
+                )
+            except Exception as e:
+                logger.error(f"Error in rule clustering pipeline: {e}")
+
+        thread = threading.Thread(
+            target=_run,
+            name="RuleClusteringThread",
+            daemon=True,
+        )
+        thread.start()
+
+    def apply_approved_rules(self) -> Dict[str, Any]:
+        """Apply approved edge case rules by injecting them into the prompt.
+
+        Returns:
+            Dict with success status, new prompt version, and re-annotation info
+        """
+        ecr = self.edge_case_rule_manager
+        approved = ecr.get_approved_categories()
+
+        # Filter to only unincorporated categories
+        unincorporated = [
+            c for c in approved
+            if c.incorporated_into_prompt_version is None
+        ]
+
+        if not unincorporated:
+            return {
+                'success': False,
+                'error': 'No unincorporated approved categories',
+            }
+
+        # Inject rules into prompt
+        current_prompt = self.get_current_prompt_text()
+        updated_prompt = self.guideline_updater.inject_rules_into_prompt(
+            current_prompt, unincorporated
+        )
+
+        # Create new prompt version
+        old_version = self.current_prompt_version
+        new_pv = self.create_prompt_version(
+            updated_prompt,
+            created_by='edge_case_rule_injection',
+            source_description=(
+                f"Injected {len(unincorporated)} edge case rule categories"
+            ),
+        )
+
+        # Mark categories as incorporated
+        for cat in unincorporated:
+            ecr.mark_category_incorporated(cat.id, new_pv.version)
+
+        result = {
+            'success': True,
+            'new_prompt_version': new_pv.version,
+            'categories_incorporated': len(unincorporated),
+            'reannotation_triggered': False,
+        }
+
+        # Trigger re-annotation if enabled
+        if self.config.edge_case_rules.reannotation_enabled:
+            reannotated = self._trigger_reannotation(old_version)
+            result['reannotation_triggered'] = reannotated > 0
+            result['reannotation_count'] = reannotated
+
+        logger.info(
+            f"Applied {len(unincorporated)} edge case rule categories, "
+            f"new prompt version {new_pv.version}"
+        )
+        return result
+
+    def _trigger_reannotation(self, old_prompt_version: int) -> int:
+        """Remove low-confidence instances from llm_labeled_ids so they
+        re-enter the labeling queue with the improved prompt.
+
+        Args:
+            old_prompt_version: The prompt version whose labels to reconsider
+
+        Returns:
+            Number of instances queued for re-annotation
+        """
+        # Track re-annotation counts per instance
+        if not hasattr(self, '_reannotation_counts'):
+            self._reannotation_counts: Dict[str, int] = {}
+
+        candidates = self.guideline_updater.get_instances_for_reannotation(
+            predictions=self.predictions,
+            old_prompt_version=old_prompt_version,
+            reannotation_counts=self._reannotation_counts,
+        )
+
+        with self._lock:
+            for instance_id in candidates:
+                # Remove from llm_labeled_ids so it can be re-labeled
+                self.llm_labeled_ids.discard(instance_id)
+                # Track re-annotation count
+                self._reannotation_counts[instance_id] = (
+                    self._reannotation_counts.get(instance_id, 0) + 1
+                )
+
+            if candidates:
+                self._save_state()
+
+        logger.info(f"Queued {len(candidates)} instances for re-annotation")
+        return len(candidates)
 
     # === Phase Control ===
 
@@ -461,6 +650,13 @@ class SoloModeManager:
                 self.predictions[instance_id] = {}
             self.predictions[instance_id][schema_name] = prediction
             self.llm_labeled_ids.add(instance_id)
+
+            # Track confidence history for cartography
+            if instance_id not in self.confidence_history:
+                self.confidence_history[instance_id] = []
+            self.confidence_history[instance_id].append(
+                (prediction.prompt_version, prediction.confidence_score)
+            )
 
     def get_llm_prediction(
         self,
@@ -670,11 +866,13 @@ class SoloModeManager:
         """
         Get the next instance for human annotation.
 
-        Uses weighted selection based on:
+        Uses weighted selection across pools:
         - Low LLM confidence
         - Diversity (embedding clusters)
         - Random sampling
         - Prior disagreements
+        - Edge case rules
+        - Cartography (high confidence variability)
 
         Args:
             user_id: The annotator's ID
@@ -682,9 +880,7 @@ class SoloModeManager:
         Returns:
             Instance ID to annotate, or None if none available
         """
-        # This is a placeholder - full implementation in instance_selector.py
         with self._lock:
-            # Get available instances
             from potato.item_state_management import get_item_state_manager
 
             try:
@@ -692,12 +888,84 @@ class SoloModeManager:
             except ValueError:
                 return None
 
-            # Find instances not yet labeled by this human
-            for instance_id in ism.instance_id_ordering:
-                if instance_id not in self.human_labeled_ids:
-                    return instance_id
+            # Compute available IDs: all instances minus already human-labeled
+            all_ids = set(ism.instance_id_ordering)
+            available = all_ids - self.human_labeled_ids
 
-            return None
+            if not available:
+                return None
+
+            # Convert predictions to dict format for refresh_pools
+            pred_dicts = {}
+            for iid, schemas in self.predictions.items():
+                pred_dicts[iid] = {
+                    s: p.to_dict() for s, p in schemas.items()
+                }
+
+            # Get edge case rule IDs if available
+            edge_case_rule_ids = None
+            if self._edge_case_rule_manager is not None:
+                try:
+                    edge_case_rule_ids = self._edge_case_rule_manager.get_rule_instance_ids()
+                except Exception:
+                    pass
+
+            # Compute cartography scores if history available
+            cartography_variability = None
+            if self.confidence_history:
+                cartography = self.get_cartography_scores()
+                if cartography:
+                    cartography_variability = {
+                        iid: s['variability']
+                        for iid, s in cartography.items()
+                    }
+
+            # Refresh pools with current data
+            self.instance_selector.refresh_pools(
+                available_ids=available,
+                llm_predictions=pred_dicts,
+                disagreement_ids=self.disagreement_ids,
+                confidence_threshold=self.config.thresholds.confidence_low,
+                edge_case_rule_ids=edge_case_rule_ids,
+                cartography_scores=cartography_variability,
+            )
+
+            # Select next instance
+            return self.instance_selector.select_next(
+                available_ids=available,
+                exclude_ids=self.human_labeled_ids,
+            )
+
+    def get_cartography_scores(self) -> Dict[str, Dict[str, float]]:
+        """Compute cartography signals for each instance.
+
+        Uses confidence history across prompt versions to identify:
+        - Ambiguous instances: high confidence variability
+        - Hard instances: consistently low confidence
+        - Easy instances: consistently high confidence
+
+        Returns:
+            Dict of instance_id -> {variability, mean_confidence}
+        """
+        import statistics
+
+        with self._lock:
+            scores = {}
+            for instance_id, history in self.confidence_history.items():
+                if not history:
+                    continue
+
+                confidences = [conf for _, conf in history]
+                mean_conf = statistics.mean(confidences)
+                variability = (
+                    statistics.stdev(confidences) if len(confidences) > 1 else 0.0
+                )
+
+                scores[instance_id] = {
+                    'variability': variability,
+                    'mean_confidence': mean_conf,
+                }
+            return scores
 
     # === Agreement Metrics ===
 
@@ -901,7 +1169,15 @@ class SoloModeManager:
                 'edge_case_ids': list(self.edge_case_ids),
                 'edge_case_labels': self.edge_case_labels,
                 'agreement_metrics': self.agreement_metrics.to_dict(),
+                'confidence_history': {
+                    iid: entries
+                    for iid, entries in self.confidence_history.items()
+                },
             }
+
+            # Include edge case rule manager state inline
+            if self._edge_case_rule_manager is not None:
+                state['edge_case_rule_data'] = self._edge_case_rule_manager.to_dict()
 
             # Atomic write
             temp_path = filepath + '.tmp'
@@ -955,6 +1231,13 @@ class SoloModeManager:
                 self.edge_case_ids = set(state.get('edge_case_ids', []))
                 self.edge_case_labels = state.get('edge_case_labels', {})
 
+                # Restore cartography confidence history
+                raw_history = state.get('confidence_history', {})
+                self.confidence_history = {
+                    iid: [(entry[0], entry[1]) for entry in entries]
+                    for iid, entries in raw_history.items()
+                }
+
                 metrics = state.get('agreement_metrics', {})
                 self.agreement_metrics = AgreementMetrics(
                     total_compared=metrics.get('total_compared', 0),
@@ -962,6 +1245,14 @@ class SoloModeManager:
                     disagreements=metrics.get('disagreements', 0),
                     agreement_rate=metrics.get('agreement_rate', 0.0),
                 )
+
+                # Load edge case rule manager state
+                ecr_data = state.get('edge_case_rule_data')
+                if ecr_data:
+                    from .edge_case_rules import EdgeCaseRuleManager
+                    self._edge_case_rule_manager = EdgeCaseRuleManager.from_dict(
+                        ecr_data, state_dir=self.config.state_dir
+                    )
 
             # Load phase state
             self.phase_controller.load_state()
@@ -1222,6 +1513,11 @@ class SoloModeManager:
                 'edge_cases': {
                     'count': len(self.edge_case_ids),
                 },
+                'edge_case_rules': (
+                    self.edge_case_rule_manager.get_stats()
+                    if self._edge_case_rule_manager is not None
+                    else {'total_rules': 0, 'total_categories': 0}
+                ),
                 'thresholds': {
                     'end_human_annotation_agreement': self.config.thresholds.end_human_annotation_agreement,
                     'minimum_validation_sample': self.config.thresholds.minimum_validation_sample,
