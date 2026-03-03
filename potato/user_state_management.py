@@ -703,7 +703,8 @@ class UserStateManager:
                     phase_type_str = self.config["phases"][phase_name]["type"]
                     phase_type = UserPhase.fromstr(phase_type_str)
                     if phase_type in self.phase_type_to_name_to_page:
-                        config_phases.append(phase_type)
+                        if phase_type not in config_phases:
+                            config_phases.append(phase_type)
 
             # Add ANNOTATION phase at the end if not already present
             if UserPhase.ANNOTATION not in config_phases:

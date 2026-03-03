@@ -161,7 +161,8 @@ def _generate_radio_layout_internal(annotation_scheme, horizontal=False):
     if annotation_scheme.get("has_free_response"):
         logger.debug("Adding free response field")
         free_response_identifiers = generate_element_identifier(schema_name, "free_response", "text")
-        instruction = annotation_scheme["has_free_response"].get("instruction", "Other")
+        free_response_config = annotation_scheme["has_free_response"]
+        instruction = free_response_config.get("instruction", "Other") if isinstance(free_response_config, dict) else "Other"
 
         schematic += f"""
             <div class="shadcn-radio-free-response">
