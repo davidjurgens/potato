@@ -2496,9 +2496,6 @@ def create_app():
     # Configure the app
     configure_app(app)
 
-    # Register Solo Mode blueprint
-    app.register_blueprint(solo_mode_bp)
-
     # Add context processor for debug settings and common config values
     @app.context_processor
     def inject_template_context():

@@ -14,7 +14,7 @@ Potato's BWS implementation:
 ## Quick Start
 
 ```bash
-python potato/flask_server.py start project-hub/simple_examples/simple-best-worst-scaling/config.yaml -p 8000
+python potato/flask_server.py start examples/classification/best-worst-scaling/config.yaml -p 8000
 ```
 
 ## Configuration

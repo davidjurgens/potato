@@ -3442,6 +3442,34 @@ def update_instance():
 
             # Handle label annotations from frontend format
             annotations = request.json.get("annotations", {})
+
+            # Pre-clear stale labels for radio/multiselect schemas.
+            # The client always sends the COMPLETE current state, so any label
+            # not in the incoming set should be removed. Without this, deselected
+            # radio options or unchecked checkboxes persist as stale data.
+            _exclusive_types = {'radio', 'multiselect'}
+            _schema_type_cache = {}
+            for scheme in config.get('annotation_schemes', []):
+                _schema_type_cache[scheme.get('name')] = scheme.get('annotation_type')
+
+            # Collect which schemas appear in the incoming annotations
+            _incoming_schemas = set()
+            for key in annotations:
+                sep = ":::" if ":::" in key else (":" if ":" in key else None)
+                if sep:
+                    _incoming_schemas.add(key.split(sep, 1)[0])
+
+            # For each exclusive schema, remove all existing labels
+            if instance_id in user_state.instance_id_to_label_to_value:
+                for schema_name_to_clear in _incoming_schemas:
+                    if _schema_type_cache.get(schema_name_to_clear) in _exclusive_types:
+                        labels_to_remove = [
+                            lbl for lbl in user_state.instance_id_to_label_to_value[instance_id]
+                            if isinstance(lbl, Label) and lbl.get_schema() == schema_name_to_clear
+                        ]
+                        for lbl in labels_to_remove:
+                            del user_state.instance_id_to_label_to_value[instance_id][lbl]
+
             for key, value in annotations.items():
                 if ":::" in key:
                     # Use ::: separator for image/audio/video annotation data

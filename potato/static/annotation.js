@@ -1766,8 +1766,14 @@ function syncAnnotationsFromDOM() {
         }
     });
 
-    // Sync radio buttons
+    // Sync radio buttons — clear schemas first (radios are mutually exclusive)
     const radios = document.querySelectorAll('input[type="radio"].annotation-input');
+    const radioSchemas = new Set();
+    radios.forEach(input => {
+        const schema = input.getAttribute('schema');
+        if (schema) radioSchemas.add(schema);
+    });
+    radioSchemas.forEach(schema => { delete currentAnnotations[schema]; });
     radios.forEach(input => {
         const schema = input.getAttribute('schema');
         const labelName = input.getAttribute('label_name');
@@ -1944,6 +1950,8 @@ function handleInputChange(element) {
         // For radio buttons, only save if checked
         if (element.checked) {
             const oldValue = currentAnnotations[schema] ? currentAnnotations[schema][labelName] : null;
+            // Radio buttons are mutually exclusive — clear old entries for this schema
+            currentAnnotations[schema] = {};
             value = element.value;
             // Track radio button selection
             if (window.interactionTracker) {

@@ -285,7 +285,7 @@ For full configuration details, see [Solo Mode Advanced Features](solo_mode_adva
 
 ## Example Project
 
-See `project-hub/simple_examples/simple-solo-mode/` for a complete working example.
+See `examples/advanced/solo-mode/` for a complete working example.
 
 ## Developer Documentation
 
