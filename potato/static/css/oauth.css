@@ -1,0 +1,95 @@
+/* OAuth / SSO Login Buttons */
+
+.oauth-providers {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.oauth-login-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 0.7rem 1rem;
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
+    color: #344054;
+    background: #fff;
+}
+
+.oauth-login-btn:hover {
+    background-color: #f9fafb;
+    border-color: #98a2b3;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.1);
+    text-decoration: none;
+    color: #344054;
+}
+
+.oauth-login-btn i {
+    font-size: 1.2rem;
+    width: 1.3rem;
+    text-align: center;
+}
+
+/* Google */
+.oauth-btn-google {
+    border-color: #dadce0;
+}
+.oauth-btn-google:hover {
+    background-color: #f8f9fa;
+    border-color: #4285f4;
+}
+.oauth-btn-google i {
+    color: #4285f4;
+}
+
+/* GitHub */
+.oauth-btn-github {
+    background-color: #24292f;
+    color: #fff;
+    border-color: #24292f;
+}
+.oauth-btn-github:hover {
+    background-color: #32383f;
+    color: #fff;
+    border-color: #32383f;
+}
+.oauth-btn-github i {
+    color: #fff;
+}
+
+/* Generic / OIDC */
+.oauth-btn-generic {
+    border-color: #d0d5dd;
+}
+.oauth-btn-generic:hover {
+    background-color: #f2f4f7;
+}
+.oauth-btn-generic i {
+    color: #667085;
+}
+
+/* Divider between SSO and local login */
+.oauth-divider {
+    display: flex;
+    align-items: center;
+    margin: 1.25rem 0;
+    color: #98a2b3;
+    font-size: 0.85rem;
+}
+.oauth-divider::before,
+.oauth-divider::after {
+    content: "";
+    flex: 1;
+    border-bottom: 1px solid #e4e7ec;
+}
+.oauth-divider span {
+    padding: 0 0.75rem;
+}

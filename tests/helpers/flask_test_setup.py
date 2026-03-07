@@ -102,6 +102,13 @@ def clear_all_global_state():
     except ImportError:
         pass
 
+    # User authenticator singleton
+    try:
+        import potato.authentication as auth_module
+        auth_module.USER_AUTHENTICATOR_SINGLETON = None
+    except ImportError:
+        pass
+
 class FlaskTestServer:
     """A test server that can be started and stopped for integration tests."""
 
@@ -464,6 +471,10 @@ class FlaskTestServer:
                 except ImportError:
                     pass
 
+                # Clear authenticator singleton from previous tests
+                import potato.authentication as auth_module
+                auth_module.USER_AUTHENTICATOR_SINGLETON = None
+
                 # Initialize authenticator
                 UserAuthenticator.init_from_config(config)
 
@@ -582,6 +593,14 @@ class FlaskTestServer:
                 # Configure routes
                 from potato.routes import configure_routes
                 configure_routes(app, config)
+
+                # Initialize OAuth with Flask app if using OAuth authentication
+                auth_method = config.get("authentication", {}).get("method", "in_memory")
+                if auth_method == "oauth":
+                    authenticator = UserAuthenticator.get_instance()
+                    oauth_backend = authenticator.get_oauth_backend()
+                    if oauth_backend:
+                        oauth_backend.init_oauth(app)
 
                 # Add route to serve test audio files from tests/data directory
                 test_data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../data'))

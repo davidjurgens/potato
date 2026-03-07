@@ -7,27 +7,55 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    {% if oauth_providers %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/oauth.css') }}">
+    {% endif %}
 </head>
 <body class="potato-page-center">
     <div style="width: 100%; max-width: 420px;">
         <div style="text-align: center; margin-bottom: 2rem;">
             <h1 class="potato-page-title">{{ title|default("Annotation Platform") }}</h1>
             <p class="potato-page-subtitle" style="margin-bottom: 0;">
-                {% if require_password %}Sign in to continue{% else %}Enter your username to continue{% endif %}
+                {% if oauth_providers and not allow_local_login %}
+                    Sign in to continue
+                {% elif require_password %}
+                    Sign in to continue
+                {% else %}
+                    Enter your username to continue
+                {% endif %}
             </p>
         </div>
 
         <div class="potato-page-card">
+            {% if login_error %}
+            <div class="potato-alert potato-alert-error">
+                <i class="fas fa-exclamation-circle me-1"></i> {{ login_error }}
+            </div>
+            {% endif %}
+
+            {% if oauth_providers %}
+            <!-- SSO Login Buttons -->
+            <div class="oauth-providers">
+                {% for provider in oauth_providers %}
+                <a href="{{ provider.login_url }}" class="oauth-login-btn {{ provider.button_class }}">
+                    <i class="{{ provider.icon_class }}"></i>
+                    <span>Sign in with {{ provider.display_name }}</span>
+                </a>
+                {% endfor %}
+            </div>
+
+            {% if allow_local_login or require_password %}
+            <div class="oauth-divider">
+                <span>or</span>
+            </div>
+            {% endif %}
+            {% endif %}
+
+            {% if not oauth_providers or allow_local_login or require_password %}
             {% if require_password %}
             <div class="potato-tabs">
                 <button class="potato-tab active" id="login-tab" onclick="switchTab('login')">Sign In</button>
                 <button class="potato-tab" id="register-tab" onclick="switchTab('register')">Register</button>
-            </div>
-            {% endif %}
-
-            {% if login_error %}
-            <div class="potato-alert potato-alert-error">
-                <i class="fas fa-exclamation-circle me-1"></i> {{ login_error }}
             </div>
             {% endif %}
 
@@ -72,6 +100,7 @@
                     <button type="submit" class="potato-form-submit">Register</button>
                 </form>
             </div>
+            {% endif %}
             {% endif %}
         </div>
     </div>

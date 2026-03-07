@@ -1,0 +1,66 @@
+# Example: OAuth/SSO Login Configuration
+#
+# Demonstrates Google + GitHub OAuth login for annotation tasks.
+#
+# Prerequisites:
+#   1. Set environment variables:
+#      export GOOGLE_CLIENT_ID="your-google-client-id"
+#      export GOOGLE_CLIENT_SECRET="your-google-client-secret"
+#      export GITHUB_CLIENT_ID="your-github-client-id"
+#      export GITHUB_CLIENT_SECRET="your-github-client-secret"
+#      export POTATO_SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+#
+#   2. Register OAuth apps with Google and/or GitHub (see docs/sso_authentication.md)
+#
+#   3. Run from repo root:
+#      python potato/flask_server.py start examples/advanced/oauth-login/config.yaml -p 8000
+#
+# For local development, use http://localhost:8000/auth/callback/google as the redirect URI.
+
+annotation_task_name: "OAuth Login Demo"
+task_dir: "."
+port: 8000
+
+# --- Authentication ---
+authentication:
+  method: "oauth"
+  providers:
+    google:
+      client_id: ${GOOGLE_CLIENT_ID}
+      client_secret: ${GOOGLE_CLIENT_SECRET}
+      # Uncomment to restrict to a specific domain:
+      # allowed_domain: "umich.edu"
+    github:
+      client_id: ${GITHUB_CLIENT_ID}
+      client_secret: ${GITHUB_CLIENT_SECRET}
+      # Uncomment to restrict to an organization:
+      # allowed_org: "my-research-lab"
+  user_identity_field: "email"
+  allow_local_login: true
+  auto_register: true
+
+secret_key: ${POTATO_SECRET_KEY}
+
+# --- Data ---
+data_files:
+  - type: jsonl
+    path: data/example.json
+    id_key: id
+    text_key: text
+
+item_properties:
+  id_key: id
+  text_key: text
+
+# --- Annotation ---
+annotation_schemes:
+  - annotation_type: "radio"
+    name: "sentiment"
+    description: "What is the sentiment of this text?"
+    labels:
+      - Positive
+      - Negative
+      - Neutral
+
+user_config:
+  allow_all_users: true

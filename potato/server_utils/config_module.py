@@ -158,6 +158,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Validate server config if present
     validate_server_config(config_data)
 
+    # Validate authentication config if present
+    validate_authentication_config(config_data)
+
     # Validate data_directory config if present
     validate_data_directory_config(config_data)
 
@@ -1034,6 +1037,117 @@ def validate_server_config(config_data: Dict[str, Any]) -> None:
     if "debug" in server_config:
         if not isinstance(server_config["debug"], bool):
             raise ConfigValidationError("server.debug must be a boolean")
+
+
+def validate_authentication_config(config_data: Dict[str, Any]) -> None:
+    """
+    Validate authentication configuration section.
+
+    Validates OAuth/OIDC provider settings, required fields, and
+    warns about common misconfigurations.
+
+    Args:
+        config_data: The configuration data
+
+    Raises:
+        ConfigValidationError: If the authentication configuration is invalid
+    """
+    if "authentication" not in config_data:
+        return  # authentication section is optional
+
+    auth_config = config_data["authentication"]
+
+    if not isinstance(auth_config, dict):
+        raise ConfigValidationError("authentication configuration must be a dictionary")
+
+    method = auth_config.get("method", "in_memory")
+    valid_methods = ["in_memory", "database", "clerk", "oauth"]
+    if method not in valid_methods:
+        raise ConfigValidationError(
+            f"authentication.method must be one of: {', '.join(valid_methods)}. "
+            f"Got: '{method}'"
+        )
+
+    # OAuth-specific validation
+    if method == "oauth":
+        # providers is required
+        providers = auth_config.get("providers")
+        if not providers or not isinstance(providers, dict):
+            raise ConfigValidationError(
+                "authentication.providers is required when method is 'oauth' "
+                "and must be a dictionary with at least one provider"
+            )
+
+        if len(providers) == 0:
+            raise ConfigValidationError(
+                "authentication.providers must contain at least one provider"
+            )
+
+        # Validate each provider
+        for name, pconfig in providers.items():
+            if not isinstance(pconfig, dict):
+                raise ConfigValidationError(
+                    f"authentication.providers.{name} must be a dictionary"
+                )
+
+            # client_id and client_secret are required
+            if "client_id" not in pconfig:
+                raise ConfigValidationError(
+                    f"authentication.providers.{name}.client_id is required"
+                )
+            if "client_secret" not in pconfig:
+                raise ConfigValidationError(
+                    f"authentication.providers.{name}.client_secret is required"
+                )
+
+            # Generic OIDC requires discovery_url
+            if name not in ("google", "github") and "discovery_url" not in pconfig:
+                raise ConfigValidationError(
+                    f"authentication.providers.{name} requires 'discovery_url' "
+                    f"for OIDC providers (only 'google' and 'github' have built-in URLs)"
+                )
+
+            # Validate optional fields
+            if "allowed_domain" in pconfig:
+                domain = pconfig["allowed_domain"]
+                if not isinstance(domain, str) or not domain.strip():
+                    raise ConfigValidationError(
+                        f"authentication.providers.{name}.allowed_domain must be a non-empty string"
+                    )
+
+            if "allowed_org" in pconfig:
+                org = pconfig["allowed_org"]
+                if not isinstance(org, str) or not org.strip():
+                    raise ConfigValidationError(
+                        f"authentication.providers.{name}.allowed_org must be a non-empty string"
+                    )
+
+            if "scopes" in pconfig:
+                scopes = pconfig["scopes"]
+                if not isinstance(scopes, list):
+                    raise ConfigValidationError(
+                        f"authentication.providers.{name}.scopes must be a list"
+                    )
+
+        # Validate user_identity_field
+        identity_field = auth_config.get("user_identity_field", "email")
+        valid_fields = ["email", "username", "sub", "name"]
+        if identity_field not in valid_fields:
+            raise ConfigValidationError(
+                f"authentication.user_identity_field must be one of: "
+                f"{', '.join(valid_fields)}. Got: '{identity_field}'"
+            )
+
+        # Warn if secret_key is not set (OAuth needs stable sessions)
+        if "secret_key" not in config_data:
+            import os
+            if not os.environ.get("POTATO_SECRET_KEY"):
+                logger.warning(
+                    "OAuth is configured but no 'secret_key' is set in config "
+                    "and POTATO_SECRET_KEY environment variable is not set. "
+                    "Sessions will be lost on server restart. "
+                    "Set 'secret_key' in config or POTATO_SECRET_KEY env var."
+                )
 
 
 def validate_quality_control_config(config_data: Dict[str, Any]) -> None:

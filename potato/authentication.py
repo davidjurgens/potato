@@ -416,13 +416,14 @@ class UserAuthenticator:
     and can be configured for passwordless operation.
     """
 
-    def __init__(self, user_config_path, auth_method="in_memory"):
+    def __init__(self, user_config_path, auth_method="in_memory", auth_config=None):
         """
         Initialize the user authenticator.
 
         Args:
             user_config_path: Path to the user configuration file
-            auth_method: Authentication method to use ("in_memory", "database", "clerk")
+            auth_method: Authentication method to use ("in_memory", "database", "clerk", "oauth")
+            auth_config: The full 'authentication' config dict (needed for OAuth)
         """
         self.allow_all_users = True
         self.user_config_path = user_config_path
@@ -433,7 +434,8 @@ class UserAuthenticator:
         self.required_user_info_keys = ["username", "password"]
         self.require_password = True
         self.auth_method = auth_method
-        self.auth_backend = self._initialize_backend(auth_method)
+        self.auth_config = auth_config or {}
+        self.auth_backend = self._initialize_backend(auth_method, auth_config)
 
         # Load users from config file if it exists
         if os.path.isfile(self.user_config_path):
@@ -443,12 +445,13 @@ class UserAuthenticator:
                     single_user = json.loads(line.strip())
                     self.add_single_user(single_user)
 
-    def _initialize_backend(self, auth_method: str) -> AuthBackend:
+    def _initialize_backend(self, auth_method: str, auth_config: dict = None) -> AuthBackend:
         """
         Initialize the appropriate authentication backend.
 
         Args:
             auth_method: The authentication method to use
+            auth_config: The full 'authentication' config dict (needed for OAuth)
 
         Returns:
             AuthBackend: The initialized authentication backend
@@ -468,6 +471,11 @@ class UserAuthenticator:
                 logger.error("CLERK_API_KEY environment variable is not set")
                 raise ValueError("CLERK_API_KEY must be set for Clerk authentication")
             return ClerkAuthBackend(api_key, frontend_api)
+        elif auth_method == "oauth":
+            from potato.auth_backends.oauth_backend import OAuthBackend
+            if not auth_config:
+                raise ValueError("OAuth authentication requires an 'authentication' config section with 'providers'")
+            return OAuthBackend(auth_config)
         else:
             logger.error(f"Unknown authentication method: {auth_method}")
             raise ValueError(f"Unknown authentication method: {auth_method}")
@@ -523,8 +531,11 @@ class UserAuthenticator:
 
                     logger.debug(f"User config path: {user_config_path}")
 
+                    # Get the full authentication config for OAuth
+                    auth_config = config.get("authentication", {})
+
                     # Initialize the authenticator
-                    USER_AUTHENTICATOR_SINGLETON = UserAuthenticator(user_config_path, auth_method)
+                    USER_AUTHENTICATOR_SINGLETON = UserAuthenticator(user_config_path, auth_method, auth_config)
                     USER_AUTHENTICATOR_SINGLETON.require_password = require_password
 
                     logger.info(f"Initialized UserAuthenticator with method: {auth_method}, require_password: {require_password}")
@@ -728,3 +739,26 @@ class UserAuthenticator:
         if self.auth_method == "clerk" and isinstance(self.auth_backend, ClerkAuthBackend):
             return self.auth_backend.frontend_api
         return ""
+
+    def get_oauth_backend(self):
+        """
+        Get the OAuth backend if using OAuth authentication.
+
+        Returns:
+            OAuthBackend or None: The OAuth backend, or None if not using OAuth
+        """
+        if self.auth_method == "oauth":
+            return self.auth_backend
+        return None
+
+    def get_login_providers(self) -> list:
+        """
+        Get the list of OAuth login providers for the login page.
+
+        Returns:
+            list: List of provider display metadata dicts, or empty list
+        """
+        oauth_backend = self.get_oauth_backend()
+        if oauth_backend:
+            return oauth_backend.get_login_providers()
+        return []

@@ -2648,6 +2648,15 @@ def run_server(args):
     # Initialize authenticator
     UserAuthenticator.init_from_config(config)
 
+    # Initialize OAuth with Flask app if using OAuth authentication
+    auth_method = config.get("authentication", {}).get("method", "in_memory")
+    if auth_method == "oauth":
+        authenticator = UserAuthenticator.get_instance()
+        oauth_backend = authenticator.get_oauth_backend()
+        if oauth_backend:
+            oauth_backend.init_oauth(app)
+            logger.info("OAuth providers initialized with Flask app")
+
     init_user_state_manager(config)
     init_item_state_manager(config)
 

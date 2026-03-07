@@ -567,9 +567,21 @@ def auth():
                                   require_password=require_password)
 
     # GET request - show the login form
+    oauth_providers = []
+    allow_local_login = True
+    try:
+        authenticator = UserAuthenticator.get_instance()
+        oauth_providers = authenticator.get_login_providers()
+        if oauth_providers:
+            allow_local_login = authenticator.auth_config.get("allow_local_login", False)
+    except ValueError:
+        pass  # Authenticator not yet initialized
+
     return render_template("home.html",
                          title=config.get("annotation_task_name", "Annotation Platform"),
-                         require_password=config.get("require_password", True))
+                         require_password=config.get("require_password", True),
+                         oauth_providers=oauth_providers,
+                         allow_local_login=allow_local_login)
 
 
 @app.route("/passwordless-login", methods=["GET", "POST"])
@@ -658,6 +670,185 @@ def clerk_login():
     return render_template("clerk_login.html",
                          clerk_frontend_api=clerk_frontend_api,
                          title=config.get("annotation_task_name", "Annotation Platform"))
+
+
+# --- OAuth SSO Routes ---
+
+@app.route("/auth/login/<provider>")
+def oauth_login(provider):
+    """Redirect the user to the OAuth provider's authorization page.
+
+    Args:
+        provider: The provider key (e.g. 'google', 'github', 'oidc').
+    """
+    authenticator = UserAuthenticator.get_instance()
+    oauth_backend = authenticator.get_oauth_backend()
+
+    if not oauth_backend:
+        logger.warning("OAuth login attempted but OAuth is not configured")
+        return redirect(url_for("home"))
+
+    client = oauth_backend.get_oauth_client(provider)
+    if client is None:
+        logger.warning("Unknown OAuth provider: %s", provider)
+        return render_template("home.html",
+                             login_error=f"Unknown login provider: {provider}",
+                             title=config.get("annotation_task_name", "Annotation Platform"),
+                             require_password=config.get("require_password", True),
+                             oauth_providers=authenticator.get_login_providers()), 404
+
+    callback_url = url_for("oauth_callback", provider=provider, _external=True)
+    return client.authorize_redirect(callback_url)
+
+
+@app.route("/auth/callback/<provider>")
+def oauth_callback(provider):
+    """Handle the OAuth callback after user authenticates with provider.
+
+    Exchanges the authorization code for a token, fetches user profile,
+    applies restrictions, and creates a Potato session.
+    """
+    authenticator = UserAuthenticator.get_instance()
+    oauth_backend = authenticator.get_oauth_backend()
+
+    if not oauth_backend:
+        return redirect(url_for("home"))
+
+    client = oauth_backend.get_oauth_client(provider)
+    if client is None:
+        return redirect(url_for("home"))
+
+    # Check if the provider returned an error (e.g. user denied access)
+    error = request.args.get("error")
+    if error:
+        error_desc = request.args.get("error_description", error)
+        logger.warning("OAuth error from %s: %s - %s", provider, error, error_desc)
+        return render_template("home.html",
+                             login_error=f"Login cancelled: {error_desc}",
+                             title=config.get("annotation_task_name", "Annotation Platform"),
+                             require_password=config.get("require_password", True),
+                             oauth_providers=authenticator.get_login_providers())
+
+    try:
+        # Exchange authorization code for token
+        token = client.authorize_access_token()
+    except Exception as e:
+        logger.error("OAuth token exchange failed for %s: %s", provider, str(e))
+        return render_template("home.html",
+                             login_error="Authentication failed. Please try again.",
+                             title=config.get("annotation_task_name", "Annotation Platform"),
+                             require_password=config.get("require_password", True),
+                             oauth_providers=authenticator.get_login_providers())
+
+    # Get user profile
+    try:
+        if provider == "github":
+            resp = client.get("user", token=token)
+            profile = resp.json()
+            # GitHub may not include email in profile — fetch from emails API
+            if not profile.get("email"):
+                emails_resp = client.get("user/emails", token=token)
+                emails = emails_resp.json()
+                primary = next((e for e in emails if e.get("primary")), None)
+                if primary:
+                    profile["email"] = primary["email"]
+        elif hasattr(token, "get") and token.get("userinfo"):
+            profile = token["userinfo"]
+        else:
+            profile = client.userinfo()
+    except Exception as e:
+        logger.error("Failed to fetch user profile from %s: %s", provider, str(e))
+        return render_template("home.html",
+                             login_error="Failed to retrieve user profile.",
+                             title=config.get("annotation_task_name", "Annotation Platform"),
+                             require_password=config.get("require_password", True),
+                             oauth_providers=authenticator.get_login_providers())
+
+    # Check domain/org restrictions
+    allowed, reason = oauth_backend.check_restrictions(provider, profile)
+    if not allowed:
+        logger.warning("OAuth restriction denied user from %s: %s", provider, reason)
+        return render_template("home.html",
+                             login_error=reason,
+                             title=config.get("annotation_task_name", "Annotation Platform"),
+                             require_password=config.get("require_password", True),
+                             oauth_providers=authenticator.get_login_providers())
+
+    # Check GitHub org restriction (requires API call)
+    allowed_org = oauth_backend.get_allowed_org(provider)
+    if allowed_org and provider == "github":
+        try:
+            orgs_resp = client.get("user/orgs", token=token)
+            orgs = orgs_resp.json()
+            user_orgs = [o.get("login", "").lower() for o in orgs]
+            if allowed_org.lower() not in user_orgs:
+                reason = (
+                    f"Access restricted to members of the '{allowed_org}' "
+                    f"GitHub organization."
+                )
+                logger.warning("GitHub org check failed: %s not in %s", profile.get("login"), allowed_org)
+                return render_template("home.html",
+                                     login_error=reason,
+                                     title=config.get("annotation_task_name", "Annotation Platform"),
+                                     require_password=config.get("require_password", True),
+                                     oauth_providers=authenticator.get_login_providers())
+        except Exception as e:
+            logger.error("Failed to check GitHub org membership: %s", str(e))
+            return render_template("home.html",
+                                 login_error="Failed to verify organization membership.",
+                                 title=config.get("annotation_task_name", "Annotation Platform"),
+                                 require_password=config.get("require_password", True),
+                                 oauth_providers=authenticator.get_login_providers())
+
+    # Extract user identity
+    try:
+        user_id = oauth_backend.extract_user_id(profile, provider)
+    except ValueError as e:
+        logger.error("Cannot extract user ID from OAuth profile: %s", str(e))
+        return render_template("home.html",
+                             login_error="Could not determine your user identity.",
+                             title=config.get("annotation_task_name", "Annotation Platform"),
+                             require_password=config.get("require_password", True),
+                             oauth_providers=authenticator.get_login_providers())
+
+    # Check auto_register
+    if not oauth_backend.auto_register and not authenticator.is_valid_username(user_id):
+        if not authenticator.is_authorized_user(user_id):
+            logger.warning("OAuth user %s not pre-authorized (auto_register=false)", user_id)
+            return render_template("home.html",
+                                 login_error="Your account is not authorized for this task.",
+                                 title=config.get("annotation_task_name", "Annotation Platform"),
+                                 require_password=config.get("require_password", True),
+                                 oauth_providers=authenticator.get_login_providers())
+
+    # Register the user in the OAuth backend
+    authenticator.add_user(user_id, None,
+                          oauth_provider=provider,
+                          oauth_profile=profile)
+
+    # Create Flask session
+    session.clear()
+    session['username'] = user_id
+    session.permanent = True
+    logger.info("OAuth login successful: provider=%s, user=%s", provider, user_id)
+
+    # Initialize user state if needed
+    if not get_user_state_manager().has_user(user_id):
+        logger.debug("Initializing state for new OAuth user: %s", user_id)
+        usm = get_user_state_manager()
+        usm.add_user(user_id)
+
+        # Check for debug phase skip
+        if config.get("debug") and config.get("debug_phase"):
+            if apply_debug_phase_skip(user_id):
+                return redirect(url_for("home"))
+            else:
+                usm.advance_phase(user_id)
+        else:
+            usm.advance_phase(user_id)
+
+    return redirect(url_for("home"))
+
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -5894,6 +6085,10 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/agent_chat/send", "agent_chat_send", agent_chat_send, methods=["POST"])
     app.add_url_rule("/agent_chat/finish", "agent_chat_finish", agent_chat_finish, methods=["POST"])
     app.add_url_rule("/agent_chat/status", "agent_chat_status", agent_chat_status, methods=["GET"])
+
+    # OAuth SSO routes
+    app.add_url_rule("/auth/login/<provider>", "oauth_login", oauth_login, methods=["GET"])
+    app.add_url_rule("/auth/callback/<provider>", "oauth_callback", oauth_callback, methods=["GET"])
 
     app.add_url_rule("/shutdown", "shutdown", shutdown, methods=["POST"])
 

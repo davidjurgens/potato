@@ -59,6 +59,10 @@
 - [Users & Collaboration](user_and_collaboration.md) - User settings and access control
 - [Passwordless Login](passwordless_login.md) - URL-based authentication
 
+## Authentication & Access Control
+
+- [SSO & OAuth Authentication](sso_authentication.md) - Google, GitHub, and institutional SSO login
+
 ## Crowdsourcing
 
 - [Crowdsourcing Guide](crowdsourcing.md) - Prolific and MTurk integration
@@ -109,6 +113,7 @@
 | Display images/video with radio buttons | [Instance Display](instance_display.md) |
 | Show/hide questions based on answers | [Conditional Logic](conditional_logic.md) |
 | Annotate PDFs, Word docs, or code | [Format Support](format_support.md) |
+| Set up SSO/OAuth login | [SSO Authentication](sso_authentication.md) |
 | Configure for MTurk | [MTurk Integration](mturk_integration.md) |
 | Configure for Prolific | [Crowdsourcing Guide](crowdsourcing.md#prolific-integration) |
 | Monitor annotation progress | [Admin Dashboard](admin_dashboard.md) |
