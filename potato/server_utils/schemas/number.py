@@ -140,7 +140,7 @@ def _generate_tooltip(annotation_scheme):
         tooltip_text = annotation_scheme["tooltip"]
     elif "tooltip_file" in annotation_scheme:
         try:
-            with open(annotation_scheme["tooltip_file"], "rt") as f:
+            with open(annotation_scheme["tooltip_file"], "rt", encoding="utf-8") as f:
                 tooltip_text = "".join(f.readlines())
         except Exception as e:
             logger.error(f"Failed to read tooltip file: {e}")

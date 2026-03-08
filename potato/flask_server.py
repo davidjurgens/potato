@@ -883,7 +883,7 @@ def init_prolific_study(config: dict) -> None:
         import yaml
         prolific_config_path = get_abs_or_rel_path(config_file_path, config)
         if os.path.exists(prolific_config_path):
-            with open(prolific_config_path, 'r') as f:
+            with open(prolific_config_path, 'r', encoding='utf-8') as f:
                 prolific_settings = yaml.safe_load(f)
                 logger.info(f"Loaded Prolific config from {prolific_config_path}")
         else:

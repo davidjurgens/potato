@@ -69,13 +69,13 @@ def _generate_select_layout_internal(annotation_scheme):
         "use_predefined_labels" in annotation_scheme
         and annotation_scheme["use_predefined_labels"] in predefined_labels_dict
     ):
-        with open(predefined_labels_dict[annotation_scheme["use_predefined_labels"]]) as r:
+        with open(predefined_labels_dict[annotation_scheme["use_predefined_labels"]], encoding="utf-8") as r:
             schematic += r.read()
 
     else:
         # if annotation_scheme['labels'] is defined as a path
         if type(annotation_scheme["labels"]) == str and os.path.exists(annotation_scheme["labels"]):
-            with open(annotation_scheme["labels"], "r") as r:
+            with open(annotation_scheme["labels"], "r", encoding="utf-8") as r:
                 labels = [it.strip() for it in r.readlines()]
         else:
             labels = annotation_scheme["labels"]

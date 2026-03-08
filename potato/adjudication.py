@@ -991,7 +991,7 @@ class AdjudicationManager:
                 "last_updated": datetime.now().isoformat(),
             }
 
-            with open(decisions_file, "w") as f:
+            with open(decisions_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
 
         except Exception as e:
@@ -1007,7 +1007,7 @@ class AdjudicationManager:
             if not os.path.exists(decisions_file):
                 return
 
-            with open(decisions_file, "r") as f:
+            with open(decisions_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
             for d in data.get("decisions", []):

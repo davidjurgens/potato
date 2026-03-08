@@ -332,7 +332,7 @@ def _generate_tooltip(label_data):
         tooltip_text = label_data["tooltip"]
     elif "tooltip_file" in label_data:
         try:
-            with open(label_data["tooltip_file"], "rt") as f:
+            with open(label_data["tooltip_file"], "rt", encoding="utf-8") as f:
                 tooltip_text = "".join(f.readlines())
         except Exception as e:
             logger.error(f"Failed to read tooltip file: {e}")

@@ -90,7 +90,7 @@ def generate_annotation_layout_file(config: dict, annotation_schemes: list[dict]
 """
 
     # Write the layout file
-    with open(layout_file_path, "wt") as outf:
+    with open(layout_file_path, "wt", encoding="utf-8") as outf:
         outf.write(layout_content)
 
     logger.info(f"Generated annotation layout file: {layout_file_path}")
@@ -119,7 +119,7 @@ def get_or_generate_annotation_layout(config: dict, annotation_schemes: list[dic
 
     # Check if the layout file already exists and if the hash matches
     if os.path.exists(layout_file_path):
-        with open(layout_file_path, "rt") as f:
+        with open(layout_file_path, "rt", encoding="utf-8") as f:
             for _ in range(2):  # Only need to check the first two lines
                 line = f.readline()
                 if line.startswith("<!-- CONFIG_HASH:"):
@@ -225,7 +225,7 @@ def generate_annotation_html_template(config: dict) -> str:
     if not os.path.exists(html_template_file):
         raise FileNotFoundError("html_template_file not found: %s" % html_template_file)
 
-    with open(html_template_file, "rt") as file_p:
+    with open(html_template_file, "rt", encoding="utf-8") as file_p:
         html_template = "".join(file_p.readlines())
 
     # Load the header content we'll stuff in the template, which has scripts
@@ -235,7 +235,7 @@ def generate_annotation_html_template(config: dict) -> str:
     if not os.path.exists(header_file):
         raise FileNotFoundError("header_file not found: %s" % header_file)
 
-    with open(header_file, "rt") as file_p:
+    with open(header_file, "rt", encoding="utf-8") as file_p:
         header = "".join(file_p.readlines())
 
     html_template = html_template.replace("{{ HEADER }}", header)
@@ -294,7 +294,7 @@ def generate_annotation_html_template(config: dict) -> str:
             task_layout_file = abs_task_layout_file
 
         # Read the custom task layout
-        with open(task_layout_file, "rt") as f:
+        with open(task_layout_file, "rt", encoding="utf-8") as f:
             task_html_layout = "".join(f.readlines())
 
         # Extract keybindings from the annotation schemes for the sidebar
@@ -307,7 +307,7 @@ def generate_annotation_html_template(config: dict) -> str:
         try:
             layout_file_path = get_or_generate_annotation_layout(config, annotation_schemes)
             # Read the generated layout file
-            with open(layout_file_path, "rt") as f:
+            with open(layout_file_path, "rt", encoding="utf-8") as f:
                 task_html_layout = "".join(f.readlines())
 
             # Extract keybindings from the annotation schemes for the sidebar
@@ -395,7 +395,7 @@ def generate_annotation_html_template(config: dict) -> str:
     html_template_with_hash = f"<!-- CONFIG_HASH: {config_hash} -->\n{html_template}"
 
     # Write the file
-    with open(output_html_fname, "wt") as outf:
+    with open(output_html_fname, "wt", encoding="utf-8") as outf:
         outf.write(html_template_with_hash)
 
     logger.debug("writing annotation html to %s" % output_html_fname)
@@ -418,7 +418,7 @@ def get_html(fname: str, config: dict):
         else:
             fname = abs_html_template_file
 
-    with open(fname, "rt") as f:
+    with open(fname, "rt", encoding="utf-8") as f:
         html = "".join(f.readlines())
     return html
 
@@ -523,16 +523,16 @@ def generate_html_from_schematic(annotation_schemas: list[dict],
             task_layout_file = abs_task_layout_file
 
         # Read the custom task layout
-        with open(task_layout_file, "rt") as f:
+        with open(task_layout_file, "rt", encoding="utf-8") as f:
             task_html_layout = "".join(f.readlines())
 
     else:
         # Use the dedicated annotation layout file system (auto-generated)
         try:
             layout_file_path = get_or_generate_annotation_layout(config, annotation_schemas)
-            
+
             # Read the generated layout file
-            with open(layout_file_path, "rt") as f:
+            with open(layout_file_path, "rt", encoding="utf-8") as f:
                 task_html_layout = "".join(f.readlines())
             
         except Exception as e:
@@ -610,7 +610,7 @@ def generate_html_from_schematic(annotation_schemas: list[dict],
 
     # Write the file
     logger.debug("writing %s html to %s.html" % (phase_name, output_html_fname))
-    with open(output_html_fname, "wt") as outf:
+    with open(output_html_fname, "wt", encoding="utf-8") as outf:
         outf.write(cur_html_template)
 
     return site_name #output_html_fname

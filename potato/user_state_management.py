@@ -1163,7 +1163,7 @@ class UserState:
         # Create temp file in same directory to ensure atomic rename works
         fd, temp_path = tempfile.mkstemp(dir=user_dir, suffix='.tmp')
         try:
-            with os.fdopen(fd, 'wt') as outf:
+            with os.fdopen(fd, 'wt', encoding='utf-8') as outf:
                 json.dump(user_state, outf, indent=2)
                 outf.flush()
                 os.fsync(outf.fileno())  # Ensure data is written to disk
@@ -1182,7 +1182,7 @@ class UserState:
         if not os.path.exists(state_file):
             raise ValueError(f'User state file not found for user in directory "{user_dir}"')
 
-        with open(state_file, 'rt') as f:
+        with open(state_file, 'rt', encoding='utf-8') as f:
             j = json.load(f)
 
         def to_label(d: dict[str,str]) -> Label:
@@ -2414,7 +2414,7 @@ class InMemoryUserState(UserState):
         # Create temp file in same directory to ensure atomic rename works
         fd, temp_path = tempfile.mkstemp(dir=user_dir, suffix='.tmp')
         try:
-            with os.fdopen(fd, 'wt') as outf:
+            with os.fdopen(fd, 'wt', encoding='utf-8') as outf:
                 json.dump(user_state, outf, indent=2)
                 outf.flush()
                 os.fsync(outf.fileno())  # Ensure data is written to disk
@@ -2433,7 +2433,7 @@ class InMemoryUserState(UserState):
         if not os.path.exists(state_file):
             raise ValueError(f'User state file not found for user in directory "{user_dir}"')
 
-        with open(state_file, 'rt') as f:
+        with open(state_file, 'rt', encoding='utf-8') as f:
             j = json.load(f)
 
         def to_label(d: dict[str,str]) -> Label:

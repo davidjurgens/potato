@@ -190,7 +190,7 @@ def get_admin_api_key():
     # Check if a key file already exists (from previous run)
     if os.path.exists(key_file_path):
         try:
-            with open(key_file_path, 'r') as f:
+            with open(key_file_path, 'r', encoding='utf-8') as f:
                 existing_key = f.read().strip()
                 if existing_key:
                     _generated_admin_api_key = existing_key
@@ -205,7 +205,7 @@ def get_admin_api_key():
 
     # Save to file
     try:
-        with open(key_file_path, 'w') as f:
+        with open(key_file_path, 'w', encoding='utf-8') as f:
             f.write(_generated_admin_api_key)
         logger.info(f"Generated admin API key and saved to {key_file_path}")
         logger.info(f"Use this key to access the admin dashboard at /admin")

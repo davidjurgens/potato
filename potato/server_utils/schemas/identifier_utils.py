@@ -320,7 +320,7 @@ def generate_tooltip_html(label_data: Dict[str, Any]) -> str:
     # Check for tooltip file
     elif "tooltip_file" in label_data:
         try:
-            with open(label_data["tooltip_file"], "rt") as f:
+            with open(label_data["tooltip_file"], "rt", encoding="utf-8") as f:
                 tooltip_text = "".join(f.readlines())
             logger.debug(f"Read tooltip from file: {label_data['tooltip_file']}")
         except FileNotFoundError:

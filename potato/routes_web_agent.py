@@ -180,7 +180,7 @@ def end_session():
     os.makedirs(recordings_dir, exist_ok=True)
     trace_path = os.path.join(recordings_dir, 'trace.json')
 
-    with open(trace_path, 'w') as f:
+    with open(trace_path, 'w', encoding='utf-8') as f:
         json.dump(trace, f, indent=2)
 
     logger.info(f"Ended recording session {session_id}, saved {len(steps)} steps")

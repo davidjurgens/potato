@@ -440,7 +440,7 @@ class UserAuthenticator:
         # Load users from config file if it exists
         if os.path.isfile(self.user_config_path):
             logger.info(f"Loading users from {self.user_config_path}")
-            with open(self.user_config_path, "rt") as f:
+            with open(self.user_config_path, "rt", encoding="utf-8") as f:
                 for line in f.readlines():
                     single_user = json.loads(line.strip())
                     self.add_single_user(single_user)
@@ -685,7 +685,7 @@ class UserAuthenticator:
             return
 
         elif self.user_config_path:
-            with open(self.user_config_path, "wt") as f:
+            with open(self.user_config_path, "wt", encoding="utf-8") as f:
                 for k in self.userlist:
                     f.write(json.dumps(self.users[k]) + "\n")
             logger.info(f"User info file saved at: {self.user_config_path}")
