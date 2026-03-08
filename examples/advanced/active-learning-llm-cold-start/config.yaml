@@ -1,0 +1,90 @@
+port: 9002
+server_name: potato annotator
+annotation_task_name: Active Learning with LLM Cold-Start
+task_dir: .
+output_annotation_dir: annotation_output/active-learning-llm-cold-start/
+output_annotation_format: json
+annotation_codebook_url: ''
+
+data_files:
+  - data/classification-sample.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+user_config:
+  allow_all_users: true
+  users: []
+
+# Active learning with LLM cold-start and ICL ensemble
+active_learning:
+  enabled: true
+  query_strategy: "uncertainty"
+  vectorizer_name: "sklearn.feature_extraction.text.TfidfVectorizer"
+  classifier_name: "sklearn.linear_model.LogisticRegression"
+  calibrate_probabilities: true
+  min_instances_for_training: 10
+  update_frequency: 5
+  random_sample_percent: 0.2
+  schema_names:
+    - topic
+
+  # LLM cold-start: use LLM to identify informative instances before
+  # enough annotations exist for classifier training
+  cold_start_strategy: "llm"
+  cold_start_batch_size: 20
+
+  # ICL ensemble: blend classifier predictions with LLM ICL predictions
+  use_icl_ensemble: true
+  icl_ensemble_params:
+    initial_icl_weight: 0.7
+    final_icl_weight: 0.2
+    transition_instances: 50
+
+  # Annotation routing: auto-label high-confidence instances
+  annotation_routing: true
+  routing_thresholds:
+    auto_label_min_confidence: 0.9
+    show_suggestion_below: 0.5
+  verification_sample_rate: 0.2
+
+  # LLM endpoint for cold-start and routing
+  llm:
+    enabled: true
+    use_mock: true  # Set to false and configure endpoint_url for real LLM
+    endpoint_url: ""
+    model_name: ""
+    confidence_method: "verbalized"
+
+# ICL labeling configuration
+icl_labeling:
+  example_selection:
+    min_agreement_threshold: 0.8
+    min_annotators_per_instance: 2
+    max_examples_per_schema: 10
+  llm_labeling:
+    batch_size: 10
+    trigger_threshold: 5
+    confidence_threshold: 0.7
+  verification:
+    enabled: true
+    sample_rate: 0.2
+
+annotation_schemes:
+  - annotation_type: radio
+    name: topic
+    description: What is the main topic of this text?
+    labels:
+      - name: technology
+        tooltip: About technology, software, or gadgets
+      - name: sports
+        tooltip: About sports, athletics, or games
+      - name: politics
+        tooltip: About politics, government, or policy
+      - name: entertainment
+        tooltip: About movies, music, or culture
+    sequential_key_binding: true
+
+alert_time_each_instance: 10000000
+site_dir: default

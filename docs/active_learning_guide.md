@@ -484,8 +484,84 @@ active_learning:
   max_instances_to_reorder: 200
 ```
 
+## Query Strategies
+
+Potato supports multiple query strategies beyond basic uncertainty sampling. For a comprehensive reference with mathematical formulations and citations, see [Active Learning Query Strategies](active_learning_strategies.md).
+
+| Strategy | Description | Config Value |
+|----------|-------------|-------------|
+| Uncertainty Sampling | Select least-confident instances | `uncertainty` |
+| Diversity Sampling | Maximize feature-space coverage | `diversity` |
+| BADGE | Uncertainty-weighted diversity | `badge` |
+| BALD | Ensemble disagreement | `bald` |
+| Hybrid | Weighted combination | `hybrid` |
+
+```yaml
+active_learning:
+  query_strategy: "hybrid"
+  hybrid_weights:
+    uncertainty: 0.7
+    diversity: 0.3
+```
+
+## Cold-Start with LLM Selection
+
+Before enough annotations exist for classifier training, Potato can use an LLM to identify the most informative instances. Instances with moderate LLM confidence (near the decision boundary) are prioritized.
+
+```yaml
+active_learning:
+  cold_start_strategy: "llm"
+  cold_start_batch_size: 20
+  llm:
+    enabled: true
+    endpoint_url: "http://localhost:8080/v1/chat/completions"
+    model_name: "your-model"
+```
+
+## Sentence-Transformer Embeddings
+
+For tasks where TF-IDF features are insufficient, use pre-trained sentence-transformer embeddings:
+
+```yaml
+active_learning:
+  vectorizer_name: "sentence-transformers"
+  vectorizer_params:
+    model_name: "all-MiniLM-L6-v2"
+```
+
+Requires: `pip install sentence-transformers`
+
+## Probability Calibration
+
+Raw `predict_proba` outputs from sklearn classifiers are often poorly calibrated. Potato wraps classifiers with `CalibratedClassifierCV` by default:
+
+```yaml
+active_learning:
+  calibrate_probabilities: true  # default
+```
+
+Set to `false` to disable calibration (e.g., for debugging or when using RandomForest which has better-calibrated probabilities natively).
+
+## Configuration Reference (New Fields)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `query_strategy` | string | `"uncertainty"` | Query strategy: uncertainty, diversity, badge, bald, hybrid |
+| `hybrid_weights` | dict | `{uncertainty: 0.7, diversity: 0.3}` | Weights for hybrid strategy (must sum to 1.0) |
+| `bald_params` | dict | `{n_estimators: 5, bootstrap_fraction: 0.8}` | BALD ensemble parameters |
+| `calibrate_probabilities` | bool | `true` | Wrap classifier with CalibratedClassifierCV |
+| `cold_start_strategy` | string | `"random"` | Cold-start strategy: random, llm |
+| `cold_start_batch_size` | int | `20` | Instances to sample for LLM cold-start |
+| `classifier_params` | dict | `{}` | Extra parameters passed to classifier constructor |
+| `vectorizer_params` | dict | `{}` | Extra parameters passed to vectorizer constructor |
+| `use_icl_ensemble` | bool | `false` | Blend ICL predictions with classifier |
+| `annotation_routing` | bool | `false` | Enable LLM-based annotation routing |
+
 ## Conclusion
 
 Active learning in Potato provides powerful capabilities for optimizing annotation workflows. By following this guide and best practices, administrators can configure and use active learning effectively to improve annotation efficiency and model quality.
 
-For additional support and advanced configurations, refer to the [Active Learning Status Report](active_learning_status.md).
+For additional support and advanced configurations, refer to:
+- [Active Learning Query Strategies](active_learning_strategies.md) — Detailed strategy reference with citations
+- [AI Support](ai_support.md) — LLM endpoint configuration
+- [Active Learning Status Report](active_learning_status.md)

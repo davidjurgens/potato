@@ -629,3 +629,58 @@ ai_support:
 ```
 
 This configuration provides a complete AI-assisted annotation setup with caching, multi-schema support, and automatic pre-generation for optimal user experience.
+
+## LLM Confidence Methods for Active Learning
+
+When using LLM-based active learning, the confidence score drives instance selection quality. Potato supports three confidence elicitation methods:
+
+### Verbalized Confidence (default)
+
+The LLM self-reports confidence on a 1-10 scale in its JSON response. Simple and universally supported.
+
+```yaml
+active_learning:
+  llm:
+    confidence_method: "verbalized"
+```
+
+Tian et al. (2023) found that for RLHF-tuned LLMs, verbalized confidence can be surprisingly well-calibrated.
+
+### Logprob Extraction
+
+Extract token-level log probabilities from VLLM/OpenAI-compatible endpoints:
+
+```yaml
+active_learning:
+  llm:
+    confidence_method: "logprobs"
+```
+
+Computes `confidence = exp(mean_logprob)` over the response tokens. Falls back to verbalized confidence if the endpoint doesn't return logprobs.
+
+**Requires:** VLLM or OpenAI-compatible endpoint with logprobs support.
+
+### Consistency-Based Confidence
+
+Query the same instance N times with `temperature > 0` and use the agreement rate:
+
+```yaml
+active_learning:
+  llm:
+    confidence_method: "consistency"
+    consistency_samples: 3
+```
+
+Works with any endpoint (Anthropic, Ollama, etc.) that doesn't support logprobs. Higher agreement = higher confidence.
+
+### Which Method to Use?
+
+| Method | Pros | Cons | Best For |
+|--------|------|------|----------|
+| `verbalized` | Universal, simple | Unreliable for some models | Default, quick setup |
+| `logprobs` | Most calibrated | Requires logprobs API | VLLM, OpenAI endpoints |
+| `consistency` | Works everywhere | N API calls per instance | Anthropic, Ollama |
+
+**References:**
+- Tian et al. (2023) "Just Ask for Calibration" — EMNLP 2023
+- Xiong et al. (2024) "Can LLMs Express Their Uncertainty?" — ICLR 2024

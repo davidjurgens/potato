@@ -2,15 +2,32 @@
 LLM Integration for Active Learning
 
 This module provides LLM-based active learning capabilities using VLLM endpoints.
-It implements confidence-based instance selection and prediction using large language models.
+It implements confidence-based instance selection and prediction using large language
+models, with support for multiple confidence elicitation methods:
+
+- **logprobs**: Extract token-level log probabilities from VLLM/OpenAI-compatible
+  endpoints for calibrated confidence scores.
+- **verbalized**: Ask the LLM to self-report confidence on a 1-10 scale (default).
+- **consistency**: Query the same instance N times with temperature > 0 and use
+  agreement rate as confidence (works with any endpoint).
+
+References:
+    Tian et al. (2023) "Just Ask for Calibration: Strategies for Eliciting
+    Calibrated Confidence Scores from Language Models Fine-Tuned with Human
+    Feedback." EMNLP 2023.
+
+    Xiong et al. (2024) "Can LLMs Express Their Uncertainty? An Empirical
+    Evaluation of Confidence Elicitation in LLMs." ICLR 2024.
 """
 
 import logging
+import math
 import time
 import json
 import requests
+from collections import Counter
 from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 
@@ -25,6 +42,7 @@ class LLMPrediction:
     confidence_score: float
     raw_response: str
     error_message: Optional[str] = None
+    confidence_method: str = "verbalized"
 
 
 @dataclass
@@ -39,6 +57,8 @@ class LLMConfig:
     retry_attempts: int = 3
     retry_delay: float = 1.0
     max_instances_per_request: int = 5
+    confidence_method: str = "verbalized"  # logprobs | verbalized | consistency
+    consistency_samples: int = 3
 
 
 class LLMActiveLearning:
@@ -233,12 +253,28 @@ Example response:
         return predictions
 
     def _predict_single(self, prompt: str, instance: Dict[str, Any]) -> LLMPrediction:
-        """Make a single prediction using the LLM."""
+        """Make a single prediction using the LLM.
+
+        Dispatches to the appropriate confidence method:
+        - logprobs: Extract token-level log probabilities
+        - consistency: Query N times, use agreement rate
+        - verbalized (default): Parse self-reported confidence from JSON
+        """
+        method = self.config.confidence_method
+
+        if method == "consistency":
+            return self._predict_consistency(prompt, instance)
+        elif method == "logprobs":
+            return self._predict_with_logprobs(prompt, instance)
+        else:
+            return self._predict_verbalized(prompt, instance)
+
+    def _predict_verbalized(self, prompt: str, instance: Dict[str, Any]) -> LLMPrediction:
+        """Original verbalized confidence method (1-10 scale)."""
         instance_id = instance.get('id', 'unknown')
 
         for attempt in range(self.config.retry_attempts):
             try:
-                # Prepare the request payload
                 payload = {
                     "model": self.config.model_name,
                     "messages": [
@@ -250,7 +286,6 @@ Example response:
                     "response_format": {"type": "json_object"}
                 }
 
-                # Make the request
                 response = self.session.post(
                     self.config.endpoint_url,
                     json=payload,
@@ -260,34 +295,29 @@ Example response:
                 if response.status_code == 200:
                     result = response.json()
 
-                    # Extract the response content
                     if 'choices' in result and len(result['choices']) > 0:
                         content = result['choices'][0]['message']['content']
 
-                        # Parse the JSON response
                         try:
                             parsed_response = json.loads(content)
-
-                            # Extract label and confidence
                             predicted_label = parsed_response.get('label', '')
                             confidence_score = parsed_response.get('confidence', 1)
 
-                            # Validate confidence score
                             if not isinstance(confidence_score, (int, float)):
                                 confidence_score = 1
                             else:
-                                confidence_score = max(1, min(10, confidence_score)) / 10.0  # Normalize to 0-1
+                                confidence_score = max(1, min(10, confidence_score)) / 10.0
 
                             return LLMPrediction(
                                 instance_id=instance_id,
                                 predicted_label=predicted_label,
                                 confidence_score=confidence_score,
-                                raw_response=content
+                                raw_response=content,
+                                confidence_method="verbalized"
                             )
 
                         except json.JSONDecodeError as e:
                             self.logger.warning(f"Failed to parse JSON response for instance {instance_id}: {e}")
-                            # Try to extract information from raw response
                             return self._extract_from_raw_response(content, instance_id)
 
                     else:
@@ -302,22 +332,201 @@ Example response:
                 if attempt < self.config.retry_attempts - 1:
                     time.sleep(self.config.retry_delay * (attempt + 1))
                 else:
-                    # Final attempt failed
                     return LLMPrediction(
                         instance_id=instance_id,
                         predicted_label='',
                         confidence_score=0.1,
                         raw_response='',
-                        error_message=f"All attempts failed: {e}"
+                        error_message=f"All attempts failed: {e}",
+                        confidence_method="verbalized"
                     )
 
-        # This should never be reached, but just in case
         return LLMPrediction(
             instance_id=instance_id,
             predicted_label='',
             confidence_score=0.1,
             raw_response='',
-            error_message="Unknown error"
+            error_message="Unknown error",
+            confidence_method="verbalized"
+        )
+
+    def _predict_with_logprobs(self, prompt: str, instance: Dict[str, Any]) -> LLMPrediction:
+        """Extract confidence from token-level log probabilities.
+
+        Requests logprobs=True from VLLM/OpenAI-compatible endpoints and
+        computes confidence as exp(mean_logprob) over the label tokens.
+        Falls back to verbalized confidence if logprobs unavailable.
+        """
+        instance_id = instance.get('id', 'unknown')
+
+        for attempt in range(self.config.retry_attempts):
+            try:
+                payload = {
+                    "model": self.config.model_name,
+                    "messages": [
+                        {"role": "system", "content": "You are a helpful assistant that provides structured JSON responses."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "max_tokens": self.config.max_tokens,
+                    "temperature": self.config.temperature,
+                    "response_format": {"type": "json_object"},
+                    "logprobs": True,
+                    "top_logprobs": 5,
+                }
+
+                response = self.session.post(
+                    self.config.endpoint_url,
+                    json=payload,
+                    timeout=self.config.timeout
+                )
+
+                if response.status_code == 200:
+                    result = response.json()
+
+                    if 'choices' not in result or len(result['choices']) == 0:
+                        raise Exception(f"Invalid response format: {result}")
+
+                    choice = result['choices'][0]
+                    content = choice['message']['content']
+
+                    # Parse label from JSON content
+                    try:
+                        parsed = json.loads(content)
+                    except json.JSONDecodeError:
+                        return self._extract_from_raw_response(content, instance_id)
+
+                    predicted_label = parsed.get('label', '')
+
+                    # Try to extract logprobs
+                    logprobs_data = choice.get('logprobs', {})
+                    token_logprobs = logprobs_data.get('content', [])
+
+                    if token_logprobs:
+                        # Compute mean logprob across all tokens
+                        log_probs = [
+                            t['logprob'] for t in token_logprobs
+                            if 'logprob' in t and t['logprob'] is not None
+                        ]
+                        if log_probs:
+                            mean_logprob = sum(log_probs) / len(log_probs)
+                            confidence_score = min(1.0, max(0.0, math.exp(mean_logprob)))
+                        else:
+                            # No valid logprobs, fall back to verbalized
+                            confidence_score = parsed.get('confidence', 5)
+                            if isinstance(confidence_score, (int, float)):
+                                confidence_score = max(1, min(10, confidence_score)) / 10.0
+                            else:
+                                confidence_score = 0.5
+                    else:
+                        # Endpoint didn't return logprobs, fall back to verbalized
+                        self.logger.debug(f"No logprobs returned for {instance_id}, using verbalized")
+                        confidence_score = parsed.get('confidence', 5)
+                        if isinstance(confidence_score, (int, float)):
+                            confidence_score = max(1, min(10, confidence_score)) / 10.0
+                        else:
+                            confidence_score = 0.5
+
+                    return LLMPrediction(
+                        instance_id=instance_id,
+                        predicted_label=predicted_label,
+                        confidence_score=confidence_score,
+                        raw_response=content,
+                        confidence_method="logprobs" if token_logprobs else "verbalized"
+                    )
+
+                else:
+                    raise Exception(f"HTTP {response.status_code}: {response.text}")
+
+            except Exception as e:
+                self.logger.warning(f"Logprobs attempt {attempt + 1} failed for {instance_id}: {e}")
+                if attempt < self.config.retry_attempts - 1:
+                    time.sleep(self.config.retry_delay * (attempt + 1))
+                else:
+                    return LLMPrediction(
+                        instance_id=instance_id,
+                        predicted_label='',
+                        confidence_score=0.1,
+                        raw_response='',
+                        error_message=f"All logprob attempts failed: {e}",
+                        confidence_method="logprobs"
+                    )
+
+        return LLMPrediction(
+            instance_id=instance_id,
+            predicted_label='',
+            confidence_score=0.1,
+            raw_response='',
+            error_message="Unknown error",
+            confidence_method="logprobs"
+        )
+
+    def _predict_consistency(self, prompt: str, instance: Dict[str, Any]) -> LLMPrediction:
+        """Consistency-based confidence: query N times, use agreement rate.
+
+        Works with any endpoint (including Anthropic, Ollama) that doesn't
+        support logprobs. Confidence = fraction of samples that agree on
+        the most common label.
+        """
+        instance_id = instance.get('id', 'unknown')
+        n_samples = self.config.consistency_samples
+
+        labels = []
+        raw_responses = []
+
+        for _ in range(n_samples):
+            try:
+                payload = {
+                    "model": self.config.model_name,
+                    "messages": [
+                        {"role": "system", "content": "You are a helpful assistant that provides structured JSON responses."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "max_tokens": self.config.max_tokens,
+                    "temperature": max(0.5, self.config.temperature),  # Need some randomness
+                    "response_format": {"type": "json_object"}
+                }
+
+                response = self.session.post(
+                    self.config.endpoint_url,
+                    json=payload,
+                    timeout=self.config.timeout
+                )
+
+                if response.status_code == 200:
+                    result = response.json()
+                    if 'choices' in result and len(result['choices']) > 0:
+                        content = result['choices'][0]['message']['content']
+                        raw_responses.append(content)
+                        try:
+                            parsed = json.loads(content)
+                            labels.append(parsed.get('label', ''))
+                        except json.JSONDecodeError:
+                            pass
+
+            except Exception as e:
+                self.logger.debug(f"Consistency sample failed for {instance_id}: {e}")
+
+        if not labels:
+            return LLMPrediction(
+                instance_id=instance_id,
+                predicted_label='',
+                confidence_score=0.1,
+                raw_response='',
+                error_message="All consistency samples failed",
+                confidence_method="consistency"
+            )
+
+        # Most common label
+        label_counts = Counter(labels)
+        predicted_label, count = label_counts.most_common(1)[0]
+        confidence_score = count / len(labels)
+
+        return LLMPrediction(
+            instance_id=instance_id,
+            predicted_label=predicted_label,
+            confidence_score=confidence_score,
+            raw_response=raw_responses[0] if raw_responses else '',
+            confidence_method="consistency"
         )
 
     def _extract_from_raw_response(self, raw_response: str, instance_id: str) -> LLMPrediction:
@@ -488,7 +697,9 @@ def create_llm_active_learning(config: Dict[str, Any]) -> LLMActiveLearning:
         batch_size=config.get('batch_size', 10),
         retry_attempts=config.get('retry_attempts', 3),
         retry_delay=config.get('retry_delay', 1.0),
-        max_instances_per_request=config.get('max_instances_per_request', 5)
+        max_instances_per_request=config.get('max_instances_per_request', 5),
+        confidence_method=config.get('confidence_method', 'verbalized'),
+        consistency_samples=config.get('consistency_samples', 3),
     )
 
     # Use mock implementation for testing or when endpoint is not available

@@ -1,0 +1,56 @@
+port: 9001
+server_name: potato annotator
+annotation_task_name: Active Learning Strategies Demo
+task_dir: .
+output_annotation_dir: annotation_output/active-learning-strategies/
+output_annotation_format: json
+annotation_codebook_url: ''
+
+data_files:
+  - data/sentiment-sample.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+user_config:
+  allow_all_users: true
+  users: []
+
+# Active learning with hybrid strategy, TF-IDF, and calibration
+active_learning:
+  enabled: true
+  query_strategy: "hybrid"
+  hybrid_weights:
+    uncertainty: 0.7
+    diversity: 0.3
+  vectorizer_name: "sklearn.feature_extraction.text.TfidfVectorizer"
+  vectorizer_params:
+    ngram_range: [1, 2]
+    max_features: 5000
+  classifier_name: "sklearn.linear_model.LogisticRegression"
+  classifier_params:
+    C: 1.0
+    max_iter: 500
+  calibrate_probabilities: true
+  min_instances_for_training: 5
+  update_frequency: 3
+  random_sample_percent: 0.2
+  schema_names:
+    - sentiment
+
+annotation_schemes:
+  - annotation_type: radio
+    name: sentiment
+    description: What is the sentiment of this text?
+    labels:
+      - name: positive
+        tooltip: The text expresses positive sentiment
+      - name: negative
+        tooltip: The text expresses negative sentiment
+      - name: neutral
+        tooltip: The text is neutral or mixed
+    sequential_key_binding: true
+
+alert_time_each_instance: 10000000
+site_dir: default

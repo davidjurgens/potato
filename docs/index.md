@@ -52,6 +52,7 @@
 
 - [AI Support](ai_support.md) - AI-powered label suggestions
 - [Active Learning](active_learning_guide.md) - ML-based prioritization
+- [Active Learning Strategies](active_learning_strategies.md) - Query strategies reference (BADGE, BALD, hybrid, cold-start)
 - [ICL Labeling](icl_labeling.md) - In-context learning for labeling
 
 ## User Management

@@ -2628,6 +2628,103 @@ def validate_active_learning_config(config_data: Dict[str, Any]) -> None:
         if "model_name" in llm_config and not isinstance(llm_config["model_name"], str):
             raise ConfigValidationError("active_learning.llm.model_name must be a string")
 
+    # Validate query strategy
+    if "query_strategy" in al_config:
+        strategy = al_config["query_strategy"]
+        valid_strategies = ["uncertainty", "diversity", "badge", "bald", "hybrid"]
+        if strategy not in valid_strategies:
+            raise ConfigValidationError(
+                f"active_learning.query_strategy must be one of: {', '.join(valid_strategies)}"
+            )
+
+    # Validate hybrid weights
+    if "hybrid_weights" in al_config:
+        weights = al_config["hybrid_weights"]
+        if not isinstance(weights, dict):
+            raise ConfigValidationError("active_learning.hybrid_weights must be a dictionary")
+        weight_sum = sum(weights.values())
+        if abs(weight_sum - 1.0) > 0.01:
+            raise ConfigValidationError(
+                f"active_learning.hybrid_weights must sum to 1.0 (got {weight_sum})"
+            )
+
+    # Validate cold-start strategy
+    if "cold_start_strategy" in al_config:
+        cs = al_config["cold_start_strategy"]
+        if cs not in ["random", "llm"]:
+            raise ConfigValidationError(
+                "active_learning.cold_start_strategy must be one of: random, llm"
+            )
+
+    # Validate confidence method (for LLM active learning)
+    if "confidence_method" in al_config:
+        cm = al_config["confidence_method"]
+        if cm not in ["logprobs", "verbalized", "consistency"]:
+            raise ConfigValidationError(
+                "active_learning.confidence_method must be one of: logprobs, verbalized, consistency"
+            )
+
+    # Validate classifier_params and vectorizer_params
+    if "classifier_params" in al_config:
+        if not isinstance(al_config["classifier_params"], dict):
+            raise ConfigValidationError("active_learning.classifier_params must be a dictionary")
+
+    if "vectorizer_params" in al_config:
+        if not isinstance(al_config["vectorizer_params"], dict):
+            raise ConfigValidationError("active_learning.vectorizer_params must be a dictionary")
+
+    # Validate calibrate_probabilities
+    if "calibrate_probabilities" in al_config:
+        if not isinstance(al_config["calibrate_probabilities"], bool):
+            raise ConfigValidationError("active_learning.calibrate_probabilities must be a boolean")
+
+    # Validate BALD params
+    if "bald_params" in al_config:
+        bp = al_config["bald_params"]
+        if not isinstance(bp, dict):
+            raise ConfigValidationError("active_learning.bald_params must be a dictionary")
+        if "n_estimators" in bp:
+            if not isinstance(bp["n_estimators"], int) or bp["n_estimators"] < 2:
+                raise ConfigValidationError("active_learning.bald_params.n_estimators must be an integer >= 2")
+
+    # Validate ICL ensemble params
+    if "use_icl_ensemble" in al_config:
+        if not isinstance(al_config["use_icl_ensemble"], bool):
+            raise ConfigValidationError("active_learning.use_icl_ensemble must be a boolean")
+
+    if "icl_ensemble_params" in al_config:
+        if not isinstance(al_config["icl_ensemble_params"], dict):
+            raise ConfigValidationError("active_learning.icl_ensemble_params must be a dictionary")
+
+    # Validate annotation routing
+    if "annotation_routing" in al_config:
+        if not isinstance(al_config["annotation_routing"], bool):
+            raise ConfigValidationError("active_learning.annotation_routing must be a boolean")
+
+    if "routing_thresholds" in al_config:
+        rt = al_config["routing_thresholds"]
+        if not isinstance(rt, dict):
+            raise ConfigValidationError("active_learning.routing_thresholds must be a dictionary")
+        for key in ["auto_label_min_confidence", "show_suggestion_below"]:
+            if key in rt:
+                val = rt[key]
+                if not isinstance(val, (int, float)) or val < 0 or val > 1:
+                    raise ConfigValidationError(
+                        f"active_learning.routing_thresholds.{key} must be between 0 and 1"
+                    )
+
+    # Warn about sentence-transformers dependency
+    if al_config.get("vectorizer_name") == "sentence-transformers" or \
+       (isinstance(al_config.get("vectorizer"), dict) and
+        al_config["vectorizer"].get("name") == "sentence-transformers"):
+        try:
+            import sentence_transformers  # noqa: F401
+        except ImportError:
+            logger.warning(
+                "sentence-transformers vectorizer configured but package not installed. "
+                "Install with: pip install sentence-transformers"
+            )
+
 
 def validate_ai_support_config(config_data: Dict[str, Any]) -> None:
     """

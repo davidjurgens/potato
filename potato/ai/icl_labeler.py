@@ -319,10 +319,19 @@ class ICLLabeler:
                             )
                             new_examples[schema_name].append(example)
 
-                # Sort by agreement score and limit
+                # Select examples using coverage-based selection (CoverICL-inspired)
+                # or fall back to agreement-score sorting
                 for schema_name in new_examples:
-                    new_examples[schema_name].sort(key=lambda x: x.agreement_score, reverse=True)
-                    new_examples[schema_name] = new_examples[schema_name][:self.max_examples_per_schema]
+                    candidates = new_examples[schema_name]
+                    if len(candidates) > self.max_examples_per_schema:
+                        selected = self._select_diverse_examples(
+                            candidates, self.max_examples_per_schema
+                        )
+                        new_examples[schema_name] = selected
+                    else:
+                        new_examples[schema_name].sort(
+                            key=lambda x: x.agreement_score, reverse=True
+                        )
 
                 self.schema_to_examples = dict(new_examples)
                 self.last_example_refresh = datetime.now()
@@ -342,6 +351,80 @@ class ICLLabeler:
     def has_enough_examples(self, schema_name: str) -> bool:
         """Check if we have enough examples to start labeling."""
         return len(self.get_examples_for_schema(schema_name)) >= self.trigger_threshold
+
+    def _select_diverse_examples(
+        self,
+        candidates: List[HighConfidenceExample],
+        k: int,
+    ) -> List[HighConfidenceExample]:
+        """CoverICL-inspired coverage-based example selection.
+
+        Uses greedy facility location to select examples that maximize
+        coverage of the instance embedding space, ensuring diverse and
+        representative ICL demonstrations.
+
+        Inspired by Mavromatis et al. (2024) CoverICL. Falls back to
+        agreement-score sorting if vectorization fails.
+
+        Args:
+            candidates: Pool of high-confidence examples
+            k: Number of examples to select
+
+        Returns:
+            List of selected examples maximizing coverage
+        """
+        if len(candidates) <= k:
+            return candidates
+
+        try:
+            from sklearn.feature_extraction.text import TfidfVectorizer
+            from sklearn.metrics.pairwise import cosine_distances
+
+            texts = [c.text for c in candidates]
+            vectorizer = TfidfVectorizer(max_features=5000)
+            features = vectorizer.fit_transform(texts).toarray()
+
+            # Greedy facility location: iteratively pick the candidate that
+            # maximizes the minimum distance to already-selected examples
+            n = len(candidates)
+            selected_indices = []
+
+            # Start with the candidate that has highest agreement score
+            # (quality-weighted seed)
+            agreements = [c.agreement_score for c in candidates]
+            first = int(max(range(n), key=lambda i: agreements[i]))
+            selected_indices.append(first)
+
+            dist_matrix = cosine_distances(features)
+
+            for _ in range(k - 1):
+                # For each unselected candidate, compute min distance to selected set
+                best_idx = -1
+                best_score = -1.0
+
+                for i in range(n):
+                    if i in selected_indices:
+                        continue
+                    min_dist = min(dist_matrix[i][j] for j in selected_indices)
+                    # Weight by agreement score for quality-aware selection
+                    score = min_dist * candidates[i].agreement_score
+                    if score > best_score:
+                        best_score = score
+                        best_idx = i
+
+                if best_idx >= 0:
+                    selected_indices.append(best_idx)
+                else:
+                    break
+
+            selected = [candidates[i] for i in selected_indices]
+            logger.debug(f"CoverICL selection: {len(selected)} diverse examples from {n} candidates")
+            return selected
+
+        except Exception as e:
+            logger.warning(f"Coverage-based selection failed, using agreement sorting: {e}")
+            candidates.sort(key=lambda x: x.agreement_score, reverse=True)
+            return candidates[:k]
 
     # === LLM Labeling ===
 

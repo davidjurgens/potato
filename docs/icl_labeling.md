@@ -310,8 +310,59 @@ Predictions include:
 3. Ensure `assignment_mix_rate` is reasonable (0.1-0.3)
 4. Verify there are pending verifications in the queue
 
+## CoverICL-Inspired Example Selection
+
+By default, ICL examples are selected by agreement score. When the pool of high-confidence examples exceeds `max_examples_per_schema`, Potato uses a **coverage-based selection** approach inspired by Mavromatis et al. (2024):
+
+1. Embed all high-agreement annotations using TF-IDF
+2. Use greedy facility location (submodular optimization) to select examples that maximize coverage of the instance space
+3. Weight selection by agreement score for quality-aware diversity
+
+This ensures ICL examples are **diverse and representative**, not just the easiest cases with highest agreement. The selection happens automatically during `refresh_high_confidence_examples()`.
+
+## Integration with Active Learning
+
+ICL predictions can be combined with the sklearn-based active learning classifier for improved instance ranking:
+
+```yaml
+active_learning:
+  use_icl_ensemble: true
+  icl_ensemble_params:
+    initial_icl_weight: 0.7   # Favor ICL early (few annotations)
+    final_icl_weight: 0.2     # Favor classifier later (many annotations)
+    transition_instances: 100
+```
+
+The weight interpolates linearly as annotations accumulate, providing a smooth transition from LLM-dependent to classifier-dependent ranking.
+
+## Annotation Routing
+
+Noise-aware routing between LLM auto-labeling and human annotation (based on Yuan et al., 2024):
+
+```yaml
+active_learning:
+  annotation_routing: true
+  routing_thresholds:
+    auto_label_min_confidence: 0.9
+    show_suggestion_below: 0.5
+  verification_sample_rate: 0.2
+```
+
+- **High LLM confidence (>0.9):** Auto-label with periodic spot-checking
+- **Medium confidence (0.5-0.9):** Route to human annotator (most informative)
+- **Low confidence (<0.5):** Route to human with LLM suggestion displayed
+
+The `verification_sample_rate` controls how often auto-labeled instances are spot-checked by humans.
+
+## References
+
+- Mavromatis et al. (2024) "CoverICL: Selective Annotation for In-Context Learning via Active Graph Coverage." *EMNLP 2024*.
+- Yuan et al. (2024) "Hide and Seek in Noise Labels: Noise-Robust Collaborative Active Learning." *ACL 2024*.
+- Xiao et al. (2023) "FreeAL: Towards Human-Free Active Learning in the Era of Large Language Models." *EMNLP 2023*.
+
 ## Related Documentation
 
 - [AI Support](ai_support.md) - General AI endpoint configuration
 - [Active Learning Guide](active_learning_guide.md) - Related AI-assisted features
+- [Active Learning Strategies](active_learning_strategies.md) - Query strategy reference
 - [Admin Dashboard](admin_dashboard.md) - Monitoring and administration
