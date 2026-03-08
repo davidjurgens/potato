@@ -1,0 +1,79 @@
+# Web Agent Trace Creation Example
+#
+# Demonstrates creation mode where annotators browse websites
+# while their interactions are recorded to build web agent traces.
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/agent-traces/web-agent-creation/config.yaml -p 8000
+
+annotation_task_name: "Web Agent Trace Creation"
+
+# Data configuration - task descriptions for annotators
+data_files:
+  - data/tasks.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+# Task directory
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+# Instance Display Configuration
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    - key: task_description
+      type: text
+      label: "Task to Complete"
+
+    # Web agent recorder display type
+    # Provides an iframe for browsing with interaction recording
+    - key: browsing_session
+      type: web_agent_recorder
+      label: "Browse and Complete the Task"
+      display_options:
+        start_url: "https://www.google.com"
+        proxy_mode: auto
+        record_mouse_path: true
+        record_viewport: true
+        screenshot_method: server
+        max_steps: 50
+
+# Annotation Schemes
+annotation_schemes:
+  # Self-assessment of task completion
+  - annotation_type: radio
+    name: completion_status
+    description: "Did you successfully complete the task?"
+    labels:
+      - name: completed
+        tooltip: "Task fully completed"
+      - name: partial
+        tooltip: "Partially completed"
+      - name: unable
+        tooltip: "Could not complete the task"
+    sequential_key_binding: true
+
+  # Difficulty rating
+  - annotation_type: likert
+    name: difficulty
+    description: "How difficult was this task?"
+    min_label: "Very easy"
+    max_label: "Very hard"
+    size: 5
+
+  # Notes
+  - annotation_type: text
+    name: notes
+    description: "Any notes about the task or issues encountered"
+
+# User configuration
+user_config:
+  allow_all_users: true
+  require_password: false

@@ -23,6 +23,7 @@ from .code_display import CodeDisplay
 from .agent_trace_display import AgentTraceDisplay
 from .gallery_display import GalleryDisplay
 from .interactive_chat_display import InteractiveChatDisplay
+from .web_agent_trace_display import WebAgentTraceDisplay
 
 __all__ = [
     'display_registry',
@@ -37,4 +38,5 @@ __all__ = [
     'AgentTraceDisplay',
     'GalleryDisplay',
     'InteractiveChatDisplay',
+    'WebAgentTraceDisplay',
 ]

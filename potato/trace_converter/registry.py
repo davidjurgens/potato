@@ -137,6 +137,7 @@ def _register_builtin_converters():
     from .converters.anthropic_converter import AnthropicConverter
     from .converters.openai_converter import OpenAIConverter
     from .converters.multi_agent_converter import MultiAgentConverter
+    from .converters.web_agent_converter import WebAgentConverter
 
     converters = [
         # Existing converters (specific formats first)
@@ -144,6 +145,8 @@ def _register_builtin_converters():
         LangChainConverter(),
         LangfuseConverter(),
         ATIFConverter(),
+        # Web agent (with coordinates/mouse_path) before plain WebArena
+        WebAgentConverter(),
         WebArenaConverter(),
         # New converters (specific-to-generic order)
         SWEBenchConverter(),

@@ -113,6 +113,9 @@ from potato.ai.ai_help_wrapper import init_dynamic_ai_help
 app = Flask(__name__)
 app.register_blueprint(solo_mode_bp)
 
+# Web agent recording and proxy blueprints (registered lazily in configure_app
+# only when web_agent display types are configured)
+
 # Secret key will be set in configure_app() from config
 
 # Use centralized logging configuration
@@ -2493,7 +2496,30 @@ def configure_app(flask_app):
     from routes import configure_routes
     configure_routes(app, config)
 
+    # Conditionally register web agent blueprints only when needed
+    _register_web_agent_blueprints_if_needed(app, config)
+
     return app
+
+
+def _register_web_agent_blueprints_if_needed(flask_app, config):
+    """Register web agent blueprints only if web_agent display types are configured."""
+    needs_web_agent = False
+    instance_display = config.get("instance_display", {})
+    fields = instance_display.get("fields", [])
+    for field in fields:
+        if isinstance(field, dict):
+            field_type = field.get("type", "")
+            if field_type in ("web_agent_trace", "web_agent_recorder"):
+                needs_web_agent = True
+                break
+
+    if needs_web_agent:
+        from potato.routes_web_agent import web_agent_bp
+        from potato.web_proxy import web_proxy_bp
+        flask_app.register_blueprint(web_agent_bp)
+        flask_app.register_blueprint(web_proxy_bp)
+        logger.info("Registered web agent blueprints (web_agent_trace/recorder display type detected)")
 
 # Function to create and initialize the Flask application
 def create_app():

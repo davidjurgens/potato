@@ -363,6 +363,12 @@
     <script src="{{ url_for('static', filename='agent-chat.js') }}?v=1"></script>
     {% endif %}
 
+    <!-- Web Agent Trace Viewer (overlays + step navigation) -->
+    <script src="{{ url_for('static', filename='web-agent-overlays.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='web-agent-viewer.js') }}?v=1"></script>
+    <!-- Web Agent Interaction Recorder (creation mode) -->
+    <script src="{{ url_for('static', filename='web-agent-recorder.js') }}?v=1"></script>
+
     <!-- Global keyboard debug (temporary) -->
     <script>
         window.addEventListener('keydown', function(e) {

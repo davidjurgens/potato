@@ -1,0 +1,281 @@
+[
+  {
+    "id": "trace_001",
+    "task_description": "Find and add a blue wool sweater under $50 to the shopping cart",
+    "site": "shopping-demo.example.com",
+    "steps": [
+      {
+        "step_index": 0,
+        "screenshot_url": "screenshots/placeholder.png",
+        "action_type": "click",
+        "element": {"tag": "input", "text": "Search products...", "bbox": [340, 45, 680, 75]},
+        "coordinates": {"x": 510, "y": 60},
+        "mouse_path": [[200, 300], [350, 200], [510, 60]],
+        "thought": "I need to search for blue wool sweaters. I'll click on the search bar first.",
+        "observation": "Search bar is now focused and ready for input.",
+        "timestamp": 1.2,
+        "viewport": {"width": 1280, "height": 720}
+      },
+      {
+        "step_index": 1,
+        "screenshot_url": "screenshots/placeholder.png",
+        "action_type": "type",
+        "element": {"tag": "input", "text": "Search products...", "bbox": [340, 45, 680, 75]},
+        "coordinates": {"x": 510, "y": 60},
+        "mouse_path": [],
+        "thought": "Now I'll type my search query for blue wool sweaters.",
+        "observation": "Search text has been entered in the search field.",
+        "timestamp": 3.5,
+        "viewport": {"width": 1280, "height": 720},
+        "typed_text": "blue wool sweater"
+      },
+      {
+        "step_index": 2,
+        "screenshot_url": "screenshots/placeholder.png",
+        "action_type": "click",
+        "element": {"tag": "button", "text": "Search", "bbox": [690, 45, 750, 75]},
+        "coordinates": {"x": 720, "y": 60},
+        "mouse_path": [[510, 60], [650, 55], [720, 60]],
+        "thought": "I'll click the search button to find results.",
+        "observation": "Search results page loaded with 24 items matching 'blue wool sweater'.",
+        "timestamp": 4.8,
+        "viewport": {"width": 1280, "height": 720}
+      },
+      {
+        "step_index": 3,
+        "screenshot_url": "screenshots/placeholder.png",
+        "action_type": "scroll",
+        "element": {},
+        "coordinates": {"x": 640, "y": 400},
+        "mouse_path": [],
+        "thought": "I need to scroll down to see more results and check prices.",
+        "observation": "More search results are now visible. I can see items ranging from $35 to $80.",
+        "timestamp": 7.2,
+        "viewport": {"width": 1280, "height": 720},
+        "scroll_direction": "down"
+      },
+      {
+        "step_index": 4,
+        "screenshot_url": "screenshots/placeholder.png",
+        "action_type": "click",
+        "element": {"tag": "a", "text": "Classic Blue Wool Sweater - $42.99", "bbox": [100, 450, 400, 600]},
+        "coordinates": {"x": 250, "y": 520},
+        "mouse_path": [[640, 400], [400, 480], [250, 520]],
+        "thought": "This sweater is blue wool and under $50 at $42.99. I'll click to view details.",
+        "observation": "Product detail page loaded for 'Classic Blue Wool Sweater'.",
+        "timestamp": 9.1,
+        "viewport": {"width": 1280, "height": 720}
+      },
+      {
+        "step_index": 5,
+        "screenshot_url": "screenshots/placeholder.png",
+        "action_type": "click",
+        "element": {"tag": "button", "text": "Add to Cart", "bbox": [800, 400, 1000, 450]},
+        "coordinates": {"x": 900, "y": 425},
+        "mouse_path": [[250, 520], [500, 450], [900, 425]],
+        "thought": "The sweater meets all criteria. I'll add it to the cart.",
+        "observation": "Item added to cart. Cart badge shows '1 item'.",
+        "timestamp": 11.5,
+        "viewport": {"width": 1280, "height": 720}
+      },
+      {
+        "step_index": 6,
+        "screenshot_url": "screenshots/placeholder.png",
+        "action_type": "done",
+        "element": {},
+        "coordinates": {},
+        "mouse_path": [],
+        "thought": "Task complete. I found a blue wool sweater for $42.99 (under $50) and added it to the cart.",
+        "observation": "Shopping cart contains 1 item: Classic Blue Wool Sweater - $42.99.",
+        "timestamp": 12.0,
+        "viewport": {"width": 1280, "height": 720}
+      }
+    ]
+  },
+  {
+    "id": "trace_002",
+    "task_description": "Navigate to the electronics section and find the cheapest wireless headphones",
+    "site": "shopping-demo.example.com",
+    "steps": [
+      {
+        "step_index": 0,
+        "screenshot_url": "screenshots/placeholder.png",
+        "action_type": "click",
+        "element": {"tag": "a", "text": "Electronics", "bbox": [200, 10, 300, 40]},
+        "coordinates": {"x": 250, "y": 25},
+        "mouse_path": [[640, 360], [400, 200], [250, 25]],
+        "thought": "I need to navigate to the Electronics section via the top menu.",
+        "observation": "Electronics category page loaded.",
+        "timestamp": 2.0,
+        "viewport": {"width": 1280, "height": 720}
+      },
+      {
+        "step_index": 1,
+        "screenshot_url": "screenshots/placeholder.png",
+        "action_type": "click",
+        "element": {"tag": "a", "text": "Headphones", "bbox": [50, 200, 200, 230]},
+        "coordinates": {"x": 125, "y": 215},
+        "mouse_path": [[250, 25], [150, 100], [125, 215]],
+        "thought": "I'll click on the Headphones subcategory to narrow results.",
+        "observation": "Headphones listing page with 15 products.",
+        "timestamp": 4.5,
+        "viewport": {"width": 1280, "height": 720}
+      },
+      {
+        "step_index": 2,
+        "screenshot_url": "screenshots/placeholder.png",
+        "action_type": "click",
+        "element": {"tag": "select", "text": "Sort by", "bbox": [900, 100, 1050, 130]},
+        "coordinates": {"x": 975, "y": 115},
+        "mouse_path": [[125, 215], [500, 150], [975, 115]],
+        "thought": "I'll sort by price to find the cheapest wireless headphones quickly.",
+        "observation": "Sort dropdown is open with options.",
+        "timestamp": 6.0,
+        "viewport": {"width": 1280, "height": 720}
+      },
+      {
+        "step_index": 3,
+        "screenshot_url": "screenshots/placeholder.png",
+        "action_type": "select",
+        "element": {"tag": "option", "text": "Price: Low to High"},
+        "coordinates": {"x": 975, "y": 170},
+        "mouse_path": [[975, 115], [975, 170]],
+        "thought": "Selecting 'Price: Low to High' to sort by ascending price.",
+        "observation": "Products re-sorted. Cheapest wireless headphones at top: BudgetBuds Pro - $19.99.",
+        "timestamp": 7.5,
+        "viewport": {"width": 1280, "height": 720}
+      },
+      {
+        "step_index": 4,
+        "screenshot_url": "screenshots/placeholder.png",
+        "action_type": "done",
+        "element": {},
+        "coordinates": {},
+        "mouse_path": [],
+        "thought": "Found the cheapest wireless headphones: BudgetBuds Pro at $19.99.",
+        "observation": "The cheapest wireless headphones are 'BudgetBuds Pro' at $19.99.",
+        "timestamp": 8.0,
+        "viewport": {"width": 1280, "height": 720}
+      }
+    ]
+  },
+  {
+    "id": "trace_003",
+    "task_description": "Create a new account and update the shipping address to 123 Main St, Springfield, IL 62701",
+    "site": "shopping-demo.example.com",
+    "steps": [
+      {
+        "step_index": 0,
+        "screenshot_url": "screenshots/placeholder.png",
+        "action_type": "click",
+        "element": {"tag": "a", "text": "Sign Up", "bbox": [1100, 10, 1200, 40]},
+        "coordinates": {"x": 1150, "y": 25},
+        "mouse_path": [[640, 360], [900, 200], [1150, 25]],
+        "thought": "I need to create a new account first. I'll click on Sign Up.",
+        "observation": "Registration form loaded.",
+        "timestamp": 1.5,
+        "viewport": {"width": 1280, "height": 720}
+      },
+      {
+        "step_index": 1,
+        "screenshot_url": "screenshots/placeholder.png",
+        "action_type": "type",
+        "element": {"tag": "input", "text": "Email", "bbox": [400, 200, 700, 230]},
+        "coordinates": {"x": 550, "y": 215},
+        "mouse_path": [[1150, 25], [800, 150], [550, 215]],
+        "thought": "Filling in the email field.",
+        "observation": "Email field populated.",
+        "timestamp": 4.0,
+        "viewport": {"width": 1280, "height": 720},
+        "typed_text": "user@example.com"
+      },
+      {
+        "step_index": 2,
+        "screenshot_url": "screenshots/placeholder.png",
+        "action_type": "type",
+        "element": {"tag": "input", "text": "Password", "bbox": [400, 250, 700, 280]},
+        "coordinates": {"x": 550, "y": 265},
+        "mouse_path": [[550, 215], [550, 265]],
+        "thought": "Setting a password for the account.",
+        "observation": "Password field filled.",
+        "timestamp": 6.0,
+        "viewport": {"width": 1280, "height": 720},
+        "typed_text": "SecurePass123!"
+      },
+      {
+        "step_index": 3,
+        "screenshot_url": "screenshots/placeholder.png",
+        "action_type": "click",
+        "element": {"tag": "button", "text": "Create Account", "bbox": [450, 320, 650, 360]},
+        "coordinates": {"x": 550, "y": 340},
+        "mouse_path": [[550, 265], [550, 340]],
+        "thought": "Submitting the registration form.",
+        "observation": "Account created successfully. Redirected to account dashboard.",
+        "timestamp": 7.5,
+        "viewport": {"width": 1280, "height": 720}
+      },
+      {
+        "step_index": 4,
+        "screenshot_url": "screenshots/placeholder.png",
+        "action_type": "click",
+        "element": {"tag": "a", "text": "Shipping Address", "bbox": [50, 300, 250, 330]},
+        "coordinates": {"x": 150, "y": 315},
+        "mouse_path": [[550, 340], [300, 330], [150, 315]],
+        "thought": "Now I need to update the shipping address. I'll click on the address section.",
+        "observation": "Shipping address form loaded.",
+        "timestamp": 9.0,
+        "viewport": {"width": 1280, "height": 720}
+      },
+      {
+        "step_index": 5,
+        "screenshot_url": "screenshots/placeholder.png",
+        "action_type": "type",
+        "element": {"tag": "input", "text": "Street Address", "bbox": [400, 200, 800, 230]},
+        "coordinates": {"x": 600, "y": 215},
+        "mouse_path": [[150, 315], [400, 250], [600, 215]],
+        "thought": "Entering the street address.",
+        "observation": "Street address field populated.",
+        "timestamp": 12.0,
+        "viewport": {"width": 1280, "height": 720},
+        "typed_text": "123 Main St"
+      },
+      {
+        "step_index": 6,
+        "screenshot_url": "screenshots/placeholder.png",
+        "action_type": "type",
+        "element": {"tag": "input", "text": "City", "bbox": [400, 250, 600, 280]},
+        "coordinates": {"x": 500, "y": 265},
+        "mouse_path": [[600, 215], [500, 265]],
+        "thought": "Entering city name.",
+        "observation": "City field filled.",
+        "timestamp": 13.5,
+        "viewport": {"width": 1280, "height": 720},
+        "typed_text": "Springfield"
+      },
+      {
+        "step_index": 7,
+        "screenshot_url": "screenshots/placeholder.png",
+        "action_type": "click",
+        "element": {"tag": "button", "text": "Save Address", "bbox": [450, 400, 650, 440]},
+        "coordinates": {"x": 550, "y": 420},
+        "mouse_path": [[500, 265], [550, 420]],
+        "thought": "Saving the shipping address.",
+        "observation": "Address saved: 123 Main St, Springfield, IL 62701.",
+        "timestamp": 15.0,
+        "viewport": {"width": 1280, "height": 720}
+      },
+      {
+        "step_index": 8,
+        "screenshot_url": "screenshots/placeholder.png",
+        "action_type": "done",
+        "element": {},
+        "coordinates": {},
+        "mouse_path": [],
+        "thought": "Task complete. Created account and updated shipping address to 123 Main St, Springfield, IL 62701.",
+        "observation": "Account dashboard shows updated shipping address.",
+        "timestamp": 16.0,
+        "viewport": {"width": 1280, "height": 720}
+      }
+    ]
+  }
+]

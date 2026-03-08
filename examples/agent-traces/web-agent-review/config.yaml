@@ -1,0 +1,120 @@
+# Web Agent Trace Review Example
+#
+# Demonstrates the web_agent_trace display type for reviewing
+# web browsing agent traces with interactive step-by-step navigation,
+# SVG overlay visualizations (click markers, bounding boxes, mouse paths),
+# and per-step + trajectory-level annotation schemes.
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/agent-traces/web-agent-review/config.yaml -p 8000
+
+annotation_task_name: "Web Agent Trace Review"
+
+# Data configuration
+data_files:
+  - data/web-traces.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+# Task directory
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+# Instance Display Configuration
+# Shows task description and interactive web agent trace viewer
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    - key: task_description
+      type: text
+      label: "Task"
+
+    # The web_agent_trace display type renders an interactive viewer with:
+    # - Screenshot display with SVG overlays (clicks, bboxes, mouse paths)
+    # - Step-by-step navigation with prev/next buttons
+    # - Filmstrip thumbnail bar for quick navigation
+    # - Step details panel (action type, thought, element info, observation)
+    # - Overlay toggle controls
+    - key: steps
+      type: web_agent_trace
+      label: "Agent Browsing Trace"
+      display_options:
+        show_overlays: true
+        show_filmstrip: true
+        show_thought: true
+        show_observation: true
+        show_element_info: true
+        screenshot_max_width: 800
+        screenshot_max_height: 600
+        filmstrip_size: 80
+
+# Annotation Schemes
+annotation_schemes:
+  # Overall task success
+  - annotation_type: radio
+    name: task_success
+    description: "Did the agent successfully complete the task?"
+    labels:
+      - name: success
+        tooltip: "Agent fully completed the task correctly"
+      - name: partial
+        tooltip: "Agent made progress but didn't fully complete the task"
+      - name: failure
+        tooltip: "Agent failed to complete the task"
+    sequential_key_binding: true
+
+  # Efficiency rating
+  - annotation_type: likert
+    name: efficiency
+    description: "How efficient was the agent's approach?"
+    min_label: "Very inefficient"
+    max_label: "Optimal"
+    size: 5
+
+  # Step correctness (per-step annotation)
+  - annotation_type: radio
+    name: step_correctness
+    description: "Was this step correct and necessary?"
+    per_step: true
+    labels:
+      - name: correct
+        tooltip: "Step was correct and necessary"
+      - name: incorrect
+        tooltip: "Step was wrong or led to errors"
+      - name: unnecessary
+        tooltip: "Step was not needed for the task"
+    sequential_key_binding: true
+
+  # Error types (multiselect)
+  - annotation_type: multiselect
+    name: error_types
+    description: "Select all error types observed in the trace"
+    labels:
+      - name: wrong_element
+        tooltip: "Clicked/interacted with wrong element"
+      - name: wrong_page
+        tooltip: "Navigated to wrong page"
+      - name: missed_step
+        tooltip: "Skipped a necessary step"
+      - name: unnecessary_action
+        tooltip: "Performed an action that wasn't needed"
+      - name: loop_detected
+        tooltip: "Got stuck repeating actions"
+      - name: no_errors
+        tooltip: "No errors observed"
+
+  # Free text notes
+  - annotation_type: text
+    name: notes
+    description: "Additional observations about the agent's behavior"
+
+# User configuration
+user_config:
+  allow_all_users: true
+  require_password: false

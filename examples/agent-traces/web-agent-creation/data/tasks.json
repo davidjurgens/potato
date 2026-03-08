@@ -1,0 +1,20 @@
+[
+  {
+    "id": "task_001",
+    "task_description": "Find and add a blue wool sweater under $50 to the shopping cart",
+    "start_url": "https://www.amazon.com",
+    "category": "shopping"
+  },
+  {
+    "id": "task_002",
+    "task_description": "Search for the nearest Italian restaurant with at least 4 stars and get directions",
+    "start_url": "https://www.google.com/maps",
+    "category": "navigation"
+  },
+  {
+    "id": "task_003",
+    "task_description": "Find the current weather forecast for San Francisco and compare it with New York",
+    "start_url": "https://weather.gov",
+    "category": "information"
+  }
+]

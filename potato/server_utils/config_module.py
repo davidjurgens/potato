@@ -2916,7 +2916,7 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
     valid_display_types = [
         "text", "html", "image", "video", "audio", "dialogue", "pairwise",
         "pdf", "document", "spreadsheet", "code", "agent_trace", "gallery",
-        "conversation_tree", "interactive_chat"
+        "conversation_tree", "interactive_chat", "web_agent_trace",
     ]
 
     for i, field in enumerate(fields):

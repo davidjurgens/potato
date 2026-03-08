@@ -290,6 +290,7 @@ def _register_builtin_displays():
     from .agent_trace_display import AgentTraceDisplay
     from .gallery_display import GalleryDisplay
     from .interactive_chat_display import InteractiveChatDisplay
+    from .web_agent_trace_display import WebAgentTraceDisplay
 
     displays = [
         DisplayDefinition(
@@ -499,6 +500,23 @@ def _register_builtin_displays():
             },
             supports_span_target=True,
             description="Interactive agent chat with post-interaction trace display"
+        ),
+        DisplayDefinition(
+            name="web_agent_trace",
+            renderer=WebAgentTraceDisplay(),
+            required_fields=["key"],
+            optional_fields={
+                "show_overlays": True,
+                "show_filmstrip": True,
+                "show_thought": True,
+                "show_observation": True,
+                "show_element_info": True,
+                "screenshot_max_width": 800,
+                "screenshot_max_height": 600,
+                "filmstrip_size": 80,
+            },
+            supports_span_target=False,
+            description="Web agent trace viewer with screenshots, SVG overlays, and step navigation"
         ),
     ]
 
