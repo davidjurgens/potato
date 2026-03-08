@@ -332,6 +332,13 @@ class TieredAnnotationManager {
             return null;
         }
 
+        // Validate URL scheme to prevent javascript: or data: URI injection
+        const trimmed = url.trim();
+        if (!/^(https?:\/\/|\/)/i.test(trimmed)) {
+            console.warn('[TieredAnnotation] Rejected media URL with disallowed scheme');
+            return null;
+        }
+
         // Return proxied URL for external sources (enables CORS for waveform generation)
         return this._getProxiedUrl(url);
     }

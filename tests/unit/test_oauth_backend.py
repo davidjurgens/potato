@@ -136,7 +136,7 @@ class TestDomainRestrictions:
         profile = {"email": "alice@gmail.com"}
         allowed, reason = backend.check_restrictions("google", profile)
         assert allowed is False
-        assert "umich.edu" in reason
+        assert reason.startswith("Access restricted to umich.edu")
 
     def test_no_domain_restriction_allows_all(self):
         config = make_oauth_config(

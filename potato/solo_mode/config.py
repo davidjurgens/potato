@@ -282,7 +282,7 @@ def _parse_model_config(model_data: Dict[str, Any]) -> ModelConfig:
         env_var = api_key[2:-1]
         api_key = os.environ.get(env_var)
         if not api_key:
-            logger.warning(f"Environment variable {env_var} not set")
+            logger.warning("Required environment variable for API key is not set")
 
     return ModelConfig(
         endpoint_type=model_data.get('endpoint_type', 'openai'),

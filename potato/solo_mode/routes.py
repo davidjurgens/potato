@@ -13,6 +13,7 @@ Provides endpoints for:
 
 import json
 import logging
+import traceback
 from flask import (
     Blueprint,
     render_template,
@@ -724,8 +725,8 @@ def api_optimize_prompt():
             'result': result,
         })
     except Exception as e:
-        logger.error(f"Prompt optimization failed: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.error("Prompt optimization failed: %s", traceback.format_exc())
+        return jsonify({'error': 'An internal error occurred'}), 500
 
 
 @solo_mode_bp.route('/api/disagreements')
@@ -833,7 +834,8 @@ def api_rules_apply():
         result = manager.apply_approved_rules()
         return jsonify(result)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error("Error applying approved rules: %s", traceback.format_exc())
+        return jsonify({'error': 'An internal error occurred'}), 500
 
 
 @solo_mode_bp.route('/api/rules/cluster', methods=['POST'])
@@ -918,8 +920,8 @@ def api_confusion_analysis():
     try:
         return jsonify(manager.get_confusion_analysis_full())
     except Exception as e:
-        logger.error(f"Confusion analysis failed: {e}")
-        return jsonify({'enabled': False, 'error': str(e)}), 500
+        logger.error("Confusion analysis failed: %s", traceback.format_exc())
+        return jsonify({'enabled': False, 'error': 'An internal error occurred'}), 500
 
 
 @solo_mode_bp.route('/api/confusion-analysis/root-cause', methods=['POST'])
@@ -1065,8 +1067,8 @@ def api_refinement_trigger():
         result = manager.trigger_refinement_cycle()
         return jsonify(result)
     except Exception as e:
-        logger.error(f"Refinement trigger failed: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.error("Refinement trigger failed: %s", traceback.format_exc())
+        return jsonify({'error': 'An internal error occurred'}), 500
 
 
 @solo_mode_bp.route('/api/refinement/reset', methods=['POST'])
@@ -1116,8 +1118,8 @@ def api_labeling_functions_extract():
         result = manager.extract_labeling_functions()
         return jsonify(result)
     except Exception as e:
-        logger.error(f"Labeling function extraction failed: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.error("Labeling function extraction failed: %s", traceback.format_exc())
+        return jsonify({'error': 'An internal error occurred'}), 500
 
 
 @solo_mode_bp.route('/api/labeling-functions/<function_id>/toggle', methods=['POST'])
@@ -1155,8 +1157,8 @@ def api_disagreement_explorer():
         data = manager.get_disagreement_explorer_data(label_filter=label_filter)
         return jsonify(data)
     except Exception as e:
-        logger.error(f"Disagreement explorer failed: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.error("Disagreement explorer failed: %s", traceback.format_exc())
+        return jsonify({'error': 'An internal error occurred'}), 500
 
 
 @solo_mode_bp.route('/api/disagreement-timeline')
@@ -1171,8 +1173,8 @@ def api_disagreement_timeline():
         data = manager.get_disagreement_timeline(bucket_size=bucket_size)
         return jsonify(data)
     except Exception as e:
-        logger.error(f"Disagreement timeline failed: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.error("Disagreement timeline failed: %s", traceback.format_exc())
+        return jsonify({'error': 'An internal error occurred'}), 500
 
 
 @solo_mode_bp.route('/api/export')

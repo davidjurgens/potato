@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import logging
+import traceback
 import datetime
 from datetime import timedelta
 from flask import Flask, session, render_template, request, redirect, url_for, jsonify, make_response
@@ -3068,8 +3069,8 @@ def api_icl_record_verification():
             return jsonify({'success': False, 'message': 'No prediction found to verify'})
 
     except Exception as e:
-        logger.error(f"Error recording verification: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.error("Error recording verification: %s", traceback.format_exc())
+        return jsonify({'error': 'An internal error occurred'}), 500
 
 
 ########################################################################
@@ -3162,9 +3163,8 @@ def agent_chat_send():
         })
 
     except Exception as e:
-        logger.error(f"Agent chat send error: {e}")
-        error_msg = str(e)
-        return jsonify({"error": error_msg}), 400
+        logger.error("Agent chat send error: %s", traceback.format_exc())
+        return jsonify({"error": "An internal error occurred"}), 400
 
 
 @app.route("/agent_chat/finish", methods=["POST"])
@@ -3228,8 +3228,8 @@ def agent_chat_finish():
         return jsonify({"success": True, "message_count": len(conversation)})
 
     except Exception as e:
-        logger.error(f"Agent chat finish error: {e}")
-        return jsonify({"error": str(e)}), 500
+        logger.error("Agent chat finish error: %s", traceback.format_exc())
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @app.route("/agent_chat/status", methods=["GET"])
@@ -3377,8 +3377,8 @@ def get_current_instance():
         })
 
     except Exception as e:
-        logger.error(f"Error getting current instance: {e}")
-        return jsonify({"error": str(e)}), 500
+        logger.error("Error getting current instance: %s", traceback.format_exc())
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @app.route("/api/instance_data", methods=["GET"])
@@ -3415,8 +3415,8 @@ def get_instance_data():
         return jsonify(raw_data)
 
     except Exception as e:
-        logger.error(f"Error getting instance data: {e}")
-        return jsonify({"error": str(e)}), 500
+        logger.error("Error getting instance data: %s", traceback.format_exc())
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @app.route("/api/spans/<instance_id>")
@@ -6362,9 +6362,11 @@ def admin_api_bws_scoring_generate():
         scorer = BwsScorer(annotations, pool_items, id_key, text_key)
         scores_dict = scorer.score(method)
     except ImportError as e:
-        return jsonify({"error": str(e)}), 400
+        logger.error("BWS scoring import error: %s", traceback.format_exc())
+        return jsonify({"error": "A required dependency is missing"}), 400
     except Exception as e:
-        return jsonify({"error": f"Scoring failed: {e}"}), 500
+        logger.error("BWS scoring failed: %s", traceback.format_exc())
+        return jsonify({"error": "An internal error occurred"}), 500
 
     # Write scores file
     output_dir = config.get("output_annotation_dir", "annotation_output")
@@ -6511,8 +6513,8 @@ def admin_api_embedding_viz_data():
         })
 
     except Exception as e:
-        logger.error(f"Error getting embedding visualization data: {e}")
-        return jsonify({"error": str(e)}), 500
+        logger.error("Error getting embedding visualization data: %s", traceback.format_exc())
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @app.route('/admin/api/embedding_viz/reorder', methods=['POST'])
@@ -6555,8 +6557,8 @@ def admin_api_embedding_viz_reorder():
         return jsonify(result)
 
     except Exception as e:
-        logger.error(f"Error reordering instances: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        logger.error("Error reordering instances: %s", traceback.format_exc())
+        return jsonify({"success": False, "error": "An internal error occurred"}), 500
 
 
 @app.route('/admin/api/embedding_viz/refresh', methods=['POST'])
@@ -6597,8 +6599,8 @@ def admin_api_embedding_viz_refresh():
         })
 
     except Exception as e:
-        logger.error(f"Error refreshing embedding visualization: {e}")
-        return jsonify({"status": "error", "error": str(e)}), 500
+        logger.error("Error refreshing embedding visualization: %s", traceback.format_exc())
+        return jsonify({"status": "error", "error": "An internal error occurred"}), 500
 
 
 @app.route('/admin/api/embedding_viz/stats', methods=['GET'])

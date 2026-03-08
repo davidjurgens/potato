@@ -12,11 +12,11 @@ griffe==0.22.0
     # via mkdocstrings-python
 importlib-metadata==4.12.0
     # via mkdocs
-jinja2==3.1.2
+jinja2==3.1.6
     # via
     #   mkdocs
     #   mkdocstrings
-markdown==3.3.7
+markdown==3.8.1
     # via
     #   markdown-include
     #   mkdocs
@@ -25,7 +25,7 @@ markdown==3.3.7
     #   pymdown-extensions
 markdown-include==0.6.0
     # via -r docs/requirements.in
-markupsafe==2.1.1
+markupsafe==2.1.5
     # via
     #   jinja2
     #   mkdocstrings
@@ -46,7 +46,7 @@ mkdocstrings-python==0.7.1
     # via mkdocstrings
 packaging==21.3
     # via mkdocs
-pymdown-extensions==10.0
+pymdown-extensions==10.16.1
     # via mkdocstrings
 pyparsing==3.0.9
     # via packaging
@@ -62,5 +62,5 @@ six==1.16.0
     # via python-dateutil
 watchdog==2.1.9
     # via mkdocs
-zipp==3.8.0
+zipp==3.19.1
     # via importlib-metadata

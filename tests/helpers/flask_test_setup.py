@@ -594,6 +594,17 @@ class FlaskTestServer:
                 from potato.routes import configure_routes
                 configure_routes(app, config)
 
+                # Register web agent blueprints (not included in configure_routes)
+                try:
+                    from potato.routes_web_agent import web_agent_bp
+                    from potato.web_proxy import web_proxy_bp
+                    if 'web_agent' not in app.blueprints:
+                        app.register_blueprint(web_agent_bp)
+                    if 'web_proxy' not in app.blueprints:
+                        app.register_blueprint(web_proxy_bp)
+                except ImportError:
+                    pass
+
                 # Initialize OAuth with Flask app if using OAuth authentication
                 auth_method = config.get("authentication", {}).get("method", "in_memory")
                 if auth_method == "oauth":

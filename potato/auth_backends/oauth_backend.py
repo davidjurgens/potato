@@ -80,8 +80,8 @@ class OAuthBackend(AuthBackend):
             }
 
         logger.info(
-            "OAuth backend initialized with providers: %s",
-            ", ".join(self.providers_config.keys()),
+            "OAuth backend initialized with %d provider(s)",
+            len(self.providers_config),
         )
 
     def init_oauth(self, app):
@@ -276,8 +276,7 @@ class OAuthBackend(AuthBackend):
             resolved = os.environ.get(env_name, "")
             if not resolved:
                 logger.warning(
-                    "Environment variable '%s' is not set (referenced in OAuth config)",
-                    env_name,
+                    "Environment variable referenced in OAuth config is not set"
                 )
             return resolved
         return value

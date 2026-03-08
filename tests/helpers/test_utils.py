@@ -255,7 +255,7 @@ def cleanup_test_directory(test_dir: str):
         if os.path.exists(test_dir):
             shutil.rmtree(test_dir)
     except Exception as e:
-        print(f"Warning: Failed to clean up test directory {test_dir}: {e}")
+        print(f"Warning: Failed to clean up test directory: {e}")
 
 
 def get_project_root() -> str:
