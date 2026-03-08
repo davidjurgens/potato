@@ -1,0 +1,87 @@
+# SWE-bench Evaluation Example
+#
+# Demonstrates evaluation of SWE-bench coding agent traces, where
+# agents attempt to resolve GitHub issues by generating patches.
+#
+# To convert your own SWE-bench data:
+#   python -m potato.trace_converter -i swebench-results.json -f swebench -o data/swebench-traces.jsonl
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/agent-traces/swebench-evaluation/config.yaml -p 8000
+
+annotation_task_name: "SWE-bench Patch Evaluation"
+
+data_files:
+  - data/swebench-traces.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    - key: task_description
+      type: text
+      label: "Issue Description"
+
+    - key: metadata_table
+      type: spreadsheet
+      label: "Instance Info"
+      display_options:
+        compact: true
+        max_height: 150
+
+    - key: conversation
+      type: dialogue
+      label: "Agent Trace & Patch"
+      display_options:
+        show_turn_numbers: true
+
+annotation_schemes:
+  - annotation_type: radio
+    name: patch_correctness
+    description: "Is the generated patch correct?"
+    labels:
+      - name: correct
+        tooltip: "Patch fully resolves the issue"
+      - name: partial
+        tooltip: "Patch partially addresses the issue"
+      - name: incorrect
+        tooltip: "Patch does not fix or introduces new bugs"
+    sequential_key_binding: true
+
+  - annotation_type: likert
+    name: code_quality
+    description: "Rate the quality of the generated code"
+    min_label: "Poor"
+    max_label: "Excellent"
+    size: 5
+
+  - annotation_type: multiselect
+    name: patch_issues
+    description: "Select any issues with the patch"
+    labels:
+      - name: incomplete_fix
+        tooltip: "Doesn't fully address the problem"
+      - name: side_effects
+        tooltip: "May cause unintended side effects"
+      - name: poor_style
+        tooltip: "Doesn't follow project conventions"
+      - name: no_issues
+        tooltip: "No issues found"
+
+  - annotation_type: text
+    name: notes
+    description: "Additional notes on the patch"
+
+user_config:
+  allow_all_users: true
+  require_password: false

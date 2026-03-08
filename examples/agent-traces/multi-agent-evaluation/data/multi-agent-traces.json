@@ -1,0 +1,42 @@
+[
+  {
+    "id": "crew_eval_001",
+    "task": "Research the impact of remote work on productivity and write a brief executive summary.",
+    "agents": [
+      {"role": "Researcher", "goal": "Find data and studies on remote work productivity"},
+      {"role": "Analyst", "goal": "Synthesize findings into insights"},
+      {"role": "Writer", "goal": "Write a clear executive summary"}
+    ],
+    "steps": [
+      {"agent": "Researcher", "thought": "I need to find recent studies on remote work productivity.", "action": "search_academic('remote work productivity meta-analysis 2023-2024')", "result": "Found 12 relevant studies. Key findings: Stanford study shows 13% productivity increase for remote workers; Microsoft study shows hybrid workers are most productive; Owl Labs reports 62% of workers feel more productive at home."},
+      {"agent": "Researcher", "thought": "I should also look at the counterarguments.", "action": "search_academic('remote work productivity challenges')", "result": "Found challenges: collaboration difficulties (cited by 43% of managers), onboarding new employees (67% harder), innovation concerns (mixed evidence)."},
+      {"agent": "Analyst", "thought": "The data shows a nuanced picture. Remote work boosts individual productivity but may hurt collaborative innovation.", "action": "create_synthesis(findings=['individual_productivity_up', 'collaboration_harder', 'hybrid_optimal'])", "result": "Synthesis complete: Remote work increases individual task productivity by 10-13% on average, but collaborative and creative work may suffer. Hybrid models (2-3 days remote) appear optimal."},
+      {"agent": "Writer", "thought": "I have the synthesis. Let me write a concise executive summary.", "action": "write_document(type='executive_summary', length='250_words')", "result": "Executive summary drafted: 'Remote Work & Productivity: The Hybrid Advantage'\n\nRecent research reveals that remote work significantly boosts individual productivity, with studies showing 10-13% improvement in focused task completion. However, this comes with trade-offs in collaborative work and team innovation.\n\nKey findings:\n- Individual productivity: +10-13% for remote workers\n- Collaboration: 43% of managers report difficulties\n- Onboarding: 67% harder for new employees\n- Worker preference: 62% feel more productive at home\n\nRecommendation: Adopt hybrid models with 2-3 remote days per week to capture productivity gains while maintaining collaboration quality."}
+    ]
+  },
+  {
+    "id": "autogen_eval_001",
+    "task": "Debug a Python function that's returning incorrect results",
+    "messages": [
+      {"sender": "user_proxy", "receiver": "code_assistant", "content": "This function is supposed to return the moving average of a list but gives wrong results:\n\ndef moving_average(data, window):\n    result = []\n    for i in range(len(data)):\n        start = max(0, i - window)\n        avg = sum(data[start:i+1]) / window\n        result.append(avg)\n    return result\n\nmoving_average([1, 2, 3, 4, 5], 3) returns [0.33, 1.0, 2.0, 3.0, 4.0] but should return [1.0, 1.5, 2.0, 3.0, 4.0]"},
+      {"sender": "code_assistant", "receiver": "user_proxy", "content": "I can see two bugs:\n\n1. **Division by window size instead of actual window**: For the first few elements, the window is smaller than `window`. You should divide by the actual number of elements, not the fixed window size.\n\n2. **The first element window**: `sum(data[0:1]) / 3 = 0.33` when it should be `1/1 = 1.0`\n\nHere's the fix:\n```python\ndef moving_average(data, window):\n    result = []\n    for i in range(len(data)):\n        start = max(0, i - window + 1)\n        actual_window = i - start + 1\n        avg = sum(data[start:i+1]) / actual_window\n        result.append(avg)\n    return result\n```"},
+      {"sender": "user_proxy", "receiver": "code_assistant", "content": "Let me test this... moving_average([1, 2, 3, 4, 5], 3) now returns [1.0, 1.5, 2.0, 3.0, 4.0]. That's correct!"},
+      {"sender": "code_assistant", "receiver": "user_proxy", "content": "The fix addressed both issues:\n- Changed `i - window` to `i - window + 1` for the correct start index\n- Used `actual_window` (the real number of elements in the window) instead of the fixed `window` parameter for division\n\nThis ensures edge cases at the beginning of the list are handled correctly."}
+    ]
+  },
+  {
+    "id": "lg_eval_001",
+    "task": "Answer a question using search and calculation tools",
+    "events": [
+      {"node": "agent", "type": "on_chain_start", "data": {"input": "What is the GDP per capita of Japan in USD?"}},
+      {"node": "tools", "type": "on_tool_start", "data": {"tool": "web_search", "input": "Japan GDP 2024 USD"}},
+      {"node": "tools", "type": "on_tool_end", "data": {"output": "Japan's nominal GDP in 2024 is approximately $4.21 trillion USD."}},
+      {"node": "tools", "type": "on_tool_start", "data": {"tool": "web_search", "input": "Japan population 2024"}},
+      {"node": "tools", "type": "on_tool_end", "data": {"output": "Japan's population in 2024 is approximately 123.3 million."}},
+      {"node": "tools", "type": "on_tool_start", "data": {"tool": "calculator", "input": "4210000000000 / 123300000"}},
+      {"node": "tools", "type": "on_tool_end", "data": {"output": "34145.17"}},
+      {"node": "agent", "type": "on_llm_end", "data": {"output": "Japan's GDP per capita is approximately $34,145 USD (2024). This is calculated from a nominal GDP of $4.21 trillion divided by a population of 123.3 million."}},
+      {"node": "agent", "type": "on_chain_end", "data": {"output": "Japan's GDP per capita is approximately $34,145 USD."}}
+    ]
+  }
+]

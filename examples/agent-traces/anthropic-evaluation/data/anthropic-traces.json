@@ -1,0 +1,44 @@
+[
+  {
+    "id": "msg_eval_001",
+    "model": "claude-sonnet-4-20250514",
+    "system": "You are a research assistant that helps find and summarize academic papers.",
+    "messages": [
+      {"role": "user", "content": "Find recent papers on RLHF for language models."},
+      {"role": "assistant", "content": [
+        {"type": "text", "text": "I'll search for recent papers on RLHF (Reinforcement Learning from Human Feedback) for language models."},
+        {"type": "tool_use", "id": "toolu_01", "name": "search_papers", "input": {"query": "RLHF language models 2024", "limit": 5}}
+      ]},
+      {"role": "user", "content": [
+        {"type": "tool_result", "tool_use_id": "toolu_01", "content": "1. 'Direct Preference Optimization' (Rafailov et al., 2023) - 1,200 citations\n2. 'Constitutional AI' (Bai et al., 2022) - 890 citations\n3. 'RLHF: A Survey' (Wang et al., 2024) - 156 citations\n4. 'KTO: Model Alignment as Prospect Theoretic Optimization' (Ethayarajh et al., 2024) - 89 citations\n5. 'ORPO: One-shot Preference Optimization' (Hong et al., 2024) - 45 citations"}
+      ]},
+      {"role": "assistant", "content": [
+        {"type": "text", "text": "I found several relevant papers. The field has been moving toward simpler alternatives to full RLHF:\n\n1. **DPO (Direct Preference Optimization)** - The most influential recent work, showing you can optimize for preferences without an explicit reward model.\n2. **Constitutional AI** - Anthropic's approach to self-supervised alignment.\n3. **KTO** - A newer approach based on prospect theory that only needs binary feedback.\n4. **ORPO** - Combines SFT and preference alignment in one step.\n\nWould you like me to get detailed summaries of any of these?"}
+      ]}
+    ],
+    "usage": {"input_tokens": 340, "output_tokens": 180}
+  },
+  {
+    "id": "msg_eval_002",
+    "model": "claude-sonnet-4-20250514",
+    "messages": [
+      {"role": "user", "content": "Analyze the sentiment of this customer review: 'The product arrived late and was damaged, but customer service was incredibly helpful and sent a replacement immediately. Overall satisfied.'"},
+      {"role": "assistant", "content": [
+        {"type": "thinking", "thinking": "This review has mixed sentiment. Negative aspects: late delivery, damaged product. Positive aspects: helpful customer service, quick replacement. The overall sentiment leans positive because the customer explicitly says 'Overall satisfied' and the resolution was good."},
+        {"type": "text", "text": "**Sentiment Analysis:**\n\n- **Overall: Mixed-Positive** (the customer ends satisfied)\n- **Delivery experience: Negative** (late, damaged)\n- **Customer service: Very Positive** (incredibly helpful, immediate replacement)\n- **Resolution: Positive** (problem was resolved effectively)\n\nThe review demonstrates a classic service recovery scenario where excellent customer service turned a negative experience into overall satisfaction."}
+      ]}
+    ],
+    "usage": {"input_tokens": 85, "output_tokens": 120}
+  },
+  {
+    "id": "msg_eval_003",
+    "model": "claude-sonnet-4-20250514",
+    "messages": [
+      {"role": "user", "content": "Write a Python function to calculate Fibonacci numbers efficiently."},
+      {"role": "assistant", "content": [
+        {"type": "text", "text": "Here's an efficient implementation using memoization:\n\n```python\nfrom functools import lru_cache\n\n@lru_cache(maxsize=None)\ndef fibonacci(n: int) -> int:\n    \"\"\"Calculate the nth Fibonacci number efficiently.\"\"\"\n    if n < 0:\n        raise ValueError(\"n must be non-negative\")\n    if n <= 1:\n        return n\n    return fibonacci(n - 1) + fibonacci(n - 2)\n```\n\nThis has O(n) time complexity with memoization, compared to O(2^n) for the naive recursive approach. For very large n, an iterative approach avoids stack overflow:\n\n```python\ndef fibonacci_iterative(n: int) -> int:\n    if n < 0:\n        raise ValueError(\"n must be non-negative\")\n    if n <= 1:\n        return n\n    a, b = 0, 1\n    for _ in range(2, n + 1):\n        a, b = b, a + b\n    return b\n```"}
+      ]}
+    ],
+    "usage": {"input_tokens": 45, "output_tokens": 195}
+  }
+]

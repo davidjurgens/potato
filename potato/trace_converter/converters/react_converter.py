@@ -90,6 +90,9 @@ class ReActConverter(BaseTraceConverter):
         if not isinstance(steps, list) or not steps:
             return False
         step = steps[0]
-        return isinstance(step, dict) and any(
-            k in step for k in ("thought", "action", "observation")
-        )
+        if not isinstance(step, dict):
+            return False
+        # Reject if steps have "agent" field (that's CrewAI multi-agent format)
+        if "agent" in step:
+            return False
+        return any(k in step for k in ("thought", "action", "observation"))

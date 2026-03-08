@@ -1,0 +1,89 @@
+# Multi-Agent Trace Evaluation Example
+#
+# Demonstrates evaluation of multi-agent system traces from different
+# frameworks: CrewAI (crew roles), AutoGen (sender/receiver), and
+# LangGraph (node events).
+#
+# To convert your own multi-agent traces:
+#   python -m potato.trace_converter -i traces.json -f multi_agent -o data/multi-agent-traces.jsonl
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/agent-traces/multi-agent-evaluation/config.yaml -p 8000
+
+annotation_task_name: "Multi-Agent Trace Evaluation"
+
+data_files:
+  - data/multi-agent-traces.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    - key: task_description
+      type: text
+      label: "Task"
+
+    - key: metadata_table
+      type: spreadsheet
+      label: "Trace Info"
+      display_options:
+        compact: true
+        max_height: 150
+
+    - key: conversation
+      type: dialogue
+      label: "Agent Interactions"
+      display_options:
+        show_turn_numbers: true
+        alternating_shading: true
+
+annotation_schemes:
+  - annotation_type: radio
+    name: task_success
+    description: "Did the multi-agent system complete the task?"
+    labels:
+      - name: success
+        tooltip: "Fully completed correctly"
+      - name: partial
+        tooltip: "Partially completed or with errors"
+      - name: failure
+        tooltip: "Not completed"
+    sequential_key_binding: true
+
+  - annotation_type: likert
+    name: coordination_quality
+    description: "How well did the agents coordinate?"
+    min_label: "Poor coordination"
+    max_label: "Excellent coordination"
+    size: 5
+
+  - annotation_type: multiselect
+    name: agent_issues
+    description: "Select any issues observed in agent interactions"
+    labels:
+      - name: redundant_work
+        tooltip: "Agents duplicated effort unnecessarily"
+      - name: miscommunication
+        tooltip: "Agents misunderstood each other"
+      - name: bottleneck
+        tooltip: "One agent became a bottleneck"
+      - name: no_issues
+        tooltip: "No coordination issues"
+
+  - annotation_type: text
+    name: notes
+    description: "Additional notes"
+
+user_config:
+  allow_all_users: true
+  require_password: false

@@ -1,0 +1,39 @@
+[
+  {
+    "id": "chatcmpl-001",
+    "model": "gpt-4",
+    "messages": [
+      {"role": "system", "content": "You are a helpful travel assistant."},
+      {"role": "user", "content": "Find me the cheapest flight from JFK to London next Friday."},
+      {"role": "assistant", "content": "I'll search for flights from JFK to London for next Friday.", "tool_calls": [
+        {"id": "call_1", "type": "function", "function": {"name": "search_flights", "arguments": "{\"origin\": \"JFK\", \"destination\": \"LHR\", \"date\": \"2024-03-15\"}"}}
+      ]},
+      {"role": "tool", "tool_call_id": "call_1", "content": "Found 5 flights:\n1. BA117 - $450 (direct, 7h)\n2. VS3 - $420 (direct, 7h15m)\n3. AA100 - $480 (direct, 7h30m)\n4. UA110 - $510 (1 stop, 10h)\n5. DL400 - $395 (1 stop, 11h)"},
+      {"role": "assistant", "content": "I found several options. The cheapest is DL400 at $395 with one stop (11 hours), but VS3 at $420 is the best value for a direct flight (7h15m). Would you like me to book either of these?"}
+    ],
+    "usage": {"prompt_tokens": 245, "completion_tokens": 89, "total_tokens": 334}
+  },
+  {
+    "id": "chatcmpl-002",
+    "model": "gpt-4",
+    "messages": [
+      {"role": "system", "content": "You are a code review assistant."},
+      {"role": "user", "content": "Review this Python function for bugs:\ndef divide(a, b):\n    return a / b"},
+      {"role": "assistant", "content": "I see a potential issue. The function doesn't handle division by zero. Here's a fix:\n\n```python\ndef divide(a, b):\n    if b == 0:\n        raise ValueError(\"Cannot divide by zero\")\n    return a / b\n```\n\nI'd also recommend adding type hints and a docstring."}
+    ],
+    "usage": {"prompt_tokens": 120, "completion_tokens": 65, "total_tokens": 185}
+  },
+  {
+    "id": "chatcmpl-003",
+    "model": "gpt-4",
+    "messages": [
+      {"role": "user", "content": "What's the capital of France and its population?"},
+      {"role": "assistant", "content": null, "tool_calls": [
+        {"id": "call_2", "type": "function", "function": {"name": "lookup_city", "arguments": "{\"city\": \"Paris\", \"fields\": [\"population\", \"country\"]}"}}
+      ]},
+      {"role": "tool", "tool_call_id": "call_2", "content": "{\"city\": \"Paris\", \"country\": \"France\", \"population\": 2161000, \"metro_population\": 12213364}"},
+      {"role": "assistant", "content": "The capital of France is Paris, with a city population of about 2.16 million and a metropolitan area population of approximately 12.2 million."}
+    ],
+    "usage": {"prompt_tokens": 95, "completion_tokens": 42, "total_tokens": 137}
+  }
+]

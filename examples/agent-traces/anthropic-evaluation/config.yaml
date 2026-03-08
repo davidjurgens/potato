@@ -1,0 +1,75 @@
+# Anthropic Claude Trace Evaluation Example
+#
+# Demonstrates evaluation of Anthropic Claude Messages API traces,
+# including tool_use, tool_result, and thinking blocks.
+#
+# To convert your own Anthropic traces:
+#   python -m potato.trace_converter -i your-anthropic-traces.json -f anthropic -o data/anthropic-traces.jsonl
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/agent-traces/anthropic-evaluation/config.yaml -p 8000
+
+annotation_task_name: "Anthropic Claude Trace Evaluation"
+
+data_files:
+  - data/anthropic-traces.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    - key: task_description
+      type: text
+      label: "Task"
+
+    - key: metadata_table
+      type: spreadsheet
+      label: "Trace Info"
+      display_options:
+        compact: true
+        max_height: 120
+
+    - key: conversation
+      type: dialogue
+      label: "Agent Trace"
+      display_options:
+        show_turn_numbers: true
+        alternating_shading: true
+
+annotation_schemes:
+  - annotation_type: radio
+    name: task_success
+    description: "Did the agent complete the task?"
+    labels:
+      - name: success
+        tooltip: "Fully completed correctly"
+      - name: partial
+        tooltip: "Partially completed or with errors"
+      - name: failure
+        tooltip: "Not completed"
+    sequential_key_binding: true
+
+  - annotation_type: likert
+    name: reasoning_quality
+    description: "Rate the quality of the agent's reasoning"
+    min_label: "Poor"
+    max_label: "Excellent"
+    size: 5
+
+  - annotation_type: text
+    name: notes
+    description: "Additional notes"
+
+user_config:
+  allow_all_users: true
+  require_password: false

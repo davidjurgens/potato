@@ -1,0 +1,38 @@
+[
+  {
+    "instance_id": "django__django-16527",
+    "problem_statement": "AdminSite.catch_all_view() doesn't pass extra_context to login view\n\nWhen catch_all_view handles a request for a URL that requires authentication, it redirects to the login view but doesn't pass extra_context. This means any custom context variables set up in AdminSite subclasses are lost during the login redirect.",
+    "repo": "django/django",
+    "version": "5.0",
+    "base_commit": "4c76ffc2d6c77c850b4bef8d9acc197d11c47937",
+    "model_patch": "diff --git a/django/contrib/admin/sites.py b/django/contrib/admin/sites.py\n--- a/django/contrib/admin/sites.py\n+++ b/django/contrib/admin/sites.py\n@@ -443,7 +443,7 @@ def catch_all_view(self, request, url):\n         if not self.has_permission(request):\n             index_path = reverse('admin:index', current_app=self.name)\n             return redirect_to_login(\n-                request.get_full_path(),\n+                request.get_full_path(), extra_context=self.each_context(request),\n             )\n",
+    "model_name_or_path": "gpt-4-1106-preview",
+    "FAIL_TO_PASS": "[\"test_catch_all_view_passes_extra_context\"]",
+    "PASS_TO_PASS": "[\"test_catch_all_view\", \"test_login\", \"test_admin_index\"]",
+    "test_result": "resolved"
+  },
+  {
+    "instance_id": "requests__requests-5414",
+    "problem_statement": "Session.resolve_redirects copies the original request for all subsequent requests, losing any updates made during redirects.\n\nWhen following redirects, the method creates a copy of the original request each time rather than copying the most recent request. This means that cookies or headers added during redirect handling are lost on the next redirect.",
+    "repo": "psf/requests",
+    "version": "2.28",
+    "base_commit": "7f694b79a0e9c8e3d1a9b0f2cc6e0e8f7c7e8e9e",
+    "model_patch": "diff --git a/requests/sessions.py b/requests/sessions.py\n--- a/requests/sessions.py\n+++ b/requests/sessions.py\n@@ -167,7 +167,7 @@ def resolve_redirects(self, resp, req, stream=False, timeout=None,\n                 extract_cookies_to_jar(prepared_request._cookies, req, resp.raw)\n                 merge_cookies(prepared_request._cookies, self.cookies)\n-                prepared_request = req.copy()\n+                prepared_request = prepared_request.copy()\n",
+    "model_name_or_path": "claude-sonnet-4-20250514",
+    "FAIL_TO_PASS": "[\"test_redirect_preserves_cookies\", \"test_redirect_preserves_headers\"]",
+    "PASS_TO_PASS": "[\"test_basic_redirect\", \"test_redirect_status_codes\"]",
+    "test_result": "resolved"
+  },
+  {
+    "instance_id": "flask__flask-4935",
+    "problem_statement": "Blueprint.register() does not copy error handlers to the app when nesting blueprints.\n\nWhen nesting blueprints (bp2 registered on bp1, bp1 registered on app), error handlers defined on bp2 are not propagated to the app. Only bp1's error handlers are registered.",
+    "repo": "pallets/flask",
+    "version": "2.3",
+    "base_commit": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+    "patch": "diff --git a/src/flask/blueprints.py b/src/flask/blueprints.py\n--- a/src/flask/blueprints.py\n+++ b/src/flask/blueprints.py\n@@ -312,6 +312,10 @@ def register(self, app, options):\n         for blueprint, bp_options in self._blueprints:\n             bp_options = bp_options.copy()\n             bp_options['url_prefix'] = url_prefix + (bp_options.get('url_prefix') or '')\n+            # Propagate error handlers from nested blueprints\n+            for key, handlers in blueprint.error_handler_spec.items():\n+                for code, handler_map in handlers.items():\n+                    self.error_handler_spec.setdefault(key, {}).setdefault(code, {}).update(handler_map)\n             blueprint.register(app, bp_options)\n",
+    "model_name_or_path": "gpt-4",
+    "FAIL_TO_PASS": "[\"test_nested_blueprint_error_handlers\"]",
+    "PASS_TO_PASS": "[\"test_blueprint_registration\", \"test_error_handler\"]",
+    "test_result": "resolved"
+  }
+]

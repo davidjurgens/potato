@@ -29,11 +29,11 @@ def parse_args(args=None):
 
     parser.add_argument(
         "--input", "-i",
-        help="Input file path (JSON or JSONL)"
+        help="Input file path (JSON, JSONL, or Parquet)"
     )
     parser.add_argument(
         "--input-format", "-f",
-        help="Input format name (e.g., langchain, langfuse, react, atif, webarena)"
+        help="Input format name (e.g., react, langchain, langfuse, atif, webarena, openai, anthropic, swebench, otel, multi_agent, mcp)"
     )
     parser.add_argument(
         "--output", "-o",
@@ -64,10 +64,16 @@ def parse_args(args=None):
 
 
 def load_input(file_path: str):
-    """Load input data from JSON or JSONL file."""
+    """Load input data from JSON, JSONL, or Parquet file."""
     path = Path(file_path)
     if not path.exists():
         raise FileNotFoundError(f"Input file not found: {file_path}")
+
+    # Handle Parquet files
+    if path.suffix.lower() == ".parquet":
+        import pyarrow.parquet as pq
+        table = pq.read_table(str(path))
+        return table.to_pandas().to_dict("records")
 
     content = path.read_text(encoding="utf-8").strip()
 

@@ -384,7 +384,7 @@ def load_instance_data(config: dict):
             logger.warning(f"Skipping data_files entry with no path: {data_file_entry}")
             continue
         fmt = data_fname.split(".")[-1]
-        if fmt not in ["csv", "tsv", "json", "jsonl"]:
+        if fmt not in ["csv", "tsv", "json", "jsonl", "parquet"]:
             raise Exception("Unsupported input file format %s for %s" % (fmt, data_fname))
 
         logger.debug("Reading data from " + data_fname)
@@ -442,6 +442,41 @@ def load_instance_data(config: dict):
                 if text_key not in item:
                     logger.warning(f"Text key '{text_key}' not found in item with ID '{instance_id}'")
 
+                ism.add_item(instance_id, item)
+
+            line_no = len(items)
+        elif fmt == "parquet":
+            import pyarrow.parquet as pq
+
+            table = pq.read_table(data_fname)
+            df = table.to_pandas()
+
+            if id_key not in df.columns:
+                raise KeyError(f"ID column '{id_key}' not found in file {data_fname}")
+            if text_key not in df.columns:
+                logger.warning(f"Text column '{text_key}' not found in file {data_fname}")
+
+            df[id_key] = df[id_key].astype(str)
+
+            if df[id_key].duplicated().any():
+                dupes = df[id_key][df[id_key].duplicated()].tolist()
+                raise ValueError(f"Duplicate instance IDs found in {data_fname}: {dupes}")
+
+            existing_dupes = [id for id in df[id_key] if ism.has_item(id)]
+            if existing_dupes:
+                raise ValueError(f"Instance IDs in {data_fname} conflict with existing IDs: {existing_dupes}")
+
+            if text_key in df.columns:
+                df = df.astype({text_key: str})
+
+            items = df.to_dict('records')
+
+            if filter_config:
+                items = _apply_annotation_filter(items, filter_config, id_key)
+                logger.info(f"Filtered to {len(items)} items based on prior annotations")
+
+            for item in items:
+                instance_id = item[id_key]
                 ism.add_item(instance_id, item)
 
             line_no = len(items)

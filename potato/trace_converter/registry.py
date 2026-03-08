@@ -114,19 +114,44 @@ converter_registry = TraceConverterRegistry()
 
 
 def _register_builtin_converters():
-    """Register all built-in converters. Called on import."""
+    """Register all built-in converters. Called on import.
+
+    Registration order matters for auto-detection (first match wins).
+    More specific formats are registered before generic ones to avoid
+    false positives:
+    - ReAct before MultiAgent (both have "steps" but ReAct steps have thought/action/observation)
+    - SWE-bench before ReAct (instance_id is highly specific)
+    - OTEL before others (trace_id+span_id is unique)
+    - MCP before others (MCP methods are distinctive)
+    - Anthropic before OpenAI (content blocks vs string content)
+    - MultiAgent last among message-based (checks for sender/receiver/agents)
+    """
     from .converters.react_converter import ReActConverter
     from .converters.langchain_converter import LangChainConverter
     from .converters.langfuse_converter import LangfuseConverter
     from .converters.atif_converter import ATIFConverter
     from .converters.webarena_converter import WebArenaConverter
+    from .converters.swebench_converter import SWEBenchConverter
+    from .converters.otel_converter import OTELConverter
+    from .converters.mcp_converter import MCPConverter
+    from .converters.anthropic_converter import AnthropicConverter
+    from .converters.openai_converter import OpenAIConverter
+    from .converters.multi_agent_converter import MultiAgentConverter
 
     converters = [
+        # Existing converters (specific formats first)
         ReActConverter(),
         LangChainConverter(),
         LangfuseConverter(),
         ATIFConverter(),
         WebArenaConverter(),
+        # New converters (specific-to-generic order)
+        SWEBenchConverter(),
+        OTELConverter(),
+        MCPConverter(),
+        AnthropicConverter(),
+        OpenAIConverter(),
+        MultiAgentConverter(),
     ]
 
     for converter in converters:

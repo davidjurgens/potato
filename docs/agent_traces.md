@@ -344,6 +344,114 @@ python -m potato.trace_converter --list-formats
 | `langfuse` | Langfuse export | `observations[].type/input/output` |
 | `atif` | Academic standard | `steps[].thought/action/observation` + structured `task`/`agent` |
 | `webarena` | GUI benchmarks | `actions[].action_type/element` + `screenshots[]` |
+| `openai` | OpenAI Chat/Assistants API | `messages[].role/content/tool_calls` |
+| `anthropic` | Anthropic Claude Messages API | `messages[].content[]` with typed blocks (`text`, `tool_use`, `tool_result`) |
+| `swebench` | SWE-bench benchmark | `instance_id` + `problem_statement` + `patch`/`model_patch` |
+| `otel` | OpenTelemetry/OTLP | `resourceSpans` (OTLP) or `trace_id`/`span_id` (flat) |
+| `multi_agent` | CrewAI, AutoGen, LangGraph | Auto-detected: `agents`+`steps[].agent`, `messages[].sender`, `events[].node` |
+| `mcp` | Model Context Protocol | `interactions[].method` (tools/call, resources/read, prompts/get) |
+
+### New Format Examples
+
+#### OpenAI Chat Completions
+```bash
+python -m potato.trace_converter --input openai_logs.json --input-format openai --output data.jsonl
+```
+
+Input format — messages with `role`/`content` strings, optional `tool_calls`:
+```json
+{
+    "id": "chatcmpl-abc123",
+    "model": "gpt-4",
+    "messages": [
+        {"role": "user", "content": "What is the weather?"},
+        {"role": "assistant", "content": null, "tool_calls": [
+            {"id": "call_1", "type": "function",
+             "function": {"name": "get_weather", "arguments": "{\"location\":\"NYC\"}"}}
+        ]},
+        {"role": "tool", "tool_call_id": "call_1", "content": "Sunny, 72F"},
+        {"role": "assistant", "content": "It's sunny and 72F in NYC."}
+    ]
+}
+```
+
+Also supports the OpenAI Assistants API format with `assistant_id` and `steps` arrays.
+
+#### Anthropic Claude Messages
+```bash
+python -m potato.trace_converter --input claude_logs.json --input-format anthropic --output data.jsonl
+```
+
+Input format — content is a list of typed blocks:
+```json
+{
+    "id": "msg_abc123",
+    "model": "claude-sonnet-4-20250514",
+    "messages": [
+        {"role": "user", "content": "Analyze this data."},
+        {"role": "assistant", "content": [
+            {"type": "text", "text": "Let me analyze this."},
+            {"type": "tool_use", "id": "toolu_1", "name": "python", "input": {"code": "df.describe()"}}
+        ]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "toolu_1", "content": "count    100\nmean     42.5"}
+        ]}
+    ]
+}
+```
+
+Handles `thinking` blocks, `tool_result` with `is_error`, and request/response pair format.
+
+#### SWE-bench
+```bash
+python -m potato.trace_converter --input swebench_results.json --input-format swebench --output data.jsonl
+```
+
+Input format — coding benchmark instances:
+```json
+{
+    "instance_id": "django__django-16527",
+    "problem_statement": "Bug description...",
+    "repo": "django/django",
+    "model_patch": "diff --git a/...",
+    "FAIL_TO_PASS": "[\"test_case_1\"]",
+    "test_result": "resolved"
+}
+```
+
+#### OpenTelemetry/OTLP
+```bash
+python -m potato.trace_converter --input otel_export.json --input-format otel --output data.jsonl
+```
+
+Supports both OTLP nested format (`resourceSpans`) and flattened per-span format (`trace_id`/`span_id`). Uses GenAI Semantic Conventions (`gen_ai.prompt`, `gen_ai.completion`, `tool.name`).
+
+#### Multi-Agent (CrewAI / AutoGen / LangGraph)
+```bash
+python -m potato.trace_converter --input multi_agent_log.json --input-format multi_agent --output data.jsonl
+```
+
+Auto-detects the sub-format:
+- **CrewAI**: `agents` list + `steps` with `agent` field
+- **AutoGen**: `messages` with `sender`/`receiver`
+- **LangGraph**: `events` with `node` field
+
+#### MCP Interaction Logs
+```bash
+python -m potato.trace_converter --input mcp_session.json --input-format mcp --output data.jsonl
+```
+
+Input format — JSON-RPC 2.0 interactions:
+```json
+{
+    "id": "session_001",
+    "server": "my-mcp-server",
+    "interactions": [
+        {"method": "tools/call", "params": {"name": "search", "arguments": {"q": "test"}},
+         "result": {"content": [{"type": "text", "text": "Found 5 results"}]}}
+    ]
+}
+```
 
 ## Export Format
 
@@ -389,7 +497,7 @@ Potato automatically computes IAA metrics:
 
 ## Example Projects
 
-Potato includes four ready-to-use example projects:
+Potato includes eight ready-to-use example projects:
 
 ### 1. Agent Trace Evaluation
 ```bash
@@ -414,6 +522,30 @@ Side-by-side comparison of two agent traces on the same task.
 python potato/flask_server.py start examples/agent-traces/rag-evaluation/config.yaml -p 8000
 ```
 RAG pipeline evaluation with retrieval relevance and citation accuracy.
+
+### 5. OpenAI Trace Evaluation
+```bash
+python potato/flask_server.py start examples/agent-traces/openai-evaluation/config.yaml -p 8000
+```
+OpenAI Chat Completions traces with tool calls, evaluated for task success and response quality.
+
+### 6. Anthropic Claude Trace Evaluation
+```bash
+python potato/flask_server.py start examples/agent-traces/anthropic-evaluation/config.yaml -p 8000
+```
+Anthropic Messages API traces with tool_use/tool_result blocks and thinking blocks.
+
+### 7. SWE-bench Patch Evaluation
+```bash
+python potato/flask_server.py start examples/agent-traces/swebench-evaluation/config.yaml -p 8000
+```
+SWE-bench coding agent patches with correctness assessment and code quality ratings.
+
+### 8. Multi-Agent Evaluation
+```bash
+python potato/flask_server.py start examples/agent-traces/multi-agent-evaluation/config.yaml -p 8000
+```
+Multi-agent traces from CrewAI, AutoGen, and LangGraph with coordination quality assessment.
 
 ## Workflow-Specific Configurations
 

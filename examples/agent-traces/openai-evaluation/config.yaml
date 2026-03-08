@@ -1,0 +1,75 @@
+# OpenAI Trace Evaluation Example
+#
+# Demonstrates evaluation of OpenAI Chat Completions traces converted
+# to Potato's canonical format using the OpenAI trace converter.
+#
+# To convert your own OpenAI traces:
+#   python -m potato.trace_converter -i your-openai-traces.json -f openai -o data/openai-traces.jsonl
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/agent-traces/openai-evaluation/config.yaml -p 8000
+
+annotation_task_name: "OpenAI Trace Evaluation"
+
+data_files:
+  - data/openai-traces.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    - key: task_description
+      type: text
+      label: "Task"
+
+    - key: metadata_table
+      type: spreadsheet
+      label: "Trace Info"
+      display_options:
+        compact: true
+        max_height: 120
+
+    - key: conversation
+      type: dialogue
+      label: "Agent Trace"
+      display_options:
+        show_turn_numbers: true
+        alternating_shading: true
+
+annotation_schemes:
+  - annotation_type: radio
+    name: task_success
+    description: "Did the agent complete the task?"
+    labels:
+      - name: success
+        tooltip: "Fully completed correctly"
+      - name: partial
+        tooltip: "Partially completed or with errors"
+      - name: failure
+        tooltip: "Not completed"
+    sequential_key_binding: true
+
+  - annotation_type: likert
+    name: response_quality
+    description: "Rate the quality of the agent's response"
+    min_label: "Poor"
+    max_label: "Excellent"
+    size: 5
+
+  - annotation_type: text
+    name: notes
+    description: "Additional notes"
+
+user_config:
+  allow_all_users: true
+  require_password: false
