@@ -22,6 +22,20 @@ from potato.server_utils.schemas.keybinding_allocator import allocate_keybinding
 logger = logging.getLogger(__name__)
 
 
+def _layout_has_instance_slot(task_html_layout: str) -> bool:
+    """Return True when a task layout explicitly places instance display content."""
+    if not task_html_layout:
+        return False
+
+    slot_markers = [
+        r"\{\{\s*display_html",        # full instance display block
+        r"\{\{\s*display_fields",      # per-field placement
+        r"instance_display_block\.html", # explicit include fallback
+        r"data-instance-display-slot",    # future/custom marker
+    ]
+    return any(re.search(pattern, task_html_layout) for pattern in slot_markers)
+
+
 # TODO: Move this to config.yaml files
 # Items which will be displayed in the popup statistics sidebar
 STATS_KEYS = {
@@ -354,6 +368,7 @@ def generate_annotation_html_template(config: dict) -> str:
     #
 
     # Swap in the task's layout
+    config["task_layout_has_instance_slot"] = _layout_has_instance_slot(task_html_layout)
     html_template = html_template.replace("{{ TASK_LAYOUT }}", task_html_layout)
     html_template = html_template.replace("{{annotation_codebook}}", codebook_html)
     html_template = html_template.replace(
@@ -547,6 +562,7 @@ def generate_html_from_schematic(annotation_schemas: list[dict],
 
             task_html_layout = f'<div class="annotation_schema">{schema_layouts}</div>'
 
+    config["task_layout_has_instance_slot"] = _layout_has_instance_slot(task_html_layout)
     cur_html_template = html_template.replace("{{ TASK_LAYOUT }}", task_html_layout)
 
     # Add in a codebook link if the admin specified one

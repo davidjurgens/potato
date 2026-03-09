@@ -2079,6 +2079,13 @@ def render_page_with_annotations(username) -> str:
             logger.error(f"Error rendering instance display: {e}")
             has_instance_display = False  # Fall back to legacy mode
 
+    # Default behavior: render instance content at the top unless task layout
+    # explicitly defines its own instance slot.
+    kwargs.setdefault(
+        "task_layout_has_instance_slot", config.get("task_layout_has_instance_slot", False)
+    )
+    kwargs.setdefault("allow_instance_display", True)
+
     rendered_html = render_template(
         html_file,
         username=username,

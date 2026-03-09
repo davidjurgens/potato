@@ -187,7 +187,7 @@
                     <i class="fas fa-gavel"></i> Adjudicate
                 </a>
                 {% endif %}
-                {% if show_instructions_button | default(false) %}
+                {% if is_annotation_phase | default(false) and (show_instructions_button | default(false)) %}
                 <button type="button" class="adjudicate-btn" title="View Instructions"
                         data-bs-toggle="modal" data-bs-target="#instructions-modal">
                     <i class="fas fa-book"></i> Instructions
@@ -261,7 +261,15 @@
                     {% elif not (task_layout_has_instance_slot | default(false)) %}
                     <!-- Non-annotation pages still need legacy JS hooks -->
                     <div id="instance-text" style="display: none;">
+                        <div id="span-overlays"></div>
                         <div id="text-content" data-original-text=""></div>
+                    </div>
+                    {% else %}
+                    <!-- Custom task_layout slots may place display fields elsewhere.
+                         Keep legacy hooks hidden so annotation.js does not fail. -->
+                    <div id="instance-text" style="display: none;">
+                        <div id="span-overlays"></div>
+                        <div id="text-content" data-original-text="{{ instance_plain_text | default('') | e }}">{{ instance | safe }}</div>
                     </div>
                     {% endif %}
 
