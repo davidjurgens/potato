@@ -438,13 +438,20 @@ class FlaskTestServer:
                     config_dir = os.path.dirname(config_file) if config_file else os.getcwd()
                     fixed_data_files = []
                     for data_file in config['data_files']:
-                        # If it's an absolute path, use it as is
-                        if os.path.isabs(data_file):
-                            full_path = data_file
-                        # If it's a relative path, resolve it from the config file directory
+                        if isinstance(data_file, dict):
+                            # Dict entry with path + optional encoding/filter
+                            path = data_file.get("path", "")
+                            if not os.path.isabs(path):
+                                data_file = dict(data_file)
+                                data_file["path"] = os.path.join(config_dir, path)
+                            fixed_data_files.append(data_file)
                         else:
-                            full_path = os.path.join(config_dir, data_file)
-                        fixed_data_files.append(full_path)
+                            # Simple string path
+                            if os.path.isabs(data_file):
+                                full_path = data_file
+                            else:
+                                full_path = os.path.join(config_dir, data_file)
+                            fixed_data_files.append(full_path)
                     config['data_files'] = fixed_data_files
 
                 # Create required directories

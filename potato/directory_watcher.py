@@ -13,6 +13,7 @@ Configuration:
     data_directory: str - Path to the directory containing data files
     watch_data_directory: bool - Whether to watch for changes (default: False)
     watch_poll_interval: float - Seconds between directory scans (default: 5.0)
+    data_directory_encoding: str - File encoding for directory files (default: "utf-8")
 
 Example config:
     data_directory: "./data/incoming"
@@ -101,6 +102,7 @@ class DirectoryWatcher:
             config: Configuration dictionary containing:
                 - data_directory: Path to watch
                 - watch_poll_interval: Seconds between scans (default: 5.0)
+                - data_directory_encoding: File encoding (default: "utf-8")
                 - item_properties.id_key: Key for instance IDs
                 - item_properties.text_key: Key for text content
             item_state_manager: The ItemStateManager instance to add items to
@@ -123,6 +125,7 @@ class DirectoryWatcher:
             raise ValueError(f"data_directory does not exist or is not a directory: {self.data_directory}")
 
         self.poll_interval = config.get("watch_poll_interval", 5.0)
+        self.encoding = config.get("data_directory_encoding", "utf-8")
         self.id_key = config["item_properties"]["id_key"]
         self.text_key = config["item_properties"]["text_key"]
 
@@ -460,7 +463,7 @@ class DirectoryWatcher:
         """
         instances = []
 
-        with open(file_path, 'rt', encoding='utf-8') as f:
+        with open(file_path, 'rt', encoding=self.encoding) as f:
             for line_no, line in enumerate(f, 1):
                 line = line.strip()
                 if not line:
@@ -503,7 +506,7 @@ class DirectoryWatcher:
                 "Install it with: pip install pandas"
             )
 
-        df = pd.read_csv(file_path, sep=separator)
+        df = pd.read_csv(file_path, sep=separator, encoding=self.encoding)
 
         # Validate ID column exists
         if self.id_key not in df.columns:

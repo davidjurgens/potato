@@ -85,6 +85,29 @@ biased caused by the ordering effect. You can access the displayed content in th
 ```
 
 
+## File Encoding
+
+By default, all input data files are read as UTF-8. If your data uses a different encoding (e.g., `latin-1`, `shift_jis`, `gb2312`), you can specify it per-file using the dict format in `data_files`:
+
+```yaml
+data_files:
+  - data/utf8_data.json                    # string form → defaults to utf-8
+  - path: data/latin1_data.json            # dict form without encoding → defaults to utf-8
+    encoding: latin-1
+  - path: data/japanese_data.csv
+    encoding: shift_jis
+```
+
+The `encoding` field accepts any encoding name recognized by Python (see [Python Standard Encodings](https://docs.python.org/3/library/codecs.html#standard-encodings)).
+
+For directory watching, you can set the encoding for all files in the watched directory:
+
+```yaml
+data_directory: ./data/incoming
+data_directory_encoding: latin-1
+watch_data_directory: true
+```
+
 ## Update input data formats on the YAML config file
 
 You would pass the input data paths and field names into the YAML config

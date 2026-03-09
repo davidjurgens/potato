@@ -6,6 +6,7 @@ import yaml
 import os
 import logging
 import re
+import codecs
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 from urllib.parse import urlparse
@@ -1621,10 +1622,31 @@ def validate_file_paths(config_data: Dict[str, Any], project_dir: str, config_fi
         if data_file in [None, "null", "default"]:
             continue
 
+        # Handle dict entries with path + optional encoding
+        if isinstance(data_file, dict):
+            file_path = data_file.get("path")
+            if not file_path:
+                raise ConfigValidationError(f"Data file {i}: dict entry missing 'path' field")
+            # Validate encoding if specified
+            encoding = data_file.get("encoding")
+            if encoding is not None:
+                if not isinstance(encoding, str):
+                    raise ConfigValidationError(
+                        f"Data file {i}: 'encoding' must be a string, got {type(encoding).__name__}"
+                    )
+                try:
+                    codecs.lookup(encoding)
+                except LookupError:
+                    raise ConfigValidationError(
+                        f"Data file {i}: unknown encoding '{encoding}'"
+                    )
+        else:
+            file_path = data_file
+
         try:
-            validated_path = validate_path_security(data_file, base_dir, project_dir)
+            validated_path = validate_path_security(file_path, base_dir, project_dir)
             if not os.path.exists(validated_path):
-                raise ConfigValidationError(f"Data file not found: {data_file} (resolved to: {validated_path})")
+                raise ConfigValidationError(f"Data file not found: {file_path} (resolved to: {validated_path})")
         except ConfigSecurityError as e:
             raise ConfigSecurityError(f"Data file {i}: {str(e)}")
 

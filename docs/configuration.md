@@ -229,8 +229,10 @@ If no key is configured, Potato automatically generates a secure random key and 
 
 ```yaml
 data_files:
-  - data/my_data.json
-  - data/another_dataset.csv
+  - data/my_data.json                      # simple string path (utf-8)
+  - path: data/another_dataset.csv         # dict form (utf-8 default)
+  - path: data/latin1_data.json            # dict form with explicit encoding
+    encoding: latin-1
 
 item_properties:
   id_key: id           # Field name for item ID
@@ -239,6 +241,15 @@ item_properties:
   kwargs:              # Optional: additional fields to pass to templates
     - metadata
     - source
+```
+
+The `encoding` field (optional, default `utf-8`) can be set per-file using the dict form. Any [Python-recognized encoding](https://docs.python.org/3/library/codecs.html#standard-encodings) is accepted.
+
+For directory watching, set `data_directory_encoding` to apply a single encoding to all files in the watched directory:
+
+```yaml
+data_directory: ./data/incoming
+data_directory_encoding: shift_jis
 ```
 
 ### Output Configuration

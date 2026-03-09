@@ -379,9 +379,11 @@ def load_instance_data(config: dict):
         if isinstance(data_file_entry, dict):
             data_fname = data_file_entry.get("path")
             filter_config = data_file_entry.get("filter_by_prior_annotation")
+            encoding = data_file_entry.get("encoding", "utf-8")
         else:
             data_fname = data_file_entry
             filter_config = None
+            encoding = "utf-8"
 
         if not data_fname:
             logger.warning(f"Skipping data_files entry with no path: {data_file_entry}")
@@ -395,7 +397,7 @@ def load_instance_data(config: dict):
         if fmt in ["json", "jsonl"]:
             # Handle JSON and JSONL formats
             # Try parsing as a JSON array first, fall back to JSON Lines
-            with open(data_fname, "rt") as f:
+            with open(data_fname, "rt", encoding=encoding) as f:
                 raw = f.read()
 
             items = None
@@ -487,7 +489,7 @@ def load_instance_data(config: dict):
             sep = "," if fmt == "csv" else "\t"
 
             # Validate required columns exist
-            df = pd.read_csv(data_fname, sep=sep)
+            df = pd.read_csv(data_fname, sep=sep, encoding=encoding)
             if id_key not in df.columns:
                 raise KeyError(f"ID column '{id_key}' not found in file {data_fname}")
             if text_key not in df.columns:
@@ -1228,7 +1230,7 @@ def load_phase_data(config: dict) -> None:
                     if phase_file.endswith(('.html', '.htm')):
                         logger.debug(f"Instructions phase '{phase_name}' using HTML file: {phase_file}")
                         # Read the HTML and write it as a generated template
-                        with open(phase_file, 'rt') as f:
+                        with open(phase_file, 'rt', encoding='utf-8') as f:
                             instructions_html = f.read()
 
                         # Wrap in a minimal page template for consistency
@@ -1347,13 +1349,13 @@ def get_phase_annotation_schemes(filename: str) -> list[dict]:
         raise Exception("Phase labeling schemes file %s does not exist" % filename)
 
     if filename.endswith(".json"):
-        with open(filename, "rt") as f:
+        with open(filename, "rt", encoding="utf-8") as f:
             schemes = json.load(f)
         # Allow users to have specified a single scheme in the JSON file
         if type(schemes) != list:
             schemes = [schemes]
     elif filename.endswith(".jsonl"):
-        with open(filename, 'rt') as f:
+        with open(filename, 'rt', encoding='utf-8') as f:
             for line_no, line in enumerate(f):
                 line = line.strip()
                 if not line:  # Skip empty lines
@@ -1365,7 +1367,7 @@ def get_phase_annotation_schemes(filename: str) -> list[dict]:
                         f"Invalid JSON at line {line_no+1} in {filename}: {e}"
                     ) from e
     elif filename.endswith(".yaml") or filename.endswith(".yml"):
-        with open(filename, 'rt') as f:
+        with open(filename, 'rt', encoding='utf-8') as f:
             schemes = yaml.safe_load(f)
     else:
         raise Exception("Unknown file format for phase labeling schemes file %s" % filename)
@@ -1503,8 +1505,8 @@ def get_displayed_text(text):
         return text
 
     # Normalize text for consistent positioning (matches client-side normalization)
-    # Remove non-printable characters and normalize whitespace
-    text = re.sub(r'[^\x20-\x7E\n]', '', text)
+    # Remove control characters but preserve all Unicode (fixes issue #114)
+    text = re.sub(r'[\x00-\x1F\x7F]', lambda m: m.group() if m.group() == '\n' else '', text)
     text = re.sub(r'[ \t]+', ' ', text)  # Normalize horizontal whitespace only
     text = text.strip()
 
