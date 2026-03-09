@@ -1365,6 +1365,10 @@ def instructions():
             debug_phase=config.get("debug_phase"),
             ui_config=config.get("ui_config", {}),
             show_instructions_button=usm.is_instructions_required(),
+            task_layout_has_instance_slot=config.get(
+                "task_layout_has_instance_slot", False
+            ),
+            allow_instance_display=False,
         )
 
 
@@ -1404,6 +1408,11 @@ def instructions_view():
         debug_phase=config.get("debug_phase"),
         ui_config=config.get("ui_config", {}),
         show_instructions_button=usm.is_instructions_required(),
+        task_layout_has_instance_slot=config.get(
+            "task_layout_has_instance_slot", False
+        ),
+        allow_instance_display=False,
+        is_readonly_instructions_view=True,
     )
 
 

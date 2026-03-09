@@ -85,6 +85,7 @@
                 <span class="task-name">{{annotation_task_name}}</span>
             </div>
 
+            {% if not (is_readonly_instructions_view | default(false)) %}
             <div class="navbar-center">
                 <div class="annotation-status-indicator" id="annotation-status">
                     <span class="status-badge {{ 'labeled' if instance_has_annotations else 'unlabeled' }}">
@@ -138,6 +139,7 @@
                     <a href="/logout" class="logout-btn">Logout</a>
                 </div>
             </div>
+            {% endif %}
         </div>
     </nav>
 
@@ -162,54 +164,15 @@
 
                 <!-- Main content area -->
                 <div id="main-content" style="display: none;">
-                    <!-- Instance display area -->
-                    <div class="mb-4">
-                        {% if has_instance_display | default(false) %}
-                        <!-- New instance_display mode: explicit content display configuration -->
-                        {{ display_html | safe }}
-                        <!-- Hidden element for legacy JS compatibility -->
-                        <div id="instance-text" style="display: none;">
-                            <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}">{{instance | sanitize_html}}</div>
-                        </div>
-                        {% elif has_video_annotation | default(false) %}
-                        <h5 class="mb-3">Video to Annotate:</h5>
-                        <!-- For video annotation, keep the text-content element accessible for JS but visually hidden -->
-                        <div id="instance-text" class="instance-text-container" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0);">
-                            <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}">{{instance | sanitize_html}}</div>
-                        </div>
-                        {% elif has_audio_annotation | default(false) %}
-                        <h5 class="mb-3">Audio to Annotate:</h5>
-                        <!-- For audio annotation, keep the text-content element accessible for JS but visually hidden -->
-                        <div id="instance-text" class="instance-text-container" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0);">
-                            <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}">{{instance | sanitize_html}}</div>
-                        </div>
-                        {% elif has_image_annotation | default(false) %}
-                        <!-- For image annotation, hide this section - the image is loaded directly into the annotation canvas -->
-                        <!-- Store the image URL in a hidden element for JavaScript to access -->
-                        <div id="instance-text" style="display: none;">
-                            <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}" data-image-url="{{instance | sanitize_html}}">{{instance | sanitize_html}}</div>
-                        </div>
-                        {% elif instance_id %}
-                        <h5 class="mb-3">Text to Annotate:</h5>
-                        <div id="instance-text" class="p-3 border rounded instance-text-container" style="background-color: var(--light-bg); min-height: 100px; position: relative;">
-                            <!-- Text content layer for span annotation -->
-                            <!-- Note: sanitize_html filter allows safe span annotation HTML while blocking XSS -->
-                            <!-- data-original-text uses plain text (no span HTML) for correct position calculations -->
-                            <!-- DOM content uses rendered HTML with span tags for visual display -->
-                            <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}" style="position: relative; z-index: 1; pointer-events: auto;">{{instance | sanitize_html}}
-                                <!-- Span overlays layer - nested inside text-content for correct positioning -->
-                                <div id="span-overlays" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;">
-                                    <!-- Individual overlays will have pointer-events: auto -->
-                                </div>
-                            </div>
-                        </div>
-                        {% else %}
-                        <!-- Keep legacy hooks for JS on non-annotation pages (e.g., instructions) -->
-                        <div id="instance-text" style="display: none;">
-                            <div id="text-content" data-original-text=""></div>
-                        </div>
-                        {% endif %}
+                    {% if not (task_layout_has_instance_slot | default(false)) and (allow_instance_display | default(false)) %}
+                    <!-- Default instance display placement (fallback when no custom slot is used) -->
+                    {% include 'instance_display_block.html' %}
+                    {% elif not (task_layout_has_instance_slot | default(false)) %}
+                    <!-- Non-annotation pages still need legacy JS hooks -->
+                    <div id="instance-text" style="display: none;">
+                        <div id="text-content" data-original-text=""></div>
                     </div>
+                    {% endif %}
 
 
 
@@ -230,6 +193,7 @@
         </div>
 
         <!-- Navigation buttons -->
+        {% if not (is_readonly_instructions_view | default(false)) %}
         <div class="potato-nav">
             <button class="shadcn-button shadcn-button-outline" id="prev-btn" onclick="navigateToPrevious()">
                 <i class="fas fa-arrow-left me-2"></i>Previous
@@ -238,6 +202,7 @@
                 Next<i class="fas fa-arrow-right ms-2"></i>
             </button>
         </div>
+        {% endif %}
 
         <!-- Footer -->
         <footer class="potato-footer">
