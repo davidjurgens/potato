@@ -181,6 +181,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Validate AI support configuration if present
     validate_ai_support_config(config_data)
 
+    # Validate chat support configuration if present
+    validate_chat_support_config(config_data)
+
     # Validate category assignment configuration if present
     validate_category_assignment_config(config_data)
 
@@ -2836,6 +2839,97 @@ def validate_ai_support_config(config_data: Dict[str, Any]) -> None:
     # Validate option_highlighting configuration
     if "option_highlighting" in ai_config:
         _validate_option_highlighting_config(ai_config["option_highlighting"])
+
+
+def validate_chat_support_config(config_data: Dict[str, Any]) -> None:
+    """
+    Validate chat support configuration for LLM annotator assistance.
+
+    Args:
+        config_data: The configuration data containing chat_support section
+
+    Raises:
+        ConfigValidationError: If the chat support configuration is invalid
+    """
+    if "chat_support" not in config_data:
+        return  # Chat support is optional
+
+    chat_config = config_data["chat_support"]
+
+    if not isinstance(chat_config.get("enabled", False), bool):
+        raise ConfigValidationError("chat_support.enabled must be a boolean")
+
+    if not chat_config.get("enabled", False):
+        return  # Skip validation if not enabled
+
+    # Validate endpoint type
+    if "endpoint_type" not in chat_config:
+        raise ConfigValidationError(
+            "chat_support.endpoint_type is required when chat_support is enabled"
+        )
+
+    endpoint_type = chat_config["endpoint_type"]
+    valid_endpoint_types = [
+        "openai", "anthropic", "huggingface", "ollama", "gemini", "vllm", "openrouter",
+    ]
+    if endpoint_type not in valid_endpoint_types:
+        raise ConfigValidationError(
+            f"chat_support.endpoint_type must be one of: {', '.join(valid_endpoint_types)}"
+        )
+
+    # Validate ai_config section
+    if "ai_config" in chat_config:
+        ai_cfg = chat_config["ai_config"]
+        if not isinstance(ai_cfg, dict):
+            raise ConfigValidationError("chat_support.ai_config must be a dictionary")
+
+        if "model" in ai_cfg:
+            if not isinstance(ai_cfg["model"], str) or not ai_cfg["model"].strip():
+                raise ConfigValidationError(
+                    "chat_support.ai_config.model must be a non-empty string"
+                )
+
+        if "temperature" in ai_cfg:
+            temp = ai_cfg["temperature"]
+            if not isinstance(temp, (int, float)) or temp < 0 or temp > 2:
+                raise ConfigValidationError(
+                    "chat_support.ai_config.temperature must be between 0 and 2"
+                )
+
+        if "max_tokens" in ai_cfg:
+            mt = ai_cfg["max_tokens"]
+            if not isinstance(mt, int) or mt < 1:
+                raise ConfigValidationError(
+                    "chat_support.ai_config.max_tokens must be a positive integer"
+                )
+
+        # Validate API key for cloud endpoints
+        if endpoint_type in ["openai", "anthropic", "huggingface", "gemini", "openrouter"]:
+            api_key = ai_cfg.get("api_key", "")
+            if not api_key or not isinstance(api_key, str):
+                raise ConfigValidationError(
+                    f"chat_support.ai_config.api_key is required for {endpoint_type} endpoint"
+                )
+
+    # Validate UI section
+    if "ui" in chat_config:
+        ui_cfg = chat_config["ui"]
+        if not isinstance(ui_cfg, dict):
+            raise ConfigValidationError("chat_support.ui must be a dictionary")
+
+        if "sidebar_width" in ui_cfg:
+            sw = ui_cfg["sidebar_width"]
+            if not isinstance(sw, int) or sw < 200 or sw > 800:
+                raise ConfigValidationError(
+                    "chat_support.ui.sidebar_width must be an integer between 200 and 800"
+                )
+
+        if "max_history_per_instance" in ui_cfg:
+            mh = ui_cfg["max_history_per_instance"]
+            if not isinstance(mh, int) or mh < 1:
+                raise ConfigValidationError(
+                    "chat_support.ui.max_history_per_instance must be a positive integer"
+                )
 
 
 def _validate_option_highlighting_config(oh_config: Dict[str, Any]) -> None:

@@ -73,6 +73,11 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/agent-chat.css') }}">
     {% endif %}
 
+    {% if chat_enabled | default(false) %}
+    <!-- LLM Chat Sidebar Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/llm-chat-sidebar.css') }}?v=1">
+    {% endif %}
+
     <!-- jQuery (required for span annotation) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
 </head>
@@ -361,6 +366,11 @@
     {% if agent_proxy_enabled | default(false) %}
     <!-- Agent Chat UI -->
     <script src="{{ url_for('static', filename='agent-chat.js') }}?v=1"></script>
+    {% endif %}
+
+    {% if chat_enabled | default(false) %}
+    <!-- LLM Chat Sidebar -->
+    <script src="{{ url_for('static', filename='llm-chat-sidebar.js') }}?v=1"></script>
     {% endif %}
 
     <!-- Web Agent Trace Viewer (overlays + step navigation) -->

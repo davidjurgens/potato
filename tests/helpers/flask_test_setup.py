@@ -102,6 +102,13 @@ def clear_all_global_state():
     except ImportError:
         pass
 
+    # Chat manager
+    try:
+        from potato.chat_manager import clear_chat_manager
+        clear_chat_manager()
+    except ImportError:
+        pass
+
     # User authenticator singleton
     try:
         import potato.authentication as auth_module
@@ -556,6 +563,16 @@ class FlaskTestServer:
                         print(f"[DEBUG] Error initializing Solo Mode manager: {e}")
                         import traceback
                         traceback.print_exc()
+
+                # Initialize chat manager if configured
+                if config.get("chat_support", {}).get("enabled", False):
+                    try:
+                        from potato.chat_manager import init_chat_manager, clear_chat_manager
+                        clear_chat_manager()
+                        init_chat_manager(config)
+                        print("[DEBUG] Chat manager initialized successfully")
+                    except Exception as e:
+                        print(f"[DEBUG] Error initializing chat manager: {e}")
 
                 # Initialize agent session manager if configured
                 if "agent_proxy" in config:

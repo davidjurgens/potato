@@ -1823,6 +1823,9 @@ def render_page_with_annotations(username) -> str:
     # Check if agent proxy is configured (for conditional loading of agent-chat.js/css)
     agent_proxy_enabled = "agent_proxy" in config
 
+    # Check if chat support is enabled (for conditional loading of llm-chat-sidebar assets)
+    chat_enabled = config.get("chat_support", {}).get("enabled", False)
+
     # Get pre-annotation configuration
     pre_annotation_config = {}
     if qc_manager:
@@ -1880,6 +1883,8 @@ def render_page_with_annotations(username) -> str:
         multi_span_mode=display_template_vars.get("multi_span_mode", False),
         # Agent proxy (for conditional loading of agent-chat assets)
         agent_proxy_enabled=agent_proxy_enabled,
+        # Chat support (for conditional loading of llm-chat-sidebar assets)
+        chat_enabled=chat_enabled,
         # Adjudication: show link for adjudicators
         is_adjudicator=_is_user_adjudicator(username),
         # Annotation status indicator
@@ -2739,6 +2744,13 @@ def run_server(args):
         init_ai_cache_manager()
         logger.info("AI support initialized successfully")
     
+    # Initialize chat manager if enabled
+    if config.get("chat_support", {}).get("enabled", False):
+        logger.info("Initializing Chat Manager...")
+        from potato.chat_manager import init_chat_manager
+        init_chat_manager(config)
+        logger.info("Chat support initialized successfully")
+
     # Initialize Solo Mode if enabled
     if config.get("solo_mode", {}).get("enabled", False):
         logger.info("Initializing Solo Mode...")

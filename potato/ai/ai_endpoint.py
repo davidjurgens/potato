@@ -228,6 +228,42 @@ class BaseAIEndpoint(ABC):
         """
         pass
 
+    def chat_query(self, messages: List[Dict[str, str]]) -> str:
+        """
+        Send a multi-turn chat conversation to the AI model.
+
+        Default implementation flattens messages into a single prompt and calls query().
+        Subclasses should override with native multi-turn support.
+
+        Args:
+            messages: List of message dicts with 'role' and 'content' keys.
+                      Roles: 'system', 'user', 'assistant'
+
+        Returns:
+            The model's response as a plain text string.
+        """
+        # Flatten messages into a single prompt
+        parts = []
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "system":
+                parts.append(f"System: {content}")
+            elif role == "assistant":
+                parts.append(f"Assistant: {content}")
+            else:
+                parts.append(f"User: {content}")
+        prompt = "\n\n".join(parts) + "\n\nAssistant:"
+
+        try:
+            result = self.query(prompt)
+            # query() may return parsed JSON or a string; ensure we return a string
+            if isinstance(result, dict):
+                return result.get("response", result.get("content", str(result)))
+            return str(result)
+        except Exception as e:
+            raise AIEndpointRequestError(f"Chat query failed: {e}")
+
     def parseStringToJson(self, response_content: str) -> str:
         """
         Parse the response content and extract JSON, handling markdown code blocks.

@@ -5,7 +5,7 @@ This module provides integration with Ollama for local LLM inference.
 """
 
 import json
-from typing import Type
+from typing import Dict, List, Type
 import ollama
 from pydantic import BaseModel
 from .ai_endpoint import BaseAIEndpoint, AIEndpointRequestError, ModelCapabilities
@@ -123,6 +123,33 @@ class OllamaEndpoint(BaseAIEndpoint):
         except Exception as e:
             logger.error(f"[Ollama] Request failed: {e}")
             raise AIEndpointRequestError(f"Ollama request failed: {e}")
-        
-  
+
+    def chat_query(self, messages: List[Dict[str, str]]) -> str:
+        """Send a multi-turn chat to Ollama using native chat API."""
+        import logging
+        logger = logging.getLogger(__name__)
+
+        try:
+            options = {
+                'temperature': self.temperature,
+                'num_predict': self.max_tokens,
+            }
+
+            response = self.client.chat(
+                model=self.model,
+                messages=messages,
+                options=options,
+                think=False,
+            )
+
+            message = response.get('message') if hasattr(response, 'get') else getattr(response, 'message', None)
+            if message is None:
+                raise AIEndpointRequestError("No message in Ollama chat response")
+
+            content = message.get('content') if hasattr(message, 'get') else getattr(message, 'content', None)
+            return content or ""
+        except Exception as e:
+            logger.error(f"[Ollama] Chat request failed: {e}")
+            raise AIEndpointRequestError(f"Ollama chat request failed: {e}")
+
 

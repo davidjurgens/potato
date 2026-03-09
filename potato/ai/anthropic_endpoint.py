@@ -4,6 +4,7 @@ Anthropic AI endpoint implementation.
 This module provides integration with Anthropic's Claude API for LLM inference.
 """
 
+from typing import Dict, List
 import anthropic
 from .ai_endpoint import BaseAIEndpoint, AIEndpointRequestError, ModelCapabilities
 
@@ -89,3 +90,29 @@ class AnthropicEndpoint(BaseAIEndpoint):
             return response.content[0].text
         except Exception as e:
             raise AIEndpointRequestError(f"Anthropic request failed: {e}")
+
+    def chat_query(self, messages: List[Dict[str, str]]) -> str:
+        """Send a multi-turn chat to Anthropic using native messages API."""
+        try:
+            # Extract system message if present
+            system_text = ""
+            chat_messages = []
+            for msg in messages:
+                if msg["role"] == "system":
+                    system_text = msg["content"]
+                else:
+                    chat_messages.append({"role": msg["role"], "content": msg["content"]})
+
+            kwargs = {
+                "model": self.model,
+                "max_tokens": self.max_tokens,
+                "temperature": self.temperature,
+                "messages": chat_messages,
+            }
+            if system_text:
+                kwargs["system"] = system_text
+
+            response = self.client.messages.create(**kwargs)
+            return response.content[0].text
+        except Exception as e:
+            raise AIEndpointRequestError(f"Anthropic chat request failed: {e}")

@@ -400,16 +400,12 @@ def home():
                 user_state = usm.get_user_state(username)
 
                 if user_state:
-                    # Determine the first phase from config
-                    phases_config = config.get('phases', {})
-                    phases_order = phases_config.get('order', ['annotation'])
-                    first_phase_name = phases_order[0] if phases_order else 'annotation'
-                    first_phase = UserPhase.fromstr(first_phase_name)
-
                     # Set user to the first phase if they're in LOGIN
+                    # Use advance_phase() which properly looks up the first page
+                    # for the phase (fixes issue #113: page was None for phased workflows)
                     if user_state.get_phase() == UserPhase.LOGIN:
-                        logger.debug(f"Advancing URL-direct user {username} to first phase: {first_phase}")
-                        user_state.advance_to_phase(first_phase, None)
+                        logger.debug(f"Advancing URL-direct user {username} past LOGIN phase")
+                        usm.advance_phase(username)
 
                     # Assign instances if user doesn't have any
                     if not user_state.has_assignments():
@@ -1664,7 +1660,9 @@ def annotate():
         logger.debug(f"User {username} has no remaining assignments, advancing phase")
         # If the user is done annotating, advance to the next phase
         get_user_state_manager().advance_phase(username)
-        return home()
+        # Use redirect to ensure next phase handler gets a GET request (fixes issue #115:
+        # POST leaking into poststudy handler caused it to skip immediately)
+        return redirect(url_for("home"))
 
     # Handle POST requests
     if request.method == 'POST':
@@ -1750,7 +1748,8 @@ def annotate():
     if not user_state.has_remaining_assignments():
         logger.debug(f"User {username} has completed all assignments, advancing phase")
         get_user_state_manager().advance_phase(username)
-        return home()
+        # Use redirect to ensure next phase handler gets a GET request (fixes issue #115)
+        return redirect(url_for("home"))
 
     # Handle GET requests with instance_id query parameter
     if request.method == 'GET' and request.args.get('instance_id'):
@@ -6090,6 +6089,11 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/auth/login/<provider>", "oauth_login", oauth_login, methods=["GET"])
     app.add_url_rule("/auth/callback/<provider>", "oauth_callback", oauth_callback, methods=["GET"])
 
+    # Chat support API routes
+    app.add_url_rule("/api/chat/send", "chat_send", chat_send, methods=["POST"])
+    app.add_url_rule("/api/chat/history", "chat_history", chat_history, methods=["GET"])
+    app.add_url_rule("/api/chat/config", "chat_config", chat_config, methods=["GET"])
+
     app.add_url_rule("/shutdown", "shutdown", shutdown, methods=["POST"])
 
     # Register Solo Mode blueprint if not already registered
@@ -6857,6 +6861,158 @@ def adjudicate_api_next():
         "item_text": item_text,
         "item_data": item_data,
     })
+
+
+# ============================================================================
+# Chat Support API Endpoints
+# ============================================================================
+
+@app.route("/api/chat/send", methods=["POST"])
+def chat_send():
+    """Send a message to the LLM chat assistant and get a response."""
+    import time as time_module
+    from potato.chat_manager import get_chat_manager
+    from potato.interaction_tracking import (
+        get_or_create_behavioral_data, ChatMessage,
+    )
+
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    username = session['username']
+    data = request.get_json()
+    if not data or not data.get("message"):
+        return jsonify({"error": "No message provided"}), 400
+
+    chat_manager = get_chat_manager()
+    if not chat_manager or not chat_manager.enabled:
+        return jsonify({"error": "Chat support is not enabled"}), 404
+
+    user_state = get_user_state(username)
+    if not user_state:
+        return jsonify({"error": "User state not found"}), 404
+
+    # Get instance info
+    instance_id = data.get("instance_id")
+    if not instance_id:
+        current_instance = user_state.get_current_instance()
+        if current_instance:
+            instance_id = current_instance.get_id()
+
+    # Get instance text for context
+    instance_text = ""
+    if instance_id:
+        item_state_mgr = get_item_state_manager()
+        item = item_state_mgr.get_item(instance_id)
+        if item:
+            text_key = config.get("item_properties", {}).get("text_key", "text")
+            item_data = item.get_data()
+            instance_text = item_data.get(text_key, item.get_text())
+
+    # Get behavioral data and existing chat history
+    bd = get_or_create_behavioral_data(
+        user_state.instance_id_to_behavioral_data,
+        instance_id or "",
+    )
+
+    # Build history from chat_history (only role + content for the LLM)
+    history = [
+        {"role": msg.role, "content": msg.content}
+        for msg in bd.chat_history
+        if isinstance(msg, ChatMessage)
+    ]
+
+    # Enforce max history
+    max_hist = chat_manager.max_history_per_instance
+    if len(history) > max_hist:
+        history = history[-max_hist:]
+
+    user_message = data["message"]
+    now = time_module.time()
+
+    # Send to LLM
+    result = chat_manager.send_message(
+        user_message, instance_text, instance_id or "", history
+    )
+
+    # Record messages in behavioral data
+    bd.chat_history.append(ChatMessage(
+        role="user",
+        content=user_message,
+        timestamp=now,
+        instance_id=instance_id or "",
+    ))
+    bd.chat_history.append(ChatMessage(
+        role="assistant",
+        content=result["content"],
+        timestamp=time_module.time(),
+        instance_id=instance_id or "",
+        response_time_ms=result["response_time_ms"],
+    ))
+
+    # Log interaction event
+    bd.add_interaction(
+        event_type="chat_message_sent",
+        target="chat_sidebar",
+        metadata={
+            "message_length": len(user_message),
+            "response_length": len(result["content"]),
+            "response_time_ms": result["response_time_ms"],
+        },
+    )
+
+    # Persist user state
+    usm = get_user_state_manager()
+    if usm:
+        usm.save_user_state(user_state)
+
+    return jsonify(result)
+
+
+@app.route("/api/chat/history", methods=["GET"])
+def chat_history():
+    """Get chat history for a specific instance."""
+    from potato.interaction_tracking import get_or_create_behavioral_data, ChatMessage
+
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    username = session['username']
+    instance_id = request.args.get("instance_id", "")
+
+    user_state = get_user_state(username)
+    if not user_state:
+        return jsonify({"error": "User state not found"}), 404
+
+    if not instance_id:
+        current_instance = user_state.get_current_instance()
+        if current_instance:
+            instance_id = current_instance.get_id()
+
+    # Get existing behavioral data (don't create if it doesn't exist)
+    bd_dict = user_state.instance_id_to_behavioral_data
+    if instance_id and instance_id in bd_dict:
+        bd = get_or_create_behavioral_data(bd_dict, instance_id)
+        messages = [
+            msg.to_dict() if hasattr(msg, 'to_dict') else msg
+            for msg in bd.chat_history
+        ]
+    else:
+        messages = []
+
+    return jsonify({"messages": messages, "instance_id": instance_id})
+
+
+@app.route("/api/chat/config", methods=["GET"])
+def chat_config():
+    """Get chat UI configuration."""
+    from potato.chat_manager import get_chat_manager
+
+    chat_manager = get_chat_manager()
+    if not chat_manager:
+        return jsonify({"enabled": False})
+
+    return jsonify(chat_manager.get_ui_config())
 
 
 @app.route('/shutdown', methods=['POST'])
