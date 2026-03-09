@@ -73,19 +73,75 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/agent-chat.css') }}">
     {% endif %}
 
+    {% if is_embedded_in_modal | default(false) %}
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            background: transparent;
+            min-height: 0 !important;
+        }
+
+        .container-fluid {
+            margin: 0;
+            padding: 0;
+            min-height: 0 !important;
+        }
+
+        #task_layout {
+            margin: 0;
+            border: 0;
+            box-shadow: none;
+            border-radius: 0;
+            background: transparent;
+            min-height: 0 !important;
+        }
+
+        #task_layout.shadcn-card,
+        #task_layout.shadcn-card.media-annotation,
+        #task_layout.shadcn-card.text-annotation,
+        #task_layout .shadcn-card-content,
+        #annotation-forms {
+            margin: 0;
+            padding: 0;
+            min-height: 0 !important;
+        }
+
+        #loading-state,
+        #error-state,
+        .potato-nav,
+        .potato-footer {
+            display: none !important;
+        }
+
+        #main-content {
+            display: block !important;
+            min-height: 0 !important;
+        }
+
+        #embedded-instructions-content {
+            margin: 0;
+            padding: 0.75rem 1rem;
+            min-height: 0 !important;
+        }
+    </style>
+    {% endif %}
+
     <!-- jQuery (required for span annotation) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
 </head>
 
 <body>
+    {% set embedded_in_modal = is_embedded_in_modal | default(false) %}
     <!-- Header navigation bar -->
+    {% if not embedded_in_modal %}
     <nav class="potato-navbar" role="navigation">
         <div class="navbar-inner">
             <div class="navbar-brand">
                 <span class="task-name">{{annotation_task_name}}</span>
             </div>
 
-            {% if not (is_readonly_instructions_view | default(false)) %}
+            {% if show_annotation_navigation | default(false) %}
             <div class="navbar-center">
                 <div class="annotation-status-indicator" id="annotation-status">
                     <span class="status-badge {{ 'labeled' if instance_has_annotations else 'unlabeled' }}">
@@ -122,28 +178,63 @@
                     <button type="button" class="goto-btn" id="go-to-btn">Go</button>
                 </div>
             </div>
+            {% endif %}
 
             <div class="navbar-end">
+                {% if show_annotation_navigation | default(false) %}
                 {% if is_adjudicator %}
                 <a href="/adjudicate" class="adjudicate-btn" title="Adjudication Mode">
                     <i class="fas fa-gavel"></i> Adjudicate
                 </a>
                 {% endif %}
                 {% if show_instructions_button | default(false) %}
-                <a href="{{ url_for('instructions_view') }}" class="adjudicate-btn" title="View Instructions" target="_blank" rel="noopener noreferrer">
+                <button type="button" class="adjudicate-btn" title="View Instructions"
+                        data-bs-toggle="modal" data-bs-target="#instructions-modal">
                     <i class="fas fa-book"></i> Instructions
-                </a>
+                </button>
+                {% endif %}
                 {% endif %}
                 <div class="user-pill">
                     <span class="username" id="username-display">{{username}}</span>
                     <a href="/logout" class="logout-btn">Logout</a>
                 </div>
             </div>
-            {% endif %}
         </div>
     </nav>
+    {% endif %}
+
+    {% if show_instructions_button | default(false) %}
+    <div class="modal fade" id="instructions-modal" tabindex="-1" aria-labelledby="instructions-modal-label" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="instructions-modal-label">
+                        <i class="fas fa-book me-2"></i>Instructions
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <iframe
+                        id="instructions-modal-iframe"
+                        title="Task instructions"
+                        loading="lazy"
+                        style="width: 100%; height: 40vh; border: 0;"
+                        src="{{ url_for('instructions_view') }}?embed=1"
+                        data-src="{{ url_for('instructions_view') }}?embed=1"
+                    ></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <div class="container-fluid">
+        {% if embedded_in_modal %}
+        <div id="embedded-instructions-content">
+            {{ TASK_LAYOUT }}
+            {{ var_elems | safe }}
+        </div>
+        {% else %}
         <!-- Main annotation area -->
         <div id="task_layout" class="shadcn-card mb-2 {% if has_image_annotation or has_video_annotation or has_audio_annotation %}media-annotation{% else %}text-annotation{% endif %}">
             <div class="shadcn-card-content">
@@ -193,7 +284,7 @@
         </div>
 
         <!-- Navigation buttons -->
-        {% if not (is_readonly_instructions_view | default(false)) %}
+        {% if is_annotation_phase | default(false) %}
         <div class="potato-nav">
             <button class="shadcn-button shadcn-button-outline" id="prev-btn" onclick="navigateToPrevious()">
                 <i class="fas fa-arrow-left me-2"></i>Previous
@@ -202,9 +293,18 @@
                 Next<i class="fas fa-arrow-right ms-2"></i>
             </button>
         </div>
+        {% elif show_phase_continue_button | default(false) %}
+        <div class="potato-nav" style="justify-content: center;">
+            <form method="post" action="{{ url_for('instructions') }}">
+                <button type="submit" class="shadcn-button shadcn-button-primary" id="phase-continue-btn">
+                    {{ phase_continue_label | default('Continue') }}<i class="fas fa-arrow-right ms-2"></i>
+                </button>
+            </form>
+        </div>
         {% endif %}
 
         <!-- Footer -->
+        {% if not embedded_in_modal %}
         <footer class="potato-footer">
             &copy; 2025 <a href="https://blablablab.si.umich.edu/">Blablablab</a>
             <span class="footer-sep">&middot;</span>
@@ -212,6 +312,8 @@
             <span class="footer-sep">&middot;</span>
             <a href="https://github.com/davidjurgens/potato#cite-us">Cite Us</a>
         </footer>
+        {% endif %}
+        {% endif %}
     </div>
 
     <!-- Bootstrap JS -->
@@ -225,6 +327,8 @@
             ui_debug: {{ 'true' if ui_debug else 'false' }},
             server_debug: {{ 'true' if server_debug else 'false' }},
             debug_phase: {{ debug_phase | tojson if debug_phase else 'null' }},
+            show_annotation_navigation: {{ 'true' if show_annotation_navigation | default(false) else 'false' }},
+            is_annotation_phase: {{ 'true' if is_annotation_phase | default(false) else 'false' }},
             api_key: "test_api_key",
             username: {{ username | tojson }},
             ui_config: {}
@@ -371,5 +475,43 @@
             }
         });
     </script>
+
+    {% if show_instructions_button | default(false) %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const modalEl = document.getElementById('instructions-modal');
+            const iframeEl = document.getElementById('instructions-modal-iframe');
+            if (!modalEl || !iframeEl) return;
+
+            const fitIframeHeightToContent = function() {
+                try {
+                    const iframeWindow = iframeEl.contentWindow;
+                    const doc = iframeWindow && iframeWindow.document;
+                    if (!doc || !doc.body) return;
+                    const bodyHeight = doc.body.scrollHeight || 0;
+                    const htmlHeight = doc.documentElement ? doc.documentElement.scrollHeight : 0;
+                    const contentHeight = Math.max(bodyHeight, htmlHeight);
+                    const maxHeight = Math.floor(window.innerHeight * 0.78);
+                    const targetHeight = Math.max(120, Math.min(contentHeight + 2, maxHeight));
+                    iframeEl.style.height = targetHeight + 'px';
+                } catch (e) {
+                    // Keep fallback size if sizing cannot be computed.
+                }
+            };
+
+            modalEl.addEventListener('show.bs.modal', function() {
+                if (!iframeEl.src || iframeEl.src === 'about:blank') {
+                    iframeEl.src = iframeEl.dataset.src;
+                }
+                setTimeout(fitIframeHeightToContent, 50);
+            });
+
+            modalEl.addEventListener('shown.bs.modal', fitIframeHeightToContent);
+            iframeEl.addEventListener('load', fitIframeHeightToContent);
+            window.addEventListener('resize', fitIframeHeightToContent);
+
+        });
+    </script>
+    {% endif %}
 </body>
 </html>

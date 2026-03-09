@@ -1369,6 +1369,11 @@ def instructions():
                 "task_layout_has_instance_slot", False
             ),
             allow_instance_display=False,
+            show_annotation_navigation=True,
+            show_phase_continue_button=True,
+            phase_continue_label="Start annotation",
+            is_annotation_phase=False,
+            is_embedded_in_modal=False,
         )
 
 
@@ -1397,6 +1402,7 @@ def instructions_view():
         page = next(iter(page_to_file.keys()))
 
     instructions_html_fname = usm.get_phase_html_fname(phase, page)
+    embed_mode = request.args.get("embed", "0").lower() in {"1", "true", "yes"}
     return render_template(
         instructions_html_fname,
         annotation_task_name=config.get("annotation_task_name", "Annotation Task"),
@@ -1412,6 +1418,10 @@ def instructions_view():
             "task_layout_has_instance_slot", False
         ),
         allow_instance_display=False,
+        show_annotation_navigation=False,
+        show_phase_continue_button=False,
+        is_annotation_phase=False,
+        is_embedded_in_modal=embed_mode,
         is_readonly_instructions_view=True,
     )
 

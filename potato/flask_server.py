@@ -1845,6 +1845,9 @@ def get_current_page_html(config, username):
             if hasattr(user_state, "get_assigned_instance_count")
             else 0
         ),
+        "show_annotation_navigation": phase != UserPhase.DONE,
+        "is_annotation_phase": False,
+        "is_embedded_in_modal": False,
         "ui_config": config.get("ui_config", {}),
         "show_instructions_button": usm.is_instructions_required(),
     }
@@ -2119,6 +2122,10 @@ def render_page_with_annotations(username) -> str:
         show_instructions_button=get_user_state_manager().is_instructions_required(),
         # Annotation status indicator
         instance_has_annotations=instance_has_annotations,
+        # Annotation-only controls
+        show_annotation_navigation=True,
+        is_annotation_phase=True,
+        is_embedded_in_modal=False,
         # ai=ai_hints,
         **kwargs,
     )

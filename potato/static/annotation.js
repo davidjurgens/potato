@@ -54,6 +54,17 @@ const boundEventHandlers = {
 
 let aiAssistantManger = new AIAssistantManager();
 
+function isAnnotationNavigationPage() {
+    if (window.config && window.config.is_annotation_phase === true) {
+        return true;
+    }
+
+    // Fallback for older templates: require nav buttons and an instance id value.
+    const hasNavButtons = Boolean(document.getElementById('prev-btn') && document.getElementById('next-btn'));
+    const instanceIdInput = document.getElementById('instance_id');
+    return hasNavButtons && Boolean(instanceIdInput && instanceIdInput.value);
+}
+
 /**
  * Flush any pending debounced save synchronously using navigator.sendBeacon().
  * Called from beforeunload and visibilitychange so annotations are not lost
@@ -459,12 +470,17 @@ function getCurrentOverlayCount() {
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function () {
-    loadCurrentInstance();
-    setupEventListeners();
-    // Initial validation check
-    validateRequiredFields();
-    // Initialize span manager integration
-    initializeSpanManagerIntegration();
+    if (isAnnotationNavigationPage()) {
+        loadCurrentInstance();
+        setupEventListeners();
+        // Initial validation check
+        validateRequiredFields();
+        // Initialize span manager integration
+        initializeSpanManagerIntegration();
+    } else {
+        // Non-annotation phases (instructions/consent/etc.) should render static content only.
+        setLoading(false);
+    }
     // Initialize display logic for conditional schemas
     if (typeof initDisplayLogic === 'function') {
         initDisplayLogic();
@@ -1702,14 +1718,14 @@ function setLoading(loading) {
     const nextBtn = document.getElementById('next-btn');
 
     if (loading) {
-        loadingState.style.display = 'block';
-        mainContent.style.display = 'none';
-        prevBtn.disabled = true;
-        nextBtn.disabled = true;
+        if (loadingState) loadingState.style.display = 'block';
+        if (mainContent) mainContent.style.display = 'none';
+        if (prevBtn) prevBtn.disabled = true;
+        if (nextBtn) nextBtn.disabled = true;
     } else {
-        loadingState.style.display = 'none';
-        mainContent.style.display = 'block';
-        prevBtn.disabled = false;
+        if (loadingState) loadingState.style.display = 'none';
+        if (mainContent) mainContent.style.display = 'block';
+        if (prevBtn) prevBtn.disabled = false;
         // Don't enable next button here - let validateRequiredFields handle it
         validateRequiredFields();
     }
