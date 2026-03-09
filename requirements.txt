@@ -1,3 +1,11 @@
+# Development requirements: installs ALL dependencies (core + optional).
+# For package dependency metadata, see setup.py (install_requires / extras_require).
+#
+# Install everything:  pip install -r requirements.txt
+# Install core only:   pip install .
+# Install with extras: pip install ".[ai,formats,viz,export,auth]"
+
+# --- Core dependencies (also declared in setup.py install_requires) ---
 beautifulsoup4>=4.10.0
 click>=8.0.3
 Flask>=3.0.0
