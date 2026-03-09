@@ -1101,6 +1101,26 @@ class ItemStateManager:
             for item_id in to_assign:
                 user_state.assign_instance(self.instance_id_to_instance[item_id])
             return len(to_assign)
+        elif self.assignment_strategy == AssignmentStrategy.LEAST_ANNOTATED:
+            # Least annotated strategy: prioritize items with fewest annotations
+            candidates = []
+            for iid in list(self.remaining_instance_ids):
+                annotation_count = len(self.instance_annotators[iid])
+                if self.max_annotations_per_item >= 0 and annotation_count >= self.max_annotations_per_item:
+                    if iid in self.remaining_instance_ids:
+                        self.remaining_instance_ids.remove(iid)
+                    continue
+                if iid not in user_state.get_assigned_instance_ids():
+                    candidates.append((iid, annotation_count))
+            if not candidates:
+                return 0
+            # Sort by annotation count (fewest first), then by id for determinism
+            candidates.sort(key=lambda x: (x[1], x[0]))
+            assigned = 0
+            for item_id, _ in candidates[:instances_to_assign]:
+                user_state.assign_instance(self.instance_id_to_instance[item_id])
+                assigned += 1
+            return assigned
         elif self.assignment_strategy == AssignmentStrategy.FIXED_ORDER:
             # Fixed order assignment strategy
             assigned = 0
@@ -1273,7 +1293,18 @@ class ItemStateManager:
         else:
             # Default fallback to fixed order
             self.logger.warning(f"Unknown assignment strategy: {self.assignment_strategy}, falling back to fixed order")
-            return self.assign_instances_to_user_fixed_order(user_state, instances_to_assign)
+            assigned = 0
+            for iid in list(self.remaining_instance_ids):
+                if self.max_annotations_per_item >= 0 and len(self.instance_annotators[iid]) >= self.max_annotations_per_item:
+                    if iid in self.remaining_instance_ids:
+                        self.remaining_instance_ids.remove(iid)
+                    continue
+                if iid not in user_state.get_assigned_instance_ids():
+                    user_state.assign_instance(self.instance_id_to_instance[iid])
+                    assigned += 1
+                    if assigned >= instances_to_assign:
+                        break
+            return assigned
 
     def _assign_category_based_dynamic(self, user_state: 'UserState', instances_to_assign: int) -> int:
         """
