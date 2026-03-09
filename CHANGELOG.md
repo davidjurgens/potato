@@ -2,6 +2,10 @@
 
 All notable changes to the Potato annotation platform are documented in this file.
 
+## [this repo] - My version
+
+- Changed the instance display logic in `templates/base_template_v2.html` to not insert instances at the top pf the page by default. 
+
 ## [2.2.0] - Comprehensive Annotation & Export Platform
 
 9 new annotation schemas, MACE annotator competence estimation, diversity ordering, pluggable export system with 8 formats, extended remote data sources, standard survey instruments, and annotation navigation.
