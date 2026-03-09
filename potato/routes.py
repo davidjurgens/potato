@@ -1364,6 +1364,7 @@ def instructions():
             server_debug=config.get("server_debug", False),
             debug_phase=config.get("debug_phase"),
             ui_config=config.get("ui_config", {}),
+            show_instructions_button=usm.is_instructions_required(),
         )
 
 
@@ -1402,6 +1403,7 @@ def instructions_view():
         server_debug=config.get("server_debug", False),
         debug_phase=config.get("debug_phase"),
         ui_config=config.get("ui_config", {}),
+        show_instructions_button=usm.is_instructions_required(),
     )
 
 
