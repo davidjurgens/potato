@@ -46,9 +46,10 @@ def compute_config_md5(config):
     return hashlib.md5(config_str.encode('utf-8')).hexdigest()
 
 
-def generate_annotation_layout_file(config: dict, annotation_schemes: list[dict]) -> str:
+def generate_annotation_layout_file(config: dict, annotation_schemes: list[dict], layout_name: str = None) -> str:
     """
     Generate a dedicated annotation layout file in the task directory under layouts/task_layout.html.
+    If layout_name is provided, uses task_layout_{layout_name}.html instead.
     """
     task_dir = config.get("task_dir")
     if not task_dir:
@@ -60,7 +61,8 @@ def generate_annotation_layout_file(config: dict, annotation_schemes: list[dict]
         os.makedirs(layout_dir)
 
     # Generate the layout file path
-    layout_file_path = os.path.join(layout_dir, DEFAULT_ANNOTATION_LAYOUT_FILENAME)
+    filename = f"task_layout_{layout_name}.html" if layout_name else DEFAULT_ANNOTATION_LAYOUT_FILENAME
+    layout_file_path = os.path.join(layout_dir, filename)
 
     # Generate the HTML layout content
     schema_layouts = ""
@@ -97,24 +99,30 @@ def generate_annotation_layout_file(config: dict, annotation_schemes: list[dict]
     return layout_file_path
 
 
-def get_or_generate_annotation_layout(config: dict, annotation_schemes: list[dict]) -> str:
+def get_or_generate_annotation_layout(config: dict, annotation_schemes: list[dict], layout_name: str = None) -> str:
     """
     Get the annotation layout file path, generating it if it doesn't exist or if the config hash has changed.
+    If layout_name is provided, uses task_layout_{layout_name}.html instead.
     """
     task_dir = config.get("task_dir")
     if not task_dir:
         raise ValueError("task_dir is required in config")
     layout_dir = os.path.join(task_dir, DEFAULT_ANNOTATION_LAYOUT_SUBDIR)
-    layout_file_path = os.path.join(layout_dir, DEFAULT_ANNOTATION_LAYOUT_FILENAME)
+    filename = f"task_layout_{layout_name}.html" if layout_name else DEFAULT_ANNOTATION_LAYOUT_FILENAME
+    layout_file_path = os.path.join(layout_dir, filename)
 
     config_hash = compute_config_md5(config)
 
     # Also hash the actual generated schema content to detect code changes
     # (e.g., if bws.py changes separators, the config hash won't change but the output will)
+    # NOTE: must match the concatenation format used in generate_annotation_layout_file
+    # (each layout followed by "\n") so hashes are consistent
     schema_content_hash = hashlib.md5()
+    schema_layouts = ""
     for annotation_scheme in annotation_schemes:
         layout_html, _ = generate_schematic(annotation_scheme)
-        schema_content_hash.update(layout_html.encode('utf-8'))
+        schema_layouts += layout_html + "\n"
+    schema_content_hash.update(schema_layouts.encode('utf-8'))
     combined_hash = f"{config_hash}_{schema_content_hash.hexdigest()}"
 
     # Check if the layout file already exists and if the hash matches
@@ -133,7 +141,7 @@ def get_or_generate_annotation_layout(config: dict, annotation_schemes: list[dic
 
     # Generate the layout file if it doesn't exist or hash mismatches
     logger.info(f"Annotation layout file not found or hash mismatch, generating: {layout_file_path}")
-    return generate_annotation_layout_file(config, annotation_schemes)
+    return generate_annotation_layout_file(config, annotation_schemes, layout_name=layout_name)
 
 
 def generate_schematic(annotation_scheme):
@@ -529,12 +537,12 @@ def generate_html_from_schematic(annotation_schemas: list[dict],
     else:
         # Use the dedicated annotation layout file system (auto-generated)
         try:
-            layout_file_path = get_or_generate_annotation_layout(config, annotation_schemas)
+            layout_file_path = get_or_generate_annotation_layout(config, annotation_schemas, layout_name=phase_name)
 
             # Read the generated layout file
             with open(layout_file_path, "rt", encoding="utf-8") as f:
                 task_html_layout = "".join(f.readlines())
-            
+
         except Exception as e:
             logger.warning(f"Failed to use dedicated layout file: {e}. Falling back to inline generation.")
 
