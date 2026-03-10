@@ -293,3 +293,166 @@ class TestSpanAnnotationIntegration:
         assert '<b>bold</b>' in result  # Allowed tag preserved
         assert '&lt;script&gt;' in result  # Dangerous tag escaped
         assert '<script>' not in result
+
+
+class TestStructuralElements:
+    """Test structural HTML elements added in Issue #120."""
+
+    def test_paragraph_preserved(self):
+        """<p> tags should be preserved."""
+        result = sanitize_html('<p>A paragraph.</p>')
+        assert '<p>A paragraph.</p>' in result
+
+    def test_unordered_list_preserved(self):
+        """<ul>/<li> tags should be preserved."""
+        result = sanitize_html('<ul><li>Item 1</li><li>Item 2</li></ul>')
+        assert '<ul>' in result
+        assert '<li>Item 1</li>' in result
+        assert '</ul>' in result
+
+    def test_ordered_list_preserved(self):
+        """<ol>/<li> tags should be preserved."""
+        result = sanitize_html('<ol><li>First</li><li>Second</li></ol>')
+        assert '<ol>' in result
+        assert '<li>First</li>' in result
+
+    def test_horizontal_rule_preserved(self):
+        """<hr> tags should be preserved."""
+        result = sanitize_html('Above<hr>Below')
+        assert '<hr>' in result or '<hr />' in result
+
+    def test_heading_elements_preserved(self):
+        """<h1> through <h6> should be preserved."""
+        for level in range(1, 7):
+            tag = f'h{level}'
+            result = sanitize_html(f'<{tag}>Heading {level}</{tag}>')
+            assert f'<{tag}>Heading {level}</{tag}>' in result
+
+    def test_table_elements_preserved(self):
+        """<table>, <tr>, <td>, <th> should be preserved."""
+        html = '<table><thead><tr><th>Header</th></tr></thead><tbody><tr><td>Cell</td></tr></tbody></table>'
+        result = sanitize_html(html)
+        assert '<table>' in result
+        assert '<thead>' in result
+        assert '<tbody>' in result
+        assert '<tr>' in result
+        assert '<th>Header</th>' in result
+        assert '<td>Cell</td>' in result
+
+    def test_table_attributes_preserved(self):
+        """colspan, rowspan, scope should be preserved on table cells."""
+        result = sanitize_html('<th colspan="2" scope="col">Wide Header</th>')
+        assert 'colspan="2"' in result
+        assert 'scope="col"' in result
+
+        result = sanitize_html('<td rowspan="3">Tall Cell</td>')
+        assert 'rowspan="3"' in result
+
+    def test_code_and_pre_preserved(self):
+        """<code>, <pre>, <blockquote> should be preserved."""
+        result = sanitize_html('<pre><code>x = 1</code></pre>')
+        assert '<pre>' in result
+        assert '<code>x = 1</code>' in result
+
+        result = sanitize_html('<blockquote>A quote.</blockquote>')
+        assert '<blockquote>A quote.</blockquote>' in result
+
+    def test_inline_semantics_preserved(self):
+        """<sub>, <sup>, <small> should be preserved."""
+        assert '<sub>2</sub>' in sanitize_html('H<sub>2</sub>O')
+        assert '<sup>2</sup>' in sanitize_html('x<sup>2</sup>')
+        assert '<small>' in sanitize_html('<small>Fine print</small>')
+
+    def test_issue_120_example(self):
+        """The exact example from Issue #120 should render as HTML."""
+        html = '<h3>Instructions</h3><p>Please read carefully.</p><ul><li>Step 1</li><li>Step 2</li></ul>'
+        result = sanitize_html(html)
+        assert '<h3>Instructions</h3>' in result
+        assert '<p>Please read carefully.</p>' in result
+        assert '<ul>' in result
+        assert '<li>Step 1</li>' in result
+        assert '<li>Step 2</li>' in result
+
+
+class TestLinkSanitization:
+    """Test <a> link sanitization (Issue #120)."""
+
+    def test_safe_link_preserved(self):
+        """<a> with safe https href should be preserved."""
+        result = sanitize_html('<a href="https://example.com">Link</a>')
+        assert '<a href="https://example.com">Link</a>' in result
+
+    def test_link_with_title_preserved(self):
+        """<a> with title attribute should be preserved."""
+        result = sanitize_html('<a href="https://example.com" title="Example">Link</a>')
+        assert 'href="https://example.com"' in result
+        assert 'title="Example"' in result
+
+    def test_javascript_href_blocked(self):
+        """<a href="javascript:..."> should have the javascript: protocol stripped."""
+        result = sanitize_html('<a href="javascript:alert(1)">Click me</a>')
+        assert 'javascript:' not in result
+
+    def test_data_href_blocked(self):
+        """<a href="data:..."> should have href stripped."""
+        result = sanitize_html('<a href="data:text/html,<script>alert(1)</script>">Bad</a>')
+        assert 'data:' not in result
+
+    def test_target_blank_gets_noopener(self):
+        """<a target="_blank"> should auto-get rel="noopener noreferrer"."""
+        result = sanitize_html('<a href="https://example.com" target="_blank">Link</a>')
+        assert 'target="_blank"' in result
+        assert 'rel="noopener noreferrer"' in result
+
+    def test_target_blank_with_existing_rel(self):
+        """If rel is already present, don't duplicate it."""
+        result = sanitize_html('<a href="https://example.com" target="_blank" rel="noopener">Link</a>')
+        assert 'target="_blank"' in result
+        # Should have rel (either original or auto-added), but not duplicated
+        assert result.count('rel=') == 1
+
+
+class TestExpandedCssProperties:
+    """Test expanded CSS properties (Issue #120)."""
+
+    def test_text_align_allowed(self):
+        result = _sanitize_style('text-align: center;')
+        assert 'text-align: center' in result
+
+    def test_font_size_allowed(self):
+        result = _sanitize_style('font-size: 14px;')
+        assert 'font-size: 14px' in result
+
+    def test_font_family_allowed(self):
+        result = _sanitize_style('font-family: Arial, sans-serif;')
+        assert 'font-family: Arial, sans-serif' in result
+
+    def test_line_height_allowed(self):
+        result = _sanitize_style('line-height: 1.5;')
+        assert 'line-height: 1.5' in result
+
+    def test_max_width_allowed(self):
+        result = _sanitize_style('max-width: 600px;')
+        assert 'max-width: 600px' in result
+
+    def test_margin_shorthand_variants_allowed(self):
+        result = _sanitize_style('margin-top: 10px; margin-bottom: 20px;')
+        assert 'margin-top: 10px' in result
+        assert 'margin-bottom: 20px' in result
+
+    def test_padding_shorthand_variants_allowed(self):
+        result = _sanitize_style('padding-left: 5px; padding-right: 5px;')
+        assert 'padding-left: 5px' in result
+        assert 'padding-right: 5px' in result
+
+    def test_border_radius_allowed(self):
+        result = _sanitize_style('border-radius: 4px;')
+        assert 'border-radius: 4px' in result
+
+    def test_border_collapse_allowed(self):
+        result = _sanitize_style('border-collapse: collapse;')
+        assert 'border-collapse: collapse' in result
+
+    def test_list_style_type_allowed(self):
+        result = _sanitize_style('list-style-type: disc;')
+        assert 'list-style-type: disc' in result
