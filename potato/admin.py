@@ -271,6 +271,7 @@ class AdminDashboard:
                             "phase": timing_data.phase,
                             "has_assignments": timing_data.has_assignments,
                             "remaining_assignments": timing_data.remaining_assignments,
+                            "max_assignments": user_state.get_max_assignments(),
                             "last_activity": timing_data.last_activity.isoformat() if timing_data.last_activity else None,
                             "current_instance_time": timing_data.current_instance_time,
 

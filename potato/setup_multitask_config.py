@@ -149,14 +149,14 @@ def main():
             if os.path.isdir(multitask_config["surveyflow_path"] + file):
                 continue
             # Read the surveyflow file
-            with open(multitask_config["surveyflow_path"] + file, "r") as f:
+            with open(multitask_config["surveyflow_path"] + file, "r", encoding="utf-8") as f:
                 page = f.read()
             # Replace task keys with task-specific text
             for key in key2text:
                 page = page.replace(key, key2text[key][task])
             page = page.replace("[TASK]", task)
             # Write the specialized surveyflow file
-            with open(surveyflow_output_path + task + "-" + file, "wt") as f:
+            with open(surveyflow_output_path + task + "-" + file, "wt", encoding="utf-8") as f:
                 f.write(page)
 
         # for key in ["surveyflow_output_path", ]

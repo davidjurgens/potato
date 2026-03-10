@@ -169,11 +169,15 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
         el_json = json_module.dumps(el_config)
         entity_linking_attr = f' data-entity-linking=\'{escape_html_content(el_json)}\''
 
+    # Check for show_span_labels option (default: true)
+    show_span_labels = annotation_scheme.get("show_span_labels", True)
+    show_labels_attr = '' if show_span_labels else ' data-show-span-labels="false"'
+
     # Get layout attributes for grid positioning
     layout_attrs = generate_layout_attributes(annotation_scheme)
 
     schematic = f"""
-    <form id="{escape_html_content(scheme_name)}" class="annotation-form span shadcn-span-container" action="/action_page.php" data-annotation-id="{escape_html_content(str(annotation_scheme.get("annotation_id", "")))}"{target_field_attr}{discontinuous_attr}{entity_linking_attr} {layout_attrs}>
+    <form id="{escape_html_content(scheme_name)}" class="annotation-form span shadcn-span-container" action="/action_page.php" data-annotation-id="{escape_html_content(str(annotation_scheme.get("annotation_id", "")))}"{target_field_attr}{discontinuous_attr}{entity_linking_attr}{show_labels_attr} {layout_attrs}>
             {get_ai_wrapper()}
         <fieldset schema="{escape_html_content(scheme_name)}">
             <legend class="shadcn-span-title">{escape_html_content(annotation_scheme["description"])}</legend>

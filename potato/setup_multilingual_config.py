@@ -150,14 +150,14 @@ def main():
             if os.path.isdir(multilingual_config["surveyflow_path"] + file):
                 continue
             # Read the surveyflow file
-            with open(multilingual_config["surveyflow_path"] + file, "r") as f:
+            with open(multilingual_config["surveyflow_path"] + file, "r", encoding="utf-8") as f:
                 page = f.read()
             # Replace translation keys with language-specific text
             for key in key2text:
                 page = page.replace(key, key2text[key][lang])
             page = page.replace("[LANGUAGE]", lang)
             # Write the localized surveyflow file
-            with open(surveyflow_output_path + lang + "-" + file, "wt") as f:
+            with open(surveyflow_output_path + lang + "-" + file, "wt", encoding="utf-8") as f:
                 f.write(page)
 
         # for key in ["surveyflow_output_path", ]

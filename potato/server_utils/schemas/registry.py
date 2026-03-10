@@ -251,7 +251,7 @@ def _register_builtin_schemas():
             name="radio",
             generator=generate_radio_layout,
             required_fields=["name", "description", "labels"],
-            optional_fields=["horizontal", "label_requirement", "sequential_key_binding", "has_free_response"],
+            optional_fields=["horizontal", "label_requirement", "sequential_key_binding", "has_free_response", "option_randomization", "dynamic_options", "dynamic_options_field"],
             supports_keybindings=True,
             description="Single-choice radio button selection"
         ),
@@ -259,7 +259,7 @@ def _register_builtin_schemas():
             name="multiselect",
             generator=generate_multiselect_layout,
             required_fields=["name", "description", "labels"],
-            optional_fields=["display_config", "label_requirement", "sequential_key_binding", "video_as_label", "has_free_response"],
+            optional_fields=["display_config", "label_requirement", "sequential_key_binding", "video_as_label", "has_free_response", "option_randomization", "dynamic_options", "dynamic_options_field"],
             supports_keybindings=True,
             description="Multiple-choice checkbox selection"
         ),
@@ -307,7 +307,7 @@ def _register_builtin_schemas():
             name="span",
             generator=generate_span_layout,
             required_fields=["name", "description", "labels"],
-            optional_fields=["sequential_key_binding", "bad_text_label", "title", "allow_discontinuous", "entity_linking"],
+            optional_fields=["sequential_key_binding", "bad_text_label", "title", "allow_discontinuous", "entity_linking", "show_span_labels"],
             supports_keybindings=True,
             description="Text span annotation/highlighting with optional entity linking to knowledge bases"
         ),
@@ -315,7 +315,7 @@ def _register_builtin_schemas():
             name="select",
             generator=generate_select_layout,
             required_fields=["name", "description", "labels"],
-            optional_fields=["label_requirement"],
+            optional_fields=["label_requirement", "option_randomization", "dynamic_options", "dynamic_options_field"],
             supports_keybindings=False,
             description="Dropdown selection"
         ),
@@ -323,7 +323,7 @@ def _register_builtin_schemas():
             name="pure_display",
             generator=generate_pure_display_layout,
             required_fields=["name", "description"],
-            optional_fields=["labels"],
+            optional_fields=["labels", "allow_html"],
             supports_keybindings=False,
             description="Display-only content (instructions, headers)"
         ),

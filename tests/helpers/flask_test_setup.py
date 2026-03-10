@@ -614,6 +614,35 @@ class FlaskTestServer:
 
                 app.permanent_session_lifetime = timedelta(days=config.get("session_lifetime_days", 2))
 
+                # Add context processor for template variables (same as create_app)
+                @app.context_processor
+                def inject_template_context():
+                    from potato.logging_config import is_ui_debug_enabled, is_server_debug_enabled
+                    ui_lang_defaults = {
+                        'next_button': 'Next',
+                        'previous_button': 'Previous',
+                        'labeled_badge': 'Labeled',
+                        'not_labeled_badge': 'Not labeled',
+                        'submit_button': 'Submit',
+                        'progress_label': 'Progress',
+                        'go_button': 'Go',
+                        'logout': 'Logout',
+                        'loading': 'Loading annotation interface...',
+                        'error_heading': 'Error',
+                        'retry_button': 'Retry',
+                        'adjudicate': 'Adjudicate',
+                    }
+                    ui_lang_config = config.get('ui_language', {})
+                    ui_lang = {**ui_lang_defaults, **ui_lang_config}
+                    return {
+                        'ui_debug': is_ui_debug_enabled(),
+                        'server_debug': is_server_debug_enabled(),
+                        'debug_mode': config.get('debug', False),
+                        'debug_phase': config.get('debug_phase'),
+                        'annotation_task_name': config.get('annotation_task_name', 'Annotation Task'),
+                        'ui_lang': ui_lang,
+                    }
+
                 # Configure routes
                 from potato.routes import configure_routes
                 configure_routes(app, config)

@@ -1256,7 +1256,7 @@ def load_phase_data(config: dict) -> None:
                         if not os.path.exists(generated_dir):
                             os.makedirs(generated_dir)
                         output_html_fname = os.path.join(generated_dir, site_name)
-                        with open(output_html_fname, "wt") as outf:
+                        with open(output_html_fname, "wt", encoding="utf-8") as outf:
                             outf.write(html_template)
 
                         user_state_manager = get_user_state_manager()
@@ -2061,10 +2061,10 @@ def render_page_with_annotations(username) -> str:
                             option = input_field.findChildren("option", {"value": value})[0]
                             option["selected"] = "selected"
 
-    # randomize the order of options for multirate schema
+    # randomize the order of options for schemas that support it
     selected_schemas_for_option_randomization = []
     for it in config['annotation_schemes']:
-        if it['annotation_type'] == 'multirate' and it.get('option_randomization'):
+        if it.get('option_randomization') and it['annotation_type'] in ('multirate', 'radio', 'multiselect', 'select'):
             selected_schemas_for_option_randomization.append(it['description'])
 
 
@@ -2075,6 +2075,15 @@ def render_page_with_annotations(username) -> str:
     soup = add_ai_hints(soup, instance_id)
 
     rendered_html = str(soup)
+
+    # Filter options per instance based on dynamic_options config
+    dynamic_option_schemes = [
+        s for s in config.get('annotation_schemes', [])
+        if s.get('dynamic_options') and s['annotation_type'] in ('radio', 'multiselect', 'select')
+    ]
+    if dynamic_option_schemes:
+        soup = filter_dynamic_options(soup, dynamic_option_schemes, item.get_data())
+        rendered_html = str(soup)
 
     # Populate dynamic multirate options from instance data
     has_dynamic_multirate = any(
@@ -2231,30 +2240,133 @@ def randomize_options(soup, legend_names, seed):
         # Find the legend within the current fieldset
         legend = fieldset.find('legend')
         if legend and legend.string in legend_names:
-            # Legend found, set the flag and break the loop
+            # Legend found, set the flag
             legend_found = True
 
-            # Find the table within the fieldset
-            table = fieldset.find('table')
-            if not table:
-                logger.debug("Table not found within the fieldset.")
-                continue
+            # Determine the parent form's annotation type
+            parent_form = fieldset.find_parent('form')
+            annotation_type = parent_form.get('data-annotation-type', '') if parent_form else ''
 
-            # Get the list of tr elements excluding the first one (title)
-            tr_elements = table.find_all('tr')[1:]
+            if annotation_type == 'multirate':
+                # Multirate: shuffle <tr> rows in table (skip header row)
+                table = fieldset.find('table')
+                if not table:
+                    logger.debug("Table not found within the fieldset.")
+                    continue
+                tr_elements = table.find_all('tr')[1:]
+                random.shuffle(tr_elements)
+                for tr in tr_elements:
+                    table.append(tr)
 
-            # Shuffle the tr elements based on the given random seed
-            random.shuffle(tr_elements)
+            elif annotation_type == 'radio':
+                # Radio: shuffle <div class="shadcn-radio-option"> elements
+                options_container = fieldset.find('div', class_='shadcn-radio-options')
+                if not options_container:
+                    options_container = fieldset
+                option_divs = options_container.find_all('div', class_='shadcn-radio-option', recursive=False)
+                if option_divs:
+                    random.shuffle(option_divs)
+                    for div in option_divs:
+                        options_container.append(div)
 
-            # Insert the shuffled tr elements back into the tbody
-            for tr in tr_elements:
-                table.append(tr)
+            elif annotation_type == 'multiselect':
+                # Multiselect: shuffle checkbox option divs within the grid
+                grid = fieldset.find('div', class_='shadcn-multiselect-grid')
+                if not grid:
+                    grid = fieldset
+                option_divs = grid.find_all('div', class_='shadcn-multiselect-option', recursive=False)
+                if option_divs:
+                    random.shuffle(option_divs)
+                    for div in option_divs:
+                        grid.append(div)
+
+            elif annotation_type == 'select':
+                # Select: shuffle <option> elements (skip first if it's a placeholder)
+                select_el = fieldset.find('select')
+                if select_el:
+                    options = select_el.find_all('option')
+                    # Keep placeholder (first option with empty value) in place
+                    placeholder = None
+                    shuffleable = []
+                    for opt in options:
+                        if not placeholder and (opt.get('value', '') == '' or opt.get('disabled') is not None):
+                            placeholder = opt
+                        else:
+                            shuffleable.append(opt)
+                    random.shuffle(shuffleable)
+                    # Clear and re-insert
+                    select_el.clear()
+                    if placeholder:
+                        select_el.append(placeholder)
+                    for opt in shuffleable:
+                        select_el.append(opt)
+            else:
+                logger.debug(f"Unsupported annotation type for randomization: {annotation_type}")
 
     # Check if any legend was found
     if not legend_found:
         logger.debug("No matching legends found within any fieldset.")
 
     return soup
+
+def filter_dynamic_options(soup, schemes, instance_data):
+    """
+    Filter annotation options per instance based on dynamic_options config.
+
+    Each scheme can specify a `dynamic_options_field` that references a field
+    in the instance data containing a list of visible option labels.
+    Options not in the list are removed from the DOM.
+
+    Args:
+        soup: BeautifulSoup page object
+        schemes: List of annotation scheme dicts with dynamic_options enabled
+        instance_data: The current instance's data dictionary
+    """
+    for scheme in schemes:
+        field_name = scheme.get('dynamic_options_field', 'visible_labels')
+        visible_labels = instance_data.get(field_name)
+        if visible_labels is None:
+            continue  # No filtering for this instance
+
+        if isinstance(visible_labels, str):
+            visible_labels = [visible_labels]
+
+        visible_set = set(visible_labels)
+        schema_name = scheme['name']
+        annotation_type = scheme['annotation_type']
+
+        # Find the form for this schema
+        form = soup.find('form', {'data-schema-name': schema_name})
+        if not form:
+            form = soup.find('form', id=schema_name)
+        if not form:
+            continue
+
+        if annotation_type == 'radio':
+            for option_div in form.find_all('div', class_='shadcn-radio-option'):
+                input_el = option_div.find('input', type='radio')
+                if input_el and input_el.get('value') not in visible_set:
+                    option_div.decompose()
+
+        elif annotation_type == 'multiselect':
+            for option_div in form.find_all('div', class_='shadcn-multiselect-option'):
+                input_el = option_div.find('input', type='checkbox')
+                if input_el and input_el.get('value') not in visible_set:
+                    option_div.decompose()
+
+        elif annotation_type == 'select':
+            select_el = form.find('select')
+            if select_el:
+                for option in select_el.find_all('option'):
+                    val = option.get('value', '')
+                    # Keep placeholder options (empty value or disabled)
+                    if val == '' or option.get('disabled') is not None:
+                        continue
+                    if val not in visible_set:
+                        option.decompose()
+
+    return soup
+
 
 def map_user_id_to_digit(user_id_str):
     # Convert the user_id_str to an integer using a hash function
@@ -2569,6 +2681,25 @@ def create_app():
     def inject_template_context():
         """Inject debug settings and common config values into all templates."""
         from potato.logging_config import is_ui_debug_enabled, is_server_debug_enabled
+
+        # Build ui_lang dict with defaults, overridden by config
+        ui_lang_defaults = {
+            'next_button': 'Next',
+            'previous_button': 'Previous',
+            'labeled_badge': 'Labeled',
+            'not_labeled_badge': 'Not labeled',
+            'submit_button': 'Submit',
+            'progress_label': 'Progress',
+            'go_button': 'Go',
+            'logout': 'Logout',
+            'loading': 'Loading annotation interface...',
+            'error_heading': 'Error',
+            'retry_button': 'Retry',
+            'adjudicate': 'Adjudicate',
+        }
+        ui_lang_config = config.get('ui_language', {})
+        ui_lang = {**ui_lang_defaults, **ui_lang_config}
+
         return {
             'ui_debug': is_ui_debug_enabled(),
             'server_debug': is_server_debug_enabled(),
@@ -2576,6 +2707,8 @@ def create_app():
             'debug_phase': config.get('debug_phase'),
             # Add common config values needed by templates
             'annotation_task_name': config.get('annotation_task_name', 'Annotation Task'),
+            # Multilingual UI strings
+            'ui_lang': ui_lang,
         }
 
     return app

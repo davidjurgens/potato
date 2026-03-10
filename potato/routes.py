@@ -2491,6 +2491,125 @@ def admin_api_config():
         return jsonify(result)
 
 
+@app.route("/admin/api/user/<username>/set_instances", methods=["POST"])
+def admin_api_set_user_instances(username):
+    """
+    Set the maximum number of instances for a specific user.
+    Admin-only endpoint requiring API key.
+
+    JSON Body:
+        max_instances (int): New max instance count. Use -1 for unlimited.
+
+    Returns:
+        flask.Response: JSON response with updated user info
+    """
+    data = request.get_json()
+    if not data or 'max_instances' not in data:
+        return jsonify({"error": "max_instances is required"}), 400
+
+    max_instances = int(data['max_instances'])
+
+    usm = get_user_state_manager()
+    user_state = usm.get_user_state(username)
+    if not user_state:
+        return jsonify({"error": f"User '{username}' not found"}), 404
+
+    # Don't allow setting below current annotation count (can't un-annotate)
+    current_count = user_state.get_annotation_count()
+    if max_instances >= 0 and max_instances < current_count:
+        max_instances = current_count
+
+    user_state.set_max_assignments(max_instances)
+
+    return jsonify({
+        "success": True,
+        "username": username,
+        "max_instances": max_instances,
+        "current_annotations": current_count
+    })
+
+
+@app.route("/admin/api/stale_assignments", methods=["GET"])
+def admin_api_stale_assignments():
+    """
+    Get a list of stale instance assignments (assigned but not annotated past timeout).
+
+    Returns:
+        flask.Response: JSON with stale assignment info
+    """
+    import time
+    ism = get_item_state_manager()
+    usm = get_user_state_manager()
+    timeout_hours = ism.reclaim_timeout_hours
+    cutoff = time.time() - (timeout_hours * 3600)
+    stale = []
+
+    for iid, user_timestamps in ism.assignment_timestamps.items():
+        for username, timestamp in user_timestamps.items():
+            user_state = usm.get_user_state(username)
+            if user_state and user_state.has_annotated(iid):
+                continue
+            hours_ago = (time.time() - timestamp) / 3600
+            stale.append({
+                'instance_id': iid,
+                'username': username,
+                'assigned_hours_ago': round(hours_ago, 1),
+                'is_stale': timestamp < cutoff
+            })
+
+    stale.sort(key=lambda x: x['assigned_hours_ago'], reverse=True)
+    return jsonify({
+        'stale_assignments': stale,
+        'timeout_hours': timeout_hours,
+        'reclaim_enabled': ism.reclaim_enabled
+    })
+
+
+@app.route("/admin/api/reclaim_instance", methods=["POST"])
+def admin_api_reclaim_instance():
+    """
+    Manually reclaim a specific instance assignment from a user.
+
+    JSON Body:
+        instance_id (str): The instance to reclaim
+        username (str): The user to reclaim from
+    """
+    data = request.get_json()
+    if not data or 'instance_id' not in data or 'username' not in data:
+        return jsonify({"error": "instance_id and username are required"}), 400
+
+    iid = data['instance_id']
+    username = data['username']
+
+    ism = get_item_state_manager()
+    usm = get_user_state_manager()
+    user_state = usm.get_user_state(username)
+
+    if not user_state:
+        return jsonify({"error": f"User '{username}' not found"}), 404
+
+    if user_state.has_annotated(iid):
+        return jsonify({"error": "Cannot reclaim: user has already annotated this instance"}), 400
+
+    # Remove from user's assignment
+    assigned_ids = user_state.get_assigned_instance_ids()
+    if iid in assigned_ids:
+        assigned_ids.discard(iid)
+        if iid in user_state.instance_id_ordering:
+            user_state.instance_id_ordering.remove(iid)
+
+    # Return to pool
+    if iid not in ism.completed_instance_ids and iid not in ism.remaining_instance_ids:
+        ism.remaining_instance_ids.append(iid)
+
+    # Clean up tracking
+    ism.instance_annotators[iid].discard(username)
+    if iid in ism.assignment_timestamps and username in ism.assignment_timestamps[iid]:
+        del ism.assignment_timestamps[iid][username]
+
+    return jsonify({"success": True, "instance_id": iid, "username": username})
+
+
 @app.route("/admin/api/questions", methods=["GET"])
 def admin_api_questions():
     """
@@ -6032,6 +6151,9 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/api/annotators", "admin_api_annotators", admin_api_annotators, methods=["GET"])
     app.add_url_rule("/admin/api/instances", "admin_api_instances", admin_api_instances, methods=["GET"])
     app.add_url_rule("/admin/api/config", "admin_api_config", admin_api_config, methods=["GET", "POST"])
+    app.add_url_rule("/admin/api/user/<username>/set_instances", "admin_api_set_user_instances", admin_api_set_user_instances, methods=["POST"])
+    app.add_url_rule("/admin/api/stale_assignments", "admin_api_stale_assignments", admin_api_stale_assignments, methods=["GET"])
+    app.add_url_rule("/admin/api/reclaim_instance", "admin_api_reclaim_instance", admin_api_reclaim_instance, methods=["POST"])
     app.add_url_rule("/admin/api/questions", "admin_api_questions", admin_api_questions, methods=["GET"])
     app.add_url_rule("/admin/api/annotation_history", "admin_api_annotation_history", admin_api_annotation_history, methods=["GET"])
     app.add_url_rule("/admin/api/suspicious_activity", "admin_api_suspicious_activity", admin_api_suspicious_activity, methods=["GET"])

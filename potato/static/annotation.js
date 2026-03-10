@@ -1657,31 +1657,59 @@ function validateRequiredFields() {
     // Check all inputs with validation="required"
     const requiredInputs = document.querySelectorAll('input[validation="required"]');
     let allRequiredFilled = true;
+    const unfilledSchemas = [];
 
-    // Group inputs by their name (for radio buttons) or individual inputs
-    const inputGroups = {};
+    // Group inputs by their parent form's schema name
+    const formGroups = {};
     requiredInputs.forEach(input => {
+        const form = input.closest('.annotation-form');
+        const schemaName = form ? (form.getAttribute('data-schema-name') || form.id) : null;
+        if (!schemaName) return;
+        if (!formGroups[schemaName]) {
+            formGroups[schemaName] = { form: form, radios: {}, others: [] };
+        }
         if (input.type === 'radio') {
-            // For radio buttons, check if any in the group is selected
             const name = input.name;
-            if (!inputGroups[name]) {
-                inputGroups[name] = [];
+            if (!formGroups[schemaName].radios[name]) {
+                formGroups[schemaName].radios[name] = [];
             }
-            inputGroups[name].push(input);
+            formGroups[schemaName].radios[name].push(input);
         } else {
-            // For other inputs, check individually
-            if (!input.value || input.value.trim() === '') {
-                allRequiredFilled = false;
-            }
+            formGroups[schemaName].others.push(input);
         }
     });
 
-    // Check radio button groups
-    for (const [name, inputs] of Object.entries(inputGroups)) {
-        const anySelected = inputs.some(input => input.checked);
-        if (!anySelected) {
+    // Check each schema's required inputs
+    for (const [schemaName, group] of Object.entries(formGroups)) {
+        let schemaFilled = true;
+
+        // Check radio groups
+        for (const [name, inputs] of Object.entries(group.radios)) {
+            if (!inputs.some(input => input.checked)) {
+                schemaFilled = false;
+                break;
+            }
+        }
+
+        // Check other inputs (textbox, select, etc.)
+        for (const input of group.others) {
+            if (!input.value || input.value.trim() === '') {
+                schemaFilled = false;
+                break;
+            }
+        }
+
+        if (!schemaFilled) {
             allRequiredFilled = false;
-            break;
+            // Get human-readable label from the form's legend/title
+            const legend = group.form.querySelector('legend');
+            const label = legend ? legend.textContent.trim() : schemaName;
+            unfilledSchemas.push({ name: schemaName, label: label });
+        }
+
+        // Toggle red highlight on unfilled required forms
+        if (group.form) {
+            group.form.classList.toggle('required-unfilled', !schemaFilled);
         }
     }
 
@@ -1691,7 +1719,37 @@ function validateRequiredFields() {
         nextBtn.disabled = !allRequiredFilled;
     }
 
+    // Show/hide error message
+    updateRequiredFieldsError(unfilledSchemas);
+
     return allRequiredFilled;
+}
+
+function updateRequiredFieldsError(unfilledSchemas) {
+    let errorDiv = document.getElementById('required-fields-error');
+
+    if (unfilledSchemas.length === 0) {
+        if (errorDiv) {
+            errorDiv.style.display = 'none';
+        }
+        return;
+    }
+
+    // Create error div if it doesn't exist
+    if (!errorDiv) {
+        errorDiv = document.createElement('div');
+        errorDiv.id = 'required-fields-error';
+        errorDiv.className = 'required-fields-error';
+        const navDiv = document.querySelector('.potato-nav');
+        if (navDiv) {
+            navDiv.parentNode.insertBefore(errorDiv, navDiv);
+        }
+    }
+
+    const labels = unfilledSchemas.map(s => `<strong>${s.label}</strong>`).join(', ');
+    const plural = unfilledSchemas.length > 1;
+    errorDiv.innerHTML = `<i class="fas fa-exclamation-circle"></i> Please answer the required question${plural ? 's' : ''}: ${labels}`;
+    errorDiv.style.display = 'block';
 }
 
 function setLoading(loading) {

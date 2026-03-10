@@ -569,22 +569,28 @@ class UnifiedPositioningStrategy {
             controlsContainer.style.pointerEvents = 'auto';
             controlsContainer.style.zIndex = '10';
 
-            const label = document.createElement('div');
-            label.className = 'span-label';
-            label.textContent = span.label;
-            // Override CSS positioning to work in flex container
-            label.style.position = 'static';
-            label.style.top = 'auto';
-            label.style.left = 'auto';
-            label.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
-            label.style.color = 'white';
-            label.style.padding = '2px 6px';
-            label.style.borderRadius = '3px';
-            label.style.fontSize = '11px';
-            label.style.fontWeight = '500';
-            label.style.whiteSpace = 'nowrap';
-            label.style.display = 'block';
-            controlsContainer.appendChild(label);
+            // Check if span labels should be shown (config: show_span_labels)
+            const spanForm = document.querySelector('.annotation-form.span[data-show-span-labels="false"]');
+            const showLabels = !spanForm;
+
+            if (showLabels) {
+                const label = document.createElement('div');
+                label.className = 'span-label';
+                label.textContent = span.label;
+                // Override CSS positioning to work in flex container
+                label.style.position = 'static';
+                label.style.top = 'auto';
+                label.style.left = 'auto';
+                label.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
+                label.style.color = 'white';
+                label.style.padding = '2px 6px';
+                label.style.borderRadius = '3px';
+                label.style.fontSize = '11px';
+                label.style.fontWeight = '500';
+                label.style.whiteSpace = 'nowrap';
+                label.style.display = 'block';
+                controlsContainer.appendChild(label);
+            }
 
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'span-delete-btn';
