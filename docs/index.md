@@ -55,13 +55,11 @@
 - [Active Learning Strategies](active_learning_strategies.md) - Query strategies reference (BADGE, BALD, hybrid, cold-start)
 - [ICL Labeling](icl_labeling.md) - In-context learning for labeling
 
-## User Management
+## Authentication & User Management
 
-- [Users & Collaboration](user_and_collaboration.md) - User settings and access control
-- [Passwordless Login](passwordless_login.md) - URL-based authentication
-
-## Authentication & Access Control
-
+- [Users & Collaboration](user_and_collaboration.md) - User registration, access control, and collaboration
+- [Password Management](password_management.md) - Password security, reset flows, database backend, and shared credentials
+- [Passwordless Login](passwordless_login.md) - Authentication without passwords
 - [SSO & OAuth Authentication](sso_authentication.md) - Google, GitHub, and institutional SSO login
 
 ## Crowdsourcing
@@ -115,6 +113,8 @@
 | Show/hide questions based on answers | [Conditional Logic](conditional_logic.md) |
 | Annotate PDFs, Word docs, or code | [Format Support](format_support.md) |
 | Set up SSO/OAuth login | [SSO Authentication](sso_authentication.md) |
+| Reset a user's password | [Password Management](password_management.md) |
+| Use a database for user storage | [Password Management](password_management.md#database-authentication-backend) |
 | Configure for MTurk | [MTurk Integration](mturk_integration.md) |
 | Configure for Prolific | [Crowdsourcing Guide](crowdsourcing.md#prolific-integration) |
 | Monitor annotation progress | [Admin Dashboard](admin_dashboard.md) |
