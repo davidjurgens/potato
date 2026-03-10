@@ -17,6 +17,7 @@ Uses the MACE demo project which has pre-loaded annotation data.
 import pytest
 import requests
 import os
+import subprocess
 import sys
 
 # Add project root to path
@@ -31,10 +32,19 @@ class TestAdminDashboardAPI:
     @pytest.fixture(scope="class", autouse=True)
     def flask_server(self, request):
         """Start the MACE demo server for testing."""
-        config_path = os.path.join(
+        demo_dir = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "examples", "advanced", "mace-demo", "config.yaml"
+            "examples", "advanced", "mace-demo"
         )
+        config_path = os.path.join(demo_dir, "config.yaml")
+
+        # Generate synthetic annotation data (gitignored, must be regenerated)
+        setup_script = os.path.join(demo_dir, "setup_demo.py")
+        subprocess.run(
+            [sys.executable, setup_script, "--clean"],
+            check=True, cwd=demo_dir,
+        )
+
         server = FlaskTestServer(port=9020, config_file=config_path)
         if not server.start():
             pytest.fail("Failed to start MACE demo server")

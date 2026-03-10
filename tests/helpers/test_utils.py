@@ -124,6 +124,10 @@ def create_test_config(
         if field in kwargs:
             config[field] = kwargs[field]
 
+    # Merge additional_config dict into config (for extra sections like diversity_ordering)
+    if "additional_config" in kwargs:
+        config.update(kwargs["additional_config"])
+
     config_file = Path(test_dir) / "config.yaml"
 
     with open(config_file, 'w') as f:
@@ -304,10 +308,10 @@ class TestConfigManager:
     Context manager for creating and cleaning up test configurations.
     """
 
-    def __init__(self, test_name: str, annotation_schemes: List[Dict[str, Any]], num_instances: int = 2, **kwargs):
+    def __init__(self, test_name: str, annotation_schemes: List[Dict[str, Any]], num_instances: int = 2, num_items: int = None, **kwargs):
         self.test_name = test_name
         self.annotation_schemes = annotation_schemes
-        self.num_instances = num_instances
+        self.num_instances = num_items if num_items is not None else num_instances
         self.kwargs = kwargs
         self.test_dir = None
         self.config_file = None

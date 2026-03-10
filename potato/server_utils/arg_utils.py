@@ -14,8 +14,8 @@ def arguments():
 
     parser.add_argument(
         "mode",
-        choices=['start', 'get', 'list', 'migrate'],
-        help="set the mode when potato is used, currently supporting: start, get, list, migrate",
+        choices=['start', 'get', 'list', 'migrate', 'reset-password'],
+        help="set the mode when potato is used, currently supporting: start, get, list, migrate, reset-password",
         default="start",
     )
 
@@ -156,6 +156,16 @@ def arguments():
         dest="quiet",
         help="[migrate mode] Suppress informational output",
         default=False,
+    )
+
+    # Password reset arguments
+    parser.add_argument(
+        "--username",
+        action="store",
+        type=str,
+        dest="username",
+        help="[reset-password mode] Username to reset password for",
+        default=None,
     )
 
     return parser.parse_args()
