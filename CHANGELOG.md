@@ -4,8 +4,10 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ## [this repo] - My version
 
-- Changed the instance display logic in `templates/base_template_v2.html` to not insert instances at the top pf the page by default. 
-- Added an 'Instructions' button to navbar which opens task instructions in a new tab, when instructions page is passed.
+- Changed the instance display logic:
+	- Instances are now not inserted at the top of all the pages by default;
+	- You can now insert part of the instance (e.g. `{{ display_fields["user_query"] }}`) 
+- Added an 'Instructions' button to navbar during annotation which opens a task instructions pop-up, when instructions page is passed.
 
 ## [2.2.0] - Comprehensive Annotation & Export Platform
 

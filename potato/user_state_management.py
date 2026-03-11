@@ -1674,7 +1674,14 @@ class InMemoryUserState(UserState):
         return self.span_annotations
 
     def add_label_annotation(self, instance_id: str, label: Label, value: any) -> None:
-        if self.current_phase_and_page[0] == UserPhase.ANNOTATION:
+        # If this instance is assigned to the user, treat updates as instance
+        # annotations even if phase state has just advanced.
+        store_as_instance_annotation = (
+            self.current_phase_and_page[0] == UserPhase.ANNOTATION
+            or instance_id in self.assigned_instance_ids
+        )
+
+        if store_as_instance_annotation:
             self.instance_id_to_label_to_value[instance_id][label] = value
         else:
             self.phase_to_page_to_label_to_value[self.current_phase_and_page[0]][self.current_phase_and_page[1]][label] = value
@@ -1684,7 +1691,12 @@ class InMemoryUserState(UserState):
         '''Adds a set of span annotations to the instance or if the user is not
            in the annotation phase, to the page associated with the current phase'''
 
-        if self.current_phase_and_page[0] == UserPhase.ANNOTATION:
+        store_as_instance_annotation = (
+            self.current_phase_and_page[0] == UserPhase.ANNOTATION
+            or instance_id in self.assigned_instance_ids
+        )
+
+        if store_as_instance_annotation:
             # Ensure the instance_id exists in the dictionary
             if instance_id not in self.instance_id_to_span_to_value:
                 self.instance_id_to_span_to_value[instance_id] = {}

@@ -127,6 +127,52 @@
     </style>
     {% endif %}
 
+    {% if not (is_embedded_in_modal | default(false)) %}
+    <style>
+        html, body {
+            min-height: 100%;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .potato-navbar {
+            flex-shrink: 0;
+        }
+
+        .container-fluid {
+            flex: 1 1 auto;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #task_layout.shadcn-card,
+        #task_layout.shadcn-card.media-annotation,
+        #task_layout.shadcn-card.text-annotation {
+            flex: 1 1 auto;
+            min-height: 0;
+            max-height: none;
+            margin-bottom: 0;
+        }
+
+        #task_layout .shadcn-card-content,
+        #main-content {
+            min-height: 0;
+        }
+
+        .potato-nav,
+        .potato-footer {
+            flex-shrink: 0;
+        }
+    </style>
+    {% endif %}
+
     <!-- jQuery (required for span annotation) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
 </head>
@@ -187,7 +233,7 @@
                     <i class="fas fa-gavel"></i> Adjudicate
                 </a>
                 {% endif %}
-                {% if is_annotation_phase | default(false) and (show_instructions_button | default(false)) %}
+                {% if show_instructions_button | default(false) %}
                 <button type="button" class="adjudicate-btn" title="View Instructions"
                         data-bs-toggle="modal" data-bs-target="#instructions-modal">
                     <i class="fas fa-book"></i> Instructions
@@ -265,8 +311,7 @@
                         <div id="text-content" data-original-text=""></div>
                     </div>
                     {% else %}
-                    <!-- Custom task_layout slots may place display fields elsewhere.
-                         Keep legacy hooks hidden so annotation.js does not fail. -->
+                    <!-- Custom task_layout slot mode: keep hidden legacy hooks for JS compatibility -->
                     <div id="instance-text" style="display: none;">
                         <div id="span-overlays"></div>
                         <div id="text-content" data-original-text="{{ instance_plain_text | default('') | e }}">{{ instance | safe }}</div>

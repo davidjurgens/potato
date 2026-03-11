@@ -113,6 +113,29 @@ from potato.diversity_manager import get_diversity_manager
 import os
 
 
+def _finalize_user_session_state(username: str, user_state=None) -> None:
+    """Finalize behavioral/session timestamps and persist state."""
+    if not username:
+        return
+
+    if user_state is None:
+        user_state = get_user_state(username)
+
+    if not user_state:
+        return
+
+    # Finalize per-instance behavioral sessions if present
+    for _, bd in getattr(user_state, "instance_id_to_behavioral_data", {}).items():
+        if hasattr(bd, "session_end") and getattr(bd, "session_end", None) is None and hasattr(bd, "finalize_session"):
+            bd.finalize_session()
+
+    # Finalize user-level session metadata
+    if hasattr(user_state, "session_start_time") and user_state.session_start_time:
+        user_state.end_session()
+
+    get_user_state_manager().save_user_state(user_state)
+
+
 def get_debug_phase_target(debug_phase: str) -> tuple:
     """
     Parse the debug_phase string and find the matching phase and page.
@@ -997,6 +1020,10 @@ def logout_page():
         flask.Response: Redirect to login page
     """
     logger.debug("Processing logout request")
+
+    username = session.get("username")
+    if username:
+        _finalize_user_session_state(username)
 
     # Clear the session
     session.clear()
@@ -2017,6 +2044,7 @@ def annotate():
     # See if this user has finished annotating all of their assigned instances
     if not user_state.has_remaining_assignments():
         logger.debug(f"User {username} has no remaining assignments, advancing phase")
+        _finalize_user_session_state(username, user_state)
         # If the user is done annotating, advance to the next phase
         get_user_state_manager().advance_phase(username)
         return home()
@@ -2121,6 +2149,7 @@ def annotate():
     # This handles the case where the user just finished their last item
     if not user_state.has_remaining_assignments():
         logger.debug(f"User {username} has completed all assignments, advancing phase")
+        _finalize_user_session_state(username, user_state)
         get_user_state_manager().advance_phase(username)
         return home()
 

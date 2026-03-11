@@ -351,8 +351,12 @@ class MysqlUserState(UserState):
     def add_label_annotation(self, instance_id: str, label: Label, value: Any) -> None:
         """Add a label annotation."""
         phase, page = self.get_current_phase_and_page()
+        assigned_ids = self.get_assigned_instance_ids()
+        store_as_instance_annotation = (
+            phase == UserPhase.ANNOTATION or instance_id in assigned_ids
+        )
 
-        if phase == UserPhase.ANNOTATION:
+        if store_as_instance_annotation:
             # Store in label_annotations table
             with self.db_manager.get_connection() as conn:
                 cursor = conn.cursor()
@@ -380,8 +384,12 @@ class MysqlUserState(UserState):
     def add_span_annotation(self, instance_id: str, span: SpanAnnotation, value: Any) -> None:
         """Add a span annotation."""
         phase, page = self.get_current_phase_and_page()
+        assigned_ids = self.get_assigned_instance_ids()
+        store_as_instance_annotation = (
+            phase == UserPhase.ANNOTATION or instance_id in assigned_ids
+        )
 
-        if phase == UserPhase.ANNOTATION:
+        if store_as_instance_annotation:
             # Store in span_annotations table
             with self.db_manager.get_connection() as conn:
                 cursor = conn.cursor()
