@@ -124,6 +124,10 @@ def create_test_config(
         if field in kwargs:
             config[field] = kwargs[field]
 
+    # Support multi-phase workflows in tests
+    if "phases" in kwargs:
+        config["phases"] = kwargs["phases"]
+
     config_file = Path(test_dir) / "config.yaml"
 
     with open(config_file, 'w') as f:

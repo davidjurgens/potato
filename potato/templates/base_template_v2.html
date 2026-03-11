@@ -194,19 +194,19 @@
                             <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}" data-image-url="{{instance | sanitize_html}}">{{instance | sanitize_html}}</div>
                         </div>
                         {% else %}
-                        <h5 class="mb-3">Text to Annotate:</h5>
-                        <div id="instance-text" class="p-3 border rounded instance-text-container" style="background-color: var(--light-bg); min-height: 100px; position: relative;">
-                            <!-- Text content layer for span annotation -->
-                            <!-- Note: sanitize_html filter allows safe span annotation HTML while blocking XSS -->
-                            <!-- data-original-text uses plain text (no span HTML) for correct position calculations -->
-                            <!-- DOM content uses rendered HTML with span tags for visual display -->
-                            <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}" style="position: relative; z-index: 1; pointer-events: auto;">{{instance | sanitize_html}}
-                                <!-- Span overlays layer - nested inside text-content for correct positioning -->
-                                <div id="span-overlays" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;">
-                                    <!-- Individual overlays will have pointer-events: auto -->
+                        {% if is_annotation_page %}
+                                <h5 class="mb-3">Text to Annotate:</h5>
+                                <div id="instance-text" class="p-3 border rounded instance-text-container" style="background-color: var(--light-bg); min-height: 100px; position: relative;">
+                                    <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}" style="position: relative; z-index: 1; pointer-events: auto;">{{instance | sanitize_html}}
+                                        <div id="span-overlays" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;">
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
-                        </div>
+                            {% else %}
+                                <div id="instance-text" style="display: none;">
+                                    <div id="text-content" data-original-text=""></div>
+                                </div>
+                            {% endif %}
                         {% endif %}
                     </div>
 

@@ -1613,6 +1613,8 @@ def get_current_page_html(config, username):
     user_state = get_user_state(username)
     phase, page = user_state.get_current_phase_and_page()
 
+    is_annotation_page = phase == UserPhase.ANNOTATION
+
     usm = get_user_state_manager()
     html_fname = usm.get_phase_html_fname(phase, page)
 
@@ -1631,6 +1633,7 @@ def get_current_page_html(config, username):
         'finished': 0,
         'total_count': user_state.get_assigned_instance_count() if hasattr(user_state, 'get_assigned_instance_count') else 0,
         'ui_config': config.get('ui_config', {}),
+        'is_annotation_page': is_annotation_page,
     }
     return render_template(html_fname, **context)
 
@@ -1653,6 +1656,10 @@ def render_page_with_annotations(username) -> str:
     global emphasis_corpus_to_schemas
 
     user_state = get_user_state_manager().get_user_state(username)
+    phase, page = user_state.get_current_phase_and_page()
+
+    is_annotation_page = phase == UserPhase.ANNOTATION
+
     item = user_state.get_current_instance()
     instance_id = item.get_id()
 
@@ -1889,6 +1896,8 @@ def render_page_with_annotations(username) -> str:
         is_adjudicator=_is_user_adjudicator(username),
         # Annotation status indicator
         instance_has_annotations=instance_has_annotations,
+        # if this is an annotation page
+        is_annotation_page=is_annotation_page,
         # ai=ai_hints,
         **kwargs
     )
