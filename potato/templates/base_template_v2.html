@@ -233,7 +233,7 @@
                     <i class="fas fa-gavel"></i> Adjudicate
                 </a>
                 {% endif %}
-                {% if show_instructions_button | default(false) %}
+                {% if show_instructions_button | default(false) and is_annotation_phase | default(false) %}
                 <button type="button" class="adjudicate-btn" title="View Instructions"
                         data-bs-toggle="modal" data-bs-target="#instructions-modal">
                     <i class="fas fa-book"></i> Instructions
@@ -249,7 +249,7 @@
     </nav>
     {% endif %}
 
-    {% if show_instructions_button | default(false) %}
+    {% if show_instructions_button | default(false) and is_annotation_phase | default(false) %}
     <div class="modal fade" id="instructions-modal" tabindex="-1" aria-labelledby="instructions-modal-label" aria-hidden="true">
         <div class="modal-dialog modal-xl modal-dialog-centered">
             <div class="modal-content">
@@ -529,7 +529,7 @@
         });
     </script>
 
-    {% if show_instructions_button | default(false) %}
+    {% if show_instructions_button | default(false) and is_annotation_phase | default(false) %}
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const modalEl = document.getElementById('instructions-modal');
