@@ -1801,9 +1801,9 @@ class AdminDashboard:
                 'flagged_user_ids': [u['user_id'] for u in flagged_users],
                 'warning_user_ids': [u['user_id'] for u in warning_users],
                 'high_suspicion_users': len(flagged_users),
-                'fast_annotation_rate': (users_with_fast_annotations / total_users_with_data * 100) if total_users_with_data > 0 else 0,
-                'low_interaction_rate': (users_with_low_interaction / total_users_with_data * 100) if total_users_with_data > 0 else 0,
-                'no_change_rate': (users_with_no_changes / total_users_with_data * 100) if total_users_with_data > 0 else 0,
+                'fast_annotation_rate': (users_with_fast_annotations / total_users_with_data) if total_users_with_data > 0 else 0,
+                'low_interaction_rate': (users_with_low_interaction / total_users_with_data) if total_users_with_data > 0 else 0,
+                'no_change_rate': (users_with_no_changes / total_users_with_data) if total_users_with_data > 0 else 0,
             }
 
             return {
