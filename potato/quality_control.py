@@ -115,6 +115,7 @@ class QualityControlManager:
         self.attention_expected: Dict[str, Dict[str, Any]] = {}  # item_id -> expected_answer
         self.attention_results: Dict[str, List[AttentionCheckResult]] = defaultdict(list)  # user_id -> results
         self.user_items_since_attention: Dict[str, int] = defaultdict(int)  # user_id -> count
+        self.user_items_since_gold: Dict[str, int] = defaultdict(int)  # user_id -> count
 
         # Gold standard data
         self.gold_items: List[Dict] = []
@@ -332,6 +333,7 @@ class QualityControlManager:
         """Record that a user annotated a regular (non-attention-check) item."""
         with self._lock:
             self.user_items_since_attention[user_id] = self.user_items_since_attention.get(user_id, 0) + 1
+            self.user_items_since_gold[user_id] = self.user_items_since_gold.get(user_id, 0) + 1
 
     def validate_attention_response(
         self,
@@ -418,13 +420,13 @@ class QualityControlManager:
         """Check if an item is a gold standard."""
         return item_id in self.gold_labels
 
-    def should_inject_gold_standard(self, user_id: str, items_since_last: int) -> bool:
+    def should_inject_gold_standard(self, user_id: str, items_since_last: Optional[int] = None) -> bool:
         """
         Determine if a gold standard should be injected.
 
         Args:
             user_id: The user ID
-            items_since_last: Number of items since last gold standard
+            items_since_last: Deprecated override; if omitted, uses the gold-specific counter
 
         Returns:
             True if a gold standard should be injected
@@ -433,8 +435,10 @@ class QualityControlManager:
             return False
 
         if self.qc_config.gold_mode == 'training':
-            # Gold standards only in training phase - handled separately
             return False
+
+        if items_since_last is None:
+            items_since_last = self.user_items_since_gold.get(user_id, 0)
 
         if self.qc_config.gold_frequency:
             return items_since_last >= self.qc_config.gold_frequency
@@ -463,6 +467,7 @@ class QualityControlManager:
                 # Recycle items if all have been seen
                 available = self.gold_items
 
+            self.user_items_since_gold[user_id] = 0
             return random.choice(available)
 
     def validate_gold_response(

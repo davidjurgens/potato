@@ -1645,7 +1645,7 @@ def _is_user_adjudicator(username: str) -> bool:
     return False
 
 
-def render_page_with_annotations(username) -> str:
+def render_page_with_annotations(username: str):
     '''
     When annotating, shows the current instance to the user with any annotations
     they may have made. This method is called when the user is in the annotation
@@ -1679,7 +1679,18 @@ def render_page_with_annotations(username) -> str:
     # print('instance_id: ', instance_id)
 
     # directly display the prepared displayed_text
-    text = item.get_data()["displayed_text"]
+    item_data = item.get_data() if hasattr(item, "get_data") else {}
+    text_key = config.get("item_properties", {}).get("text_key", "text")
+    raw_text = None
+    if isinstance(item_data, dict):
+        raw_text = item_data.get("displayed_text")
+        if raw_text is None:
+            raw_text = item_data.get(text_key, item_data.get("text"))
+
+    if raw_text is None:
+        raw_text = item.get_displayed_text() if hasattr(item, "get_displayed_text") else item.get_text()
+
+    text = raw_text if "displayed_text" in (item_data or {}) else get_displayed_text(raw_text)
     # print('displayed_text: ', text)
 
     # Save the original plain text BEFORE any span rendering
@@ -3080,3 +3091,4 @@ def main():
 # Main entry point
 if __name__ == "__main__":
     main()
+

@@ -678,3 +678,351 @@ class TestSingleton:
         clear_quality_control_manager()
 
         assert get_quality_control_manager() is None
+
+
+def test_attention_check_injection_wires_into_annotate_flow(monkeypatch):
+    """Loaded attention checks should be injected into the live annotation flow when due."""
+    from potato.routes import _inject_quality_control_item_if_needed
+    from potato.quality_control import QualityControlManager
+    from potato.phase import UserPhase
+    import potato.routes as routes
+
+    config = {
+        "item_properties": {"text_key": "text"},
+        "attention_checks": {
+            "enabled": True,
+            "items_file": "attention.json",
+            "frequency": 2,
+        }
+    }
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        attn_file = os.path.join(tmpdir, "attention.json")
+        with open(attn_file, "w", encoding="utf-8") as f:
+            json.dump([
+                {"id": "attn_live_001", "text": "Select positive", "expected_answer": {"sentiment": "positive"}}
+            ], f)
+
+        qc_manager = QualityControlManager(config, tmpdir)
+        qc_manager.user_items_since_attention["user1"] = 2
+
+        class StubItem:
+            def __init__(self, item_id, data=None):
+                self._item_id = item_id
+                self._data = data or {"id": item_id, "text": item_id}
+            def get_id(self):
+                return self._item_id
+            def get_data(self):
+                return self._data
+
+        class StubISM:
+            def __init__(self):
+                self.items = {}
+            def add_item(self, item_id, item_data):
+                self.items[item_id] = StubItem(item_id, item_data)
+            def has_item(self, item_id):
+                return item_id in self.items
+            def get_item(self, item_id):
+                return self.items[item_id]
+
+        class StubUserState:
+            def __init__(self):
+                self.current_instance_index = 0
+                self.instance_id_ordering = ["item_001", "item_002"]
+                self.assigned_instance_ids = set(self.instance_id_ordering)
+                self.current_phase_and_page = (UserPhase.ANNOTATION, "annotation")
+            def get_current_instance(self):
+                return StubItem("item_001")
+            def generate_id_order_mapping(self, ordering):
+                return {iid: idx for idx, iid in enumerate(ordering)}
+
+        stub_ism = StubISM()
+        user_state = StubUserState()
+
+        monkeypatch.setattr("potato.routes.get_quality_control_manager", lambda: qc_manager)
+        monkeypatch.setattr("potato.routes.get_item_state_manager", lambda: stub_ism)
+        monkeypatch.setattr(routes, "config", config, raising=False)
+        monkeypatch.setattr("potato.routes.get_displayed_text", lambda text: f"rendered::{text}")
+
+        _inject_quality_control_item_if_needed("user1", user_state)
+
+        assert "attn_live_001" in user_state.instance_id_ordering
+        assert user_state.instance_id_ordering[1] == "attn_live_001"
+        assert "attn_live_001" in user_state.assigned_instance_ids
+        assert "attn_live_001" in stub_ism.items
+        assert stub_ism.get_item("attn_live_001").get_data()["displayed_text"] == "rendered::Select positive"
+
+
+def test_render_page_with_injected_qc_item_without_displayed_text(monkeypatch):
+    """QC items injected at runtime should render even if they only contain raw text."""
+    from flask import Flask
+    import potato.flask_server as fs
+    from potato.phase import UserPhase
+    from potato.server_utils.html_sanitizer import register_jinja_filters
+
+    app = Flask(__name__, template_folder=r"C:\Users\Aldo\PycharmProjects\potato\potato\templates")
+    app.secret_key = "test-secret"
+    register_jinja_filters(app)
+
+    class StubItem:
+        def get_id(self):
+            return "attn_runtime_001"
+        def get_data(self):
+            return {
+                "id": "attn_runtime_001",
+                "text": "Select positive for this check.",
+                "expected_answer": {"sentiment": "positive"},
+            }
+        def get_text(self):
+            return "Select positive for this check."
+        def get_displayed_text(self):
+            return "Select positive for this check."
+
+    class StubUserState:
+        instance_id_ordering = ["attn_runtime_001"]
+        def get_current_phase_and_page(self):
+            return (UserPhase.ANNOTATION, "Sentiment Analysis with Quality Control")
+        def get_current_instance(self):
+            return StubItem()
+        def get_current_instance_index(self):
+            return 0
+        def get_annotation_count(self):
+            return 0
+        def has_annotated(self, instance_id):
+            return False
+        def generate_user_statistics(self):
+            return {}
+
+    class StubUSM:
+        def get_user_state(self, username):
+            return StubUserState()
+        def get_phase_html_fname(self, phase, page):
+            return "base_template_v2.html"
+
+    class StubISM:
+        def get_total_assignable_items_for_user(self, user_state):
+            return 1
+
+    monkeypatch.setattr(fs, "app", app, raising=False)
+    monkeypatch.setattr(fs, "config", {
+        "annotation_task_name": "Sentiment Analysis with Quality Control",
+        "annotation_schemes": [{
+            "name": "sentiment",
+            "annotation_type": "radio",
+            "description": "What is the overall sentiment of this text?",
+            "labels": [{"name": "positive"}, {"name": "negative"}, {"name": "neutral"}],
+        }],
+        "item_properties": {"text_key": "text", "kwargs": []},
+        "site_file": "base_template_v2.html",
+        "ui": {},
+        "customjs": False,
+        "debug": False,
+        "alert_time_each_instance": 10000000,
+    }, raising=False)
+    monkeypatch.setattr(fs, "get_user_state_manager", lambda: StubUSM())
+    monkeypatch.setattr(fs, "get_item_state_manager", lambda: StubISM())
+    monkeypatch.setattr(fs, "get_quality_control_manager", lambda: None)
+    monkeypatch.setattr(fs, "get_annotations_for_user_on", lambda username, instance_id: None)
+    monkeypatch.setattr(fs, "get_span_annotations_for_user_on", lambda username, instance_id: [])
+    monkeypatch.setattr(fs, "get_label_suggestions", lambda item, config, prefill: set())
+    monkeypatch.setattr(fs, "_is_user_adjudicator", lambda username: False)
+
+    with app.test_request_context("/annotate"):
+        rendered = fs.render_page_with_annotations("user1")
+
+    assert "Select positive for this check." in rendered
+
+
+def test_attention_check_injection_reuses_existing_global_item_without_duplicate(monkeypatch):
+    """Existing QC items in the global item manager should be reused, not re-added."""
+    from potato.routes import _inject_quality_control_item_if_needed
+    from potato.quality_control import QualityControlManager
+    from potato.phase import UserPhase
+    import potato.routes as routes
+
+    config = {
+        "item_properties": {"text_key": "text"},
+        "attention_checks": {
+            "enabled": True,
+            "items_file": "attention.json",
+            "frequency": 2,
+        }
+    }
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        attn_file = os.path.join(tmpdir, "attention.json")
+        with open(attn_file, "w", encoding="utf-8") as f:
+            json.dump([
+                {"id": "attn_live_002", "text": "Select neutral", "expected_answer": {"sentiment": "neutral"}}
+            ], f)
+
+        qc_manager = QualityControlManager(config, tmpdir)
+        qc_manager.user_items_since_attention["user1"] = 2
+
+        class StubItem:
+            def __init__(self, item_id, data=None):
+                self._item_id = item_id
+                self._data = data or {"id": item_id, "text": item_id}
+            def get_id(self):
+                return self._item_id
+            def get_data(self):
+                return self._data
+
+        class StubISM:
+            def __init__(self):
+                self.items = {
+                    "attn_live_002": StubItem("attn_live_002", {"id": "attn_live_002", "text": "Select neutral"})
+                }
+                self.add_calls = 0
+            def add_item(self, item_id, item_data):
+                self.add_calls += 1
+                raise AssertionError("add_item should not be called for an existing global QC item")
+            def has_item(self, item_id):
+                return item_id in self.items
+            def get_item(self, item_id):
+                return self.items[item_id]
+
+        class StubUserState:
+            def __init__(self):
+                self.current_instance_index = 0
+                self.instance_id_ordering = ["item_001", "item_002"]
+                self.assigned_instance_ids = set(self.instance_id_ordering)
+                self.current_phase_and_page = (UserPhase.ANNOTATION, "annotation")
+            def get_current_instance(self):
+                return StubItem("item_001")
+            def generate_id_order_mapping(self, ordering):
+                return {iid: idx for idx, iid in enumerate(ordering)}
+
+        stub_ism = StubISM()
+        user_state = StubUserState()
+
+        monkeypatch.setattr("potato.routes.get_quality_control_manager", lambda: qc_manager)
+        monkeypatch.setattr("potato.routes.get_item_state_manager", lambda: stub_ism)
+        monkeypatch.setattr(routes, "config", config, raising=False)
+        monkeypatch.setattr("potato.routes.get_displayed_text", lambda text: f"rendered::{text}")
+
+        _inject_quality_control_item_if_needed("user1", user_state)
+
+        assert stub_ism.add_calls == 0
+        assert "attn_live_002" in user_state.instance_id_ordering
+        assert user_state.instance_id_ordering[1] == "attn_live_002"
+        assert "attn_live_002" in user_state.assigned_instance_ids
+        assert stub_ism.get_item("attn_live_002").get_data()["displayed_text"] == "rendered::Select neutral"
+
+
+def test_attention_check_is_not_reinjected_for_same_user(monkeypatch):
+    """A QC item already seen by a user must not be injected again later."""
+    from potato.routes import _inject_quality_control_item_if_needed
+    from potato.quality_control import QualityControlManager
+    from potato.phase import UserPhase
+    import potato.routes as routes
+
+    config = {
+        "item_properties": {"text_key": "text"},
+        "attention_checks": {
+            "enabled": True,
+            "items_file": "attention.json",
+            "frequency": 2,
+        }
+    }
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        attn_file = os.path.join(tmpdir, "attention.json")
+        with open(attn_file, "w", encoding="utf-8") as f:
+            json.dump([
+                {"id": "attn_seen_001", "text": "Select negative", "expected_answer": {"sentiment": "negative"}}
+            ], f)
+
+        qc_manager = QualityControlManager(config, tmpdir)
+        qc_manager.user_items_since_attention["user1"] = 2
+
+        class StubItem:
+            def __init__(self, item_id):
+                self._item_id = item_id
+            def get_id(self):
+                return self._item_id
+
+        class StubISM:
+            def __init__(self):
+                self.items = {}
+                self.add_calls = 0
+            def add_item(self, item_id, item_data):
+                self.add_calls += 1
+                self.items[item_id] = item_data
+            def has_item(self, item_id):
+                return item_id in self.items
+            def get_item(self, item_id):
+                return self.items[item_id]
+
+        class StubUserState:
+            def __init__(self):
+                self.current_instance_index = 0
+                self.instance_id_ordering = ["item_009", "item_010"]
+                self.assigned_instance_ids = {"item_009", "item_010", "attn_seen_001"}
+                self.current_phase_and_page = (UserPhase.ANNOTATION, "annotation")
+            def get_current_instance(self):
+                return StubItem("item_009")
+            def generate_id_order_mapping(self, ordering):
+                return {iid: idx for idx, iid in enumerate(ordering)}
+            def get_annotated_instance_ids(self):
+                return {"attn_seen_001"}
+
+        stub_ism = StubISM()
+        user_state = StubUserState()
+
+        monkeypatch.setattr("potato.routes.get_quality_control_manager", lambda: qc_manager)
+        monkeypatch.setattr("potato.routes.get_item_state_manager", lambda: stub_ism)
+        monkeypatch.setattr(routes, "config", config, raising=False)
+        monkeypatch.setattr("potato.routes.get_displayed_text", lambda text: f"rendered::{text}")
+
+        before = list(user_state.instance_id_ordering)
+        _inject_quality_control_item_if_needed("user1", user_state)
+
+        assert user_state.instance_id_ordering == before
+        assert stub_ism.add_calls == 0
+
+
+def test_gold_standard_uses_separate_counter_from_attention(tmp_path):
+    """Gold injection must still become due even when attention checks reset their own counter."""
+    config = {
+        "attention_checks": {
+            "enabled": True,
+            "items_file": "attention.json",
+            "frequency": 3,
+        },
+        "gold_standards": {
+            "enabled": True,
+            "items_file": "gold.json",
+            "mode": "mixed",
+            "frequency": 5,
+        },
+    }
+
+    attention_items = [
+        {"id": "attn_001", "text": "Select positive", "expected_answer": {"sentiment": "positive"}}
+    ]
+    gold_items = [
+        {"id": "gold_001", "text": "Gold item", "gold_label": {"sentiment": "neutral"}}
+    ]
+
+    (tmp_path / "attention.json").write_text(json.dumps(attention_items), encoding="utf-8")
+    (tmp_path / "gold.json").write_text(json.dumps(gold_items), encoding="utf-8")
+
+    manager = QualityControlManager(config, str(tmp_path))
+
+    for _ in range(3):
+        manager.record_regular_item("user1")
+    assert manager.should_inject_attention_check("user1") is True
+    manager.get_attention_check_item("user1")
+    assert manager.user_items_since_attention["user1"] == 0
+    assert manager.user_items_since_gold["user1"] == 3
+
+    for _ in range(2):
+        manager.record_regular_item("user1")
+
+    assert manager.should_inject_gold_standard("user1") is True
+    gold_item = manager.get_gold_standard_item("user1")
+    assert gold_item is not None
+    assert gold_item["id"] == "gold_001"
+    assert manager.user_items_since_gold["user1"] == 0
+
