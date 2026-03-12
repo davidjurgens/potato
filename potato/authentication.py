@@ -11,9 +11,10 @@ password handling.
 
 Key Features:
 - Multiple authentication backends (in-memory, database, Clerk SSO)
-- Password hashing with PBKDF2
+- Password hashing with PBKDF2 and per-user salts
 - Passwordless authentication support
 - User registration and management
+- Password reset with secure tokens
 - Session-based authentication
 - Configurable authentication requirements
 """
@@ -22,9 +23,12 @@ import os
 import json
 import logging
 import hashlib
+import hmac
 import secrets
+import sqlite3
 import requests
 import threading
+import time
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any, List, Union
 
@@ -33,6 +37,58 @@ logger = logging.getLogger(__name__)
 # Global singleton instance of the user authenticator with thread-safe lock
 USER_AUTHENTICATOR_SINGLETON = None
 _USER_AUTHENTICATOR_LOCK = threading.Lock()
+
+# Format for per-user salt storage: "<32-char-hex-salt>$<hash-hex>"
+_SALT_HASH_SEPARATOR = "$"
+
+
+def _is_salted_hash(value: str) -> bool:
+    """Check if a stored password value is in the per-user salt$hash format."""
+    if not value or _SALT_HASH_SEPARATOR not in value:
+        return False
+    parts = value.split(_SALT_HASH_SEPARATOR, 1)
+    # salt is 32 hex chars (16 bytes), hash is 64 hex chars (32 bytes sha256)
+    return len(parts) == 2 and len(parts[0]) == 32 and len(parts[1]) == 64
+
+
+def _hash_password_with_salt(password: str, salt: str = None) -> str:
+    """Hash a password with a per-user salt using PBKDF2.
+
+    Args:
+        password: The plain text password to hash
+        salt: Hex-encoded salt string. If None, generates a new random salt.
+
+    Returns:
+        str: The combined "salt$hash" string
+    """
+    if not password:
+        return ""
+    if salt is None:
+        salt = secrets.token_hex(16)
+    hash_value = hashlib.pbkdf2_hmac(
+        'sha256',
+        password.encode('utf-8'),
+        salt.encode('utf-8'),
+        100000
+    ).hex()
+    return f"{salt}{_SALT_HASH_SEPARATOR}{hash_value}"
+
+
+def _verify_password(password: str, stored: str) -> bool:
+    """Verify a password against a stored salt$hash value using constant-time comparison."""
+    if not password or not stored:
+        return False
+    if not _is_salted_hash(stored):
+        return False
+    salt, expected_hash = stored.split(_SALT_HASH_SEPARATOR, 1)
+    actual_hash = hashlib.pbkdf2_hmac(
+        'sha256',
+        password.encode('utf-8'),
+        salt.encode('utf-8'),
+        100000
+    ).hex()
+    return hmac.compare_digest(expected_hash, actual_hash)
+
 
 class AuthBackend(ABC):
     """
@@ -44,368 +100,305 @@ class AuthBackend(ABC):
     """
     @abstractmethod
     def authenticate(self, username: str, password: Optional[str]) -> bool:
-        """
-        Authenticate a user against this backend.
-
-        Args:
-            username: The username to authenticate
-            password: The password to verify (None for passwordless auth)
-
-        Returns:
-            bool: True if authentication succeeds, False otherwise
-        """
+        """Authenticate a user against this backend."""
         pass
 
     @abstractmethod
     def add_user(self, username: str, password: Optional[str], **kwargs) -> str:
-        """
-        Add a user to this backend.
-
-        Args:
-            username: The username for the new user
-            password: The password for the new user (None for passwordless)
-            **kwargs: Additional user data to store
-
-        Returns:
-            str: Status message indicating success or failure
-        """
+        """Add a user to this backend. Returns status message."""
         pass
 
     @abstractmethod
     def is_valid_username(self, username: str) -> bool:
-        """
-        Check if a username exists in this backend.
-
-        Args:
-            username: The username to check
-
-        Returns:
-            bool: True if the username exists, False otherwise
-        """
+        """Check if a username exists in this backend."""
         pass
+
+    @abstractmethod
+    def update_password(self, username: str, new_password: str) -> bool:
+        """Update a user's password. Returns True on success."""
+        pass
+
+    @abstractmethod
+    def get_all_users(self) -> List[str]:
+        """Return list of all usernames."""
+        pass
+
+    def add_user_prehashed(self, username: str, hashed_password: str, **kwargs) -> str:
+        """Load user with already-hashed password (for file loading). Override in subclasses."""
+        raise NotImplementedError("This backend does not support loading pre-hashed passwords")
+
 
 class InMemoryAuthBackend(AuthBackend):
     """
-    Authentication backend that stores users in memory only.
+    Authentication backend that stores users in memory with per-user salts.
 
-    This backend is suitable for development and testing. User data is lost
-    when the server restarts. It provides secure password hashing using PBKDF2.
+    Password storage format: "salt$hash" where salt is 32 hex chars and hash is 64 hex chars.
     """
     def __init__(self):
-        """
-        Initialize the in-memory authentication backend.
-
-        Creates empty storage for users and generates a random salt for
-        password hashing.
-        """
-        self.users = {}  # username -> password_hash
+        self.users = {}  # username -> "salt$hash"
         self.user_data = {}  # username -> additional data
-        self.salt = secrets.token_hex(16)  # Random salt for password hashing
-
-    def _hash_password(self, password: str) -> str:
-        """
-        Hash a password with the salt using PBKDF2.
-
-        Args:
-            password: The plain text password to hash
-
-        Returns:
-            str: The hashed password as a hex string
-        """
-        if not password:
-            return ""
-        return hashlib.pbkdf2_hmac(
-            'sha256',
-            password.encode('utf-8'),
-            self.salt.encode('utf-8'),
-            100000  # Number of iterations for security
-        ).hex()
 
     def authenticate(self, username: str, password: Optional[str]) -> bool:
-        """
-        Authenticate a user against in-memory store.
-
-        Args:
-            username: The username to authenticate
-            password: The password to verify (None for passwordless login)
-
-        Returns:
-            bool: True if authentication succeeds, False otherwise
-        """
         if username not in self.users:
             return False
-
         if password is None:  # Passwordless login
             return True
-
-        # Use constant-time comparison to prevent timing attacks
-        import hmac
-        hashed = self._hash_password(password)
-        return hmac.compare_digest(self.users[username], hashed)
+        return _verify_password(password, self.users[username])
 
     def add_user(self, username: str, password: Optional[str], **kwargs) -> str:
-        """
-        Add a user to the in-memory store.
-
-        Args:
-            username: The username for the new user
-            password: The password for the new user (None for passwordless)
-            **kwargs: Additional user data to store
-
-        Returns:
-            str: Status message indicating success or failure
-        """
         if username in self.users:
             return "Duplicate user"
-
-        # Store password hash (empty string for passwordless users)
-        self.users[username] = self._hash_password(password) if password else ""
-
-        # Store additional user data
+        self.users[username] = _hash_password_with_salt(password) if password else ""
         self.user_data[username] = kwargs
+        return "Success"
 
+    def add_user_prehashed(self, username: str, hashed_password: str, **kwargs) -> str:
+        """Store a user with an already-hashed password (salt$hash format)."""
+        if username in self.users:
+            return "Duplicate user"
+        self.users[username] = hashed_password
+        self.user_data[username] = kwargs
         return "Success"
 
     def is_valid_username(self, username: str) -> bool:
-        """
-        Check if a username exists in the in-memory store.
-
-        Args:
-            username: The username to check
-
-        Returns:
-            bool: True if the username exists, False otherwise
-        """
         return username in self.users
+
+    def update_password(self, username: str, new_password: str) -> bool:
+        if username not in self.users:
+            return False
+        self.users[username] = _hash_password_with_salt(new_password)
+        return True
+
+    def get_all_users(self) -> List[str]:
+        return list(self.users.keys())
+
 
 class DatabaseAuthBackend(AuthBackend):
     """
-    Authentication backend that stores users in a database.
+    Authentication backend using SQLite (stdlib) or PostgreSQL (psycopg2).
 
-    This backend is designed for production use where user data needs to persist
-    across server restarts. It provides a placeholder implementation that should
-    be extended with actual database connectivity.
+    Connection string formats:
+        sqlite:///path/to/db.db     (relative or absolute)
+        postgresql://user:pass@host/dbname
     """
     def __init__(self, db_connection_string: str):
-        """
-        Initialize the database authentication backend.
-
-        Args:
-            db_connection_string: Connection string for the database
-
-        Note:
-            This is a placeholder implementation. In production, you would:
-            1. Connect to the database
-            2. Create tables if they don't exist
-            3. Set up indexes for username lookups
-        """
         self.db_connection_string = db_connection_string
-        # This is a placeholder - in a real implementation, you would:
-        # 1. Connect to the database
-        # 2. Create tables if they don't exist
-        # 3. Set up indexes for username lookups
+        self._lock = threading.Lock()
+        self._db_type = None  # 'sqlite' or 'postgresql'
+        self._connection = None
 
-        # For simplicity, we'll use a dict as our "database" for this example
-        self.users = {}
+        if db_connection_string.startswith("sqlite:///"):
+            self._db_type = "sqlite"
+            self._init_sqlite(db_connection_string[len("sqlite:///"):])
+        elif db_connection_string.startswith("postgresql://"):
+            self._db_type = "postgresql"
+            self._init_postgresql(db_connection_string)
+        else:
+            raise ValueError(
+                f"Unsupported database URL: {db_connection_string}. "
+                "Use sqlite:///path/to/db or postgresql://user:pass@host/dbname"
+            )
 
-        # Generate a random salt for password hashing
-        # In production with a real DB, the salt should be stored per-user
-        self.salt = secrets.token_hex(16)
+        logger.info(f"Database auth backend initialized ({self._db_type})")
 
-        logger.info(f"Database auth backend initialized with connection: {db_connection_string}")
+    def _init_sqlite(self, db_path: str):
+        """Initialize SQLite database."""
+        # Create parent directories if needed
+        db_dir = os.path.dirname(db_path)
+        if db_dir:
+            os.makedirs(db_dir, exist_ok=True)
 
-    def _hash_password(self, password: str) -> str:
-        """
-        Hash a password with the salt using PBKDF2.
+        self._connection = sqlite3.connect(db_path, check_same_thread=False)
+        self._connection.execute("PRAGMA journal_mode=WAL")
+        self._connection.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                username TEXT PRIMARY KEY,
+                password_hash TEXT NOT NULL,
+                email TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        self._connection.commit()
+
+    def _init_postgresql(self, connection_string: str):
+        """Initialize PostgreSQL database."""
+        try:
+            import psycopg2
+        except ImportError:
+            raise ImportError(
+                "psycopg2 is required for PostgreSQL authentication backend. "
+                "Install it with: pip install psycopg2-binary"
+            )
+        self._connection = psycopg2.connect(connection_string)
+        self._connection.autocommit = True
+        with self._connection.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    username TEXT PRIMARY KEY,
+                    password_hash TEXT NOT NULL,
+                    email TEXT,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )
+            """)
+
+    def _execute(self, query: str, params: tuple = (), fetch: str = None):
+        """Thread-safe query execution.
 
         Args:
-            password: The plain text password to hash
+            query: SQL query with ? placeholders (auto-converted to %s for PostgreSQL)
+            params: Query parameters
+            fetch: None, 'one', or 'all'
 
         Returns:
-            str: The hashed password as a hex string
+            Query result based on fetch parameter
         """
-        if not password:
-            return ""
-        return hashlib.pbkdf2_hmac(
-            'sha256',
-            password.encode('utf-8'),
-            self.salt.encode('utf-8'),
-            100000  # Number of iterations for security
-        ).hex()
+        with self._lock:
+            if self._db_type == "postgresql":
+                query = query.replace("?", "%s")
+
+            if self._db_type == "sqlite":
+                cursor = self._connection.cursor()
+                cursor.execute(query, params)
+                if fetch == "one":
+                    result = cursor.fetchone()
+                elif fetch == "all":
+                    result = cursor.fetchall()
+                else:
+                    self._connection.commit()
+                    result = None
+                cursor.close()
+                return result
+            else:
+                with self._connection.cursor() as cur:
+                    cur.execute(query, params)
+                    if fetch == "one":
+                        return cur.fetchone()
+                    elif fetch == "all":
+                        return cur.fetchall()
+                    return None
 
     def authenticate(self, username: str, password: Optional[str]) -> bool:
-        """
-        Authenticate a user against the database.
-
-        Args:
-            username: The username to authenticate
-            password: The password to verify (None for passwordless login)
-
-        Returns:
-            bool: True if authentication succeeds, False otherwise
-
-        Note:
-            This is a placeholder implementation. In production, you would:
-            1. Query the database for the user
-            2. Verify the password hash using a secure method
-        """
-        # In a real implementation, you would:
-        # 1. Query the database for the user
-        # 2. Verify the password hash using a secure method
-
-        if username not in self.users:
+        row = self._execute(
+            "SELECT password_hash FROM users WHERE username = ?",
+            (username,), fetch="one"
+        )
+        if not row:
             return False
-
         if password is None:  # Passwordless login
             return True
-
-        # Hash the provided password and compare with stored hash
-        import hmac
-        hashed = self._hash_password(password)
-        return hmac.compare_digest(self.users[username], hashed)
+        return _verify_password(password, row[0])
 
     def add_user(self, username: str, password: Optional[str], **kwargs) -> str:
-        """
-        Add a user to the database.
-
-        Args:
-            username: The username for the new user
-            password: The password for the new user (None for passwordless)
-            **kwargs: Additional user data to store
-
-        Returns:
-            str: Status message indicating success or failure
-
-        Note:
-            This is a placeholder implementation. In production, you would:
-            1. Hash the password
-            2. Insert the user into the database
-            3. Handle duplicate username errors
-        """
-        # In a real implementation, you would:
-        # 1. Hash the password
-        # 2. Insert the user into the database
-        # 3. Handle duplicate username errors
-
-        if username in self.users:
+        existing = self._execute(
+            "SELECT 1 FROM users WHERE username = ?",
+            (username,), fetch="one"
+        )
+        if existing:
             return "Duplicate user"
 
-        # Store password hash (empty string for passwordless users)
-        self.users[username] = self._hash_password(password) if password else ""
+        hashed = _hash_password_with_salt(password) if password else ""
+        email = kwargs.get("email", "")
+        self._execute(
+            "INSERT INTO users (username, password_hash, email) VALUES (?, ?, ?)",
+            (username, hashed, email)
+        )
+        return "Success"
+
+    def add_user_prehashed(self, username: str, hashed_password: str, **kwargs) -> str:
+        """Store a user with an already-hashed password."""
+        existing = self._execute(
+            "SELECT 1 FROM users WHERE username = ?",
+            (username,), fetch="one"
+        )
+        if existing:
+            return "Duplicate user"
+
+        email = kwargs.get("email", "")
+        self._execute(
+            "INSERT INTO users (username, password_hash, email) VALUES (?, ?, ?)",
+            (username, hashed_password, email)
+        )
         return "Success"
 
     def is_valid_username(self, username: str) -> bool:
-        """
-        Check if a username exists in the database.
+        row = self._execute(
+            "SELECT 1 FROM users WHERE username = ?",
+            (username,), fetch="one"
+        )
+        return row is not None
 
-        Args:
-            username: The username to check
+    def update_password(self, username: str, new_password: str) -> bool:
+        if not self.is_valid_username(username):
+            return False
+        hashed = _hash_password_with_salt(new_password)
+        if self._db_type == "sqlite":
+            self._execute(
+                "UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE username = ?",
+                (hashed, username)
+            )
+        else:
+            self._execute(
+                "UPDATE users SET password_hash = ?, updated_at = NOW() WHERE username = ?",
+                (hashed, username)
+            )
+        return True
 
-        Returns:
-            bool: True if the username exists, False otherwise
+    def get_all_users(self) -> List[str]:
+        rows = self._execute("SELECT username FROM users", fetch="all")
+        return [r[0] for r in rows]
 
-        Note:
-            This is a placeholder implementation. In production, you would query the database.
-        """
-        # In a real implementation, you would query the database
-        return username in self.users
+    def close(self):
+        """Close the database connection."""
+        if self._connection:
+            self._connection.close()
+            self._connection = None
+
 
 class ClerkAuthBackend(AuthBackend):
     """
     Authentication backend that uses Clerk for SSO.
-
-    This backend integrates with Clerk's authentication service to provide
-    single sign-on capabilities. It verifies tokens with Clerk's API and
-    caches user information locally.
     """
     def __init__(self, api_key: str, frontend_api: str):
-        """
-        Initialize the Clerk SSO backend.
-
-        Args:
-            api_key: Clerk API key for server-side operations
-            frontend_api: Clerk frontend API key for client-side operations
-        """
         self.api_key = api_key
         self.frontend_api = frontend_api
         self.users = {}  # Cache of known users
-
         logger.info("Clerk SSO backend initialized")
 
     def authenticate(self, username: str, token: Optional[str]) -> bool:
-        """
-        Authenticate a user using Clerk token.
-
-        Args:
-            username: The username to authenticate
-            token: The Clerk session token to verify
-
-        Returns:
-            bool: True if authentication succeeds, False otherwise
-
-        Side Effects:
-            - Caches user data if authentication succeeds
-        """
         if not token:
             return False
-
-        # Verify the token with Clerk API
         try:
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json"
             }
-
-            # This is a simplified example - in production you would use the Clerk SDK
-            # or follow their API documentation for token verification
             response = requests.get(
                 f"https://api.clerk.dev/v1/sessions/{token}",
                 headers=headers
             )
-
             if response.status_code == 200:
                 user_data = response.json()
-                # Cache the user
                 self.users[username] = user_data
                 return True
-
             return False
-
         except Exception as e:
             logger.error(f"Error authenticating with Clerk: {str(e)}")
             return False
 
     def add_user(self, username: str, password: Optional[str], **kwargs) -> str:
-        """
-        Add a user to Clerk - this typically happens on Clerk's side,
-        not through our application.
-
-        Args:
-            username: The username (not used in Clerk)
-            password: The password (not used in Clerk)
-            **kwargs: Additional user data (not used in Clerk)
-
-        Returns:
-            str: Status message indicating that user management happens through Clerk
-        """
         return "User management happens through Clerk dashboard"
 
     def is_valid_username(self, username: str) -> bool:
-        """
-        Check if a username exists in Clerk.
-
-        Args:
-            username: The username to check
-
-        Returns:
-            bool: True if the username exists in our local cache, False otherwise
-
-        Note:
-            In a real implementation, you would query Clerk's API
-        """
-        # In a real implementation, you would query Clerk's API
-        # For now, we'll just check our local cache
         return username in self.users
+
+    def update_password(self, username: str, new_password: str) -> bool:
+        raise NotImplementedError("Password management is handled by Clerk")
+
+    def get_all_users(self) -> List[str]:
+        return list(self.users.keys())
+
 
 class UserAuthenticator:
     """
@@ -417,16 +410,9 @@ class UserAuthenticator:
     """
 
     def __init__(self, user_config_path, auth_method="in_memory", auth_config=None):
-        """
-        Initialize the user authenticator.
-
-        Args:
-            user_config_path: Path to the user configuration file
-            auth_method: Authentication method to use ("in_memory", "database", "clerk", "oauth")
-            auth_config: The full 'authentication' config dict (needed for OAuth)
-        """
         self.allow_all_users = True
         self.user_config_path = user_config_path
+        self.user_config_path_explicit = False  # Set to True if path was explicitly configured
         self.authorized_users = []
         self.userlist = []
         self.usernames = set()
@@ -437,33 +423,33 @@ class UserAuthenticator:
         self.auth_config = auth_config or {}
         self.auth_backend = self._initialize_backend(auth_method, auth_config)
 
+        # Token management for password reset
+        self._reset_tokens = {}  # token -> {username, expires}
+        self._token_lock = threading.Lock()
+
         # Load users from config file if it exists
         if os.path.isfile(self.user_config_path):
             logger.info(f"Loading users from {self.user_config_path}")
             with open(self.user_config_path, "rt", encoding="utf-8") as f:
                 for line in f.readlines():
-                    single_user = json.loads(line.strip())
-                    self.add_single_user(single_user)
+                    line = line.strip()
+                    if not line:
+                        continue
+                    single_user = json.loads(line)
+                    # Detect salt$hash format in password field
+                    password_val = single_user.get("password", "")
+                    if password_val and _is_salted_hash(password_val):
+                        self._add_user_prehashed(single_user)
+                    else:
+                        self.add_single_user(single_user)
 
     def _initialize_backend(self, auth_method: str, auth_config: dict = None) -> AuthBackend:
-        """
-        Initialize the appropriate authentication backend.
-
-        Args:
-            auth_method: The authentication method to use
-            auth_config: The full 'authentication' config dict (needed for OAuth)
-
-        Returns:
-            AuthBackend: The initialized authentication backend
-
-        Raises:
-            ValueError: If the authentication method is not supported
-        """
         if auth_method == "in_memory":
             return InMemoryAuthBackend()
         elif auth_method == "database":
-            db_conn = os.environ.get("POTATO_DB_CONNECTION", "sqlite:///potato/users.db")
-            return DatabaseAuthBackend(db_conn)
+            db_url = (auth_config or {}).get("database_url") or \
+                     os.environ.get("POTATO_DB_CONNECTION", "sqlite:///potato_users.db")
+            return DatabaseAuthBackend(db_url)
         elif auth_method == "clerk":
             api_key = os.environ.get("CLERK_API_KEY", "")
             frontend_api = os.environ.get("CLERK_FRONTEND_API", "")
@@ -482,61 +468,33 @@ class UserAuthenticator:
 
     @staticmethod
     def init_from_config(config: dict) -> "UserAuthenticator":
-        """
-        Initialize the UserAuthenticator from a configuration dictionary.
-
-        This method creates a singleton instance of the UserAuthenticator
-        based on the provided configuration. It determines the authentication
-        method and sets up the appropriate backend.
-        Thread-safe initialization using double-checked locking pattern.
-
-        Args:
-            config: Configuration dictionary containing authentication settings
-
-        Returns:
-            UserAuthenticator: The initialized authenticator instance
-
-        Side Effects:
-            - Creates global singleton instance
-            - Sets up authentication backend
-            - Loads user configuration if specified
-        """
+        """Initialize the UserAuthenticator from a configuration dictionary (singleton)."""
         global USER_AUTHENTICATOR_SINGLETON
 
-        # Double-checked locking for thread safety
         if USER_AUTHENTICATOR_SINGLETON is None:
             with _USER_AUTHENTICATOR_LOCK:
-                # Check again inside the lock
                 if USER_AUTHENTICATOR_SINGLETON is None:
-                    # Determine authentication method from config
                     auth_method = config.get("authentication", {}).get("method", "in_memory")
-
-                    # Get config path if specified
                     user_config_path = config.get("authentication", {}).get("user_config_path", None)
-
-                    # Check if password is required
                     require_password = config.get("require_password", True)
 
-                    # See if the user_config_path has been set
+                    path_explicit = user_config_path is not None
+
                     if user_config_path is None:
-                        # If not, set it to the default path where the annotators are
-                        # stored
                         config_dir = os.path.dirname(config['output_annotation_dir'])
                         user_config_path = os.path.join(config_dir, "user_config.json")
                     else:
-                        # If it has been set, make sure it's a valid path
+                        # Don't raise if file doesn't exist — it will be created on first registration
                         if not os.path.isfile(user_config_path):
-                            logger.error(f"Invalid user_config_path: {user_config_path}")
-                            raise ValueError(f"Invalid user_config_path: {user_config_path}")
+                            logger.info(f"user_config_path '{user_config_path}' does not exist yet; will be created on first registration")
 
                     logger.debug(f"User config path: {user_config_path}")
 
-                    # Get the full authentication config for OAuth
                     auth_config = config.get("authentication", {})
 
-                    # Initialize the authenticator
                     USER_AUTHENTICATOR_SINGLETON = UserAuthenticator(user_config_path, auth_method, auth_config)
                     USER_AUTHENTICATOR_SINGLETON.require_password = require_password
+                    USER_AUTHENTICATOR_SINGLETON.user_config_path_explicit = path_explicit
 
                     logger.info(f"Initialized UserAuthenticator with method: {auth_method}, require_password: {require_password}")
 
@@ -544,15 +502,6 @@ class UserAuthenticator:
 
     @staticmethod
     def get_instance():
-        """
-        Get the singleton instance of the UserAuthenticator.
-
-        Returns:
-            UserAuthenticator: The singleton authenticator instance
-
-        Raises:
-            ValueError: If the authenticator has not been initialized
-        """
         global USER_AUTHENTICATOR_SINGLETON
         if USER_AUTHENTICATOR_SINGLETON is None:
             raise ValueError("UserAuthenticator not initialized; call init_from_config first")
@@ -560,101 +509,67 @@ class UserAuthenticator:
 
     @staticmethod
     def authenticate(username: str, password: Optional[str]) -> bool:
-        """
-        Authenticate a user with the current authentication backend.
-
-        This static method provides a convenient way to authenticate users
-        without needing direct access to the authenticator instance.
-
-        Args:
-            username: The username to authenticate
-            password: The password to verify (None for passwordless auth)
-
-        Returns:
-            bool: True if authentication succeeds, False otherwise
-        """
         authenticator = UserAuthenticator.get_instance()
 
-        # First, verify the user exists in the system
         if not authenticator.auth_backend.is_valid_username(username):
             logger.warning(f"Authentication failed: user '{username}' does not exist")
             return False
 
-        # If passwords are not required, allow passwordless authentication
         if not authenticator.require_password:
             logger.debug(f"Passwordless authentication for user: {username}")
             return authenticator.auth_backend.authenticate(username, None)
 
-        # Regular password authentication
         return authenticator.auth_backend.authenticate(username, password)
 
-    # This function will be deprecated
     def add_user(self, username, password: Optional[str], **kwargs):
-        """
-        Add a user to the authentication system.
-
-        This method is deprecated and will be removed in a future version.
-        Use add_single_user() instead.
-
-        Args:
-            username: The username for the new user
-            password: The password for the new user (None for passwordless)
-            **kwargs: Additional user data to store
-
-        Returns:
-            str: Status message indicating success or failure
-        """
-        # For passwordless mode, don't enforce authorization checks
+        """Add a user to the authentication system."""
         if not self.require_password:
-            # Passwordless mode - allow any user
             logger.debug(f"Passwordless mode - allowing any user: {username}")
         elif self.allow_all_users == False and not self.is_authorized_user(username):
             return "Unauthorized user"
 
         result = self.auth_backend.add_user(username, password, **kwargs)
         if result == "Success":
-            self.users[username] = kwargs
+            user_data = {"username": username}
+            user_data.update(kwargs)
+            self.users[username] = user_data
             self.userlist.append(username)
         return result
 
+    def _add_user_prehashed(self, single_user):
+        """Add a user with an already-hashed password (loaded from file)."""
+        username = single_user["username"]
+        hashed_password = single_user.get("password", "")
+
+        result = self.auth_backend.add_user_prehashed(
+            username,
+            hashed_password,
+            **{k: v for k, v in single_user.items() if k not in ["username", "password"]}
+        )
+
+        if result == "Success":
+            self.users[username] = single_user
+            self.userlist.append(username)
+
+        return result
+
     def add_single_user(self, single_user):
-        """
-        Add a single user to the full user dict.
-
-        This method processes a user dictionary and adds the user to the
-        authentication system. It handles both password-based and passwordless
-        authentication modes.
-
-        Args:
-            single_user: Dictionary containing user information
-
-        Returns:
-            str: Status message indicating success or failure
-
-        Side Effects:
-            - Adds user to authentication backend
-            - Updates internal tracking structures
-        """
-        # For passwordless mode, don't enforce authorization checks
+        """Add a single user to the full user dict."""
         if not self.require_password:
-            # Passwordless mode - allow any user
             logger.debug(f"Passwordless mode - allowing any user: {single_user['username']}")
         elif self.allow_all_users == False and not self.is_authorized_user(single_user["username"]):
             return "Unauthorized user"
 
-        # In passwordless mode, we only need username
         if not self.require_password:
             required_keys = ["username"]
         else:
             required_keys = self.required_user_info_keys
 
-        # Validate that all required keys are present
         for key in required_keys:
             if key not in single_user:
                 logger.error(f"Missing {key} in user info")
                 return f"Missing {key} in user info"
 
-        # Add user to the backend
         result = self.auth_backend.add_user(
             single_user["username"],
             single_user.get("password"),
@@ -662,102 +577,138 @@ class UserAuthenticator:
         )
 
         if result == "Success":
-            # Update internal tracking
             self.users[single_user["username"]] = single_user
             self.userlist.append(single_user["username"])
 
         return result
 
+    def update_password(self, username: str, new_password: str) -> bool:
+        """Update a user's password via the backend."""
+        result = self.auth_backend.update_password(username, new_password)
+        if result and username in self.users:
+            # Update the stored user dict with the new hash for save_user_config
+            if isinstance(self.users[username], dict):
+                self.users[username]["password"] = self.auth_backend.users[username] \
+                    if hasattr(self.auth_backend, 'users') else _hash_password_with_salt(new_password)
+        return result
+
     def save_user_config(self):
-        """
-        Save user config to file - only applicable for in_memory authentication.
+        """Save user config to file.
 
-        This method saves the current user configuration to the specified file.
-        It's only applicable for in_memory authentication where user data
-        needs to be persisted to disk.
+        Saves when:
+        - auth_method is in_memory AND user_config_path was explicitly configured
+        - auth_method is not in_memory and not database (other file-based methods)
 
-        Side Effects:
-            - Writes user data to configuration file
-            - Logs success or warning messages
+        Skips when:
+        - auth_method is database (DB handles its own persistence)
+        - auth_method is in_memory with auto-generated default path (preserve old behavior)
         """
-        if self.auth_method == "in_memory":
-            logger.info(f"User config not saved - using {self.auth_method} authentication")
+        if self.auth_method == "database":
+            logger.debug("User config not saved - using database authentication (DB handles persistence)")
             return
 
-        elif self.user_config_path:
+        if self.auth_method == "in_memory" and not self.user_config_path_explicit:
+            logger.debug("User config not saved - using in_memory with default path")
+            return
+
+        if self.user_config_path:
             with open(self.user_config_path, "wt", encoding="utf-8") as f:
                 for k in self.userlist:
-                    f.write(json.dumps(self.users[k]) + "\n")
+                    user_data = self.users.get(k, {})
+                    if isinstance(user_data, dict):
+                        # Ensure password field contains the hashed value
+                        output = dict(user_data)
+                        if hasattr(self.auth_backend, 'users') and k in self.auth_backend.users:
+                            output["password"] = self.auth_backend.users[k]
+                        f.write(json.dumps(output) + "\n")
+                    else:
+                        f.write(json.dumps({"username": k}) + "\n")
             logger.info(f"User info file saved at: {self.user_config_path}")
         else:
             logger.warning("WARNING: user_config_path not specified, user registration info are not saved")
 
-    def is_authorized_user(self, username):
-        """
-        Check if a user name is in the authorized user list (as presented in the configuration file).
+    # --- Token-based password reset ---
+
+    def create_reset_token(self, username: str, ttl_hours: int = 24) -> Optional[str]:
+        """Create a password reset token for a user.
 
         Args:
-            username: The username to check
+            username: The username to create a token for
+            ttl_hours: Token validity in hours (default 24)
 
         Returns:
-            bool: True if the user is authorized, False otherwise
+            The token string, or None if user doesn't exist
         """
+        if not self.auth_backend.is_valid_username(username):
+            return None
+
+        token = secrets.token_urlsafe(32)
+        expires = time.time() + (ttl_hours * 3600)
+
+        with self._token_lock:
+            # Invalidate any existing tokens for this user
+            self._reset_tokens = {
+                t: v for t, v in self._reset_tokens.items()
+                if v["username"] != username
+            }
+            self._reset_tokens[token] = {
+                "username": username,
+                "expires": expires
+            }
+
+        return token
+
+    def validate_reset_token(self, token: str) -> Optional[str]:
+        """Validate a reset token and return the username, or None if invalid/expired."""
+        with self._token_lock:
+            # Clean expired tokens
+            now = time.time()
+            self._reset_tokens = {
+                t: v for t, v in self._reset_tokens.items()
+                if v["expires"] > now
+            }
+
+            if token not in self._reset_tokens:
+                return None
+            return self._reset_tokens[token]["username"]
+
+    def consume_reset_token(self, token: str) -> Optional[str]:
+        """Validate, delete, and return the username for a reset token. Single-use."""
+        with self._token_lock:
+            now = time.time()
+            self._reset_tokens = {
+                t: v for t, v in self._reset_tokens.items()
+                if v["expires"] > now
+            }
+
+            if token not in self._reset_tokens:
+                return None
+            username = self._reset_tokens[token]["username"]
+            del self._reset_tokens[token]
+            return username
+
+    # --- End token management ---
+
+    def is_authorized_user(self, username):
         return username in self.authorized_users
 
     def is_valid_username(self, username):
-        """
-        Check if a user name is in the current user list.
-
-        Args:
-            username: The username to check
-
-        Returns:
-            bool: True if the username exists, False otherwise
-        """
         return self.auth_backend.is_valid_username(username)
 
     def is_valid_password(self, username, password):
-        """
-        Check if the password is correct for a given (username, password) pair.
-
-        Args:
-            username: The username to check
-            password: The password to verify
-
-        Returns:
-            bool: True if the password is correct, False otherwise
-        """
         return self.authenticate(username, password)
 
     def get_clerk_frontend_api(self) -> str:
-        """
-        Get the Clerk frontend API key if using Clerk authentication.
-
-        Returns:
-            str: The Clerk frontend API key, or empty string if not using Clerk
-        """
         if self.auth_method == "clerk" and isinstance(self.auth_backend, ClerkAuthBackend):
             return self.auth_backend.frontend_api
         return ""
 
     def get_oauth_backend(self):
-        """
-        Get the OAuth backend if using OAuth authentication.
-
-        Returns:
-            OAuthBackend or None: The OAuth backend, or None if not using OAuth
-        """
         if self.auth_method == "oauth":
             return self.auth_backend
         return None
 
     def get_login_providers(self) -> list:
-        """
-        Get the list of OAuth login providers for the login page.
-
-        Returns:
-            list: List of provider display metadata dicts, or empty list
-        """
         oauth_backend = self.get_oauth_backend()
         if oauth_backend:
             return oauth_backend.get_login_providers()

@@ -3057,6 +3057,11 @@ def main():
     elif args.mode == 'list':
         logger.info("Listing available projects")
         show_project_hub(args.config_file)
+    elif args.mode == 'reset-password':
+        logger.info("Starting password reset")
+        from potato.password_reset import cli_reset_password
+        cli_reset_password(args)
+        return
     elif args.mode == 'migrate':
         logger.info("Starting config migration")
         from potato.migrate_cli import main as migrate_main

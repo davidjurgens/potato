@@ -9,6 +9,8 @@ submitted and persisted.
 
 import json
 import os
+import subprocess
+import sys
 import pytest
 import requests
 import shutil
@@ -37,6 +39,13 @@ class TestAdjudicationDemo:
         adj_output = os.path.join(DEMO_DIR, "annotation_output", "adjudication")
         if os.path.exists(adj_output):
             shutil.rmtree(adj_output)
+
+        # Generate synthetic annotation data (gitignored, must be regenerated)
+        setup_script = os.path.join(DEMO_DIR, "setup_demo.py")
+        subprocess.run(
+            [sys.executable, setup_script, "--clean"],
+            check=True, cwd=DEMO_DIR,
+        )
 
         server = FlaskTestServer(
             port=find_free_port(),

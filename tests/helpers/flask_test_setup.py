@@ -129,6 +129,7 @@ class FlaskTestServer:
         self.temp_config_file = None
         self.debug = debug
         self.test_data_file = test_data_file
+        self.admin_api_key = 'test-admin-api-key'
 
         # Handle port parameter - use requested port if available, otherwise find a free one
         self.port = self._get_available_port(port)
@@ -144,6 +145,11 @@ class FlaskTestServer:
             # Update port to match the actual port being used
             config_data['port'] = self.port
             config_data['host'] = '0.0.0.0'
+
+            # Inject a known admin API key if not already set
+            if 'admin_api_key' not in config_data:
+                config_data['admin_api_key'] = 'test-admin-api-key'
+            self.admin_api_key = config_data['admin_api_key']
 
             # Write updated config to a temp file in the same directory
             config_dir = os.path.dirname(os.path.abspath(config_file))
@@ -178,6 +184,9 @@ class FlaskTestServer:
                     config['session_lifetime_days'] = 2
                 if 'secret_key' not in config:
                     config['secret_key'] = 'test-secret-key'
+                if 'admin_api_key' not in config:
+                    config['admin_api_key'] = 'test-admin-api-key'
+                self.admin_api_key = config['admin_api_key']
 
                 # Write to temp YAML file within the project directory
                 temp_path = self._create_temp_config_file(config, 'flasktest_config_')
@@ -201,6 +210,9 @@ class FlaskTestServer:
                     config_data['session_lifetime_days'] = 2
                 if 'secret_key' not in config_data:
                     config_data['secret_key'] = 'test-secret-key'
+                if 'admin_api_key' not in config_data:
+                    config_data['admin_api_key'] = 'test-admin-api-key'
+                self.admin_api_key = config_data['admin_api_key']
 
                 # Write updated config back to the SAME directory to preserve data file paths
                 config_dir = os.path.dirname(os.path.abspath(config))

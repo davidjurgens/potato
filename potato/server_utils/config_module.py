@@ -1153,6 +1153,23 @@ def validate_authentication_config(config_data: Dict[str, Any]) -> None:
                     "Set 'secret_key' in config or POTATO_SECRET_KEY env var."
                 )
 
+    # Database-specific validation
+    if method == "database":
+        db_url = auth_config.get("database_url")
+        if db_url:
+            if not (db_url.startswith("sqlite:///") or db_url.startswith("postgresql://")):
+                raise ConfigValidationError(
+                    "authentication.database_url must start with 'sqlite:///' or 'postgresql://'. "
+                    f"Got: '{db_url}'"
+                )
+
+        # Mutual exclusivity: database backend and user_config_path
+        if "user_config_path" in auth_config:
+            raise ConfigValidationError(
+                "authentication.user_config_path cannot be used with method 'database'. "
+                "The database backend handles its own user persistence."
+            )
+
 
 def validate_quality_control_config(config_data: Dict[str, Any]) -> None:
     """

@@ -486,6 +486,36 @@ user_config:
   users: []             # Pre-defined users (empty = none)
 ```
 
+### Authentication Configuration
+
+```yaml
+# Require password for login (default: true)
+require_password: true
+
+authentication:
+  # Backend: "in_memory" (default), "database", "clerk", or "oauth"
+  method: in_memory
+
+  # Path to persistent user credential file (in_memory method only)
+  # When set, user registrations and password changes persist to this file
+  # Mutually exclusive with method: database
+  user_config_path: user_credentials.jsonl
+
+  # Database connection URL (database method only)
+  # Alternatively set POTATO_DB_CONNECTION environment variable
+  # database_url: "sqlite:///data/auth.db"
+```
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `require_password` | boolean | `true` | Require password for login |
+| `authentication.method` | string | `"in_memory"` | Backend: `in_memory`, `database`, `clerk`, `oauth` |
+| `authentication.user_config_path` | string | auto-generated | Path to JSONL file for user persistence |
+| `authentication.database_url` | string | `sqlite:///potato_users.db` | Database URL (for `database` method) |
+
+See [Password Management](password_management.md) for password security, reset flows, and database backend details.
+See [SSO & OAuth Authentication](sso_authentication.md) for Google, GitHub, and institutional SSO.
+
 ### Advanced User Settings
 
 ```yaml

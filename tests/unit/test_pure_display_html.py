@@ -201,5 +201,43 @@ class TestFormatDisplayContent:
         assert "<b>bold</b>" in result
 
 
+class TestIssue120StructuralHtml:
+    """Test that structural HTML works in pure_display with allow_html (Issue #120)."""
+
+    def test_allow_html_preserves_paragraphs_and_lists(self):
+        """Paragraphs and lists should be preserved with allow_html."""
+        from potato.server_utils.schemas.pure_display import format_display_content
+        html = "<p>Read carefully.</p><ul><li>Step 1</li><li>Step 2</li></ul>"
+        result = format_display_content([html], allow_html=True)
+        assert "<p>Read carefully.</p>" in result
+        assert "<ul>" in result
+        assert "<li>Step 1</li>" in result
+
+    def test_allow_html_preserves_headings(self):
+        """Headings should be preserved with allow_html."""
+        from potato.server_utils.schemas.pure_display import format_display_content
+        result = format_display_content(["<h3>Instructions</h3>"], allow_html=True)
+        assert "<h3>Instructions</h3>" in result
+
+    def test_allow_html_preserves_tables(self):
+        """Tables should be preserved with allow_html."""
+        from potato.server_utils.schemas.pure_display import format_display_content
+        html = "<table><tr><th>Key</th><td>Value</td></tr></table>"
+        result = format_display_content([html], allow_html=True)
+        assert "<table>" in result
+        assert "<th>Key</th>" in result
+        assert "<td>Value</td>" in result
+
+    def test_issue_120_full_example(self):
+        """The exact example from Issue #120 should render correctly."""
+        from potato.server_utils.schemas.pure_display import format_display_content
+        html = '<h3>Instructions</h3><p>Please read carefully.</p><ul><li>Step 1</li><li>Step 2</li></ul>'
+        result = format_display_content([html], allow_html=True)
+        assert "<h3>Instructions</h3>" in result
+        assert "<p>Please read carefully.</p>" in result
+        assert "<li>Step 1</li>" in result
+        assert "<li>Step 2</li>" in result
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

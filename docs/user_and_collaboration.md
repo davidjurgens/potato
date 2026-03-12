@@ -8,7 +8,9 @@ your account\".
 ![The log-in screen has an account creation button on the bottom right, circled in red.](img/login-button.png)
 
 After creating an account, you can log in with the email and password
-used in the account creation step.
+used in the account creation step. Passwords are stored with per-user salted PBKDF2 hashing for security.
+
+If a user forgets their password, administrators can reset it via the CLI or API. See [Password Management](password_management.md) for details on password reset, shared credential files, and database-backed authentication.
 
 ### Set up authorized users
 Sometimes you might only allow a short list of users to sign up.

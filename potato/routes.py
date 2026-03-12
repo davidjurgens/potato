@@ -1046,10 +1046,13 @@ def register():
         return render_template("home.html",
                                 login_error="Username and password are required")
 
-    # Register the user with the autheticator
+    # Register the user with the authenticator
     logger.debug("Adding user to authenticator...")
     user_authenticator = UserAuthenticator.get_instance()
     user_authenticator.add_user(username, password)
+
+    # Persist user config if explicitly configured
+    user_authenticator.save_user_config()
 
     logger.debug("Setting session variables...")
     session['username'] = username
@@ -3281,6 +3284,10 @@ def agent_chat_send():
         })
 
     except Exception as e:
+        # Surface sandbox violations (step limit, timeout, rate limit) directly
+        from potato.agent_proxy.sandbox import SandboxViolation
+        if isinstance(e, SandboxViolation):
+            return jsonify({"error": str(e)}), 400
         logger.error("Agent chat send error: %s", traceback.format_exc())
         return jsonify({"error": "An internal error occurred"}), 400
 
@@ -6055,6 +6062,160 @@ def ai_assistant():
     return result
 
 
+def admin_reset_password():
+    """Admin API to reset a user's password.
+
+    Requires X-API-Key header. Takes JSON body with username and new_password.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Unauthorized - valid API key required"}), 403
+
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+
+    username = data.get("username")
+    new_password = data.get("new_password")
+
+    if not username or not new_password:
+        return jsonify({"error": "username and new_password are required"}), 400
+
+    user_authenticator = UserAuthenticator.get_instance()
+    if not user_authenticator.is_valid_username(username):
+        return jsonify({"error": f"User '{username}' does not exist"}), 404
+
+    if user_authenticator.update_password(username, new_password):
+        user_authenticator.save_user_config()
+        return jsonify({"status": "success", "message": f"Password reset for '{username}'"})
+    else:
+        return jsonify({"error": "Failed to reset password"}), 500
+
+
+def admin_create_reset_token():
+    """Admin API to generate a password reset token for a user.
+
+    Requires X-API-Key header. Takes JSON body with username and optional ttl_hours.
+    Returns the reset link and token.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Unauthorized - valid API key required"}), 403
+
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+
+    username = data.get("username")
+    ttl_hours = data.get("ttl_hours", 24)
+
+    if not username:
+        return jsonify({"error": "username is required"}), 400
+
+    user_authenticator = UserAuthenticator.get_instance()
+    token = user_authenticator.create_reset_token(username, ttl_hours=ttl_hours)
+
+    if token is None:
+        return jsonify({"error": f"User '{username}' does not exist"}), 404
+
+    reset_link = f"{request.host_url.rstrip('/')}/reset/{token}"
+    return jsonify({
+        "status": "success",
+        "reset_link": reset_link,
+        "token": token,
+        "expires_in_hours": ttl_hours
+    })
+
+
+def forgot_password():
+    """Self-service forgot password page.
+
+    GET: Show the forgot password form.
+    POST: Generate a reset token and display the reset link.
+    """
+    if request.method == "GET":
+        return render_template("forgot_password.html",
+                             title=config.get("annotation_task_name", "Annotation Platform"))
+
+    username = request.form.get("username", "").strip()
+    # Always show success to prevent user enumeration
+    if not username:
+        return render_template("forgot_password.html",
+                             title=config.get("annotation_task_name", "Annotation Platform"),
+                             error="Please enter your username.")
+
+    user_authenticator = UserAuthenticator.get_instance()
+    token = user_authenticator.create_reset_token(username)
+
+    if token:
+        reset_link = f"{request.host_url.rstrip('/')}/reset/{token}"
+        return render_template("forgot_password.html",
+                             title=config.get("annotation_task_name", "Annotation Platform"),
+                             reset_link=reset_link,
+                             success=True)
+    else:
+        # Show same success message to prevent enumeration
+        return render_template("forgot_password.html",
+                             title=config.get("annotation_task_name", "Annotation Platform"),
+                             success=True)
+
+
+def reset_password_with_token(token):
+    """Self-service password reset using a token.
+
+    GET: Show the reset form if token is valid.
+    POST: Process the new password.
+    """
+    user_authenticator = UserAuthenticator.get_instance()
+
+    if request.method == "GET":
+        username = user_authenticator.validate_reset_token(token)
+        if not username:
+            return render_template("reset_password.html",
+                                 title=config.get("annotation_task_name", "Annotation Platform"),
+                                 error="This reset link is invalid or has expired.",
+                                 token_invalid=True)
+        return render_template("reset_password.html",
+                             title=config.get("annotation_task_name", "Annotation Platform"),
+                             token=token,
+                             username=username)
+
+    # POST
+    new_password = request.form.get("password", "")
+    confirm_password = request.form.get("confirm_password", "")
+
+    if not new_password:
+        return render_template("reset_password.html",
+                             title=config.get("annotation_task_name", "Annotation Platform"),
+                             token=token,
+                             error="Password cannot be empty.")
+
+    if new_password != confirm_password:
+        return render_template("reset_password.html",
+                             title=config.get("annotation_task_name", "Annotation Platform"),
+                             token=token,
+                             error="Passwords do not match.")
+
+    # Consume token (single-use)
+    username = user_authenticator.consume_reset_token(token)
+    if not username:
+        return render_template("reset_password.html",
+                             title=config.get("annotation_task_name", "Annotation Platform"),
+                             error="This reset link is invalid or has expired.",
+                             token_invalid=True)
+
+    if user_authenticator.update_password(username, new_password):
+        user_authenticator.save_user_config()
+        return render_template("reset_password.html",
+                             title=config.get("annotation_task_name", "Annotation Platform"),
+                             success=True)
+    else:
+        return render_template("reset_password.html",
+                             title=config.get("annotation_task_name", "Annotation Platform"),
+                             token=token,
+                             error="Failed to reset password. Please try again.")
+
+
 def configure_routes(flask_app, app_config):
     """
     Initialize the Flask routes with the given Flask app instance
@@ -6145,6 +6306,12 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/all_instances", "admin_all_instances", admin_all_instances, methods=["GET"])
     app.add_url_rule("/admin/item_state", "admin_item_state", admin_item_state, methods=["GET"])
     app.add_url_rule("/admin/item_state/<item_id>", "admin_item_state_detail", admin_item_state_detail, methods=["GET"])
+
+    # Password management routes
+    app.add_url_rule("/admin/reset_password", "admin_reset_password", admin_reset_password, methods=["POST"])
+    app.add_url_rule("/admin/create_reset_token", "admin_create_reset_token", admin_create_reset_token, methods=["POST"])
+    app.add_url_rule("/forgot-password", "forgot_password", forgot_password, methods=["GET", "POST"])
+    app.add_url_rule("/reset/<token>", "reset_password_with_token", reset_password_with_token, methods=["GET", "POST"])
 
     # New admin dashboard API routes
     app.add_url_rule("/admin/api/overview", "admin_api_overview", admin_api_overview, methods=["GET"])

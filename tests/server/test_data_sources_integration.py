@@ -660,12 +660,15 @@ class TestSSRFProtection:
         """Test that public URLs are allowed."""
         from potato.data_sources.sources.url_source import resolve_and_validate_url
 
-        # This should not raise
+        # This should not raise; returns (url, validated_ips) tuple
         result = resolve_and_validate_url(
             "https://example.com/data.json",
             block_private_ips=True
         )
-        assert result == "https://example.com/data.json"
+        url, ips = result
+        assert url == "https://example.com/data.json"
+        assert isinstance(ips, list)
+        assert len(ips) > 0
 
     def test_blocks_file_scheme(self):
         """Test that file:// scheme is blocked."""

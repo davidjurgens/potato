@@ -41,17 +41,21 @@ authentication:
 
 ### Database
 
-Users are persisted to a database. Set the connection string via environment variable:
-
-```bash
-export POTATO_DB_CONNECTION="sqlite:///users.db"
-```
+Users are persisted to a database (SQLite or PostgreSQL). Set the connection string via config or environment variable:
 
 ```yaml
 require_password: false
 authentication:
   method: database
+  database_url: "sqlite:///users.db"
 ```
+
+```bash
+# Or via environment variable
+export POTATO_DB_CONNECTION="sqlite:///users.db"
+```
+
+See [Password Management — Database Backend](password_management.md#database-authentication-backend) for detailed setup including PostgreSQL.
 
 ### Clerk SSO
 
@@ -162,6 +166,7 @@ success = UserAuthenticator.authenticate("username", None)
    ```
 
 2. Existing passwordless users will need to register with a password
+3. Admins can set passwords for existing users via `potato reset-password config.yaml --username <user>` (see [Password Management](password_management.md))
 
 ## Troubleshooting
 
@@ -214,6 +219,8 @@ annotation_schemes:
 
 ## Related Documentation
 
+- [Password Management](password_management.md) - Password security, reset flows, and database backend
+- [SSO & OAuth Authentication](sso_authentication.md) - Google, GitHub, and institutional SSO login
 - [User and Collaboration](user_and_collaboration.md) - User management features
 - [Crowdsourcing](crowdsourcing.md) - Integration with crowdsourcing platforms
 - [Configuration](configuration.md) - Full configuration reference
