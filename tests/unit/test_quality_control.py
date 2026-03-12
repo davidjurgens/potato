@@ -9,6 +9,7 @@ import pytest
 import json
 import tempfile
 import os
+from pathlib import Path
 from datetime import datetime
 from unittest.mock import Mock, patch
 
@@ -234,6 +235,52 @@ class TestAttentionChecks:
         assert stats["failed"] == 1
         assert stats["pass_rate"] == 0.5
 
+    def test_load_attention_items_from_jsonl(self, tmp_path):
+        """Attention check files should also load from JSONL."""
+        jsonl_content = "\n".join([
+            json.dumps({"id": "attn_jsonl_001", "text": "Select positive.", "expected_answer": {"sentiment": "positive"}}),
+            json.dumps({"id": "attn_jsonl_002", "text": "Select negative.", "expected_answer": {"sentiment": "negative"}}),
+        ])
+        file_path = tmp_path / "attention.json"
+        file_path.write_text(jsonl_content, encoding="utf-8")
+
+        manager = QualityControlManager(
+            {
+                "attention_checks": {
+                    "enabled": True,
+                    "items_file": file_path.name,
+                    "frequency": 5,
+                }
+            },
+            str(tmp_path),
+        )
+
+        assert len(manager.attention_items) == 2
+        assert manager.attention_expected["attn_jsonl_001"] == {"sentiment": "positive"}
+        assert manager.attention_expected["attn_jsonl_002"] == {"sentiment": "negative"}
+
+    def test_invalid_attention_jsonl_logs_parse_error(self, tmp_path, caplog):
+        """Invalid JSONL attention files should log a parse error and load nothing."""
+        file_path = tmp_path / "attention.json"
+        file_path.write_text(
+            '{"id": "attn_valid", "expected_answer": {"sentiment": "positive"}}\nnot-json\n',
+            encoding="utf-8",
+        )
+
+        with caplog.at_level("ERROR"):
+            manager = QualityControlManager(
+                {
+                    "attention_checks": {
+                        "enabled": True,
+                        "items_file": file_path.name,
+                    }
+                },
+                str(tmp_path),
+            )
+
+        assert manager.attention_items == []
+        assert "Failed to parse attention checks file" in caplog.text
+        assert "Invalid JSON at line 2" in caplog.text
 
 class TestGoldStandards:
     """Tests for gold standard functionality."""
@@ -351,6 +398,31 @@ class TestGoldStandards:
         assert accuracy["total"] == 3
         assert accuracy["correct"] == 2
         assert abs(accuracy["accuracy"] - 2/3) < 0.01
+
+    def test_load_gold_items_from_jsonl(self, tmp_path):
+        """Gold standard files should also load from JSONL."""
+        jsonl_content = "\n".join([
+            json.dumps({"id": "gold_jsonl_001", "text": "Great product", "gold_label": {"sentiment": "positive"}, "explanation": "Positive sentiment."}),
+            json.dumps({"id": "gold_jsonl_002", "text": "Terrible product", "gold_label": {"sentiment": "negative"}, "explanation": "Negative sentiment."}),
+        ])
+        file_path = tmp_path / "gold.json"
+        file_path.write_text(jsonl_content, encoding="utf-8")
+
+        manager = QualityControlManager(
+            {
+                "gold_standards": {
+                    "enabled": True,
+                    "items_file": file_path.name,
+                    "mode": "mixed",
+                }
+            },
+            str(tmp_path),
+        )
+
+        assert len(manager.gold_items) == 2
+        assert manager.gold_labels["gold_jsonl_001"] == {"sentiment": "positive"}
+        assert manager.gold_labels["gold_jsonl_002"] == {"sentiment": "negative"}
+        assert manager.gold_explanations["gold_jsonl_001"] == "Positive sentiment."
 
 
 class TestPreAnnotation:
@@ -760,7 +832,8 @@ def test_render_page_with_injected_qc_item_without_displayed_text(monkeypatch):
     from potato.phase import UserPhase
     from potato.server_utils.html_sanitizer import register_jinja_filters
 
-    app = Flask(__name__, template_folder=r"C:\Users\Aldo\PycharmProjects\potato\potato\templates")
+    template_folder = Path(__file__).resolve().parents[2] / "potato" / "templates"
+    app = Flask(__name__, template_folder=str(template_folder))
     app.secret_key = "test-secret"
     register_jinja_filters(app)
 

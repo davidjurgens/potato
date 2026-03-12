@@ -80,7 +80,6 @@ from potato.flask_server import get_displayed_text
 
 
 def _inject_quality_control_item_if_needed(username, user_state):
-    # ...existing code...
     qc_manager = get_quality_control_manager()
     if not qc_manager:
         return

@@ -193,6 +193,32 @@ class QualityControlManager:
 
         return qc
 
+    def _load_json_or_jsonl(self, file_path: str) -> List[Dict[str, Any]]:
+        """Load items from a JSON array or JSONL file."""
+        with open(file_path, 'r', encoding='utf-8') as f:
+            raw = f.read()
+
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+
+        items = []
+        for line_no, line in enumerate(raw.splitlines()):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                items.append(json.loads(line))
+            except json.JSONDecodeError as e:
+                raise ValueError(
+                    f"Invalid JSON at line {line_no + 1} in {file_path}: {e}"
+                ) from e
+
+        return items
+
     def _load_attention_checks(self) -> None:
         """Load attention check items from file."""
         if not self.qc_config.attention_checks_enabled:
@@ -208,12 +234,7 @@ class QualityControlManager:
             return
 
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                items = json.load(f)
-
-            if not isinstance(items, list):
-                self.logger.error("Attention checks file must contain a JSON array")
-                return
+            items = self._load_json_or_jsonl(str(file_path))
 
             for item in items:
                 if 'id' not in item or 'expected_answer' not in item:
@@ -225,7 +246,7 @@ class QualityControlManager:
 
             self.logger.info(f"Loaded {len(self.attention_items)} attention check items")
 
-        except json.JSONDecodeError as e:
+        except (json.JSONDecodeError, ValueError) as e:
             self.logger.error(f"Failed to parse attention checks file: {e}")
         except Exception as e:
             self.logger.error(f"Failed to load attention checks: {e}")
@@ -245,12 +266,7 @@ class QualityControlManager:
             return
 
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                items = json.load(f)
-
-            if not isinstance(items, list):
-                self.logger.error("Gold standards file must contain a JSON array")
-                return
+            items = self._load_json_or_jsonl(str(file_path))
 
             for item in items:
                 if 'id' not in item or 'gold_label' not in item:
@@ -264,7 +280,7 @@ class QualityControlManager:
 
             self.logger.info(f"Loaded {len(self.gold_items)} gold standard items")
 
-        except json.JSONDecodeError as e:
+        except (json.JSONDecodeError, ValueError) as e:
             self.logger.error(f"Failed to parse gold standards file: {e}")
         except Exception as e:
             self.logger.error(f"Failed to load gold standards: {e}")

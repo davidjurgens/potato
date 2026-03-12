@@ -352,31 +352,53 @@ class TestBehavioralAnalyticsCalculations:
         total_accepts = 7
 
         if total_requests > 0:
-            accept_rate = (total_accepts / total_requests) * 100
+            accept_rate = total_accepts / total_requests
         else:
             accept_rate = 0
 
-        assert accept_rate == 70.0
+        assert accept_rate == 0.7
 
-    def test_average_time_calculation(self):
-        """Test average time per instance calculation."""
-        times_ms = [35000, 45000, 60000, 5000, 4000]  # Mix of normal and fast times
-        total_time = sum(times_ms)
-        avg_time_ms = total_time / len(times_ms) if times_ms else 0
-        avg_time_sec = avg_time_ms / 1000
+    def test_behavioral_analytics_ai_accept_rate_api_contract(self):
+        """Behavioral analytics should expose AI accept rates as 0-1 ratios."""
+        from potato.admin import AdminDashboard
 
-        assert avg_time_sec == 29.8
+        class StubUserState:
+            def __init__(self):
+                self.instance_id_to_behavioral_data = {
+                    "item_001": {
+                        "total_time_ms": 12000,
+                        "interactions": [{"event_type": "click"}, {"event_type": "save"}, {"event_type": "navigation"}],
+                        "annotation_changes": [{"source": "user"}],
+                        "scroll_depth_max": 80,
+                        "ai_usage": [
+                            {"suggestion_accepted": True, "time_to_decision_ms": 1000},
+                            {"suggestion_accepted": True, "time_to_decision_ms": 900},
+                            {"suggestion_accepted": False, "time_to_decision_ms": 1100},
+                        ],
+                    }
+                }
 
-    def test_fast_annotation_detection(self):
-        """Test that fast annotations are detected correctly."""
-        threshold_sec = 2.0  # 2 seconds threshold
-        times_sec = [35.0, 1.5, 1.0, 45.0, 0.5]  # 3 fast out of 5
+        class StubUSM:
+            def get_user_state(self, user_id):
+                return StubUserState()
 
-        fast_count = sum(1 for t in times_sec if t < threshold_sec)
-        fast_rate = fast_count / len(times_sec) if times_sec else 0
+        dashboard = AdminDashboard()
+        dashboard.check_admin_access = lambda: True
 
-        assert fast_count == 3
-        assert fast_rate == 0.6
+        import potato.admin as admin_module
+        original_get_user_state_manager = admin_module.get_user_state_manager
+        original_get_users = admin_module.get_users
+        try:
+            admin_module.get_user_state_manager = lambda: StubUSM()
+            admin_module.get_users = lambda: ["user_001"]
+
+            result = dashboard.get_behavioral_analytics_data()
+        finally:
+            admin_module.get_user_state_manager = original_get_user_state_manager
+            admin_module.get_users = original_get_users
+
+        assert result["ai_usage"]["accept_rate"] == 2 / 3
+        assert result["users"][0]["ai_accept_rate"] == 2 / 3
 
 
 class TestBehavioralDataIntegration:

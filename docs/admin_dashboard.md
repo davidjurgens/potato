@@ -392,7 +392,7 @@ Returns comprehensive behavioral analytics data for all annotators.
       "total_interactions": 600,
       "total_changes": 150,
       "ai_requests": 10,
-      "ai_accept_rate": 70.0,
+      "ai_accept_rate": 0.7,
       "suspicion_score": 0.15
     }
   ]

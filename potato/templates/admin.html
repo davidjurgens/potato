@@ -1974,7 +1974,7 @@
               <td>${user.total_interactions}</td>
               <td>${user.total_changes}</td>
               <td>${user.ai_requests}</td>
-              <td>${user.ai_requests > 0 ? user.ai_accept_rate.toFixed(0) + '%' : 'N/A'}</td>
+              <td>${user.ai_requests > 0 ? (user.ai_accept_rate * 100).toFixed(0) + '%' : 'N/A'}</td>
               <td style="${suspicionClass}">${(user.suspicion_score * 100).toFixed(0)}%</td>
             </tr>
           `;

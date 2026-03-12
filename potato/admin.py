@@ -1759,7 +1759,7 @@ class AdminDashboard:
                         'avg_changes': user_changes / total_instances,
                         'ai_requests': user_ai_requests,
                         'ai_accepts': user_ai_accepts,
-                        'ai_accept_rate': (user_ai_accepts / user_ai_requests * 100) if user_ai_requests > 0 else None,
+                        'ai_accept_rate': (user_ai_accepts / user_ai_requests) if user_ai_requests > 0 else None,
                         'fast_annotation_rate': fast_rate,
                         'low_interaction_rate': low_interaction_rate,
                         'no_scroll_rate': no_scroll_rate,
@@ -1788,7 +1788,7 @@ class AdminDashboard:
                 'total_requests': ai_usage_total['requests'],
                 'total_accepts': ai_usage_total['accepts'],
                 'total_rejects': ai_usage_total['rejects'],
-                'accept_rate': (ai_usage_total['accepts'] / ai_usage_total['requests'] * 100) if ai_usage_total['requests'] > 0 else 0,
+                'accept_rate': (ai_usage_total['accepts'] / ai_usage_total['requests']) if ai_usage_total['requests'] > 0 else 0,
                 'avg_decision_time_ms': sum(ai_usage_total['decision_times']) / len(ai_usage_total['decision_times']) if ai_usage_total['decision_times'] else 0
             }
 
