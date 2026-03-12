@@ -75,6 +75,68 @@ from potato.adjudication import get_adjudication_manager, AdjudicationDecision
 from potato.diversity_manager import get_diversity_manager
 
 import os
+from potato.item_state_management import Item
+from potato.flask_server import get_displayed_text
+
+
+def _inject_quality_control_item_if_needed(username, user_state):
+    qc_manager = get_quality_control_manager()
+    if not qc_manager:
+        return
+
+    current_instance = user_state.get_current_instance()
+    current_instance_id = current_instance.get_id() if current_instance else None
+    if current_instance_id and (
+        qc_manager.is_attention_check(current_instance_id) or qc_manager.is_gold_standard(current_instance_id)
+    ):
+        return
+
+    assigned_ids = set(getattr(user_state, "assigned_instance_ids", set()) or set())
+    annotated_ids = set(user_state.get_annotated_instance_ids()) if hasattr(user_state, "get_annotated_instance_ids") else set()
+    seen_qc_ids = assigned_ids | annotated_ids
+
+    insert_index = user_state.current_instance_index + 1 if user_state.current_instance_index >= 0 else 0
+
+    def inject_item(item_data):
+        item_id = item_data.get("id")
+        if not item_id or item_id in user_state.instance_id_ordering or item_id in seen_qc_ids:
+            return False
+
+        prepared_item = dict(item_data)
+        text_key = config.get("item_properties", {}).get("text_key", "text")
+        if "displayed_text" not in prepared_item:
+            raw_text = prepared_item.get(text_key, prepared_item.get("text", ""))
+            prepared_item["displayed_text"] = get_displayed_text(raw_text) if raw_text is not None else ""
+
+        item_manager = get_item_state_manager()
+        if item_manager.has_item(item_id):
+            existing_item = item_manager.get_item(item_id)
+            if existing_item and isinstance(existing_item.get_data(), dict):
+                existing_data = existing_item.get_data()
+                if "displayed_text" not in existing_data:
+                    existing_data["displayed_text"] = prepared_item["displayed_text"]
+        else:
+            item_manager.add_item(item_id, prepared_item)
+
+        if item_id in user_state.assigned_instance_ids:
+            return False
+
+        user_state.instance_id_ordering.insert(insert_index, item_id)
+        user_state.assigned_instance_ids.add(item_id)
+        user_state.instance_id_to_order = user_state.generate_id_order_mapping(user_state.instance_id_ordering)
+        return True
+
+    if qc_manager.should_inject_attention_check(username):
+        attention_item = qc_manager.get_attention_check_item(username)
+        if attention_item and inject_item(attention_item):
+            logger.info(f"Injected attention check {attention_item.get('id')} for user {username}")
+            return
+
+    if qc_manager.should_inject_gold_standard(username):
+        gold_item = qc_manager.get_gold_standard_item(username)
+        if gold_item and inject_item(gold_item):
+            logger.info(f"Injected gold standard {gold_item.get('id')} for user {username}")
+            return
 
 
 def get_debug_phase_target(debug_phase: str) -> tuple:
@@ -1661,11 +1723,10 @@ def annotate():
     # See if this user has finished annotating all of their assigned instances
     if not user_state.has_remaining_assignments():
         logger.debug(f"User {username} has no remaining assignments, advancing phase")
-        # If the user is done annotating, advance to the next phase
         get_user_state_manager().advance_phase(username)
-        # Use redirect to ensure next phase handler gets a GET request (fixes issue #115:
-        # POST leaking into poststudy handler caused it to skip immediately)
         return redirect(url_for("home"))
+
+    _inject_quality_control_item_if_needed(username, user_state)
 
     # Handle POST requests
     if request.method == 'POST':
@@ -1698,7 +1759,13 @@ def annotate():
                                getattr(acm, "prefetch_page_count_on_prev", 0) )
     elif action == "next_instance":
         logger.debug(f"Moving to next instance for user: {username}")
-        move_to_next_instance(username)
+        moved_forward = move_to_next_instance(username)
+        if not moved_forward and user_state.is_at_end_index():
+            logger.debug(f"User {username} reached the end of assigned instances")
+            if not user_state.has_remaining_assignments():
+                logger.debug(f"User {username} completed all assignments at end-of-list")
+                get_user_state_manager().advance_phase(username)
+                return redirect(url_for("home"))
         acm = get_ai_cache_manager()
         if acm:
             acm.start_prefetch(user_state.current_instance_index, getattr(acm,"prefetch_page_count_on_next", 0))
