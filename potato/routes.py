@@ -1196,9 +1196,8 @@ def consent():
         usm = get_user_state_manager()
         usm.advance_phase(session['username'])
 
-        # Reset to pretend this is a new get request
-        request.method = 'GET'
-        return home()
+        # Redirect to force a clean GET request (fixes POST leakage, issue #124)
+        return redirect(url_for("home"))
     # Show the current consent form
     else:
         logger.debug("GET <- CONSENT")
@@ -1231,8 +1230,9 @@ def instructions():
         # and have the home page redirect to the appropriate next phase
         usm = get_user_state_manager()
         usm.advance_phase(session['username'])
-        request.method = 'GET'
-        return home()
+
+        # Redirect to force a clean GET request (fixes POST leakage, issue #124)
+        return redirect(url_for("home"))
 
     # Show the current set of instructions
     else:
@@ -1296,7 +1296,7 @@ def training():
         logger.debug('Training not enabled, advancing to next phase')
         usm = get_user_state_manager()
         usm.advance_phase(username)
-        return home()
+        return redirect(url_for("home"))
 
     # Get training state and initialize max_mistakes from config if not set
     training_state = user_state.get_training_state()
@@ -1393,7 +1393,7 @@ def training():
 
                     usm = get_user_state_manager()
                     usm.advance_phase(username)
-                    return home()
+                    return redirect(url_for("home"))
 
                 # Move to next training question or complete training
                 if user_state.advance_training_question():
@@ -1445,7 +1445,7 @@ def training():
 
                         usm = get_user_state_manager()
                         usm.advance_phase(username)
-                        return home()
+                        return redirect(url_for("home"))
             else:
                 logger.info(f'User {username} answered training question {instance_id} incorrectly')
                 # Record the mistake
@@ -1534,7 +1534,7 @@ def training():
                                 training_state.set_passed(True)
                                 usm = get_user_state_manager()
                                 usm.advance_phase(username)
-                                return home()
+                                return redirect(url_for("home"))
                             else:
                                 training_state.set_failed(True)
                                 user_state.set_current_phase_and_page((UserPhase.DONE, None))
@@ -1657,8 +1657,9 @@ def prestudy():
         # Advance the state and redirect to the appropriate next phase
         usm = get_user_state_manager()
         usm.advance_phase(session['username'])
-        request.method = 'GET'
-        return home()
+
+        # Redirect to force a clean GET request (fixes POST leakage, issue #124)
+        return redirect(url_for("home"))
 
     # Show the current prestudy page
     else:
@@ -2779,6 +2780,80 @@ def admin_api_agreement():
     if isinstance(result, tuple):
         return jsonify(result[0]), result[1]
     return jsonify(result)
+
+
+@app.route("/admin/api/step_agreement", methods=["GET"])
+def admin_api_step_agreement():
+    """
+    Get step-level inter-annotator agreement metrics for agent traces.
+    Admin-only endpoint.
+
+    Query params:
+        scheme: Annotation scheme name (required)
+        metric: "krippendorff_alpha" or "cohens_kappa" (default: krippendorff_alpha)
+
+    Returns:
+        JSON with overall, per_step, and per_instance agreement.
+    """
+    try:
+        from potato.step_agreement import compute_step_agreement
+        from potato.item_state_management import get_item_state_manager
+
+        scheme_name = request.args.get("scheme", "")
+        metric = request.args.get("metric", "krippendorff_alpha")
+
+        if not scheme_name:
+            return jsonify({"error": "scheme parameter is required"}), 400
+
+        ism = get_item_state_manager()
+        # Collect step-level annotations from all instances
+        annotations = {}
+        for instance_id, item in ism.instance_id_to_instance.items():
+            annotator_data = {}
+            for annotator_id, ann in item.get_annotations().items():
+                if scheme_name in ann:
+                    annotator_data[annotator_id] = ann
+            if annotator_data:
+                annotations[instance_id] = annotator_data
+
+        if not annotations:
+            return jsonify({
+                "error": "No step-level annotations found",
+                "scheme": scheme_name,
+            }), 404
+
+        result = compute_step_agreement(
+            annotations, scheme_name=scheme_name, metric=metric
+        )
+        return jsonify(result)
+
+    except ImportError as e:
+        return jsonify({"error": f"Missing dependency: {e}"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/admin/api/step_quality", methods=["GET"])
+def admin_api_step_quality():
+    """
+    Get step-level quality control metrics.
+    Admin-only endpoint.
+
+    Returns:
+        JSON with gold standard results and attention check stats.
+    """
+    try:
+        step_qc_config = config.get("quality_control", {}).get("step_level", {})
+        if not step_qc_config.get("enabled", False):
+            return jsonify({"enabled": False, "message": "Step-level QC not configured"})
+
+        from potato.step_quality_control import StepQualityControlManager
+        task_dir = config.get("task_dir", ".")
+        manager = StepQualityControlManager(step_qc_config, task_dir)
+        return jsonify(manager.get_quality_summary())
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/admin/api/quality_control", methods=["GET"])
@@ -4291,8 +4366,9 @@ def poststudy():
         # Advance the state and move to the appropriate next phase
         usm = get_user_state_manager()
         usm.advance_phase(session['username'])
-        request.method = 'GET'
-        return home()
+
+        # Redirect to force a clean GET request (fixes POST leakage, issue #124)
+        return redirect(url_for("home"))
 
     # Show the current poststudy page
     else:
@@ -4428,7 +4504,7 @@ def api_frontend():
     # Check user phase
     if user_state.get_phase() != UserPhase.ANNOTATION:
         logger.info(f"User {username} not in annotation phase, redirecting")
-        return home()
+        return redirect(url_for("home"))
 
     # If the user hasn't yet been assigned anything to annotate, do so now
     if not user_state.has_assignments():
@@ -4438,7 +4514,7 @@ def api_frontend():
     if not user_state.has_remaining_assignments():
         # If the user is done annotating, advance to the next phase
         get_user_state_manager().advance_phase(username)
-        return home()
+        return redirect(url_for("home"))
 
     # Render the API frontend template
     return render_template("api_frontend.html",
@@ -4475,7 +4551,7 @@ def span_api_frontend():
     # Check user phase
     if user_state.get_phase() != UserPhase.ANNOTATION:
         logger.info(f"User {username} not in annotation phase, redirecting")
-        return home()
+        return redirect(url_for("home"))
 
     # If the user hasn't yet been assigned anything to annotate, do so now
     if not user_state.has_assignments():
@@ -4485,7 +4561,7 @@ def span_api_frontend():
     if not user_state.has_remaining_assignments():
         # If the user is done annotating, advance to the next phase
         get_user_state_manager().advance_phase(username)
-        return home()
+        return redirect(url_for("home"))
 
     # Render the span API frontend template
     return render_template("span_api_frontend.html",
