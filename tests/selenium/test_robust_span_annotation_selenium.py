@@ -31,7 +31,7 @@ class TestRobustSpanAnnotationSelenium:
             "max_annotations_per_user": 5,
             "assignment_strategy": "fixed_order",
             "annotation_task_name": "Robust Span Annotation Test",
-            "require_password": False,
+            "require_password": True,
             "authentication": {
                 "method": "in_memory"
             },
@@ -75,24 +75,25 @@ class TestRobustSpanAnnotationSelenium:
             "alert_time_each_instance": 10000000
         }
 
-        # Create temporary directory for test
-        test_dir = tempfile.mkdtemp()
+        # Create test directory within tests/output (not /tmp)
+        tests_dir = os.path.dirname(os.path.dirname(__file__))
+        test_dir = os.path.join(tests_dir, "output", "robust_span_test")
+        os.makedirs(test_dir, exist_ok=True)
 
-        # Create test data file in the test directory
+        # Create output directory
+        os.makedirs(os.path.join(test_dir, "output"), exist_ok=True)
+
+        # Create test data file inside task_dir (test_dir itself)
         data_file = os.path.join(test_dir, "test_data.json")
         with open(data_file, 'w') as f:
             for item in test_data:
                 f.write(json.dumps(item) + '\n')
 
-        # Create output and task directories
-        os.makedirs(os.path.join(test_dir, "output"), exist_ok=True)
-        os.makedirs(os.path.join(test_dir, "task"), exist_ok=True)
-
-        # Update config paths to use absolute paths
+        # Update config paths - task_dir is the test_dir itself so data_files are inside it
         config["output_annotation_dir"] = os.path.join(test_dir, "output")
-        config["task_dir"] = os.path.join(test_dir, "task")
-        config["site_dir"] = os.path.join(test_dir, "templates")
-        config["data_files"] = [data_file]  # Use absolute path to the data file
+        config["task_dir"] = test_dir
+        config["site_dir"] = "default"
+        config["data_files"] = ["test_data.json"]  # Relative to task_dir
 
         # Create config file
         config_path = os.path.join(test_dir, "test_config.yaml")

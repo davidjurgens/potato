@@ -670,6 +670,29 @@ class FlaskTestServer:
                 except ImportError:
                     pass
 
+                # Register live agent blueprint if live_agent config is present
+                if config.get("live_agent"):
+                    try:
+                        from potato.routes_live_agent import live_agent_bp
+                        if 'live_agent' not in app.blueprints:
+                            app.register_blueprint(live_agent_bp)
+                            app.config["live_agent"] = config.get("live_agent", {})
+                            app.config["live_agent_enabled"] = True
+                            app.config["task_dir"] = config.get("task_dir", ".")
+                    except ImportError:
+                        pass
+
+                # Register trace ingestion blueprint if configured
+                trace_ingestion_config = config.get("trace_ingestion", {})
+                if trace_ingestion_config.get("enabled", False):
+                    try:
+                        from potato.routes_trace_ingestion import trace_ingestion_bp
+                        if 'trace_ingestion' not in app.blueprints:
+                            app.register_blueprint(trace_ingestion_bp)
+                            app.config["trace_ingestion"] = trace_ingestion_config
+                    except ImportError:
+                        pass
+
                 # Initialize OAuth with Flask app if using OAuth authentication
                 auth_method = config.get("authentication", {}).get("method", "in_memory")
                 if auth_method == "oauth":
@@ -753,6 +776,10 @@ class FlaskTestServer:
             except Exception:
                 self.process.kill()
             self.process = None
+
+        # Release the port for reuse by other tests
+        if hasattr(self, 'port') and self.port:
+            release_port(self.port)
 
     def register_user(self, username: str, password: str = "test_password") -> bool:
         """Register a new user via the registration endpoint."""

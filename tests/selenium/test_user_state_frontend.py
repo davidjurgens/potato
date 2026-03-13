@@ -121,14 +121,23 @@ class TestUserStateFrontendIntegration:
         yield driver
         driver.quit()
 
+    def _browser_login(self, driver, base_url, username):
+        """Login a user through the browser (establishes session cookies)."""
+        driver.get(base_url)
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.ID, "login-email"))
+        )
+        email_field = driver.find_element(By.ID, "login-email")
+        email_field.clear()
+        email_field.send_keys(username)
+        submit_btn = driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+        submit_btn.click()
+        time.sleep(0.5)
+
     def test_frontend_loads_user_state(self, flask_server, driver):
         """Test that frontend can load user state without errors."""
-        # Register a test user
-        user_data = {"email": "frontend_test_user", "pass": "test_password"}
-        session = requests.Session()
-
-        reg_response = session.post(f"{flask_server.base_url}/register", data=user_data, timeout=5)
-        assert reg_response.status_code in [200, 302]
+        # Register and login via browser (require_password=False, so just enter username)
+        self._browser_login(driver, flask_server.base_url, "frontend_test_user")
 
         # Navigate to annotation page
         driver.get(f"{flask_server.base_url}/annotate")
@@ -159,28 +168,9 @@ class TestUserStateFrontendIntegration:
 
     def test_frontend_handles_annotations_by_instance(self, flask_server, driver):
         """Test that frontend can handle annotations.by_instance structure."""
-        # Register a test user
-        user_data = {"email": "annotations_frontend_user", "pass": "test_password"}
-        session = requests.Session()
-
-        reg_response = session.post(f"{flask_server.base_url}/register", data=user_data, timeout=5)
-        assert reg_response.status_code in [200, 302]
-
-        # Submit an annotation first
-        annotation_data = {
-            "instance_id": "frontend_test_item_1",
-            "annotations": {
-                "sentiment:happy": "happy"
-            },
-            "span_annotations": {}
-        }
-
-        response = session.post(
-            f"{flask_server.base_url}/updateinstance",
-            json=annotation_data,
-            timeout=5
-        )
-        assert response.status_code == 200
+        # Login via browser
+        username = "annotations_frontend_user"
+        self._browser_login(driver, flask_server.base_url, username)
 
         # Navigate to annotation page
         driver.get(f"{flask_server.base_url}/annotate")
@@ -211,12 +201,8 @@ class TestUserStateFrontendIntegration:
 
     def test_frontend_span_annotation_workflow(self, flask_server, driver):
         """Test complete span annotation workflow in frontend."""
-        # Register a test user
-        user_data = {"email": "span_frontend_user", "pass": "test_password"}
-        session = requests.Session()
-
-        reg_response = session.post(f"{flask_server.base_url}/register", data=user_data, timeout=5)
-        assert reg_response.status_code in [200, 302]
+        # Login via browser
+        self._browser_login(driver, flask_server.base_url, "span_frontend_user")
 
         # Navigate to annotation page
         driver.get(f"{flask_server.base_url}/annotate")

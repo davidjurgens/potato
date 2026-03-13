@@ -55,9 +55,10 @@ item_properties:
   audio_key: audio_url
 
 instance_display:
-  - field_name: audio_url
-    display_type: audio
-    label: "Audio"
+  fields:
+    - key: audio_url
+      type: audio
+      label: "Audio"
 
 annotation_schemes:
   - annotation_type: tiered_annotation

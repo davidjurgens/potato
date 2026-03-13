@@ -27,8 +27,9 @@ class EventAnnotationSeleniumTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Set up the Flask server with event annotation config."""
-        # Use the event annotation example config
-        config_file = "examples/span/event-annotation/config.yaml"
+        # Use the event annotation example config (absolute path for reliability)
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+        config_file = os.path.join(project_root, "examples/span/event-annotation/config.yaml")
 
         # Use dynamic port allocation
         port = find_free_port(preferred_port=9020)
@@ -56,7 +57,7 @@ class EventAnnotationSeleniumTest(unittest.TestCase):
             cls.driver.implicitly_wait(5)
         except Exception as e:
             print(f"Failed to create Chrome driver: {e}")
-            cls.server.stop_server()
+            cls.server.stop()
             raise
 
     @classmethod
@@ -65,7 +66,7 @@ class EventAnnotationSeleniumTest(unittest.TestCase):
         if hasattr(cls, 'driver'):
             cls.driver.quit()
         if hasattr(cls, 'server'):
-            cls.server.stop_server()
+            cls.server.stop()
 
     def setUp(self):
         """Set up for each test - register and login."""

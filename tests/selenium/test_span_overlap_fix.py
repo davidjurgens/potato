@@ -590,14 +590,15 @@ class TestSpanOverlapFix(BaseSeleniumTest):
             false
         );
 
+        let fullText = '';
         let node;
         while (node = walker.nextNode()) {{
             textNodes.push({{
                 node: node,
                 start: fullText.length,
-                end: fullText.length + textNode.textContent.length
+                end: fullText.length + node.textContent.length
             }});
-            fullText += textNode.textContent;
+            fullText += node.textContent;
         }}
 
         const startIndex = fullText.indexOf('{text_to_select}');
