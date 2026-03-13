@@ -1,0 +1,23 @@
+[
+  {
+    "id": "task_001",
+    "task_description": "Search for 'climate change effects' on Wikipedia and find the section about economic impacts",
+    "start_url": "https://en.wikipedia.org",
+    "difficulty": "easy",
+    "agent_trace": {}
+  },
+  {
+    "id": "task_002",
+    "task_description": "Go to Python.org and find the download page for the latest stable Python release",
+    "start_url": "https://www.python.org",
+    "difficulty": "easy",
+    "agent_trace": {}
+  },
+  {
+    "id": "task_003",
+    "task_description": "Navigate to the Flask documentation and find the section about request handling",
+    "start_url": "https://flask.palletsprojects.com",
+    "difficulty": "medium",
+    "agent_trace": {}
+  }
+]
