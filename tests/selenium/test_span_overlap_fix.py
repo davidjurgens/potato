@@ -123,11 +123,11 @@ class TestSpanOverlapFix(BaseSeleniumTest):
         for i, span in enumerate(all_spans[:5]):  # Show first 5 spans
             print(f"Span {i}: class='{span.get_attribute('class')}', text='{span.text[:50]}'")
 
-        # Look for annotation-span elements specifically (new span manager)
-        annotation_spans = self.driver.find_elements(By.CLASS_NAME, "annotation-span")
-        print(f"Found {len(annotation_spans)} annotation-span elements")
-        for i, span in enumerate(annotation_spans):
-            print(f"Annotation span {i}: label='{span.get_attribute('data-label')}', text='{span.text[:50]}'")
+        # Look for span-overlay-pure elements (current overlay system)
+        overlay_spans = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
+        print(f"Found {len(overlay_spans)} span-overlay-pure elements")
+        for i, span in enumerate(overlay_spans):
+            print(f"Overlay span {i}: label='{span.get_attribute('data-label')}', id='{span.get_attribute('data-annotation-id')}'")
 
         # Create second span: select words that overlap with first span
         second_span_text = " ".join(words[2:5])  # Overlaps with first span
@@ -137,74 +137,19 @@ class TestSpanOverlapFix(BaseSeleniumTest):
         # Wait for second span to be created
         time.sleep(0.1)
 
-        # Debug: Check what span elements are present after second span
-        print("Checking for span elements after second span creation...")
-        all_spans_after = self.driver.find_elements(By.CSS_SELECTOR, "span")
-        print(f"Found {len(all_spans_after)} span elements after second span")
-        annotation_spans_after = self.driver.find_elements(By.CLASS_NAME, "annotation-span")
-        print(f"Found {len(annotation_spans_after)} annotation-span elements after second span")
-        for i, span in enumerate(annotation_spans_after):
-            print(f"Annotation span {i}: label='{span.get_attribute('data-label')}', text='{span.text[:50]}'")
-
-        # Debug: Check if there are any error messages or status updates
-        status_elements = self.driver.find_elements(By.ID, "status")
-        if status_elements:
-            print(f"Status message: {status_elements[0].text}")
-
-        # Debug: Check the current text content to see if spans are there but not detected
-        instance_text = self.driver.find_element(By.ID, "instance-text")
-        print(f"Instance text content: {instance_text.text[:200]}...")
-        print(f"Instance text HTML: {instance_text.get_attribute('innerHTML')[:500]}...")
+        # Debug: Check what span overlay elements are present after second span
+        print("Checking for span overlay elements after second span creation...")
+        overlay_spans_after = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
+        print(f"Found {len(overlay_spans_after)} span-overlay-pure elements after second span")
+        for i, span in enumerate(overlay_spans_after):
+            print(f"Overlay span {i}: label='{span.get_attribute('data-label')}', id='{span.get_attribute('data-annotation-id')}'")
 
         # Verify both spans are visible (using the correct class name)
-        spans = self.driver.find_elements(By.CLASS_NAME, "annotation-span")
+        spans = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         self.assertGreaterEqual(len(spans), 2, "Both spans should be created and visible")
 
         # Verify span labels are visible
-        labels = self.driver.find_elements(By.CLASS_NAME, "span-label")
-        print(f"Found {len(labels)} span-label elements")
-        for i, label in enumerate(labels):
-            print(f"Span label {i}: text='{label.text}', class='{label.get_attribute('class')}', visible='{label.is_displayed()}'")
-            # Print innerHTML and outerHTML
-            inner_html = self.driver.execute_script("return arguments[0].innerHTML;", label)
-            outer_html = self.driver.execute_script("return arguments[0].outerHTML;", label)
-            print(f"  innerHTML: {inner_html}")
-            print(f"  outerHTML: {outer_html}")
-            # Print computed style
-            computed_style = self.driver.execute_script("var s = window.getComputedStyle(arguments[0]); return {display: s.display, visibility: s.visibility, opacity: s.opacity, color: s.color, background: s.backgroundColor, zIndex: s.zIndex};", label)
-            print(f"  computed style: {computed_style}")
-            # Print bounding rect
-            rect = self.driver.execute_script("var r = arguments[0].getBoundingClientRect(); return {top: r.top, left: r.left, width: r.width, height: r.height};", label)
-            print(f"  bounding rect: {rect}")
-
-        # Also look for overlay labels specifically
-        overlay_labels = self.driver.find_elements(By.CLASS_NAME, "overlay-label")
-        print(f"Found {len(overlay_labels)} overlay-label elements")
-        for i, label in enumerate(overlay_labels):
-            print(f"Overlay label {i}: text='{label.text}', class='{label.get_attribute('class')}', visible='{label.is_displayed()}'")
-            inner_html = self.driver.execute_script("return arguments[0].innerHTML;", label)
-            outer_html = self.driver.execute_script("return arguments[0].outerHTML;", label)
-            print(f"  innerHTML: {inner_html}")
-            print(f"  outerHTML: {outer_html}")
-            computed_style = self.driver.execute_script("var s = window.getComputedStyle(arguments[0]); return {display: s.display, visibility: s.visibility, opacity: s.opacity, color: s.color, background: s.backgroundColor, zIndex: s.zIndex};", label)
-            print(f"  computed style: {computed_style}")
-            rect = self.driver.execute_script("var r = arguments[0].getBoundingClientRect(); return {top: r.top, left: r.left, width: r.width, height: r.height};", label)
-            print(f"  bounding rect: {rect}")
-
-        # Look for any elements with span-label in their class
-        all_labels = self.driver.find_elements(By.CSS_SELECTOR, "[class*='span-label']")
-        print(f"Found {len(all_labels)} elements with span-label in class")
-        for i, label in enumerate(all_labels):
-            print(f"All label {i}: text='{label.text}', class='{label.get_attribute('class')}', visible='{label.is_displayed()}'")
-            inner_html = self.driver.execute_script("return arguments[0].innerHTML;", label)
-            outer_html = self.driver.execute_script("return arguments[0].outerHTML;", label)
-            print(f"  innerHTML: {inner_html}")
-            print(f"  outerHTML: {outer_html}")
-            computed_style = self.driver.execute_script("var s = window.getComputedStyle(arguments[0]); return {display: s.display, visibility: s.visibility, opacity: s.opacity, color: s.color, background: s.backgroundColor, zIndex: s.zIndex};", label)
-            print(f"  computed style: {computed_style}")
-            rect = self.driver.execute_script("var r = arguments[0].getBoundingClientRect(); return {top: r.top, left: r.left, width: r.width, height: r.height};", label)
-            print(f"  bounding rect: {rect}")
-
+        labels = self.driver.find_elements(By.CSS_SELECTOR, ".span-label")
         label_texts = [label.text for label in labels]
         self.assertIn("positive", label_texts, "First span label should be visible")
         self.assertIn("negative", label_texts, "Second span label should be visible")
@@ -249,11 +194,11 @@ class TestSpanOverlapFix(BaseSeleniumTest):
         time.sleep(0.1)
 
         # Verify both spans are visible
-        spans = self.driver.find_elements(By.CLASS_NAME, "annotation-span")
+        spans = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         self.assertGreaterEqual(len(spans), 2, "Both overlapping spans should be visible")
 
         # Verify both labels are visible
-        labels = self.driver.find_elements(By.CLASS_NAME, "span-label")
+        labels = self.driver.find_elements(By.CSS_SELECTOR, ".span-label")
         label_texts = [label.text for label in labels]
         self.assertIn("positive", label_texts, "First span label should be visible")
         self.assertIn("negative", label_texts, "Second span label should be visible")
@@ -298,11 +243,11 @@ class TestSpanOverlapFix(BaseSeleniumTest):
         time.sleep(0.1)
 
         # Verify all three spans are visible
-        spans = self.driver.find_elements(By.CLASS_NAME, "annotation-span")
+        spans = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         self.assertGreaterEqual(len(spans), 3, "All three spans should be visible")
 
         # Verify all labels are visible
-        labels = self.driver.find_elements(By.CLASS_NAME, "span-label")
+        labels = self.driver.find_elements(By.CSS_SELECTOR, ".span-label")
         label_texts = [label.text for label in labels]
         self.assertIn("positive", label_texts, "First span label should be visible")
         self.assertIn("negative", label_texts, "Second span label should be visible")
@@ -344,21 +289,21 @@ class TestSpanOverlapFix(BaseSeleniumTest):
         time.sleep(0.1)
 
         # Verify both spans exist
-        spans = self.driver.find_elements(By.CLASS_NAME, "annotation-span")
+        spans = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         self.assertGreaterEqual(len(spans), 2, "Both spans should be created")
 
         # Delete the first span
-        delete_buttons = self.driver.find_elements(By.CLASS_NAME, "span-delete-btn")
+        delete_buttons = self.driver.find_elements(By.CSS_SELECTOR, ".span-delete-btn")
         if len(delete_buttons) > 0:
             delete_buttons[0].click()
             time.sleep(0.1)
 
         # Verify second span still exists
-        remaining_spans = self.driver.find_elements(By.CLASS_NAME, "annotation-span")
+        remaining_spans = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         self.assertGreaterEqual(len(remaining_spans), 1, "Second span should still exist after deletion")
 
         # Verify second span label is still visible
-        remaining_labels = self.driver.find_elements(By.CLASS_NAME, "span-label")
+        remaining_labels = self.driver.find_elements(By.CSS_SELECTOR, ".span-label")
         label_texts = [label.text for label in remaining_labels]
         self.assertIn("negative", label_texts, "Second span label should still be visible")
 
@@ -398,7 +343,7 @@ class TestSpanOverlapFix(BaseSeleniumTest):
         time.sleep(0.1)
 
         # Verify both spans exist
-        spans = self.driver.find_elements(By.CLASS_NAME, "annotation-span")
+        spans = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         self.assertGreaterEqual(len(spans), 2, "Both spans should be created")
 
         # Navigate to next instance
@@ -406,22 +351,22 @@ class TestSpanOverlapFix(BaseSeleniumTest):
         next_button.click()
 
         # Wait for navigation
-        time.sleep(0.05)
+        time.sleep(0.5)
 
         # Navigate back to previous instance
         prev_button = self.driver.find_element(By.ID, "prev-btn")
         prev_button.click()
 
-        # Wait for navigation
-        time.sleep(0.05)
+        # Wait for navigation and span overlay rendering
+        time.sleep(1.0)
 
         # Verify spans are still there
-        spans_after_navigation = self.driver.find_elements(By.CLASS_NAME, "annotation-span")
+        spans_after_navigation = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         self.assertGreaterEqual(len(spans_after_navigation), 2,
                                "Both spans should persist after navigation")
 
         # Verify labels are still visible
-        labels_after_navigation = self.driver.find_elements(By.CLASS_NAME, "span-label")
+        labels_after_navigation = self.driver.find_elements(By.CSS_SELECTOR, ".span-label")
         label_texts = [label.text for label in labels_after_navigation]
         self.assertIn("positive", label_texts, "First span label should persist")
         self.assertIn("negative", label_texts, "Second span label should persist")
@@ -463,22 +408,22 @@ class TestSpanOverlapFix(BaseSeleniumTest):
         time.sleep(0.1)
 
         # Verify both spans are visible
-        spans = self.driver.find_elements(By.CLASS_NAME, "annotation-span")
+        spans = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         self.assertGreaterEqual(len(spans), 2, "Spans with same start should both be visible")
 
         # Test 2: Spans that are completely contained within others
         # First create a longer span
         long_span_text = " ".join(words[:5])
-        self.create_span_by_text_selection(long_span_text, "mixed")
+        self.create_span_by_text_selection(long_span_text, "neutral")
         time.sleep(0.1)
 
         # Then create a shorter span within it
         short_span_text = " ".join(words[1:4])
-        self.create_span_by_text_selection(short_span_text, "neutral")
+        self.create_span_by_text_selection(short_span_text, "positive")
         time.sleep(0.1)
 
-        # Verify both spans are visible
-        all_spans = self.driver.find_elements(By.CLASS_NAME, "annotation-span")
+        # Verify all spans are visible
+        all_spans = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         self.assertGreaterEqual(len(all_spans), 4, "All spans including contained ones should be visible")
 
     def test_multiple_non_overlapping_spans(self):
@@ -519,31 +464,19 @@ class TestSpanOverlapFix(BaseSeleniumTest):
         # Wait for second span to be created
         time.sleep(0.1)
 
-        # Debug: Check what span elements are present after second span
-        print("Checking for span elements after second span creation...")
-        all_spans_after = self.driver.find_elements(By.CSS_SELECTOR, "span")
-        print(f"Found {len(all_spans_after)} span elements after second span")
-        annotation_spans_after = self.driver.find_elements(By.CLASS_NAME, "annotation-span")
-        print(f"Found {len(annotation_spans_after)} annotation-span elements after second span")
-        for i, span in enumerate(annotation_spans_after):
-            print(f"Annotation span {i}: label='{span.get_attribute('data-label')}', text='{span.text[:50]}'")
-
-        # Debug: Check if there are any error messages or status updates
-        status_elements = self.driver.find_elements(By.ID, "status")
-        if status_elements:
-            print(f"Status message: {status_elements[0].text}")
-
-        # Debug: Check the current text content to see if spans are there but not detected
-        instance_text = self.driver.find_element(By.ID, "instance-text")
-        print(f"Instance text content: {instance_text.text[:200]}...")
-        print(f"Instance text HTML: {instance_text.get_attribute('innerHTML')[:500]}...")
+        # Debug: Check what span overlay elements are present after second span
+        print("Checking for span overlay elements after second span creation...")
+        overlay_spans_after = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
+        print(f"Found {len(overlay_spans_after)} span-overlay-pure elements after second span")
+        for i, span in enumerate(overlay_spans_after):
+            print(f"Overlay span {i}: label='{span.get_attribute('data-label')}', id='{span.get_attribute('data-annotation-id')}'")
 
         # Verify both spans are visible
-        spans = self.driver.find_elements(By.CLASS_NAME, "annotation-span")
+        spans = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         self.assertGreaterEqual(len(spans), 2, "Both spans should be created and visible")
 
         # Verify span labels are visible
-        labels = self.driver.find_elements(By.CLASS_NAME, "span-label")
+        labels = self.driver.find_elements(By.CSS_SELECTOR, ".span-label")
         label_texts = [label.text for label in labels]
         self.assertIn("positive", label_texts, "First span label should be visible")
         self.assertIn("negative", label_texts, "Second span label should be visible")
@@ -565,7 +498,7 @@ class TestSpanOverlapFix(BaseSeleniumTest):
 
         Args:
             text_to_select: The text to select
-            label: The label to apply (positive, negative, neutral, mixed)
+            label: The label to apply (positive, negative, neutral)
         """
         # Click the label checkbox by ID to activate (triggers changeSpanLabel -> selectLabel)
         schema = "emotion_spans"  # BaseSeleniumTest default schema

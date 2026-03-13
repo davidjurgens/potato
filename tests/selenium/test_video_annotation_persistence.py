@@ -164,9 +164,8 @@ site_dir: default
         if hasattr(cls, 'test_output_dir') and os.path.exists(cls.test_output_dir):
             shutil.rmtree(cls.test_output_dir, ignore_errors=True)
 
-    def setUp(self):
-        """Set up WebDriver for each test."""
-        # Clean up annotation output directory to ensure fresh state
+    def _reset_server_state(self):
+        """Clean annotation output and reset server state for test isolation."""
         import shutil
         import requests
         annotation_dir = os.path.join(self.test_output_dir, "annotation_output")
@@ -184,6 +183,10 @@ site_dir: default
                 print(f"[TEST] Warning: Could not reset server state: {response.status_code}")
         except Exception as e:
             print(f"[TEST] Warning: Could not reset server state: {e}")
+
+    def setUp(self):
+        """Set up WebDriver for each test."""
+        self._reset_server_state()
 
         # Use Firefox by default (better keyboard support for video annotation)
         self.driver = webdriver.Firefox(options=self.firefox_options)
@@ -539,7 +542,10 @@ class TestVideoAnnotationPersistenceChrome(TestVideoAnnotationPersistence):
     """Run video annotation persistence tests on Chrome."""
 
     def setUp(self):
-        """Set up Chrome WebDriver."""
+        """Set up Chrome WebDriver with same state cleanup as parent."""
+        self._reset_server_state()
+
+        # Use Chrome instead of Firefox
         self.driver = webdriver.Chrome(options=self.chrome_options)
         self.driver.implicitly_wait(5)
 

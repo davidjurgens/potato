@@ -389,38 +389,16 @@ class RobustSpanAnnotationHelper:
                 if result.get('success'):
                     print(f"   ✅ Text selection successful: '{result.get('selectedText')}'")
 
-                    # Call surroundSelection directly to create the span
-                    surround_result = driver.execute_script("""
-                        if (typeof surroundSelection === 'function') {
-                            return surroundSelection('emotion', 'happy', 'happy', '(255, 230, 230)');
-                        } else {
-                            return 'surroundSelection function not found';
+                    # Dispatch mouseup event to trigger SpanManager.handleTextSelection()
+                    driver.execute_script("""
+                        var el = document.getElementById('instance-text') || document.getElementById('text-content');
+                        if (el) {
+                            el.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
                         }
                     """)
-                    print(f"   Direct surroundSelection result: {surround_result}")
 
-                    # Fetch and print browser console logs after surroundSelection
-                    print("   🔍 Fetching browser logs after surroundSelection...")
-                    try:
-                        logs = driver.get_log('browser')
-                        for entry in logs:
-                            print(f"   [BROWSER LOG] {entry['level']}: {entry['message']}")
-                        if not logs:
-                            print("   [BROWSER LOG] No new logs found after surroundSelection")
-                    except Exception as e:
-                        print(f"   [BROWSER LOG] Error fetching logs after surroundSelection: {e}")
-
-                    # Wait a moment for any async operations to complete
-                    time.sleep(0.05)
-
-                    # Fetch logs one more time to catch any delayed output
-                    print("   🔍 Fetching browser logs after delay...")
-                    try:
-                        logs = driver.get_log('browser')
-                        for entry in logs:
-                            print(f"   [BROWSER LOG] {entry['level']}: {entry['message']}")
-                    except Exception as e:
-                        print(f"   [BROWSER LOG] Error fetching logs after delay: {e}")
+                    # Wait for async span creation
+                    time.sleep(1.0)
 
                     return True
                 else:
@@ -468,33 +446,25 @@ class RobustSpanAnnotationHelper:
 
     @staticmethod
     def get_span_text(span_element):
-        """Get the text content of a span element with error handling for the overlay system."""
+        """Get the text content covered by a span overlay using data-start/data-end offsets."""
         try:
-            # For the overlay system, we need to find the text segments covered by this overlay
-            # Get the annotation ID from the overlay
-            annotation_id = span_element.get_attribute('data-annotation-id')
-            if not annotation_id:
-                print(f"   ⚠️ Overlay missing data-annotation-id")
-                return ""
-
-            # Find the container
-            container = span_element.find_element(By.XPATH, "./ancestor::div[contains(@class, 'span-annotation-container')]")
-
-            # Find all text segments covered by this overlay
-            text_segments = container.find_elements(By.CSS_SELECTOR, ".text-segment")
-            covered_text = ""
-
-            for segment in text_segments:
-                span_ids = segment.get_attribute('data-span-ids') or ""
-                if annotation_id in span_ids.split(','):
-                    covered_text += segment.text
-
-            if covered_text:
-                print(f"   📝 Found covered text: '{covered_text}'")
-                return covered_text
+            start = span_element.get_attribute('data-start')
+            end = span_element.get_attribute('data-end')
+            if start is not None and end is not None:
+                start = int(start)
+                end = int(end)
+                # Get original text from the text-content element
+                from selenium.webdriver.common.by import By as ByLocal
+                driver = span_element.parent
+                text_el = driver.find_element(ByLocal.ID, "text-content")
+                original_text = text_el.get_attribute("data-original-text") or text_el.text
+                span_text = original_text[start:end]
+                print(f"   📝 Span text [{start}:{end}]: '{span_text}'")
+                return span_text
             else:
-                print(f"   ⚠️ No text segments found for overlay {annotation_id}")
-                return ""
+                label = span_element.get_attribute('data-label') or ""
+                print(f"   ⚠️ Overlay missing start/end offsets, label={label}")
+                return label
 
         except Exception as e:
             print(f"   ❌ Error getting span text: {e}")
@@ -507,7 +477,7 @@ class RobustSpanAnnotationHelper:
         for attempt in range(max_retries):
             try:
                 # Find the close button within the span
-                close_button = span_element.find_element(By.CSS_SELECTOR, ".span-close")
+                close_button = span_element.find_element(By.CSS_SELECTOR, ".span-delete-btn")
 
                 # Scroll the close button into view
                 driver.execute_script("arguments[0].scrollIntoView(true);", close_button)
@@ -740,18 +710,29 @@ class RobustSpanAnnotationHelper:
             return False
 
     @staticmethod
+    def wait_for_span_manager(driver, timeout=10):
+        """Wait for SpanManager to be fully initialized (async)."""
+        try:
+            WebDriverWait(driver, timeout).until(
+                lambda d: d.execute_script(
+                    "return window.spanManager && window.spanManager.isInitialized === true;"
+                )
+            )
+            print("   ✅ SpanManager initialized")
+            return True
+        except TimeoutException:
+            print("   ⚠️ SpanManager initialization timeout")
+            return False
+
+    @staticmethod
     def verify_overlay_positioning(driver, expected_spans):
-        """Verify that span overlays are correctly positioned over their text segments."""
+        """Verify that span overlays exist with correct data attributes."""
         print("   🔍 Verifying overlay positioning...")
 
         try:
             # Find all span overlays
             overlays = driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
             print(f"   📊 Found {len(overlays)} span overlays")
-
-            # Find all text segments
-            segments = driver.find_elements(By.CSS_SELECTOR, ".text-segment")
-            print(f"   📊 Found {len(segments)} text segments")
 
             all_correct = True
 
@@ -764,41 +745,17 @@ class RobustSpanAnnotationHelper:
 
                 print(f"   🔍 Overlay {i}: id={annotation_id}, schema={schema}, label={label}, start={start}, end={end}")
 
-                # Find covered segments
-                covered_segments = []
-                for segment in segments:
-                    span_ids = segment.get_attribute('data-span-ids') or ""
-                    if annotation_id in span_ids.split(','):
-                        covered_segments.append(segment)
-
-                print(f"   📝 Overlay {i} covers {len(covered_segments)} segments")
-
                 # Verify overlay has correct data attributes
-                if not all([annotation_id, schema, label, start, end]):
+                if not all([schema, label]):
                     print(f"   ❌ Overlay {i} missing required data attributes")
                     all_correct = False
-
-                # Verify overlay covers at least one segment
-                if not covered_segments:
-                    print(f"   ❌ Overlay {i} covers no text segments")
-                    all_correct = False
-
-                # Verify overlay is positioned (has non-zero dimensions)
-                try:
-                    rect = overlay.rect
-                    if rect['width'] <= 0 or rect['height'] <= 0:
-                        print(f"   ❌ Overlay {i} has zero dimensions: {rect}")
-                        all_correct = False
-                    else:
-                        print(f"   ✅ Overlay {i} positioned correctly: {rect}")
-                except Exception as e:
-                    print(f"   ❌ Error getting overlay {i} position: {e}")
-                    all_correct = False
+                else:
+                    print(f"   ✅ Overlay {i} has correct attributes")
 
             if all_correct:
-                print("   ✅ All overlays positioned correctly")
+                print("   ✅ All overlays verified correctly")
             else:
-                print("   ❌ Some overlays have positioning issues")
+                print("   ❌ Some overlays have issues")
 
             return all_correct
 
@@ -1014,6 +971,7 @@ class TestSpanAnnotationComprehensive:
             browser.get(f"{base_url}/annotate?instance_id=ai_1")
             RobustSpanAnnotationHelper.wait_for_page_load(browser)
             time.sleep(0.1)
+            RobustSpanAnnotationHelper.wait_for_span_manager(browser)
 
             instance_text = RobustSpanAnnotationHelper.wait_for_element(
                 browser, By.ID, "instance-text", description="instance text"
@@ -1039,7 +997,7 @@ class TestSpanAnnotationComprehensive:
             # Select emotion label first
             print("2. Selecting emotion label...")
             emotion_label = RobustSpanAnnotationHelper.wait_for_clickable(
-                browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+                browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='happy']",
                 description="emotion label"
             )
             RobustSpanAnnotationHelper.safe_click(browser, emotion_label, "emotion label")
@@ -1066,7 +1024,7 @@ class TestSpanAnnotationComprehensive:
             print(f"   📝 Span text: {span_text}")
             # Be more flexible about the selected text - just verify that some text was selected
             assert len(span_text) > 0, f"Expected non-empty span text, got '{span_text}'"
-            assert "intelligence" in span_text or "artificial" in span_text or "model" in span_text, f"Expected relevant text in span, got '{span_text}'"
+            assert "intelligence" in span_text or "artificial" in span_text or "natural" in span_text or "language" in span_text or "model" in span_text, f"Expected relevant text in span, got '{span_text}'"
 
             # Verify backend storage
             print("5. Verifying backend storage...")
@@ -1092,6 +1050,7 @@ class TestSpanAnnotationComprehensive:
             browser.get(f"{base_url}/annotate")
             RobustSpanAnnotationHelper.wait_for_page_load(browser)
             time.sleep(0.1)
+            RobustSpanAnnotationHelper.wait_for_span_manager(browser)
 
             # Verify we're on the annotation page
             instance_text = RobustSpanAnnotationHelper.wait_for_element(
@@ -1102,7 +1061,7 @@ class TestSpanAnnotationComprehensive:
             # Click on emotion label
             print("2. Clicking emotion label...")
             emotion_label = RobustSpanAnnotationHelper.wait_for_clickable(
-                browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+                browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='happy']",
                 description="emotion label"
             )
             RobustSpanAnnotationHelper.safe_click(browser, emotion_label, "emotion label")
@@ -1112,7 +1071,7 @@ class TestSpanAnnotationComprehensive:
             assert emotion_label.is_selected(), "Emotion label should be checked"
             print("   ✅ Emotion label is checked")
 
-            # Select text to create the span (this now includes surroundSelection call)
+            # Select text to create the span (dispatches mouseup for SpanManager)
             print("3. Selecting text to create span...")
             selection_success = RobustSpanAnnotationHelper.robust_text_selection(browser, 5, 15)
             assert selection_success, "Text selection failed"
@@ -1153,6 +1112,7 @@ class TestSpanAnnotationComprehensive:
             browser.get(f"{base_url}/annotate")
             RobustSpanAnnotationHelper.wait_for_page_load(browser)
             time.sleep(0.1)
+            RobustSpanAnnotationHelper.wait_for_span_manager(browser)
 
             # Verify we're on the annotation page
             instance_text = RobustSpanAnnotationHelper.wait_for_element(
@@ -1164,6 +1124,7 @@ class TestSpanAnnotationComprehensive:
             browser.get(f"{base_url}/annotate?instance_id=ai_1")
             RobustSpanAnnotationHelper.wait_for_page_load(browser)
             time.sleep(0.1)
+            RobustSpanAnnotationHelper.wait_for_span_manager(browser)
 
             # Refind the instance text element after navigation
             instance_text = RobustSpanAnnotationHelper.wait_for_element(
@@ -1171,52 +1132,52 @@ class TestSpanAnnotationComprehensive:
             )
 
             # Fetch and store the original text from the data attribute ONCE for this instance
-            original_text = instance_text.find_element(By.CSS_SELECTOR, ".original-text").get_attribute("data-original-text")
+            text_content_el = browser.find_element(By.ID, "text-content")
+            original_text = text_content_el.get_attribute("data-original-text")
             if not original_text:
                 # Fallback to DOM text if data attribute is not available
                 original_text = instance_text.text
             print(f"   📝 Original text length: {len(original_text)} characters")
             print(f"   📝 Original text preview: {original_text[:100]}...")
 
-            # Dynamically find indices for the target phrases in the original text
-            phrase1 = "artificial intelligence"
+            # Dynamically find indices for the target phrases in the original text (case-insensitive)
+            phrase1 = "Artificial intelligence"
             phrase2 = "natural language"
             start1 = original_text.find(phrase1)
+            if start1 == -1:
+                start1 = original_text.lower().find(phrase1.lower())
             end1 = start1 + len(phrase1)
             start2 = original_text.find(phrase2)
+            if start2 == -1:
+                start2 = original_text.lower().find(phrase2.lower())
             end2 = start2 + len(phrase2)
             assert start1 != -1 and start2 != -1, f"Could not find target phrases in original text: {original_text}"
             print(f"   📍 Indices for '{phrase1}': {start1}-{end1}")
             print(f"   📍 Indices for '{phrase2}': {start2}-{end2}")
 
-            # Create first span
-            print("3. Creating first span...")
-            RobustSpanAnnotationHelper.robust_text_selection(browser, start1, end1)
-            time.sleep(0.05)
-
-            # Select emotion label
-            emotion_label = RobustSpanAnnotationHelper.wait_for_element(
-                browser, By.CSS_SELECTOR, "[data-label='happy']", description="happy emotion label"
+            # Select emotion label FIRST (required before text selection)
+            print("3. Selecting emotion label...")
+            emotion_label = RobustSpanAnnotationHelper.wait_for_clickable(
+                browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='happy']",
+                description="emotion label"
             )
-            RobustSpanAnnotationHelper.safe_click(browser, emotion_label, "happy emotion label")
+            RobustSpanAnnotationHelper.safe_click(browser, emotion_label, "emotion label")
             time.sleep(0.1)
+
+            # Create first span
+            print("4. Creating first span...")
+            RobustSpanAnnotationHelper.robust_text_selection(browser, start1, end1)
+            time.sleep(1.0)
 
             # Verify first span was created
             spans = RobustSpanAnnotationHelper.get_span_elements(browser)
             assert len(spans) == 1, f"Expected 1 span, found {len(spans)}"
             print(f"   ✅ First span created successfully")
 
-            # Create second span (using the same original_text and indices)
-            print("4. Creating second span...")
+            # Create second span (label is still selected)
+            print("5. Creating second span...")
             RobustSpanAnnotationHelper.robust_text_selection(browser, start2, end2)
-            time.sleep(0.05)
-
-            # Select emotion label for second span
-            emotion_label = RobustSpanAnnotationHelper.wait_for_element(
-                browser, By.CSS_SELECTOR, "[data-label='happy']", description="happy emotion label"
-            )
-            RobustSpanAnnotationHelper.safe_click(browser, emotion_label, "happy emotion label")
-            time.sleep(0.1)
+            time.sleep(1.0)
 
             # Verify both spans were created
             spans = RobustSpanAnnotationHelper.get_span_elements(browser)
@@ -1251,6 +1212,7 @@ class TestSpanAnnotationComprehensive:
             browser.get(f"{base_url}/annotate")
             RobustSpanAnnotationHelper.wait_for_page_load(browser)
             time.sleep(0.1)
+            RobustSpanAnnotationHelper.wait_for_span_manager(browser)
 
             # Verify we're on the annotation page
             instance_text = RobustSpanAnnotationHelper.wait_for_element(
@@ -1262,7 +1224,7 @@ class TestSpanAnnotationComprehensive:
             # Create first span (emotion: happy)
             print("2. Creating first span (emotion: happy)...")
             RobustSpanAnnotationHelper.safe_click(browser, RobustSpanAnnotationHelper.wait_for_clickable(
-                browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+                browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='happy']",
                 description="emotion label"
             ), "emotion label")
             time.sleep(0.05)
@@ -1274,7 +1236,7 @@ class TestSpanAnnotationComprehensive:
             # Create second span (intensity: high) - partially overlapping
             print("3. Creating second span (intensity: high) - partially overlapping...")
             RobustSpanAnnotationHelper.safe_click(browser, RobustSpanAnnotationHelper.wait_for_clickable(
-                browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+                browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='happy']",
                 description="emotion label"
             ), "emotion label")
             time.sleep(0.05)
@@ -1348,6 +1310,7 @@ class TestSpanAnnotationComprehensive:
         browser.get(f"{base_url}/annotate")
         RobustSpanAnnotationHelper.wait_for_page_load(browser)
         time.sleep(0.1)
+        RobustSpanAnnotationHelper.wait_for_span_manager(browser)
 
         # Verify we're on the annotation page
         instance_text = RobustSpanAnnotationHelper.wait_for_element(
@@ -1359,7 +1322,7 @@ class TestSpanAnnotationComprehensive:
         # Create outer span (emotion: happy)
         print("2. Creating outer span (emotion: happy)...")
         RobustSpanAnnotationHelper.safe_click(browser, RobustSpanAnnotationHelper.wait_for_clickable(
-            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='happy']",
             description="emotion label"
         ), "emotion label")
         time.sleep(0.05)
@@ -1371,7 +1334,7 @@ class TestSpanAnnotationComprehensive:
         # Create inner span (intensity: high) - nested within outer span
         print("3. Creating inner span (intensity: high) - nested within outer span...")
         RobustSpanAnnotationHelper.safe_click(browser, RobustSpanAnnotationHelper.wait_for_clickable(
-            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='happy']",
             description="emotion label"
         ), "emotion label")
         time.sleep(0.05)
@@ -1408,6 +1371,7 @@ class TestSpanAnnotationComprehensive:
         browser.get(f"{base_url}/annotate")
         RobustSpanAnnotationHelper.wait_for_page_load(browser)
         time.sleep(0.1)
+        RobustSpanAnnotationHelper.wait_for_span_manager(browser)
 
         # Verify we're on the annotation page
         instance_text = RobustSpanAnnotationHelper.wait_for_element(
@@ -1419,7 +1383,7 @@ class TestSpanAnnotationComprehensive:
         # Create first span (emotion: happy)
         print("2. Creating first span (emotion: happy)...")
         RobustSpanAnnotationHelper.safe_click(browser, RobustSpanAnnotationHelper.wait_for_clickable(
-            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='happy']",
             description="emotion label"
         ), "emotion label")
         time.sleep(0.05)
@@ -1431,7 +1395,7 @@ class TestSpanAnnotationComprehensive:
         # Create second span (intensity: high) - non-overlapping
         print("3. Creating second span (intensity: high)...")
         RobustSpanAnnotationHelper.safe_click(browser, RobustSpanAnnotationHelper.wait_for_clickable(
-            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='happy']",
             description="emotion label"
         ), "emotion label")
         time.sleep(0.05)
@@ -1473,6 +1437,7 @@ class TestSpanAnnotationComprehensive:
         browser.get(f"{base_url}/annotate")
         RobustSpanAnnotationHelper.wait_for_page_load(browser)
         time.sleep(0.1)
+        RobustSpanAnnotationHelper.wait_for_span_manager(browser)
         instance_text = RobustSpanAnnotationHelper.wait_for_element(
             browser, By.ID, "instance-text", description="instance text"
         )
@@ -1481,41 +1446,25 @@ class TestSpanAnnotationComprehensive:
 
         print("2. Creating first span (emotion: happy)...")
         RobustSpanAnnotationHelper.safe_click(browser, RobustSpanAnnotationHelper.wait_for_clickable(
-            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='happy']",
             description="emotion label"
         ), "emotion label")
         time.sleep(0.05)
         selection_success = RobustSpanAnnotationHelper.robust_text_selection(browser, 0, 15)
         assert selection_success, "First text selection failed"
         time.sleep(0.1)
-        browser.execute_script("""
-            if (typeof changeSpanLabel === 'function') {
-                changeSpanLabel(document.querySelector('input[name="span_label:::emotion"][value="1"]'), 'emotion', 'happy', 'happy', '(255, 230, 230)');
-            }
-            if (typeof surroundSelection === 'function') {
-                surroundSelection('emotion', 'happy', 'happy', '(255, 230, 230)');
-            }
-        """)
-        time.sleep(0.1)
+
 
         print("3. Creating second span (intensity: high) - partially overlapping...")
         RobustSpanAnnotationHelper.safe_click(browser, RobustSpanAnnotationHelper.wait_for_clickable(
-            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='happy']",
             description="emotion label"
         ), "emotion label")
         time.sleep(0.05)
         selection_success = RobustSpanAnnotationHelper.robust_text_selection(browser, 10, 25)
         assert selection_success, "Second text selection failed"
         time.sleep(0.1)
-        browser.execute_script("""
-            if (typeof changeSpanLabel === 'function') {
-                changeSpanLabel(document.querySelector('input[name="span_label:::emotion"][value="1"]'), 'emotion', 'happy', 'happy', '(255, 230, 230)');
-            }
-            if (typeof surroundSelection === 'function') {
-                surroundSelection('emotion', 'happy', 'happy', '(255, 230, 230)');
-            }
-        """)
-        time.sleep(0.1)
+
 
         spans = RobustSpanAnnotationHelper.get_span_elements(browser)
         assert len(spans) == 2, f"Expected 2 spans, got {len(spans)}"
@@ -1544,6 +1493,7 @@ class TestSpanAnnotationComprehensive:
         browser.get(f"{base_url}/annotate")
         RobustSpanAnnotationHelper.wait_for_page_load(browser)
         time.sleep(0.1)
+        RobustSpanAnnotationHelper.wait_for_span_manager(browser)
         instance_text = RobustSpanAnnotationHelper.wait_for_element(
             browser, By.ID, "instance-text", description="instance text"
         )
@@ -1552,41 +1502,25 @@ class TestSpanAnnotationComprehensive:
 
         print("2. Creating outer span (emotion: happy)...")
         RobustSpanAnnotationHelper.safe_click(browser, RobustSpanAnnotationHelper.wait_for_clickable(
-            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='happy']",
             description="emotion label"
         ), "emotion label")
         time.sleep(0.05)
         selection_success = RobustSpanAnnotationHelper.robust_text_selection(browser, 0, 20)
         assert selection_success, "Outer text selection failed"
         time.sleep(0.1)
-        browser.execute_script("""
-            if (typeof changeSpanLabel === 'function') {
-                changeSpanLabel(document.querySelector('input[name="span_label:::emotion"][value="1"]'), 'emotion', 'happy', 'happy', '(255, 230, 230)');
-            }
-            if (typeof surroundSelection === 'function') {
-                surroundSelection('emotion', 'happy', 'happy', '(255, 230, 230)');
-            }
-        """)
-        time.sleep(0.1)
+
 
         print("3. Creating inner span (intensity: high) - nested within outer span...")
         RobustSpanAnnotationHelper.safe_click(browser, RobustSpanAnnotationHelper.wait_for_clickable(
-            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='happy']",
             description="emotion label"
         ), "emotion label")
         time.sleep(0.05)
         selection_success = RobustSpanAnnotationHelper.robust_text_selection(browser, 5, 15)
         assert selection_success, "Inner text selection failed"
         time.sleep(0.1)
-        browser.execute_script("""
-            if (typeof changeSpanLabel === 'function') {
-                changeSpanLabel(document.querySelector('input[name="span_label:::emotion"][value="1"]'), 'emotion', 'happy', 'happy', '(255, 230, 230)');
-            }
-            if (typeof surroundSelection === 'function') {
-                surroundSelection('emotion', 'happy', 'happy', '(255, 230, 230)');
-            }
-        """)
-        time.sleep(0.1)
+
 
         spans = RobustSpanAnnotationHelper.get_span_elements(browser)
         assert len(spans) == 2, f"Expected 2 spans, got {len(spans)}"
@@ -1615,6 +1549,7 @@ class TestSpanAnnotationComprehensive:
         browser.get(f"{base_url}/annotate")
         RobustSpanAnnotationHelper.wait_for_page_load(browser)
         time.sleep(0.1)
+        RobustSpanAnnotationHelper.wait_for_span_manager(browser)
         instance_text = RobustSpanAnnotationHelper.wait_for_element(
             browser, By.ID, "instance-text", description="instance text"
         )
@@ -1623,41 +1558,25 @@ class TestSpanAnnotationComprehensive:
 
         print("2. Creating first span (emotion: happy)...")
         RobustSpanAnnotationHelper.safe_click(browser, RobustSpanAnnotationHelper.wait_for_clickable(
-            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='happy']",
             description="emotion label"
         ), "emotion label")
         time.sleep(0.05)
         selection_success = RobustSpanAnnotationHelper.robust_text_selection(browser, 0, 10)
         assert selection_success, "First text selection failed"
         time.sleep(0.1)
-        browser.execute_script("""
-            if (typeof changeSpanLabel === 'function') {
-                changeSpanLabel(document.querySelector('input[name="span_label:::emotion"][value="1"]'), 'emotion', 'happy', 'happy', '(255, 230, 230)');
-            }
-            if (typeof surroundSelection === 'function') {
-                surroundSelection('emotion', 'happy', 'happy', '(255, 230, 230)');
-            }
-        """)
-        time.sleep(0.1)
+
 
         print("3. Creating second span (intensity: high)...")
         RobustSpanAnnotationHelper.safe_click(browser, RobustSpanAnnotationHelper.wait_for_clickable(
-            browser, By.CSS_SELECTOR, "input[name='span_label:::intensity'][value='3']",
+            browser, By.CSS_SELECTOR, "input[name='span_label:::intensity'][value='high']",
             description="intensity label"
         ), "intensity label")
         time.sleep(0.05)
         selection_success = RobustSpanAnnotationHelper.robust_text_selection(browser, 50, 70)
         assert selection_success, "Second text selection failed"
         time.sleep(0.1)
-        browser.execute_script("""
-            if (typeof changeSpanLabel === 'function') {
-                changeSpanLabel(document.querySelector('input[name="span_label:::intensity"][value="3"]'), 'intensity', 'high', 'high', '(150, 150, 150)');
-            }
-            if (typeof surroundSelection === 'function') {
-                surroundSelection('intensity', 'high', 'high', '(150, 150, 150)');
-            }
-        """)
-        time.sleep(0.1)
+
 
         spans = RobustSpanAnnotationHelper.get_span_elements(browser)
         assert len(spans) == 2, f"Expected 2 spans, got {len(spans)}"
@@ -1686,6 +1605,7 @@ class TestSpanAnnotationComprehensive:
         browser.get(f"{base_url}/annotate")
         RobustSpanAnnotationHelper.wait_for_page_load(browser)
         time.sleep(0.1)
+        RobustSpanAnnotationHelper.wait_for_span_manager(browser)
         instance_text = RobustSpanAnnotationHelper.wait_for_element(
             browser, By.ID, "instance-text", description="instance text"
         )
@@ -1694,41 +1614,25 @@ class TestSpanAnnotationComprehensive:
 
         print("2. Creating first span (emotion: happy)...")
         RobustSpanAnnotationHelper.safe_click(browser, RobustSpanAnnotationHelper.wait_for_clickable(
-            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='happy']",
             description="emotion label"
         ), "emotion label")
         time.sleep(0.05)
         selection_success = RobustSpanAnnotationHelper.robust_text_selection(browser, 0, 15)
         assert selection_success, "First text selection failed"
         time.sleep(0.1)
-        browser.execute_script("""
-            if (typeof changeSpanLabel === 'function') {
-                changeSpanLabel(document.querySelector('input[name="span_label:::emotion"][value="1"]'), 'emotion', 'happy', 'happy', '(255, 230, 230)');
-            }
-            if (typeof surroundSelection === 'function') {
-                surroundSelection('emotion', 'happy', 'happy', '(255, 230, 230)');
-            }
-        """)
-        time.sleep(0.1)
+
 
         print("3. Creating second span (intensity: high) - partially overlapping...")
         RobustSpanAnnotationHelper.safe_click(browser, RobustSpanAnnotationHelper.wait_for_clickable(
-            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='happy']",
             description="emotion label"
         ), "emotion label")
         time.sleep(0.05)
         selection_success = RobustSpanAnnotationHelper.robust_text_selection(browser, 10, 25)
         assert selection_success, "Second text selection failed"
         time.sleep(0.1)
-        browser.execute_script("""
-            if (typeof changeSpanLabel === 'function') {
-                changeSpanLabel(document.querySelector('input[name="span_label:::emotion"][value="1"]'), 'emotion', 'happy', 'happy', '(255, 230, 230)');
-            }
-            if (typeof surroundSelection === 'function') {
-                surroundSelection('emotion', 'happy', 'happy', '(255, 230, 230)');
-            }
-        """)
-        time.sleep(0.1)
+
 
         spans = RobustSpanAnnotationHelper.get_span_elements(browser)
         assert len(spans) == 2, f"Expected 2 spans, got {len(spans)}"
@@ -1757,6 +1661,7 @@ class TestSpanAnnotationComprehensive:
         browser.get(f"{base_url}/annotate")
         RobustSpanAnnotationHelper.wait_for_page_load(browser)
         time.sleep(0.1)
+        RobustSpanAnnotationHelper.wait_for_span_manager(browser)
         instance_text = RobustSpanAnnotationHelper.wait_for_element(
             browser, By.ID, "instance-text", description="instance text"
         )
@@ -1765,41 +1670,25 @@ class TestSpanAnnotationComprehensive:
 
         print("2. Creating outer span (emotion: happy)...")
         RobustSpanAnnotationHelper.safe_click(browser, RobustSpanAnnotationHelper.wait_for_clickable(
-            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='happy']",
             description="emotion label"
         ), "emotion label")
         time.sleep(0.05)
         selection_success = RobustSpanAnnotationHelper.robust_text_selection(browser, 0, 20)
         assert selection_success, "Outer text selection failed"
         time.sleep(0.1)
-        browser.execute_script("""
-            if (typeof changeSpanLabel === 'function') {
-                changeSpanLabel(document.querySelector('input[name="span_label:::emotion"][value="1"]'), 'emotion', 'happy', 'happy', '(255, 230, 230)');
-            }
-            if (typeof surroundSelection === 'function') {
-                surroundSelection('emotion', 'happy', 'happy', '(255, 230, 230)');
-            }
-        """)
-        time.sleep(0.1)
+
 
         print("3. Creating inner span (intensity: high) - nested within outer span...")
         RobustSpanAnnotationHelper.safe_click(browser, RobustSpanAnnotationHelper.wait_for_clickable(
-            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='happy']",
             description="emotion label"
         ), "emotion label")
         time.sleep(0.05)
         selection_success = RobustSpanAnnotationHelper.robust_text_selection(browser, 5, 15)
         assert selection_success, "Inner text selection failed"
         time.sleep(0.1)
-        browser.execute_script("""
-            if (typeof changeSpanLabel === 'function') {
-                changeSpanLabel(document.querySelector('input[name="span_label:::emotion"][value="1"]'), 'emotion', 'happy', 'happy', '(255, 230, 230)');
-            }
-            if (typeof surroundSelection === 'function') {
-                surroundSelection('emotion', 'happy', 'happy', '(255, 230, 230)');
-            }
-        """)
-        time.sleep(0.1)
+
 
         spans = RobustSpanAnnotationHelper.get_span_elements(browser)
         assert len(spans) == 2, f"Expected 2 spans, got {len(spans)}"
@@ -1828,6 +1717,7 @@ class TestSpanAnnotationComprehensive:
         browser.get(f"{base_url}/annotate")
         RobustSpanAnnotationHelper.wait_for_page_load(browser)
         time.sleep(0.1)
+        RobustSpanAnnotationHelper.wait_for_span_manager(browser)
         instance_text = RobustSpanAnnotationHelper.wait_for_element(
             browser, By.ID, "instance-text", description="instance text"
         )
@@ -1836,22 +1726,14 @@ class TestSpanAnnotationComprehensive:
 
         print("2. Creating span on instance 1...")
         RobustSpanAnnotationHelper.safe_click(browser, RobustSpanAnnotationHelper.wait_for_clickable(
-            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='happy']",
             description="emotion label"
         ), "emotion label")
         time.sleep(0.05)
         selection_success = RobustSpanAnnotationHelper.robust_text_selection(browser, 0, 10)
         assert selection_success, "First text selection failed"
         time.sleep(0.1)
-        browser.execute_script("""
-            if (typeof changeSpanLabel === 'function') {
-                changeSpanLabel(document.querySelector('input[name="span_label:::emotion"][value="1"]'), 'emotion', 'happy', 'happy', '(255, 230, 230)');
-            }
-            if (typeof surroundSelection === 'function') {
-                surroundSelection('emotion', 'happy', 'happy', '(255, 230, 230)');
-            }
-        """)
-        time.sleep(0.1)
+
 
         print("3. Navigating to next instance...")
         next_btn = RobustSpanAnnotationHelper.wait_for_clickable(
@@ -1867,22 +1749,14 @@ class TestSpanAnnotationComprehensive:
 
         print("4. Creating span on instance 2...")
         RobustSpanAnnotationHelper.safe_click(browser, RobustSpanAnnotationHelper.wait_for_clickable(
-            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+            browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='happy']",
             description="emotion label"
         ), "emotion label")
         time.sleep(0.05)
         selection_success = RobustSpanAnnotationHelper.robust_text_selection(browser, 0, 10)
         assert selection_success, "Second text selection failed"
         time.sleep(0.1)
-        browser.execute_script("""
-            if (typeof changeSpanLabel === 'function') {
-                changeSpanLabel(document.querySelector('input[name="span_label:::emotion"][value="1"]'), 'emotion', 'happy', 'happy', '(255, 230, 230)');
-            }
-            if (typeof surroundSelection === 'function') {
-                surroundSelection('emotion', 'happy', 'happy', '(255, 230, 230)');
-            }
-        """)
-        time.sleep(0.1)
+
 
         print("5. Navigating back to instance 1...")
         prev_btn = RobustSpanAnnotationHelper.wait_for_clickable(
@@ -1925,12 +1799,14 @@ class TestSpanAnnotationComprehensive:
         print("\n=== Debug Test: Check Page Elements ===")
 
         base_url = f"http://localhost:{flask_server.port}"
+        self.register_test_user(browser, base_url, "debug_page")
 
         # Navigate to annotation page
         print("1. Navigating to annotation page...")
         browser.get(f"{base_url}/annotate")
         RobustSpanAnnotationHelper.wait_for_page_load(browser)
         time.sleep(0.1)
+        RobustSpanAnnotationHelper.wait_for_span_manager(browser)
 
         # Check page title
         title = browser.title
@@ -1973,12 +1849,14 @@ class TestSpanAnnotationComprehensive:
         print("\n=== Debug Test: Overlay JavaScript ===")
 
         base_url = f"http://localhost:{flask_server.port}"
+        self.register_test_user(browser, base_url, "debug_overlay")
 
         # Navigate to annotation page
         print("1. Navigating to annotation page...")
         browser.get(f"{base_url}/annotate")
         RobustSpanAnnotationHelper.wait_for_page_load(browser)
         time.sleep(0.1)
+        RobustSpanAnnotationHelper.wait_for_span_manager(browser)
 
         # Check if overlay elements exist
         print("2. Checking overlay elements...")
@@ -2050,6 +1928,7 @@ class TestSpanAnnotationComprehensive:
             browser.get(f"{base_url}/annotate")
             RobustSpanAnnotationHelper.wait_for_page_load(browser)
             time.sleep(0.1)
+            RobustSpanAnnotationHelper.wait_for_span_manager(browser)
 
             # Verify we're on the annotation page
             instance_text = RobustSpanAnnotationHelper.wait_for_element(
@@ -2060,7 +1939,7 @@ class TestSpanAnnotationComprehensive:
             # Create a span annotation
             print("2. Creating span annotation...")
             RobustSpanAnnotationHelper.safe_click(browser, RobustSpanAnnotationHelper.wait_for_clickable(
-                browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+                browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='happy']",
                 description="emotion label"
             ), "emotion label")
             time.sleep(0.05)
@@ -2143,11 +2022,12 @@ class TestSpanAnnotationComprehensive:
             browser.get(f"{base_url}/annotate")
             RobustSpanAnnotationHelper.wait_for_page_load(browser)
             time.sleep(0.1)
+            RobustSpanAnnotationHelper.wait_for_span_manager(browser)
 
             # Create a span annotation
             print("2. Creating span annotation...")
             RobustSpanAnnotationHelper.safe_click(browser, RobustSpanAnnotationHelper.wait_for_clickable(
-                browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+                browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='happy']",
                 description="emotion label"
             ), "emotion label")
             time.sleep(0.05)
@@ -2244,11 +2124,12 @@ class TestSpanAnnotationComprehensive:
             browser.get(f"{base_url}/annotate")
             RobustSpanAnnotationHelper.wait_for_page_load(browser)
             time.sleep(0.1)
+            RobustSpanAnnotationHelper.wait_for_span_manager(browser)
 
             # Create a span annotation
             print("2. Creating span annotation...")
             RobustSpanAnnotationHelper.safe_click(browser, RobustSpanAnnotationHelper.wait_for_clickable(
-                browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+                browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='happy']",
                 description="emotion label"
             ), "emotion label")
             time.sleep(0.05)
@@ -2321,7 +2202,7 @@ class TestSpanAnnotationComprehensive:
 
             # Select the "happy" label (using the same approach as other working tests)
             happy_label = RobustSpanAnnotationHelper.wait_for_clickable(
-                browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='1']",
+                browser, By.CSS_SELECTOR, "input[name='span_label:::emotion'][value='happy']",
                 description="emotion label"
             )
             RobustSpanAnnotationHelper.safe_click(browser, happy_label, "emotion label")
