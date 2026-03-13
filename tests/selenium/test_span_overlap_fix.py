@@ -567,80 +567,62 @@ class TestSpanOverlapFix(BaseSeleniumTest):
             text_to_select: The text to select
             label: The label to apply (positive, negative, neutral, mixed)
         """
-        # First, find and click the span label checkbox
-        # The span labels are checkboxes with labels containing span elements
-        label_xpath = f"//label[.//span[text()='{label}']]"
-        label_element = self.driver.find_element(By.XPATH, label_xpath)
-        label_element.click()
-        time.sleep(0.1)
+        # Click the label checkbox by ID to activate (triggers changeSpanLabel -> selectLabel)
+        schema = "emotion_spans"  # BaseSeleniumTest default schema
+        label_id = f"{schema}_{label}"
+        label_el = self.driver.find_element(By.ID, label_id)
+        self.driver.execute_script("arguments[0].click()", label_el)
+        time.sleep(0.3)
 
-        # Find and select the text
-        instance_text = self.driver.find_element(By.ID, "instance-text")
-
-        # Use JavaScript to select the text, handling the case where DOM has been modified
-        script = f"""
-        const textElement = document.getElementById('instance-text');
-
-        // Get all text nodes in the element
-        const textNodes = [];
-        const walker = document.createTreeWalker(
-            textElement,
-            NodeFilter.SHOW_TEXT,
-            null,
-            false
-        );
-
-        let fullText = '';
-        let node;
+        # Select text AND dispatch mouseup in one JS call to prevent selection clearing
+        text_el = self.driver.find_element(By.CSS_SELECTOR, "[id^='text-content']")
+        result = self.driver.execute_script(f"""
+        var el = arguments[0];
+        var textNodes = [];
+        var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
+        var fullText = '';
+        var node;
         while (node = walker.nextNode()) {{
-            textNodes.push({{
-                node: node,
-                start: fullText.length,
-                end: fullText.length + node.textContent.length
-            }});
+            textNodes.push({{node: node, start: fullText.length, end: fullText.length + node.textContent.length}});
             fullText += node.textContent;
         }}
 
-        const startIndex = fullText.indexOf('{text_to_select}');
-        if (startIndex !== -1) {{
-            const endIndex = startIndex + {len(text_to_select)};
+        var startIndex = fullText.indexOf('{text_to_select}');
+        if (startIndex === -1) return false;
+        var endIndex = startIndex + {len(text_to_select)};
 
-            // Find the text nodes that contain our selection
-            let startNode = null;
-            let startOffset = 0;
-            let endNode = null;
-            let endOffset = 0;
-
-            for (const pos of nodePositions) {{
-                if (startIndex >= pos.start && startIndex < pos.end) {{
-                    startNode = pos.node;
-                    startOffset = startIndex - pos.start;
-                }}
-                if (endIndex > pos.start && endIndex <= pos.end) {{
-                    endNode = pos.node;
-                    endOffset = endIndex - pos.start;
-                    break;
-                }}
+        var startNode = null, startOffset = 0, endNode = null, endOffset = 0;
+        for (var i = 0; i < textNodes.length; i++) {{
+            var pos = textNodes[i];
+            if (startIndex >= pos.start && startIndex < pos.end) {{
+                startNode = pos.node;
+                startOffset = startIndex - pos.start;
             }}
-
-            if (startNode && endNode) {{
-                const range = document.createRange();
-                range.setStart(startNode, startOffset);
-                range.setEnd(endNode, endOffset);
-
-                const selection = window.getSelection();
-                selection.removeAllRanges();
-                selection.addRange(range);
-
-                // Trigger the text selection handler
-                const event = new Event('mouseup');
-                textElement.dispatchEvent(event);
+            if (endIndex > pos.start && endIndex <= pos.end) {{
+                endNode = pos.node;
+                endOffset = endIndex - pos.start;
+                break;
             }}
         }}
-        """
 
-        self.driver.execute_script(script)
-        time.sleep(0.1)
+        if (startNode && endNode) {{
+            var range = document.createRange();
+            range.setStart(startNode, startOffset);
+            range.setEnd(endNode, endOffset);
+            var selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            // Dispatch mouseup immediately while selection is active
+            el.dispatchEvent(new MouseEvent('mouseup', {{bubbles: true}}));
+            return true;
+        }}
+        return false;
+        """, text_el)
+
+        if not result:
+            raise Exception(f"Could not find text '{text_to_select}' in document")
+
+        time.sleep(0.5)  # Wait for span creation + async save
 
 
 if __name__ == '__main__':

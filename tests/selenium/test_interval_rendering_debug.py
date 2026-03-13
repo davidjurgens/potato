@@ -95,7 +95,7 @@ class TestIntervalRenderingDebug(BaseSeleniumTest):
 
             # Check if span overlays were created
             span_overlays = self.driver.find_element(By.ID, "span-overlays")
-            overlay_elements = span_overlays.find_elements(By.CLASS_NAME, "span-overlay")
+            overlay_elements = span_overlays.find_elements(By.CLASS_NAME, "span-overlay-pure")
             print(f"✅ Found {len(overlay_elements)} span overlays")
 
             if len(overlay_elements) > 0:

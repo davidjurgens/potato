@@ -104,7 +104,7 @@ class TestSecureSeleniumPatterns(BaseSeleniumTest):
         time.sleep(0.1)
 
         # Check that the span overlay exists and contains the correct text
-        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
         self.assertGreater(len(span_overlays), 0, "No span overlays found")
 
         # Get the text content of the overlay
@@ -169,7 +169,7 @@ class TestSecureSeleniumPatterns(BaseSeleniumTest):
         time.sleep(0.1)
 
         # Get the initial overlay position
-        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
         self.assertGreater(len(span_overlays), 0, "No span overlays found")
 
         initial_overlay = span_overlays[0]
@@ -194,7 +194,7 @@ class TestSecureSeleniumPatterns(BaseSeleniumTest):
         time.sleep(0.1)
 
         # Check that the span overlay still exists and has the correct text
-        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
         self.assertGreater(len(span_overlays), 0, "No span overlays found after navigation")
 
         final_overlay = span_overlays[0]
@@ -280,7 +280,7 @@ class TestSecureSeleniumPatterns(BaseSeleniumTest):
             time.sleep(0.1)
 
             # Store overlay info
-            span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+            span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
             if span_overlays:
                 latest_overlay = span_overlays[-1]  # Get the most recent overlay
                 created_overlays.append({
@@ -511,7 +511,7 @@ class TestCustomSeleniumConfig(BaseSeleniumTest):
         time.sleep(0.1)
 
         # Verify overlay was created
-        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
         self.assertGreater(len(span_overlays), 0, "No span overlays found")
 
         overlay_text = span_overlays[0].text.strip()

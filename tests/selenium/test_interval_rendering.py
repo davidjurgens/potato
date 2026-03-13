@@ -99,7 +99,7 @@ class TestIntervalRendering(BaseSeleniumTest):
 
         # Check that span overlays were created
         span_overlays = self.driver.find_element(By.ID, "span-overlays")
-        overlay_elements = span_overlays.find_elements(By.CLASS_NAME, "span-overlay")
+        overlay_elements = span_overlays.find_elements(By.CLASS_NAME, "span-overlay-pure")
 
         self.assertGreater(len(overlay_elements), 0, "No span overlays were created")
 
@@ -164,7 +164,7 @@ class TestIntervalRendering(BaseSeleniumTest):
 
         # Check that both spans exist
         span_overlays = self.driver.find_element(By.ID, "span-overlays")
-        overlay_elements = span_overlays.find_elements(By.CLASS_NAME, "span-overlay")
+        overlay_elements = span_overlays.find_elements(By.CLASS_NAME, "span-overlay-pure")
 
         self.assertGreaterEqual(len(overlay_elements), 2, f"Expected at least 2 overlays, got {len(overlay_elements)}")
 
@@ -215,7 +215,7 @@ class TestIntervalRendering(BaseSeleniumTest):
 
         # Verify span exists
         span_overlays = self.driver.find_element(By.ID, "span-overlays")
-        overlay_elements = span_overlays.find_elements(By.CLASS_NAME, "span-overlay")
+        overlay_elements = span_overlays.find_elements(By.CLASS_NAME, "span-overlay-pure")
         self.assertGreater(len(overlay_elements), 0, "Span was not created")
 
         # Delete the span by clicking the delete button
@@ -226,7 +226,7 @@ class TestIntervalRendering(BaseSeleniumTest):
         time.sleep(0.1)
 
         # Verify span was deleted
-        overlay_elements_after = span_overlays.find_elements(By.CLASS_NAME, "span-overlay")
+        overlay_elements_after = span_overlays.find_elements(By.CLASS_NAME, "span-overlay-pure")
         self.assertEqual(len(overlay_elements_after), 0, "Span was not deleted")
 
     def select_span_label(self, label_name):

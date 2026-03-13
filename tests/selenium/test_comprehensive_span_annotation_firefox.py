@@ -363,7 +363,7 @@ class FirefoxSpanAnnotationHelper:
     def check_span_elements(driver, expected_count=1):
         """Check for span overlays, labels, and delete buttons."""
         try:
-            overlays = driver.find_elements(By.CLASS_NAME, "span-overlay")
+            overlays = driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
             labels = driver.find_elements(By.CLASS_NAME, "span-label")
             deletes = driver.find_elements(By.CLASS_NAME, "span-delete-btn")
 

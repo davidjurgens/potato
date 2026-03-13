@@ -441,14 +441,14 @@ class RobustSpanAnnotationHelper:
             # Wait for potential overlays to appear
             try:
                 WebDriverWait(driver, timeout).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, ".span-overlay"))
+                    EC.presence_of_element_located((By.CSS_SELECTOR, ".span-overlay-pure"))
                 )
                 print("   ✅ Found at least one span overlay")
             except TimeoutException:
                 print("   ⚠️ No span overlays found within timeout")
 
             # Get all spans
-            spans = driver.find_elements(By.CSS_SELECTOR, ".span-overlay")
+            spans = driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
             print(f"   📊 Found {len(spans)} span elements")
 
             for i, span in enumerate(spans):
@@ -746,7 +746,7 @@ class RobustSpanAnnotationHelper:
 
         try:
             # Find all span overlays
-            overlays = driver.find_elements(By.CSS_SELECTOR, ".span-overlay")
+            overlays = driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
             print(f"   📊 Found {len(overlays)} span overlays")
 
             # Find all text segments
@@ -2015,7 +2015,7 @@ class TestSpanAnnotationComprehensive:
         time.sleep(0.1)
 
         # Check for overlay elements after calling renderSpanOverlays
-        overlay_elements = browser.find_elements(By.CSS_SELECTOR, ".span-overlay")
+        overlay_elements = browser.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         print(f"   Overlay elements found after manual call: {len(overlay_elements)}")
 
         # Check the HTML structure of the instance-text
@@ -2076,7 +2076,7 @@ class TestSpanAnnotationComprehensive:
 
             # Test 3: Verify span label is visible
             print("3. Verifying span label is visible...")
-            span_labels = browser.find_elements(By.CSS_SELECTOR, ".span-overlay .span-label")
+            span_labels = browser.find_elements(By.CSS_SELECTOR, ".span-overlay-pure .span-label")
             assert len(span_labels) == 1, f"Expected 1 span label, got {len(span_labels)}"
 
             label_text = span_labels[0].text
@@ -2087,7 +2087,7 @@ class TestSpanAnnotationComprehensive:
 
             # Test 4: Verify delete button is visible
             print("4. Verifying delete button is visible...")
-            delete_buttons = browser.find_elements(By.CSS_SELECTOR, ".span-overlay .span-close")
+            delete_buttons = browser.find_elements(By.CSS_SELECTOR, ".span-overlay-pure .span-close")
             assert len(delete_buttons) == 1, f"Expected 1 delete button, got {len(delete_buttons)}"
 
             delete_button = delete_buttons[0]
@@ -2162,7 +2162,7 @@ class TestSpanAnnotationComprehensive:
 
             # Test 3: Verify span label positioning
             print("3. Verifying span label positioning...")
-            span_label = browser.find_element(By.CSS_SELECTOR, ".span-overlay .span-label")
+            span_label = browser.find_element(By.CSS_SELECTOR, ".span-overlay-pure .span-label")
 
             # Check CSS properties
             label_position = span_label.value_of_css_property("position")
@@ -2184,7 +2184,7 @@ class TestSpanAnnotationComprehensive:
 
             # Test 4: Verify delete button positioning
             print("4. Verifying delete button positioning...")
-            delete_button = browser.find_element(By.CSS_SELECTOR, ".span-overlay .span-close")
+            delete_button = browser.find_element(By.CSS_SELECTOR, ".span-overlay-pure .span-close")
 
             # Check CSS properties
             delete_position = delete_button.value_of_css_property("position")
@@ -2209,7 +2209,7 @@ class TestSpanAnnotationComprehensive:
 
             # Test 5: Verify span overlay positioning
             print("5. Verifying span overlay positioning...")
-            span_highlight = browser.find_element(By.CSS_SELECTOR, ".span-overlay")
+            span_highlight = browser.find_element(By.CSS_SELECTOR, ".span-overlay-pure")
 
             # Check CSS properties
             highlight_position = span_highlight.value_of_css_property("position")
@@ -2263,7 +2263,7 @@ class TestSpanAnnotationComprehensive:
 
             # Test 3: Verify span label text color
             print("3. Verifying span label text color...")
-            span_label = browser.find_element(By.CSS_SELECTOR, ".span-overlay .span-label")
+            span_label = browser.find_element(By.CSS_SELECTOR, ".span-overlay-pure .span-label")
 
             # Check text color
             color = span_label.value_of_css_property("color")
@@ -2285,7 +2285,7 @@ class TestSpanAnnotationComprehensive:
 
             # Test 4: Verify delete button text color
             print("4. Verifying delete button text color...")
-            delete_button = browser.find_element(By.CSS_SELECTOR, ".span-overlay .span-close")
+            delete_button = browser.find_element(By.CSS_SELECTOR, ".span-overlay-pure .span-close")
 
             # Check text color
             color = delete_button.value_of_css_property("color")
