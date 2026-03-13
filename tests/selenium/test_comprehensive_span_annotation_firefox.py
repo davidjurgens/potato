@@ -466,7 +466,7 @@ class TestFirefoxSpanAnnotationComprehensive(BaseSeleniumTest):
 
         # Step 2: Navigate to instance 2
         print(f"   🔄 Step 2: Navigating to instance 2...")
-        next_button = self.driver.find_element(By.ID, "next-button")
+        next_button = self.driver.find_element(By.ID, "next-btn")
         next_button.click()
         time.sleep(0.1)
 
@@ -480,7 +480,7 @@ class TestFirefoxSpanAnnotationComprehensive(BaseSeleniumTest):
 
         # Step 3: Navigate to instance 3
         print(f"   🔄 Step 3: Navigating to instance 3...")
-        next_button = self.driver.find_element(By.ID, "next-button")
+        next_button = self.driver.find_element(By.ID, "next-btn")
         next_button.click()
         time.sleep(0.1)
 
@@ -494,12 +494,12 @@ class TestFirefoxSpanAnnotationComprehensive(BaseSeleniumTest):
 
         # Step 4: Navigate back to instance 1
         print(f"   🔄 Step 4. Navigating back to instance 1...")
-        prev_button = self.driver.find_element(By.ID, "prev-button")
+        prev_button = self.driver.find_element(By.ID, "prev-btn")
         prev_button.click()
         time.sleep(0.1)
 
         # Navigate back again to get to instance 1
-        prev_button = self.driver.find_element(By.ID, "prev-button")
+        prev_button = self.driver.find_element(By.ID, "prev-btn")
         prev_button.click()
         time.sleep(0.1)
 
@@ -513,7 +513,7 @@ class TestFirefoxSpanAnnotationComprehensive(BaseSeleniumTest):
 
         # Step 5. Navigate "prev" from instance 1 (should go to instance 3)
         print(f"   🔄 Step 5: Navigating 'prev' from instance 1...")
-        prev_button = self.driver.find_element(By.ID, "prev-button")
+        prev_button = self.driver.find_element(By.ID, "prev-btn")
         prev_button.click()
         time.sleep(0.1)
 
@@ -763,7 +763,7 @@ class TestFirefoxSpanAnnotationComprehensive(BaseSeleniumTest):
 
         # Navigate to next instance
         print(f"   🔄 Navigating to next instance...")
-        next_button = self.driver.find_element(By.ID, "next-button")
+        next_button = self.driver.find_element(By.ID, "next-btn")
         next_button.click()
 
         time.sleep(0.1)
@@ -786,7 +786,7 @@ class TestFirefoxSpanAnnotationComprehensive(BaseSeleniumTest):
 
         # Navigate back to first instance
         print(f"   🔄 Navigating back to first instance...")
-        prev_button = self.driver.find_element(By.ID, "prev-button")
+        prev_button = self.driver.find_element(By.ID, "prev-btn")
         prev_button.click()
 
         time.sleep(0.1)
@@ -890,7 +890,7 @@ class TestFirefoxSpanAnnotationComprehensive(BaseSeleniumTest):
             print(f"   📊 Current instance: {current_details}")
 
             # Navigate to next
-            next_button = self.driver.find_element(By.ID, "next-button")
+            next_button = self.driver.find_element(By.ID, "next-btn")
             next_button.click()
             time.sleep(0.05)
 

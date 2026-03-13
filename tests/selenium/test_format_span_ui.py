@@ -536,7 +536,7 @@ class TestSpanAnnotationSubmission(BaseFormatSpanTest):
 
         # Check for submit button
         try:
-            submit_btn = driver.find_element(By.ID, "submit-button")
+            submit_btn = driver.find_element(By.ID, "next-btn")
             assert submit_btn is not None
         except NoSuchElementException:
             # Submit button might have different ID

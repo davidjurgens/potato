@@ -451,7 +451,7 @@ class TestSpanPositioningBugReproduction(BaseSeleniumTest):
 
         # Try to navigate to next instance, if available
         try:
-            next_button = self.driver.find_element(By.ID, "next-button")
+            next_button = self.driver.find_element(By.ID, "next-btn")
             if next_button.is_enabled():
                 next_button.click()
                 print("🔧 Navigated to next instance")
@@ -469,7 +469,7 @@ class TestSpanPositioningBugReproduction(BaseSeleniumTest):
         print("\n📝 Step 3: Navigating back...")
 
         try:
-            prev_button = self.driver.find_element(By.ID, "prev-button")
+            prev_button = self.driver.find_element(By.ID, "prev-btn")
             if prev_button.is_enabled():
                 prev_button.click()
                 print("🔧 Navigated back to first instance")

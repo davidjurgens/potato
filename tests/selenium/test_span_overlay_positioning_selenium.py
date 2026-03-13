@@ -290,14 +290,14 @@ class TestSpanOverlayPositioningSelenium(BaseSeleniumTest):
         print(f"Initial overlay position: {initial_rect}")
 
         # Navigate to the next instance
-        next_button = self.wait_for_element(By.ID, "next-button")
+        next_button = self.wait_for_element(By.ID, "next-btn")
         next_button.click()
 
         # Wait for navigation to complete
         time.sleep(0.1)
 
         # Navigate back to the first instance
-        prev_button = self.wait_for_element(By.ID, "prev-button")
+        prev_button = self.wait_for_element(By.ID, "prev-btn")
         prev_button.click()
 
         # Wait for navigation to complete
