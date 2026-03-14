@@ -1111,7 +1111,28 @@ def register():
     # Register the user with the authenticator
     logger.debug("Adding user to authenticator...")
     user_authenticator = UserAuthenticator.get_instance()
-    user_authenticator.add_user(username, password)
+    registration_result = user_authenticator.add_user(username, password)
+
+    if registration_result != "Success":
+        logger.warning(
+            "Registration failed for user '%s' with result: %s",
+            username,
+            registration_result,
+        )
+        error_messages = {
+            "Duplicate user": "Registration failed: username already exists. Please sign in instead.",
+            "Unauthorized user": "Registration failed: this username is not authorized.",
+        }
+        return render_template(
+            "home.html",
+            login_error=error_messages.get(
+                registration_result,
+                "Registration failed. Please try again.",
+            ),
+            login_email=username,
+            title=config.get("annotation_task_name", "Annotation Platform"),
+            require_password=config.get("require_password", True),
+        )
 
     # Persist user config if explicitly configured
     user_authenticator.save_user_config()
