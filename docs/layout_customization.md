@@ -8,6 +8,7 @@ Potato provides two approaches for customizing the annotation interface layout:
 
 1. **Auto-generated layouts**: Potato generates a `layouts/task_layout.html` file that you can edit
 2. **Custom layout files**: Create your own HTML template with full control over styling
+3. **Project base CSS**: Load a project-local CSS file into the shared base template
 
 ## Quick Start
 
@@ -25,6 +26,25 @@ Potato provides two approaches for customizing the annotation interface layout:
 ```yaml
 task_layout: layouts/custom_task_layout.html
 ```
+
+### Using Project Base CSS
+
+If you only want to restore global styling without replacing the whole base template,
+point `base_css` at a CSS file in your project:
+
+```yaml
+base_css: styles/annotation-base.css
+```
+
+Potato will read that file and inject it into the shared base template inside a
+`<style>` tag. The path is resolved relative to your config file, just like
+`task_layout`.
+
+This applies to:
+
+- The main annotation page
+- Generated surveyflow phase pages
+- HTML instructions pages wrapped with the shared base template
 
 ## Layout File Structure
 

@@ -1704,6 +1704,19 @@ def validate_file_paths(config_data: Dict[str, Any], project_dir: str, config_fi
             except ConfigSecurityError as e:
                 raise ConfigSecurityError(f"site_dir: {str(e)}")
 
+    # Validate project-level base CSS file
+    if 'base_css' in config_data:
+        base_css = config_data['base_css']
+        if base_css not in [None, "null", "default"]:
+            try:
+                validated_css = validate_path_security(base_css, base_dir, project_dir)
+                if not os.path.exists(validated_css):
+                    raise ConfigValidationError(
+                        f"base_css file not found: {base_css} (resolved to: {validated_css})"
+                    )
+            except ConfigSecurityError as e:
+                raise ConfigSecurityError(f"base_css: {str(e)}")
+
     # Validate custom_ds
     if 'custom_ds' in config_data:
         custom_ds = config_data['custom_ds']
