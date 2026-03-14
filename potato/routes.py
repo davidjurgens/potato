@@ -1942,10 +1942,9 @@ def annotate():
 def _instance_meets_required_annotation_rules(user_state, instance_id: str) -> bool:
     """Return True when all required annotation schemes are satisfied for an instance."""
     schemes = config.get("annotation_schemes", [])
-    require_all_schemes = not any(_scheme_is_required(scheme) for scheme in schemes)
 
     for scheme in schemes:
-        if not require_all_schemes and not _scheme_is_required(scheme):
+        if not _scheme_is_required(scheme):
             continue
         if not _scheme_has_required_annotation(user_state, instance_id, scheme):
             return False

@@ -477,6 +477,58 @@ class TestMultiPhaseWorkflow:
         finally:
             cleanup_test_directory(test_dir)
 
+    def test_optional_annotation_schemas_do_not_block_next_instance(self):
+        """Annotation schemas without explicit requirements should remain optional."""
+        test_dir = create_test_directory("optional_annotation_navigation")
+        try:
+            test_data = [
+                {"id": "item_1", "text": "First optional item."},
+                {"id": "item_2", "text": "Second optional item."},
+            ]
+            data_file = create_test_data_file(test_dir, test_data)
+            annotation_schemes = [
+                {
+                    "name": "sentiment",
+                    "annotation_type": "radio",
+                    "labels": ["positive", "negative"],
+                    "description": "Sentiment",
+                },
+                {
+                    "name": "notes",
+                    "annotation_type": "text",
+                    "description": "Notes",
+                },
+            ]
+
+            config_file = create_test_config(
+                test_dir,
+                annotation_schemes,
+                data_files=[data_file],
+                annotation_task_name="Optional Annotation Navigation",
+                require_password=False,
+                max_annotations_per_user=10,
+                phases={"order": ["annotation"], "annotation": {"type": "annotation"}},
+            )
+
+            server = FlaskTestServer(config_file=config_file, debug=False)
+            assert server.start()
+            try:
+                session = requests.Session()
+                user_data = {"email": "optional_nav_user", "pass": "test_password"}
+                session.post(f"{server.base_url}/register", data=user_data)
+                session.post(f"{server.base_url}/auth", data=user_data)
+
+                allowed = session.post(
+                    f"{server.base_url}/annotate",
+                    json={"action": "next_instance", "instance_id": "item_1"},
+                )
+                assert allowed.status_code == 200
+                assert "Second optional item." in allowed.text
+            finally:
+                server.stop()
+        finally:
+            cleanup_test_directory(test_dir)
+
     def test_first_non_annotation_phase_renders_hidden_instance_text_placeholders(self):
         """
         Regression test for the shared base template on the first non-annotation phase.

@@ -1713,46 +1713,31 @@ function validateRequiredFields(options = {}) {
         formGroups[schemaName].requiredLabels.push(input);
     });
 
-    const useFallbackAllForms = Object.keys(formGroups).length === 0;
-    if (useFallbackAllForms) {
-        document.querySelectorAll('.annotation-form[data-schema-name]').forEach(form => {
-            const schemaName = form.getAttribute('data-schema-name') || form.id;
-            if (!schemaName) return;
-            formGroups[schemaName] = { form: form, radios: {}, others: [], requiredLabels: [], fallback: true };
-        });
-    }
-
     // Check each schema's required inputs
     for (const [schemaName, group] of Object.entries(formGroups)) {
         let schemaFilled = true;
 
-        if (group.fallback) {
-            schemaFilled = isAnnotationFormComplete(group.form, schemaName);
+        // Check radio groups
+        for (const [name, inputs] of Object.entries(group.radios)) {
+            if (!inputs.some(input => input.checked)) {
+                schemaFilled = false;
+                break;
+            }
         }
 
-        if (!group.fallback) {
-            // Check radio groups
-            for (const [name, inputs] of Object.entries(group.radios)) {
-                if (!inputs.some(input => input.checked)) {
+        // Check other inputs (textbox, select, etc.)
+        for (const input of group.others) {
+            if (!input.value || input.value.trim() === '') {
+                schemaFilled = false;
+                break;
+            }
+        }
+
+        if (schemaFilled && group.requiredLabels.length > 0) {
+            for (const input of group.requiredLabels) {
+                if (!input.checked) {
                     schemaFilled = false;
                     break;
-                }
-            }
-
-            // Check other inputs (textbox, select, etc.)
-            for (const input of group.others) {
-                if (!input.value || input.value.trim() === '') {
-                    schemaFilled = false;
-                    break;
-                }
-            }
-
-            if (schemaFilled && group.requiredLabels.length > 0) {
-                for (const input of group.requiredLabels) {
-                    if (!input.checked) {
-                        schemaFilled = false;
-                        break;
-                    }
                 }
             }
         }
@@ -1782,51 +1767,6 @@ function validateRequiredFields(options = {}) {
 
     return allRequiredFilled;
 }
-
-function isAnnotationFormComplete(form, schemaName) {
-    const radios = form.querySelectorAll('input[type="radio"].annotation-input');
-    if (radios.length > 0 && Array.from(radios).some(input => input.checked)) {
-        return true;
-    }
-
-    const checkboxes = form.querySelectorAll('input[type="checkbox"].annotation-input');
-    if (checkboxes.length > 0 && Array.from(checkboxes).some(input => input.checked)) {
-        return true;
-    }
-
-    const textInputs = form.querySelectorAll('input[type="text"].annotation-input, textarea.annotation-input');
-    if (Array.from(textInputs).some(input => input.value && input.value.trim() !== '')) {
-        return true;
-    }
-
-    const selects = form.querySelectorAll('select.annotation-input');
-    if (Array.from(selects).some(input => input.value && input.value.trim() !== '')) {
-        return true;
-    }
-
-    const numberInputs = form.querySelectorAll('input[type="number"].annotation-input');
-    if (Array.from(numberInputs).some(input => input.value && input.value.trim() !== '')) {
-        return true;
-    }
-
-    const sliders = form.querySelectorAll('input[type="range"].annotation-input');
-    if (sliders.length > 0) {
-        return true;
-    }
-
-    const hiddenInputs = form.querySelectorAll('input[type="hidden"].annotation-input, input.annotation-data-input');
-    if (Array.from(hiddenInputs).some(input => input.value && input.value.trim() !== '')) {
-        return true;
-    }
-
-    const spanAnnotations = extractSpanAnnotationsFromDOM();
-    if (spanAnnotations.some(annotation => annotation.schema === schemaName)) {
-        return true;
-    }
-
-    return false;
-}
-
 function updateRequiredFieldsError(unfilledSchemas) {
     let errorDiv = document.getElementById('required-fields-error');
 
