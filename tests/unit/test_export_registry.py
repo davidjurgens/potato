@@ -128,5 +128,9 @@ class TestBuiltinExportersRegistered:
 
     def test_all_formats_listed(self):
         formats = export_registry.get_supported_formats()
-        expected = ["agent_eval", "coco", "conll_2003", "conll_u", "eaf", "mask_png", "parquet", "pascal_voc", "textgrid", "yolo"]
-        assert formats == expected
+        # Core exporters always present
+        core_expected = {"agent_eval", "coco", "conll_2003", "conll_u", "eaf", "mask_png", "parquet", "pascal_voc", "textgrid", "yolo"}
+        # HuggingFace exporter is optional (depends on datasets/huggingface_hub)
+        optional = {"huggingface"}
+        assert core_expected.issubset(set(formats))
+        assert set(formats) - core_expected <= optional

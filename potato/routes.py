@@ -4270,6 +4270,25 @@ def update_instance():
                 # Handle blocking
                 if attention_result.get("blocked"):
                     logger.warning(f"User {username} blocked by attention check")
+
+                    # Emit webhook for attention check failure
+                    from potato.webhooks import get_webhook_emitter
+                    from potato.webhooks.events import (
+                        build_attention_check_failed_payload,
+                        QUALITY_ATTENTION_CHECK_FAILED,
+                    )
+                    _wh = get_webhook_emitter()
+                    if _wh:
+                        _wh.emit(
+                            QUALITY_ATTENTION_CHECK_FAILED,
+                            build_attention_check_failed_payload(
+                                user_id=username,
+                                instance_id=instance_id,
+                                message=attention_result.get("message"),
+                                blocked=True,
+                            ),
+                        )
+
                     # Don't save state for blocked user
                     return jsonify({
                         "status": "blocked",
@@ -4309,6 +4328,43 @@ def update_instance():
         # Save state
         get_user_state_manager().save_user_state(user_state)
         logger.debug(f"User state saved for {username}")
+
+        # Emit webhook events for annotation save
+        from potato.webhooks import get_webhook_emitter
+        from potato.webhooks.events import (
+            ANNOTATION_CREATED, ANNOTATION_UPDATED,
+            ITEM_FULLY_ANNOTATED,
+            build_annotation_payload, build_item_fully_annotated_payload,
+        )
+        _wh = get_webhook_emitter()
+        if _wh:
+            _evt = ANNOTATION_CREATED
+            _wh.emit(
+                _evt,
+                build_annotation_payload(
+                    event_type=_evt,
+                    user_id=username,
+                    instance_id=instance_id,
+                    annotations=all_annotations,
+                ),
+            )
+
+            # Check if item is now fully annotated
+            ism = get_item_state_manager()
+            annotators = ism.get_annotators_for_item(instance_id)
+            num_annotators = config.get("annotation_task_name",
+                                         config.get("num_annotators_per_item", 3))
+            if isinstance(num_annotators, str):
+                num_annotators = 3
+            if len(annotators) >= num_annotators:
+                _wh.emit(
+                    ITEM_FULLY_ANNOTATED,
+                    build_item_fully_annotated_payload(
+                        instance_id=instance_id,
+                        annotator_count=len(annotators),
+                        required_count=num_annotators,
+                    ),
+                )
 
         # Trigger MACE competence estimation check
         from potato.mace_manager import get_mace_manager
@@ -7198,6 +7254,47 @@ def admin_api_cache_clear():
     except Exception as e:
         logger.error(f"Error clearing cache: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/admin/api/webhooks', methods=['GET'])
+def admin_api_webhooks():
+    """Get webhook configuration and delivery stats."""
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.webhooks import get_webhook_emitter
+    emitter = get_webhook_emitter()
+    if not emitter:
+        return jsonify({"enabled": False, "endpoints": [], "stats": {}})
+
+    return jsonify({
+        "enabled": True,
+        "endpoints": emitter.get_endpoint_info(),
+        "stats": emitter.get_stats(),
+    })
+
+
+@app.route('/admin/api/webhooks/test', methods=['POST'])
+def admin_api_webhooks_test():
+    """Send a test webhook event to verify endpoint connectivity."""
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.webhooks import get_webhook_emitter
+    emitter = get_webhook_emitter()
+    if not emitter:
+        return jsonify({"error": "Webhooks not enabled"}), 400
+
+    import datetime
+    test_payload = {
+        "event": "webhook.test",
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "data": {"message": "Test webhook from Potato admin"},
+    }
+    count = emitter.emit("webhook.test", test_payload)
+    return jsonify({"status": "sent", "endpoints_matched": count})
 
 
 @app.route('/adjudicate/api/submit', methods=['POST'])

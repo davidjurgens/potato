@@ -1844,6 +1844,9 @@ def render_page_with_annotations(username: str):
     # Check if chat support is enabled (for conditional loading of llm-chat-sidebar assets)
     chat_enabled = config.get("chat_support", {}).get("enabled", False)
 
+    # Check if live agent is enabled (for conditional loading of live-agent assets)
+    live_agent_enabled = bool(config.get("live_agent"))
+
     # Get pre-annotation configuration
     pre_annotation_config = {}
     if qc_manager:
@@ -1903,6 +1906,8 @@ def render_page_with_annotations(username: str):
         agent_proxy_enabled=agent_proxy_enabled,
         # Chat support (for conditional loading of llm-chat-sidebar assets)
         chat_enabled=chat_enabled,
+        # Live agent (for conditional loading of live-agent assets)
+        live_agent_enabled=live_agent_enabled,
         # Adjudication: show link for adjudicators
         is_adjudicator=_is_user_adjudicator(username),
         # Annotation status indicator
@@ -2660,6 +2665,57 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
         flask_app.register_blueprint(web_proxy_bp)
         logger.info("Registered web agent blueprints (web_agent_trace/recorder display type detected)")
 
+    # Check for live_agent display type
+    needs_live_agent = False
+    for field in fields:
+        if isinstance(field, dict) and field.get("type") == "live_agent":
+            needs_live_agent = True
+            break
+
+    if needs_live_agent:
+        from potato.routes_live_agent import live_agent_bp
+        flask_app.register_blueprint(live_agent_bp)
+        # Store live_agent config on the app for route access
+        live_agent_config = config.get("live_agent", {})
+        flask_app.config["live_agent"] = live_agent_config
+        flask_app.config["live_agent_enabled"] = True
+        logger.info("Registered live agent blueprint (live_agent display type detected)")
+
+        # Register cleanup on app shutdown
+        import atexit
+        def _cleanup_agent_sessions():
+            try:
+                from potato.agent_runner_manager import AgentRunnerManager
+                AgentRunnerManager.clear_instance()
+            except Exception:
+                pass
+        atexit.register(_cleanup_agent_sessions)
+
+    # Check for trace_ingestion config
+    trace_ingestion_config = config.get("trace_ingestion", {})
+    if trace_ingestion_config.get("enabled", False):
+        from potato.routes_trace_ingestion import trace_ingestion_bp
+        flask_app.register_blueprint(trace_ingestion_bp)
+        flask_app.config["trace_ingestion"] = trace_ingestion_config
+        logger.info("Registered trace ingestion blueprint")
+
+        # Start Langfuse poller if configured
+        sources = trace_ingestion_config.get("sources", [])
+        for source in sources:
+            if source.get("type") == "langfuse":
+                from potato.trace_ingestion.langfuse_poller import LangfusePoller
+                poller = LangfusePoller(
+                    api_url=source.get("api_url", "https://cloud.langfuse.com"),
+                    public_key=source.get("public_key", ""),
+                    secret_key=source.get("secret_key", source.get("api_key", "")),
+                    poll_interval=source.get("poll_interval", 30),
+                )
+                poller.start()
+                logger.info(f"Started Langfuse poller (interval={source.get('poll_interval', 30)}s)")
+
+                import atexit
+                atexit.register(poller.stop)
+
 # Function to create and initialize the Flask application
 def create_app():
     """
@@ -3033,6 +3089,47 @@ def run_server(args):
                     watcher.stop()
                     logger.info("Directory watcher stopped")
             atexit.register(cleanup_directory_watcher)
+
+    # Initialize webhook emitter if configured
+    if config.get('webhooks', {}).get('enabled', False):
+        from potato.webhooks import init_webhook_emitter, get_webhook_emitter
+        init_webhook_emitter(config)
+        logger.info("Webhook emitter initialized")
+
+        import atexit
+        def cleanup_webhook_emitter():
+            emitter = get_webhook_emitter()
+            if emitter:
+                emitter.stop()
+                logger.info("Webhook emitter stopped")
+        atexit.register(cleanup_webhook_emitter)
+
+    # Initialize HuggingFace CommitScheduler for live backup if configured
+    hf_backup = config.get('huggingface_backup', {})
+    if hf_backup.get('enabled', False):
+        try:
+            from huggingface_hub import CommitScheduler
+            import os
+            task_dir = config.get('task_dir', '.')
+            output_dir = os.path.join(
+                task_dir,
+                config.get('output_annotation_dir', 'annotation_output')
+            )
+            hf_token = hf_backup.get('token') or os.environ.get('HF_TOKEN')
+            scheduler = CommitScheduler(
+                repo_id=hf_backup['repo_id'],
+                folder_path=output_dir,
+                token=hf_token,
+                private=hf_backup.get('private', True),
+                every=hf_backup.get('schedule_minutes', 5),
+            )
+            logger.info("HuggingFace CommitScheduler initialized: %s (every %d min)",
+                        hf_backup['repo_id'], hf_backup.get('schedule_minutes', 5))
+        except ImportError:
+            logger.warning("huggingface_hub not installed, skipping CommitScheduler. "
+                           "Install with: pip install huggingface_hub>=0.20.0")
+        except Exception as e:
+            logger.error("Failed to initialize HuggingFace CommitScheduler: %s", e)
 
     # Initialize WaveformService for audio annotation if configured
     _init_waveform_service(config)

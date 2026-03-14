@@ -41,6 +41,7 @@
 ## Agent Evaluation
 
 - [Agent Traces](agent_traces.md) - Evaluate AI agent traces and trajectories
+- [Live Agent Interaction](live_agent.md) - Observe and interact with a live AI agent in real time
 
 ## Solo Mode
 
@@ -77,8 +78,14 @@
 
 - [Data Format](data_format.md) - Input and output data formats
 - [Export Formats](export_formats.md) - Export to COCO, YOLO, CoNLL, and more
+- [HuggingFace Hub Export](huggingface_export.md) - Push annotations to HuggingFace Hub
 - [UI Configuration](ui_configuration.md) - Interface customization
 - [Layout Customization](layout_customization.md) - Custom CSS layouts and styling
+
+## Integrations
+
+- [Webhooks](webhooks.md) - Outgoing webhook notifications for annotation events
+- [HuggingFace Spaces](huggingface_spaces.md) - Deploy Potato on HuggingFace Spaces
 
 ## Tools & Utilities
 
@@ -132,6 +139,9 @@
 | Use Solo Mode for collaborative annotation | [Solo Mode](solo_mode.md) |
 | Export annotations to Parquet | [Export Formats](export_formats.md#parquet) |
 | Export to COCO/YOLO/CoNLL | [Export Formats](export_formats.md) |
+| Push annotations to HuggingFace Hub | [HuggingFace Export](huggingface_export.md) |
+| Deploy on HuggingFace Spaces | [HuggingFace Spaces](huggingface_spaces.md) |
+| Set up webhook notifications | [Webhooks](webhooks.md) |
 
 ---
 

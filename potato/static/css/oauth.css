@@ -65,6 +65,21 @@
     color: #fff;
 }
 
+/* HuggingFace */
+.oauth-btn-huggingface {
+    background-color: #FFD21E;
+    color: #1a1a2e;
+    border-color: #FFD21E;
+}
+.oauth-btn-huggingface:hover {
+    background-color: #FFDC4E;
+    color: #1a1a2e;
+    border-color: #FFDC4E;
+}
+.oauth-btn-huggingface i {
+    color: #1a1a2e;
+}
+
 /* Generic / OIDC */
 .oauth-btn-generic {
     border-color: #d0d5dd;

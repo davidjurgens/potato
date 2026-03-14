@@ -1,0 +1,58 @@
+# Example Potato configuration for HuggingFace Spaces deployment
+#
+# Usage:
+#   Set POTATO_CONFIG=spaces_config_example.yaml in your Space environment variables
+
+# Project title shown in the UI
+title: "Text Classification (HF Spaces)"
+
+# Data files - paths relative to the config file
+data_files:
+  - path: data/examples.json
+    format: json
+
+# Item display configuration
+item_properties:
+  id_key: id
+  text_key: text
+
+# Annotation schemas
+annotation_schemes:
+  - annotation_type: radio
+    name: sentiment
+    description: "What is the sentiment of this text?"
+    labels:
+      - Positive
+      - Negative
+      - Neutral
+
+# Output directory for annotations
+output_annotation_dir: annotation_output
+task_dir: .
+
+# Authentication via HuggingFace OAuth
+# OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET are auto-provided by HF Spaces
+authentication:
+  type: oauth
+  providers:
+    huggingface:
+      client_id: "${OAUTH_CLIENT_ID}"
+      client_secret: "${OAUTH_CLIENT_SECRET}"
+  auto_register: true
+  user_identity_field: email
+
+# Optional: Auto-backup annotations to HuggingFace Hub
+# huggingface_backup:
+#   enabled: true
+#   repo_id: "your-org/annotation-backup"
+#   token: "${HF_TOKEN}"
+#   schedule_minutes: 5
+#   private: true
+
+# Optional: Webhook notifications
+# webhooks:
+#   enabled: true
+#   endpoints:
+#     - name: "pipeline"
+#       url: "https://your-webhook-endpoint.com/hook"
+#       events: ["task.completed"]

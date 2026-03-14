@@ -56,6 +56,10 @@ _VIZ_DEPS = [
 _EXPORT_DEPS = [
     "pyarrow>=12.0.0",
 ]
+_HF_DEPS = [
+    "huggingface_hub>=0.20.0",
+    "datasets>=2.14.0",
+]
 _AUTH_DEPS = [
     "Authlib>=1.3.0",
 ]
@@ -91,8 +95,9 @@ setup(
         "formats": _FORMAT_DEPS,
         "viz": _VIZ_DEPS,
         "export": _EXPORT_DEPS,
+        "huggingface": _HF_DEPS,
         "auth": _AUTH_DEPS,
-        "all": _AI_DEPS + _FORMAT_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _AUTH_DEPS,
+        "all": _AI_DEPS + _FORMAT_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS,
     },
     include_package_data=True,
     entry_points={

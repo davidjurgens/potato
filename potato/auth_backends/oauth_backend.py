@@ -34,6 +34,13 @@ PROVIDER_CONFIGS = {
         "icon_class": "fab fa-github",
         "button_class": "oauth-btn-github",
     },
+    "huggingface": {
+        "display_name": "HuggingFace",
+        "server_metadata_url": "https://huggingface.co/.well-known/openid-configuration",
+        "client_kwargs": {"scope": "openid profile email"},
+        "icon_class": "fas fa-robot",
+        "button_class": "oauth-btn-huggingface",
+    },
 }
 
 

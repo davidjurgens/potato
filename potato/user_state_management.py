@@ -657,10 +657,28 @@ class UserStateManager:
 
     def advance_phase(self, user_id: str) -> None:
         '''Moves the user to the next page in the current phase or the next phase'''
-        phase, page = self.get_next_user_phase_page(user_id)
-        # Get the current user's state
         user_state = self.get_user_state(user_id)
+        old_phase, _ = user_state.get_current_phase_and_page()
+        phase, page = self.get_next_user_phase_page(user_id)
         user_state.advance_to_phase(phase, page)
+
+        # Emit webhook if phase changed
+        if phase != old_phase:
+            from potato.webhooks import get_webhook_emitter
+            _wh = get_webhook_emitter()
+            if _wh:
+                from potato.webhooks.events import (
+                    USER_PHASE_COMPLETED,
+                    build_phase_completed_payload,
+                )
+                _wh.emit(
+                    USER_PHASE_COMPLETED,
+                    build_phase_completed_payload(
+                        user_id=user_id,
+                        phase_name=old_phase.value if hasattr(old_phase, 'value') else str(old_phase),
+                        next_phase=phase.value if hasattr(phase, 'value') else str(phase),
+                    ),
+                )
 
     def get_next_user_phase_page(self, user_id: str) -> tuple[UserPhase,str]:
         '''Returns the name and filename of next the page for the user, either
