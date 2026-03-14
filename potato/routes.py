@@ -50,7 +50,7 @@ from potato.flask_server import (
     get_users, get_total_annotations, update_annotation_state, ai_hints,
     get_training_instances, get_training_correct_answers, get_training_explanation,
     get_training_instance_categories, get_prolific_study, get_keyword_highlight_patterns,
-    get_keyword_highlight_settings
+    get_keyword_highlight_settings, get_phase_annotation_schemes
 )
 
 # Import admin dashboard functionality
@@ -1702,9 +1702,44 @@ def annotate():
     logger.debug(f"User state: {user_state}")
     logger.debug(f"User state phase: {user_state.get_phase() if user_state else 'No user state'}")
 
+    leaked_navigation_actions = {
+        "prev_instance",
+        "next_instance",
+        "go_to",
+        "jump_to_unannotated",
+        "jump_to_unannotated_prev",
+    }
+    request_json = request.get_json(silent=True) if request.is_json else None
+    pending_action = None
+    if request_json:
+        pending_action = request_json.get("action")
+    elif "action" in request.form:
+        pending_action = request.form.get("action")
+
     # Check user phase
     if not user_state or user_state.get_phase() != UserPhase.ANNOTATION:
         logger.info(f"User {username} not in annotation phase, redirecting. Phase: {user_state.get_phase() if user_state else 'No user state'}")
+        if request.method == "POST":
+            logger.debug(
+                "Non-annotation /annotate POST received. pending_action=%r request_json=%r",
+                pending_action,
+                request_json,
+            )
+        if request.method == "POST" and (pending_action in leaked_navigation_actions or request.is_json):
+            if user_state:
+                if pending_action == "prev_instance":
+                    get_user_state_manager().retreat_phase(username)
+                else:
+                    logger.debug(
+                        "Non-annotation next-style navigation for %s on phase %s",
+                        username,
+                        user_state.get_phase(),
+                    )
+                    get_user_state_manager().advance_phase(username)
+            # Force a clean GET so shared annotation nav controls rendered on
+            # phase pages do not accidentally submit the current phase and
+            # advance the workflow.
+            return redirect(url_for("home"))
         return home()
 
     # If the user hasn't yet been assigned anything to annotate, do so now
@@ -1722,7 +1757,7 @@ def annotate():
                 return redirect(url_for("adjudicate"))
 
     # See if this user has finished annotating all of their assigned instances
-    if not user_state.has_remaining_assignments():
+    if _user_has_completed_required_assignments(user_state):
         logger.debug(f"User {username} has no remaining assignments, advancing phase")
         get_user_state_manager().advance_phase(username)
         return redirect(url_for("home"))
@@ -1759,6 +1794,21 @@ def annotate():
             acm.start_prefetch(user_state.current_instance_index,
                                getattr(acm, "prefetch_page_count_on_prev", 0) )
     elif action == "next_instance":
+        current_instance_id = user_state.get_current_instance_id()
+        if current_instance_id and not _instance_meets_required_annotation_rules(user_state, current_instance_id):
+            logger.debug(
+                "Blocking next_instance for user %s on instance %s because required annotations are incomplete",
+                username,
+                current_instance_id,
+            )
+            if request.is_json:
+                return jsonify({
+                    "status": "validation_error",
+                    "message": "Please complete the required annotations before continuing.",
+                }), 400
+            response = make_response(render_page_with_annotations(username))
+            response.status_code = 400
+            return response
         logger.debug(f"Moving to next instance for user: {username}")
         moved_forward = move_to_next_instance(username)
         if not moved_forward and user_state.is_at_end_index():
@@ -1781,7 +1831,29 @@ def annotate():
 
         logger.debug(f"go_to action with value: {go_to_value}")
         if go_to_value is not None:
-            go_to_id(username, go_to_value)
+            target_index = int(go_to_value)
+            current_instance_id = user_state.get_current_instance_id()
+            if (
+                target_index > user_state.current_instance_index
+                and current_instance_id
+                and not _instance_meets_required_annotation_rules(user_state, current_instance_id)
+            ):
+                logger.debug(
+                    "Blocking go_to for user %s from index %s to %s because required annotations are incomplete on instance %s",
+                    username,
+                    user_state.current_instance_index,
+                    target_index,
+                    current_instance_id,
+                )
+                if request.is_json:
+                    return jsonify({
+                        "status": "validation_error",
+                        "message": "Please complete the required annotations before continuing.",
+                    }), 400
+                response = make_response(render_page_with_annotations(username))
+                response.status_code = 400
+                return response
+            go_to_id(username, target_index)
             acm = get_ai_cache_manager()
             if acm:
                 acm.start_prefetch(user_state.current_instance_index, 1)
@@ -1790,6 +1862,21 @@ def annotate():
         else:
             logger.warning('go_to action requested but no go_to value provided')
     elif action == "jump_to_unannotated":
+        current_instance_id = user_state.get_current_instance_id()
+        if current_instance_id and not _instance_meets_required_annotation_rules(user_state, current_instance_id):
+            logger.debug(
+                "Blocking jump_to_unannotated for user %s on instance %s because required annotations are incomplete",
+                username,
+                current_instance_id,
+            )
+            if request.is_json:
+                return jsonify({
+                    "status": "validation_error",
+                    "message": "Please complete the required annotations before continuing.",
+                }), 400
+            response = make_response(render_page_with_annotations(username))
+            response.status_code = 400
+            return response
         # Find the next unannotated instance and jump to it
         next_idx = user_state.find_next_unannotated_index()
         if next_idx is not None:
@@ -1816,7 +1903,7 @@ def annotate():
 
     # After processing the action, check again if user has completed all assignments
     # This handles the case where the user just finished their last item
-    if not user_state.has_remaining_assignments():
+    if _user_has_completed_required_assignments(user_state):
         logger.debug(f"User {username} has completed all assignments, advancing phase")
         get_user_state_manager().advance_phase(username)
         # Use redirect to ensure next phase handler gets a GET request (fixes issue #115)
@@ -1850,6 +1937,102 @@ def annotate():
     response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     response.headers['Pragma'] = 'no-cache'
     return response
+
+
+def _instance_meets_required_annotation_rules(user_state, instance_id: str) -> bool:
+    """Return True when all required annotation schemes are satisfied for an instance."""
+    schemes = config.get("annotation_schemes", [])
+    require_all_schemes = not any(_scheme_is_required(scheme) for scheme in schemes)
+
+    for scheme in schemes:
+        if not require_all_schemes and not _scheme_is_required(scheme):
+            continue
+        if not _scheme_has_required_annotation(user_state, instance_id, scheme):
+            return False
+    return True
+
+
+def _user_has_completed_required_assignments(user_state) -> bool:
+    """Return True only when every assignment counting toward completion satisfies required rules."""
+    if user_state.max_assignments < 0:
+        return False
+
+    annotated_ids = user_state.get_annotated_instance_ids()
+    if len(annotated_ids) < user_state.max_assignments:
+        return False
+
+    counted_instance_ids = [
+        instance_id for instance_id in user_state.instance_id_ordering
+        if instance_id
+    ][:user_state.max_assignments]
+
+    if len(counted_instance_ids) < user_state.max_assignments:
+        return False
+
+    return all(
+        instance_id in annotated_ids
+        and _instance_meets_required_annotation_rules(user_state, instance_id)
+        for instance_id in counted_instance_ids
+    )
+
+
+def _scheme_is_required(scheme: dict) -> bool:
+    """Support both legacy `required` and newer `label_requirement` config styles."""
+    label_requirement = scheme.get("label_requirement", {})
+    if isinstance(label_requirement, bool):
+        label_requirement = {"required": label_requirement}
+    return bool(
+        scheme.get("required")
+        or label_requirement.get("required")
+        or label_requirement.get("required_label")
+    )
+
+
+def _value_is_present(value) -> bool:
+    """Treat empty strings and empty collections as missing while allowing 0/False values."""
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return value.strip() != ""
+    if isinstance(value, (list, tuple, dict, set)):
+        return len(value) > 0
+    return True
+
+
+def _scheme_has_required_annotation(user_state, instance_id: str, scheme: dict) -> bool:
+    """Check whether a required scheme is satisfied on a given instance."""
+    scheme_name = scheme.get("name")
+    label_requirement = scheme.get("label_requirement", {})
+    if isinstance(label_requirement, bool):
+        label_requirement = {"required": label_requirement}
+
+    required_labels = label_requirement.get("required_label")
+    if isinstance(required_labels, str):
+        required_labels = {required_labels}
+    elif isinstance(required_labels, list):
+        required_labels = set(required_labels)
+    else:
+        required_labels = set()
+
+    label_values = user_state.instance_id_to_label_to_value.get(instance_id, {})
+    matching_labels = {
+        label.get_name(): value
+        for label, value in label_values.items()
+        if isinstance(label, Label) and label.get_schema() == scheme_name and _value_is_present(value)
+    }
+
+    if required_labels:
+        return any(label_name in required_labels for label_name in matching_labels)
+
+    if scheme.get("annotation_type") == "span":
+        span_values = user_state.instance_id_to_span_to_value.get(instance_id, {})
+        return any(
+            span.get_schema() == scheme_name and _value_is_present(value)
+            for span, value in span_values.items()
+        )
+
+    return bool(matching_labels)
+
 
 @app.route('/get_ai_suggestion', methods=['GET'])
 def get_ai_suggestion():
@@ -3872,6 +4055,19 @@ def update_instance():
 
         # Debug: Log user phase for debugging annotation storage issues
         logger.debug(f"User '{username}' phase: {user_state.get_phase()}, current_phase_and_page: {user_state.current_phase_and_page}")
+
+        # Ignore stale autosaves from survey-flow pages after the user has
+        # already advanced into annotation. These payloads carry an empty or
+        # non-assigned instance_id and should not count as annotated items.
+        if user_state.get_phase() == UserPhase.ANNOTATION:
+            assigned_ids = user_state.get_assigned_instance_ids()
+            if not instance_id or instance_id not in assigned_ids:
+                logger.debug(
+                    "Ignoring stale annotation update for user %s with instance_id=%r while in annotation phase",
+                    username,
+                    instance_id,
+                )
+                return jsonify({"status": "ignored", "message": "Stale annotation update ignored"})
 
         # Track session
         if not user_state.session_start_time:

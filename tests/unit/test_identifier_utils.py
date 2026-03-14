@@ -252,3 +252,21 @@ class TestGenerateValidationAttribute:
             "label_requirement": {"required": False}
         }
         assert generate_validation_attribute(schema) == ""
+
+    def test_top_level_required_returns_required(self):
+        """Legacy top-level required=True should still produce validation."""
+        schema = {
+            "name": "test",
+            "description": "Test",
+            "required": True,
+        }
+        assert generate_validation_attribute(schema) == "required"
+
+    def test_boolean_label_requirement_returns_required(self):
+        """Boolean label_requirement should be normalized for validation generation."""
+        schema = {
+            "name": "test",
+            "description": "Test",
+            "label_requirement": True,
+        }
+        assert generate_validation_attribute(schema) == "required"

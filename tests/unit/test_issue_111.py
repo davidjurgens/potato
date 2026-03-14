@@ -172,3 +172,96 @@ class TestPhaseDeduplication:
         next_phase, next_page = mgr.get_next_user_phase_page("test_user")
         assert next_phase == UserPhase.INSTRUCTIONS
         assert next_page == "specific_instructions"
+
+    def test_multi_page_instructions_retreats_within_phase(self):
+        """Within a multi-page phase, previous navigation should move back one page."""
+        config = {
+            "output_annotation_dir": "/tmp/test_issue_111",
+            "phases": {
+                "order": [
+                    "general_instructions",
+                    "specific_instructions",
+                    "annotation",
+                ],
+                "general_instructions": {
+                    "type": "instructions",
+                    "file": "general.html",
+                },
+                "specific_instructions": {
+                    "type": "instructions",
+                    "file": "specific.html",
+                },
+            },
+        }
+
+        mgr = _make_user_state_manager(config)
+        mgr.phase_type_to_name_to_page[UserPhase.INSTRUCTIONS]["general_instructions"] = "general.html"
+        mgr.phase_type_to_name_to_page[UserPhase.INSTRUCTIONS]["specific_instructions"] = "specific.html"
+
+        user = InMemoryUserState("test_user")
+        user.current_phase_and_page = (UserPhase.INSTRUCTIONS, "specific_instructions")
+        mgr.user_to_annotation_state = {"test_user": user}
+
+        prev_phase, prev_page = mgr.get_prev_user_phase_page("test_user")
+        assert prev_phase == UserPhase.INSTRUCTIONS
+        assert prev_page == "general_instructions"
+
+    def test_phase_transition_with_duplicate_phase_types_retreats_to_prior_phase(self):
+        """Retreating from the first page of a duplicated phase type should go to the prior phase."""
+        config = {
+            "output_annotation_dir": "/tmp/test_issue_111",
+            "phases": {
+                "order": [
+                    "consent",
+                    "general_instructions",
+                    "specific_instructions",
+                    "training",
+                    "annotation",
+                ],
+                "consent": {
+                    "type": "consent",
+                    "file": "consent.html",
+                },
+                "general_instructions": {
+                    "type": "instructions",
+                    "file": "general.html",
+                },
+                "specific_instructions": {
+                    "type": "instructions",
+                    "file": "specific.html",
+                },
+                "training": {
+                    "type": "training",
+                    "file": "training.html",
+                },
+            },
+        }
+
+        mgr = _make_user_state_manager(config)
+        mgr.phase_type_to_name_to_page[UserPhase.CONSENT]["consent"] = "consent.html"
+        mgr.phase_type_to_name_to_page[UserPhase.INSTRUCTIONS]["general_instructions"] = "general.html"
+        mgr.phase_type_to_name_to_page[UserPhase.INSTRUCTIONS]["specific_instructions"] = "specific.html"
+        mgr.phase_type_to_name_to_page[UserPhase.TRAINING]["training"] = "training.html"
+
+        user = InMemoryUserState("test_user")
+        user.current_phase_and_page = (UserPhase.PRESTUDY, "prestudy")
+        mgr.user_to_annotation_state = {"test_user": user}
+
+        # Explicitly place prestudy in the configured phase sequence.
+        mgr.phase_type_to_name_to_page[UserPhase.PRESTUDY]["prestudy"] = "prestudy.html"
+        mgr.config["phases"]["order"] = [
+            "consent",
+            "prestudy",
+            "general_instructions",
+            "specific_instructions",
+            "training",
+            "annotation",
+        ]
+        mgr.config["phases"]["prestudy"] = {
+            "type": "prestudy",
+            "file": "prestudy.html",
+        }
+
+        prev_phase, prev_page = mgr.get_prev_user_phase_page("test_user")
+        assert prev_phase == UserPhase.CONSENT
+        assert prev_page == "consent"
