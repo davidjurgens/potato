@@ -2758,6 +2758,7 @@ def create_app():
     def inject_template_context():
         """Inject debug settings and common config values into all templates."""
         from potato.logging_config import is_ui_debug_enabled, is_server_debug_enabled
+        from potato.server_utils.front_end import resolve_header_logo_src
 
         # Build ui_lang dict with defaults, overridden by config
         ui_lang_defaults = {
@@ -2784,6 +2785,7 @@ def create_app():
             'debug_phase': config.get('debug_phase'),
             # Add common config values needed by templates
             'annotation_task_name': config.get('annotation_task_name', 'Annotation Task'),
+            'header_logo_url': resolve_header_logo_src(config),
             # Multilingual UI strings
             'ui_lang': ui_lang,
         }

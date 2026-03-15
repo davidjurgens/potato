@@ -2,11 +2,13 @@
 Handle all front-end related functionalities.
 """
 
-import os
-import logging
-import json
-import re
+import base64
 import hashlib
+import json
+import logging
+import mimetypes
+import os
+import re
 from collections import OrderedDict
 
 #add local module
@@ -34,6 +36,17 @@ STATS_KEYS = {
 # Default name for the generated annotation layout file
 DEFAULT_ANNOTATION_LAYOUT_SUBDIR = "layouts"
 DEFAULT_ANNOTATION_LAYOUT_FILENAME = "task_layout.html"
+SUPPORTED_HEADER_LOGO_EXTENSIONS = {
+    ".svg",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".avif",
+    ".bmp",
+    ".ico",
+}
 
 
 def compute_config_md5(config):
@@ -225,6 +238,53 @@ def resolve_project_asset_path(asset_path: str, config: dict, asset_label: str) 
         raise FileNotFoundError(f"{asset_label} not found: {asset_path}")
 
     return abs_asset_path
+
+
+def is_direct_asset_url(asset_path: str) -> bool:
+    """
+    Return True when the asset path is already a browser-consumable URL.
+    """
+    if not asset_path:
+        return False
+
+    return asset_path.startswith(("http://", "https://", "/media/", "/static/", "data:image/"))
+
+
+def validate_header_logo_path(asset_path: str) -> None:
+    """
+    Validate that the configured header logo uses a supported image format.
+    """
+    extension = os.path.splitext(asset_path)[1].lower()
+    if extension not in SUPPORTED_HEADER_LOGO_EXTENSIONS:
+        allowed = ", ".join(sorted(SUPPORTED_HEADER_LOGO_EXTENSIONS))
+        raise ValueError(
+            f"Unsupported header_logo format '{extension or '[no extension]'}'. "
+            f"Supported formats: {allowed}"
+        )
+
+
+def resolve_header_logo_src(config: dict) -> str:
+    """
+    Resolve the configured header logo to a value suitable for an <img src>.
+    """
+    header_logo = config.get("header_logo")
+    if not header_logo or header_logo in [None, "null", "default"]:
+        return ""
+
+    if is_direct_asset_url(header_logo):
+        return header_logo
+
+    resolved_logo = resolve_project_asset_path(header_logo, config, "header_logo file")
+    validate_header_logo_path(resolved_logo)
+
+    mime_type, _ = mimetypes.guess_type(resolved_logo)
+    if not mime_type or not mime_type.startswith("image/"):
+        raise ValueError(f"header_logo must be an image file: {header_logo}")
+
+    with open(resolved_logo, "rb") as logo_file:
+        encoded_logo = base64.b64encode(logo_file.read()).decode("ascii")
+
+    return f"data:{mime_type};base64,{encoded_logo}"
 
 
 def load_header_html(config: dict, header_file: str) -> str:

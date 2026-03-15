@@ -93,6 +93,13 @@
     <nav class="potato-navbar" role="navigation">
         <div class="navbar-inner">
             <div class="navbar-brand">
+                {% if header_logo_url %}
+                <img
+                    src="{{ header_logo_url }}"
+                    alt="{{ annotation_task_name }} logo"
+                    class="header-logo"
+                >
+                {% endif %}
                 <span class="task-name">{{annotation_task_name}}</span>
             </div>
 

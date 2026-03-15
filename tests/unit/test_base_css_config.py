@@ -1,4 +1,9 @@
-from potato.server_utils.front_end import generate_annotation_html_template, load_header_html
+from potato.server_utils.config_module import ConfigValidationError, validate_file_paths
+from potato.server_utils.front_end import (
+    generate_annotation_html_template,
+    load_header_html,
+    resolve_header_logo_src,
+)
 
 
 def _make_config(tmp_path, **overrides):
@@ -64,3 +69,45 @@ def test_generate_annotation_html_template_raises_for_missing_base_css(tmp_path)
         assert "base_css file not found" in str(exc)
     else:
         raise AssertionError("Expected FileNotFoundError for missing base_css")
+
+
+def test_generate_annotation_html_template_includes_header_logo_markup(tmp_path):
+    logo_file = tmp_path / "logo.svg"
+    logo_file.write_text(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'></svg>",
+        encoding="utf-8",
+    )
+
+    config = _make_config(tmp_path, header_logo="logo.svg")
+
+    site_name = generate_annotation_html_template(config)
+    output_file = tmp_path / "templates" / "generated" / site_name
+    html = output_file.read_text(encoding="utf-8")
+
+    assert 'class="header-logo"' in html
+    assert "{{ header_logo_url }}" in html
+
+
+def test_resolve_header_logo_src_returns_data_url_for_local_image(tmp_path):
+    logo_file = tmp_path / "logo.svg"
+    logo_file.write_text(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'></svg>",
+        encoding="utf-8",
+    )
+
+    config = _make_config(tmp_path, header_logo="logo.svg")
+
+    logo_src = resolve_header_logo_src(config)
+
+    assert logo_src.startswith("data:image/svg+xml;base64,")
+
+
+def test_validate_file_paths_rejects_missing_header_logo(tmp_path):
+    config = _make_config(tmp_path, header_logo="missing.svg")
+
+    try:
+        validate_file_paths(config, str(tmp_path), str(tmp_path))
+    except ConfigValidationError as exc:
+        assert "header_logo file not found" in str(exc)
+    else:
+        raise AssertionError("Expected ConfigValidationError for missing header_logo")
