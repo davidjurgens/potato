@@ -1248,6 +1248,14 @@ def load_phase_data(config: dict) -> None:
                         html_template = html_template.replace("{{keybindings}}", "")
                         html_template = html_template.replace("{{statistics_nav}}", "")
 
+                        # Inject project-level base CSS
+                        from server_utils.front_end import load_project_base_css_html
+                        try:
+                            project_css = load_project_base_css_html(config)
+                        except FileNotFoundError:
+                            project_css = ""
+                        html_template = html_template.replace("{{ PROJECT_BASE_CSS }}", project_css)
+
                         site_name = (
                             "_".join(config["annotation_task_name"].split(" "))
                             + "-" + "%s.html" % phase_name
@@ -2717,14 +2725,30 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
                 atexit.register(poller.stop)
 
 # Function to create and initialize the Flask application
-def create_app():
+def create_app(config_file=None):
     """
-    Create and configure the Flask application
+    Create and configure the Flask application.
+
+    When *config_file* is provided (e.g. from a gunicorn factory call like
+    ``gunicorn "potato.flask_server:create_app('config.yaml')"``), this
+    function also performs the full server initialization (config loading,
+    state managers, data loading, etc.) that ``run_server()`` normally does.
+    This makes it compatible with WSGI servers that use the factory pattern.
+
+    Args:
+        config_file: Optional path to a YAML config file.  When provided,
+            ``init_config`` and ``_initialize_from_config`` are called
+            automatically so the app is ready to serve requests.
 
     Returns:
         The configured Flask application instance
     """
     global app
+
+    # If a config file was provided, perform full initialization first.
+    # This is the code path used by gunicorn / WSGI factory calls.
+    if config_file is not None:
+        _initialize_from_config(config_file)
 
     # Initialize the app with explicit static folder configuration
     static_folder = os.path.join(cur_program_dir, 'static')
@@ -2776,6 +2800,14 @@ def create_app():
         ui_lang_config = config.get('ui_language', {})
         ui_lang = {**ui_lang_defaults, **ui_lang_config}
 
+        # Load project-level base CSS if configured
+        from potato.server_utils.front_end import load_project_base_css_html
+        try:
+            project_base_css = load_project_base_css_html(config)
+        except FileNotFoundError:
+            project_base_css = ""
+            logger.warning("base_css file configured but not found")
+
         return {
             'ui_debug': is_ui_debug_enabled(),
             'server_debug': is_server_debug_enabled(),
@@ -2785,9 +2817,120 @@ def create_app():
             'annotation_task_name': config.get('annotation_task_name', 'Annotation Task'),
             # Multilingual UI strings
             'ui_lang': ui_lang,
+            # Project-level base CSS
+            'PROJECT_BASE_CSS': project_base_css,
         }
 
     return app
+
+
+def _initialize_from_config(config_file):
+    """
+    Perform full server initialization from a config file path.
+
+    This is used by ``create_app(config_file)`` for WSGI/gunicorn deployments
+    where ``run_server()`` is not called.  It mirrors the initialization steps
+    in ``run_server()`` but constructs a minimal ``args`` namespace instead of
+    parsing sys.argv.
+    """
+    import types
+
+    # Build a minimal args namespace that init_config expects
+    args = types.SimpleNamespace(
+        config_file=config_file,
+        port=None,
+        verbose=False,
+        very_verbose=False,
+        debug=False,
+        debug_log=None,
+        debug_phase=None,
+        customjs=None,
+        customjs_hostname=None,
+        persist_sessions=False,
+        require_password=None,
+        mode="start",
+    )
+
+    # Initialize configuration
+    init_config(args)
+
+    # Handle require_no_password
+    if config.get("require_no_password", False):
+        config["require_password"] = False
+
+    # For URL-direct login, disable password requirement
+    login_config = config.get("login", {})
+    if login_config.get("type") in ["url_direct", "prolific"]:
+        config["require_password"] = False
+
+    # Set random seed default
+    if "random_seed" not in config:
+        config["random_seed"] = 1234
+
+    # Set up logging
+    setup_logging(
+        verbose=config.get("verbose", False),
+        debug=config.get("debug", False),
+        debug_log=config.get("debug_log"),
+        log_dir=config.get("output_annotation_dir"),
+    )
+
+    # Ensure directories exist
+    task_dir = config.get("task_dir", ".")
+    if not os.path.exists(task_dir):
+        os.makedirs(task_dir)
+
+    output_annotation_dir = config.get("output_annotation_dir", "annotation_output")
+    if not os.path.exists(output_annotation_dir):
+        os.makedirs(output_annotation_dir)
+
+    # Initialize authenticator
+    UserAuthenticator.init_from_config(config)
+
+    # Initialize state managers (singletons — safe to call if already initialized)
+    init_user_state_manager(config)
+    init_item_state_manager(config)
+
+    # Initialize AI support if enabled
+    if config.get("ai_support", {}).get("enabled", False):
+        init_ai_prompt(config)
+        init_dynamic_ai_help()
+
+    # Load data
+    load_all_data(config)
+
+    # Initialize AI cache after data is loaded
+    if config.get("ai_support", {}).get("enabled", False):
+        init_ai_cache_manager()
+
+    # Initialize quality control if enabled
+    qc_enabled = (
+        config.get("attention_checks", {}).get("enabled", False)
+        or config.get("gold_standards", {}).get("enabled", False)
+        or config.get("pre_annotation", {}).get("enabled", False)
+    )
+    if qc_enabled:
+        qc_task_dir = config.get(
+            "task_dir", os.path.dirname(config.get("config_file", ""))
+        )
+        init_quality_control_manager(config, qc_task_dir)
+
+    # Initialize adjudication if configured
+    if config.get("adjudication", {}).get("enabled", False):
+        init_adjudication_manager(config)
+
+    # Initialize knowledge base manager
+    init_kb_manager(config)
+
+    # Initialize WaveformService for audio annotation
+    _init_waveform_service(config)
+
+    # Initialize webhook emitter if configured
+    if config.get("webhooks", {}).get("enabled", False):
+        from potato.webhooks import init_webhook_emitter
+        init_webhook_emitter(config)
+
+    logger.info("Server initialization complete (WSGI factory mode)")
 
 
 def _init_waveform_service(config: dict) -> None:

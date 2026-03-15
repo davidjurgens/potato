@@ -9,6 +9,33 @@ Potato provides two approaches for customizing the annotation interface layout:
 1. **Auto-generated layouts**: Potato generates a `layouts/task_layout.html` file that you can edit
 2. **Custom layout files**: Create your own HTML template with full control over styling
 
+## Project-level Base CSS (`base_css`)
+
+For global styling that applies across all pages (annotation, consent, instructions, etc.), use the `base_css` config option:
+
+```yaml
+base_css: "styles/custom.css"
+```
+
+The CSS file is read at server startup and injected as a `<style id="potato-project-base-css">` block in the `<head>` of every page. It loads after all built-in Potato styles, so your rules take precedence.
+
+The path is resolved relative to the config file's directory. Absolute paths are also supported.
+
+**Example** `styles/custom.css`:
+
+```css
+body {
+    font-family: 'Georgia', serif;
+    background-color: #f5f5dc;
+}
+
+.navbar {
+    background-color: #336699 !important;
+}
+```
+
+> **Note:** Changes to the CSS file require a server restart. A missing file will log a warning rather than crash.
+
 ## Quick Start
 
 ### Using Auto-generated Layouts

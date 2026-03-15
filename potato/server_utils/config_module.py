@@ -1714,6 +1714,27 @@ def validate_file_paths(config_data: Dict[str, Any], project_dir: str, config_fi
             except ConfigSecurityError as e:
                 raise ConfigSecurityError(f"custom_ds: {str(e)}")
 
+    # Validate base_css
+    if 'base_css' in config_data:
+        base_css = config_data['base_css']
+        if base_css not in [None, "null", "default"]:
+            try:
+                validated_css = validate_path_security(base_css, base_dir, project_dir)
+                if not os.path.exists(validated_css):
+                    # Try resolving relative to config file directory
+                    if config_file_dir:
+                        alt_path = os.path.join(config_file_dir, base_css)
+                        if not os.path.exists(alt_path):
+                            raise ConfigValidationError(
+                                f"base_css file not found: {base_css} (resolved to: {validated_css})"
+                            )
+                    else:
+                        raise ConfigValidationError(
+                            f"base_css file not found: {base_css} (resolved to: {validated_css})"
+                        )
+            except ConfigSecurityError as e:
+                raise ConfigSecurityError(f"base_css: {str(e)}")
+
 
 def validate_training_config(config_data: Dict[str, Any], project_dir: str, config_file_dir: str = None) -> None:
     """
@@ -3147,6 +3168,7 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
         "text", "html", "image", "video", "audio", "dialogue", "pairwise",
         "pdf", "document", "spreadsheet", "code", "agent_trace", "gallery",
         "conversation_tree", "interactive_chat", "web_agent_trace",
+        "live_agent",
     ]
 
     for i, field in enumerate(fields):

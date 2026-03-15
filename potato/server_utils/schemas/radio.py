@@ -101,7 +101,7 @@ def _generate_radio_layout_internal(annotation_scheme, horizontal=False):
         # Generate consistent identifiers
         identifiers = generate_element_identifier(schema_name, label, "radio")
         label_value = label  # Use label name as value for annotation storage
-        validation = generate_validation_attribute(annotation_scheme)
+        validation = generate_validation_attribute(annotation_scheme, label)
 
         # Debug logging
         logger.debug(f"Schema: {schema_name}, Label: {label}, Validation: '{validation}'")

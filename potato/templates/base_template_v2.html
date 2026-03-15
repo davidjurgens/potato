@@ -84,6 +84,9 @@
 
     <!-- jQuery (required for span annotation) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+
+    <!-- Project-level base CSS (injected from base_css config option) -->
+    {{ PROJECT_BASE_CSS | safe }}
 </head>
 
 <body>
@@ -380,8 +383,14 @@
     <!-- Web Agent Trace Viewer (overlays + step navigation) -->
     <script src="{{ url_for('static', filename='web-agent-overlays.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='web-agent-viewer.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='web-agent-playback.js') }}?v=1"></script>
     <!-- Web Agent Interaction Recorder (creation mode) -->
     <script src="{{ url_for('static', filename='web-agent-recorder.js') }}?v=1"></script>
+    <!-- Live Agent Viewer (real-time agent interaction) -->
+    {% if live_agent_enabled | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/live-agent.css') }}?v=1">
+    <script src="{{ url_for('static', filename='live-agent-viewer.js') }}?v=1"></script>
+    {% endif %}
 
     <!-- Global keyboard debug (temporary) -->
     <script>

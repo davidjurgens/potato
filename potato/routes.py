@@ -1111,7 +1111,11 @@ def register():
     # Register the user with the authenticator
     logger.debug("Adding user to authenticator...")
     user_authenticator = UserAuthenticator.get_instance()
-    user_authenticator.add_user(username, password)
+    result = user_authenticator.add_user(username, password)
+
+    if result != "Success":
+        logger.warning(f"Registration failed for '{username}': {result}")
+        return render_template("home.html", login_error=result)
 
     # Persist user config if explicitly configured
     user_authenticator.save_user_config()
@@ -1666,6 +1670,69 @@ def prestudy():
         logger.debug("GET <-- PRESTUDY")
         return get_current_page_html(config, username)
 
+def _scheme_is_required(scheme: dict) -> bool:
+    """Check if an annotation scheme is marked as required."""
+    # required: true at top level
+    if scheme.get("required") is True:
+        return True
+    # label_requirement: true (bool) or label_requirement.required: true
+    lr = scheme.get("label_requirement", {})
+    if lr is True:
+        return True
+    if isinstance(lr, dict) and lr.get("required") is True:
+        return True
+    return False
+
+
+def _scheme_has_required_annotation(user_state, instance_id: str, scheme: dict) -> bool:
+    """Check whether a specific required scheme has been annotated for the given instance."""
+    schema_name = scheme.get("name", "")
+
+    # Check label annotations — keys are Label objects with .get_schema() and .get_name()
+    label_annotations = user_state.instance_id_to_label_to_value.get(instance_id, {})
+    for label_key, value in label_annotations.items():
+        if hasattr(label_key, 'get_schema') and label_key.get_schema() == schema_name:
+            # Found a label for this schema — check if it has a truthy value
+            if value:
+                return True
+
+    # Check span annotations
+    span_annotations = user_state.instance_id_to_span_to_value.get(instance_id, {})
+    if span_annotations:
+        # Span annotations are stored differently — check if any spans exist
+        if isinstance(span_annotations, dict) and span_annotations:
+            return True
+        elif isinstance(span_annotations, list) and len(span_annotations) > 0:
+            return True
+
+    return False
+
+
+def _instance_meets_required_annotation_rules(user_state, instance_id: str) -> list:
+    """Check if all required annotation schemes are satisfied for an instance.
+
+    Returns a list of unsatisfied scheme names (empty if all satisfied).
+    """
+    unsatisfied = []
+    for scheme in config.get("annotation_schemes", []):
+        if _scheme_is_required(scheme) and not _scheme_has_required_annotation(user_state, instance_id, scheme):
+            unsatisfied.append(scheme.get("name", "unknown"))
+    return unsatisfied
+
+
+def _check_required_or_block(user_state, instance_id: str):
+    """Check required annotations and return a 400 response if not met, or None if OK."""
+    unsatisfied = _instance_meets_required_annotation_rules(user_state, instance_id)
+    if unsatisfied:
+        msg = f"Required annotation(s) not completed: {', '.join(unsatisfied)}"
+        logger.info(f"Blocking navigation: {msg} for instance {instance_id}")
+        if request.is_json:
+            return jsonify({"status": "validation_error", "message": msg, "unsatisfied_schemas": unsatisfied}), 400
+        # For form POSTs, fall through to render the page with existing annotations
+        return None
+    return None
+
+
 @app.route("/annotate", methods=["GET", "POST"])
 def annotate():
     """
@@ -1702,9 +1769,31 @@ def annotate():
     logger.debug(f"User state: {user_state}")
     logger.debug(f"User state phase: {user_state.get_phase() if user_state else 'No user state'}")
 
-    # Check user phase
+    # Check user phase — guard against leaked nav button POSTs from non-annotation pages
     if not user_state or user_state.get_phase() != UserPhase.ANNOTATION:
-        logger.info(f"User {username} not in annotation phase, redirecting. Phase: {user_state.get_phase() if user_state else 'No user state'}")
+        cur_phase = user_state.get_phase() if user_state else None
+        logger.info(f"User {username} not in annotation phase (phase={cur_phase}), redirecting.")
+
+        # If a nav POST arrived from a non-annotation page, handle it gracefully
+        if request.method == 'POST':
+            action = None
+            if request.is_json and request.json:
+                action = request.json.get('action')
+            elif request.form:
+                action = request.form.get('action')
+
+            if action == 'next_instance':
+                # Treat as "submit current phase page" — advance to next phase
+                logger.info(f"Leaked next_instance from phase {cur_phase}, advancing phase")
+                get_user_state_manager().advance_phase(username)
+                return redirect(url_for("home"))
+            elif action == 'prev_instance':
+                # No backward navigation — just redirect without changing state
+                logger.info(f"Leaked prev_instance from phase {cur_phase}, ignoring")
+                return redirect(url_for("home"))
+
+        # For non-nav POSTs (phase form submissions) and GETs, delegate to home()
+        # so POST data is preserved for phase processing
         return home()
 
     # If the user hasn't yet been assigned anything to annotate, do so now
@@ -1760,6 +1849,12 @@ def annotate():
                                getattr(acm, "prefetch_page_count_on_prev", 0) )
     elif action == "next_instance":
         logger.debug(f"Moving to next instance for user: {username}")
+        # Check required annotations before allowing forward navigation
+        current_id = user_state.get_current_instance_id()
+        block_response = _check_required_or_block(user_state, current_id)
+        if block_response is not None:
+            return block_response
+
         moved_forward = move_to_next_instance(username)
         if not moved_forward and user_state.is_at_end_index():
             logger.debug(f"User {username} reached the end of assigned instances")
@@ -1781,6 +1876,14 @@ def annotate():
 
         logger.debug(f"go_to action with value: {go_to_value}")
         if go_to_value is not None:
+            # Block forward go_to if required annotations aren't met
+            target_index = int(go_to_value)
+            if target_index > user_state.current_instance_index:
+                current_id = user_state.get_current_instance_id()
+                block_response = _check_required_or_block(user_state, current_id)
+                if block_response is not None:
+                    return block_response
+
             go_to_id(username, go_to_value)
             acm = get_ai_cache_manager()
             if acm:
@@ -1790,6 +1893,12 @@ def annotate():
         else:
             logger.warning('go_to action requested but no go_to value provided')
     elif action == "jump_to_unannotated":
+        # Check required annotations before jumping forward
+        current_id = user_state.get_current_instance_id()
+        block_response = _check_required_or_block(user_state, current_id)
+        if block_response is not None:
+            return block_response
+
         # Find the next unannotated instance and jump to it
         next_idx = user_state.find_next_unannotated_index()
         if next_idx is not None:
@@ -3863,12 +3972,23 @@ def update_instance():
 
     if request.is_json:
         logger.debug(f"Received JSON data: {request.json}")
-        instance_id = str(request.json.get("instance_id"))  # Normalize to string
+        raw_instance_id = request.json.get("instance_id")
+        if raw_instance_id is None or str(raw_instance_id).strip() == "":
+            logger.warning(f"Received update with null/empty instance_id from user {session.get('username')}")
+            return jsonify({"status": "error", "message": "Missing instance_id"})
+        instance_id = str(raw_instance_id)  # Normalize to string
         username = session['username']
         user_state = get_user_state(username)
         if not user_state:
             logger.error(f"User state not found for user: {username}")
             return jsonify({"status": "error", "message": "User state not found"})
+
+        # Guard: reject updates for instances not assigned to this user
+        if user_state.get_phase() == UserPhase.ANNOTATION:
+            assigned_ids = user_state.get_assigned_instance_ids()
+            if assigned_ids and instance_id not in assigned_ids:
+                logger.warning(f"User {username} tried to update unassigned instance {instance_id}")
+                return jsonify({"status": "error", "message": "Instance not assigned to user"})
 
         # Debug: Log user phase for debugging annotation storage issues
         logger.debug(f"User '{username}' phase: {user_state.get_phase()}, current_phase_and_page: {user_state.current_phase_and_page}")
@@ -6568,6 +6688,10 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/api/embedding_viz/refresh", "admin_api_embedding_viz_refresh", admin_api_embedding_viz_refresh, methods=["POST"])
     app.add_url_rule("/admin/api/embedding_viz/stats", "admin_api_embedding_viz_stats", admin_api_embedding_viz_stats, methods=["GET"])
 
+    # Export admin API routes
+    app.add_url_rule("/admin/api/export/formats", "admin_api_export_formats", admin_api_export_formats, methods=["GET"])
+    app.add_url_rule("/admin/api/export", "admin_api_export", admin_api_export, methods=["POST"])
+
     # Agent chat routes (interactive agent testing)
     app.add_url_rule("/agent_chat/send", "agent_chat_send", agent_chat_send, methods=["POST"])
     app.add_url_rule("/agent_chat/finish", "agent_chat_finish", agent_chat_finish, methods=["POST"])
@@ -7295,6 +7419,57 @@ def admin_api_webhooks_test():
     }
     count = emitter.emit("webhook.test", test_payload)
     return jsonify({"status": "sent", "endpoints_matched": count})
+
+
+@app.route('/admin/api/export/formats', methods=['GET'])
+def admin_api_export_formats():
+    """List available export formats with metadata."""
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.export import export_registry
+    formats = export_registry.list_exporters()
+    return jsonify({"formats": formats})
+
+
+@app.route('/admin/api/export', methods=['POST'])
+def admin_api_export():
+    """Run an export in the requested format and return the result."""
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin access required"}), 403
+
+    data = request.get_json(silent=True) or {}
+    fmt = data.get("format")
+    if not fmt:
+        return jsonify({"error": "Missing required field: format"}), 400
+
+    output = data.get("output", "")
+    options = data.get("options") or {}
+
+    config_file = config.get("__config_file__")
+    if not config_file:
+        return jsonify({"error": "Config file path not available"}), 500
+
+    try:
+        from potato.export.cli import build_export_context
+        from potato.export import export_registry
+
+        context = build_export_context(config_file)
+        result = export_registry.export(fmt, context, output, options)
+
+        return jsonify({
+            "success": result.success,
+            "format": result.format_name,
+            "files_written": result.files_written,
+            "stats": result.stats,
+            "warnings": result.warnings,
+            "errors": result.errors,
+        })
+    except Exception as e:
+        logger.exception("Export failed: %s", e)
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/adjudicate/api/submit', methods=['POST'])

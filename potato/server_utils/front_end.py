@@ -36,6 +36,61 @@ DEFAULT_ANNOTATION_LAYOUT_SUBDIR = "layouts"
 DEFAULT_ANNOTATION_LAYOUT_FILENAME = "task_layout.html"
 
 
+def resolve_project_asset_path(config: dict, relative_path: str) -> str:
+    """
+    Resolve a project-relative asset path using the config file directory as base.
+
+    Args:
+        config: The configuration dict (must contain ``__config_file__``)
+        relative_path: The path as specified in the config (absolute or relative)
+
+    Returns:
+        Absolute path to the resolved file
+
+    Raises:
+        FileNotFoundError: If the file does not exist at the resolved path
+    """
+    if os.path.isabs(relative_path) and os.path.exists(relative_path):
+        return relative_path
+
+    if os.path.exists(relative_path):
+        return os.path.abspath(relative_path)
+
+    # Resolve relative to the config file's directory
+    config_file = config.get("__config_file__", "")
+    if config_file:
+        real_path = os.path.realpath(config_file)
+        dir_path = os.path.dirname(real_path)
+        abs_path = os.path.join(dir_path, relative_path)
+        if os.path.exists(abs_path):
+            return abs_path
+
+    raise FileNotFoundError(f"Project asset file not found: {relative_path}")
+
+
+def load_project_base_css_html(config: dict) -> str:
+    """
+    Load the project-level ``base_css`` file and return it wrapped in a ``<style>`` tag.
+
+    If ``base_css`` is not configured, returns an empty string.
+
+    Args:
+        config: The configuration dict
+
+    Returns:
+        HTML ``<style>`` block, or empty string
+    """
+    css_path = config.get("base_css")
+    if not css_path:
+        return ""
+
+    resolved = resolve_project_asset_path(config, css_path)
+    with open(resolved, "rt", encoding="utf-8") as f:
+        css_content = f.read()
+
+    return f'<style id="potato-project-base-css">\n{css_content}\n</style>'
+
+
 def compute_config_md5(config):
     """
     Compute MD5 hash of the config dict for template invalidation.
@@ -292,14 +347,7 @@ def generate_annotation_html_template(config: dict) -> str:
         logger.info(f"Using custom task layout file: {task_layout_file}")
 
         # Resolve the path relative to the config file
-        if not os.path.exists(task_layout_file):
-            real_path = os.path.realpath(config["__config_file__"])
-            dir_path = os.path.dirname(real_path)
-            abs_task_layout_file = os.path.join(dir_path, task_layout_file)
-
-            if not os.path.exists(abs_task_layout_file):
-                raise FileNotFoundError(f"task_layout file not found: {task_layout_file}")
-            task_layout_file = abs_task_layout_file
+        task_layout_file = resolve_project_asset_path(config, task_layout_file)
 
         # Read the custom task layout
         with open(task_layout_file, "rt", encoding="utf-8") as f:
@@ -521,14 +569,7 @@ def generate_html_from_schematic(annotation_schemas: list[dict],
         logger.info(f"Using custom task layout file: {task_layout_file}")
 
         # Resolve the path relative to the config file
-        if not os.path.exists(task_layout_file):
-            real_path = os.path.realpath(config["__config_file__"])
-            dir_path = os.path.dirname(real_path)
-            abs_task_layout_file = os.path.join(dir_path, task_layout_file)
-
-            if not os.path.exists(abs_task_layout_file):
-                raise FileNotFoundError(f"task_layout file not found: {task_layout_file}")
-            task_layout_file = abs_task_layout_file
+        task_layout_file = resolve_project_asset_path(config, task_layout_file)
 
         # Read the custom task layout
         with open(task_layout_file, "rt", encoding="utf-8") as f:
