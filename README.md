@@ -1,11 +1,11 @@
-# Potato: The Portable Text Annotation Tool
+# Potato: The Portable Annotation Tool
 
 [![Documentation](https://img.shields.io/badge/docs-readthedocs-blue)](https://potatoannotator.readthedocs.io/)
 [![PyPI](https://img.shields.io/pypi/v/potato-annotation)](https://pypi.org/project/potato-annotation/)
 [![License](https://img.shields.io/badge/license-Polyform%20Shield-green)](LICENSE)
 [![Paper](https://img.shields.io/badge/paper-EMNLP%202022-orange)](https://aclanthology.org/2022.emnlp-demos.33/)
 
-**Potato** is a free, self-hosted annotation platform for NLP and AI research. Annotate text, audio, video, images, documents, agent traces, and more — configured entirely through YAML. No coding required.
+**Potato** is a free, self-hosted annotation platform for NLP, Agentic, and GenAI research. Annotate text, audio, video, images, documents, agent traces, and more — configured entirely through YAML. No coding required.
 
 ---
 
