@@ -82,6 +82,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/llm-chat-sidebar.css') }}?v=1">
     {% endif %}
 
+    {{ PROJECT_BASE_CSS }}
+
     <!-- jQuery (required for span annotation) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
 </head>
@@ -91,6 +93,13 @@
     <nav class="potato-navbar" role="navigation">
         <div class="navbar-inner">
             <div class="navbar-brand">
+                {% if header_logo_url %}
+                <img
+                    src="{{ header_logo_url }}"
+                    alt="{{ annotation_task_name }} logo"
+                    class="header-logo"
+                >
+                {% endif %}
                 <span class="task-name">{{annotation_task_name}}</span>
             </div>
 
@@ -230,10 +239,10 @@
 
         <!-- Navigation buttons -->
         <div class="potato-nav">
-            <button class="shadcn-button shadcn-button-outline" id="prev-btn" onclick="navigateToPrevious()">
+            <button type="button" class="shadcn-button shadcn-button-outline" id="prev-btn" onclick="navigateToPrevious()">
                 <i class="fas fa-arrow-left me-2"></i>{{ ui_lang.previous_button }}
             </button>
-            <button class="shadcn-button shadcn-button-primary" id="next-btn" onclick="navigateToNext()">
+            <button type="button" class="shadcn-button shadcn-button-primary" id="next-btn" onclick="navigateToNext()">
                 {{ ui_lang.next_button }}<i class="fas fa-arrow-right ms-2"></i>
             </button>
         </div>

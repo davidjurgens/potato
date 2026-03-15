@@ -3658,6 +3658,18 @@ body.has-pairwise-display #instance-text {
 }
 
 .potato-navbar .navbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.potato-navbar .navbar-brand .header-logo {
+  display: block;
+  width: auto;
+  max-width: 44px;
+  max-height: 44px;
+  object-fit: contain;
   flex-shrink: 0;
 }
 

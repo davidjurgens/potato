@@ -1235,12 +1235,13 @@ def load_phase_data(config: dict) -> None:
 
                         # Wrap in a minimal page template for consistency
                         cur_program_dir = os.path.dirname(os.path.abspath(__file__))
-                        from server_utils.front_end import get_html
+                        from server_utils.front_end import get_html, load_header_html, load_project_base_css_html
                         html_template_file = os.path.join(cur_program_dir, 'templates', 'base_template_v2.html')
                         header_file = os.path.join(cur_program_dir, 'templates', 'header.html')
                         html_template = get_html(html_template_file, config)
-                        header = get_html(header_file, config)
+                        header = load_header_html(config, header_file)
                         html_template = html_template.replace("{{ HEADER }}", header)
+                        html_template = html_template.replace("{{ PROJECT_BASE_CSS }}", load_project_base_css_html(config))
                         html_template = html_template.replace("{{ TASK_LAYOUT }}", instructions_html)
                         html_template = html_template.replace("{{annotation_codebook}}", "")
                         html_template = html_template.replace("{{annotation_task_name}}",
@@ -2757,6 +2758,7 @@ def create_app():
     def inject_template_context():
         """Inject debug settings and common config values into all templates."""
         from potato.logging_config import is_ui_debug_enabled, is_server_debug_enabled
+        from potato.server_utils.front_end import resolve_header_logo_src
 
         # Build ui_lang dict with defaults, overridden by config
         ui_lang_defaults = {
@@ -2783,6 +2785,7 @@ def create_app():
             'debug_phase': config.get('debug_phase'),
             # Add common config values needed by templates
             'annotation_task_name': config.get('annotation_task_name', 'Annotation Task'),
+            'header_logo_url': resolve_header_logo_src(config),
             # Multilingual UI strings
             'ui_lang': ui_lang,
         }
@@ -3109,7 +3112,6 @@ def run_server(args):
     if hf_backup.get('enabled', False):
         try:
             from huggingface_hub import CommitScheduler
-            import os
             task_dir = config.get('task_dir', '.')
             output_dir = os.path.join(
                 task_dir,

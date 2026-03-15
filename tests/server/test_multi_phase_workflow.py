@@ -169,6 +169,366 @@ class TestMultiPhaseWorkflow:
         response = session.post(f"{self.server.base_url}/updateinstance", json=annotation_data)
         assert response.status_code == 200
 
+    def test_next_instance_is_blocked_until_required_annotations_are_complete(self):
+        """Required annotation schemas should block instance navigation server-side."""
+        test_dir = create_test_directory("required_annotation_navigation")
+        try:
+            test_data = [
+                {"id": "item_1", "text": "First required item."},
+                {"id": "item_2", "text": "Second required item."},
+            ]
+            data_file = create_test_data_file(test_dir, test_data)
+            annotation_schemes = [
+                {
+                    "name": "sentiment",
+                    "annotation_type": "radio",
+                    "labels": ["positive", "negative"],
+                    "description": "Sentiment",
+                    "required": True,
+                },
+                {
+                    "name": "notes",
+                    "annotation_type": "text",
+                    "description": "Notes",
+                    "required": True,
+                },
+            ]
+
+            config_file = create_test_config(
+                test_dir,
+                annotation_schemes,
+                data_files=[data_file],
+                annotation_task_name="Required Annotation Navigation",
+                require_password=False,
+                max_annotations_per_user=10,
+                phases={"order": ["annotation"], "annotation": {"type": "annotation"}},
+            )
+
+            server = FlaskTestServer(config_file=config_file, debug=False)
+            assert server.start()
+            try:
+                session = requests.Session()
+                user_data = {"email": "required_nav_user", "pass": "test_password"}
+                session.post(f"{server.base_url}/register", data=user_data)
+                session.post(f"{server.base_url}/auth", data=user_data)
+
+                blocked = session.post(
+                    f"{server.base_url}/annotate",
+                    json={"action": "next_instance", "instance_id": "item_1"},
+                )
+                assert blocked.status_code == 400
+                assert blocked.json()["status"] == "validation_error"
+
+                session.post(
+                    f"{server.base_url}/updateinstance",
+                    json={
+                        "instance_id": "item_1",
+                        "annotations": {
+                            "sentiment:positive": "true",
+                            "notes:text_box": "filled",
+                        },
+                        "span_annotations": [],
+                    },
+                )
+
+                allowed = session.post(
+                    f"{server.base_url}/annotate",
+                    json={"action": "next_instance", "instance_id": "item_1"},
+                )
+                assert allowed.status_code == 200
+                assert "Second required item." in allowed.text
+            finally:
+                server.stop()
+        finally:
+            cleanup_test_directory(test_dir)
+
+    def test_jump_to_unannotated_is_blocked_until_required_annotations_are_complete(self):
+        """Header jump-forward navigation should honor the same required rules as Next."""
+        test_dir = create_test_directory("required_jump_navigation")
+        try:
+            test_data = [
+                {"id": "item_1", "text": "First required item."},
+                {"id": "item_2", "text": "Second required item."},
+                {"id": "item_3", "text": "Third required item."},
+            ]
+            data_file = create_test_data_file(test_dir, test_data)
+            annotation_schemes = [
+                {
+                    "name": "sentiment",
+                    "annotation_type": "radio",
+                    "labels": ["positive", "negative"],
+                    "description": "Sentiment",
+                    "required": True,
+                },
+                {
+                    "name": "notes",
+                    "annotation_type": "text",
+                    "description": "Notes",
+                    "required": True,
+                },
+            ]
+
+            config_file = create_test_config(
+                test_dir,
+                annotation_schemes,
+                data_files=[data_file],
+                annotation_task_name="Required Jump Navigation",
+                require_password=False,
+                max_annotations_per_user=10,
+                phases={"order": ["annotation"], "annotation": {"type": "annotation"}},
+            )
+
+            server = FlaskTestServer(config_file=config_file, debug=False)
+            assert server.start()
+            try:
+                session = requests.Session()
+                user_data = {"email": "required_jump_user", "pass": "test_password"}
+                session.post(f"{server.base_url}/register", data=user_data)
+                session.post(f"{server.base_url}/auth", data=user_data)
+
+                blocked = session.post(
+                    f"{server.base_url}/annotate",
+                    json={"action": "jump_to_unannotated", "instance_id": "item_1"},
+                )
+                assert blocked.status_code == 400
+                assert blocked.json()["status"] == "validation_error"
+
+                session.post(
+                    f"{server.base_url}/updateinstance",
+                    json={
+                        "instance_id": "item_1",
+                        "annotations": {
+                            "sentiment:positive": "true",
+                            "notes:text_box": "filled",
+                        },
+                        "span_annotations": [],
+                    },
+                )
+
+                allowed = session.post(
+                    f"{server.base_url}/annotate",
+                    json={"action": "jump_to_unannotated", "instance_id": "item_1"},
+                )
+                assert allowed.status_code == 200
+                assert "Second required item." in allowed.text
+            finally:
+                server.stop()
+        finally:
+            cleanup_test_directory(test_dir)
+
+    def test_go_to_forward_is_blocked_until_required_annotations_are_complete(self):
+        """Direct header go-to should not bypass required annotation validation when moving forward."""
+        test_dir = create_test_directory("required_goto_navigation")
+        try:
+            test_data = [
+                {"id": "item_1", "text": "First required item."},
+                {"id": "item_2", "text": "Second required item."},
+                {"id": "item_3", "text": "Third required item."},
+            ]
+            data_file = create_test_data_file(test_dir, test_data)
+            annotation_schemes = [
+                {
+                    "name": "sentiment",
+                    "annotation_type": "radio",
+                    "labels": ["positive", "negative"],
+                    "description": "Sentiment",
+                    "required": True,
+                },
+                {
+                    "name": "notes",
+                    "annotation_type": "text",
+                    "description": "Notes",
+                    "required": True,
+                },
+            ]
+
+            config_file = create_test_config(
+                test_dir,
+                annotation_schemes,
+                data_files=[data_file],
+                annotation_task_name="Required Go To Navigation",
+                require_password=False,
+                max_annotations_per_user=10,
+                phases={"order": ["annotation"], "annotation": {"type": "annotation"}},
+            )
+
+            server = FlaskTestServer(config_file=config_file, debug=False)
+            assert server.start()
+            try:
+                session = requests.Session()
+                user_data = {"email": "required_goto_user", "pass": "test_password"}
+                session.post(f"{server.base_url}/register", data=user_data)
+                session.post(f"{server.base_url}/auth", data=user_data)
+
+                blocked = session.post(
+                    f"{server.base_url}/annotate",
+                    json={"action": "go_to", "go_to": 1},
+                )
+                assert blocked.status_code == 400
+                assert blocked.json()["status"] == "validation_error"
+
+                session.post(
+                    f"{server.base_url}/updateinstance",
+                    json={
+                        "instance_id": "item_1",
+                        "annotations": {
+                            "sentiment:positive": "true",
+                            "notes:text_box": "filled",
+                        },
+                        "span_annotations": [],
+                    },
+                )
+
+                allowed = session.post(
+                    f"{server.base_url}/annotate",
+                    json={"action": "go_to", "go_to": 1},
+                )
+                assert allowed.status_code == 200
+                assert "Second required item." in allowed.text
+            finally:
+                server.stop()
+        finally:
+            cleanup_test_directory(test_dir)
+
+    def test_last_item_partial_annotations_do_not_complete_the_phase(self):
+        """A partially annotated last item should not trigger completion before navigation validation runs."""
+        test_dir = create_test_directory("required_last_item_completion")
+        try:
+            test_data = [
+                {"id": "item_1", "text": "First required item."},
+                {"id": "item_2", "text": "Second required item."},
+                {"id": "item_3", "text": "Third required item."},
+            ]
+            data_file = create_test_data_file(test_dir, test_data)
+            annotation_schemes = [
+                {
+                    "name": "sentiment",
+                    "annotation_type": "radio",
+                    "labels": ["positive", "negative"],
+                    "description": "Sentiment",
+                    "required": True,
+                },
+                {
+                    "name": "notes",
+                    "annotation_type": "text",
+                    "description": "Notes",
+                    "required": True,
+                },
+            ]
+
+            config_file = create_test_config(
+                test_dir,
+                annotation_schemes,
+                data_files=[data_file],
+                annotation_task_name="Required Last Item Completion",
+                require_password=False,
+                max_annotations_per_user=3,
+                phases={"order": ["annotation"], "annotation": {"type": "annotation"}},
+            )
+
+            server = FlaskTestServer(config_file=config_file, debug=False)
+            assert server.start()
+            try:
+                session = requests.Session()
+                user_data = {"email": "required_last_item_user", "pass": "test_password"}
+                session.post(f"{server.base_url}/register", data=user_data)
+                session.post(f"{server.base_url}/auth", data=user_data)
+
+                for instance_id in ("item_1", "item_2"):
+                    session.post(
+                        f"{server.base_url}/updateinstance",
+                        json={
+                            "instance_id": instance_id,
+                            "annotations": {
+                                "sentiment:positive": "true",
+                                "notes:text_box": f"filled-{instance_id}",
+                            },
+                            "span_annotations": [],
+                        },
+                    )
+                    session.post(
+                        f"{server.base_url}/annotate",
+                        json={"action": "next_instance", "instance_id": instance_id},
+                    )
+
+                session.post(
+                    f"{server.base_url}/updateinstance",
+                    json={
+                        "instance_id": "item_3",
+                        "annotations": {
+                            "sentiment:positive": "true",
+                        },
+                        "span_annotations": [],
+                    },
+                )
+
+                blocked = session.post(
+                    f"{server.base_url}/annotate",
+                    json={"action": "next_instance", "instance_id": "item_3"},
+                    allow_redirects=False,
+                )
+                assert blocked.status_code == 400
+                assert blocked.json()["status"] == "validation_error"
+
+                still_annotation = session.get(f"{server.base_url}/")
+                assert "Third required item." in still_annotation.text
+            finally:
+                server.stop()
+        finally:
+            cleanup_test_directory(test_dir)
+
+    def test_optional_annotation_schemas_do_not_block_next_instance(self):
+        """Annotation schemas without explicit requirements should remain optional."""
+        test_dir = create_test_directory("optional_annotation_navigation")
+        try:
+            test_data = [
+                {"id": "item_1", "text": "First optional item."},
+                {"id": "item_2", "text": "Second optional item."},
+            ]
+            data_file = create_test_data_file(test_dir, test_data)
+            annotation_schemes = [
+                {
+                    "name": "sentiment",
+                    "annotation_type": "radio",
+                    "labels": ["positive", "negative"],
+                    "description": "Sentiment",
+                },
+                {
+                    "name": "notes",
+                    "annotation_type": "text",
+                    "description": "Notes",
+                },
+            ]
+
+            config_file = create_test_config(
+                test_dir,
+                annotation_schemes,
+                data_files=[data_file],
+                annotation_task_name="Optional Annotation Navigation",
+                require_password=False,
+                max_annotations_per_user=10,
+                phases={"order": ["annotation"], "annotation": {"type": "annotation"}},
+            )
+
+            server = FlaskTestServer(config_file=config_file, debug=False)
+            assert server.start()
+            try:
+                session = requests.Session()
+                user_data = {"email": "optional_nav_user", "pass": "test_password"}
+                session.post(f"{server.base_url}/register", data=user_data)
+                session.post(f"{server.base_url}/auth", data=user_data)
+
+                allowed = session.post(
+                    f"{server.base_url}/annotate",
+                    json={"action": "next_instance", "instance_id": "item_1"},
+                )
+                assert allowed.status_code == 200
+                assert "Second optional item." in allowed.text
+            finally:
+                server.stop()
+        finally:
+            cleanup_test_directory(test_dir)
+
     def test_first_non_annotation_phase_renders_hidden_instance_text_placeholders(self):
         """
         Regression test for the shared base template on the first non-annotation phase.
@@ -282,3 +642,107 @@ class TestMultiPhaseWorkflow:
 
         # The current instance text should be rendered on the page
         assert "This is the first item for phase testing." in html
+
+    def test_previous_navigation_on_phase_page_does_not_advance_stage(self):
+        """
+        Regression test for phase pages using the shared annotation navigation UI.
+
+        The Previous button on a non-annotation phase posts JSON to /annotate.
+        That request must not be treated as a phase submission for the current
+        page, or the workflow will incorrectly advance to the next stage.
+        """
+        session = requests.Session()
+        username = "phase_prev_navigation_test_user"
+        user_data = {"email": username, "pass": "test_password"}
+
+        session.post(f"{self.server.base_url}/register", data=user_data)
+        session.post(f"{self.server.base_url}/auth", data=user_data)
+
+        response = session.get(f"{self.server.base_url}/")
+        assert response.status_code == 200
+        assert "Are you at least 18 years old?" in response.text
+        assert "How familiar are you with the internet?" not in response.text
+
+        prev_response = session.post(
+            f"{self.server.base_url}/annotate",
+            json={"action": "prev_instance", "instance_id": "phase_item_1"},
+            allow_redirects=True,
+        )
+        assert prev_response.status_code == 200
+
+        # The user should still be on the consent stage, not advanced forward.
+        assert "Are you at least 18 years old?" in prev_response.text
+        assert "How familiar are you with the internet?" not in prev_response.text
+
+    def test_previous_navigation_on_prestudy_returns_to_consent(self):
+        """
+        Previous navigation from prestudy should move to the previous workflow stage.
+        """
+        session = requests.Session()
+        username = "phase_prev_from_prestudy_test_user"
+        user_data = {"email": username, "pass": "test_password"}
+
+        session.post(f"{self.server.base_url}/register", data=user_data)
+        session.post(f"{self.server.base_url}/auth", data=user_data)
+
+        consent_response = session.get(f"{self.server.base_url}/")
+        assert consent_response.status_code == 200
+        assert "Are you at least 18 years old?" in consent_response.text
+
+        # Advance to prestudy using the same compatibility path the tests already use.
+        prestudy_response = session.post(
+            f"{self.server.base_url}/annotate",
+            data={
+                "age_consent:::Yes": "true",
+                "info_consent:::Yes": "true",
+            },
+            allow_redirects=True,
+        )
+        assert prestudy_response.status_code == 200
+        assert "How familiar are you with the internet?" in prestudy_response.text
+
+        prev_response = session.post(
+            f"{self.server.base_url}/annotate",
+            json={"action": "prev_instance", "instance_id": "phase_item_1"},
+            allow_redirects=True,
+        )
+        assert prev_response.status_code == 200
+        assert "Are you at least 18 years old?" in prev_response.text
+        assert "How familiar are you with the internet?" not in prev_response.text
+
+    def test_next_navigation_on_consent_advances_to_prestudy(self):
+        """
+        Shared navigation UI should advance non-annotation phases once required answers are saved.
+        """
+        session = requests.Session()
+        username = "phase_next_from_consent_test_user"
+        user_data = {"email": username, "pass": "test_password"}
+
+        session.post(f"{self.server.base_url}/register", data=user_data)
+        session.post(f"{self.server.base_url}/auth", data=user_data)
+
+        consent_response = session.get(f"{self.server.base_url}/")
+        assert consent_response.status_code == 200
+        assert "Are you at least 18 years old?" in consent_response.text
+
+        save_response = session.post(
+            f"{self.server.base_url}/updateinstance",
+            json={
+                "instance_id": "",
+                "annotations": {
+                    "age_consent:I agree": "I agree",
+                    "info_consent:Yes": "Yes",
+                },
+                "span_annotations": [],
+            },
+        )
+        assert save_response.status_code == 200
+
+        next_response = session.post(
+            f"{self.server.base_url}/annotate",
+            json={"action": "next_instance", "instance_id": "phase_item_1"},
+            allow_redirects=True,
+        )
+        assert next_response.status_code == 200
+        assert "How familiar are you with the internet?" in next_response.text
+        assert "Are you at least 18 years old?" not in next_response.text

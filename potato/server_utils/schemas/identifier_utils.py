@@ -188,6 +188,8 @@ def generate_validation_attribute(annotation_scheme: dict, label_name: str = Non
         str: Validation attribute value
     """
     label_requirement = annotation_scheme.get("label_requirement", {})
+    if isinstance(label_requirement, bool):
+        label_requirement = {"required": label_requirement}
 
     # Debug logging
     logger.debug(f"generate_validation_attribute called with label_requirement: {label_requirement}")
@@ -204,7 +206,7 @@ def generate_validation_attribute(annotation_scheme: dict, label_name: str = Non
             return "required_label"
 
     # Check for general required validation
-    if label_requirement.get("required"):
+    if annotation_scheme.get("required") or label_requirement.get("required"):
         logger.debug(f"Returning 'required' for general requirement")
         return "required"
 

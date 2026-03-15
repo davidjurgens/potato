@@ -295,6 +295,8 @@ class TestAnnotationStatusLogic:
         """Test that get_annotation_count returns correct count."""
         user = InMemoryUserState("test_user")
         user.current_phase_and_page = (UserPhase.ANNOTATION, None)
+        user.instance_id_ordering = ["item1", "item2"]
+        user.assigned_instance_ids = {"item1", "item2"}
 
         # Initially zero
         assert user.get_annotation_count() == 0
@@ -312,6 +314,21 @@ class TestAnnotationStatusLogic:
         # Add more annotations to same item (should not increase count)
         user.add_label_annotation("item1", Label("test_schema", "label2"), "true")
         assert user.get_annotation_count() == 2
+
+    def test_annotated_instance_ids_ignore_unassigned_and_empty_ids(self):
+        """Only assigned annotation items should count toward progress."""
+        user = InMemoryUserState("test_user")
+        user.current_phase_and_page = (UserPhase.ANNOTATION, None)
+        user.instance_id_ordering = ["item1", "item2"]
+        user.assigned_instance_ids = {"item1", "item2"}
+
+        user.add_label_annotation("item1", Label("test_schema", "label1"), "true")
+        user.add_label_annotation("", Label("survey_schema", "yes"), "true")
+        user.add_label_annotation("not_assigned", Label("survey_schema", "yes"), "true")
+
+        annotated_ids = user.get_annotated_instance_ids()
+        assert annotated_ids == {"item1"}
+        assert user.get_annotation_count() == 1
 
 
 class TestNavigationIntegration:
