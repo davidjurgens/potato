@@ -291,6 +291,7 @@ def _register_builtin_displays():
     from .gallery_display import GalleryDisplay
     from .interactive_chat_display import InteractiveChatDisplay
     from .web_agent_trace_display import WebAgentTraceDisplay
+    from .live_agent_display import LiveAgentDisplay
 
     displays = [
         DisplayDefinition(
@@ -514,9 +515,29 @@ def _register_builtin_displays():
                 "screenshot_max_width": 800,
                 "screenshot_max_height": 600,
                 "filmstrip_size": 80,
+                "auto_playback": False,
+                "playback_step_delay": 2.0,
             },
             supports_span_target=False,
             description="Web agent trace viewer with screenshots, SVG overlays, and step navigation"
+        ),
+        DisplayDefinition(
+            name="live_agent",
+            renderer=LiveAgentDisplay(),
+            required_fields=["key"],
+            optional_fields={
+                "show_overlays": True,
+                "show_filmstrip": True,
+                "show_thought": True,
+                "show_controls": True,
+                "allow_takeover": True,
+                "allow_instructions": True,
+                "screenshot_max_width": 900,
+                "screenshot_max_height": 650,
+                "filmstrip_size": 80,
+            },
+            supports_span_target=False,
+            description="Live AI agent viewer with real-time screenshots, controls, and interaction"
         ),
     ]
 
