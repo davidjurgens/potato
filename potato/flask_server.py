@@ -3257,7 +3257,6 @@ def run_server(args):
     if hf_backup.get('enabled', False):
         try:
             from huggingface_hub import CommitScheduler
-            import os
             task_dir = config.get('task_dir', '.')
             output_dir = os.path.join(
                 task_dir,

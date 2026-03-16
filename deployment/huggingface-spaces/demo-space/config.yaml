@@ -98,6 +98,7 @@ annotation_schemes:
     description: "Additional notes or observations"
 
 # Open access — no password for demo
+require_password: false
+
 user_config:
   allow_all_users: true
-  require_password: false
