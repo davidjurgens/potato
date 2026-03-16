@@ -1735,6 +1735,29 @@ def validate_file_paths(config_data: Dict[str, Any], project_dir: str, config_fi
             except ConfigSecurityError as e:
                 raise ConfigSecurityError(f"base_css: {str(e)}")
 
+    # Validate header_logo
+    if 'header_logo' in config_data:
+        header_logo = config_data['header_logo']
+        if header_logo not in [None, "null", "default"]:
+            # Allow URLs to pass through without file validation
+            if not str(header_logo).startswith(("http://", "https://")):
+                try:
+                    validated_logo = validate_path_security(header_logo, base_dir, project_dir)
+                    if not os.path.exists(validated_logo):
+                        # Try resolving relative to config file directory
+                        if config_file_dir:
+                            alt_path = os.path.join(config_file_dir, header_logo)
+                            if not os.path.exists(alt_path):
+                                raise ConfigValidationError(
+                                    f"header_logo file not found: {header_logo} (resolved to: {validated_logo})"
+                                )
+                        else:
+                            raise ConfigValidationError(
+                                f"header_logo file not found: {header_logo} (resolved to: {validated_logo})"
+                            )
+                except ConfigSecurityError as e:
+                    raise ConfigSecurityError(f"header_logo: {str(e)}")
+
 
 def validate_training_config(config_data: Dict[str, Any], project_dir: str, config_file_dir: str = None) -> None:
     """

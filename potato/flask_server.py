@@ -2801,12 +2801,15 @@ def create_app(config_file=None):
         ui_lang = {**ui_lang_defaults, **ui_lang_config}
 
         # Load project-level base CSS if configured
-        from potato.server_utils.front_end import load_project_base_css_html
+        from potato.server_utils.front_end import load_project_base_css_html, resolve_header_logo_src
         try:
             project_base_css = load_project_base_css_html(config)
         except FileNotFoundError:
             project_base_css = ""
             logger.warning("base_css file configured but not found")
+
+        # Resolve header logo (cached as data URL at startup)
+        header_logo_url = resolve_header_logo_src(config)
 
         return {
             'ui_debug': is_ui_debug_enabled(),
@@ -2819,6 +2822,8 @@ def create_app(config_file=None):
             'ui_lang': ui_lang,
             # Project-level base CSS
             'PROJECT_BASE_CSS': project_base_css,
+            # Header logo
+            'header_logo_url': header_logo_url,
         }
 
     return app

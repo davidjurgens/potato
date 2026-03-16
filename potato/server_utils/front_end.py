@@ -2,6 +2,7 @@
 Handle all front-end related functionalities.
 """
 
+import base64
 import os
 import logging
 import json
@@ -34,6 +35,52 @@ STATS_KEYS = {
 # Default name for the generated annotation layout file
 DEFAULT_ANNOTATION_LAYOUT_SUBDIR = "layouts"
 DEFAULT_ANNOTATION_LAYOUT_FILENAME = "task_layout.html"
+
+
+SUPPORTED_HEADER_LOGO_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp'}
+EXTENSION_TO_MIME = {
+    '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
+    '.webp': 'image/webp',
+}
+
+
+def resolve_header_logo_src(config: dict) -> str:
+    """
+    Resolve the ``header_logo`` config value into a src URL for an ``<img>`` tag.
+
+    - If not configured, returns ``""``.
+    - If the value is an HTTP(S) URL, returns it directly.
+    - Otherwise, reads the local file, base64-encodes it, and returns a data URL.
+
+    Returns:
+        A URL string suitable for ``<img src="...">``, or ``""`` if not configured.
+    """
+    logo_path = config.get("header_logo")
+    if not logo_path:
+        return ""
+
+    # Pass through external URLs
+    if logo_path.startswith(("http://", "https://")):
+        return logo_path
+
+    try:
+        resolved = resolve_project_asset_path(config, logo_path)
+    except FileNotFoundError:
+        logger.warning("header_logo file not found: %s", logo_path)
+        return ""
+
+    ext = os.path.splitext(resolved)[1].lower()
+    if ext not in SUPPORTED_HEADER_LOGO_EXTENSIONS:
+        logger.warning("header_logo has unsupported extension '%s' (supported: %s)",
+                        ext, ', '.join(sorted(SUPPORTED_HEADER_LOGO_EXTENSIONS)))
+        return ""
+
+    mime = EXTENSION_TO_MIME[ext]
+    with open(resolved, "rb") as f:
+        encoded = base64.b64encode(f.read()).decode("ascii")
+
+    return f"data:{mime};base64,{encoded}"
 
 
 def resolve_project_asset_path(config: dict, relative_path: str) -> str:

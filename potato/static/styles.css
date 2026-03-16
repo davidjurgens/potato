@@ -3668,6 +3668,13 @@ body.has-pairwise-display #instance-text {
   letter-spacing: -0.01em;
 }
 
+.potato-navbar .navbar-brand .header-logo {
+  height: 32px;
+  width: auto;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
 .potato-navbar .navbar-center {
   display: flex;
   align-items: center;
