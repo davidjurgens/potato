@@ -462,6 +462,10 @@ function getCurrentOverlayCount() {
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function () {
+    // Skip annotation initialization on non-annotation pages (consent, instructions, etc.)
+    if (window.config && !window.config.is_annotation_page) {
+        return;
+    }
     loadCurrentInstance();
     setupEventListeners();
     // Initial validation check
@@ -1274,7 +1278,7 @@ function generateAnnotationForms() {
 }
 
 async function saveAnnotations() {
-    if (!currentInstance) {
+    if (!currentInstance || !currentInstance.id) {
         return;
     }
 

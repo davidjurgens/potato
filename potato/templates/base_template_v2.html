@@ -261,6 +261,7 @@
     <script type="text/javascript">
         window.config = {
             annotation_task_name: {{ annotation_task_name | tojson }},
+            is_annotation_page: {{ 'true' if is_annotation_page else 'false' }},
             debug: {{ 'true' if debug_mode else 'false' }},
             ui_debug: {{ 'true' if ui_debug else 'false' }},
             server_debug: {{ 'true' if server_debug else 'false' }},
