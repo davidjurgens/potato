@@ -1,0 +1,79 @@
+# LangChain Integration Example
+#
+# Demonstrates how to receive and annotate LangChain agent traces
+# via the webhook ingestion endpoint.
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/agent-traces/langchain-integration/config.yaml -p 8000
+#
+# Then run the demo agent:
+#   python examples/agent-traces/langchain-integration/demo_agent.py
+
+annotation_task_name: "LangChain Agent Evaluation"
+
+# Data configuration — starts with sample traces; new traces arrive via webhook
+data_files:
+  - data/sample-traces.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+# Task directory
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+# Enable trace ingestion webhook
+trace_ingestion:
+  enabled: true
+  api_key: ""  # no auth for demo; set a key in production
+  notify_annotators: true
+
+# Instance Display Configuration
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    - key: task_description
+      type: text
+      label: "Task"
+
+    - key: conversation
+      type: dialogue
+      label: "Agent Trace"
+      display_options:
+        show_turn_numbers: true
+        alternating_shading: true
+
+# Annotation Schemes
+annotation_schemes:
+  - annotation_type: radio
+    name: task_success
+    description: "Did the agent complete the task?"
+    labels:
+      - name: success
+        tooltip: "Fully completed correctly"
+      - name: partial
+        tooltip: "Partially completed or with errors"
+      - name: failure
+        tooltip: "Not completed"
+    sequential_key_binding: true
+
+  - annotation_type: likert
+    name: efficiency
+    description: "How efficient was the agent's approach?"
+    min_label: "Very inefficient"
+    max_label: "Optimal"
+    size: 5
+
+  - annotation_type: text
+    name: notes
+    description: "Additional notes or observations"
+
+# User configuration
+user_config:
+  allow_all_users: true
+  require_password: false

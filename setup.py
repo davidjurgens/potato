@@ -63,6 +63,9 @@ _HF_DEPS = [
 _AUTH_DEPS = [
     "Authlib>=1.3.0",
 ]
+_LANGCHAIN_DEPS = [
+    "langchain-core>=0.1.0",
+]
 
 setup(
     name="potato-annotation",
@@ -97,7 +100,8 @@ setup(
         "export": _EXPORT_DEPS,
         "huggingface": _HF_DEPS,
         "auth": _AUTH_DEPS,
-        "all": _AI_DEPS + _FORMAT_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS,
+        "langchain": _LANGCHAIN_DEPS,
+        "all": _AI_DEPS + _FORMAT_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS + _LANGCHAIN_DEPS,
     },
     include_package_data=True,
     entry_points={
