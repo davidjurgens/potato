@@ -58,13 +58,58 @@ class HuggingFaceExporter(BaseExporter):
 
         return True, ""
 
+    def build_dataset_dict(self, context: ExportContext,
+                           include_spans: bool = True,
+                           include_items: bool = True) -> "DatasetDict":
+        """
+        Build a DatasetDict from an ExportContext without pushing to Hub.
+
+        Args:
+            context: ExportContext with annotations, items, schemas
+            include_spans: Include a 'spans' split
+            include_items: Include an 'items' split
+
+        Returns:
+            datasets.DatasetDict with annotations/spans/items splits
+
+        Raises:
+            ImportError: If datasets library is not installed
+            ValueError: If no data to build
+        """
+        Dataset, DatasetDict, _, _ = _check_deps()
+
+        schema_map = {s["name"]: s for s in context.schemas}
+        splits = {}
+
+        # 1. Annotations split
+        ann_rows = self._build_annotation_rows(context.annotations, schema_map)
+        if ann_rows:
+            splits["annotations"] = Dataset.from_list(ann_rows)
+
+        # 2. Spans split (optional)
+        if include_spans:
+            span_rows = self._build_span_rows(context.annotations)
+            if span_rows:
+                splits["spans"] = Dataset.from_list(span_rows)
+
+        # 3. Items split (optional)
+        if include_items and context.items:
+            item_rows = self._build_item_rows(context.items)
+            if item_rows:
+                splits["items"] = Dataset.from_list(item_rows)
+
+        if not splits:
+            raise ValueError("No data to build — annotations list is empty")
+
+        return DatasetDict(splits)
+
     def export(self, context: ExportContext, output_path: str,
                options: Optional[dict] = None) -> ExportResult:
         options = options or {}
         warnings_list = []
 
         try:
-            Dataset, DatasetDict, DatasetCard, DatasetCardData = _check_deps()
+            _, _, DatasetCard, DatasetCardData = _check_deps()
         except ImportError as e:
             return ExportResult(
                 success=False,
@@ -99,43 +144,25 @@ class HuggingFaceExporter(BaseExporter):
             )
 
         try:
-            schema_map = {s["name"]: s for s in context.schemas}
+            dataset_dict = self.build_dataset_dict(
+                context,
+                include_spans=include_spans,
+                include_items=include_items,
+            )
 
-            # Build datasets
-            splits = {}
-
-            # 1. Annotations split
-            ann_rows = self._build_annotation_rows(context.annotations, schema_map)
-            if ann_rows:
-                splits["annotations"] = Dataset.from_list(ann_rows)
-
-            # 2. Spans split (optional)
-            if include_spans:
-                span_rows = self._build_span_rows(context.annotations)
-                if span_rows:
-                    splits["spans"] = Dataset.from_list(span_rows)
-
-            # 3. Items split (optional)
-            if include_items and context.items:
-                item_rows = self._build_item_rows(context.items)
-                if item_rows:
-                    splits["items"] = Dataset.from_list(item_rows)
-
-            if not splits:
-                return ExportResult(
-                    success=False,
-                    format_name=self.format_name,
-                    errors=["No data to export after building datasets"],
-                )
-
-            # Create DatasetDict and push
-            dataset_dict = DatasetDict(splits)
             dataset_dict.push_to_hub(
                 repo_id,
                 token=token,
                 private=private,
                 commit_message=commit_message,
             )
+
+            # Compute stats by rebuilding row counts (avoids depending on
+            # DatasetDict internals for len/keys).
+            schema_map = {s["name"]: s for s in context.schemas}
+            ann_rows = self._build_annotation_rows(context.annotations, schema_map)
+            span_rows = self._build_span_rows(context.annotations) if include_spans else []
+            item_rows = self._build_item_rows(context.items) if include_items and context.items else []
 
             # Generate and push dataset card
             try:
@@ -148,6 +175,15 @@ class HuggingFaceExporter(BaseExporter):
                 warnings_list.append(f"Dataset card push failed: {e}")
                 logger.warning("Failed to push dataset card: %s", e)
 
+            # Build splits list based on what was actually included
+            splits_list = []
+            if ann_rows:
+                splits_list.append("annotations")
+            if span_rows:
+                splits_list.append("spans")
+            if item_rows:
+                splits_list.append("items")
+
             return ExportResult(
                 success=True,
                 format_name=self.format_name,
@@ -155,13 +191,19 @@ class HuggingFaceExporter(BaseExporter):
                 stats={
                     "repo_id": repo_id,
                     "annotation_rows": len(ann_rows),
-                    "span_rows": len(span_rows) if include_spans and 'spans' in splits else 0,
-                    "item_rows": len(item_rows) if include_items and 'items' in splits else 0,
-                    "splits": list(splits.keys()),
+                    "span_rows": len(span_rows),
+                    "item_rows": len(item_rows),
+                    "splits": splits_list,
                     "private": private,
                 },
             )
 
+        except ValueError as e:
+            return ExportResult(
+                success=False,
+                format_name=self.format_name,
+                errors=[str(e)],
+            )
         except Exception as e:
             logger.error("HuggingFace Hub export failed: %s", e)
             return ExportResult(
