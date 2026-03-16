@@ -97,6 +97,44 @@ The CommitScheduler runs as a background thread and automatically commits change
 - **Cold starts**: Free Spaces may sleep after inactivity. Upgraded Spaces stay running.
 - **Resource limits**: Free tier has limited CPU/RAM. Upgrade for larger projects.
 
+## Exporting Annotations
+
+Since Spaces don't provide terminal access, there are three ways to get your annotations out:
+
+### 1. Admin API Export (Recommended)
+
+Use the admin API to trigger a structured export to HuggingFace Hub or other formats directly from your Space:
+
+```bash
+curl -X POST https://your-space.hf.space/admin/api/export \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_ADMIN_KEY" \
+  -d '{
+    "format": "huggingface",
+    "output": "your-org/my-annotations",
+    "options": {"private": "true"}
+  }'
+```
+
+When `HF_TOKEN` is set as a Space secret, the exporter uses it automatically — no need to pass the token in the request body.
+
+To see all available formats:
+
+```bash
+curl https://your-space.hf.space/admin/api/export/formats \
+  -H "X-API-Key: YOUR_ADMIN_KEY"
+```
+
+### 2. CommitScheduler Backup (Automatic)
+
+If `commit_scheduler` is configured, raw annotation files are automatically pushed to your Space's repository on a regular interval. These are the raw JSON files, not structured datasets.
+
+### 3. Download Raw Files
+
+Access annotation files directly via the HuggingFace Spaces file browser in your repository, or clone the repo locally.
+
+See [HuggingFace Hub Export](huggingface_export.md) for detailed export options and format documentation.
+
 ## Related Documentation
 
 - [HuggingFace Hub Export](huggingface_export.md) - Export annotations to HuggingFace datasets

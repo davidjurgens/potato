@@ -149,6 +149,57 @@ Verify your token has write permissions and hasn't expired.
 **Large datasets timing out**
 For very large annotation sets, consider exporting to Parquet first and uploading manually.
 
+## Exporting from the Admin API
+
+If you don't have CLI access (e.g., running on HuggingFace Spaces or a remote server), you can trigger exports via the admin API endpoint.
+
+### Prerequisites
+
+- An admin API key (printed to the console on server startup, or set via `admin_api_key` in your config)
+- The `HF_TOKEN` environment variable or pass the token in the request options
+
+### Triggering an Export
+
+```bash
+curl -X POST http://localhost:8000/admin/api/export \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_ADMIN_KEY" \
+  -d '{
+    "format": "huggingface",
+    "output": "your-org/my-annotations",
+    "options": {"token": "hf_xxx", "private": "true"}
+  }'
+```
+
+The response includes the export result:
+
+```json
+{
+  "success": true,
+  "format": "huggingface",
+  "files_written": ["your-org/my-annotations"],
+  "stats": {"num_annotations": 150, "num_items": 50},
+  "warnings": [],
+  "errors": []
+}
+```
+
+### Listing Available Formats
+
+```bash
+curl http://localhost:8000/admin/api/export/formats \
+  -H "X-API-Key: YOUR_ADMIN_KEY"
+```
+
+### For HuggingFace Spaces Users
+
+When running on Spaces, you won't have terminal access. Use the admin API instead:
+
+1. Set `HF_TOKEN` as a Space secret in your repository settings
+2. Note the admin API key from the Space logs (or configure one in your YAML)
+3. Use `curl` or any HTTP client to call the export endpoint
+4. Pass the format as `"huggingface"` and your repo ID as the output
+
 ## Related Documentation
 
 - [Export Formats](export_formats.md) - Other export formats (COCO, YOLO, Parquet, etc.)

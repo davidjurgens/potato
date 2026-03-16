@@ -512,6 +512,34 @@ export_registry.register(MyExporter())
 2. Check for case sensitivity issues
 3. Ensure category IDs are consistent
 
+## Exporting via Admin API
+
+All export formats are available through the admin API, allowing exports without CLI access. This is useful for remote deployments, HuggingFace Spaces, or integrating exports into automated workflows.
+
+### List Available Formats
+
+```bash
+curl http://localhost:8000/admin/api/export/formats \
+  -H "X-API-Key: YOUR_ADMIN_KEY"
+```
+
+### Run an Export
+
+```bash
+curl -X POST http://localhost:8000/admin/api/export \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_ADMIN_KEY" \
+  -d '{
+    "format": "coco",
+    "output": "/path/to/output",
+    "options": {}
+  }'
+```
+
+The endpoint accepts any format returned by the formats listing endpoint. Format-specific options are passed in the `options` field.
+
+See [HuggingFace Hub Export](huggingface_export.md) for HuggingFace-specific options and [HuggingFace Spaces](huggingface_spaces.md) for remote deployment guidance.
+
 ## Related Documentation
 
 - [Data Format](data_format.md) - Input data format

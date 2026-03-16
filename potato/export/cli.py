@@ -66,10 +66,27 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list) -> list:
         all_instances = set(label_data.keys()) | set(span_data.keys())
 
         for instance_id in all_instances:
+            # Labels may be stored as a list of [[{schema, name}, value], ...]
+            # or as a dict of {schema_name: {label_name: value}}.
+            # Normalize to dict format.
+            raw_labels = label_data.get(instance_id, {})
+            if isinstance(raw_labels, list):
+                labels_dict = {}
+                for entry in raw_labels:
+                    if isinstance(entry, (list, tuple)) and len(entry) == 2:
+                        label_obj, value = entry
+                        if isinstance(label_obj, dict):
+                            schema = label_obj.get("schema", "")
+                            name = label_obj.get("name", "")
+                        else:
+                            schema, name = str(label_obj), ""
+                        labels_dict.setdefault(schema, {})[name] = value
+                raw_labels = labels_dict
+
             record = {
                 "instance_id": instance_id,
                 "user_id": user_id,
-                "labels": label_data.get(instance_id, {}),
+                "labels": raw_labels,
                 "spans": {},
                 "links": {},
                 "image_annotations": {},
