@@ -216,13 +216,12 @@ def concatenate_dialogue_text(data: Any, speaker_key: str = "speaker", text_key:
     """
     Concatenate dialogue data into a single plain text string.
 
-    This is the CANONICAL format for dialogue text used by both
-    DialogueDisplay (for data-original-text) and routes.py (for span
-    text extraction).  Both MUST use this function to ensure span
-    offsets align correctly.
-
     Format: "Speaker: text\\nSpeaker: text\\n..."
     Turns without a speaker omit the "Speaker: " prefix.
+
+    Note: For span offset matching with dialogue displays, use
+    ``reconstruct_dialogue_dom_text()`` instead — it accounts for
+    turn numbers and DOM whitespace normalization.
 
     Args:
         data: Dialogue data — list of dicts, list of strings, or a string
@@ -247,6 +246,62 @@ def concatenate_dialogue_text(data: Any, speaker_key: str = "speaker", text_key:
         else:
             parts.append(str(item))
     return "\n".join(parts)
+
+
+def reconstruct_dialogue_dom_text(
+    data: Any,
+    speaker_key: str = "speaker",
+    text_key: str = "text",
+    show_turn_numbers: bool = False,
+) -> str:
+    """
+    Reconstruct the whitespace-normalized DOM textContent of a dialogue display.
+
+    When DialogueDisplay renders HTML, the browser's ``textContent`` includes
+    turn numbers, speaker prefixes, and the text of each turn — all separated
+    by whitespace that ``normalizeText()`` collapses to single spaces.
+
+    This function reproduces that collapsed form so that span offsets produced
+    by the client (DOM-based) can be used server-side to extract the correct
+    substring.
+
+    Args:
+        data: Dialogue data — list of dicts, list of strings, or a string
+        speaker_key: Key for speaker in dict format
+        text_key: Key for text in dict format
+        show_turn_numbers: Whether turn numbers like ``[1]`` are shown
+
+    Returns:
+        Single-line text matching the browser's normalized textContent
+    """
+    if isinstance(data, str):
+        return data.strip()
+
+    if not isinstance(data, list):
+        return str(data).strip()
+
+    parts = []
+    for i, item in enumerate(data):
+        turn_parts = []
+        if show_turn_numbers:
+            turn_parts.append(f"[{i + 1}]")
+
+        if isinstance(item, dict):
+            speaker = item.get(speaker_key, "")
+            text = item.get(text_key, "")
+            if speaker:
+                turn_parts.append(f"{speaker}:")
+            turn_parts.append(str(text))
+        else:
+            turn_parts.append(str(item))
+
+        parts.append(" ".join(turn_parts))
+
+    # Join turns with single space (browser normalizes inter-turn whitespace)
+    import re as _re
+    joined = " ".join(parts)
+    # Final normalization: collapse any remaining multi-space to single space
+    return _re.sub(r"\s+", " ", joined).strip()
 
 
 def render_display_container(

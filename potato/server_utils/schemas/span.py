@@ -183,7 +183,7 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
             <legend class="shadcn-span-title">{escape_html_content(annotation_scheme["description"])}</legend>
             {"<div class='discontinuous-hint'>Hold Ctrl/Cmd + select to add additional text to this span</div>" if allow_discontinuous else ""}
             {"<div class='entity-linking-hint'>Click the link icon on spans to connect to knowledge base entities</div>" if entity_linking_enabled else ""}
-            <div class="shadcn-span-options">
+            <div class="shadcn-span-options"{f' style="grid-template-columns: repeat({int(annotation_scheme["columns"])}, 1fr)"' if annotation_scheme.get("columns") else ""}>
     """
 
     if isinstance(annotation_scheme["labels"], list) and len(annotation_scheme["labels"]) > 0:

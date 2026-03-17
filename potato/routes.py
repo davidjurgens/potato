@@ -3900,15 +3900,36 @@ def get_span_data(instance_id):
         span_source_text = normalized_text  # default: text_key field
         if span_target_field and isinstance(item_data, dict) and span_target_field in item_data:
             field_data = item_data[span_target_field]
-            # Use shared concatenation for list data (dialogue, etc.)
-            # to ensure span offsets match what the display rendered.
-            from potato.server_utils.displays.base import concatenate_dialogue_text
-            if isinstance(field_data, list):
+
+            # Check if this field is a dialogue display (offsets are DOM-based)
+            from potato.server_utils.displays.base import (
+                concatenate_dialogue_text,
+                reconstruct_dialogue_dom_text,
+            )
+            display_fields = config.get("instance_display", {}).get("fields", [])
+            field_cfg = next(
+                (f for f in display_fields if f.get("key") == span_target_field),
+                None,
+            )
+            is_dialogue = field_cfg and field_cfg.get("type") == "dialogue"
+
+            if is_dialogue and isinstance(field_data, list):
+                opts = field_cfg.get("display_options", {})
+                field_text = reconstruct_dialogue_dom_text(
+                    field_data,
+                    speaker_key=opts.get("speaker_key", "speaker"),
+                    text_key=opts.get("text_key", "text"),
+                    show_turn_numbers=opts.get("show_turn_numbers", False),
+                )
+            elif isinstance(field_data, list):
                 field_text = concatenate_dialogue_text(field_data)
+                field_text = re_module.sub(r'<[^>]+>', '', field_text)
+                field_text = re_module.sub(r'\s+', ' ', field_text).strip()
             else:
                 field_text = str(field_data)
-            field_text = re_module.sub(r'<[^>]+>', '', field_text)
-            span_source_text = re_module.sub(r'\s+', ' ', field_text).strip()
+                field_text = re_module.sub(r'<[^>]+>', '', field_text)
+                field_text = re_module.sub(r'\s+', ' ', field_text).strip()
+            span_source_text = field_text
 
         span_entry = {
             'id': span_id,

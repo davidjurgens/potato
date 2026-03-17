@@ -1,11 +1,15 @@
-# Potato Demo Space — Agent Trace Evaluation
+# Complex Agent Trace Annotation
 #
-# Showcases Potato's agent trace annotation capabilities with
-# multiple schema types: radio, likert, multiselect, span, and text.
+# Demonstrates a multi-schema annotation setup for evaluating AI agent traces:
+#   - Radio buttons for task success and side effects
+#   - Likert scale for efficiency rating
+#   - Span annotations for marking issues in the dialogue
+#   - Free-text notes
 #
-# Designed for HuggingFace Spaces free tier deployment.
+# Run from repo root:
+#   python potato/flask_server.py start examples/agent-traces/complex-annotation/config.yaml -p 8000
 
-annotation_task_name: "Agent Trace Evaluation Demo"
+annotation_task_name: "Agent Trace Evaluation"
 
 # Data configuration
 data_files:
@@ -133,7 +137,7 @@ annotation_schemes:
     multiline: true
     rows: 3
 
-# Open access — no password for demo
+# Open access — no password required
 require_password: false
 
 user_config:

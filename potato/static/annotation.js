@@ -1830,7 +1830,9 @@ function setLoading(loading) {
         loadingState.style.display = 'none';
         mainContent.style.display = 'block';
         prevBtn.disabled = false;
-        // Don't enable next button here - let validateRequiredFields handle it
+        // Re-enable next button, then run validation which may re-disable it
+        // if required fields are unfilled
+        nextBtn.disabled = false;
         validateRequiredFields();
     }
 }

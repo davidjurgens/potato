@@ -149,14 +149,19 @@ class DialogueDisplay(BaseDisplay):
         # Combine all turns
         all_turns_html = "\n".join(turn_html_list)
 
-        # For span annotation, wrap all turns using the shared span wrapper
+        # For span annotation, wrap in .text-content WITHOUT data-original-text.
+        # Dialogue DOM textContent (with turn numbers, speaker prefixes, whitespace)
+        # differs from concatenate_dialogue_text() output.  By omitting the attribute,
+        # getCanonicalText() falls back to container.textContent, so offsets from
+        # selection and from canonicalText always agree.
         if is_span_target:
-            from .base import concatenate_dialogue_text
-            options = self.get_display_options(field_config)
-            speaker_key = options.get("speaker_key", "speaker")
-            text_key_opt = options.get("text_key", "text")
-            concat_text = concatenate_dialogue_text(data, speaker_key, text_key_opt)
-            all_turns_html = self.render_span_wrapper(field_key, all_turns_html, concat_text)
+            escaped_key = html.escape(field_key, quote=True)
+            all_turns_html = (
+                f'<div class="text-content" id="text-content-{escaped_key}"'
+                f' style="position: relative; padding-top: 24px;">'
+                f'{all_turns_html}'
+                f'</div>'
+            )
 
         # Hidden inputs for storing per-turn rating data (one per scheme)
         hidden_input_html = ""
