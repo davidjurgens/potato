@@ -4107,6 +4107,68 @@ body.has-pairwise-display #instance-text {
   100% { transform: scale(1); }
 }
 
+/* ===== ANNOTATION INSTRUCTIONS BANNER ===== */
+
+.annotation-instructions-banner {
+  margin-bottom: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  overflow: hidden;
+}
+
+.annotation-instructions-banner summary {
+  padding: 0.625rem 1rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  user-select: none;
+}
+
+.annotation-instructions-banner summary:hover {
+  background: var(--accent);
+}
+
+.annotation-instructions-content {
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--foreground);
+}
+
+.annotation-instructions-content h4 {
+  margin: 0.75rem 0 0.35rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.annotation-instructions-content h4:first-child {
+  margin-top: 0;
+}
+
+.annotation-instructions-content ul,
+.annotation-instructions-content ol {
+  margin: 0.25rem 0 0.5rem 1.25rem;
+  padding: 0;
+}
+
+.annotation-instructions-content li {
+  margin-bottom: 0.2rem;
+}
+
+.annotation-instructions-content code {
+  background: var(--muted);
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  font-size: 0.8rem;
+}
+
+.annotation-instructions-content strong {
+  color: var(--primary);
+}
+
 /* ===== RESPONSIVE NAVBAR ===== */
 
 @media (max-width: 900px) {

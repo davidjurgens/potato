@@ -1642,6 +1642,7 @@ def get_current_page_html(config, username):
         'total_count': user_state.get_assigned_instance_count() if hasattr(user_state, 'get_assigned_instance_count') else 0,
         'ui_config': config.get('ui_config', {}),
         'is_annotation_page': is_annotation_page,
+        'annotation_instructions': config.get('annotation_instructions', ''),
     }
     return render_template(html_fname, **context)
 
@@ -1916,6 +1917,8 @@ def render_page_with_annotations(username: str):
         chat_enabled=chat_enabled,
         # Live agent (for conditional loading of live-agent assets)
         live_agent_enabled=live_agent_enabled,
+        # Annotation instructions (collapsible banner)
+        annotation_instructions=config.get("annotation_instructions", ""),
         # Adjudication: show link for adjudicators
         is_adjudicator=_is_user_adjudicator(username),
         # Annotation status indicator
