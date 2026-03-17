@@ -269,7 +269,7 @@ def generate_annotation_html_template(config: dict) -> str:
         )
 
     # Grab the annotation schemes
-    annotation_schemes = config["annotation_schemes"]
+    annotation_schemes = config.get("annotation_schemes", [])
     logger.debug("Saw %d annotation scheme(s)" % len(annotation_schemes))
 
     # insert annotation id to each of the schemes

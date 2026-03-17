@@ -2146,6 +2146,19 @@ function onlyOne(checkbox) {
         className: checkbox.className
     });
 
+    // Native radio behavior already enforces one selection per name group.
+    // Avoid class-based unchecking which can affect unrelated groups.
+    if (checkbox.type === 'radio') {
+        checkbox.setAttribute('data-just-checked', 'true');
+        checkbox.checked = true;
+        setTimeout(() => {
+            if (checkbox.hasAttribute('data-just-checked')) {
+                checkbox.removeAttribute('data-just-checked');
+            }
+        }, 100);
+        return;
+    }
+
     var x = document.getElementsByClassName(checkbox.className);
     debugLog('🔍 [DEBUG] onlyOne() - Found elements with same class:', x.length);
 
@@ -2155,10 +2168,10 @@ function onlyOne(checkbox) {
             id: x[i].id,
             value: x[i].value,
             checked: x[i].checked,
-            willUncheck: x[i].value != checkbox.value
+            willUncheck: x[i] !== checkbox
         });
 
-        if (x[i].value != checkbox.value) {
+        if (x[i] !== checkbox) {
             debugLog('🔍 [DEBUG] onlyOne() - Unchecking element:', x[i].id);
             x[i].checked = false;
         }

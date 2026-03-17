@@ -224,6 +224,7 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
     Raises:
         ConfigValidationError: If annotation schemes are invalid
     """
+    dynamic_schema_mode = bool(config_data.get("dynamic_schema_mode", False))
     has_top_level = 'annotation_schemes' in config_data
     has_phases = 'phases' in config_data and config_data['phases']
 
@@ -256,7 +257,7 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
         schemes = config_data['annotation_schemes']
         if not isinstance(schemes, list):
             raise ConfigValidationError("annotation_schemes must be a list")
-        if not schemes:
+        if not schemes and not dynamic_schema_mode:
             raise ConfigValidationError("annotation_schemes cannot be empty")
 
         for i, scheme in enumerate(schemes):
@@ -309,7 +310,12 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
                         f"'instrument', or 'instruments'"
                     )
     else:
-        raise ConfigValidationError("Config must have either 'annotation_schemes' (top-level) or 'phases' with annotation_schemes")
+        if dynamic_schema_mode:
+            # Dynamic schema mode allows custom task layouts to define annotation
+            # forms per-instance without static config-level schemas.
+            config_data["annotation_schemes"] = []
+        else:
+            raise ConfigValidationError("Config must have either 'annotation_schemes' (top-level) or 'phases' with annotation_schemes")
 
     # Validate keyword_highlight is not enabled for image-based tasks
     _validate_keyword_highlight_for_images(config_data)
@@ -2423,6 +2429,7 @@ def init_config(args):
             config_data = load_and_validate_config(config_file, project_dir)
 
         config.update(config_data)
+        config.setdefault("annotation_schemes", [])
 
         # Only override config settings if command line arguments are explicitly provided
         config_updates = {
