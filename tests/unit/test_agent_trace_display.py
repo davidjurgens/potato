@@ -22,7 +22,8 @@ class TestAgentTraceDisplay:
         assert display_registry.is_registered("agent_trace")
 
     def test_supports_span_target(self):
-        assert self.display.supports_span_target is True
+        # agent_trace uses per-step IDs, not the .text-content wrapper contract
+        assert self.display.supports_span_target is False
 
     def test_render_empty(self):
         html = self.display.render({"key": "test"}, None)
