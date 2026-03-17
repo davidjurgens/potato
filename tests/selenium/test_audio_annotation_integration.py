@@ -27,6 +27,9 @@ from tests.helpers.flask_test_setup import FlaskTestServer
 from tests.helpers.port_manager import find_free_port
 
 
+
+pytestmark = pytest.mark.redundant
+
 class TestAudioAnnotationIntegration:
     """Integration test suite for audio annotation functionality."""
 
@@ -526,6 +529,7 @@ site_dir: default
 
         # Change to 2x speed
         from selenium.webdriver.support.ui import Select
+
         select = Select(speed_select)
         select.select_by_value("2")
         time.sleep(0.1)

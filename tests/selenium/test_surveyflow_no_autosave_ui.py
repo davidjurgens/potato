@@ -30,6 +30,11 @@ from tests.helpers.test_utils import (
 )
 
 
+import pytest
+
+
+pytestmark = pytest.mark.core
+
 def create_surveyflow_config(test_dir, port):
     """Create config with consent -> instructions -> annotation phases."""
     test_data = [

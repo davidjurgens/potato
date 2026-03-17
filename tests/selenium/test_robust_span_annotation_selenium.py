@@ -21,6 +21,9 @@ from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 
+
+pytestmark = pytest.mark.redundant
+
 class TestRobustSpanAnnotationSelenium:
     """Test suite for robust span annotation system using Selenium."""
 
@@ -337,4 +340,5 @@ class TestRobustSpanAnnotationSelenium:
 
 def create_app():
     from potato.flask_server import create_app
+
     return create_app()

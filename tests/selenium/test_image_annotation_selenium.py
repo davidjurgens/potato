@@ -38,6 +38,11 @@ from tests.helpers.test_utils import (
 )
 
 
+import pytest
+
+
+pytestmark = pytest.mark.core
+
 class TestImageAnnotationSelenium(unittest.TestCase):
     """
     Test suite for image annotation functionality.

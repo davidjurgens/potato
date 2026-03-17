@@ -16,6 +16,9 @@ from tests.helpers.test_utils import create_test_config, create_test_data_file
 from tests.helpers.port_manager import find_free_port
 import logging
 
+
+pytestmark = pytest.mark.redundant
+
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -101,6 +104,7 @@ class TestFirefoxInstanceIdFix:
     def _register_user(self, driver, base_url, test_name):
         """Register a test user."""
         import uuid
+
         timestamp = int(time.time())
         unique_id = str(uuid.uuid4())[:8]
         username = f"ff_test_{test_name}_{timestamp}_{unique_id}"

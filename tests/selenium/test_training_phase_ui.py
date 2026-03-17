@@ -32,6 +32,11 @@ from tests.helpers.test_utils import (
 )
 
 
+import pytest
+
+
+pytestmark = pytest.mark.core
+
 def create_training_selenium_config(
     test_dir, port, max_mistakes=-1, allow_retry=True
 ):

@@ -25,6 +25,11 @@ import unittest
 from tests.selenium.test_base import BaseSeleniumTest
 
 
+import pytest
+
+
+pytestmark = pytest.mark.redundant
+
 class TestSpanOverlayPersistenceFix(BaseSeleniumTest):
     """
     Comprehensive test suite to verify the span overlay persistence bug fix.

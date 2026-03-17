@@ -23,6 +23,10 @@ import sys
 import shutil
 import logging
 
+
+
+pytestmark = pytest.mark.redundant
+
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

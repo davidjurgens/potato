@@ -27,6 +27,11 @@ from tests.helpers.port_manager import find_free_port
 from tests.helpers.test_utils import TestConfigManager
 
 
+import pytest
+
+
+pytestmark = pytest.mark.core
+
 class TestAnnotationPhaseUI(unittest.TestCase):
     """Comprehensive annotation phase UI tests with multiple schema types."""
 

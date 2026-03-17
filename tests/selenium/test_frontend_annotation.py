@@ -16,6 +16,9 @@ from tests.helpers.test_utils import create_test_config, create_test_data_file
 from tests.helpers.port_manager import find_free_port
 
 
+
+pytestmark = pytest.mark.core
+
 @pytest.fixture(scope="module")
 def flask_server():
     """Start the Flask server in production mode using a dynamically created config."""
@@ -61,6 +64,7 @@ def flask_server():
 
     # Cleanup
     import shutil
+
     try:
         shutil.rmtree(test_dir, ignore_errors=True)
     except Exception:

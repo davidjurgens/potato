@@ -24,6 +24,11 @@ from tests.helpers.flask_test_setup import FlaskTestServer
 from tests.helpers.port_manager import find_free_port
 
 
+import pytest
+
+
+pytestmark = pytest.mark.core
+
 def get_project_root():
     return os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 

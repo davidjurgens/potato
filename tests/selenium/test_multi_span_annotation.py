@@ -33,6 +33,10 @@ from tests.helpers.flask_test_setup import FlaskTestServer
 from tests.helpers.port_manager import find_free_port
 
 
+import pytest
+
+pytestmark = pytest.mark.core
+
 def create_multi_span_config(test_dir):
     """Create a multi-span annotation config for testing."""
     os.makedirs(test_dir, exist_ok=True)

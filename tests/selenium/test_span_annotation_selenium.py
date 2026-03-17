@@ -26,6 +26,11 @@ import unittest
 from tests.selenium.test_base import BaseSeleniumTest
 
 
+import pytest
+
+
+pytestmark = pytest.mark.core
+
 class TestSpanAnnotationSelenium(BaseSeleniumTest):
     """
     Test suite for span annotation functionality.

@@ -26,6 +26,11 @@ from tests.helpers.test_utils import (
 )
 
 
+import pytest
+
+
+pytestmark = pytest.mark.core
+
 def create_bws_test_config(test_dir, num_items=10, tuple_size=4, num_tuples=5, port=9020):
     """Create a BWS config for Selenium testing."""
     # Create pool data

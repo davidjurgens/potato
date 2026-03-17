@@ -21,6 +21,10 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 
 
+import pytest
+
+pytestmark = pytest.mark.redundant
+
 class TestAnnotationTypePersistence(unittest.TestCase):
     """Test that different annotation types persist correctly across navigation."""
 

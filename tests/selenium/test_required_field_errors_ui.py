@@ -25,6 +25,11 @@ from tests.helpers.port_manager import find_free_port
 from tests.helpers.test_utils import cleanup_test_directory, create_test_data_file
 
 
+import pytest
+
+
+pytestmark = pytest.mark.core
+
 def create_required_fields_config(test_dir, port):
     """Create a config with two required annotation schemes."""
     test_data = [

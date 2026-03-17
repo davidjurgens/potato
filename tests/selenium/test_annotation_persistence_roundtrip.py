@@ -34,6 +34,10 @@ from tests.helpers.port_manager import find_free_port
 from tests.helpers.test_utils import create_test_config, create_test_data_file
 
 
+import pytest
+
+pytestmark = pytest.mark.core
+
 def create_multiselect_annotation_config(test_dir: str, num_instances: int = 3, **kwargs):
     """
     Create a test configuration with multiselect (checkbox) annotation.

@@ -26,6 +26,11 @@ from tests.helpers.test_utils import (
 )
 
 
+import pytest
+
+
+pytestmark = pytest.mark.core
+
 def create_multiphase_config(test_dir, port):
     """Create config with consent -> instructions -> annotation -> poststudy."""
     test_data = [

@@ -27,6 +27,11 @@ from tests.helpers.test_utils import (
 )
 
 
+import pytest
+
+
+pytestmark = pytest.mark.core
+
 def create_qc_config(test_dir, port):
     """Create config with attention checks and gold standards enabled."""
     # Create 10 annotation items

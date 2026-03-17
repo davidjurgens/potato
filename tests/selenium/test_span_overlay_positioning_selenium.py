@@ -6,6 +6,10 @@ from selenium.webdriver.support.ui import WebDriverWait
 from tests.selenium.test_base import BaseSeleniumTest
 
 
+import pytest
+
+pytestmark = pytest.mark.redundant
+
 class TestSpanOverlayPositioningSelenium(BaseSeleniumTest):
     """
     Test span overlay positioning in a real browser environment.

@@ -14,6 +14,11 @@ from tests.selenium.test_base import BaseSeleniumTest
 import requests
 
 
+import pytest
+
+
+pytestmark = pytest.mark.redundant
+
 @unittest.skip("Tests internal JS functions that have been removed during refactoring")
 class TestSpanPositioningBugReproduction(BaseSeleniumTest):
     """
