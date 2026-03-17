@@ -21,12 +21,8 @@ COPY . .
 # Install potato
 RUN pip install --no-cache-dir -e .
 
-# Copy demo config and data
-COPY deployment/huggingface-spaces/demo-space/config.yaml /app/config.yaml
-COPY deployment/huggingface-spaces/demo-space/data/ /app/data/
-
 # Copy entrypoint
-COPY deployment/huggingface-spaces/demo-space/entrypoint.sh /entrypoint.sh
+COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Create directories for output

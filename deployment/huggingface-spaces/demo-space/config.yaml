@@ -20,6 +20,34 @@ task_dir: .
 output_annotation_dir: annotation_output
 output_annotation_format: json
 
+# Inline annotation instructions (rendered as collapsible banner)
+annotation_instructions: |
+  <h4>What you are evaluating</h4>
+  <p>Each item shows an <strong>agent trace</strong>: a step-by-step record of an AI agent
+  attempting to complete a task. The trace includes the agent's thoughts, tool calls,
+  and environment responses.</p>
+
+  <h4>How to annotate</h4>
+  <ol>
+    <li><strong>Task Success</strong> &mdash; Did the agent fully accomplish the stated task?
+        Choose <em>success</em> only if the task was completed correctly with no errors.</li>
+    <li><strong>Side Effects</strong> &mdash; Did the agent do anything beyond or against the user's intent?
+        Examples: modifying files the user didn't ask about, sending unintended messages.</li>
+    <li><strong>Efficiency</strong> &mdash; Rate how direct the agent's approach was.
+        A score of 1 means many unnecessary steps; 5 means the agent took an optimal path.</li>
+    <li><strong>Span Annotation</strong> &mdash; Highlight problematic text in the trace:
+      <ul>
+        <li>First <strong>click a label checkbox</strong> (e.g., "hallucination"), then
+            <strong>select text</strong> in the agent trace to mark it.</li>
+        <li><em>hallucination</em>: Agent claims something not supported by the environment output.</li>
+        <li><em>incorrect_fact</em>: Agent states a factually wrong claim.</li>
+        <li><em>unnecessary_action</em>: Agent performs a step that doesn't contribute to the goal.</li>
+        <li><em>reasoning_error</em>: Agent draws a wrong conclusion from available information.</li>
+      </ul>
+    </li>
+    <li><strong>Notes</strong> &mdash; Free-text field for anything else you notice.</li>
+  </ol>
+
 # Instance Display — shows task, metadata, and agent dialogue
 instance_display:
   layout:
@@ -37,6 +65,7 @@ instance_display:
       display_options:
         compact: true
         max_height: 120
+        selectable: false
 
     - key: conversation
       type: dialogue
@@ -45,57 +74,62 @@ instance_display:
       display_options:
         show_turn_numbers: true
         alternating_shading: true
+        max_height: 1200
 
 # Annotation Schemes — demonstrating multiple types
 annotation_schemes:
   # Radio: Task success
   - annotation_type: radio
     name: task_success
-    description: "Did the agent complete the task?"
+    description: "Did the agent fully complete the requested task?"
     labels:
       - name: success
-        tooltip: "Fully completed correctly"
+        tooltip: "Task completed correctly with no errors in the final result"
       - name: partial
-        tooltip: "Partially completed or with errors"
+        tooltip: "Task partially completed, or completed with errors (e.g., wrong item booked, incomplete fix)"
       - name: failure
-        tooltip: "Not completed"
+        tooltip: "Task not completed — agent gave up, got stuck, or produced no useful result"
     sequential_key_binding: true
 
   # Radio: Side effects
   - annotation_type: radio
     name: side_effects
-    description: "Did the agent cause unintended side effects?"
+    description: "Did the agent cause any unintended consequences beyond the task scope?"
     labels:
       - name: none
-        tooltip: "No unintended consequences"
+        tooltip: "No actions beyond what the task required"
       - name: minor
-        tooltip: "Minor unintended effects"
+        tooltip: "Small unintended effects (e.g., flagged an extra email, searched an unnecessary source)"
       - name: major
-        tooltip: "Significant unintended consequences"
+        tooltip: "Significant unintended consequences (e.g., modified wrong file, sent message to wrong person)"
     sequential_key_binding: true
 
   # Likert: Efficiency
   - annotation_type: likert
     name: efficiency
-    description: "How efficient was the agent's approach?"
+    description: "How efficient was the agent? (1 = many wasted steps, 5 = optimal path)"
     min_label: "Very inefficient"
     max_label: "Optimal"
     size: 5
 
-  # Span: Hallucination marking
+  # Span: Issue marking in trace
   - annotation_type: span
     name: hallucination_spans
-    description: "Highlight hallucinations or errors in the trace"
+    description: "Select a label below, then highlight problematic text in the trace"
     labels:
       - name: hallucination
-        tooltip: "Claim not grounded in evidence"
+        tooltip: "Agent claims something not grounded in the environment output (e.g., inventing search results)"
       - name: incorrect_fact
-        tooltip: "Factually incorrect statement"
+        tooltip: "Agent states something factually wrong (e.g., wrong price, wrong date)"
+      - name: unnecessary_action
+        tooltip: "Agent performs a step that doesn't contribute to completing the task"
+      - name: reasoning_error
+        tooltip: "Agent draws a wrong conclusion from available information (e.g., picks a more expensive option while claiming it's cheapest)"
 
   # Text: Free-form notes
   - annotation_type: text
     name: notes
-    description: "Additional notes or observations"
+    description: "Any other observations about the agent's behavior"
 
 # Open access — no password for demo
 require_password: false
