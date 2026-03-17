@@ -54,7 +54,7 @@ class PDFDisplay(BaseDisplay):
         "show_bbox_labels": True,   # Show labels on bounding boxes
     }
     description = "PDF document display with PDF.js rendering"
-    supports_span_target = True
+    supports_span_target = False  # Uses PDF.js text layer, not .text-content wrapper contract
 
     def render(self, field_config: Dict[str, Any], data: Any) -> str:
         """

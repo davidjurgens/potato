@@ -15,7 +15,7 @@ Usage:
 """
 
 from .registry import display_registry, DisplayDefinition, DisplayRegistry
-from .base import BaseDisplay, render_display_container
+from .base import BaseDisplay, render_display_container, concatenate_dialogue_text
 from .pdf_display import PDFDisplay
 from .document_display import DocumentDisplay
 from .spreadsheet_display import SpreadsheetDisplay
@@ -32,6 +32,7 @@ __all__ = [
     'DisplayRegistry',
     'BaseDisplay',
     'render_display_container',
+    'concatenate_dialogue_text',
     'PDFDisplay',
     'DocumentDisplay',
     'SpreadsheetDisplay',

@@ -3899,7 +3899,14 @@ def get_span_data(instance_id):
         # In multi-field mode, each span's offsets are relative to its target field's text
         span_source_text = normalized_text  # default: text_key field
         if span_target_field and isinstance(item_data, dict) and span_target_field in item_data:
-            field_text = str(item_data[span_target_field])
+            field_data = item_data[span_target_field]
+            # Use shared concatenation for list data (dialogue, etc.)
+            # to ensure span offsets match what the display rendered.
+            from potato.server_utils.displays.base import concatenate_dialogue_text
+            if isinstance(field_data, list):
+                field_text = concatenate_dialogue_text(field_data)
+            else:
+                field_text = str(field_data)
             field_text = re_module.sub(r'<[^>]+>', '', field_text)
             span_source_text = re_module.sub(r'\s+', ' ', field_text).strip()
 

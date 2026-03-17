@@ -59,7 +59,7 @@ class AgentTraceDisplay(BaseDisplay):
         "text_key": "text",
     }
     description = "Agent trace display with step cards and type badges"
-    supports_span_target = True
+    supports_span_target = False  # Per-step IDs don't follow .text-content wrapper contract
 
     def render(self, field_config: Dict[str, Any], data: Any) -> str:
         if not data:
