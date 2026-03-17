@@ -172,6 +172,14 @@
 
                 <!-- Main content area -->
                 <div id="main-content" style="display: none;">
+                    {% if annotation_instructions | default('') %}
+                    <details class="annotation-instructions-banner" open>
+                        <summary>Annotation Instructions (click to collapse)</summary>
+                        <div class="annotation-instructions-content">
+                            {{ annotation_instructions | safe }}
+                        </div>
+                    </details>
+                    {% endif %}
                     <!-- Instance display area -->
                     <div class="mb-4">
                         {% if has_instance_display | default(false) %}
@@ -246,11 +254,11 @@
 
         <!-- Footer -->
         <footer class="potato-footer">
-            &copy; 2025 <a href="https://blablablab.si.umich.edu/">Blablablab</a>
+            Powered by <a href="https://potatoannotator.com/" target="_blank" rel="noopener noreferrer">Potato</a>
             <span class="footer-sep">&middot;</span>
-            <a href="https://github.com/davidjurgens/potato">GitHub</a>
+            <a href="https://github.com/davidjurgens/potato" target="_blank" rel="noopener noreferrer">GitHub</a>
             <span class="footer-sep">&middot;</span>
-            <a href="https://github.com/davidjurgens/potato#cite-us">Cite Us</a>
+            <a href="https://github.com/davidjurgens/potato#cite-us" target="_blank" rel="noopener noreferrer">Cite Us</a>
         </footer>
     </div>
 
