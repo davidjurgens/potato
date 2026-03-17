@@ -100,6 +100,7 @@
 
 ## Release Notes
 
+- [v2.4.0](releasenotes/v2.4.0.md) - Agent Evaluation, AI-Assisted Annotation & Enterprise Integration
 - [v2.2.0](releasenotes/v2.2.0.md) - Comprehensive Annotation & Export Platform
 - [v2.1.0](releasenotes/v2.1.0.md) - Adjudication & Multi-Modal Annotation
 - [v2.0.0](releasenotes/v2.0.0.md) - Backend Refactor
