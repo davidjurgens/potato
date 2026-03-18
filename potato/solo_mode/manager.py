@@ -914,7 +914,10 @@ class SoloModeManager:
         Returns:
             True if transition successful
         """
-        return self.phase_controller.transition_to(phase, reason=reason, force=force)
+        result = self.phase_controller.transition_to(phase, reason=reason, force=force)
+        if result and phase in (SoloPhase.PARALLEL_ANNOTATION, SoloPhase.ACTIVE_ANNOTATION):
+            self.start_background_labeling()
+        return result
 
     def advance_to_next_phase(self, reason: str = "") -> bool:
         """Advance to the next logical phase."""
@@ -1722,6 +1725,12 @@ class SoloModeManager:
             self.phase_controller.load_state()
 
             logger.info("Loaded Solo Mode state")
+
+            # Auto-start background labeling if already in an annotation phase
+            current_phase = self.phase_controller.get_current_phase()
+            if current_phase in (SoloPhase.PARALLEL_ANNOTATION, SoloPhase.ACTIVE_ANNOTATION):
+                self.start_background_labeling()
+
             return True
 
         except Exception as e:
@@ -1819,10 +1828,9 @@ class SoloModeManager:
         try:
             from potato.item_state_management import get_item_state_manager
             ism = get_item_state_manager()
-            item = ism.get_item_by_id(instance_id)
+            item = ism.get_item(instance_id)
             if item:
-                text_key = self.app_config.get('item_properties', {}).get('text_key', 'text')
-                return item.get(text_key, str(item))
+                return item.get_displayed_text()
         except Exception:
             pass
         return ""

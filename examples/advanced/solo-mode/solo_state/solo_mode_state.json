@@ -1,6 +1,6 @@
 {
-  "task_description": "I want to classify customer reviews as positive, negative, or neutral. A positive review expresses satisfaction with the product or service. A negative review expresses dissatisfaction or complaints. A neutral review is factual without strong sentiment.",
-  "current_prompt_version": 1,
+  "task_description": "I want to classify customer reviews as good, bad or neutral",
+  "current_prompt_version": 8,
   "prompt_versions": [
     {
       "version": 1,
@@ -10,19 +10,516 @@
       "source_description": "Initial prompt from task description",
       "parent_version": null,
       "validation_accuracy": null
+    },
+    {
+      "version": 2,
+      "prompt_text": "Label the following text according to this task: I want to classify positive and negative customer reviews",
+      "created_at": "2026-03-18T14:44:27.703734",
+      "created_by": "user_setup",
+      "source_description": "Initial prompt from task description",
+      "parent_version": 1,
+      "validation_accuracy": null
+    },
+    {
+      "version": 3,
+      "prompt_text": "Label the following text according to this task: I want to classify positive and negative customer reviews",
+      "created_at": "2026-03-18T14:45:03.494516",
+      "created_by": "manual_edit",
+      "source_description": "",
+      "parent_version": 2,
+      "validation_accuracy": null
+    },
+    {
+      "version": 4,
+      "prompt_text": "Label the following text according to this task: I want to classify customer reviews as good and bad",
+      "created_at": "2026-03-18T14:47:27.399508",
+      "created_by": "user_setup",
+      "source_description": "Initial prompt from task description",
+      "parent_version": 3,
+      "validation_accuracy": null
+    },
+    {
+      "version": 5,
+      "prompt_text": "Label the following text according to this task: I want to classify customer reviews as helpful or not",
+      "created_at": "2026-03-18T14:49:39.620510",
+      "created_by": "user_setup",
+      "source_description": "Initial prompt from task description",
+      "parent_version": 4,
+      "validation_accuracy": null
+    },
+    {
+      "version": 6,
+      "prompt_text": "Label the following text according to this task: I want to classify customer reviews as good bad neutral",
+      "created_at": "2026-03-18T15:01:15.228099",
+      "created_by": "user_setup",
+      "source_description": "Initial prompt from task description",
+      "parent_version": 5,
+      "validation_accuracy": null
+    },
+    {
+      "version": 7,
+      "prompt_text": "Label the following text according to this task: I want to classify customer reviews as good, bad or neutral",
+      "created_at": "2026-03-18T15:08:29.649333",
+      "created_by": "user_setup",
+      "source_description": "Initial prompt from task description",
+      "parent_version": 6,
+      "validation_accuracy": null
+    },
+    {
+      "version": 8,
+      "prompt_text": "Label the following text according to this task: I want to classify customer reviews as good, bad or neutral",
+      "created_at": "2026-03-18T15:13:57.297539",
+      "created_by": "user_setup",
+      "source_description": "Initial prompt from task description",
+      "parent_version": 7,
+      "validation_accuracy": null
     }
   ],
-  "predictions": {},
-  "human_labeled_ids": [],
-  "llm_labeled_ids": [],
+  "predictions": {
+    "1": {
+      "sentiment": {
+        "instance_id": "1",
+        "schema_name": "sentiment",
+        "predicted_label": "positive",
+        "confidence_score": 0.8,
+        "uncertainty_score": 0.19999999999999996,
+        "prompt_version": 7,
+        "timestamp": "2026-03-18T15:13:24.022829",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The reviewer uses superlatives such as 'absolutely love' and 'best purchase', indicating a very positive sentiment towards the product. The use of exclamation marks also emphasizes their enthusiasm, suggesting that this review is overwhelmingly positive in tone and intent.",
+        "human_label": "positive",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "2": {
+      "sentiment": {
+        "instance_id": "2",
+        "schema_name": "sentiment",
+        "predicted_label": "negative",
+        "confidence_score": 0.8,
+        "uncertainty_score": 0.19999999999999996,
+        "prompt_version": 7,
+        "timestamp": "2026-03-18T15:13:27.157140",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The review mentions a 'terrible experience' and specific issues with the item's condition and customer service, indicating a strong negative sentiment.",
+        "human_label": "negative",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "4": {
+      "sentiment": {
+        "instance_id": "4",
+        "schema_name": "sentiment",
+        "predicted_label": "positive",
+        "confidence_score": 0.8,
+        "uncertainty_score": 0.19999999999999996,
+        "prompt_version": 7,
+        "timestamp": "2026-03-18T15:13:34.587996",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The review uses strong language ('exceeded all my expectations') and includes a clear recommendation, indicating a very positive sentiment towards the product or service being reviewed. The use of 'Highly recommend' further emphasizes the reviewer's enthusiasm for it. This suggests that the customer is extremely satisfied with their experience and would encourage others to try it out as well. The tone is overwhelmingly positive, making this review clearly positive in nature.",
+        "human_label": "positive",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "5": {
+      "sentiment": {
+        "instance_id": "5",
+        "schema_name": "sentiment",
+        "predicted_label": "negative",
+        "confidence_score": 0.8,
+        "uncertainty_score": 0.19999999999999996,
+        "prompt_version": 7,
+        "timestamp": "2026-03-18T15:13:38.027062",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The reviewer uses strong negative language ('Worst purchase ever', 'Complete waste of money') to express their dissatisfaction with the product, indicating a strongly negative sentiment.",
+        "human_label": "negative",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "6": {
+      "sentiment": {
+        "instance_id": "6",
+        "schema_name": "sentiment",
+        "predicted_label": "neutral",
+        "confidence_score": 0.8,
+        "uncertainty_score": 0.19999999999999996,
+        "prompt_version": 7,
+        "timestamp": "2026-03-18T15:13:41.403729",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The review does not mention any positive or negative aspects of the product, only its material and color options. This suggests a neutral tone without expressing a clear opinion about the product's quality or performance.",
+        "human_label": "neutral",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "7": {
+      "sentiment": {
+        "instance_id": "7",
+        "schema_name": "sentiment",
+        "predicted_label": "positive",
+        "confidence_score": 0.8,
+        "uncertainty_score": 0.19999999999999996,
+        "prompt_version": 7,
+        "timestamp": "2026-03-18T15:13:44.462094",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The reviewer uses the phrase 'So happy' and mentions that the product changed their daily routine for the better, indicating a very positive sentiment towards the product.",
+        "human_label": "positive",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "8": {
+      "sentiment": {
+        "instance_id": "8",
+        "schema_name": "sentiment",
+        "predicted_label": "negative",
+        "confidence_score": 0.8,
+        "uncertainty_score": 0.19999999999999996,
+        "prompt_version": 7,
+        "timestamp": "2026-03-18T15:13:47.879567",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The reviewer mentions that the product broke after a short period of use, indicating dissatisfaction with its performance and durability. This suggests a negative experience with the product.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "10": {
+      "sentiment": {
+        "instance_id": "10",
+        "schema_name": "sentiment",
+        "predicted_label": "positive",
+        "confidence_score": 0.8,
+        "uncertainty_score": 0.19999999999999996,
+        "prompt_version": 8,
+        "timestamp": "2026-03-18T15:13:59.010782",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The reviewer uses the phrase 'Amazing quality' and states that it's worth every penny, indicating a very positive sentiment towards the product or service being reviewed. The tone is enthusiastic and suggests satisfaction with the purchase.",
+        "human_label": "positive",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "9": {
+      "sentiment": {
+        "instance_id": "9",
+        "schema_name": "sentiment",
+        "predicted_label": "neutral",
+        "confidence_score": 0.8,
+        "uncertainty_score": 0.19999999999999996,
+        "prompt_version": 8,
+        "timestamp": "2026-03-18T15:14:09.951398",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The review does not express a strong positive or negative sentiment, but rather provides factual information about the shipping policy. The tone is neutral and informative, without any emotive language or explicit praise or criticism. This suggests that the reviewer is simply stating facts, without expressing a personal opinion or emotion, which is consistent with a neutral label. However, the confidence level is not extremely high due to the lack of emotional tone or strong language, leaving some room for interpretation. The edge case rule for this type of ambiguity would be: When a review contains factual information but lacks emotive language or strong sentiment -> Label as neutral (only if confidence < 75).",
+        "human_label": "neutral",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "11": {
+      "sentiment": {
+        "instance_id": "11",
+        "schema_name": "sentiment",
+        "predicted_label": "negative",
+        "confidence_score": 0.8,
+        "uncertainty_score": 0.19999999999999996,
+        "prompt_version": 8,
+        "timestamp": "2026-03-18T15:14:13.048646",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The reviewer explicitly states not to buy the product, indicating a strong negative sentiment towards its quality and durability.",
+        "human_label": "negative",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "13": {
+      "sentiment": {
+        "instance_id": "13",
+        "schema_name": "sentiment",
+        "predicted_label": "positive",
+        "confidence_score": 0.8,
+        "uncertainty_score": 0.19999999999999996,
+        "prompt_version": 8,
+        "timestamp": "2026-03-18T15:14:19.128502",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The reviewer uses the product every day and mentions that their family loves it, indicating a strong positive sentiment towards the product's quality or usefulness.",
+        "human_label": "positive",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "15": {
+      "sentiment": {
+        "instance_id": "15",
+        "schema_name": "sentiment",
+        "predicted_label": "neutral",
+        "confidence_score": 0.8,
+        "uncertainty_score": 0.19999999999999996,
+        "prompt_version": 8,
+        "timestamp": "2026-03-18T15:14:29.453994",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The review provides information about the product's size options without expressing a positive or negative opinion, indicating a neutral sentiment.",
+        "human_label": "neutral",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "16": {
+      "sentiment": {
+        "instance_id": "16",
+        "schema_name": "sentiment",
+        "predicted_label": "positive",
+        "confidence_score": 0.8,
+        "uncertainty_score": 0.19999999999999996,
+        "prompt_version": 8,
+        "timestamp": "2026-03-18T15:14:33.980712",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The reviewer uses positive language such as 'exactly what I needed', 'perfect fit', and 'great value' to describe their experience with the product or service. This suggests that they are satisfied with their purchase and would recommend it to others. The tone of the review is overwhelmingly positive, indicating a high level of confidence in the label.",
+        "human_label": "positive",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "17": {
+      "sentiment": {
+        "instance_id": "17",
+        "schema_name": "sentiment",
+        "predicted_label": "negative",
+        "confidence_score": 0.8,
+        "uncertainty_score": 0.19999999999999996,
+        "prompt_version": 8,
+        "timestamp": "2026-03-18T15:14:38.525967",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The reviewer mentions that the product was not as described, indicating a negative experience. The use of 'Not as described' strongly suggests a bad review, despite the mention of returning it immediately which could be seen as a positive action in some contexts. However, given the overall tone and language used, the confidence is high enough to label this as a negative review.",
+        "human_label": "negative",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "19": {
+      "sentiment": {
+        "instance_id": "19",
+        "schema_name": "sentiment",
+        "predicted_label": "positive",
+        "confidence_score": 0.8,
+        "uncertainty_score": 0.19999999999999996,
+        "prompt_version": 8,
+        "timestamp": "2026-03-18T15:14:46.852435",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The reviewer uses the phrase 'Can't imagine life without it now', indicating a very positive sentiment towards the product or service. The use of an exclamation mark also adds to the enthusiasm and positivity of the review. This suggests that the reviewer is extremely satisfied with their experience, which aligns with the label 'positive'.",
+        "human_label": "positive",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "14": {
+      "sentiment": {
+        "instance_id": "14",
+        "schema_name": "sentiment",
+        "predicted_label": "negative",
+        "confidence_score": 0.8,
+        "uncertainty_score": 0.19999999999999996,
+        "prompt_version": 8,
+        "timestamp": "2026-03-18T15:15:01.663285",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The reviewer mentions 'frustrating' and that the product 'still doesn't work right', indicating a strong negative sentiment towards their experience with the product. The use of the word 'forever' also implies a long period of time, which further emphasizes the negative tone of the review. This suggests that the reviewer's opinion is strongly negative, making it more likely to be classified as 'negative'. The only reason for not giving it 100% confidence is that the reviewer does mention some positive aspects (e.g., 'took forever'), but these are greatly outweighed by their criticisms, leading to a strong overall negative sentiment. This suggests that this type of ambiguity occurs when there is a significant difference in weight between positive and negative comments, making it difficult to accurately classify the review as purely positive or neutral.",
+        "human_label": "negative",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "20": {
+      "sentiment": {
+        "instance_id": "20",
+        "schema_name": "sentiment",
+        "predicted_label": "negative",
+        "confidence_score": 0.8,
+        "uncertainty_score": 0.19999999999999996,
+        "prompt_version": 8,
+        "timestamp": "2026-03-18T15:15:06.751885",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The reviewer mentions breaking on first use and requesting a refund, indicating dissatisfaction with the product's performance and quality.",
+        "human_label": "negative",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    }
+  },
+  "human_labeled_ids": [
+    "3",
+    "19",
+    "4",
+    "7",
+    "17",
+    "20",
+    "11",
+    "16",
+    "9",
+    "6",
+    "13",
+    "14",
+    "5",
+    "10",
+    "1",
+    "2",
+    "15"
+  ],
+  "llm_labeled_ids": [
+    "2",
+    "4",
+    "7",
+    "17",
+    "19",
+    "20",
+    "11",
+    "16",
+    "9",
+    "6",
+    "8",
+    "13",
+    "14",
+    "10",
+    "1",
+    "5",
+    "15"
+  ],
   "disagreement_ids": [],
   "validation_sample_ids": [],
   "edge_case_ids": [],
   "edge_case_labels": {},
   "agreement_metrics": {
-    "total_compared": 0,
-    "agreements": 0,
+    "total_compared": 16,
+    "agreements": 16,
     "disagreements": 0,
-    "agreement_rate": 0.0
+    "agreement_rate": 1.0
+  },
+  "confidence_history": {
+    "1": [
+      [
+        7,
+        0.8
+      ]
+    ],
+    "2": [
+      [
+        7,
+        0.8
+      ]
+    ],
+    "4": [
+      [
+        7,
+        0.8
+      ]
+    ],
+    "5": [
+      [
+        7,
+        0.8
+      ]
+    ],
+    "6": [
+      [
+        7,
+        0.8
+      ]
+    ],
+    "7": [
+      [
+        7,
+        0.8
+      ]
+    ],
+    "8": [
+      [
+        7,
+        0.8
+      ]
+    ],
+    "10": [
+      [
+        8,
+        0.8
+      ]
+    ],
+    "9": [
+      [
+        8,
+        0.8
+      ]
+    ],
+    "11": [
+      [
+        8,
+        0.8
+      ]
+    ],
+    "13": [
+      [
+        8,
+        0.8
+      ]
+    ],
+    "15": [
+      [
+        8,
+        0.8
+      ]
+    ],
+    "16": [
+      [
+        8,
+        0.8
+      ]
+    ],
+    "17": [
+      [
+        8,
+        0.8
+      ]
+    ],
+    "19": [
+      [
+        8,
+        0.8
+      ]
+    ],
+    "14": [
+      [
+        8,
+        0.8
+      ]
+    ],
+    "20": [
+      [
+        8,
+        0.8
+      ]
+    ]
+  },
+  "edge_case_rule_data": {
+    "rules": {},
+    "categories": {}
   }
 }
