@@ -1164,7 +1164,7 @@ class UserState:
         fd, temp_path = tempfile.mkstemp(dir=user_dir, suffix='.tmp')
         try:
             with os.fdopen(fd, 'wt', encoding='utf-8') as outf:
-                json.dump(user_state, outf, indent=2)
+                json.dump(user_state, outf, indent=2, ensure_ascii=False)
                 outf.flush()
                 os.fsync(outf.fileno())  # Ensure data is written to disk
             # Atomic rename (works on POSIX, best-effort on Windows)
@@ -2427,7 +2427,7 @@ class InMemoryUserState(UserState):
         fd, temp_path = tempfile.mkstemp(dir=user_dir, suffix='.tmp')
         try:
             with os.fdopen(fd, 'wt', encoding='utf-8') as outf:
-                json.dump(user_state, outf, indent=2)
+                json.dump(user_state, outf, indent=2, ensure_ascii=False)
                 outf.flush()
                 os.fsync(outf.fileno())  # Ensure data is written to disk
             # Atomic rename (works on POSIX, best-effort on Windows)
