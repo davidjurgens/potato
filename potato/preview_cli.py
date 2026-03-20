@@ -81,9 +81,8 @@ def validate_config(config: Dict[str, Any]) -> List[str]:
     # Annotation schemes validation
     has_schemes = 'annotation_schemes' in config
     has_phases = 'phases' in config and config['phases']
-    dynamic_schema_mode = bool(config.get('dynamic_schema_mode', False))
 
-    if not has_schemes and not has_phases and not dynamic_schema_mode:
+    if not has_schemes and not has_phases:
         issues.append("ERROR: Must have either 'annotation_schemes' or 'phases'")
 
     if has_schemes and has_phases:

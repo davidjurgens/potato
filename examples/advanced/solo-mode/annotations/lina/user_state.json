@@ -1,0 +1,1202 @@
+{
+  "user_id": "lina",
+  "instance_id_ordering": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+    "11",
+    "12",
+    "13",
+    "14",
+    "15",
+    "16",
+    "17",
+    "18",
+    "19",
+    "20"
+  ],
+  "current_instance_index": 8,
+  "current_phase_and_page": [
+    "annotation",
+    "annotation"
+  ],
+  "completed_phase_and_pages": [],
+  "max_assignments": 20,
+  "instance_id_to_behavioral_data": {
+    "1": {
+      "instance_id": "1",
+      "session_start": 1773418654.2662332,
+      "session_end": null,
+      "total_time_ms": 0,
+      "interactions": [
+        {
+          "event_type": "navigation",
+          "timestamp": 1773418649.258,
+          "target": "instance_load",
+          "instance_id": "1",
+          "client_timestamp": 1773418649258,
+          "metadata": {
+            "instance_id": "1",
+            "from_instance": null
+          }
+        },
+        {
+          "event_type": "click",
+          "timestamp": 1773418660.745,
+          "target": "schema:sentiment",
+          "instance_id": "1",
+          "client_timestamp": 1773418660745,
+          "metadata": {
+            "x": 94,
+            "y": 289
+          }
+        },
+        {
+          "event_type": "focus_in",
+          "timestamp": 1773418660.748,
+          "target": "label:sentiment:positive",
+          "instance_id": "1",
+          "client_timestamp": 1773418660748,
+          "metadata": {}
+        },
+        {
+          "event_type": "click",
+          "timestamp": 1773418660.748,
+          "target": "label:sentiment:positive",
+          "instance_id": "1",
+          "client_timestamp": 1773418660748,
+          "metadata": {
+            "x": 94,
+            "y": 289
+          }
+        },
+        {
+          "event_type": "annotation_change",
+          "timestamp": 1773418660.749,
+          "target": "schema:sentiment",
+          "instance_id": "1",
+          "client_timestamp": 1773418660749,
+          "metadata": {
+            "label": "positive",
+            "action": "select",
+            "old_value": null,
+            "new_value": "positive",
+            "source": "user"
+          }
+        },
+        {
+          "event_type": "save",
+          "timestamp": 1773418661.251,
+          "target": "instance:1",
+          "instance_id": "1",
+          "client_timestamp": 1773418661251,
+          "metadata": {}
+        },
+        {
+          "event_type": "focus_out",
+          "timestamp": 1773418662.913,
+          "target": "label:sentiment:positive",
+          "instance_id": "1",
+          "client_timestamp": 1773418662913,
+          "metadata": {
+            "duration_ms": 2165
+          }
+        },
+        {
+          "event_type": "navigation",
+          "timestamp": 1773418663.054,
+          "target": "next",
+          "instance_id": "1",
+          "client_timestamp": 1773418663054,
+          "metadata": {
+            "from_instance": "1",
+            "to_instance": null
+          }
+        },
+        {
+          "event_type": "save",
+          "timestamp": 1773418663.054,
+          "target": "instance:1",
+          "instance_id": "1",
+          "client_timestamp": 1773418663054,
+          "metadata": {}
+        },
+        {
+          "event_type": "navigation",
+          "timestamp": 1773418665.646,
+          "target": "instance_load",
+          "instance_id": "1",
+          "client_timestamp": 1773418665646,
+          "metadata": {
+            "instance_id": "1",
+            "from_instance": null
+          }
+        },
+        {
+          "event_type": "navigation",
+          "timestamp": 1773418667.361,
+          "target": "next",
+          "instance_id": "1",
+          "client_timestamp": 1773418667361,
+          "metadata": {
+            "from_instance": "1",
+            "to_instance": null
+          }
+        },
+        {
+          "event_type": "save",
+          "timestamp": 1773418667.361,
+          "target": "instance:1",
+          "instance_id": "1",
+          "client_timestamp": 1773418667361,
+          "metadata": {}
+        }
+      ],
+      "ai_usage": [],
+      "annotation_changes": [
+        {
+          "timestamp": 1773418660.75612,
+          "schema_name": "sentiment",
+          "label_name": "positive",
+          "action": "select",
+          "old_value": null,
+          "new_value": "positive",
+          "source": "user"
+        }
+      ],
+      "navigation_history": [],
+      "focus_time_by_element": {
+        "label:sentiment:positive": 2165
+      },
+      "scroll_depth_max": 0.0,
+      "keyword_highlights_shown": [],
+      "chat_history": []
+    },
+    "2": {
+      "instance_id": "2",
+      "session_start": 1773418665.5327392,
+      "session_end": null,
+      "total_time_ms": 0,
+      "interactions": [
+        {
+          "event_type": "navigation",
+          "timestamp": 1773418663.32,
+          "target": "instance_load",
+          "instance_id": "2",
+          "client_timestamp": 1773418663320,
+          "metadata": {
+            "instance_id": "2",
+            "from_instance": null
+          }
+        },
+        {
+          "event_type": "navigation",
+          "timestamp": 1773418665.377,
+          "target": "prev",
+          "instance_id": "2",
+          "client_timestamp": 1773418665377,
+          "metadata": {
+            "from_instance": "2",
+            "to_instance": null
+          }
+        },
+        {
+          "event_type": "save",
+          "timestamp": 1773418665.377,
+          "target": "instance:2",
+          "instance_id": "2",
+          "client_timestamp": 1773418665377,
+          "metadata": {}
+        },
+        {
+          "event_type": "navigation",
+          "timestamp": 1773418667.692,
+          "target": "instance_load",
+          "instance_id": "2",
+          "client_timestamp": 1773418667692,
+          "metadata": {
+            "instance_id": "2",
+            "from_instance": null
+          }
+        },
+        {
+          "event_type": "click",
+          "timestamp": 1773418669.536,
+          "target": "schema:sentiment",
+          "instance_id": "2",
+          "client_timestamp": 1773418669536,
+          "metadata": {
+            "x": 112,
+            "y": 328
+          }
+        },
+        {
+          "event_type": "focus_in",
+          "timestamp": 1773418669.538,
+          "target": "label:sentiment:negative",
+          "instance_id": "2",
+          "client_timestamp": 1773418669538,
+          "metadata": {}
+        },
+        {
+          "event_type": "click",
+          "timestamp": 1773418669.538,
+          "target": "label:sentiment:negative",
+          "instance_id": "2",
+          "client_timestamp": 1773418669538,
+          "metadata": {
+            "x": 112,
+            "y": 328
+          }
+        },
+        {
+          "event_type": "annotation_change",
+          "timestamp": 1773418669.539,
+          "target": "schema:sentiment",
+          "instance_id": "2",
+          "client_timestamp": 1773418669539,
+          "metadata": {
+            "label": "negative",
+            "action": "select",
+            "old_value": null,
+            "new_value": "negative",
+            "source": "user"
+          }
+        },
+        {
+          "event_type": "save",
+          "timestamp": 1773418670.04,
+          "target": "instance:2",
+          "instance_id": "2",
+          "client_timestamp": 1773418670040,
+          "metadata": {}
+        },
+        {
+          "event_type": "focus_out",
+          "timestamp": 1773418676.644,
+          "target": "label:sentiment:negative",
+          "instance_id": "2",
+          "client_timestamp": 1773418676644,
+          "metadata": {
+            "duration_ms": 7106
+          }
+        },
+        {
+          "event_type": "navigation",
+          "timestamp": 1773418676.779,
+          "target": "next",
+          "instance_id": "2",
+          "client_timestamp": 1773418676779,
+          "metadata": {
+            "from_instance": "2",
+            "to_instance": null
+          }
+        },
+        {
+          "event_type": "save",
+          "timestamp": 1773418676.779,
+          "target": "instance:2",
+          "instance_id": "2",
+          "client_timestamp": 1773418676779,
+          "metadata": {}
+        }
+      ],
+      "ai_usage": [],
+      "annotation_changes": [
+        {
+          "timestamp": 1773418669.545129,
+          "schema_name": "sentiment",
+          "label_name": "negative",
+          "action": "select",
+          "old_value": null,
+          "new_value": "negative",
+          "source": "user"
+        }
+      ],
+      "navigation_history": [],
+      "focus_time_by_element": {
+        "label:sentiment:negative": 7106
+      },
+      "scroll_depth_max": 0.0,
+      "keyword_highlights_shown": [],
+      "chat_history": []
+    },
+    "3": {
+      "instance_id": "3",
+      "session_start": 1773418680.100814,
+      "session_end": null,
+      "total_time_ms": 0,
+      "interactions": [
+        {
+          "event_type": "navigation",
+          "timestamp": 1773418677.059,
+          "target": "instance_load",
+          "instance_id": "3",
+          "client_timestamp": 1773418677059,
+          "metadata": {
+            "instance_id": "3",
+            "from_instance": null
+          }
+        },
+        {
+          "event_type": "click",
+          "timestamp": 1773418679.662,
+          "target": "schema:sentiment",
+          "instance_id": "3",
+          "client_timestamp": 1773418679662,
+          "metadata": {
+            "x": 79,
+            "y": 386
+          }
+        },
+        {
+          "event_type": "click",
+          "timestamp": 1773418680.093,
+          "target": "schema:sentiment",
+          "instance_id": "3",
+          "client_timestamp": 1773418680093,
+          "metadata": {
+            "x": 86,
+            "y": 372
+          }
+        },
+        {
+          "event_type": "focus_in",
+          "timestamp": 1773418680.094,
+          "target": "label:sentiment:neutral",
+          "instance_id": "3",
+          "client_timestamp": 1773418680094,
+          "metadata": {}
+        },
+        {
+          "event_type": "click",
+          "timestamp": 1773418680.094,
+          "target": "label:sentiment:neutral",
+          "instance_id": "3",
+          "client_timestamp": 1773418680094,
+          "metadata": {
+            "x": 86,
+            "y": 372
+          }
+        },
+        {
+          "event_type": "annotation_change",
+          "timestamp": 1773418680.095,
+          "target": "schema:sentiment",
+          "instance_id": "3",
+          "client_timestamp": 1773418680095,
+          "metadata": {
+            "label": "neutral",
+            "action": "select",
+            "old_value": null,
+            "new_value": "neutral",
+            "source": "user"
+          }
+        },
+        {
+          "event_type": "save",
+          "timestamp": 1773418680.596,
+          "target": "instance:3",
+          "instance_id": "3",
+          "client_timestamp": 1773418680596,
+          "metadata": {}
+        },
+        {
+          "event_type": "focus_out",
+          "timestamp": 1773418680.861,
+          "target": "label:sentiment:neutral",
+          "instance_id": "3",
+          "client_timestamp": 1773418680861,
+          "metadata": {
+            "duration_ms": 767
+          }
+        },
+        {
+          "event_type": "navigation",
+          "timestamp": 1773418680.952,
+          "target": "next",
+          "instance_id": "3",
+          "client_timestamp": 1773418680952,
+          "metadata": {
+            "from_instance": "3",
+            "to_instance": null
+          }
+        },
+        {
+          "event_type": "save",
+          "timestamp": 1773418680.952,
+          "target": "instance:3",
+          "instance_id": "3",
+          "client_timestamp": 1773418680952,
+          "metadata": {}
+        }
+      ],
+      "ai_usage": [],
+      "annotation_changes": [
+        {
+          "timestamp": 1773418680.100824,
+          "schema_name": "sentiment",
+          "label_name": "neutral",
+          "action": "select",
+          "old_value": null,
+          "new_value": "neutral",
+          "source": "user"
+        }
+      ],
+      "navigation_history": [],
+      "focus_time_by_element": {
+        "label:sentiment:neutral": 767
+      },
+      "scroll_depth_max": 0.0,
+      "keyword_highlights_shown": [],
+      "chat_history": []
+    },
+    "4": {
+      "instance_id": "4",
+      "session_start": 1773418686.244381,
+      "session_end": null,
+      "total_time_ms": 0,
+      "interactions": [
+        {
+          "event_type": "navigation",
+          "timestamp": 1773418681.236,
+          "target": "instance_load",
+          "instance_id": "4",
+          "client_timestamp": 1773418681236,
+          "metadata": {
+            "instance_id": "4",
+            "from_instance": null
+          }
+        },
+        {
+          "event_type": "click",
+          "timestamp": 1773418692.006,
+          "target": "schema:sentiment",
+          "instance_id": "4",
+          "client_timestamp": 1773418692006,
+          "metadata": {
+            "x": 117,
+            "y": 284
+          }
+        },
+        {
+          "event_type": "focus_in",
+          "timestamp": 1773418692.007,
+          "target": "label:sentiment:positive",
+          "instance_id": "4",
+          "client_timestamp": 1773418692007,
+          "metadata": {}
+        },
+        {
+          "event_type": "click",
+          "timestamp": 1773418692.007,
+          "target": "label:sentiment:positive",
+          "instance_id": "4",
+          "client_timestamp": 1773418692007,
+          "metadata": {
+            "x": 117,
+            "y": 284
+          }
+        },
+        {
+          "event_type": "annotation_change",
+          "timestamp": 1773418692.008,
+          "target": "schema:sentiment",
+          "instance_id": "4",
+          "client_timestamp": 1773418692008,
+          "metadata": {
+            "label": "positive",
+            "action": "select",
+            "old_value": null,
+            "new_value": "positive",
+            "source": "user"
+          }
+        },
+        {
+          "event_type": "save",
+          "timestamp": 1773418692.508,
+          "target": "instance:4",
+          "instance_id": "4",
+          "client_timestamp": 1773418692508,
+          "metadata": {}
+        },
+        {
+          "event_type": "focus_out",
+          "timestamp": 1773418693.01,
+          "target": "label:sentiment:positive",
+          "instance_id": "4",
+          "client_timestamp": 1773418693010,
+          "metadata": {
+            "duration_ms": 1003
+          }
+        },
+        {
+          "event_type": "navigation",
+          "timestamp": 1773418693.077,
+          "target": "next",
+          "instance_id": "4",
+          "client_timestamp": 1773418693077,
+          "metadata": {
+            "from_instance": "4",
+            "to_instance": null
+          }
+        },
+        {
+          "event_type": "save",
+          "timestamp": 1773418693.077,
+          "target": "instance:4",
+          "instance_id": "4",
+          "client_timestamp": 1773418693077,
+          "metadata": {}
+        }
+      ],
+      "ai_usage": [],
+      "annotation_changes": [
+        {
+          "timestamp": 1773418692.014196,
+          "schema_name": "sentiment",
+          "label_name": "positive",
+          "action": "select",
+          "old_value": null,
+          "new_value": "positive",
+          "source": "user"
+        }
+      ],
+      "navigation_history": [],
+      "focus_time_by_element": {
+        "label:sentiment:positive": 1003
+      },
+      "scroll_depth_max": 0.0,
+      "keyword_highlights_shown": [],
+      "chat_history": []
+    },
+    "5": {
+      "instance_id": "5",
+      "session_start": 1773418698.350837,
+      "session_end": null,
+      "total_time_ms": 0,
+      "interactions": [
+        {
+          "event_type": "navigation",
+          "timestamp": 1773418693.344,
+          "target": "instance_load",
+          "instance_id": "5",
+          "client_timestamp": 1773418693344,
+          "metadata": {
+            "instance_id": "5",
+            "from_instance": null
+          }
+        },
+        {
+          "event_type": "click",
+          "timestamp": 1773418702.284,
+          "target": "schema:sentiment",
+          "instance_id": "5",
+          "client_timestamp": 1773418702284,
+          "metadata": {
+            "x": 97,
+            "y": 333
+          }
+        },
+        {
+          "event_type": "focus_in",
+          "timestamp": 1773418702.285,
+          "target": "label:sentiment:negative",
+          "instance_id": "5",
+          "client_timestamp": 1773418702285,
+          "metadata": {}
+        },
+        {
+          "event_type": "click",
+          "timestamp": 1773418702.285,
+          "target": "label:sentiment:negative",
+          "instance_id": "5",
+          "client_timestamp": 1773418702285,
+          "metadata": {
+            "x": 97,
+            "y": 333
+          }
+        },
+        {
+          "event_type": "annotation_change",
+          "timestamp": 1773418702.285,
+          "target": "schema:sentiment",
+          "instance_id": "5",
+          "client_timestamp": 1773418702285,
+          "metadata": {
+            "label": "negative",
+            "action": "select",
+            "old_value": null,
+            "new_value": "negative",
+            "source": "user"
+          }
+        },
+        {
+          "event_type": "save",
+          "timestamp": 1773418702.787,
+          "target": "instance:5",
+          "instance_id": "5",
+          "client_timestamp": 1773418702787,
+          "metadata": {}
+        },
+        {
+          "event_type": "focus_out",
+          "timestamp": 1773418703.078,
+          "target": "label:sentiment:negative",
+          "instance_id": "5",
+          "client_timestamp": 1773418703078,
+          "metadata": {
+            "duration_ms": 793
+          }
+        },
+        {
+          "event_type": "navigation",
+          "timestamp": 1773418703.194,
+          "target": "next",
+          "instance_id": "5",
+          "client_timestamp": 1773418703194,
+          "metadata": {
+            "from_instance": "5",
+            "to_instance": null
+          }
+        },
+        {
+          "event_type": "save",
+          "timestamp": 1773418703.194,
+          "target": "instance:5",
+          "instance_id": "5",
+          "client_timestamp": 1773418703194,
+          "metadata": {}
+        }
+      ],
+      "ai_usage": [],
+      "annotation_changes": [
+        {
+          "timestamp": 1773418702.288835,
+          "schema_name": "sentiment",
+          "label_name": "negative",
+          "action": "select",
+          "old_value": null,
+          "new_value": "negative",
+          "source": "user"
+        }
+      ],
+      "navigation_history": [],
+      "focus_time_by_element": {
+        "label:sentiment:negative": 793
+      },
+      "scroll_depth_max": 0.0,
+      "keyword_highlights_shown": [],
+      "chat_history": []
+    },
+    "6": {
+      "instance_id": "6",
+      "session_start": 1773418708.48369,
+      "session_end": null,
+      "total_time_ms": 0,
+      "interactions": [
+        {
+          "event_type": "navigation",
+          "timestamp": 1773418703.475,
+          "target": "instance_load",
+          "instance_id": "6",
+          "client_timestamp": 1773418703475,
+          "metadata": {
+            "instance_id": "6",
+            "from_instance": null
+          }
+        },
+        {
+          "event_type": "click",
+          "timestamp": 1773418729.788,
+          "target": "schema:sentiment",
+          "instance_id": "6",
+          "client_timestamp": 1773418729788,
+          "metadata": {
+            "x": 98,
+            "y": 353
+          }
+        },
+        {
+          "event_type": "click",
+          "timestamp": 1773418730.451,
+          "target": "schema:sentiment",
+          "instance_id": "6",
+          "client_timestamp": 1773418730451,
+          "metadata": {
+            "x": 103,
+            "y": 364
+          }
+        },
+        {
+          "event_type": "focus_in",
+          "timestamp": 1773418730.452,
+          "target": "label:sentiment:neutral",
+          "instance_id": "6",
+          "client_timestamp": 1773418730452,
+          "metadata": {}
+        },
+        {
+          "event_type": "click",
+          "timestamp": 1773418730.452,
+          "target": "label:sentiment:neutral",
+          "instance_id": "6",
+          "client_timestamp": 1773418730452,
+          "metadata": {
+            "x": 103,
+            "y": 364
+          }
+        },
+        {
+          "event_type": "annotation_change",
+          "timestamp": 1773418730.453,
+          "target": "schema:sentiment",
+          "instance_id": "6",
+          "client_timestamp": 1773418730453,
+          "metadata": {
+            "label": "neutral",
+            "action": "select",
+            "old_value": null,
+            "new_value": "neutral",
+            "source": "user"
+          }
+        },
+        {
+          "event_type": "save",
+          "timestamp": 1773418730.953,
+          "target": "instance:6",
+          "instance_id": "6",
+          "client_timestamp": 1773418730953,
+          "metadata": {}
+        },
+        {
+          "event_type": "focus_out",
+          "timestamp": 1773418731.456,
+          "target": "label:sentiment:neutral",
+          "instance_id": "6",
+          "client_timestamp": 1773418731456,
+          "metadata": {
+            "duration_ms": 1004
+          }
+        },
+        {
+          "event_type": "navigation",
+          "timestamp": 1773418731.623,
+          "target": "next",
+          "instance_id": "6",
+          "client_timestamp": 1773418731623,
+          "metadata": {
+            "from_instance": "6",
+            "to_instance": null
+          }
+        },
+        {
+          "event_type": "save",
+          "timestamp": 1773418731.623,
+          "target": "instance:6",
+          "instance_id": "6",
+          "client_timestamp": 1773418731623,
+          "metadata": {}
+        }
+      ],
+      "ai_usage": [],
+      "annotation_changes": [
+        {
+          "timestamp": 1773418730.4592278,
+          "schema_name": "sentiment",
+          "label_name": "neutral",
+          "action": "select",
+          "old_value": null,
+          "new_value": "neutral",
+          "source": "user"
+        }
+      ],
+      "navigation_history": [],
+      "focus_time_by_element": {
+        "label:sentiment:neutral": 1004
+      },
+      "scroll_depth_max": 0.0,
+      "keyword_highlights_shown": [],
+      "chat_history": []
+    },
+    "7": {
+      "instance_id": "7",
+      "session_start": 1773418736.909817,
+      "session_end": null,
+      "total_time_ms": 0,
+      "interactions": [
+        {
+          "event_type": "navigation",
+          "timestamp": 1773418731.901,
+          "target": "instance_load",
+          "instance_id": "7",
+          "client_timestamp": 1773418731901,
+          "metadata": {
+            "instance_id": "7",
+            "from_instance": null
+          }
+        },
+        {
+          "event_type": "click",
+          "timestamp": 1773418738.943,
+          "target": "schema:sentiment",
+          "instance_id": "7",
+          "client_timestamp": 1773418738943,
+          "metadata": {
+            "x": 103,
+            "y": 296
+          }
+        },
+        {
+          "event_type": "focus_in",
+          "timestamp": 1773418738.943,
+          "target": "label:sentiment:positive",
+          "instance_id": "7",
+          "client_timestamp": 1773418738943,
+          "metadata": {}
+        },
+        {
+          "event_type": "click",
+          "timestamp": 1773418738.944,
+          "target": "label:sentiment:positive",
+          "instance_id": "7",
+          "client_timestamp": 1773418738944,
+          "metadata": {
+            "x": 103,
+            "y": 296
+          }
+        },
+        {
+          "event_type": "annotation_change",
+          "timestamp": 1773418738.944,
+          "target": "schema:sentiment",
+          "instance_id": "7",
+          "client_timestamp": 1773418738944,
+          "metadata": {
+            "label": "positive",
+            "action": "select",
+            "old_value": null,
+            "new_value": "positive",
+            "source": "user"
+          }
+        },
+        {
+          "event_type": "save",
+          "timestamp": 1773418739.446,
+          "target": "instance:7",
+          "instance_id": "7",
+          "client_timestamp": 1773418739446,
+          "metadata": {}
+        },
+        {
+          "event_type": "focus_out",
+          "timestamp": 1773418740.176,
+          "target": "label:sentiment:positive",
+          "instance_id": "7",
+          "client_timestamp": 1773418740176,
+          "metadata": {
+            "duration_ms": 1233
+          }
+        },
+        {
+          "event_type": "navigation",
+          "timestamp": 1773418740.334,
+          "target": "next",
+          "instance_id": "7",
+          "client_timestamp": 1773418740334,
+          "metadata": {
+            "from_instance": "7",
+            "to_instance": null
+          }
+        },
+        {
+          "event_type": "save",
+          "timestamp": 1773418740.334,
+          "target": "instance:7",
+          "instance_id": "7",
+          "client_timestamp": 1773418740334,
+          "metadata": {}
+        }
+      ],
+      "ai_usage": [],
+      "annotation_changes": [
+        {
+          "timestamp": 1773418738.949992,
+          "schema_name": "sentiment",
+          "label_name": "positive",
+          "action": "select",
+          "old_value": null,
+          "new_value": "positive",
+          "source": "user"
+        }
+      ],
+      "navigation_history": [],
+      "focus_time_by_element": {
+        "label:sentiment:positive": 1233
+      },
+      "scroll_depth_max": 0.0,
+      "keyword_highlights_shown": [],
+      "chat_history": []
+    },
+    "8": {
+      "instance_id": "8",
+      "session_start": 1773418743.991659,
+      "session_end": null,
+      "total_time_ms": 0,
+      "interactions": [
+        {
+          "event_type": "navigation",
+          "timestamp": 1773418740.598,
+          "target": "instance_load",
+          "instance_id": "8",
+          "client_timestamp": 1773418740598,
+          "metadata": {
+            "instance_id": "8",
+            "from_instance": null
+          }
+        },
+        {
+          "event_type": "click",
+          "timestamp": 1773418743.984,
+          "target": "schema:sentiment",
+          "instance_id": "8",
+          "client_timestamp": 1773418743984,
+          "metadata": {
+            "x": 91,
+            "y": 332
+          }
+        },
+        {
+          "event_type": "focus_in",
+          "timestamp": 1773418743.985,
+          "target": "label:sentiment:negative",
+          "instance_id": "8",
+          "client_timestamp": 1773418743985,
+          "metadata": {}
+        },
+        {
+          "event_type": "click",
+          "timestamp": 1773418743.986,
+          "target": "label:sentiment:negative",
+          "instance_id": "8",
+          "client_timestamp": 1773418743986,
+          "metadata": {
+            "x": 91,
+            "y": 332
+          }
+        },
+        {
+          "event_type": "annotation_change",
+          "timestamp": 1773418743.986,
+          "target": "schema:sentiment",
+          "instance_id": "8",
+          "client_timestamp": 1773418743986,
+          "metadata": {
+            "label": "negative",
+            "action": "select",
+            "old_value": null,
+            "new_value": "negative",
+            "source": "user"
+          }
+        },
+        {
+          "event_type": "save",
+          "timestamp": 1773418744.487,
+          "target": "instance:8",
+          "instance_id": "8",
+          "client_timestamp": 1773418744487,
+          "metadata": {}
+        }
+      ],
+      "ai_usage": [],
+      "annotation_changes": [
+        {
+          "timestamp": 1773418743.991669,
+          "schema_name": "sentiment",
+          "label_name": "negative",
+          "action": "select",
+          "old_value": null,
+          "new_value": "negative",
+          "source": "user"
+        }
+      ],
+      "navigation_history": [],
+      "focus_time_by_element": {
+        "label:sentiment:negative": 2071
+      },
+      "scroll_depth_max": 0.0,
+      "keyword_highlights_shown": [],
+      "chat_history": []
+    }
+  },
+  "instance_id_to_label_to_value": {
+    "1": [
+      [
+        {
+          "schema": "sentiment",
+          "name": "positive"
+        },
+        "positive"
+      ]
+    ],
+    "2": [
+      [
+        {
+          "schema": "sentiment",
+          "name": "negative"
+        },
+        "negative"
+      ]
+    ],
+    "3": [
+      [
+        {
+          "schema": "sentiment",
+          "name": "neutral"
+        },
+        "neutral"
+      ]
+    ],
+    "4": [
+      [
+        {
+          "schema": "sentiment",
+          "name": "positive"
+        },
+        "positive"
+      ]
+    ],
+    "5": [
+      [
+        {
+          "schema": "sentiment",
+          "name": "negative"
+        },
+        "negative"
+      ]
+    ],
+    "6": [
+      [
+        {
+          "schema": "sentiment",
+          "name": "neutral"
+        },
+        "neutral"
+      ]
+    ],
+    "7": [
+      [
+        {
+          "schema": "sentiment",
+          "name": "positive"
+        },
+        "positive"
+      ]
+    ],
+    "8": [
+      [
+        {
+          "schema": "sentiment",
+          "name": "negative"
+        },
+        "negative"
+      ]
+    ]
+  },
+  "instance_id_to_span_to_value": {},
+  "phase_to_page_to_label_to_value": {},
+  "phase_to_page_to_span_to_value": {},
+  "training_state": {
+    "completed_questions": {},
+    "total_correct": 0,
+    "total_attempts": 0,
+    "total_mistakes": 0,
+    "passed": false,
+    "failed": false,
+    "current_question_index": 0,
+    "training_instances": [],
+    "show_feedback": false,
+    "feedback_message": "",
+    "allow_retry": false,
+    "max_mistakes": -1,
+    "max_mistakes_per_question": -1,
+    "category_scores": {}
+  },
+  "qualified_categories": [],
+  "category_qualification_scores": {},
+  "instance_id_to_keyword_highlight_state": {
+    "1": {
+      "highlights": [],
+      "seed": 1220455364,
+      "settings": {
+        "keyword_probability": 1.0,
+        "random_word_probability": 0.0
+      }
+    },
+    "2": {
+      "highlights": [],
+      "seed": 2414709482,
+      "settings": {
+        "keyword_probability": 1.0,
+        "random_word_probability": 0.0
+      }
+    },
+    "3": {
+      "highlights": [],
+      "seed": 3568323835,
+      "settings": {
+        "keyword_probability": 1.0,
+        "random_word_probability": 0.0
+      }
+    },
+    "4": {
+      "highlights": [],
+      "seed": 2477505938,
+      "settings": {
+        "keyword_probability": 1.0,
+        "random_word_probability": 0.0
+      }
+    },
+    "5": {
+      "highlights": [],
+      "seed": 3111865526,
+      "settings": {
+        "keyword_probability": 1.0,
+        "random_word_probability": 0.0
+      }
+    },
+    "6": {
+      "highlights": [],
+      "seed": 3984063485,
+      "settings": {
+        "keyword_probability": 1.0,
+        "random_word_probability": 0.0
+      }
+    },
+    "7": {
+      "highlights": [],
+      "seed": 3003713391,
+      "settings": {
+        "keyword_probability": 1.0,
+        "random_word_probability": 0.0
+      }
+    },
+    "8": {
+      "highlights": [],
+      "seed": 3814085142,
+      "settings": {
+        "keyword_probability": 1.0,
+        "random_word_probability": 0.0
+      }
+    }
+  },
+  "instance_id_to_link_to_value": {},
+  "instance_id_to_event_to_value": {}
+}

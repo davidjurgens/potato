@@ -11,6 +11,7 @@ import time
 import tempfile
 import os
 import requests
+from types import SimpleNamespace
 
 
 class TestAdminDashboard:
@@ -383,3 +384,149 @@ class TestAdminDashboard:
         overview = data["overview"]
         # Should show at least some users and possibly some annotations
         assert overview["total_users"] >= 1
+
+    def test_admin_instance_metrics_handle_behavioral_objects_and_legacy_dicts(self, monkeypatch):
+        """Admin instance metrics should support BehavioralData objects and legacy dict payloads."""
+        from potato.admin import AdminDashboard
+        from potato.interaction_tracking import BehavioralData
+
+        dashboard = AdminDashboard()
+
+        behavioral_object = BehavioralData(instance_id="item_001")
+        behavioral_object.total_time_ms = 4000
+        behavioral_object.ai_usage = [{"suggestion_accepted": True}]
+
+        legacy_state = SimpleNamespace(
+            instance_id_to_behavioral_data={
+                "item_001": {
+                    "total_time_ms": 2000,
+                    "ai_usage": [{"suggestion_accepted": False}, {"suggestion_accepted": True}],
+                }
+            }
+        )
+        object_state = SimpleNamespace(
+            instance_id_to_behavioral_data={"item_001": behavioral_object}
+        )
+
+        class StubUSM:
+            def __init__(self, mapping):
+                self.mapping = mapping
+
+            def get_user_state(self, username):
+                return self.mapping.get(username)
+
+        monkeypatch.setattr("potato.admin.get_user_state_manager", lambda: StubUSM({
+            "object_user": object_state,
+            "legacy_user": legacy_state,
+        }))
+        monkeypatch.setattr("potato.admin.get_users", lambda: ["object_user", "legacy_user"])
+
+        avg_time = dashboard._calculate_average_time_per_annotation("item_001")
+        total_ai = dashboard._calculate_total_instance_ai("item_001")
+
+        assert avg_time == pytest.approx(3.0)
+        assert total_ai == 3
+
+    def test_questions_data_handles_dict_based_radio_labels(self, monkeypatch):
+        """Questions analysis should normalize dict-based categorical values and labels."""
+        from potato.admin import AdminDashboard
+
+        dashboard = AdminDashboard()
+        monkeypatch.setattr(dashboard, "check_admin_access", lambda: True)
+
+        class StubItem:
+            def __init__(self, item_id):
+                self._item_id = item_id
+
+            def get_id(self):
+                return self._item_id
+
+        class StubISM:
+            def items(self):
+                return [StubItem("item_001")]
+
+        class StubUserState:
+            def get_label_annotations(self, instance_id):
+                return {
+                    "sentiment": {"name": "positive", "score": 0.97}
+                }
+
+        class StubUSM:
+            def get_user_state(self, username):
+                return StubUserState()
+
+        monkeypatch.setattr("potato.admin.get_item_state_manager", lambda: StubISM())
+        monkeypatch.setattr("potato.admin.get_user_state_manager", lambda: StubUSM())
+        monkeypatch.setattr("potato.admin.get_users", lambda: ["annotator_01"])
+        monkeypatch.setattr("potato.admin.config", {
+            "annotation_schemes": [{
+                "name": "sentiment",
+                "annotation_type": "radio",
+                "labels": [
+                    {"name": "positive", "tooltip": "Positive"},
+                    {"name": "negative", "tooltip": "Negative"}
+                ]
+            }]
+        })
+
+        result = dashboard.get_questions_data()
+        question = result["questions"][0]
+
+        assert "error" not in result
+        assert question["analysis"]["visualization_type"] == "histogram"
+        assert question["analysis"]["data"]["labels"] == ["positive", "negative"]
+        assert question["analysis"]["data"]["counts"] == [1, 0]
+
+    def test_behavioral_analytics_handles_mixed_payloads_and_ui_contract(self, monkeypatch):
+        """Behavioral analytics should support object/dict payloads and expose UI-compatible summary fields."""
+        from potato.admin import AdminDashboard
+        from potato.interaction_tracking import BehavioralData
+
+        dashboard = AdminDashboard()
+        monkeypatch.setattr(dashboard, "check_admin_access", lambda: True)
+
+        behavioral_object = BehavioralData(instance_id="item_001")
+        behavioral_object.total_time_ms = 2500
+        behavioral_object.interactions = [{"event_type": "click"}, {"event_type": "navigation"}]
+        behavioral_object.annotation_changes = [SimpleNamespace(source="user")]
+        behavioral_object.ai_usage = [SimpleNamespace(suggestion_accepted=True, time_to_decision_ms=1200)]
+        behavioral_object.scroll_depth_max = 10
+
+        legacy_payload = {
+            "item_002": {
+                "total_time_ms": 4000,
+                "interactions": [SimpleNamespace(event_type="focus_in")],
+                "annotation_changes": [],
+                "ai_usage": [{"suggestion_accepted": False, "time_to_decision_ms": 800}],
+                "scroll_depth_max": 0,
+            }
+        }
+
+        object_state = SimpleNamespace(instance_id_to_behavioral_data={"item_001": behavioral_object})
+        legacy_state = SimpleNamespace(instance_id_to_behavioral_data=legacy_payload)
+
+        class StubUSM:
+            def __init__(self, mapping):
+                self.mapping = mapping
+
+            def get_user_state(self, username):
+                return self.mapping.get(username)
+
+        monkeypatch.setattr("potato.admin.get_user_state_manager", lambda: StubUSM({
+            "object_user": object_state,
+            "legacy_user": legacy_state,
+        }))
+        monkeypatch.setattr("potato.admin.get_users", lambda: ["object_user", "legacy_user"])
+
+        result = dashboard.get_behavioral_analytics_data()
+
+        assert "error" not in result
+        assert result["aggregate_stats"]["total_users"] == 2
+        assert result["aggregate_stats"]["total_instances"] == 2
+        assert result["aggregate_stats"]["total_interactions"] == 3
+        assert result["aggregate_stats"]["total_changes"] == 1
+        assert result["aggregate_stats"]["total_ai_requests"] == 2
+        assert result["ai_usage"]["total_requests"] == 2
+        assert result["quality_summary"]["high_suspicion_users"] >= 0
+        assert len(result["users"]) == 2
+

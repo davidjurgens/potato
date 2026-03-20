@@ -28,11 +28,9 @@ class TestSpanOverlapSelection(BaseSeleniumTest):
         print(f"Original text: {original_text}")
 
         # Wait for span manager to be ready
-        time.sleep(0.05)
-        span_manager_ready = self.execute_script_safe("""
-            return window.spanManager && window.spanManager.isInitialized;
-        """)
-        self.assertTrue(span_manager_ready, "Span manager should be initialized")
+        WebDriverWait(self.driver, 10).until(
+            lambda d: d.execute_script("return window.spanManager && window.spanManager.isInitialized === true;")
+        )
 
         # Select the first label (happy)
         happy_label = self.driver.find_element(By.CSS_SELECTOR, '[data-label="happy"]')
@@ -182,11 +180,9 @@ class TestSpanOverlapSelection(BaseSeleniumTest):
         text_element = self.wait_for_element(By.ID, "instance-text")
 
         # Wait for span manager to be ready
-        time.sleep(0.05)
-        span_manager_ready = self.execute_script_safe("""
-            return window.spanManager && window.spanManager.isInitialized;
-        """)
-        self.assertTrue(span_manager_ready, "Span manager should be initialized")
+        WebDriverWait(self.driver, 10).until(
+            lambda d: d.execute_script("return window.spanManager && window.spanManager.isInitialized === true;")
+        )
 
         # Select the first label (happy)
         happy_label = self.driver.find_element(By.CSS_SELECTOR, '[data-label="happy"]')
@@ -218,11 +214,9 @@ class TestSpanOverlapSelection(BaseSeleniumTest):
         text_element = self.wait_for_element(By.ID, "instance-text")
 
         # Wait for span manager to be ready
-        time.sleep(0.05)
-        span_manager_ready = self.execute_script_safe("""
-            return window.spanManager && window.spanManager.isInitialized;
-        """)
-        self.assertTrue(span_manager_ready, "Span manager should be initialized")
+        WebDriverWait(self.driver, 10).until(
+            lambda d: d.execute_script("return window.spanManager && window.spanManager.isInitialized === true;")
+        )
 
         # Select the first label (happy)
         happy_label = self.driver.find_element(By.CSS_SELECTOR, '[data-label="happy"]')

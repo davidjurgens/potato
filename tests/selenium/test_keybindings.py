@@ -25,6 +25,10 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 
 
+import pytest
+
+pytestmark = pytest.mark.core
+
 class TestKeybindings(unittest.TestCase):
     """Test that keybindings work correctly across multiple schemas."""
 

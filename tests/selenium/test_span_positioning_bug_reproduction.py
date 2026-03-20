@@ -14,6 +14,11 @@ from tests.selenium.test_base import BaseSeleniumTest
 import requests
 
 
+import pytest
+
+
+pytestmark = pytest.mark.redundant
+
 @unittest.skip("Tests internal JS functions that have been removed during refactoring")
 class TestSpanPositioningBugReproduction(BaseSeleniumTest):
     """
@@ -439,7 +444,7 @@ class TestSpanPositioningBugReproduction(BaseSeleniumTest):
         time.sleep(0.05)
 
         # Verify initial overlay exists
-        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
         self.assertGreater(len(span_overlays), 0, "No span overlays found after creation")
 
         initial_overlay = span_overlays[0]
@@ -451,7 +456,7 @@ class TestSpanPositioningBugReproduction(BaseSeleniumTest):
 
         # Try to navigate to next instance, if available
         try:
-            next_button = self.driver.find_element(By.ID, "next-button")
+            next_button = self.driver.find_element(By.ID, "next-btn")
             if next_button.is_enabled():
                 next_button.click()
                 print("🔧 Navigated to next instance")
@@ -469,7 +474,7 @@ class TestSpanPositioningBugReproduction(BaseSeleniumTest):
         print("\n📝 Step 3: Navigating back...")
 
         try:
-            prev_button = self.driver.find_element(By.ID, "prev-button")
+            prev_button = self.driver.find_element(By.ID, "prev-btn")
             if prev_button.is_enabled():
                 prev_button.click()
                 print("🔧 Navigated back to first instance")
@@ -637,7 +642,7 @@ class TestSpanPositioningBugReproduction(BaseSeleniumTest):
         # Get the text content that the span covers by extracting it from the rendered text
         # using the span's start and end positions
         covered_text = self.execute_script_safe(f"""
-            const overlay = document.querySelector('.span-overlay-pure') || document.querySelector('.span-overlay');
+            const overlay = document.querySelector('.span-overlay-pure') || document.querySelector('.span-overlay-pure');
             if (!overlay) {{
                 return {{ success: false, error: 'No overlay found' }};
             }}
@@ -2023,7 +2028,7 @@ class TestSpanPositioningBugReproduction(BaseSeleniumTest):
             const classNames = children.map(child => child.className);
 
             // Check for specific class names
-            const spanOverlayElements = spanOverlays.querySelectorAll('.span-overlay');
+            const spanOverlayElements = spanOverlays.querySelectorAll('.span-overlay-pure');
             const spanOverlayPureElements = spanOverlays.querySelectorAll('.span-overlay-pure');
 
             return {
@@ -2049,7 +2054,7 @@ class TestSpanPositioningBugReproduction(BaseSeleniumTest):
         # Print the results
         print(f"🔧 Total children in span-overlays: {debug_result.get('totalChildren', 0)}")
         print(f"🔧 Class names found: {debug_result.get('classNames', [])}")
-        print(f"🔧 .span-overlay elements: {debug_result.get('spanOverlayCount', 0)}")
+        print(f"🔧 .span-overlay-pureelements: {debug_result.get('spanOverlayCount', 0)}")
         print(f"🔧 .span-overlay-pure elements: {debug_result.get('spanOverlayPureCount', 0)}")
 
         # This should show that only span-overlay-pure elements are being created

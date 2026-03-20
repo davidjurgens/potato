@@ -503,7 +503,7 @@ def generate_slider_layout(annotation_scheme):
     return safe_generate_layout(annotation_scheme, generate_slider_layout_internal)
 
 def generate_slider_layout_internal(annotation_scheme):
-    from .identifier_utils import escape_html_content, generate_element_identifier
+    from .identifier_utils import escape_html_content, generate_element_identifier, generate_validation_attribute
     
     if "labels" in annotation_scheme:
         return generate_radio_layout(annotation_scheme, horizontal=False)
@@ -528,6 +528,7 @@ def generate_slider_layout_internal(annotation_scheme):
     max_label = str(max_value) if show_labels else ''
     
     identifiers = generate_element_identifier(annotation_scheme["name"], "slider", "range")
+    validation = generate_validation_attribute(annotation_scheme)
 
     # Get step from annotation_scheme or default to 1
     step_value = annotation_scheme.get("step", 1)
@@ -552,7 +553,8 @@ def generate_slider_layout_internal(annotation_scheme):
                     label_name="{identifiers['label_name']}"
                     name="{identifiers['name']}"
                     id="{identifiers['id']}"
-                    schema="{identifiers['schema']}">
+                    schema="{identifiers['schema']}"
+                    validation="{validation}">
 
                 <!-- Custom visual elements -->
                 <div class="custom-slider-track">

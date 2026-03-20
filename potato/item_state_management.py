@@ -761,6 +761,14 @@ class ItemStateManager:
         # Track which annotators have worked on each item
         self.instance_annotators = defaultdict(set)
 
+        # Track assignment timestamps for stale reclamation: {instance_id: {username: timestamp}}
+        self.assignment_timestamps = defaultdict(dict)
+
+        # Instance reclamation config
+        reclaim_config = config.get('instance_reclaim', {})
+        self.reclaim_enabled = reclaim_config.get('enabled', False)
+        self.reclaim_timeout_hours = reclaim_config.get('timeout_hours', 24)
+
         # Queue of remaining instances to be assigned
         self.remaining_instance_ids = deque()
 
@@ -1032,11 +1040,35 @@ class ItemStateManager:
         """
         self.logger.debug(f"Assigning instances to user {getattr(user_state, 'user_id', None)} with strategy {self.assignment_strategy} and random_seed={self.random_seed}")
 
+        # Snapshot existing assignments so we can record timestamps for new ones
+        existing_assignments = set(user_state.get_assigned_instance_ids()) if self.reclaim_enabled else None
+
+        result = self._assign_instances_to_user_inner(user_state)
+
+        # Record timestamps for newly assigned instances
+        if self.reclaim_enabled and existing_assignments is not None:
+            import time
+            username = getattr(user_state, 'user_id', None)
+            if username:
+                now = time.time()
+                new_assignments = set(user_state.get_assigned_instance_ids()) - existing_assignments
+                for iid in new_assignments:
+                    self.assignment_timestamps[iid][username] = now
+
+        return result
+
+    def _assign_instances_to_user_inner(self, user_state: 'UserState') -> int:
+        """Inner assignment logic called by assign_instances_to_user."""
+
         # Check if we should assign a verification task from ICL labeling
         verification_assigned = self._maybe_assign_icl_verification(user_state)
         if verification_assigned:
             # Return early if we assigned a verification task
             return verification_assigned
+
+        # Reclaim stale assignments before assigning new ones
+        if self.reclaim_enabled:
+            self._reclaim_stale_assignments()
 
         # Decline to assign new items to users that have completed the maximum
         if not user_state.has_remaining_assignments():
@@ -1101,6 +1133,26 @@ class ItemStateManager:
             for item_id in to_assign:
                 user_state.assign_instance(self.instance_id_to_instance[item_id])
             return len(to_assign)
+        elif self.assignment_strategy == AssignmentStrategy.LEAST_ANNOTATED:
+            # Least annotated strategy: prioritize items with fewest annotations
+            candidates = []
+            for iid in list(self.remaining_instance_ids):
+                annotation_count = len(self.instance_annotators[iid])
+                if self.max_annotations_per_item >= 0 and annotation_count >= self.max_annotations_per_item:
+                    if iid in self.remaining_instance_ids:
+                        self.remaining_instance_ids.remove(iid)
+                    continue
+                if iid not in user_state.get_assigned_instance_ids():
+                    candidates.append((iid, annotation_count))
+            if not candidates:
+                return 0
+            # Sort by annotation count (fewest first), then by id for determinism
+            candidates.sort(key=lambda x: (x[1], x[0]))
+            assigned = 0
+            for item_id, _ in candidates[:instances_to_assign]:
+                user_state.assign_instance(self.instance_id_to_instance[item_id])
+                assigned += 1
+            return assigned
         elif self.assignment_strategy == AssignmentStrategy.FIXED_ORDER:
             # Fixed order assignment strategy
             assigned = 0
@@ -1273,7 +1325,18 @@ class ItemStateManager:
         else:
             # Default fallback to fixed order
             self.logger.warning(f"Unknown assignment strategy: {self.assignment_strategy}, falling back to fixed order")
-            return self.assign_instances_to_user_fixed_order(user_state, instances_to_assign)
+            assigned = 0
+            for iid in list(self.remaining_instance_ids):
+                if self.max_annotations_per_item >= 0 and len(self.instance_annotators[iid]) >= self.max_annotations_per_item:
+                    if iid in self.remaining_instance_ids:
+                        self.remaining_instance_ids.remove(iid)
+                    continue
+                if iid not in user_state.get_assigned_instance_ids():
+                    user_state.assign_instance(self.instance_id_to_instance[iid])
+                    assigned += 1
+                    if assigned >= instances_to_assign:
+                        break
+            return assigned
 
     def _assign_category_based_dynamic(self, user_state: 'UserState', instances_to_assign: int) -> int:
         """
@@ -1409,6 +1472,67 @@ class ItemStateManager:
 
         # For now, return a random score as placeholder
         return self.random.random()
+
+    def _reclaim_stale_assignments(self):
+        """
+        Reclaim instances from users who were assigned them but never annotated
+        within the configured timeout period. Reclaimed instances are returned
+        to the remaining_instance_ids pool.
+        """
+        import time
+        if not self.reclaim_enabled:
+            return
+
+        cutoff = time.time() - (self.reclaim_timeout_hours * 3600)
+        usm = None
+        reclaimed_count = 0
+
+        for iid in list(self.assignment_timestamps.keys()):
+            for username in list(self.assignment_timestamps[iid].keys()):
+                timestamp = self.assignment_timestamps[iid][username]
+                if timestamp > cutoff:
+                    continue  # Not stale yet
+
+                # Check if the user has actually annotated this instance
+                if usm is None:
+                    from potato.user_state_management import get_user_state_manager
+                    usm = get_user_state_manager()
+
+                user_state = usm.get_user_state(username)
+                if user_state and user_state.has_annotated(iid):
+                    # User annotated it — remove from tracking, not stale
+                    del self.assignment_timestamps[iid][username]
+                    continue
+
+                # Stale: reclaim the instance
+                self.logger.info(f"Reclaiming stale instance {iid} from user {username} "
+                                 f"(assigned {(time.time() - timestamp)/3600:.1f} hours ago)")
+
+                # Remove from user's assignment
+                if user_state:
+                    assigned_ids = user_state.get_assigned_instance_ids()
+                    if iid in assigned_ids:
+                        assigned_ids.discard(iid)
+                        if iid in user_state.instance_id_ordering:
+                            user_state.instance_id_ordering.remove(iid)
+
+                # Return to pool if not already there and not completed
+                if iid not in self.completed_instance_ids and iid not in self.remaining_instance_ids:
+                    self.remaining_instance_ids.append(iid)
+
+                # Remove annotator tracking
+                self.instance_annotators[iid].discard(username)
+
+                # Clean up timestamp
+                del self.assignment_timestamps[iid][username]
+                reclaimed_count += 1
+
+            # Clean up empty entries
+            if not self.assignment_timestamps[iid]:
+                del self.assignment_timestamps[iid]
+
+        if reclaimed_count > 0:
+            self.logger.info(f"Reclaimed {reclaimed_count} stale instance assignments")
 
     def _maybe_assign_icl_verification(self, user_state: 'UserState') -> int:
         """

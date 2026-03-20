@@ -30,6 +30,11 @@ from tests.helpers.port_manager import find_free_port
 from tests.helpers.test_utils import cleanup_test_directory
 
 
+import pytest
+
+
+pytestmark = pytest.mark.core
+
 class BaseFormatDisplayTest(unittest.TestCase):
     """Base class for format display UI tests."""
 

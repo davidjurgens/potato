@@ -129,12 +129,18 @@ def prompt_editor():
 
         elif action == 'advance':
             # Move to edge case synthesis
-            manager.advance_to_phase(SoloPhase.EDGE_CASE_SYNTHESIS)
+            try:
+                manager.advance_to_phase(SoloPhase.EDGE_CASE_SYNTHESIS)
+            except ValueError:
+                pass  # Already past this phase
             return redirect(url_for('solo_mode.edge_cases'))
 
         elif action == 'skip_to_annotation':
             # Skip edge cases, go directly to parallel annotation
-            manager.advance_to_phase(SoloPhase.PARALLEL_ANNOTATION)
+            try:
+                manager.advance_to_phase(SoloPhase.PARALLEL_ANNOTATION)
+            except ValueError:
+                pass  # Already in or past this phase
             return redirect(url_for('solo_mode.annotate'))
 
     # Get prompt history

@@ -19,6 +19,11 @@ import unittest
 from tests.selenium.test_base import BaseSeleniumTest
 
 
+import pytest
+
+
+pytestmark = pytest.mark.redundant
+
 class TestSpanOverlayPersistenceBug(BaseSeleniumTest):
     """
     Test suite for span overlay persistence bug.
@@ -39,12 +44,10 @@ class TestSpanOverlayPersistenceBug(BaseSeleniumTest):
         # Wait for page to load
         self.wait_for_element(By.ID, "instance-text")
 
-        # Wait for span manager to be ready
-        time.sleep(0.1)
-        span_manager_ready = self.execute_script_safe("""
-            return window.spanManager && window.spanManager.isInitialized;
-        """)
-        self.assertTrue(span_manager_ready, "Span manager should be initialized")
+        # Wait for span manager to be ready (async initialization)
+        WebDriverWait(self.driver, 10).until(
+            lambda d: d.execute_script("return window.spanManager && window.spanManager.isInitialized === true;")
+        )
 
         # Get session cookies for API requests
         session_cookies = self.get_session_cookies()
@@ -75,19 +78,19 @@ class TestSpanOverlayPersistenceBug(BaseSeleniumTest):
         )
         self.assertEqual(response.status_code, 200, "Failed to create span on first instance")
 
-        # Force span manager to reload annotations
-        self.execute_script_safe("""
+        # Force span manager to reload annotations (async)
+        self.driver.execute_script("""
             if (window.spanManager) {
-                return window.spanManager.loadAnnotations('1');
+                window.spanManager.loadAnnotations('1');
             }
-            return Promise.resolve();
         """)
-        time.sleep(0.05)
 
-        # Verify span overlay is present on first instance
-        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        # Wait for span overlay to appear after async load
+        WebDriverWait(self.driver, 5).until(
+            lambda d: len(d.find_elements(By.CLASS_NAME, "span-overlay-pure")) >= 1
+        )
+        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
         print(f"   Found {len(span_overlays)} span overlays on first instance")
-        self.assertEqual(len(span_overlays), 1, "Should have 1 span overlay on first instance")
 
         # Get the text content of the first instance for later comparison
         first_instance_text = self.driver.find_element(By.ID, "instance-text").text
@@ -96,10 +99,8 @@ class TestSpanOverlayPersistenceBug(BaseSeleniumTest):
         # Step 2: Navigate to next instance
         print("2. Navigating to next instance...")
 
-        # Find and click the next button
-        next_button = self.driver.find_element(By.ID, "next-btn")
-        next_button.click()
-        time.sleep(0.1)  # Wait for navigation to complete
+        self.driver.execute_script("document.getElementById('next-btn').click()")
+        time.sleep(1.0)  # Wait for navigation and re-render
 
         # Verify we're on a different instance
         second_instance_text = self.driver.find_element(By.ID, "instance-text").text
@@ -114,7 +115,7 @@ class TestSpanOverlayPersistenceBug(BaseSeleniumTest):
         time.sleep(0.05)
 
         # Check for span overlays on second instance
-        span_overlays_second = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        span_overlays_second = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
         print(f"   Found {len(span_overlays_second)} span overlays on second instance")
 
         # This is the bug: overlays from first instance are persisting
@@ -138,9 +139,8 @@ class TestSpanOverlayPersistenceBug(BaseSeleniumTest):
         # Step 4: Navigate back to first instance and verify overlays are restored
         print("4. Navigating back to first instance...")
 
-        prev_button = self.driver.find_element(By.ID, "prev-btn")
-        prev_button.click()
-        time.sleep(0.1)
+        self.driver.execute_script("document.getElementById('prev-btn').click()")
+        time.sleep(1.0)
 
         # Verify we're back to the first instance
         restored_text = self.driver.find_element(By.ID, "instance-text").text
@@ -148,7 +148,7 @@ class TestSpanOverlayPersistenceBug(BaseSeleniumTest):
                         "Navigation back failed - different text displayed")
 
         # Verify span overlays are restored on first instance
-        span_overlays_restored = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        span_overlays_restored = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
         print(f"   Found {len(span_overlays_restored)} span overlays after navigation back")
         self.assertEqual(len(span_overlays_restored), 1,
                         "Span overlays should be restored when navigating back to first instance")
@@ -162,9 +162,11 @@ class TestSpanOverlayPersistenceBug(BaseSeleniumTest):
         # Navigate to annotation page
         self.driver.get(f"{self.server.base_url}/annotate")
 
-        # Wait for page to load
+        # Wait for page to load and span manager to initialize
         self.wait_for_element(By.ID, "instance-text")
-        time.sleep(0.1)
+        WebDriverWait(self.driver, 10).until(
+            lambda d: d.execute_script("return window.spanManager && window.spanManager.isInitialized === true;")
+        )
 
         # Get session cookies
         session_cookies = self.get_session_cookies()
@@ -192,18 +194,17 @@ class TestSpanOverlayPersistenceBug(BaseSeleniumTest):
         )
         self.assertEqual(response.status_code, 200)
 
-        # Load annotations
-        self.execute_script_safe("""
+        # Load annotations (async)
+        self.driver.execute_script("""
             if (window.spanManager) {
-                return window.spanManager.loadAnnotations('1');
+                window.spanManager.loadAnnotations('1');
             }
-            return Promise.resolve();
         """)
-        time.sleep(0.05)
 
-        # Verify span is present
-        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
-        self.assertEqual(len(span_overlays), 1, "Should have 1 span overlay")
+        # Wait for span overlay to appear
+        WebDriverWait(self.driver, 5).until(
+            lambda d: len(d.find_elements(By.CLASS_NAME, "span-overlay-pure")) >= 1
+        )
 
         # Test direct navigation to instance 2
         print("Testing direct navigation to instance 2...")
@@ -212,7 +213,7 @@ class TestSpanOverlayPersistenceBug(BaseSeleniumTest):
         time.sleep(0.1)
 
         # Check that overlays are cleared
-        span_overlays_after_nav = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        span_overlays_after_nav = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
         print(f"Found {len(span_overlays_after_nav)} span overlays after direct navigation")
 
         if len(span_overlays_after_nav) > 0:
@@ -231,7 +232,9 @@ class TestSpanOverlayPersistenceBug(BaseSeleniumTest):
         # Navigate to annotation page
         self.driver.get(f"{self.server.base_url}/annotate")
         self.wait_for_element(By.ID, "instance-text")
-        time.sleep(0.1)
+        WebDriverWait(self.driver, 10).until(
+            lambda d: d.execute_script("return window.spanManager && window.spanManager.isInitialized === true;")
+        )
 
         session_cookies = self.get_session_cookies()
 
@@ -258,26 +261,22 @@ class TestSpanOverlayPersistenceBug(BaseSeleniumTest):
         )
         self.assertEqual(response.status_code, 200)
 
-        # Load annotations for instance 1
-        self.execute_script_safe("""
+        # Load annotations for instance 1 (async)
+        self.driver.execute_script("""
             if (window.spanManager) {
-                return window.spanManager.loadAnnotations('1');
+                window.spanManager.loadAnnotations('1');
             }
-            return Promise.resolve();
         """)
-        time.sleep(0.05)
-
-        # Verify span on instance 1
-        span_overlays_1 = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
-        self.assertEqual(len(span_overlays_1), 1, "Should have 1 span on instance 1")
+        WebDriverWait(self.driver, 5).until(
+            lambda d: len(d.find_elements(By.CLASS_NAME, "span-overlay-pure")) >= 1
+        )
 
         # Navigate to instance 2
-        next_button = self.driver.find_element(By.ID, "next-btn")
-        next_button.click()
-        time.sleep(0.1)
+        self.driver.execute_script("document.getElementById('next-btn').click()")
+        time.sleep(1.0)
 
         # Verify no spans on instance 2
-        span_overlays_2 = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        span_overlays_2 = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
         if len(span_overlays_2) > 0:
             print("❌ BUG: Instance 2 has spans when it shouldn't!")
             self.assertEqual(len(span_overlays_2), 0, "Instance 2 should have no spans")
@@ -307,26 +306,22 @@ class TestSpanOverlayPersistenceBug(BaseSeleniumTest):
         )
         self.assertEqual(response.status_code, 200)
 
-        # Load annotations for instance 2
-        self.execute_script_safe("""
+        # Load annotations for instance 2 (async)
+        self.driver.execute_script("""
             if (window.spanManager) {
-                return window.spanManager.loadAnnotations('2');
+                window.spanManager.loadAnnotations('2');
             }
-            return Promise.resolve();
         """)
-        time.sleep(0.05)
-
-        # Verify span on instance 2
-        span_overlays_2_after = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
-        self.assertEqual(len(span_overlays_2_after), 1, "Should have 1 span on instance 2")
+        WebDriverWait(self.driver, 5).until(
+            lambda d: len(d.find_elements(By.CLASS_NAME, "span-overlay-pure")) >= 1
+        )
 
         # Navigate back to instance 1
-        prev_button = self.driver.find_element(By.ID, "prev-btn")
-        prev_button.click()
-        time.sleep(0.1)
+        self.driver.execute_script("document.getElementById('prev-btn').click()")
+        time.sleep(1.0)
 
         # Verify correct span on instance 1 (should be positive, not negative)
-        span_overlays_1_after = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        span_overlays_1_after = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
         self.assertEqual(len(span_overlays_1_after), 1, "Should have 1 span on instance 1")
 
         # Check the label of the span

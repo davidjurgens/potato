@@ -67,6 +67,8 @@ class WebAgentTraceDisplay(BaseDisplay):
         "screenshot_max_width": 800,
         "screenshot_max_height": 600,
         "filmstrip_size": 80,
+        "auto_playback": False,
+        "playback_step_delay": 2.0,
     }
     description = "Web agent trace viewer with screenshots, SVG overlays, and step navigation"
     supports_span_target = False
@@ -117,9 +119,16 @@ class WebAgentTraceDisplay(BaseDisplay):
         # Per-step annotation container
         per_step_html = '<div class="web-agent-per-step-annotations" data-step-index="0"></div>'
 
+        # Playback data attributes
+        auto_playback = options.get("auto_playback", False)
+        playback_delay = options.get("playback_step_delay", 2.0)
+        playback_attrs = ""
+        if auto_playback:
+            playback_attrs = f' data-auto-playback="true" data-playback-step-delay="{playback_delay}"'
+
         return f'''
         <style>{css}</style>
-        <div class="web-agent-viewer" data-field-key="{field_key}" data-steps="{steps_json}">
+        <div class="web-agent-viewer" data-field-key="{field_key}" data-steps="{steps_json}"{playback_attrs}>
             {task_html}
             <div class="web-agent-main">
                 <div class="screenshot-panel">

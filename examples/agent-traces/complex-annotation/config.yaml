@@ -1,0 +1,144 @@
+# Complex Agent Trace Annotation
+#
+# Demonstrates a multi-schema annotation setup for evaluating AI agent traces:
+#   - Radio buttons for task success and side effects
+#   - Likert scale for efficiency rating
+#   - Span annotations for marking issues in the dialogue
+#   - Free-text notes
+#
+# Run from repo root:
+#   python potato/flask_server.py start examples/agent-traces/complex-annotation/config.yaml -p 8000
+
+annotation_task_name: "Agent Trace Evaluation"
+
+# Data configuration
+data_files:
+  - data/demo-traces.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+# Task directory
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+# Inline annotation instructions (rendered as collapsible banner)
+annotation_instructions: |
+  <h4>What you are evaluating</h4>
+  <p>Each item shows an <strong>agent trace</strong>: a step-by-step record of an AI agent
+  attempting to complete a task. The trace includes the agent's thoughts, tool calls,
+  and environment responses.</p>
+
+  <h4>How to annotate</h4>
+  <ol>
+    <li><strong>Task Success</strong> &mdash; Did the agent fully accomplish the stated task?
+        Choose <em>success</em> only if the task was completed correctly with no errors.</li>
+    <li><strong>Side Effects</strong> &mdash; Did the agent do anything beyond or against the user's intent?
+        Examples: modifying files the user didn't ask about, sending unintended messages.</li>
+    <li><strong>Efficiency</strong> &mdash; Rate how direct the agent's approach was.
+        A score of 1 means many unnecessary steps; 5 means the agent took an optimal path.</li>
+    <li><strong>Span Annotation</strong> &mdash; Highlight problematic text in the trace:
+      <ul>
+        <li>First <strong>click a label checkbox</strong> (e.g., "hallucination"), then
+            <strong>select text</strong> in the agent trace to mark it.</li>
+        <li><em>hallucination</em>: Agent claims something not supported by the environment output.</li>
+        <li><em>incorrect_fact</em>: Agent states a factually wrong claim.</li>
+        <li><em>unnecessary_action</em>: Agent performs a step that doesn't contribute to the goal.</li>
+        <li><em>reasoning_error</em>: Agent draws a wrong conclusion from available information.</li>
+      </ul>
+    </li>
+    <li><strong>Notes</strong> &mdash; Free-text field for anything else you notice.</li>
+  </ol>
+
+# Instance Display — shows task, metadata, and agent dialogue
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    - key: task_description
+      type: text
+      label: "Task"
+
+    - key: metadata_table
+      type: spreadsheet
+      label: "Trace Info"
+      display_options:
+        compact: true
+        selectable: false
+
+    - key: conversation
+      type: dialogue
+      label: "Agent Trace"
+      span_target: true
+      display_options:
+        show_turn_numbers: true
+        alternating_shading: true
+        max_height: 600
+
+# Annotation Schemes — demonstrating multiple types
+annotation_schemes:
+  # Radio: Task success
+  - annotation_type: radio
+    name: task_success
+    description: "Did the agent fully complete the requested task?"
+    labels:
+      - name: success
+        tooltip: "Task completed correctly with no errors in the final result"
+      - name: partial
+        tooltip: "Task partially completed, or completed with errors (e.g., wrong item booked, incomplete fix)"
+      - name: failure
+        tooltip: "Task not completed — agent gave up, got stuck, or produced no useful result"
+    sequential_key_binding: true
+
+  # Radio: Side effects
+  - annotation_type: radio
+    name: side_effects
+    description: "Did the agent cause any unintended consequences beyond the task scope?"
+    labels:
+      - name: none
+        tooltip: "No actions beyond what the task required"
+      - name: minor
+        tooltip: "Small unintended effects (e.g., flagged an extra email, searched an unnecessary source)"
+      - name: major
+        tooltip: "Significant unintended consequences (e.g., modified wrong file, sent message to wrong person)"
+    sequential_key_binding: true
+
+  # Likert: Efficiency
+  - annotation_type: likert
+    name: efficiency
+    description: "How efficient was the agent? (1 = many wasted steps, 5 = optimal path)"
+    min_label: "Very inefficient"
+    max_label: "Optimal"
+    size: 5
+
+  # Span: Issue marking in trace
+  - annotation_type: span
+    name: hallucination_spans
+    description: "Select a label below, then highlight problematic text in the trace"
+    columns: 4
+    labels:
+      - name: hallucination
+        tooltip: "Agent claims something not grounded in the environment output (e.g., inventing search results)"
+      - name: incorrect_fact
+        tooltip: "Agent states something factually wrong (e.g., wrong price, wrong date)"
+      - name: unnecessary_action
+        tooltip: "Agent performs a step that doesn't contribute to completing the task"
+      - name: reasoning_error
+        tooltip: "Agent draws a wrong conclusion from available information (e.g., picks a more expensive option while claiming it's cheapest)"
+
+  # Text: Free-form notes
+  - annotation_type: text
+    name: notes
+    description: "Any other observations about the agent's behavior"
+    multiline: true
+    rows: 3
+
+# Open access — no password required
+require_password: false
+
+user_config:
+  allow_all_users: true

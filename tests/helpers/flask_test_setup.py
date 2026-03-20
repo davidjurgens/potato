@@ -102,6 +102,13 @@ def clear_all_global_state():
     except ImportError:
         pass
 
+    # Chat manager
+    try:
+        from potato.chat_manager import clear_chat_manager
+        clear_chat_manager()
+    except ImportError:
+        pass
+
     # User authenticator singleton
     try:
         import potato.authentication as auth_module
@@ -122,6 +129,7 @@ class FlaskTestServer:
         self.temp_config_file = None
         self.debug = debug
         self.test_data_file = test_data_file
+        self.admin_api_key = 'test-admin-api-key'
 
         # Handle port parameter - use requested port if available, otherwise find a free one
         self.port = self._get_available_port(port)
@@ -137,6 +145,11 @@ class FlaskTestServer:
             # Update port to match the actual port being used
             config_data['port'] = self.port
             config_data['host'] = '0.0.0.0'
+
+            # Inject a known admin API key if not already set
+            if 'admin_api_key' not in config_data:
+                config_data['admin_api_key'] = 'test-admin-api-key'
+            self.admin_api_key = config_data['admin_api_key']
 
             # Write updated config to a temp file in the same directory
             config_dir = os.path.dirname(os.path.abspath(config_file))
@@ -171,6 +184,9 @@ class FlaskTestServer:
                     config['session_lifetime_days'] = 2
                 if 'secret_key' not in config:
                     config['secret_key'] = 'test-secret-key'
+                if 'admin_api_key' not in config:
+                    config['admin_api_key'] = 'test-admin-api-key'
+                self.admin_api_key = config['admin_api_key']
 
                 # Write to temp YAML file within the project directory
                 temp_path = self._create_temp_config_file(config, 'flasktest_config_')
@@ -194,6 +210,9 @@ class FlaskTestServer:
                     config_data['session_lifetime_days'] = 2
                 if 'secret_key' not in config_data:
                     config_data['secret_key'] = 'test-secret-key'
+                if 'admin_api_key' not in config_data:
+                    config_data['admin_api_key'] = 'test-admin-api-key'
+                self.admin_api_key = config_data['admin_api_key']
 
                 # Write updated config back to the SAME directory to preserve data file paths
                 config_dir = os.path.dirname(os.path.abspath(config))
@@ -438,13 +457,20 @@ class FlaskTestServer:
                     config_dir = os.path.dirname(config_file) if config_file else os.getcwd()
                     fixed_data_files = []
                     for data_file in config['data_files']:
-                        # If it's an absolute path, use it as is
-                        if os.path.isabs(data_file):
-                            full_path = data_file
-                        # If it's a relative path, resolve it from the config file directory
+                        if isinstance(data_file, dict):
+                            # Dict entry with path + optional encoding/filter
+                            path = data_file.get("path", "")
+                            if not os.path.isabs(path):
+                                data_file = dict(data_file)
+                                data_file["path"] = os.path.join(config_dir, path)
+                            fixed_data_files.append(data_file)
                         else:
-                            full_path = os.path.join(config_dir, data_file)
-                        fixed_data_files.append(full_path)
+                            # Simple string path
+                            if os.path.isabs(data_file):
+                                full_path = data_file
+                            else:
+                                full_path = os.path.join(config_dir, data_file)
+                            fixed_data_files.append(full_path)
                     config['data_files'] = fixed_data_files
 
                 # Create required directories
@@ -550,6 +576,16 @@ class FlaskTestServer:
                         import traceback
                         traceback.print_exc()
 
+                # Initialize chat manager if configured
+                if config.get("chat_support", {}).get("enabled", False):
+                    try:
+                        from potato.chat_manager import init_chat_manager, clear_chat_manager
+                        clear_chat_manager()
+                        init_chat_manager(config)
+                        print("[DEBUG] Chat manager initialized successfully")
+                    except Exception as e:
+                        print(f"[DEBUG] Error initializing chat manager: {e}")
+
                 # Initialize agent session manager if configured
                 if "agent_proxy" in config:
                     try:
@@ -590,6 +626,35 @@ class FlaskTestServer:
 
                 app.permanent_session_lifetime = timedelta(days=config.get("session_lifetime_days", 2))
 
+                # Add context processor for template variables (same as create_app)
+                @app.context_processor
+                def inject_template_context():
+                    from potato.logging_config import is_ui_debug_enabled, is_server_debug_enabled
+                    ui_lang_defaults = {
+                        'next_button': 'Next',
+                        'previous_button': 'Previous',
+                        'labeled_badge': 'Labeled',
+                        'not_labeled_badge': 'Not labeled',
+                        'submit_button': 'Submit',
+                        'progress_label': 'Progress',
+                        'go_button': 'Go',
+                        'logout': 'Logout',
+                        'loading': 'Loading annotation interface...',
+                        'error_heading': 'Error',
+                        'retry_button': 'Retry',
+                        'adjudicate': 'Adjudicate',
+                    }
+                    ui_lang_config = config.get('ui_language', {})
+                    ui_lang = {**ui_lang_defaults, **ui_lang_config}
+                    return {
+                        'ui_debug': is_ui_debug_enabled(),
+                        'server_debug': is_server_debug_enabled(),
+                        'debug_mode': config.get('debug', False),
+                        'debug_phase': config.get('debug_phase'),
+                        'annotation_task_name': config.get('annotation_task_name', 'Annotation Task'),
+                        'ui_lang': ui_lang,
+                    }
+
                 # Configure routes
                 from potato.routes import configure_routes
                 configure_routes(app, config)
@@ -604,6 +669,29 @@ class FlaskTestServer:
                         app.register_blueprint(web_proxy_bp)
                 except ImportError:
                     pass
+
+                # Register live agent blueprint if live_agent config is present
+                if config.get("live_agent"):
+                    try:
+                        from potato.routes_live_agent import live_agent_bp
+                        if 'live_agent' not in app.blueprints:
+                            app.register_blueprint(live_agent_bp)
+                            app.config["live_agent"] = config.get("live_agent", {})
+                            app.config["live_agent_enabled"] = True
+                            app.config["task_dir"] = config.get("task_dir", ".")
+                    except ImportError:
+                        pass
+
+                # Register trace ingestion blueprint if configured
+                trace_ingestion_config = config.get("trace_ingestion", {})
+                if trace_ingestion_config.get("enabled", False):
+                    try:
+                        from potato.routes_trace_ingestion import trace_ingestion_bp
+                        if 'trace_ingestion' not in app.blueprints:
+                            app.register_blueprint(trace_ingestion_bp)
+                            app.config["trace_ingestion"] = trace_ingestion_config
+                    except ImportError:
+                        pass
 
                 # Initialize OAuth with Flask app if using OAuth authentication
                 auth_method = config.get("authentication", {}).get("method", "in_memory")
@@ -688,6 +776,10 @@ class FlaskTestServer:
             except Exception:
                 self.process.kill()
             self.process = None
+
+        # Release the port for reuse by other tests
+        if hasattr(self, 'port') and self.port:
+            release_port(self.port)
 
     def register_user(self, username: str, password: str = "test_password") -> bool:
         """Register a new user via the registration endpoint."""

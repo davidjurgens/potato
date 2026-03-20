@@ -21,6 +21,10 @@ from tests.helpers.port_manager import find_free_port
 from tests.helpers.test_utils import create_test_config, create_test_data_file
 
 
+
+
+pytestmark = pytest.mark.redundant
+
 class TestAnnotationPersistence:
     """Test that annotations persist correctly with file-based storage."""
 

@@ -26,6 +26,11 @@ import unittest
 from tests.selenium.test_base import BaseSeleniumTest
 
 
+import pytest
+
+
+pytestmark = pytest.mark.redundant
+
 class TestFrontendSpanRendering(BaseSeleniumTest):
     """
     Test suite for frontend span rendering system.

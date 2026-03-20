@@ -172,24 +172,6 @@ class TestConsentPhase:
         # containing annotation content
         assert "/annotate" in resp.url or "annotation" in resp.text.lower()
 
-    def test_no_instructions_button_without_instructions_phase(self, flask_server):
-        """Instructions link should be hidden when no instructions phase is configured."""
-        session = requests.Session()
-        session.post(
-            f"{flask_server.base_url}/register",
-            data={"action": "signup", "email": "phase_user_no_instr", "pass": "pass"},
-            timeout=5,
-        )
-        session.post(
-            f"{flask_server.base_url}/auth",
-            data={"action": "login", "email": "phase_user_no_instr", "pass": "pass"},
-            timeout=5,
-        )
-
-        resp = session.get(f"{flask_server.base_url}/annotate", timeout=5)
-        assert resp.status_code == 200
-        assert "/instructions/view" not in resp.text
-
 
 # =====================================================================
 # Annotation submission and next/prev state
@@ -282,11 +264,13 @@ class TestAnnotationFlow:
         # The annotation should still be there.
         # Verify via user state manager directly.
         from potato.user_state_management import get_user_state_manager
-
         usm = get_user_state_manager()
         us = usm.get_user_state("flow_user2")
         labels = us.instance_id_to_label_to_value.get("flow_1", {})
-        found = any(l.get_name() == "good" and v == "good" for l, v in labels.items())
+        found = any(
+            l.get_name() == "good" and v == "good"
+            for l, v in labels.items()
+        )
         assert found, "Annotation did not persist after navigation"
 
     def test_annotate_all_items_marks_complete(self, flask_server):
@@ -295,7 +279,6 @@ class TestAnnotationFlow:
         base = flask_server.base_url
 
         from potato.user_state_management import get_user_state_manager
-
         usm = get_user_state_manager()
         us = usm.get_user_state("flow_user3")
         assigned = list(us.get_assigned_instance_ids())

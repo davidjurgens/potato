@@ -6,6 +6,7 @@ import yaml
 import os
 import logging
 import re
+import codecs
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 from urllib.parse import urlparse
@@ -180,6 +181,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Validate AI support configuration if present
     validate_ai_support_config(config_data)
 
+    # Validate chat support configuration if present
+    validate_chat_support_config(config_data)
+
     # Validate category assignment configuration if present
     validate_category_assignment_config(config_data)
 
@@ -224,7 +228,6 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
     Raises:
         ConfigValidationError: If annotation schemes are invalid
     """
-    dynamic_schema_mode = bool(config_data.get("dynamic_schema_mode", False))
     has_top_level = 'annotation_schemes' in config_data
     has_phases = 'phases' in config_data and config_data['phases']
 
@@ -257,7 +260,7 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
         schemes = config_data['annotation_schemes']
         if not isinstance(schemes, list):
             raise ConfigValidationError("annotation_schemes must be a list")
-        if not schemes and not dynamic_schema_mode:
+        if not schemes:
             raise ConfigValidationError("annotation_schemes cannot be empty")
 
         for i, scheme in enumerate(schemes):
@@ -310,12 +313,7 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
                         f"'instrument', or 'instruments'"
                     )
     else:
-        if dynamic_schema_mode:
-            # Dynamic schema mode allows custom task layouts to define annotation
-            # forms per-instance without static config-level schemas.
-            config_data["annotation_schemes"] = []
-        else:
-            raise ConfigValidationError("Config must have either 'annotation_schemes' (top-level) or 'phases' with annotation_schemes")
+        raise ConfigValidationError("Config must have either 'annotation_schemes' (top-level) or 'phases' with annotation_schemes")
 
     # Validate keyword_highlight is not enabled for image-based tasks
     _validate_keyword_highlight_for_images(config_data)
@@ -1155,6 +1153,23 @@ def validate_authentication_config(config_data: Dict[str, Any]) -> None:
                     "Set 'secret_key' in config or POTATO_SECRET_KEY env var."
                 )
 
+    # Database-specific validation
+    if method == "database":
+        db_url = auth_config.get("database_url")
+        if db_url:
+            if not (db_url.startswith("sqlite:///") or db_url.startswith("postgresql://")):
+                raise ConfigValidationError(
+                    "authentication.database_url must start with 'sqlite:///' or 'postgresql://'. "
+                    f"Got: '{db_url}'"
+                )
+
+        # Mutual exclusivity: database backend and user_config_path
+        if "user_config_path" in auth_config:
+            raise ConfigValidationError(
+                "authentication.user_config_path cannot be used with method 'database'. "
+                "The database backend handles its own user persistence."
+            )
+
 
 def validate_quality_control_config(config_data: Dict[str, Any]) -> None:
     """
@@ -1627,10 +1642,31 @@ def validate_file_paths(config_data: Dict[str, Any], project_dir: str, config_fi
         if data_file in [None, "null", "default"]:
             continue
 
+        # Handle dict entries with path + optional encoding
+        if isinstance(data_file, dict):
+            file_path = data_file.get("path")
+            if not file_path:
+                raise ConfigValidationError(f"Data file {i}: dict entry missing 'path' field")
+            # Validate encoding if specified
+            encoding = data_file.get("encoding")
+            if encoding is not None:
+                if not isinstance(encoding, str):
+                    raise ConfigValidationError(
+                        f"Data file {i}: 'encoding' must be a string, got {type(encoding).__name__}"
+                    )
+                try:
+                    codecs.lookup(encoding)
+                except LookupError:
+                    raise ConfigValidationError(
+                        f"Data file {i}: unknown encoding '{encoding}'"
+                    )
+        else:
+            file_path = data_file
+
         try:
-            validated_path = validate_path_security(data_file, base_dir, project_dir)
+            validated_path = validate_path_security(file_path, base_dir, project_dir)
             if not os.path.exists(validated_path):
-                raise ConfigValidationError(f"Data file not found: {data_file} (resolved to: {validated_path})")
+                raise ConfigValidationError(f"Data file not found: {file_path} (resolved to: {validated_path})")
         except ConfigSecurityError as e:
             raise ConfigSecurityError(f"Data file {i}: {str(e)}")
 
@@ -1677,6 +1713,50 @@ def validate_file_paths(config_data: Dict[str, Any], project_dir: str, config_fi
                 validate_path_security(custom_ds, base_dir, project_dir)
             except ConfigSecurityError as e:
                 raise ConfigSecurityError(f"custom_ds: {str(e)}")
+
+    # Validate base_css
+    if 'base_css' in config_data:
+        base_css = config_data['base_css']
+        if base_css not in [None, "null", "default"]:
+            try:
+                validated_css = validate_path_security(base_css, base_dir, project_dir)
+                if not os.path.exists(validated_css):
+                    # Try resolving relative to config file directory
+                    if config_file_dir:
+                        alt_path = os.path.join(config_file_dir, base_css)
+                        if not os.path.exists(alt_path):
+                            raise ConfigValidationError(
+                                f"base_css file not found: {base_css} (resolved to: {validated_css})"
+                            )
+                    else:
+                        raise ConfigValidationError(
+                            f"base_css file not found: {base_css} (resolved to: {validated_css})"
+                        )
+            except ConfigSecurityError as e:
+                raise ConfigSecurityError(f"base_css: {str(e)}")
+
+    # Validate header_logo
+    if 'header_logo' in config_data:
+        header_logo = config_data['header_logo']
+        if header_logo not in [None, "null", "default"]:
+            # Allow URLs to pass through without file validation
+            if not str(header_logo).startswith(("http://", "https://")):
+                try:
+                    validated_logo = validate_path_security(header_logo, base_dir, project_dir)
+                    if not os.path.exists(validated_logo):
+                        # Try resolving relative to config file directory
+                        if config_file_dir:
+                            alt_path = os.path.join(config_file_dir, header_logo)
+                            if not os.path.exists(alt_path):
+                                raise ConfigValidationError(
+                                    f"header_logo file not found: {header_logo} (resolved to: {validated_logo})"
+                                )
+                        else:
+                            raise ConfigValidationError(
+                                f"header_logo file not found: {header_logo} (resolved to: {validated_logo})"
+                            )
+                except ConfigSecurityError as e:
+                    raise ConfigSecurityError(f"header_logo: {str(e)}")
 
 
 def validate_training_config(config_data: Dict[str, Any], project_dir: str, config_file_dir: str = None) -> None:
@@ -2429,7 +2509,6 @@ def init_config(args):
             config_data = load_and_validate_config(config_file, project_dir)
 
         config.update(config_data)
-        config.setdefault("annotation_schemes", [])
 
         # Only override config settings if command line arguments are explicitly provided
         config_updates = {
@@ -2823,6 +2902,97 @@ def validate_ai_support_config(config_data: Dict[str, Any]) -> None:
         _validate_option_highlighting_config(ai_config["option_highlighting"])
 
 
+def validate_chat_support_config(config_data: Dict[str, Any]) -> None:
+    """
+    Validate chat support configuration for LLM annotator assistance.
+
+    Args:
+        config_data: The configuration data containing chat_support section
+
+    Raises:
+        ConfigValidationError: If the chat support configuration is invalid
+    """
+    if "chat_support" not in config_data:
+        return  # Chat support is optional
+
+    chat_config = config_data["chat_support"]
+
+    if not isinstance(chat_config.get("enabled", False), bool):
+        raise ConfigValidationError("chat_support.enabled must be a boolean")
+
+    if not chat_config.get("enabled", False):
+        return  # Skip validation if not enabled
+
+    # Validate endpoint type
+    if "endpoint_type" not in chat_config:
+        raise ConfigValidationError(
+            "chat_support.endpoint_type is required when chat_support is enabled"
+        )
+
+    endpoint_type = chat_config["endpoint_type"]
+    valid_endpoint_types = [
+        "openai", "anthropic", "huggingface", "ollama", "gemini", "vllm", "openrouter",
+    ]
+    if endpoint_type not in valid_endpoint_types:
+        raise ConfigValidationError(
+            f"chat_support.endpoint_type must be one of: {', '.join(valid_endpoint_types)}"
+        )
+
+    # Validate ai_config section
+    if "ai_config" in chat_config:
+        ai_cfg = chat_config["ai_config"]
+        if not isinstance(ai_cfg, dict):
+            raise ConfigValidationError("chat_support.ai_config must be a dictionary")
+
+        if "model" in ai_cfg:
+            if not isinstance(ai_cfg["model"], str) or not ai_cfg["model"].strip():
+                raise ConfigValidationError(
+                    "chat_support.ai_config.model must be a non-empty string"
+                )
+
+        if "temperature" in ai_cfg:
+            temp = ai_cfg["temperature"]
+            if not isinstance(temp, (int, float)) or temp < 0 or temp > 2:
+                raise ConfigValidationError(
+                    "chat_support.ai_config.temperature must be between 0 and 2"
+                )
+
+        if "max_tokens" in ai_cfg:
+            mt = ai_cfg["max_tokens"]
+            if not isinstance(mt, int) or mt < 1:
+                raise ConfigValidationError(
+                    "chat_support.ai_config.max_tokens must be a positive integer"
+                )
+
+        # Validate API key for cloud endpoints
+        if endpoint_type in ["openai", "anthropic", "huggingface", "gemini", "openrouter"]:
+            api_key = ai_cfg.get("api_key", "")
+            if not api_key or not isinstance(api_key, str):
+                raise ConfigValidationError(
+                    f"chat_support.ai_config.api_key is required for {endpoint_type} endpoint"
+                )
+
+    # Validate UI section
+    if "ui" in chat_config:
+        ui_cfg = chat_config["ui"]
+        if not isinstance(ui_cfg, dict):
+            raise ConfigValidationError("chat_support.ui must be a dictionary")
+
+        if "sidebar_width" in ui_cfg:
+            sw = ui_cfg["sidebar_width"]
+            if not isinstance(sw, int) or sw < 200 or sw > 800:
+                raise ConfigValidationError(
+                    "chat_support.ui.sidebar_width must be an integer between 200 and 800"
+                )
+
+        if "max_history_per_instance" in ui_cfg:
+            mh = ui_cfg["max_history_per_instance"]
+            if not isinstance(mh, int) or mh < 1:
+                raise ConfigValidationError(
+                    "chat_support.ui.max_history_per_instance must be a positive integer"
+                )
+
+
 def _validate_option_highlighting_config(oh_config: Dict[str, Any]) -> None:
     """
     Validate option highlighting configuration.
@@ -3021,6 +3191,7 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
         "text", "html", "image", "video", "audio", "dialogue", "pairwise",
         "pdf", "document", "spreadsheet", "code", "agent_trace", "gallery",
         "conversation_tree", "interactive_chat", "web_agent_trace",
+        "live_agent",
     ]
 
     for i, field in enumerate(fields):

@@ -32,3 +32,14 @@ from .flask_server import create_app
 __version__ = "2.4.0"
 __author__ = "Potato Annotation Platform Team"
 __description__ = "A flexible, web-based platform for text annotation tasks"
+
+
+def __getattr__(name):
+    """Lazy imports for optional heavy dependencies."""
+    if name == "load_as_dataset":
+        from .datasets_integration import load_as_dataset
+        return load_as_dataset
+    if name == "load_annotations":
+        from .datasets_integration import load_annotations
+        return load_annotations
+    raise AttributeError(f"module 'potato' has no attribute {name!r}")

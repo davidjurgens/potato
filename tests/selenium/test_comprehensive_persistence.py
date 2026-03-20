@@ -20,6 +20,10 @@ from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.common.action_chains import ActionChains
 
 
+import pytest
+
+pytestmark = pytest.mark.redundant
+
 class TestComprehensivePersistence(unittest.TestCase):
     """Test annotation persistence with multiple annotation types on the same page."""
 

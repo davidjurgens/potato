@@ -34,6 +34,13 @@ PROVIDER_CONFIGS = {
         "icon_class": "fab fa-github",
         "button_class": "oauth-btn-github",
     },
+    "huggingface": {
+        "display_name": "HuggingFace",
+        "server_metadata_url": "https://huggingface.co/.well-known/openid-configuration",
+        "client_kwargs": {"scope": "openid profile email"},
+        "icon_class": "fas fa-robot",
+        "button_class": "oauth-btn-huggingface",
+    },
 }
 
 
@@ -259,6 +266,14 @@ class OAuthBackend(AuthBackend):
     def is_valid_username(self, username: str) -> bool:
         """Check if a username was registered via OAuth."""
         return username in self.users
+
+    def update_password(self, username: str, new_password: str) -> bool:
+        """Not supported for OAuth - passwords are managed by providers."""
+        raise NotImplementedError("Password management is handled by OAuth providers")
+
+    def get_all_users(self) -> list:
+        """Return all registered OAuth usernames."""
+        return list(self.users.keys())
 
     def get_allowed_org(self, provider_name: str) -> Optional[str]:
         """Get the allowed_org restriction for a provider, if any."""

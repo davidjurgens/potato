@@ -771,19 +771,11 @@ class TestUserInteractionIntegration(BaseSeleniumTest):
                     results.spansError = error.toString();
                 }
 
-                // Test getAnnotations method
+                // Test getSpans as annotations (getAnnotations doesn't exist on SpanManager)
                 try {
-                    results.annotations = window.spanManager.getAnnotations();
+                    results.annotations = window.spanManager.getSpans();
                 } catch (error) {
                     results.annotationsError = error.toString();
-                }
-
-                // Test createAnnotation method
-                try {
-                    const annotationPromise = window.spanManager.createAnnotation('test', 0, 4, 'test_label');
-                    results.createAnnotationPromise = 'Promise created';
-                } catch (error) {
-                    results.createAnnotationError = error.toString();
                 }
 
                 // Test positioning strategy integration

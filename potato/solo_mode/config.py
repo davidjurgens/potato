@@ -288,7 +288,7 @@ def _parse_model_config(model_data: Dict[str, Any]) -> ModelConfig:
         endpoint_type=model_data.get('endpoint_type', 'openai'),
         model=model_data.get('model', ''),
         api_key=api_key,
-        base_url=model_data.get('base_url'),
+        base_url=model_data.get('base_url') or model_data.get('endpoint_url'),
         max_tokens=model_data.get('max_tokens', 1000),
         temperature=model_data.get('temperature', 0.1),
     )

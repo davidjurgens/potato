@@ -27,6 +27,11 @@ import unittest
 from tests.selenium.test_base import BaseSeleniumTest
 
 
+import pytest
+
+
+pytestmark = pytest.mark.redundant
+
 class TestFrontendSpanComprehensive(BaseSeleniumTest):
     """
     Comprehensive test suite for frontend span annotation system.

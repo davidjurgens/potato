@@ -136,30 +136,38 @@ class BaseFormatSpanTest(unittest.TestCase):
         unique_user = f"test_user_{uuid.uuid4().hex[:8]}"
 
         driver.get(base_url)
-        time.sleep(0.5)
 
+        # Wait for login page to load
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.ID, "login-email"))
+        )
+
+        # Check if this is password mode (has login-tab) or simple mode
         try:
-            register_form = driver.find_element(By.ID, "register-form")
-            email_input = register_form.find_element(By.NAME, "email")
-            pass_input = register_form.find_element(By.NAME, "pass")
-            email_input.send_keys(unique_user)
-            pass_input.send_keys("password123")
+            driver.find_element(By.ID, "login-tab")
+            # Password mode - switch to registration tab
+            register_tab = driver.find_element(By.ID, "register-tab")
+            register_tab.click()
+            WebDriverWait(driver, 10).until(
+                EC.visibility_of_element_located((By.ID, "register-content"))
+            )
+            username_field = driver.find_element(By.ID, "register-email")
+            password_field = driver.find_element(By.ID, "register-pass")
+            username_field.clear()
+            username_field.send_keys(unique_user)
+            password_field.clear()
+            password_field.send_keys("password123")
+            register_form = driver.find_element(By.CSS_SELECTOR, "#register-content form")
             register_form.submit()
-            time.sleep(0.5)
         except NoSuchElementException:
-            pass
+            # Simple mode (no password) - just enter username
+            username_field = driver.find_element(By.ID, "login-email")
+            username_field.clear()
+            username_field.send_keys(unique_user)
+            submit_btn = driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+            submit_btn.click()
 
-        try:
-            driver.get(base_url)
-            login_form = driver.find_element(By.ID, "login-form")
-            email_input = login_form.find_element(By.NAME, "email")
-            pass_input = login_form.find_element(By.NAME, "pass")
-            email_input.send_keys(unique_user)
-            pass_input.send_keys("password123")
-            login_form.submit()
-            time.sleep(1)
-        except NoSuchElementException:
-            pass
+        time.sleep(0.5)
 
 
 class TestCodeSpanUI(BaseFormatSpanTest):
@@ -528,7 +536,7 @@ class TestSpanAnnotationSubmission(BaseFormatSpanTest):
 
         # Check for submit button
         try:
-            submit_btn = driver.find_element(By.ID, "submit-button")
+            submit_btn = driver.find_element(By.ID, "next-btn")
             assert submit_btn is not None
         except NoSuchElementException:
             # Submit button might have different ID

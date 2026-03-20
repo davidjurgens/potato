@@ -31,7 +31,8 @@ class TestFormatDisplayRegistry:
         assert display_registry.is_registered("pdf")
         display = display_registry.get("pdf")
         assert display is not None
-        assert display.supports_span_target is True
+        # PDF uses PDF.js text layer, not the .text-content wrapper contract
+        assert display.supports_span_target is False
 
     def test_document_display_registered(self):
         """Test document display type is registered."""
@@ -45,7 +46,8 @@ class TestFormatDisplayRegistry:
         assert display_registry.is_registered("spreadsheet")
         display = display_registry.get("spreadsheet")
         assert display is not None
-        assert display.supports_span_target is True
+        # Spreadsheet doesn't implement .text-content wrapper contract
+        assert display.supports_span_target is False
 
     def test_code_display_registered(self):
         """Test code display type is registered."""

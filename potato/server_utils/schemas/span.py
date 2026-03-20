@@ -169,17 +169,21 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
         el_json = json_module.dumps(el_config)
         entity_linking_attr = f' data-entity-linking=\'{escape_html_content(el_json)}\''
 
+    # Check for show_span_labels option (default: true)
+    show_span_labels = annotation_scheme.get("show_span_labels", True)
+    show_labels_attr = '' if show_span_labels else ' data-show-span-labels="false"'
+
     # Get layout attributes for grid positioning
     layout_attrs = generate_layout_attributes(annotation_scheme)
 
     schematic = f"""
-    <form id="{escape_html_content(scheme_name)}" class="annotation-form span shadcn-span-container" action="/action_page.php" data-annotation-id="{escape_html_content(str(annotation_scheme.get("annotation_id", "")))}"{target_field_attr}{discontinuous_attr}{entity_linking_attr} {layout_attrs}>
+    <form id="{escape_html_content(scheme_name)}" class="annotation-form span shadcn-span-container" action="/action_page.php" data-annotation-id="{escape_html_content(str(annotation_scheme.get("annotation_id", "")))}"{target_field_attr}{discontinuous_attr}{entity_linking_attr}{show_labels_attr} {layout_attrs}>
             {get_ai_wrapper()}
         <fieldset schema="{escape_html_content(scheme_name)}">
             <legend class="shadcn-span-title">{escape_html_content(annotation_scheme["description"])}</legend>
             {"<div class='discontinuous-hint'>Hold Ctrl/Cmd + select to add additional text to this span</div>" if allow_discontinuous else ""}
             {"<div class='entity-linking-hint'>Click the link icon on spans to connect to knowledge base entities</div>" if entity_linking_enabled else ""}
-            <div class="shadcn-span-options">
+            <div class="shadcn-span-options"{f' style="grid-template-columns: repeat({int(annotation_scheme["columns"])}, 1fr)"' if annotation_scheme.get("columns") else ""}>
     """
 
     if isinstance(annotation_scheme["labels"], list) and len(annotation_scheme["labels"]) > 0:

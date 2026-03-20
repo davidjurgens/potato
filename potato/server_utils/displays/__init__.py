@@ -15,7 +15,7 @@ Usage:
 """
 
 from .registry import display_registry, DisplayDefinition, DisplayRegistry
-from .base import BaseDisplay, render_display_container
+from .base import BaseDisplay, render_display_container, concatenate_dialogue_text
 from .pdf_display import PDFDisplay
 from .document_display import DocumentDisplay
 from .spreadsheet_display import SpreadsheetDisplay
@@ -24,6 +24,7 @@ from .agent_trace_display import AgentTraceDisplay
 from .gallery_display import GalleryDisplay
 from .interactive_chat_display import InteractiveChatDisplay
 from .web_agent_trace_display import WebAgentTraceDisplay
+from .live_agent_display import LiveAgentDisplay
 
 __all__ = [
     'display_registry',
@@ -31,6 +32,7 @@ __all__ = [
     'DisplayRegistry',
     'BaseDisplay',
     'render_display_container',
+    'concatenate_dialogue_text',
     'PDFDisplay',
     'DocumentDisplay',
     'SpreadsheetDisplay',
@@ -39,4 +41,5 @@ __all__ = [
     'GalleryDisplay',
     'InteractiveChatDisplay',
     'WebAgentTraceDisplay',
+    'LiveAgentDisplay',
 ]

@@ -10,6 +10,7 @@ Uses examples/agent-traces/agent-trace-evaluation/config.yaml.
 import os
 import time
 import unittest
+import yaml
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -22,6 +23,11 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from tests.helpers.flask_test_setup import FlaskTestServer
 from tests.helpers.port_manager import find_free_port
 
+
+import pytest
+
+
+pytestmark = pytest.mark.core
 
 def get_project_root():
     return os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
@@ -37,8 +43,29 @@ class TestAgentTraceDisplayUI(unittest.TestCase):
             project_root, "examples/agent-traces/agent-trace-evaluation/config.yaml"
         )
 
+        # Read the base config and change conversation display to agent_trace
+        with open(config_path, "r") as f:
+            config_data = yaml.safe_load(f)
+
+        for field in config_data.get("instance_display", {}).get("fields", []):
+            if field.get("key") == "conversation" and field.get("type") == "dialogue":
+                field["type"] = "agent_trace"
+                # Remove dialogue-specific options that don't apply
+                opts = field.get("display_options", {})
+                opts.pop("per_turn_ratings", None)
+                opts.pop("alternating_shading", None)
+                opts.pop("show_turn_numbers", None)
+
+        # Write modified config next to the original
+        modified_config_path = os.path.join(
+            os.path.dirname(config_path), "test_config_agent_trace_display.yaml"
+        )
+        with open(modified_config_path, "w") as f:
+            yaml.dump(config_data, f)
+        cls._modified_config = modified_config_path
+
         port = find_free_port(preferred_port=9064)
-        cls.server = FlaskTestServer(config=config_path, port=port)
+        cls.server = FlaskTestServer(config=modified_config_path, port=port)
         started = cls.server.start()
         assert started, "Failed to start Flask server"
 
@@ -59,6 +86,8 @@ class TestAgentTraceDisplayUI(unittest.TestCase):
     def tearDownClass(cls):
         if hasattr(cls, "server"):
             cls.server.stop()
+        if hasattr(cls, "_modified_config") and os.path.exists(cls._modified_config):
+            os.remove(cls._modified_config)
 
     def setUp(self):
         self.driver = webdriver.Chrome(options=self.chrome_options)

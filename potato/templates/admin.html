@@ -626,6 +626,7 @@
                   <th>Avg Time/Annotation</th>
                   <th>Speed (per hour)</th>
                   <th>Completion %</th>
+                  <th>Max Instances</th>
                   <th>Last Activity</th>
                 </tr>
               </thead>
@@ -1228,6 +1229,13 @@
                     <td>${annotator.average_time_per_annotation || "N/A"}</td>
                     <td>${annotator.annotations_per_hour}/hr</td>
                     <td>${annotator.completion_percentage.toFixed(1)}%</td>
+                    <td>
+                      <div style="display:flex;align-items:center;gap:4px;">
+                        <button onclick="adjustUserInstances('${annotator.user_id}', -5)" style="padding:2px 6px;cursor:pointer;">-</button>
+                        <span id="max-inst-${annotator.user_id}">${annotator.max_assignments < 0 ? '∞' : annotator.max_assignments}</span>
+                        <button onclick="adjustUserInstances('${annotator.user_id}', 5)" style="padding:2px 6px;cursor:pointer;">+</button>
+                      </div>
+                    </td>
                     <td>${
                       annotator.last_activity
                         ? new Date(annotator.last_activity).toLocaleString()
@@ -1237,6 +1245,28 @@
             `
           )
           .join("");
+      }
+
+      async function adjustUserInstances(userId, delta) {
+        try {
+          // First get current value
+          const span = document.getElementById(`max-inst-${userId}`);
+          let current = span.textContent === '∞' ? -1 : parseInt(span.textContent);
+          let newVal = current < 0 ? delta : current + delta;
+          if (newVal < 0) newVal = -1; // Switch to unlimited
+
+          const response = await makeApiRequest(`/admin/api/user/${encodeURIComponent(userId)}/set_instances`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({max_instances: newVal})
+          });
+
+          if (response.success) {
+            span.textContent = response.max_instances < 0 ? '∞' : response.max_instances;
+          }
+        } catch (err) {
+          console.error('Failed to adjust instances:', err);
+        }
       }
 
       function refreshAnnotators() {
@@ -1944,7 +1974,7 @@
               <td>${user.total_interactions}</td>
               <td>${user.total_changes}</td>
               <td>${user.ai_requests}</td>
-              <td>${user.ai_requests > 0 ? user.ai_accept_rate.toFixed(0) + '%' : 'N/A'}</td>
+              <td>${user.ai_requests > 0 ? (user.ai_accept_rate * 100).toFixed(0) + '%' : 'N/A'}</td>
               <td style="${suspicionClass}">${(user.suspicion_score * 100).toFixed(0)}%</td>
             </tr>
           `;

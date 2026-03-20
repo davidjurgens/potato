@@ -37,6 +37,10 @@ from tests.helpers.test_utils import (
 )
 
 
+import pytest
+
+pytestmark = pytest.mark.core
+
 class TestAudioAnnotationSelenium(unittest.TestCase):
     """
     Test suite for audio annotation functionality.

@@ -49,12 +49,20 @@ class InstanceDisplayRenderer:
         self.fields = self.display_config.get("fields", [])
         self.layout = self.display_config.get("layout", {})
 
-        # Extract span targets - types that support span annotation
-        span_target_types = ["text", "dialogue", "pdf", "document", "spreadsheet", "code", "agent_trace", "interactive_chat"]
+        # Extract span targets — query the registry instead of a hardcoded list
         self.span_targets = [
             f["key"] for f in self.fields
-            if f.get("span_target") and f.get("type") in span_target_types
+            if f.get("span_target") and display_registry.type_supports_span_target(f.get("type", ""))
         ]
+
+        # Warn about span_target on unsupported types
+        for f in self.fields:
+            if f.get("span_target") and not display_registry.type_supports_span_target(f.get("type", "")):
+                logger.warning(
+                    f"Field '{f.get('key')}' has span_target=true but display type "
+                    f"'{f.get('type')}' does not support span annotation. "
+                    f"Span annotation will not work on this field."
+                )
 
         # Track if we have instance_display configured
         self.has_instance_display = bool(self.fields)

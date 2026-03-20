@@ -58,7 +58,7 @@ def _get_worker_port_range() -> tuple:
 def find_free_port(
     preferred_port: Optional[int] = None,
     port_range: tuple = None,
-    max_attempts: int = 20
+    max_attempts: int = 100
 ) -> int:
     """
     Find an available port with retry logic to handle race conditions.

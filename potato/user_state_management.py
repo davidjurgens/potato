@@ -657,10 +657,56 @@ class UserStateManager:
 
     def advance_phase(self, user_id: str) -> None:
         '''Moves the user to the next page in the current phase or the next phase'''
-        phase, page = self.get_next_user_phase_page(user_id)
-        # Get the current user's state
         user_state = self.get_user_state(user_id)
+        old_phase, _ = user_state.get_current_phase_and_page()
+        phase, page = self.get_next_user_phase_page(user_id)
         user_state.advance_to_phase(phase, page)
+
+        # Emit webhook if phase changed
+        if phase != old_phase:
+            from potato.webhooks import get_webhook_emitter
+            _wh = get_webhook_emitter()
+            if _wh:
+                from potato.webhooks.events import (
+                    USER_PHASE_COMPLETED,
+                    build_phase_completed_payload,
+                )
+                _wh.emit(
+                    USER_PHASE_COMPLETED,
+                    build_phase_completed_payload(
+                        user_id=user_id,
+                        phase_name=old_phase.value if hasattr(old_phase, 'value') else str(old_phase),
+                        next_phase=phase.value if hasattr(phase, 'value') else str(phase),
+                    ),
+                )
+
+    def _get_configured_phase_sequence(self) -> list:
+        '''Return the ordered list of UserPhase enums derived from the config.
+
+        If ``phases.order`` is present in the config, that order is used
+        (with ``UserPhase.ANNOTATION`` appended if missing).  Otherwise
+        falls back to the enum declaration order filtered to phases that
+        have registered page templates.
+        '''
+        if "phases" in self.config and "order" in self.config["phases"]:
+            config_phase_order = self.config["phases"]["order"]
+            config_phases = []
+            for phase_name in config_phase_order:
+                if phase_name == "annotation":
+                    if UserPhase.ANNOTATION not in config_phases:
+                        config_phases.append(UserPhase.ANNOTATION)
+                elif phase_name in self.config["phases"]:
+                    phase_type_str = self.config["phases"][phase_name]["type"]
+                    phase_type = UserPhase.fromstr(phase_type_str)
+                    if phase_type in self.phase_type_to_name_to_page:
+                        if phase_type not in config_phases:
+                            config_phases.append(phase_type)
+
+            if UserPhase.ANNOTATION not in config_phases:
+                config_phases.append(UserPhase.ANNOTATION)
+            return config_phases
+        else:
+            return [p for p in list(UserPhase) if p in self.phase_type_to_name_to_page]
 
     def get_next_user_phase_page(self, user_id: str) -> tuple[UserPhase,str]:
         '''Returns the name and filename of next the page for the user, either
@@ -687,61 +733,28 @@ class UserStateManager:
                     return cur_phase, next_page
 
         # If there are no more pages in this phase, return the next phase.
-        # Use the config's phase order instead of the enum order
-        if "phases" in self.config and "order" in self.config["phases"]:
-            # Use config phase order
-            config_phase_order = self.config["phases"]["order"]
-            # Convert config phase names to UserPhase enums.
-            # "annotation" in the order is always included — it's handled
-            # by the annotate route, not the phase template system.
-            config_phases = []
-            for phase_name in config_phase_order:
-                if phase_name == "annotation":
-                    if UserPhase.ANNOTATION not in config_phases:
-                        config_phases.append(UserPhase.ANNOTATION)
-                elif phase_name in self.config["phases"]:
-                    phase_type_str = self.config["phases"][phase_name]["type"]
-                    phase_type = UserPhase.fromstr(phase_type_str)
-                    if phase_type in self.phase_type_to_name_to_page:
-                        if phase_type not in config_phases:
-                            config_phases.append(phase_type)
+        config_phases = self._get_configured_phase_sequence()
 
-            # Add ANNOTATION phase at the end if not already present
-            if UserPhase.ANNOTATION not in config_phases:
-                config_phases.append(UserPhase.ANNOTATION)
-
-            # Find current phase in config order
-            if cur_phase in config_phases:
-                cur_phase_index = config_phases.index(cur_phase)
-                if cur_phase_index < len(config_phases) - 1:
-                    next_phase = config_phases[cur_phase_index + 1]
-                    # ANNOTATION phase is handled by the annotate route
-                    # and doesn't have entries in phase_type_to_name_to_page
-                    if next_phase == UserPhase.ANNOTATION:
-                        return next_phase, None
-                    # Use the first page in the next phase
-                    next_page = list(self.phase_type_to_name_to_page[next_phase].keys())[0]
-                    return next_phase, next_page
-                else:
-                    pass # Current phase is last in config order
-            else:
-                # Current phase not in config_phases (e.g., LOGIN).
-                # Advance to the first config phase.
-                if config_phases:
-                    first_phase = config_phases[0]
-                    if first_phase == UserPhase.ANNOTATION:
-                        return first_phase, None
-                    first_page = list(self.phase_type_to_name_to_page[first_phase].keys())[0]
-                    return first_phase, first_page
-        else:
-            # Fallback to enum order if no config order is specified
-            all_phases = [p for p in list(UserPhase) if p in self.phase_type_to_name_to_page]
-            cur_phase_index = all_phases.index(cur_phase)
-            if cur_phase_index < len(all_phases) - 1:
-                next_phase = all_phases[cur_phase_index + 1]
+        if cur_phase in config_phases:
+            cur_phase_index = config_phases.index(cur_phase)
+            if cur_phase_index < len(config_phases) - 1:
+                next_phase = config_phases[cur_phase_index + 1]
+                # ANNOTATION phase is handled by the annotate route
+                # and doesn't have entries in phase_type_to_name_to_page
+                if next_phase == UserPhase.ANNOTATION:
+                    return next_phase, None
                 # Use the first page in the next phase
                 next_page = list(self.phase_type_to_name_to_page[next_phase].keys())[0]
                 return next_phase, next_page
+        else:
+            # Current phase not in config_phases (e.g., LOGIN).
+            # Advance to the first config phase.
+            if config_phases:
+                first_phase = config_phases[0]
+                if first_phase == UserPhase.ANNOTATION:
+                    return first_phase, None
+                first_page = list(self.phase_type_to_name_to_page[first_phase].keys())[0]
+                return first_phase, first_page
 
         return UserPhase.DONE, None
 
@@ -1164,7 +1177,7 @@ class UserState:
         fd, temp_path = tempfile.mkstemp(dir=user_dir, suffix='.tmp')
         try:
             with os.fdopen(fd, 'wt', encoding='utf-8') as outf:
-                json.dump(user_state, outf, indent=2, ensure_ascii=False)
+                json.dump(user_state, outf, indent=2)
                 outf.flush()
                 os.fsync(outf.fileno())  # Ensure data is written to disk
             # Atomic rename (works on POSIX, best-effort on Windows)
@@ -1674,14 +1687,7 @@ class InMemoryUserState(UserState):
         return self.span_annotations
 
     def add_label_annotation(self, instance_id: str, label: Label, value: any) -> None:
-        # If this instance is assigned to the user, treat updates as instance
-        # annotations even if phase state has just advanced.
-        store_as_instance_annotation = (
-            self.current_phase_and_page[0] == UserPhase.ANNOTATION
-            or instance_id in self.assigned_instance_ids
-        )
-
-        if store_as_instance_annotation:
+        if self.current_phase_and_page[0] == UserPhase.ANNOTATION:
             self.instance_id_to_label_to_value[instance_id][label] = value
         else:
             self.phase_to_page_to_label_to_value[self.current_phase_and_page[0]][self.current_phase_and_page[1]][label] = value
@@ -1691,12 +1697,7 @@ class InMemoryUserState(UserState):
         '''Adds a set of span annotations to the instance or if the user is not
            in the annotation phase, to the page associated with the current phase'''
 
-        store_as_instance_annotation = (
-            self.current_phase_and_page[0] == UserPhase.ANNOTATION
-            or instance_id in self.assigned_instance_ids
-        )
-
-        if store_as_instance_annotation:
+        if self.current_phase_and_page[0] == UserPhase.ANNOTATION:
             # Ensure the instance_id exists in the dictionary
             if instance_id not in self.instance_id_to_span_to_value:
                 self.instance_id_to_span_to_value[instance_id] = {}
@@ -2427,7 +2428,7 @@ class InMemoryUserState(UserState):
         fd, temp_path = tempfile.mkstemp(dir=user_dir, suffix='.tmp')
         try:
             with os.fdopen(fd, 'wt', encoding='utf-8') as outf:
-                json.dump(user_state, outf, indent=2, ensure_ascii=False)
+                json.dump(user_state, outf, indent=2)
                 outf.flush()
                 os.fsync(outf.fileno())  # Ensure data is written to disk
             # Atomic rename (works on POSIX, best-effort on Windows)

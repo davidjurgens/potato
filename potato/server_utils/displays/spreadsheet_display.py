@@ -51,7 +51,7 @@ class SpreadsheetDisplay(BaseDisplay):
         "custom_css": None,          # Inline CSS styles for the table
     }
     description = "Spreadsheet/table display with row or cell annotation"
-    supports_span_target = True
+    supports_span_target = False  # No .text-content wrapper; table data not compatible with span offsets
 
     # Valid values for style options
     VALID_BORDER_STYLES = ["default", "bordered", "minimal", "rounded", "none"]

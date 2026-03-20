@@ -155,6 +155,46 @@ class AnnotationChange:
 
 
 @dataclass
+class ChatMessage:
+    """
+    A single chat message between an annotator and the LLM assistant.
+
+    Attributes:
+        role: 'user' or 'assistant'
+        content: The message text
+        timestamp: Unix timestamp when the message was sent/received
+        instance_id: The annotation instance this message relates to
+        response_time_ms: Milliseconds for the LLM to respond (assistant messages only)
+    """
+    role: str
+    content: str
+    timestamp: float
+    instance_id: str
+    response_time_ms: Optional[int] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            'role': self.role,
+            'content': self.content,
+            'timestamp': self.timestamp,
+            'instance_id': self.instance_id,
+            'response_time_ms': self.response_time_ms,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'ChatMessage':
+        """Reconstruct from serialized dictionary."""
+        return cls(
+            role=data.get('role', ''),
+            content=data.get('content', ''),
+            timestamp=data.get('timestamp', 0),
+            instance_id=data.get('instance_id', ''),
+            response_time_ms=data.get('response_time_ms'),
+        )
+
+
+@dataclass
 class BehavioralData:
     """
     Complete behavioral data for an annotation instance session.
@@ -186,6 +226,7 @@ class BehavioralData:
     focus_time_by_element: Dict[str, int] = field(default_factory=dict)
     scroll_depth_max: float = 0.0
     keyword_highlights_shown: List[Dict[str, Any]] = field(default_factory=list)
+    chat_history: List[ChatMessage] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -210,6 +251,10 @@ class BehavioralData:
             'focus_time_by_element': self.focus_time_by_element,
             'scroll_depth_max': self.scroll_depth_max,
             'keyword_highlights_shown': self.keyword_highlights_shown,
+            'chat_history': [
+                e.to_dict() if hasattr(e, 'to_dict') else e
+                for e in self.chat_history
+            ],
         }
 
     @classmethod
@@ -249,6 +294,13 @@ class BehavioralData:
         bd.focus_time_by_element = data.get('focus_time_by_element', {})
         bd.scroll_depth_max = data.get('scroll_depth_max', 0.0)
         bd.keyword_highlights_shown = data.get('keyword_highlights_shown', [])
+
+        # Reconstruct chat history
+        chat_history = data.get('chat_history', [])
+        bd.chat_history = [
+            ChatMessage.from_dict(e) if isinstance(e, dict) else e
+            for e in chat_history
+        ]
 
         return bd
 

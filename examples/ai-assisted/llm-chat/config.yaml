@@ -1,0 +1,50 @@
+# LLM Chat Support Example
+#
+# Demonstrates the chat sidebar where annotators can ask an LLM
+# questions about the current annotation instance.
+#
+# Prerequisites:
+#   - Ollama installed and running: ollama serve
+#   - Model pulled: ollama pull llama3.2
+#
+# Run from repo root:
+#   python potato/flask_server.py start examples/ai-assisted/llm-chat/config.yaml -p 8000
+
+annotation_task_name: "Sentiment Classification with Chat Support"
+annotation_task_description: "Classify the sentiment of each text as positive, negative, neutral, or mixed. Use the chat assistant if you need help thinking through ambiguous cases."
+
+data_files:
+  - type: json
+    path: examples/ai-assisted/llm-chat/data/sentiment-data.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+user_config:
+  allow_all_users: true
+
+annotation_schemes:
+  - annotation_type: radio
+    name: sentiment
+    description: "What is the overall sentiment of this text?"
+    labels:
+      - name: Positive
+        tooltip: "The text expresses a clearly positive opinion or emotion"
+      - name: Negative
+        tooltip: "The text expresses a clearly negative opinion or emotion"
+      - name: Neutral
+        tooltip: "The text is factual or does not express a strong opinion"
+      - name: Mixed
+        tooltip: "The text contains both positive and negative sentiments"
+
+# Chat Support Configuration
+chat_support:
+  enabled: true
+  endpoint_type: ollama
+  ai_config:
+    model: llama3.2
+    temperature: 0.7
+    max_tokens: 500
+
+task_dir: .

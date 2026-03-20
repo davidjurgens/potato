@@ -228,6 +228,73 @@ class BaseAIEndpoint(ABC):
         """
         pass
 
+    def chat_query_with_image(
+        self,
+        messages: List[Dict[str, Any]],
+        images: Optional[List["ImageData"]] = None,
+    ) -> str:
+        """
+        Send a multi-turn chat with interleaved images to the AI model.
+
+        Messages may contain content blocks (text + image) instead of plain strings.
+        Used by the live agent runner for vision-based agent loops.
+
+        Default implementation raises NotImplementedError — only vision-capable
+        endpoints should override this.
+
+        Args:
+            messages: List of message dicts. 'content' may be a string or a list
+                      of content blocks (e.g., {"type": "text", "text": "..."} or
+                      {"type": "image", "source": {...}}).
+            images: Optional list of ImageData to include (alternative to inline images).
+
+        Returns:
+            The model's response as a plain text string.
+
+        Raises:
+            NotImplementedError: If the endpoint doesn't support vision.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not support chat_query_with_image. "
+            f"Use a vision-capable endpoint (e.g., anthropic_vision)."
+        )
+
+    def chat_query(self, messages: List[Dict[str, str]]) -> str:
+        """
+        Send a multi-turn chat conversation to the AI model.
+
+        Default implementation flattens messages into a single prompt and calls query().
+        Subclasses should override with native multi-turn support.
+
+        Args:
+            messages: List of message dicts with 'role' and 'content' keys.
+                      Roles: 'system', 'user', 'assistant'
+
+        Returns:
+            The model's response as a plain text string.
+        """
+        # Flatten messages into a single prompt
+        parts = []
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "system":
+                parts.append(f"System: {content}")
+            elif role == "assistant":
+                parts.append(f"Assistant: {content}")
+            else:
+                parts.append(f"User: {content}")
+        prompt = "\n\n".join(parts) + "\n\nAssistant:"
+
+        try:
+            result = self.query(prompt)
+            # query() may return parsed JSON or a string; ensure we return a string
+            if isinstance(result, dict):
+                return result.get("response", result.get("content", str(result)))
+            return str(result)
+        except Exception as e:
+            raise AIEndpointRequestError(f"Chat query failed: {e}")
+
     def parseStringToJson(self, response_content: str) -> str:
         """
         Parse the response content and extract JSON, handling markdown code blocks.

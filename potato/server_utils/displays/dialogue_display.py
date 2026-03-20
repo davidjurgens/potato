@@ -149,6 +149,20 @@ class DialogueDisplay(BaseDisplay):
         # Combine all turns
         all_turns_html = "\n".join(turn_html_list)
 
+        # For span annotation, wrap in .text-content WITHOUT data-original-text.
+        # Dialogue DOM textContent (with turn numbers, speaker prefixes, whitespace)
+        # differs from concatenate_dialogue_text() output.  By omitting the attribute,
+        # getCanonicalText() falls back to container.textContent, so offsets from
+        # selection and from canonicalText always agree.
+        if is_span_target:
+            escaped_key = html.escape(field_key, quote=True)
+            all_turns_html = (
+                f'<div class="text-content" id="text-content-{escaped_key}"'
+                f' style="position: relative; padding-top: 24px;">'
+                f'{all_turns_html}'
+                f'</div>'
+            )
+
         # Hidden inputs for storing per-turn rating data (one per scheme)
         hidden_input_html = ""
         if per_turn_ratings and rating_schemes:

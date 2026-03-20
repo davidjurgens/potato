@@ -21,6 +21,10 @@ from selenium.webdriver.chrome.options import Options as ChromeOptions
 from tests.helpers.flask_test_setup import FlaskTestServer
 from tests.helpers.port_manager import find_free_port
 
+import pytest
+
+pytestmark = pytest.mark.core
+
 REPO_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..")
 )

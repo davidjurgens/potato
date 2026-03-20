@@ -129,12 +129,7 @@ class DisplayRegistry:
             inner_html = plugin.render(field_config, data)
             css_classes = plugin.get_css_classes(field_config)
             data_attrs = plugin.get_data_attributes(field_config, data)
-            # Check if plugin handles its own label
-            has_inline_label = (
-                hasattr(plugin, 'has_inline_label') and
-                plugin.has_inline_label(field_config)
-            )
-            label = None if has_inline_label else field_config.get("label")
+            label = None if plugin.has_inline_label(field_config) else field_config.get("label")
             return render_display_container(inner_html, css_classes, data_attrs, label)
 
         # Check built-in displays
@@ -147,12 +142,7 @@ class DisplayRegistry:
                 inner_html = renderer.render(field_config, data)
                 css_classes = renderer.get_css_classes(field_config)
                 data_attrs = renderer.get_data_attributes(field_config, data)
-                # Check if display handles its own label (e.g., collapsible text)
-                has_inline_label = (
-                    hasattr(renderer, 'has_inline_label') and
-                    renderer.has_inline_label(field_config)
-                )
-                label = None if has_inline_label else field_config.get("label")
+                label = None if renderer.has_inline_label(field_config) else field_config.get("label")
                 return render_display_container(inner_html, css_classes, data_attrs, label)
 
             # Handle callable renderers
@@ -194,6 +184,38 @@ class DisplayRegistry:
                     )
 
         return errors
+
+    def type_supports_span_target(self, field_type: str) -> bool:
+        """
+        Check if a display type supports span annotation.
+
+        Args:
+            field_type: The display type name
+
+        Returns:
+            True if the display type supports span_target
+        """
+        if field_type in self._plugins:
+            return self._plugins[field_type].supports_span_target
+        if field_type in self._displays:
+            display = self._displays[field_type]
+            if isinstance(display.renderer, BaseDisplay):
+                return display.renderer.supports_span_target
+            return display.supports_span_target
+        return False
+
+    def get_span_target_types(self) -> List[str]:
+        """
+        Get all display type names that support span annotation.
+
+        Returns:
+            List of type names where supports_span_target is True
+        """
+        types = []
+        for name in self.get_supported_types():
+            if self.type_supports_span_target(name):
+                types.append(name)
+        return sorted(types)
 
     def list_displays(self) -> List[Dict[str, Any]]:
         """
@@ -291,6 +313,7 @@ def _register_builtin_displays():
     from .gallery_display import GalleryDisplay
     from .interactive_chat_display import InteractiveChatDisplay
     from .web_agent_trace_display import WebAgentTraceDisplay
+    from .live_agent_display import LiveAgentDisplay
 
     displays = [
         DisplayDefinition(
@@ -394,7 +417,7 @@ def _register_builtin_displays():
                 "initial_page": 1,
                 "zoom": "auto",
             },
-            supports_span_target=True,
+            supports_span_target=False,
             description="PDF document display with PDF.js rendering"
         ),
         DisplayDefinition(
@@ -426,7 +449,7 @@ def _register_builtin_displays():
                 "selectable": True,
                 "compact": False,
             },
-            supports_span_target=True,
+            supports_span_target=False,
             description="Spreadsheet/table display with row or cell annotation"
         ),
         DisplayDefinition(
@@ -473,7 +496,7 @@ def _register_builtin_displays():
                 "show_summary": True,
                 "compact": False,
             },
-            supports_span_target=True,
+            supports_span_target=False,
             description="Agent trace display with step cards and type badges"
         ),
         DisplayDefinition(
@@ -514,9 +537,29 @@ def _register_builtin_displays():
                 "screenshot_max_width": 800,
                 "screenshot_max_height": 600,
                 "filmstrip_size": 80,
+                "auto_playback": False,
+                "playback_step_delay": 2.0,
             },
             supports_span_target=False,
             description="Web agent trace viewer with screenshots, SVG overlays, and step navigation"
+        ),
+        DisplayDefinition(
+            name="live_agent",
+            renderer=LiveAgentDisplay(),
+            required_fields=["key"],
+            optional_fields={
+                "show_overlays": True,
+                "show_filmstrip": True,
+                "show_thought": True,
+                "show_controls": True,
+                "allow_takeover": True,
+                "allow_instructions": True,
+                "screenshot_max_width": 900,
+                "screenshot_max_height": 650,
+                "filmstrip_size": 80,
+            },
+            supports_span_target=False,
+            description="Live AI agent viewer with real-time screenshots, controls, and interaction"
         ),
     ]
 

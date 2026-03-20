@@ -4,6 +4,7 @@ OpenAI AI endpoint implementation.
 This module provides integration with OpenAI's API for LLM inference.
 """
 
+from typing import Dict, List
 from openai import OpenAI
 from .ai_endpoint import BaseAIEndpoint, AIEndpointRequestError, ModelCapabilities
 
@@ -62,4 +63,17 @@ class OpenAIEndpoint(BaseAIEndpoint):
             return response.choices[0].message.content
         except Exception as e:
             raise AIEndpointRequestError(f"OpenAI request failed: {e}")
+
+    def chat_query(self, messages: List[Dict[str, str]]) -> str:
+        """Send a multi-turn chat to OpenAI using native messages API."""
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                max_tokens=self.max_tokens,
+                temperature=self.temperature,
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            raise AIEndpointRequestError(f"OpenAI chat request failed: {e}")
 

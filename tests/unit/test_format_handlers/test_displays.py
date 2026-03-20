@@ -23,8 +23,8 @@ class TestPDFDisplay:
         assert display.name == "pdf"
 
     def test_supports_span_target(self, display):
-        """Test span target support."""
-        assert display.supports_span_target is True
+        """PDF uses PDF.js text layer, not the .text-content wrapper contract."""
+        assert display.supports_span_target is False
 
     def test_render_file_path(self, display):
         """Test rendering with file path."""
@@ -295,8 +295,8 @@ class TestSpreadsheetDisplay:
         assert display.name == "spreadsheet"
 
     def test_supports_span_target(self, display):
-        """Test span target support."""
-        assert display.supports_span_target is True
+        """Spreadsheet doesn't implement .text-content wrapper contract."""
+        assert display.supports_span_target is False
 
     def test_render_list_of_lists(self, display):
         """Test rendering with list of lists data."""

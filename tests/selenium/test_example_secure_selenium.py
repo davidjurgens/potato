@@ -104,7 +104,7 @@ class TestSecureSeleniumPatterns(BaseSeleniumTest):
         time.sleep(0.1)
 
         # Check that the span overlay exists and contains the correct text
-        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
         self.assertGreater(len(span_overlays), 0, "No span overlays found")
 
         # Get the text content of the overlay
@@ -169,7 +169,7 @@ class TestSecureSeleniumPatterns(BaseSeleniumTest):
         time.sleep(0.1)
 
         # Get the initial overlay position
-        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
         self.assertGreater(len(span_overlays), 0, "No span overlays found")
 
         initial_overlay = span_overlays[0]
@@ -180,21 +180,21 @@ class TestSecureSeleniumPatterns(BaseSeleniumTest):
         print(f"Initial overlay position: {initial_rect}")
 
         # Navigate to the next instance
-        next_button = self.wait_for_element(By.ID, "next-button")
+        next_button = self.wait_for_element(By.ID, "next-btn")
         next_button.click()
 
         # Wait for navigation to complete
-        time.sleep(0.1)
+        time.sleep(1.0)
 
         # Navigate back to the first instance
-        prev_button = self.wait_for_element(By.ID, "prev-button")
+        prev_button = self.wait_for_element(By.ID, "prev-btn")
         prev_button.click()
 
         # Wait for navigation to complete
         time.sleep(0.1)
 
         # Check that the span overlay still exists and has the correct text
-        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
         self.assertGreater(len(span_overlays), 0, "No span overlays found after navigation")
 
         final_overlay = span_overlays[0]
@@ -280,7 +280,7 @@ class TestSecureSeleniumPatterns(BaseSeleniumTest):
             time.sleep(0.1)
 
             # Store overlay info
-            span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+            span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
             if span_overlays:
                 latest_overlay = span_overlays[-1]  # Get the most recent overlay
                 created_overlays.append({
@@ -414,45 +414,47 @@ class TestCustomSeleniumConfig(BaseSeleniumTest):
             self.driver.quit()
 
     def register_user(self):
-        """Register a test user."""
-        self.driver.get(f"{self.server.base_url}/register")
+        """Register a test user via simple login (require_password=False)."""
+        self.driver.get(f"{self.server.base_url}/")
 
         # Generate unique username
-        import time
-        username = f"test_user_{int(time.time())}"
+        import time as _time
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+        from selenium.common.exceptions import NoSuchElementException
+
+        username = f"test_user_{int(_time.time())}"
         self.test_user = username
 
-        # Fill registration form
-        email_field = self.driver.find_element(By.NAME, "email")
-        password_field = self.driver.find_element(By.NAME, "pass")
+        WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.ID, "login-email"))
+        )
 
-        email_field.send_keys(username)
-        password_field.send_keys("test_password")
+        # Handle both auth modes
+        try:
+            self.driver.find_element(By.ID, "login-tab")
+            # Password mode - switch to register tab
+            register_tab = self.driver.find_element(By.ID, "register-tab")
+            register_tab.click()
+            WebDriverWait(self.driver, 5).until(
+                EC.visibility_of_element_located((By.ID, "register-content"))
+            )
+            self.driver.find_element(By.ID, "register-email").send_keys(username)
+            self.driver.find_element(By.ID, "register-pass").send_keys("test_password")
+            self.driver.find_element(By.CSS_SELECTOR, "#register-content form").submit()
+        except NoSuchElementException:
+            # Simple mode - just enter username
+            username_field = self.driver.find_element(By.ID, "login-email")
+            username_field.clear()
+            username_field.send_keys(username)
+            self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']").click()
 
-        # Submit registration
-        register_button = self.driver.find_element(By.ID, "register-button")
-        register_button.click()
-
-        # Wait for registration to complete
-        time.sleep(0.05)
+        _time.sleep(0.5)
 
     def login_user(self):
-        """Login the test user."""
-        self.driver.get(f"{self.server.base_url}/auth")
-
-        # Fill login form
-        email_field = self.driver.find_element(By.NAME, "email")
-        password_field = self.driver.find_element(By.NAME, "pass")
-
-        email_field.send_keys(self.test_user)
-        password_field.send_keys("test_password")
-
-        # Submit login
-        login_button = self.driver.find_element(By.ID, "login-button")
-        login_button.click()
-
-        # Wait for login to complete
-        time.sleep(0.05)
+        """Login the test user - already logged in after registration."""
+        # After register_user, user should already be logged in
+        pass
 
     def test_custom_span_annotation(self):
         """Test custom span annotation functionality."""
@@ -509,7 +511,7 @@ class TestCustomSeleniumConfig(BaseSeleniumTest):
         time.sleep(0.1)
 
         # Verify overlay was created
-        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay")
+        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
         self.assertGreater(len(span_overlays), 0, "No span overlays found")
 
         overlay_text = span_overlays[0].text.strip()

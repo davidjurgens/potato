@@ -37,11 +37,11 @@ class TestGetDisplayedTextString:
         assert result == "Hello world"
 
     def test_string_tabs_removed(self, mock_config):
-        """Tabs (non-printable) are removed by the normalization regex."""
+        """Tabs (control characters) are removed by the normalization regex."""
         from potato.flask_server import get_displayed_text
 
         result = get_displayed_text("Hello\tworld")
-        # Tabs are outside the printable range (0x20-0x7E) so they're removed
+        # Tabs are control characters so they're removed, spaces collapsed
         assert result == "Helloworld"
 
     def test_string_stripped(self, mock_config):
@@ -327,6 +327,86 @@ class TestGetDisplayedTextDialogueFeatures:
         assert "<b>B.</b>" in result
         assert "dialogue-turn-even" in result
         assert "dialogue-turn-odd" in result
+
+
+class TestGetDisplayedTextUnicode:
+    """Test that get_displayed_text preserves Unicode characters (issue #114)."""
+
+    @pytest.fixture(autouse=True)
+    def mock_config(self):
+        """Mock the config module for testing."""
+        mock_config = MagicMock()
+        mock_config.get.return_value = {}
+        with patch('potato.flask_server.config', mock_config):
+            yield mock_config
+
+    def test_german_umlauts_preserved(self, mock_config):
+        """German umlauts (ü, ä, ö) should not be stripped."""
+        from potato.flask_server import get_displayed_text
+
+        result = get_displayed_text("Gute Frage. Aber bei den Grünen ist jeder so.")
+        assert "Grünen" in result
+
+    def test_french_accents_preserved(self, mock_config):
+        """French accented characters should be preserved."""
+        from potato.flask_server import get_displayed_text
+
+        result = get_displayed_text("résumé café naïve")
+        assert "résumé" in result
+        assert "café" in result
+        assert "naïve" in result
+
+    def test_chinese_characters_preserved(self, mock_config):
+        """Chinese characters should be preserved."""
+        from potato.flask_server import get_displayed_text
+
+        result = get_displayed_text("这是一个测试")
+        assert "这是一个测试" in result
+
+    def test_arabic_characters_preserved(self, mock_config):
+        """Arabic characters should be preserved."""
+        from potato.flask_server import get_displayed_text
+
+        result = get_displayed_text("مرحبا بالعالم")
+        assert "مرحبا" in result
+
+    def test_emoji_preserved(self, mock_config):
+        """Emoji characters should be preserved."""
+        from potato.flask_server import get_displayed_text
+
+        result = get_displayed_text("Hello 👋 world")
+        assert "👋" in result
+
+    def test_mixed_unicode_and_ascii(self, mock_config):
+        """Mixed Unicode and ASCII text should be fully preserved."""
+        from potato.flask_server import get_displayed_text
+
+        text = "Der König möchte über die Brücke gehen"
+        result = get_displayed_text(text)
+        assert "König" in result
+        assert "möchte" in result
+        assert "über" in result
+        assert "Brücke" in result
+
+    def test_control_characters_still_removed(self, mock_config):
+        """Control characters (not Unicode) should still be removed."""
+        from potato.flask_server import get_displayed_text
+
+        result = get_displayed_text("Hello\x00\x01\x02world")
+        assert result == "Helloworld"
+
+    def test_unicode_in_list_items_preserved(self, mock_config):
+        """Unicode in list items should be preserved."""
+        mock_config.get.side_effect = lambda key, default=None: {
+            "list_as_text": {},
+            "highlight_linebreaks": False
+        }.get(key, default)
+
+        from potato.flask_server import get_displayed_text
+
+        result = get_displayed_text(["Grüße", "café"])
+        assert "Grüße" in result
+        assert "café" in result
 
 
 class TestGetDisplayedTextEdgeCases:

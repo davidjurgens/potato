@@ -1,0 +1,96 @@
+admin_api_key: test-admin-api-key
+annotation_schemes:
+- annotation_type: radio
+  description: Did the agent complete the task?
+  display_config:
+    style: vertical
+  labels:
+  - name: Fully completed
+    tooltip: The agent successfully completed the task
+  - name: Partially completed
+    tooltip: The agent made progress but didn't finish
+  - name: Not completed
+    tooltip: The agent failed to make meaningful progress
+  name: task_completion
+- annotation_type: radio
+  description: How efficient was the agent's approach?
+  labels:
+  - name: Very efficient
+    tooltip: Minimal unnecessary steps
+  - name: Somewhat efficient
+    tooltip: Some unnecessary steps but generally on track
+  - name: Inefficient
+    tooltip: Many unnecessary steps or wrong approaches
+  name: efficiency
+- annotation_type: radio
+  description: Did you need to intervene (instruct or take over)?
+  labels:
+  - name: No intervention needed
+  - name: Gave instructions only
+  - name: Had to take over
+  name: needed_intervention
+- annotation_type: text
+  description: Additional notes about the agent's performance
+  name: notes
+annotation_task_name: Live Agent Evaluation
+data_files:
+- path: data/tasks.json
+  type: json
+debug: false
+host: 0.0.0.0
+instance_display:
+  fields:
+  - key: task_description
+    label: Task
+    type: text
+  - key: start_url
+    label: Starting URL
+    type: text
+  - display_options:
+      allow_instructions: true
+      allow_takeover: true
+      show_controls: true
+      show_filmstrip: true
+      show_overlays: true
+      show_thought: true
+    key: agent_trace
+    label: Live Agent Session
+    type: live_agent
+item_properties:
+  id_key: id
+  text_key: task_description
+live_agent:
+  ai_config:
+    base_url: http://localhost:11434
+    max_tokens: 1024
+    model: gemma3:4b
+    temperature: 0.3
+    timeout: 120
+  allow_instructions: true
+  allow_takeover: true
+  endpoint_type: ollama_vision
+  max_steps: 30
+  step_delay: 1.0
+  system_prompt: "You are a web browsing agent. You can see screenshots of web pages\
+    \ and take actions to complete tasks.\n\nFor each step, analyze the current screenshot\
+    \ and respond with a JSON object:\n{\n  \"thought\": \"Your reasoning about what\
+    \ you see and what to do next\",\n  \"action\": {\n    \"type\": \"click|type|scroll|navigate|wait|done\"\
+    ,\n    // For click: \"x\": 100, \"y\": 200\n    // For type: \"text\": \"hello\
+    \ world\"\n    // For scroll: \"direction\": \"up|down\", \"amount\": 300\n  \
+    \  // For navigate: \"url\": \"https://...\"\n    // For wait: (no extra fields)\n\
+    \    // For done: \"summary\": \"Task completed because...\"\n  }\n}\n\nAlways\
+    \ respond with valid JSON only. No markdown, no extra text.\n"
+  viewport:
+    height: 720
+    width: 1280
+output_annotation_dir: annotation_output
+output_annotation_format: json
+persist_sessions: false
+port: 9499
+random_seed: 1234
+require_password: false
+secret_key: test-secret-key
+session_lifetime_days: 2
+task_dir: .
+user_config:
+  allow_all_users: true

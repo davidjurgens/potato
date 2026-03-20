@@ -271,6 +271,7 @@ class AdminDashboard:
                             "phase": timing_data.phase,
                             "has_assignments": timing_data.has_assignments,
                             "remaining_assignments": timing_data.remaining_assignments,
+                            "max_assignments": user_state.get_max_assignments(),
                             "last_activity": timing_data.last_activity.isoformat() if timing_data.last_activity else None,
                             "current_instance_time": timing_data.current_instance_time,
 
@@ -591,14 +592,12 @@ class AdminDashboard:
             annotation_schemes = config.get("annotation_schemes", [])
             questions_data = []
 
-            # Get all users to collect their annotations
             users = get_users()
 
             for scheme in annotation_schemes:
                 scheme_name = scheme.get("name", "Unknown")
                 annotation_type = scheme.get("annotation_type", "unknown")
 
-                # Collect all annotations for this scheme
                 all_annotations = []
                 item_annotations = {}
 
@@ -609,10 +608,8 @@ class AdminDashboard:
                     for username in users:
                         user_state = get_user_state_manager().get_user_state(username)
                         if user_state:
-                            # Get label annotations for this user and item
                             label_annotations = user_state.get_label_annotations(item_id)
                             for label, value in label_annotations.items():
-                                # Label object has .schema and .name attributes (or .get_schema()/.get_name() methods)
                                 label_schema = None
                                 label_name = None
                                 if hasattr(label, 'get_schema'):
@@ -625,15 +622,23 @@ class AdminDashboard:
                                     label_schema = label
 
                                 if label_schema == scheme_name:
-                                    # For radio/select, the actual selected label is the Label's name
-                                    if label_name:
-                                        all_annotations.append(label_name)
-                                        item_annotations[item_id].append(label_name)
-                                    else:
-                                        all_annotations.append(value)
-                                        item_annotations[item_id].append(value)
+                                    normalized_value = label_name if label_name else value
 
-                # Generate analysis based on annotation type
+                                    if annotation_type in ["radio", "select"]:
+                                        normalized_value = self._normalize_categorical_value(normalized_value)
+                                    elif annotation_type == "multiselect" and isinstance(normalized_value, list):
+                                        normalized_value = [
+                                            normalized_label
+                                            for normalized_label in (
+                                                self._normalize_categorical_value(v) for v in normalized_value
+                                            )
+                                            if normalized_label is not None
+                                        ]
+
+                                    if normalized_value is not None:
+                                        all_annotations.append(normalized_value)
+                                        item_annotations[item_id].append(normalized_value)
+
                 analysis = self._analyze_annotation_scheme(
                     annotation_type, scheme, all_annotations, item_annotations
                 )
@@ -674,22 +679,33 @@ class AdminDashboard:
         }
 
         if annotation_type in ["radio", "select"]:
-            # Categorical data - show histogram
-            label_counts = Counter(all_annotations)
-            labels = scheme.get("labels", [])
+            normalized_annotations = [
+                normalized for normalized in
+                (self._normalize_categorical_value(annotation) for annotation in all_annotations)
+                if normalized is not None
+            ]
+            if not normalized_annotations:
+                return {"error": "No annotations found"}
+
+            label_counts = Counter(normalized_annotations)
+            raw_labels = scheme.get("labels", [])
+            labels = [
+                normalized for normalized in
+                (self._normalize_categorical_value(label) for label in raw_labels)
+                if normalized is not None
+            ]
 
             analysis.update({
                 "visualization_type": "histogram",
                 "data": {
                     "labels": labels,
                     "counts": [label_counts.get(label, 0) for label in labels],
-                    "percentages": [round(label_counts.get(label, 0) / len(all_annotations) * 100, 1)
+                    "percentages": [round(label_counts.get(label, 0) / len(normalized_annotations) * 100, 1)
                                   for label in labels]
                 },
                 "most_common": label_counts.most_common(1)[0] if label_counts else None,
                 "agreement_score": self._calculate_agreement_score(item_annotations)
             })
-
         elif annotation_type == "multiselect":
             # Multi-label data - show label frequency and co-occurrence
             label_counts = Counter()
@@ -997,16 +1013,52 @@ class AdminDashboard:
         except Exception as e:
             self.logger.error(f"Error getting timing data for user {user_id}: {e}")
             return None
-    
-    def _calculate_total_instance_ai(self, instance_id: str) -> Tuple[Optional[str], float]:
+
+    def _extract_behavioral_total_seconds(self, behavioral_data: Any, user_state=None) -> Optional[float]:
+        """Extract total annotation time in seconds from behavioral data objects or legacy dicts."""
+        if not behavioral_data:
+            return None
+
+        if hasattr(behavioral_data, 'total_time_ms') and behavioral_data.total_time_ms is not None:
+            return behavioral_data.total_time_ms / 1000.0
+
+        if isinstance(behavioral_data, dict):
+            total_time_ms = behavioral_data.get("total_time_ms")
+            if total_time_ms is not None:
+                return total_time_ms / 1000.0
+
+            time_string = behavioral_data.get("time_string")
+            if time_string and user_state and hasattr(user_state, 'parse_time_string'):
+                parsed_time = user_state.parse_time_string(time_string)
+                if parsed_time:
+                    return parsed_time.get("total_seconds")
+
+        return None
+
+    def _extract_behavioral_ai_count(self, behavioral_data: Any) -> int:
+        """Extract AI usage count from behavioral data objects or legacy dicts."""
+        if not behavioral_data:
+            return 0
+
+        if hasattr(behavioral_data, 'ai_usage'):
+            ai_usage = behavioral_data.ai_usage or []
+            return len(ai_usage)
+
+        if isinstance(behavioral_data, dict):
+            ai_usage = behavioral_data.get("ai_usage", []) or []
+            return len(ai_usage)
+
+        return 0
+
+    def _calculate_total_instance_ai(self, instance_id: str) -> int:
         """
-        Calculate most frequent label and disagreement for an instance.
+        Calculate total AI assistance events for an instance across all users.
 
         Args:
             instance_id: The instance ID to analyze
 
         Returns:
-            Tuple of (most_frequent_label, disagreement_score)
+            Total number of AI usage events recorded for the instance
         """
         try:
             usm = get_user_state_manager()
@@ -1015,60 +1067,17 @@ class AdminDashboard:
             total_ai = 0
             for username in users:
                 user_state = usm.get_user_state(username)
-                if user_state:
-                    total_ai += user_state.get_page_total_ai(instance_id.replace("item_", ""))
+                if not user_state:
+                    continue
+
+                behavioral_data = user_state.instance_id_to_behavioral_data.get(instance_id)
+                total_ai += self._extract_behavioral_ai_count(behavioral_data)
 
             return total_ai
 
         except Exception as e:
-            self.logger.error(f"Error calculating label statistics for instance {instance_id}: {e}")
-            return None, 0.0
-
-    def _calculate_label_statistics(self, instance_id: str) -> Tuple[Optional[str], float]:
-        """
-        Calculate most frequent label and disagreement for an instance.
-
-        Args:
-            instance_id: The instance ID to analyze
-
-        Returns:
-            Tuple of (most_frequent_label, disagreement_score)
-        """
-        try:
-            usm = get_user_state_manager()
-            users = get_users()
-
-            all_labels = []
-            for username in users:
-                user_state = usm.get_user_state(username)
-                if user_state:
-                    annotations = user_state.get_all_annotations()
-                    if instance_id in annotations:
-                        instance_annotations = annotations[instance_id]
-                        if "labels" in instance_annotations:
-                            for label, value in instance_annotations["labels"].items():
-                                if hasattr(label, 'label_name'):
-                                    all_labels.append(label.label_name)
-                                else:
-                                    all_labels.append(str(value))
-
-            if not all_labels:
-                return None, 0.0
-
-            # Calculate most frequent label
-            label_counts = Counter(all_labels)
-            most_frequent_label = label_counts.most_common(1)[0][0]
-
-            # Calculate disagreement (1 - proportion of most frequent label)
-            total_annotations = len(all_labels)
-            most_frequent_count = label_counts[most_frequent_label]
-            disagreement = 1 - (most_frequent_count / total_annotations)
-
-            return most_frequent_label, disagreement
-
-        except Exception as e:
-            self.logger.error(f"Error calculating label statistics for instance {instance_id}: {e}")
-            return None, 0.0
+            self.logger.error(f"Error calculating AI statistics for instance {instance_id}: {e}")
+            return 0
 
     def _calculate_average_time_per_annotation(self, instance_id: str) -> Optional[float]:
         """
@@ -1090,13 +1099,11 @@ class AdminDashboard:
             for username in users:
                 user_state = usm.get_user_state(username)
                 if user_state:
-                    behavioral_data = user_state.instance_id_to_behavioral_data.get(instance_id, {})
-                    time_string = behavioral_data.get("time_string")
-                    if time_string:
-                        parsed_time = user_state.parse_time_string(time_string)
-                        if parsed_time:
-                            total_time += parsed_time["total_seconds"]
-                            annotation_count += 1
+                    behavioral_data = user_state.instance_id_to_behavioral_data.get(instance_id)
+                    total_seconds = self._extract_behavioral_total_seconds(behavioral_data, user_state)
+                    if total_seconds is not None:
+                        total_time += total_seconds
+                        annotation_count += 1
 
             return total_time / annotation_count if annotation_count > 0 else None
 
@@ -1560,6 +1567,26 @@ class AdminDashboard:
             return str(value).lower()
         return str(value)
 
+    def _normalize_categorical_value(self, value: Any) -> Optional[str]:
+        """Normalize categorical annotation values and label definitions into readable strings."""
+        if value is None:
+            return None
+
+        if isinstance(value, str):
+            return value
+
+        if isinstance(value, dict):
+            for key in ("name", "label", "value", "id", "text"):
+                candidate = value.get(key)
+                if isinstance(candidate, str) and candidate:
+                    return candidate
+            return json.dumps(value, sort_keys=True)
+
+        if isinstance(value, (int, float, bool)):
+            return str(value)
+
+        return str(value)
+
     def get_quality_control_data(self) -> Dict[str, Any]:
         """
         Get quality control metrics (attention checks, gold standards, pre-annotation).
@@ -1589,6 +1616,22 @@ class AdminDashboard:
             self.logger.error(f"Error getting quality control data: {e}")
             return {"error": f"Failed to get quality control data: {str(e)}"}, 500
 
+    def _behavioral_sequence(self, value: Any) -> list:
+        """Normalize behavioral list-like values to a safe list."""
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return value
+        if isinstance(value, tuple):
+            return list(value)
+        return [value]
+
+    def _behavioral_field(self, payload: Any, field_name: str, default: Any = None) -> Any:
+        """Read a field from either a dict or an object used in behavioral analytics."""
+        if isinstance(payload, dict):
+            return payload.get(field_name, default)
+        return getattr(payload, field_name, default)
+
     def get_behavioral_analytics_data(self) -> Dict[str, Any]:
         """
         Get comprehensive behavioral analytics data for all annotators.
@@ -1607,12 +1650,17 @@ class AdminDashboard:
             usm = get_user_state_manager()
             users = get_users()
 
-            # Collect behavioral data from all users
             user_stats = []
             ai_usage_total = {'requests': 0, 'accepts': 0, 'rejects': 0, 'decision_times': []}
             all_times = []
             interaction_counts = Counter()
             change_sources = Counter()
+            total_interactions = 0
+            total_changes = 0
+            total_ai_requests = 0
+            users_with_fast_annotations = 0
+            users_with_low_interaction = 0
+            users_with_no_changes = 0
 
             for user_id in users:
                 user_state = usm.get_user_state(user_id)
@@ -1623,7 +1671,6 @@ class AdminDashboard:
                 if not behavioral_data:
                     continue
 
-                # Per-user metrics
                 user_times = []
                 user_interactions = 0
                 user_changes = 0
@@ -1632,14 +1679,10 @@ class AdminDashboard:
                 user_fast_count = 0
                 user_low_interaction_count = 0
                 user_no_scroll_count = 0
+                user_no_change_count = 0
 
                 for instance_id, bd in behavioral_data.items():
-                    # Handle both BehavioralData objects and dicts
-                    if hasattr(bd, 'to_dict'):
-                        bd = bd.to_dict()
-
-                    # Time
-                    time_ms = bd.get('total_time_ms', 0)
+                    time_ms = self._behavioral_field(bd, 'total_time_ms', 0) or 0
                     time_sec = time_ms / 1000
                     user_times.append(time_sec)
                     all_times.append(time_sec)
@@ -1647,52 +1690,61 @@ class AdminDashboard:
                     if time_sec < 5:
                         user_fast_count += 1
 
-                    # Interactions
-                    interactions = bd.get('interactions', [])
+                    interactions = self._behavioral_sequence(self._behavioral_field(bd, 'interactions', []))
                     user_interactions += len(interactions)
+                    total_interactions += len(interactions)
                     if len(interactions) < 3:
                         user_low_interaction_count += 1
 
                     for event in interactions:
-                        event_type = event.get('event_type') if isinstance(event, dict) else getattr(event, 'event_type', 'unknown')
+                        event_type = self._behavioral_field(event, 'event_type', 'unknown')
                         interaction_counts[event_type] += 1
 
-                    # Scroll depth
-                    scroll = bd.get('scroll_depth_max', 0)
+                    scroll = self._behavioral_field(bd, 'scroll_depth_max', 0) or 0
                     if scroll < 25:
                         user_no_scroll_count += 1
 
-                    # Annotation changes
-                    changes = bd.get('annotation_changes', [])
+                    changes = self._behavioral_sequence(self._behavioral_field(bd, 'annotation_changes', []))
                     user_changes += len(changes)
+                    total_changes += len(changes)
+                    if len(changes) == 0:
+                        user_no_change_count += 1
 
                     for change in changes:
-                        source = change.get('source') if isinstance(change, dict) else getattr(change, 'source', 'user')
+                        source = self._behavioral_field(change, 'source', 'user')
                         change_sources[source] += 1
 
-                    # AI usage
-                    for ai in bd.get('ai_usage', []):
+                    ai_events = self._behavioral_sequence(self._behavioral_field(bd, 'ai_usage', []))
+                    for ai in ai_events:
                         user_ai_requests += 1
+                        total_ai_requests += 1
                         ai_usage_total['requests'] += 1
 
-                        accepted = ai.get('suggestion_accepted') if isinstance(ai, dict) else getattr(ai, 'suggestion_accepted', None)
+                        accepted = self._behavioral_field(ai, 'suggestion_accepted', None)
                         if accepted:
                             user_ai_accepts += 1
                             ai_usage_total['accepts'] += 1
                         else:
                             ai_usage_total['rejects'] += 1
 
-                        decision_time = ai.get('time_to_decision_ms') if isinstance(ai, dict) else getattr(ai, 'time_to_decision_ms', None)
-                        if decision_time:
+                        decision_time = self._behavioral_field(ai, 'time_to_decision_ms', None)
+                        if isinstance(decision_time, (int, float)):
                             ai_usage_total['decision_times'].append(decision_time)
 
                 total_instances = len(behavioral_data)
                 if total_instances > 0:
-                    # Calculate suspicion score
                     fast_rate = user_fast_count / total_instances
                     low_interaction_rate = user_low_interaction_count / total_instances
                     no_scroll_rate = user_no_scroll_count / total_instances
-                    suspicion_score = fast_rate * 0.3 + low_interaction_rate * 0.35 + no_scroll_rate * 0.35
+                    no_change_rate = user_no_change_count / total_instances
+                    suspicion_score = fast_rate * 0.3 + low_interaction_rate * 0.35 + no_scroll_rate * 0.2 + no_change_rate * 0.15
+
+                    if user_fast_count > 0:
+                        users_with_fast_annotations += 1
+                    if user_low_interaction_count > 0:
+                        users_with_low_interaction += 1
+                    if user_no_change_count > 0:
+                        users_with_no_changes += 1
 
                     user_stats.append({
                         'user_id': user_id,
@@ -1707,15 +1759,15 @@ class AdminDashboard:
                         'avg_changes': user_changes / total_instances,
                         'ai_requests': user_ai_requests,
                         'ai_accepts': user_ai_accepts,
-                        'ai_accept_rate': user_ai_accepts / user_ai_requests if user_ai_requests > 0 else None,
+                        'ai_accept_rate': (user_ai_accepts / user_ai_requests) if user_ai_requests > 0 else None,
                         'fast_annotation_rate': fast_rate,
                         'low_interaction_rate': low_interaction_rate,
                         'no_scroll_rate': no_scroll_rate,
+                        'no_change_rate': no_change_rate,
                         'suspicion_score': suspicion_score,
                         'quality_flag': 'SUSPICIOUS' if suspicion_score > 0.5 else 'WARNING' if suspicion_score > 0.3 else 'OK'
                     })
 
-            # Calculate aggregate statistics
             aggregate = {
                 'total_users_with_data': len(user_stats),
                 'total_instances': sum(u['total_instances'] for u in user_stats),
@@ -1723,28 +1775,40 @@ class AdminDashboard:
                 'avg_time_per_instance': sum(all_times) / len(all_times) if all_times else 0,
                 'median_time_per_instance': sorted(all_times)[len(all_times)//2] if all_times else 0,
             }
+            aggregate_stats = {
+                'total_users': len(user_stats),
+                'total_instances': aggregate['total_instances'],
+                'avg_time_per_instance_sec': aggregate['avg_time_per_instance'],
+                'total_interactions': total_interactions,
+                'total_changes': total_changes,
+                'total_ai_requests': total_ai_requests,
+            }
 
-            # AI usage summary
             ai_summary = {
                 'total_requests': ai_usage_total['requests'],
                 'total_accepts': ai_usage_total['accepts'],
                 'total_rejects': ai_usage_total['rejects'],
-                'accept_rate': ai_usage_total['accepts'] / ai_usage_total['requests'] if ai_usage_total['requests'] > 0 else 0,
-                'avg_decision_time_ms': sum(ai_usage_total['decision_times']) / len(ai_usage_total['decision_times']) if ai_usage_total['decision_times'] else None
+                'accept_rate': (ai_usage_total['accepts'] / ai_usage_total['requests']) if ai_usage_total['requests'] > 0 else 0,
+                'avg_decision_time_ms': sum(ai_usage_total['decision_times']) / len(ai_usage_total['decision_times']) if ai_usage_total['decision_times'] else 0
             }
 
-            # Quality summary
             flagged_users = [u for u in user_stats if u['quality_flag'] == 'SUSPICIOUS']
             warning_users = [u for u in user_stats if u['quality_flag'] == 'WARNING']
+            total_users_with_data = len(user_stats)
             quality_summary = {
                 'total_flagged': len(flagged_users),
                 'total_warnings': len(warning_users),
                 'flagged_user_ids': [u['user_id'] for u in flagged_users],
-                'warning_user_ids': [u['user_id'] for u in warning_users]
+                'warning_user_ids': [u['user_id'] for u in warning_users],
+                'high_suspicion_users': len(flagged_users),
+                'fast_annotation_rate': (users_with_fast_annotations / total_users_with_data) if total_users_with_data > 0 else 0,
+                'low_interaction_rate': (users_with_low_interaction / total_users_with_data) if total_users_with_data > 0 else 0,
+                'no_change_rate': (users_with_no_changes / total_users_with_data) if total_users_with_data > 0 else 0,
             }
 
             return {
                 'aggregate': aggregate,
+                'aggregate_stats': aggregate_stats,
                 'ai_usage': ai_summary,
                 'quality_summary': quality_summary,
                 'interaction_types': dict(interaction_counts.most_common(20)),
@@ -1885,6 +1949,49 @@ class AdminDashboard:
             return {"error": "MACE not configured"}
 
         return mace_mgr.get_predictions_for_schema(schema, instance_id)
+
+    def _calculate_label_statistics(self, instance_id: str) -> Tuple[Optional[str], float]:
+        """
+        Calculate most frequent label and disagreement for an instance.
+
+        Args:
+            instance_id: The instance ID to analyze
+
+        Returns:
+            Tuple of (most_frequent_label, disagreement_score)
+        """
+        try:
+            usm = get_user_state_manager()
+            users = get_users()
+
+            all_labels = []
+            for username in users:
+                user_state = usm.get_user_state(username)
+                if user_state:
+                    annotations = user_state.get_all_annotations()
+                    if instance_id in annotations:
+                        instance_annotations = annotations[instance_id]
+                        if "labels" in instance_annotations:
+                            for label, value in instance_annotations["labels"].items():
+                                if hasattr(label, 'label_name'):
+                                    all_labels.append(label.label_name)
+                                else:
+                                    all_labels.append(str(value))
+
+            if not all_labels:
+                return None, 0.0
+
+            label_counts = Counter(all_labels)
+            most_frequent_label = label_counts.most_common(1)[0][0]
+            total_annotations = len(all_labels)
+            most_frequent_count = label_counts[most_frequent_label]
+            disagreement = 1 - (most_frequent_count / total_annotations)
+
+            return most_frequent_label, disagreement
+
+        except Exception as e:
+            self.logger.error(f"Error calculating label statistics for instance {instance_id}: {e}")
+            return None, 0.0
 
 
 # Global instance

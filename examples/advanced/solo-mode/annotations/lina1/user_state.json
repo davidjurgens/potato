@@ -1,0 +1,251 @@
+{
+  "user_id": "lina1",
+  "instance_id_ordering": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+    "11",
+    "12",
+    "13",
+    "14",
+    "15",
+    "16",
+    "17",
+    "18",
+    "19",
+    "20"
+  ],
+  "current_instance_index": 2,
+  "current_phase_and_page": [
+    "annotation",
+    "annotation"
+  ],
+  "completed_phase_and_pages": [],
+  "max_assignments": 20,
+  "instance_id_to_behavioral_data": {
+    "1": {
+      "instance_id": "1",
+      "session_start": 1773859332.949265,
+      "session_end": null,
+      "total_time_ms": 0,
+      "interactions": [
+        {
+          "event_type": "navigation",
+          "timestamp": 1773859327.94,
+          "target": "instance_load",
+          "instance_id": "1",
+          "client_timestamp": 1773859327940,
+          "metadata": {
+            "instance_id": "1",
+            "from_instance": null
+          }
+        },
+        {
+          "event_type": "click",
+          "timestamp": 1773859353.672,
+          "target": "schema:sentiment",
+          "instance_id": "1",
+          "client_timestamp": 1773859353672,
+          "metadata": {
+            "x": 106,
+            "y": 300
+          }
+        },
+        {
+          "event_type": "click",
+          "timestamp": 1773859354.113,
+          "target": "schema:sentiment",
+          "instance_id": "1",
+          "client_timestamp": 1773859354113,
+          "metadata": {
+            "x": 89,
+            "y": 288
+          }
+        },
+        {
+          "event_type": "focus_in",
+          "timestamp": 1773859354.115,
+          "target": "label:sentiment:positive",
+          "instance_id": "1",
+          "client_timestamp": 1773859354115,
+          "metadata": {}
+        },
+        {
+          "event_type": "click",
+          "timestamp": 1773859354.116,
+          "target": "label:sentiment:positive",
+          "instance_id": "1",
+          "client_timestamp": 1773859354116,
+          "metadata": {
+            "x": 89,
+            "y": 288
+          }
+        },
+        {
+          "event_type": "annotation_change",
+          "timestamp": 1773859354.116,
+          "target": "schema:sentiment",
+          "instance_id": "1",
+          "client_timestamp": 1773859354116,
+          "metadata": {
+            "label": "positive",
+            "action": "select",
+            "old_value": null,
+            "new_value": "positive",
+            "source": "user"
+          }
+        },
+        {
+          "event_type": "save",
+          "timestamp": 1773859354.618,
+          "target": "instance:1",
+          "instance_id": "1",
+          "client_timestamp": 1773859354618,
+          "metadata": {}
+        },
+        {
+          "event_type": "focus_out",
+          "timestamp": 1773859355.198,
+          "target": "label:sentiment:positive",
+          "instance_id": "1",
+          "client_timestamp": 1773859355198,
+          "metadata": {
+            "duration_ms": 1083
+          }
+        },
+        {
+          "event_type": "navigation",
+          "timestamp": 1773859355.33,
+          "target": "next",
+          "instance_id": "1",
+          "client_timestamp": 1773859355330,
+          "metadata": {
+            "from_instance": "1",
+            "to_instance": null
+          }
+        },
+        {
+          "event_type": "save",
+          "timestamp": 1773859355.33,
+          "target": "instance:1",
+          "instance_id": "1",
+          "client_timestamp": 1773859355330,
+          "metadata": {}
+        }
+      ],
+      "ai_usage": [],
+      "annotation_changes": [
+        {
+          "timestamp": 1773859354.1251578,
+          "schema_name": "sentiment",
+          "label_name": "positive",
+          "action": "select",
+          "old_value": null,
+          "new_value": "positive",
+          "source": "user"
+        }
+      ],
+      "navigation_history": [],
+      "focus_time_by_element": {
+        "label:sentiment:positive": 1083
+      },
+      "scroll_depth_max": 0.0,
+      "keyword_highlights_shown": [],
+      "chat_history": []
+    },
+    "2": {
+      "instance_id": "2",
+      "session_start": 1773859357.68008,
+      "session_end": null,
+      "total_time_ms": 0,
+      "interactions": [],
+      "ai_usage": [],
+      "annotation_changes": [
+        {
+          "timestamp": 1773859357.680091,
+          "schema_name": "sentiment",
+          "label_name": "negative",
+          "action": "select",
+          "old_value": null,
+          "new_value": "negative",
+          "source": "user"
+        }
+      ],
+      "navigation_history": [],
+      "focus_time_by_element": {
+        "label:sentiment:negative": 1232
+      },
+      "scroll_depth_max": 0.0,
+      "keyword_highlights_shown": [],
+      "chat_history": []
+    }
+  },
+  "instance_id_to_label_to_value": {
+    "1": [
+      [
+        {
+          "schema": "sentiment",
+          "name": "positive"
+        },
+        "positive"
+      ]
+    ],
+    "2": [
+      [
+        {
+          "schema": "sentiment",
+          "name": "negative"
+        },
+        "negative"
+      ]
+    ]
+  },
+  "instance_id_to_span_to_value": {},
+  "phase_to_page_to_label_to_value": {},
+  "phase_to_page_to_span_to_value": {},
+  "training_state": {
+    "completed_questions": {},
+    "total_correct": 0,
+    "total_attempts": 0,
+    "total_mistakes": 0,
+    "passed": false,
+    "failed": false,
+    "current_question_index": 0,
+    "training_instances": [],
+    "show_feedback": false,
+    "feedback_message": "",
+    "allow_retry": false,
+    "max_mistakes": -1,
+    "max_mistakes_per_question": -1,
+    "category_scores": {}
+  },
+  "qualified_categories": [],
+  "category_qualification_scores": {},
+  "instance_id_to_keyword_highlight_state": {
+    "1": {
+      "highlights": [],
+      "seed": 641980174,
+      "settings": {
+        "keyword_probability": 1.0,
+        "random_word_probability": 0.0
+      }
+    },
+    "2": {
+      "highlights": [],
+      "seed": 2335316078,
+      "settings": {
+        "keyword_probability": 1.0,
+        "random_word_probability": 0.0
+      }
+    }
+  },
+  "instance_id_to_link_to_value": {},
+  "instance_id_to_event_to_value": {}
+}

@@ -424,6 +424,8 @@ This shows SSO buttons at the top of the login page with an "or" divider and the
 - Allow both institutional (SSO) and external (password) annotators
 - Development/testing with local accounts while production uses SSO
 
+> **Note:** Local password accounts in mixed mode use per-user salted PBKDF2 hashing. Admins can reset local passwords via the CLI (`potato reset-password`) or the admin API. See [Password Management](password_management.md) for details on password security, reset flows, and user credential persistence.
+
 ---
 
 ## Security Considerations
@@ -574,6 +576,8 @@ A: They're separate authentication backends. Clerk is a paid service with its ow
 
 ## Related Documentation
 
+- [Password Management](password_management.md) — Password security, reset flows, and database backend (for local accounts in mixed mode)
+- [Passwordless Login](passwordless_login.md) — Authentication without passwords
 - [Configuration Reference](configuration.md) — Full config file documentation
 - [Crowdsourcing Integration](crowdsourcing.md) — Prolific and MTurk setup
 - [Admin Dashboard](admin_dashboard.md) — Managing annotators and viewing progress

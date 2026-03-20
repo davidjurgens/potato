@@ -1,0 +1,43 @@
+/*
+ * Live Agent Display - External CSS overrides
+ *
+ * Main styles are embedded in the display class (live_agent_display.py).
+ * This file provides responsive overrides and theme integration.
+ */
+
+/* Responsive: stack layout on narrow screens */
+@media (max-width: 900px) {
+    .live-agent-main {
+        flex-direction: column !important;
+    }
+    .live-agent-side-panel {
+        width: 100% !important;
+        border-left: none !important;
+        border-top: 1px solid #ddd;
+    }
+    .live-agent-screenshot-panel {
+        max-width: 100% !important;
+    }
+}
+
+/* Animation for thinking state */
+.live-agent-thought-text[style*="opacity: 0.6"] {
+    animation: thinking-pulse 1.5s ease-in-out infinite;
+}
+@keyframes thinking-pulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 0.3; }
+}
+
+/* Filmstrip scroll shadow hints */
+.live-agent-filmstrip {
+    scrollbar-width: thin;
+    scrollbar-color: #ccc transparent;
+}
+.live-agent-filmstrip::-webkit-scrollbar {
+    height: 4px;
+}
+.live-agent-filmstrip::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 2px;
+}

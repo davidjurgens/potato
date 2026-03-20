@@ -42,7 +42,7 @@ class TestActiveLearningConfig:
 
         assert config.enabled is False
         assert config.classifier_name == "sklearn.linear_model.LogisticRegression"
-        assert config.vectorizer_name == "sklearn.feature_extraction.text.CountVectorizer"
+        assert config.vectorizer_name == "sklearn.feature_extraction.text.TfidfVectorizer"
         assert config.min_annotations_per_instance == 1
         assert config.min_instances_for_training == 10
         assert config.resolution_strategy == ResolutionStrategy.MAJORITY_VOTE

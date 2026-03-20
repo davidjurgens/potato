@@ -910,14 +910,14 @@ function setLoading(loading) {
     const nextBtn = document.getElementById('next-btn');
 
     if (loading) {
-        if (loadingState) loadingState.style.display = 'block';
-        if (mainContent) mainContent.style.display = 'none';
-        if (prevBtn) prevBtn.disabled = true;
-        if (nextBtn) nextBtn.disabled = true;
+        loadingState.style.display = 'block';
+        mainContent.style.display = 'none';
+        prevBtn.disabled = true;
+        nextBtn.disabled = true;
     } else {
-        if (loadingState) loadingState.style.display = 'none';
-        if (mainContent) mainContent.style.display = 'block';
-        if (prevBtn) prevBtn.disabled = false;
+        loadingState.style.display = 'none';
+        mainContent.style.display = 'block';
+        prevBtn.disabled = false;
         // Don't enable next button here - let validateRequiredFields handle it
         validateRequiredFields();
     }

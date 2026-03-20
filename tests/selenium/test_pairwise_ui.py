@@ -26,6 +26,10 @@ from tests.helpers.flask_test_setup import FlaskTestServer
 from tests.helpers.port_manager import find_free_port
 
 
+
+
+pytestmark = pytest.mark.core
+
 class TestPairwiseBinaryUI:
     """Test suite for pairwise binary mode UI functionality."""
 

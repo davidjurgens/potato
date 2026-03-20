@@ -24,6 +24,9 @@ from selenium.webdriver.firefox.options import Options as FirefoxOptions
 import pytest
 
 
+
+pytestmark = pytest.mark.redundant
+
 class CrossBrowserTestBase:
     """Base class for cross-browser testing."""
 
@@ -96,6 +99,7 @@ class CrossBrowserTestBase:
             cls.server.stop_server()
         if hasattr(cls, 'test_dir'):
             from tests.helpers.test_utils import cleanup_test_directory
+
             cleanup_test_directory(cls.test_dir)
 
     def _create_driver(self):

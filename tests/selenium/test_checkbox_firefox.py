@@ -12,6 +12,9 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.firefox.options import Options as FirefoxOptions
+import pytest
+
+pytestmark = pytest.mark.redundant
 
 
 class TestCheckboxPersistenceFirefox(unittest.TestCase):

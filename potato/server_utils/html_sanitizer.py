@@ -29,10 +29,20 @@ ALLOWED_ELEMENTS: Set[str] = {
     'span',
     # Basic formatting (may be in source data)
     'b', 'i', 'u', 'strong', 'em', 'mark',
-    # Line breaks
-    'br',
+    # Line breaks and horizontal rules
+    'br', 'hr',
     # Dialogue/conversation layout elements
     'div',
+    # Structural elements for instructional content (Issue #120)
+    'p',
+    'ul', 'ol', 'li',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    # Tables for formatted content
+    'table', 'thead', 'tbody', 'tr', 'th', 'td',
+    # Inline semantics
+    'sub', 'sup', 'small', 'code', 'pre', 'blockquote',
+    # Links (href sanitized against dangerous patterns)
+    'a',
 }
 
 # Attributes allowed per element
@@ -52,6 +62,19 @@ ALLOWED_ATTRIBUTES: Dict[str, Set[str]] = {
         'data-speaker-index',
     },
     'mark': {'class', 'style'},
+    # Links — href checked against dangerous patterns in _sanitize_attributes
+    'a': {'href', 'title', 'target', 'rel'},
+    # Table elements
+    'td': {'colspan', 'rowspan', 'style'},
+    'th': {'colspan', 'rowspan', 'style', 'scope'},
+    'table': {'class', 'style'},
+    # Ordered lists
+    'ol': {'start', 'type'},
+    # Block-level elements that may need class/style
+    'blockquote': {'class', 'style'},
+    'p': {'class', 'style'},
+    'pre': {'class', 'style'},
+    'code': {'class'},
     # Most elements get no attributes
     '*': set(),
 }
@@ -62,15 +85,28 @@ ALLOWED_CSS_PROPERTIES: Set[str] = {
     'color',
     'font-weight',
     'font-style',
+    'font-family',
+    'font-size',
     'text-decoration',
+    'text-align',
+    'line-height',
     # Layout properties for dialogue/pairwise display
     'display',
     'width',
+    'max-width',
     'padding',
+    'padding-top', 'padding-bottom', 'padding-left', 'padding-right',
     'margin',
+    'margin-top', 'margin-bottom', 'margin-left', 'margin-right',
     'box-sizing',
     'vertical-align',
     'gap',
+    # List styling
+    'list-style-type',
+    # Borders
+    'border',
+    'border-radius',
+    'border-collapse',
 }
 
 # Dangerous patterns to block
@@ -190,6 +226,12 @@ def _sanitize_attributes(tag_name: str, attrs_str: str) -> str:
         if attr_name not in allowed:
             continue
 
+        # Special handling for href attribute — block dangerous URLs
+        if attr_name == 'href':
+            if any(p.search(attr_value) for p in DANGEROUS_PATTERNS):
+                logger.warning("Blocked dangerous pattern in href attribute")
+                continue
+
         # Special handling for style attribute
         if attr_name == 'style':
             attr_value = _sanitize_style(attr_value)
@@ -203,6 +245,13 @@ def _sanitize_attributes(tag_name: str, attrs_str: str) -> str:
         # Escape the value
         escaped_value = html.escape(attr_value, quote=True)
         sanitized.append(f'{attr_name}="{escaped_value}"')
+
+    # Security: auto-add rel="noopener noreferrer" for links with target="_blank"
+    if tag_name == 'a':
+        has_target_blank = any(s.startswith('target="') and '_blank' in s for s in sanitized)
+        has_rel = any(s.startswith('rel="') for s in sanitized)
+        if has_target_blank and not has_rel:
+            sanitized.append('rel="noopener noreferrer"')
 
     if sanitized:
         return ' ' + ' '.join(sanitized)

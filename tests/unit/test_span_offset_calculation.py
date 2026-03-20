@@ -15,8 +15,14 @@ from selenium.webdriver.chrome.options import Options
 import time
 import requests
 
-from potato.user_state_management import get_user_state_manager, UserPhase
-from potato.item_state_management import get_item_state_manager
+from potato.user_state_management import (
+    get_user_state_manager, init_user_state_manager,
+    clear_user_state_manager, UserPhase,
+)
+from potato.item_state_management import (
+    get_item_state_manager, init_item_state_manager,
+    clear_item_state_manager,
+)
 from potato.server_utils.schemas.span import SpanAnnotation
 
 
@@ -25,9 +31,17 @@ class TestSpanOffsetCalculation:
 
     def setup_method(self):
         """Set up test environment."""
-        # Clear any existing state
-        get_user_state_manager().clear()
-        get_item_state_manager().clear()
+        # Use the global config (set up by the session-scoped app fixture)
+        # which has all required keys like output_annotation_dir
+        from potato.server_utils.config_module import config as global_config
+        try:
+            get_user_state_manager().clear()
+        except ValueError:
+            init_user_state_manager(global_config)
+        try:
+            get_item_state_manager().clear()
+        except ValueError:
+            init_item_state_manager(global_config)
 
         # Create test instance with the exact text from the production issue
         self.test_text = "The new artificial intelligence model achieved remarkable results in natural language processing tasks, outperforming previous benchmarks by a significant margin."

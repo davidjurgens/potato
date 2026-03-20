@@ -1,0 +1,144 @@
+# Live Agent Evaluation Example
+#
+# Annotators observe an AI agent browsing the web in real time,
+# with the ability to pause, instruct, or take over control.
+#
+# REQUIREMENTS (Anthropic):
+#   pip install playwright anthropic
+#   playwright install chromium
+#   export ANTHROPIC_API_KEY=your_key_here
+#
+# REQUIREMENTS (Ollama - local, no API key needed):
+#   pip install playwright ollama
+#   playwright install chromium
+#   ollama pull gemma3:4b
+#
+# RUN:
+#   python potato/flask_server.py start examples/agent-traces/live-agent-evaluation/config.yaml -p 8000
+#
+# DEMO (without full server):
+#   python examples/agent-traces/live-agent-evaluation/demo_ollama_agent.py --url https://example.com --steps 2
+
+annotation_task_name: "Live Agent Evaluation"
+
+data_files:
+  - type: json
+    path: data/tasks.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+task_dir: .
+
+# Live agent configuration
+# Supported endpoint_type values: anthropic_vision, ollama_vision
+live_agent:
+  # --- Ollama (local, no API key needed) ---
+  endpoint_type: ollama_vision
+  ai_config:
+    model: gemma3:4b          # Recommended: reliable structured output
+    # model: qwen3-vl:2b      # Smaller but less reliable with complex prompts
+    base_url: http://localhost:11434
+    max_tokens: 1024
+    temperature: 0.3
+    timeout: 120
+
+  # --- Anthropic alternative (uncomment to use Claude) ---
+  # endpoint_type: anthropic_vision
+  # ai_config:
+  #   model: claude-sonnet-4-20250514
+  #   api_key: ${ANTHROPIC_API_KEY}
+  #   max_tokens: 4096
+  #   temperature: 0.3
+  system_prompt: |
+    You are a web browsing agent. You can see screenshots of web pages and take actions to complete tasks.
+
+    For each step, analyze the current screenshot and respond with a JSON object:
+    {
+      "thought": "Your reasoning about what you see and what to do next",
+      "action": {
+        "type": "click|type|scroll|navigate|wait|done",
+        // For click: "x": 100, "y": 200
+        // For type: "text": "hello world"
+        // For scroll: "direction": "up|down", "amount": 300
+        // For navigate: "url": "https://..."
+        // For wait: (no extra fields)
+        // For done: "summary": "Task completed because..."
+      }
+    }
+
+    Always respond with valid JSON only. No markdown, no extra text.
+  max_steps: 30
+  step_delay: 1.0
+  viewport:
+    width: 1280
+    height: 720
+  allow_takeover: true
+  allow_instructions: true
+
+# Instance display configuration
+instance_display:
+  fields:
+    - key: task_description
+      type: text
+      label: "Task"
+    - key: start_url
+      type: text
+      label: "Starting URL"
+    - key: agent_trace
+      type: live_agent
+      label: "Live Agent Session"
+      display_options:
+        show_overlays: true
+        show_filmstrip: true
+        show_thought: true
+        show_controls: true
+        allow_takeover: true
+        allow_instructions: true
+
+# Annotation schemes for evaluating the agent
+annotation_schemes:
+  - annotation_type: radio
+    name: task_completion
+    description: "Did the agent complete the task?"
+    labels:
+      - name: "Fully completed"
+        tooltip: "The agent successfully completed the task"
+      - name: "Partially completed"
+        tooltip: "The agent made progress but didn't finish"
+      - name: "Not completed"
+        tooltip: "The agent failed to make meaningful progress"
+    display_config:
+      style: vertical
+
+  - annotation_type: radio
+    name: efficiency
+    description: "How efficient was the agent's approach?"
+    labels:
+      - name: "Very efficient"
+        tooltip: "Minimal unnecessary steps"
+      - name: "Somewhat efficient"
+        tooltip: "Some unnecessary steps but generally on track"
+      - name: "Inefficient"
+        tooltip: "Many unnecessary steps or wrong approaches"
+
+  - annotation_type: radio
+    name: needed_intervention
+    description: "Did you need to intervene (instruct or take over)?"
+    labels:
+      - name: "No intervention needed"
+      - name: "Gave instructions only"
+      - name: "Had to take over"
+
+  - annotation_type: text
+    name: notes
+    description: "Additional notes about the agent's performance"
+
+# User configuration
+user_config:
+  allow_all_users: true
+
+# Output
+output_annotation_dir: annotation_output
+output_annotation_format: json

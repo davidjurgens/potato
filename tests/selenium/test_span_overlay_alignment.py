@@ -5,6 +5,11 @@ from selenium.webdriver.support import expected_conditions as EC
 from tests.selenium.test_base import BaseSeleniumTest
 
 
+import pytest
+
+
+pytestmark = pytest.mark.redundant
+
 class TestSpanOverlayAlignment(BaseSeleniumTest):
     def test_overlay_aligned_with_selection(self):
         self.driver.get(f"{self.server.base_url}/annotate")

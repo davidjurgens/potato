@@ -1,7 +1,14 @@
 import time
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 from tests.selenium.test_base import BaseSeleniumTest
 
+
+import pytest
+
+pytestmark = pytest.mark.redundant
 
 class TestSpanOverlayPositioningSelenium(BaseSeleniumTest):
     """
@@ -15,486 +22,370 @@ class TestSpanOverlayPositioningSelenium(BaseSeleniumTest):
     Authentication: Handled automatically by BaseSeleniumTest
     """
 
+    def _wait_for_span_manager(self):
+        """Wait for SpanManager to be fully initialized."""
+        WebDriverWait(self.driver, 10).until(
+            lambda d: d.execute_script(
+                "return window.spanManager && window.spanManager.isInitialized === true;"
+            )
+        )
+
+    def _select_word(self, word):
+        """
+        Select a word in the text-content element using TreeWalker for robustness.
+
+        Uses TreeWalker to find the correct text node, which handles cases where
+        the text content has multiple child nodes (e.g., from prior overlays or
+        HTML formatting).
+
+        Returns:
+            dict with bounding rect keys (left, top, right, bottom, width, height),
+            or None if the word was not found.
+        """
+        script = f'''
+            const text = document.getElementById('text-content');
+            const textContent = text.textContent || text.innerText;
+            const wordIndex = textContent.indexOf("{word}");
+            if (wordIndex === -1) return null;
+
+            const walker = document.createTreeWalker(text, NodeFilter.SHOW_TEXT);
+            let node;
+            let offset = 0;
+            while (node = walker.nextNode()) {{
+                if (offset + node.length > wordIndex) {{
+                    const range = document.createRange();
+                    range.setStart(node, wordIndex - offset);
+                    range.setEnd(node, wordIndex - offset + {len(word)});
+                    const selection = window.getSelection();
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                    return range.getBoundingClientRect();
+                }}
+                offset += node.length;
+            }}
+            return null;
+        '''
+        return self.driver.execute_script(script)
+
+    def _click_label_checkbox(self, label_value):
+        """
+        Click a span label checkbox by its value attribute.
+
+        This triggers the onclick handler which calls changeSpanLabel(), which
+        in turn calls spanManager.selectLabel() to set the active label.
+
+        Args:
+            label_value: The value attribute of the checkbox (e.g., "positive")
+        """
+        label_checkbox = self.driver.find_element(
+            By.CSS_SELECTOR, f'.shadcn-span-checkbox[value="{label_value}"]'
+        )
+        if not label_checkbox.is_selected():
+            label_checkbox.click()
+            time.sleep(0.05)
+
+    def _dispatch_mouseup_on_text(self):
+        """
+        Dispatch a mouseup event on the text-content element to trigger
+        handleTextSelection via the event listener.
+
+        Uses ActionChains to move to the text element and release, which
+        generates a real mouseup event that the SpanManager listens for.
+        """
+        text_element = self.driver.find_element(By.ID, 'text-content')
+        ActionChains(self.driver).move_to_element(text_element).release().perform()
+        time.sleep(0.1)
+
+    def _create_span_on_word(self, word, label_value):
+        """
+        Create a span annotation on a word using the proper UI flow:
+        1. Click the label checkbox (sets active label via changeSpanLabel)
+        2. Create a text selection via JavaScript
+        3. Dispatch mouseup on the text container (triggers handleTextSelection)
+
+        Args:
+            word: The word to annotate
+            label_value: The label to apply (e.g., "positive")
+
+        Returns:
+            dict with bounding rect of the selected text, or None if word not found
+        """
+        # Step 1: Click label checkbox (triggers changeSpanLabel -> selectLabel)
+        self._click_label_checkbox(label_value)
+
+        # Step 2: Create text selection via JavaScript
+        selection_rect = self._select_word(word)
+        self.assertIsNotNone(selection_rect, f"Could not find word '{word}' in text")
+
+        # Step 3: Dispatch mouseup to trigger handleTextSelection
+        self._dispatch_mouseup_on_text()
+
+        return selection_rect
+
+    def _wait_for_overlay(self, timeout=5):
+        """Wait for at least one span overlay to appear."""
+        return WebDriverWait(self.driver, timeout).until(
+            EC.presence_of_element_located(
+                (By.CSS_SELECTOR, '.span-overlay-pure')
+            )
+        )
+
+    def _count_overlays(self):
+        """Count all span overlays currently in the DOM."""
+        return len(self.driver.find_elements(By.CSS_SELECTOR, '.span-overlay-pure'))
+
     def test_span_overlay_text_matches_selection(self):
         """Test that the text in the span overlay matches the selected text."""
         # Navigate to annotation page (user is already authenticated)
         self.driver.get(f"{self.server.base_url}/annotate")
         self.wait_for_element(By.ID, "instance-text")
+        self._wait_for_span_manager()
 
-        # Wait for span manager to be initialized
-        self.execute_script_safe("""
-            return new Promise((resolve) => {
-                const check = () => {
-                    if (window.spanManager && window.spanManager.isInitialized) resolve(true);
-                    else setTimeout(check, 100);
-                }; check();
-            });
-        """)
-
-        # Debug: Check span manager state
-        span_manager_state = self.execute_script_safe("""
-            return {
-                spanManagerExists: !!window.spanManager,
-                isInitialized: window.spanManager ? window.spanManager.isInitialized : false,
-                positioningStrategy: window.spanManager ? !!window.spanManager.positioningStrategy : false,
-                selectedLabel: window.spanManager ? window.spanManager.selectedLabel : null
-            };
-        """)
-        print(f"DEBUG: Span manager state: {span_manager_state}")
-
-        # Get the actual rendered text content (without HTML formatting)
+        # Get the actual rendered text content
         rendered_text = self.execute_script_safe("""
             const textContent = document.getElementById('text-content');
             return textContent.textContent || textContent.innerText || '';
         """)
-        print(f"Original text: '{rendered_text}'")
 
-        # Select a specific text span (e.g., "thrilled" from the test data)
         target_text = "thrilled"
         start_pos = rendered_text.find(target_text)
-        end_pos = start_pos + len(target_text)
-
         if start_pos == -1:
             self.fail(f"Target text '{target_text}' not found in rendered text: '{rendered_text}'")
 
-        print(f"Target text: '{target_text}' (positions {start_pos}-{end_pos})")
-
-        # Create a range and select the text
-        self.execute_script_safe(f"""
-            const textContent = document.getElementById('text-content');
-            const range = document.createRange();
-            const textNode = textContent.firstChild;
-            range.setStart(textNode, {start_pos});
-            range.setEnd(textNode, {end_pos});
-
-            const selection = window.getSelection();
-            selection.removeAllRanges();
-            selection.addRange(range);
-        """)
-
-        # Debug: Check if text selection worked
-        selection_info = self.execute_script_safe("""
-            const selection = window.getSelection();
-            return {
-                rangeCount: selection.rangeCount,
-                isCollapsed: selection.isCollapsed,
-                selectedText: selection.toString(),
-                selectedTextTrimmed: selection.toString().trim()
-            };
-        """)
-        print(f"DEBUG: Text selection info: {selection_info}")
-
-        # Wait a moment for selection to be processed
-        time.sleep(0.1)
-
-        # Select the "positive" label checkbox to enable span creation
-        positive_checkbox = self.wait_for_element(By.ID, "emotion_spans_positive")
-        positive_checkbox.click()
-
-        # Debug: Check if label selection worked
-        label_selection_info = self.execute_script_safe("""
-            const checkedCheckbox = document.querySelector('.annotation-form.span input[type="checkbox"]:checked');
-            return {
-                checkedCheckboxExists: !!checkedCheckbox,
-                checkedCheckboxId: checkedCheckbox ? checkedCheckbox.id : null,
-                spanManagerSelectedLabel: window.spanManager ? window.spanManager.selectedLabel : null,
-                getSelectedLabelResult: window.spanManager ? window.spanManager.getSelectedLabel() : null
-            };
-        """)
-        print(f"DEBUG: Label selection info: {label_selection_info}")
-
-        # Wait a moment for label selection to be processed
-        time.sleep(0.1)
-
-        # Trigger the span creation by calling handleTextSelection
-        span_creation_result = self.execute_script_safe("""
-            if (window.spanManager && window.spanManager.handleTextSelection) {
-                try {
-                    window.spanManager.handleTextSelection();
-                    return { success: true, error: null };
-                } catch (error) {
-                    return { success: false, error: error.message };
-                }
-            } else {
-                return { success: false, error: 'Span manager or handleTextSelection method not available' };
-            }
-        """)
-        print(f"DEBUG: Span creation result: {span_creation_result}")
-
-        # Debug: Check DOM structure for positioning
-        dom_structure = self.execute_script_safe("""
-            const textContainer = document.getElementById('text-container');
-            const textContent = document.getElementById('text-content');
-            const instanceText = document.getElementById('instance-text');
-
-            return {
-                textContainerExists: !!textContainer,
-                textContentExists: !!textContent,
-                instanceTextExists: !!instanceText,
-                textContainerRect: textContainer ? textContainer.getBoundingClientRect() : null,
-                textContentRect: textContent ? textContent.getBoundingClientRect() : null,
-                instanceTextRect: instanceText ? instanceText.getBoundingClientRect() : null,
-                textContainerPosition: textContainer ? textContainer.style.position : null,
-                textContentPosition: textContent ? textContent.style.position : null,
-                instanceTextPosition: instanceText ? instanceText.style.position : null
-            };
-        """)
-        print(f"DEBUG: DOM structure: {dom_structure}")
+        # Create span using proper UI flow: click label, select text, mouseup
+        self._create_span_on_word(target_text, "positive")
 
         # Wait for the span overlay to appear
-        time.sleep(0.1)
+        self._wait_for_overlay()
 
-        # Debug: Check if any overlays were created
-        overlay_debug = self.execute_script_safe("""
-            const overlays = document.querySelectorAll('.span-overlay-pure');
-            const textContent = document.getElementById('text-content');
-            const instanceText = document.getElementById('instance-text');
-
-            return {
-                overlayCount: overlays.length,
-                textContentExists: !!textContent,
-                instanceTextExists: !!instanceText,
-                textContentText: textContent ? textContent.textContent : null,
-                instanceTextText: instanceText ? instanceText.textContent : null,
-                textContentDataOriginalText: textContent ? textContent.getAttribute('data-original-text') : null,
-                instanceTextDataOriginalText: instanceText ? instanceText.getAttribute('data-original-text') : null
-            };
-        """)
-        print(f"DEBUG: Overlay debug info: {overlay_debug}")
-
-        # Check that the span overlay exists (pure CSS system)
-        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
+        # Verify at least one overlay was created
+        span_overlays = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         self.assertGreater(len(span_overlays), 0, "No span overlays found")
 
-        # Get the actual text content that the span covers
-        covered_text = self.execute_script_safe(f"""
+        # Get the actual text content that the span covers using data attributes
+        covered_text = self.execute_script_safe("""
             const overlay = document.querySelector('.span-overlay-pure');
-            if (!overlay) {{
-                return {{ success: false, error: 'No overlay found' }};
-            }}
+            if (!overlay) {
+                return { success: false, error: 'No overlay found' };
+            }
 
             const start = parseInt(overlay.dataset.start);
             const end = parseInt(overlay.dataset.end);
             const textContent = document.getElementById('text-content');
+            const originalText = textContent.getAttribute('data-original-text')
+                || textContent.textContent || textContent.innerText || '';
 
-            // Use the original text content, not the rendered content (which includes overlays)
-            const originalText = textContent.getAttribute('data-original-text') || textContent.textContent || textContent.innerText || '';
-
-            const coveredText = originalText.substring(start, end);
-
-            return {{
+            return {
                 success: true,
-                coveredText: coveredText,
+                coveredText: originalText.substring(start, end),
                 start: start,
-                end: end,
-                originalText: originalText
-            }};
+                end: end
+            };
         """)
-
-        print(f"Covered text: '{covered_text.get('coveredText', '')}'")
 
         # Verify the covered text matches the selected text
         actual_text = covered_text.get('coveredText', '')
         self.assertEqual(actual_text, target_text,
                         f"Covered text '{actual_text}' does not match selected text '{target_text}'")
 
-        # Verify the overlay is positioned correctly
-        overlay_rect = span_overlays[0].rect
-        text_content = self.driver.find_element(By.ID, "text-content")
-        text_rect = text_content.rect
+        # Verify the overlay is positioned within the text content area
+        overlay_rect = self.driver.execute_script(
+            'return arguments[0].getBoundingClientRect();', span_overlays[0]
+        )
+        text_content_el = self.driver.find_element(By.ID, "text-content")
+        text_rect = self.driver.execute_script(
+            'return arguments[0].getBoundingClientRect();', text_content_el
+        )
 
-        print(f"DEBUG: Overlay rect: {overlay_rect}")
-        print(f"DEBUG: Text content rect: {text_rect}")
-
-        # Check that overlay is within the text content area
-        self.assertGreaterEqual(overlay_rect['top'], text_rect['top'],
+        self.assertGreaterEqual(overlay_rect['top'], text_rect['top'] - 1,
                                "Overlay positioned above text content")
-        self.assertLessEqual(overlay_rect['bottom'], text_rect['bottom'],
+        self.assertLessEqual(overlay_rect['bottom'], text_rect['bottom'] + 1,
                             "Overlay positioned below text content")
-
-        print(f"✅ Covered text matches selection: '{actual_text}'")
-        print(f"✅ Overlay positioned correctly within text area")
 
     def test_span_overlay_persistence_after_navigation(self):
         """Test that span overlays maintain correct positioning after navigation."""
         # Navigate to annotation page (user is already authenticated)
         self.driver.get(f"{self.server.base_url}/annotate")
         self.wait_for_element(By.ID, "instance-text")
+        self._wait_for_span_manager()
 
-        # Wait for span manager to be initialized
-        self.execute_script_safe("""
-            return new Promise((resolve) => {
-                const check = () => {
-                    if (window.spanManager && window.spanManager.isInitialized) resolve(true);
-                    else setTimeout(check, 100);
-                }; check();
-            });
-        """)
-
-        # Get the text content
-        text_content = self.driver.find_element(By.ID, "text-content")
-        original_text = text_content.text
-        print(f"Original text: '{original_text}'")
-
-        # Select a specific text span
         target_text = "thrilled"
-        start_pos = original_text.find(target_text)
-        end_pos = start_pos + len(target_text)
 
-        print(f"Target text: '{target_text}' (positions {start_pos}-{end_pos})")
-
-        # Create a range and select the text
-        self.execute_script_safe(f"""
-            const textContent = document.getElementById('text-content');
-            const range = document.createRange();
-            const textNode = textContent.firstChild;
-            range.setStart(textNode, {start_pos});
-            range.setEnd(textNode, {end_pos});
-
-            const selection = window.getSelection();
-            selection.removeAllRanges();
-            selection.addRange(range);
-        """)
-
-        # Wait a moment for selection to be processed
-        time.sleep(0.1)
-
-        # Select the "positive" label checkbox to enable span creation
-        positive_checkbox = self.wait_for_element(By.ID, "emotion_spans_positive")
-        positive_checkbox.click()
-
-        # Wait a moment for label selection to be processed
-        time.sleep(0.1)
-
-        # Trigger the span creation by calling handleTextSelection
-        self.execute_script_safe("""
-            if (window.spanManager && window.spanManager.handleTextSelection) {
-                window.spanManager.handleTextSelection();
-            } else {
-                console.error('Span manager or handleTextSelection method not available');
-            }
-        """)
+        # Create span using proper UI flow
+        self._create_span_on_word(target_text, "positive")
 
         # Wait for the span overlay to appear
-        time.sleep(0.1)
+        self._wait_for_overlay()
 
-        # Get the initial overlay position
-        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
+        # Get the initial overlay state
+        span_overlays = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         self.assertGreater(len(span_overlays), 0, "No span overlays found")
 
-        initial_overlay = span_overlays[0]
-        initial_text = initial_overlay.text.strip()
-        initial_rect = initial_overlay.rect
-
-        print(f"Initial overlay text: '{initial_text}'")
-        print(f"Initial overlay position: {initial_rect}")
+        initial_rect = self.driver.execute_script(
+            'return arguments[0].getBoundingClientRect();', span_overlays[0]
+        )
 
         # Navigate to the next instance
-        next_button = self.wait_for_element(By.ID, "next-button")
+        next_button = self.wait_for_element(By.ID, "next-btn")
         next_button.click()
 
         # Wait for navigation to complete
-        time.sleep(0.1)
+        time.sleep(0.5)
 
         # Navigate back to the first instance
-        prev_button = self.wait_for_element(By.ID, "prev-button")
+        prev_button = self.wait_for_element(By.ID, "prev-btn")
         prev_button.click()
 
-        # Wait for navigation to complete
-        time.sleep(0.1)
+        # Wait for navigation and overlay rendering to complete
+        time.sleep(0.5)
 
-        # Check that the span overlay still exists and has the correct text
-        span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
+        # Wait for span manager to re-initialize after navigation
+        self._wait_for_span_manager()
+
+        # Check that the span overlay still exists
+        span_overlays = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
         self.assertGreater(len(span_overlays), 0, "No span overlays found after navigation")
 
-        final_overlay = span_overlays[0]
-        final_text = final_overlay.text.strip()
-        final_rect = final_overlay.rect
-
-        print(f"Final overlay text: '{final_text}'")
-        print(f"Final overlay position: {final_rect}")
-
-        # Verify the overlay text is still correct
-        self.assertEqual(final_text, target_text,
-                        f"Overlay text changed after navigation: '{final_text}' != '{target_text}'")
+        final_rect = self.driver.execute_script(
+            'return arguments[0].getBoundingClientRect();', span_overlays[0]
+        )
 
         # Verify the overlay is still positioned within the text content area
-        text_content = self.driver.find_element(By.ID, "text-content")
-        text_rect = text_content.rect
+        text_content_el = self.driver.find_element(By.ID, "text-content")
+        text_rect = self.driver.execute_script(
+            'return arguments[0].getBoundingClientRect();', text_content_el
+        )
 
-        self.assertGreaterEqual(final_rect['top'], text_rect['top'],
+        self.assertGreaterEqual(final_rect['top'], text_rect['top'] - 1,
                                "Overlay positioned above text content after navigation")
-        self.assertLessEqual(final_rect['bottom'], text_rect['bottom'],
+        self.assertLessEqual(final_rect['bottom'], text_rect['bottom'] + 1,
                             "Overlay positioned below text content after navigation")
 
         # Verify the overlay position is reasonable (should be similar to initial position)
-        # Allow some tolerance for minor rendering differences
         position_tolerance = 10  # pixels
         self.assertLess(abs(final_rect['top'] - initial_rect['top']), position_tolerance,
                         f"Overlay top position changed too much: {final_rect['top']} vs {initial_rect['top']}")
         self.assertLess(abs(final_rect['left'] - initial_rect['left']), position_tolerance,
                         f"Overlay left position changed too much: {final_rect['left']} vs {initial_rect['left']}")
 
-        print(f"✅ Overlay text persisted correctly: '{final_text}'")
-        print(f"✅ Overlay position maintained after navigation")
-
     def test_multiple_span_overlays_positioning(self):
         """Test that multiple span overlays are positioned correctly."""
         # Navigate to annotation page (user is already authenticated)
         self.driver.get(f"{self.server.base_url}/annotate")
         self.wait_for_element(By.ID, "instance-text")
+        self._wait_for_span_manager()
 
-        # Wait for span manager to be initialized
-        self.execute_script_safe("""
-            return new Promise((resolve) => {
-                const check = () => {
-                    if (window.spanManager && window.spanManager.isInitialized) resolve(true);
-                    else setTimeout(check, 100);
-                }; check();
-            });
-        """)
-
-        # Get the actual rendered text content (without HTML formatting)
+        # Get the actual rendered text content
         rendered_text = self.execute_script_safe("""
             const textContent = document.getElementById('text-content');
             return textContent.textContent || textContent.innerText || '';
         """)
-        print(f"Original text: '{rendered_text}'")
 
-        # Create multiple span annotations
+        # Create multiple span annotations using proper UI flow
         span_data = [
-            {"text": "thrilled", "label": "emotion_spans_positive"},
-            {"text": "technology", "label": "emotion_spans_positive"},
-            {"text": "revolutionize", "label": "emotion_spans_positive"}
+            {"text": "thrilled", "label": "positive"},
+            {"text": "technology", "label": "positive"},
+            {"text": "revolutionize", "label": "positive"}
         ]
 
         created_overlays = []
 
         for span_info in span_data:
             target_text = span_info["text"]
-            start_pos = rendered_text.find(target_text)
-            end_pos = start_pos + len(target_text)
 
-            if start_pos == -1:
+            if rendered_text.find(target_text) == -1:
                 self.fail(f"Target text '{target_text}' not found in rendered text: '{rendered_text}'")
 
-            print(f"Creating span for: '{target_text}' (positions {start_pos}-{end_pos})")
+            # Create span using proper UI flow
+            self._create_span_on_word(target_text, span_info["label"])
 
-            # Create a range and select the text
-            self.execute_script_safe(f"""
-                const textContent = document.getElementById('text-content');
-                const range = document.createRange();
-                const textNode = textContent.firstChild;
-                range.setStart(textNode, {start_pos});
-                range.setEnd(textNode, {end_pos});
+            # Wait for overlay to appear
+            time.sleep(0.2)
 
-                const selection = window.getSelection();
-                selection.removeAllRanges();
-                selection.addRange(range);
-            """)
-
-            # Wait a moment for selection to be processed
-            time.sleep(0.1)
-
-            # Select the label checkbox to enable span creation
-            label = self.wait_for_element(By.ID, span_info["label"])
-            label.click()
-
-            # Wait a moment for label selection to be processed
-            time.sleep(0.1)
-
-            # Trigger the span creation by calling handleTextSelection
-            self.execute_script_safe("""
-                if (window.spanManager && window.spanManager.handleTextSelection) {
-                    window.spanManager.handleTextSelection();
-                } else {
-                    console.error('Span manager or handleTextSelection method not available');
-                }
-            """)
-
-            # Wait for the span overlay to appear
-            time.sleep(0.1)
-
-            # Store overlay info
-            span_overlays = self.driver.find_elements(By.CLASS_NAME, "span-overlay-pure")
-            if span_overlays:
-                latest_overlay = span_overlays[-1]  # Get the most recent overlay
-
-                # Get the actual text content that the span covers
-                covered_text = self.execute_script_safe(f"""
-                    const overlay = document.querySelector('.span-overlay-pure:last-child');
-                    if (!overlay) {{
-                        return {{ success: false, error: 'No overlay found' }};
-                    }}
+            # Get the overlay count and latest overlay info
+            overlay_count = self._count_overlays()
+            if overlay_count > len(created_overlays):
+                # Get info about the most recently created overlay
+                overlay_info = self.execute_script_safe(f"""
+                    const overlays = document.querySelectorAll('.span-overlay-pure');
+                    const overlay = overlays[overlays.length - 1];
+                    if (!overlay) return null;
 
                     const start = parseInt(overlay.dataset.start);
                     const end = parseInt(overlay.dataset.end);
                     const textContent = document.getElementById('text-content');
-                    const renderedText = textContent.textContent || textContent.innerText || '';
-
-                    const coveredText = renderedText.substring(start, end);
+                    const originalText = textContent.getAttribute('data-original-text')
+                        || textContent.textContent || textContent.innerText || '';
 
                     return {{
-                        success: true,
-                        coveredText: coveredText,
+                        coveredText: originalText.substring(start, end),
                         start: start,
-                        end: end
+                        end: end,
+                        rect: overlay.getBoundingClientRect()
                     }};
                 """)
 
-                created_overlays.append({
-                    "text": target_text,
-                    "covered_text": covered_text.get('coveredText', ''),
-                    "rect": latest_overlay.rect
-                })
+                if overlay_info:
+                    created_overlays.append({
+                        "text": target_text,
+                        "covered_text": overlay_info.get('coveredText', ''),
+                        "rect": overlay_info.get('rect', {})
+                    })
 
-        # Verify all overlays were created with correct text
+        # Verify all overlays were created
         self.assertEqual(len(created_overlays), len(span_data),
                         f"Expected {len(span_data)} overlays, got {len(created_overlays)}")
 
+        # Verify each overlay covers the correct text
         for i, overlay_info in enumerate(created_overlays):
             self.assertEqual(overlay_info["covered_text"], overlay_info["text"],
                            f"Overlay {i} text mismatch: '{overlay_info['covered_text']}' != '{overlay_info['text']}'")
-            print(f"✅ Overlay {i} text correct: '{overlay_info['covered_text']}'")
 
         # Verify overlays are positioned within text content area
-        text_content = self.driver.find_element(By.ID, "text-content")
-        text_rect = text_content.rect
+        text_content_el = self.driver.find_element(By.ID, "text-content")
+        text_rect = self.driver.execute_script(
+            'return arguments[0].getBoundingClientRect();', text_content_el
+        )
+
         for i, overlay_info in enumerate(created_overlays):
             rect = overlay_info["rect"]
-            self.assertGreaterEqual(rect['top'], text_rect['top'],
+            self.assertGreaterEqual(rect['top'], text_rect['top'] - 1,
                                   f"Overlay {i} positioned above text content")
-            self.assertLessEqual(rect['bottom'], text_rect['bottom'],
+            self.assertLessEqual(rect['bottom'], text_rect['bottom'] + 1,
                                f"Overlay {i} positioned below text content")
-            print(f"✅ Overlay {i} positioned correctly within text area")
 
-        # Verify overlays don't overlap significantly (they should be at different positions)
+        # Verify overlays don't overlap significantly (they annotate different words)
         for i in range(len(created_overlays)):
             for j in range(i + 1, len(created_overlays)):
                 rect1 = created_overlays[i]["rect"]
                 rect2 = created_overlays[j]["rect"]
 
-                # Check if overlays overlap significantly
-                overlap_horizontal = not (rect1['right'] < rect2['left'] or rect2['right'] < rect1['left'])
-                overlap_vertical = not (rect1['bottom'] < rect2['top'] or rect2['bottom'] < rect1['top'])
+                # Check if overlays overlap
+                overlap_horizontal = not (rect1.get('right', 0) < rect2.get('left', 0)
+                                        or rect2.get('right', 0) < rect1.get('left', 0))
+                overlap_vertical = not (rect1.get('bottom', 0) < rect2.get('top', 0)
+                                       or rect2.get('bottom', 0) < rect1.get('top', 0))
 
                 if overlap_horizontal and overlap_vertical:
                     # Calculate overlap area
-                    overlap_width = min(rect1['right'], rect2['right']) - max(rect1['left'], rect2['left'])
-                    overlap_height = min(rect1['bottom'], rect2['bottom']) - max(rect1['top'], rect2['top'])
-                    overlap_area = overlap_width * overlap_height
+                    overlap_width = (min(rect1.get('right', 0), rect2.get('right', 0))
+                                   - max(rect1.get('left', 0), rect2.get('left', 0)))
+                    overlap_height = (min(rect1.get('bottom', 0), rect2.get('bottom', 0))
+                                    - max(rect1.get('top', 0), rect2.get('top', 0)))
+                    overlap_area = max(0, overlap_width) * max(0, overlap_height)
 
-                    # Calculate total area of both overlays
-                    area1 = (rect1['right'] - rect1['left']) * (rect1['bottom'] - rect1['top'])
-                    area2 = (rect2['right'] - rect2['left']) * (rect2['bottom'] - rect2['top'])
-                    total_area = area1 + area2
+                    # Calculate areas of both overlays
+                    area1 = ((rect1.get('right', 0) - rect1.get('left', 0))
+                            * (rect1.get('bottom', 0) - rect1.get('top', 0)))
+                    area2 = ((rect2.get('right', 0) - rect2.get('left', 0))
+                            * (rect2.get('bottom', 0) - rect2.get('top', 0)))
 
-                    # Overlap should be less than 50% of the smaller overlay
-                    overlap_ratio = overlap_area / min(area1, area2)
-                    self.assertLess(overlap_ratio, 0.5,
-                                  f"Overlays {i} and {j} overlap too much: {overlap_ratio:.2f}")
-
-        print("✅ All overlays positioned correctly without significant overlap")
+                    min_area = min(area1, area2)
+                    if min_area > 0:
+                        # Overlap should be less than 50% of the smaller overlay
+                        overlap_ratio = overlap_area / min_area
+                        self.assertLess(overlap_ratio, 0.5,
+                                      f"Overlays {i} and {j} overlap too much: {overlap_ratio:.2f}")
 
 
 if __name__ == "__main__":

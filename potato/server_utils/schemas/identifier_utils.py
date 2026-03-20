@@ -189,6 +189,14 @@ def generate_validation_attribute(annotation_scheme: dict, label_name: str = Non
     """
     label_requirement = annotation_scheme.get("label_requirement", {})
 
+    # Normalize: label_requirement: true (bool) → {"required": true}
+    if isinstance(label_requirement, bool):
+        label_requirement = {"required": True} if label_requirement else {}
+
+    # Support top-level required: true as shorthand for label_requirement.required
+    if not label_requirement and annotation_scheme.get("required") is True:
+        label_requirement = {"required": True}
+
     # Debug logging
     logger.debug(f"generate_validation_attribute called with label_requirement: {label_requirement}")
     logger.debug(f"label_name: {label_name}")

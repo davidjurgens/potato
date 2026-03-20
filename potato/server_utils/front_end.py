@@ -2,6 +2,7 @@
 Handle all front-end related functionalities.
 """
 
+import base64
 import os
 import logging
 import json
@@ -22,20 +23,6 @@ from potato.server_utils.schemas.keybinding_allocator import allocate_keybinding
 logger = logging.getLogger(__name__)
 
 
-def _layout_has_instance_slot(task_html_layout: str) -> bool:
-    """Return True when a task layout explicitly places instance display content."""
-    if not task_html_layout:
-        return False
-
-    slot_markers = [
-        r"\{\{\s*display_html",        # full instance display block
-        r"\{\{\s*display_fields",      # per-field placement
-        r"instance_display_block\.html", # explicit include fallback
-        r"data-instance-display-slot",    # future/custom marker
-    ]
-    return any(re.search(pattern, task_html_layout) for pattern in slot_markers)
-
-
 # TODO: Move this to config.yaml files
 # Items which will be displayed in the popup statistics sidebar
 STATS_KEYS = {
@@ -50,6 +37,107 @@ DEFAULT_ANNOTATION_LAYOUT_SUBDIR = "layouts"
 DEFAULT_ANNOTATION_LAYOUT_FILENAME = "task_layout.html"
 
 
+SUPPORTED_HEADER_LOGO_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp'}
+EXTENSION_TO_MIME = {
+    '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
+    '.webp': 'image/webp',
+}
+
+
+def resolve_header_logo_src(config: dict) -> str:
+    """
+    Resolve the ``header_logo`` config value into a src URL for an ``<img>`` tag.
+
+    - If not configured, returns ``""``.
+    - If the value is an HTTP(S) URL, returns it directly.
+    - Otherwise, reads the local file, base64-encodes it, and returns a data URL.
+
+    Returns:
+        A URL string suitable for ``<img src="...">``, or ``""`` if not configured.
+    """
+    logo_path = config.get("header_logo")
+    if not logo_path:
+        return ""
+
+    # Pass through external URLs
+    if logo_path.startswith(("http://", "https://")):
+        return logo_path
+
+    try:
+        resolved = resolve_project_asset_path(config, logo_path)
+    except FileNotFoundError:
+        logger.warning("header_logo file not found: %s", logo_path)
+        return ""
+
+    ext = os.path.splitext(resolved)[1].lower()
+    if ext not in SUPPORTED_HEADER_LOGO_EXTENSIONS:
+        logger.warning("header_logo has unsupported extension '%s' (supported: %s)",
+                        ext, ', '.join(sorted(SUPPORTED_HEADER_LOGO_EXTENSIONS)))
+        return ""
+
+    mime = EXTENSION_TO_MIME[ext]
+    with open(resolved, "rb") as f:
+        encoded = base64.b64encode(f.read()).decode("ascii")
+
+    return f"data:{mime};base64,{encoded}"
+
+
+def resolve_project_asset_path(config: dict, relative_path: str) -> str:
+    """
+    Resolve a project-relative asset path using the config file directory as base.
+
+    Args:
+        config: The configuration dict (must contain ``__config_file__``)
+        relative_path: The path as specified in the config (absolute or relative)
+
+    Returns:
+        Absolute path to the resolved file
+
+    Raises:
+        FileNotFoundError: If the file does not exist at the resolved path
+    """
+    if os.path.isabs(relative_path) and os.path.exists(relative_path):
+        return relative_path
+
+    if os.path.exists(relative_path):
+        return os.path.abspath(relative_path)
+
+    # Resolve relative to the config file's directory
+    config_file = config.get("__config_file__", "")
+    if config_file:
+        real_path = os.path.realpath(config_file)
+        dir_path = os.path.dirname(real_path)
+        abs_path = os.path.join(dir_path, relative_path)
+        if os.path.exists(abs_path):
+            return abs_path
+
+    raise FileNotFoundError(f"Project asset file not found: {relative_path}")
+
+
+def load_project_base_css_html(config: dict) -> str:
+    """
+    Load the project-level ``base_css`` file and return it wrapped in a ``<style>`` tag.
+
+    If ``base_css`` is not configured, returns an empty string.
+
+    Args:
+        config: The configuration dict
+
+    Returns:
+        HTML ``<style>`` block, or empty string
+    """
+    css_path = config.get("base_css")
+    if not css_path:
+        return ""
+
+    resolved = resolve_project_asset_path(config, css_path)
+    with open(resolved, "rt", encoding="utf-8") as f:
+        css_content = f.read()
+
+    return f'<style id="potato-project-base-css">\n{css_content}\n</style>'
+
+
 def compute_config_md5(config):
     """
     Compute MD5 hash of the config dict for template invalidation.
@@ -60,9 +148,10 @@ def compute_config_md5(config):
     return hashlib.md5(config_str.encode('utf-8')).hexdigest()
 
 
-def generate_annotation_layout_file(config: dict, annotation_schemes: list[dict]) -> str:
+def generate_annotation_layout_file(config: dict, annotation_schemes: list[dict], layout_name: str = None) -> str:
     """
     Generate a dedicated annotation layout file in the task directory under layouts/task_layout.html.
+    If layout_name is provided, uses task_layout_{layout_name}.html instead.
     """
     task_dir = config.get("task_dir")
     if not task_dir:
@@ -74,7 +163,8 @@ def generate_annotation_layout_file(config: dict, annotation_schemes: list[dict]
         os.makedirs(layout_dir)
 
     # Generate the layout file path
-    layout_file_path = os.path.join(layout_dir, DEFAULT_ANNOTATION_LAYOUT_FILENAME)
+    filename = f"task_layout_{layout_name}.html" if layout_name else DEFAULT_ANNOTATION_LAYOUT_FILENAME
+    layout_file_path = os.path.join(layout_dir, filename)
 
     # Generate the HTML layout content
     schema_layouts = ""
@@ -111,24 +201,30 @@ def generate_annotation_layout_file(config: dict, annotation_schemes: list[dict]
     return layout_file_path
 
 
-def get_or_generate_annotation_layout(config: dict, annotation_schemes: list[dict]) -> str:
+def get_or_generate_annotation_layout(config: dict, annotation_schemes: list[dict], layout_name: str = None) -> str:
     """
     Get the annotation layout file path, generating it if it doesn't exist or if the config hash has changed.
+    If layout_name is provided, uses task_layout_{layout_name}.html instead.
     """
     task_dir = config.get("task_dir")
     if not task_dir:
         raise ValueError("task_dir is required in config")
     layout_dir = os.path.join(task_dir, DEFAULT_ANNOTATION_LAYOUT_SUBDIR)
-    layout_file_path = os.path.join(layout_dir, DEFAULT_ANNOTATION_LAYOUT_FILENAME)
+    filename = f"task_layout_{layout_name}.html" if layout_name else DEFAULT_ANNOTATION_LAYOUT_FILENAME
+    layout_file_path = os.path.join(layout_dir, filename)
 
     config_hash = compute_config_md5(config)
 
     # Also hash the actual generated schema content to detect code changes
     # (e.g., if bws.py changes separators, the config hash won't change but the output will)
+    # NOTE: must match the concatenation format used in generate_annotation_layout_file
+    # (each layout followed by "\n") so hashes are consistent
     schema_content_hash = hashlib.md5()
+    schema_layouts = ""
     for annotation_scheme in annotation_schemes:
         layout_html, _ = generate_schematic(annotation_scheme)
-        schema_content_hash.update(layout_html.encode('utf-8'))
+        schema_layouts += layout_html + "\n"
+    schema_content_hash.update(schema_layouts.encode('utf-8'))
     combined_hash = f"{config_hash}_{schema_content_hash.hexdigest()}"
 
     # Check if the layout file already exists and if the hash matches
@@ -147,7 +243,7 @@ def get_or_generate_annotation_layout(config: dict, annotation_schemes: list[dic
 
     # Generate the layout file if it doesn't exist or hash mismatches
     logger.info(f"Annotation layout file not found or hash mismatch, generating: {layout_file_path}")
-    return generate_annotation_layout_file(config, annotation_schemes)
+    return generate_annotation_layout_file(config, annotation_schemes, layout_name=layout_name)
 
 
 def generate_schematic(annotation_scheme):
@@ -269,7 +365,7 @@ def generate_annotation_html_template(config: dict) -> str:
         )
 
     # Grab the annotation schemes
-    annotation_schemes = config.get("annotation_schemes", [])
+    annotation_schemes = config["annotation_schemes"]
     logger.debug("Saw %d annotation scheme(s)" % len(annotation_schemes))
 
     # insert annotation id to each of the schemes
@@ -298,14 +394,7 @@ def generate_annotation_html_template(config: dict) -> str:
         logger.info(f"Using custom task layout file: {task_layout_file}")
 
         # Resolve the path relative to the config file
-        if not os.path.exists(task_layout_file):
-            real_path = os.path.realpath(config["__config_file__"])
-            dir_path = os.path.dirname(real_path)
-            abs_task_layout_file = os.path.join(dir_path, task_layout_file)
-
-            if not os.path.exists(abs_task_layout_file):
-                raise FileNotFoundError(f"task_layout file not found: {task_layout_file}")
-            task_layout_file = abs_task_layout_file
+        task_layout_file = resolve_project_asset_path(config, task_layout_file)
 
         # Read the custom task layout
         with open(task_layout_file, "rt", encoding="utf-8") as f:
@@ -368,7 +457,6 @@ def generate_annotation_html_template(config: dict) -> str:
     #
 
     # Swap in the task's layout
-    config["task_layout_has_instance_slot"] = _layout_has_instance_slot(task_html_layout)
     html_template = html_template.replace("{{ TASK_LAYOUT }}", task_html_layout)
     html_template = html_template.replace("{{annotation_codebook}}", codebook_html)
     html_template = html_template.replace(
@@ -528,14 +616,7 @@ def generate_html_from_schematic(annotation_schemas: list[dict],
         logger.info(f"Using custom task layout file: {task_layout_file}")
 
         # Resolve the path relative to the config file
-        if not os.path.exists(task_layout_file):
-            real_path = os.path.realpath(config["__config_file__"])
-            dir_path = os.path.dirname(real_path)
-            abs_task_layout_file = os.path.join(dir_path, task_layout_file)
-
-            if not os.path.exists(abs_task_layout_file):
-                raise FileNotFoundError(f"task_layout file not found: {task_layout_file}")
-            task_layout_file = abs_task_layout_file
+        task_layout_file = resolve_project_asset_path(config, task_layout_file)
 
         # Read the custom task layout
         with open(task_layout_file, "rt", encoding="utf-8") as f:
@@ -544,12 +625,12 @@ def generate_html_from_schematic(annotation_schemas: list[dict],
     else:
         # Use the dedicated annotation layout file system (auto-generated)
         try:
-            layout_file_path = get_or_generate_annotation_layout(config, annotation_schemas)
+            layout_file_path = get_or_generate_annotation_layout(config, annotation_schemas, layout_name=phase_name)
 
             # Read the generated layout file
             with open(layout_file_path, "rt", encoding="utf-8") as f:
                 task_html_layout = "".join(f.readlines())
-            
+
         except Exception as e:
             logger.warning(f"Failed to use dedicated layout file: {e}. Falling back to inline generation.")
 
@@ -562,7 +643,6 @@ def generate_html_from_schematic(annotation_schemas: list[dict],
 
             task_html_layout = f'<div class="annotation_schema">{schema_layouts}</div>'
 
-    config["task_layout_has_instance_slot"] = _layout_has_instance_slot(task_html_layout)
     cur_html_template = html_template.replace("{{ TASK_LAYOUT }}", task_html_layout)
 
     # Add in a codebook link if the admin specified one

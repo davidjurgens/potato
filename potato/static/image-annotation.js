@@ -1600,3 +1600,8 @@ class ImageAnnotationManager {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = ImageAnnotationManager;
 }
+
+// Make available in browser environments
+if (typeof window !== 'undefined') {
+    window.ImageAnnotationManager = ImageAnnotationManager;
+}

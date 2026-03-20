@@ -26,6 +26,11 @@ from tests.helpers.port_manager import find_free_port
 from tests.helpers.test_utils import TestConfigManager
 
 
+import pytest
+
+
+pytestmark = pytest.mark.core
+
 class TestAnnotationServerVerification(unittest.TestCase):
     """Tests verifying server-side annotation storage."""
 

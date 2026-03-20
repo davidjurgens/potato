@@ -1,75 +1,18 @@
-# Potato: The Portable Text Annotation Tool
+# Potato: The Portable Annotation Tool
 
 [![Documentation](https://img.shields.io/badge/docs-readthedocs-blue)](https://potatoannotator.readthedocs.io/)
 [![PyPI](https://img.shields.io/pypi/v/potato-annotation)](https://pypi.org/project/potato-annotation/)
 [![License](https://img.shields.io/badge/license-Polyform%20Shield-green)](LICENSE)
 [![Paper](https://img.shields.io/badge/paper-EMNLP%202022-orange)](https://aclanthology.org/2022.emnlp-demos.33/)
+[![Live Demo](https://img.shields.io/badge/demo-HuggingFace%20Spaces-yellow)](https://huggingface.co/spaces/Blablablab/potato)
 
-**Potato** is a lightweight, configuration-driven annotation tool for NLP research. Go from zero to annotating in minutes—no coding required.
+**Potato** is a free, self-hosted annotation platform for NLP, Agentic, and GenAI research. Annotate text, audio, video, images, documents, agent traces, and more — configured entirely through YAML. No coding required.
 
-## Why Potato?
-
-| Feature | Potato | Other Tools |
-|---------|--------|-------------|
-| Setup time | Minutes (YAML config) | Hours/days (custom code) |
-| Coding required | None | Often extensive |
-| Self-hosted | Yes (full data control) | Often cloud-only |
-| AI assistance | Built-in LLM support | Rarely available |
-| Cost | Free | Often paid |
-
----
-
-## Key Features
-
-### Multi-Modal Annotation
-Potato supports annotation across multiple data types:
-
-| Modality | Features |
-|----------|----------|
-| **Text** | Classification, span labeling, pairwise comparison, free-form responses |
-| **Audio** | Waveform visualization, segment labeling, playback controls ([docs](docs/audio_annotation.md)) |
-| **Video** | Frame-by-frame annotation, temporal segments, playback sync ([docs](docs/video_annotation.md)) |
-| **Images** | Region labeling, classification, comparison tasks ([docs](docs/image_annotation.md)) |
-| **Dialogue** | Turn-level annotation, conversation threading |
-| **Documents** | PDF, Word, Markdown with coordinate mapping ([docs](docs/format_support.md)) |
-| **Code** | Syntax-highlighted source code annotation ([docs](docs/format_support.md)) |
-| **Spreadsheets** | Row/cell-level tabular data annotation ([docs](docs/format_support.md)) |
-
-### Annotation Schemes
-- **Classification**: Radio buttons, checkboxes, Likert scales
-- **Span Annotation**: Highlight and label text spans with keyboard shortcuts
-- **Pairwise Comparison**: Side-by-side comparisons, best-worst scaling
-- **Free Text**: Text boxes with validation and character limits
-- **Conditional Logic**: Show/hide questions based on prior answers ([docs](docs/conditional_logic.md))
-
-### AI-Powered Assistance
-- **Label Suggestions**: LLM-powered pre-annotations to speed up work
-- **Active Learning**: Prioritize uncertain instances for efficient labeling
-- **Multiple Backends**: OpenAI, Anthropic, Ollama, vLLM, and more
-
-### Quality Control
-- **Attention Checks**: Automatically inserted validation questions
-- **Gold Standards**: Track annotator accuracy against known answers
-- **Inter-Annotator Agreement**: Built-in Krippendorff's alpha calculation
-- **Time Tracking**: Monitor annotation speed per instance
-
-### Productivity
-- **Keyboard Shortcuts**: Full keyboard navigation and labeling
-- **Dynamic Highlighting**: Smart keyword highlighting based on labels
-- **Tooltips**: Hover descriptions for complex label schemes
-- **Progress Tracking**: Real-time completion statistics
-
-### Deployment Options
-- **Local Development**: Single command startup
-- **Team Annotation**: Multi-user with authentication
-- **Crowdsourcing**: Prolific and MTurk integration
-- **Enterprise**: MySQL backend for large-scale deployments
+**[Try the live demo on HuggingFace Spaces](https://huggingface.co/spaces/Blablablab/potato)** — no installation needed.
 
 ---
 
 ## Quick Start
-
-### Option 1: Install from PyPI (Recommended)
 
 ```bash
 pip install potato-annotation
@@ -77,112 +20,207 @@ pip install potato-annotation
 # List available templates
 potato list all
 
-# Get a template project
+# Get a template and start annotating
 potato get sentiment_analysis
-
-# Start annotating
 potato start sentiment_analysis
 ```
 
-### Option 2: Run from Source
+Or run from source:
 
 ```bash
 git clone https://github.com/davidjurgens/potato.git
-cd potato
-pip install -r requirements.txt
-
-# Start a simple annotation task
-python potato/flask_server.py start examples/classification/check-box/config.yaml -p 8000
+cd potato && pip install -r requirements.txt
+python potato/flask_server.py start examples/classification/single-choice/config.yaml -p 8000
 ```
 
-Then open [http://localhost:8000](http://localhost:8000) in your browser.
+Open [http://localhost:8000](http://localhost:8000) and start annotating.
 
 ---
 
-## Documentation
+## What Can You Annotate?
 
-| Topic | Description |
-|-------|-------------|
-| [Getting Started](https://potatoannotator.readthedocs.io/en/latest/usage/) | Installation and first project setup |
-| [Configuration Guide](https://potatoannotator.readthedocs.io/en/latest/schemas_and_templates/) | YAML configuration options |
-| [Annotation Schemas](https://potatoannotator.readthedocs.io/en/latest/schemas_and_templates/) | Radio, checkbox, span, likert, and more |
-| [Conditional Logic](docs/conditional_logic.md) | Show/hide questions based on answers |
-| [Format Support](docs/format_support.md) | PDF, Word, code, spreadsheet annotation |
-| [Data Formats](https://potatoannotator.readthedocs.io/en/latest/data_format/) | Input/output data specifications |
-| [AI Support](docs/ai_support.md) | LLM integration for label suggestions |
-| [Quality Control](docs/quality_control.md) | Attention checks and gold standards |
-| [Active Learning](docs/active_learning_guide.md) | ML-based instance prioritization |
-| [Admin Dashboard](docs/admin_dashboard.md) | Monitoring and analytics |
-| [Crowdsourcing](https://potatoannotator.readthedocs.io/en/latest/crowdsourcing/) | Prolific and MTurk setup |
-| [User Simulator](docs/simulator.md) | Testing and load simulation |
+Potato handles the full spectrum of annotation tasks — from traditional NLP labeling to evaluating the latest AI agent systems.
+
+### Data Types
+
+| Modality | Capabilities |
+|----------|-------------|
+| **Text** | Classification, span labeling, entity linking, coreference, pairwise comparison ([docs](docs/schemas_and_templates.md)) |
+| **Agent Traces** | Step-by-step evaluation of LLM agents, tool calls, ReAct chains, and multi-agent systems ([docs](docs/agent_traces.md)) |
+| **Web Agents** | Screenshot-based review with SVG click/scroll overlays, or live browsing with automatic trace recording ([docs](docs/web_agent_annotation.md)) |
+| **RAG Pipelines** | Retrieval relevance, answer faithfulness, citation accuracy, hallucination detection |
+| **Audio** | Waveform visualization, segment labeling, ELAN-style tiered annotation ([docs](docs/audio_annotation.md)) |
+| **Video** | Frame-by-frame labeling, temporal segments, playback sync ([docs](docs/video_annotation.md)) |
+| **Images** | Bounding boxes, polygons, landmarks, classification ([docs](docs/image_annotation.md)) |
+| **Dialogue** | Turn-level annotation, conversation trees, interactive chat evaluation |
+| **Documents** | PDF, Word, Markdown, code, and spreadsheets with coordinate mapping ([docs](docs/format_support.md)) |
+
+### Annotation Schemes
+
+| Scheme | Use Case |
+|--------|----------|
+| Radio / Checkbox / Likert | Classification, multi-label, rating scales |
+| Span annotation | NER, highlighting, hallucination marking |
+| Pairwise comparison | A/B testing, best-worst scaling |
+| Per-step ratings | Evaluate individual agent actions or dialogue turns |
+| Free text | Open-ended responses with validation |
+| Triage | Rapid accept/reject/skip curation ([docs](docs/triage.md)) |
+| Conditional logic | Adaptive forms that respond to prior answers ([docs](docs/conditional_logic.md)) |
+
+---
+
+## Agent & LLM Evaluation
+
+Potato provides purpose-built tooling for evaluating AI agents at every level of granularity.
+
+### Trace Formats
+
+Import traces from any major agent framework with the built-in converter:
+
+```bash
+python -m potato.trace_converter --input traces.json --input-format openai --output data.jsonl
+```
+
+Supported formats: **OpenAI**, **Anthropic/Claude**, **ReAct**, **LangChain**, **LangFuse**, **WebArena**, **SWE-bench**, **OpenTelemetry**, **CrewAI/AutoGen/LangGraph**, **MCP**, and more. Auto-detection is available with `--auto-detect`.
+
+### Evaluation Levels
+
+| Level | What You Annotate | Example |
+|-------|------------------|---------|
+| **Trajectory** | Overall task success, efficiency, safety | "Did the agent complete the task?" |
+| **Step** | Individual action correctness, reasoning quality | Per-turn Likert ratings on each agent step |
+| **Span** | Specific text segments within agent output | Highlight hallucinated claims, factual errors |
+| **Comparison** | Side-by-side A/B agent evaluation | "Which agent performed better?" |
+
+### Web Agent Viewer
+
+An interactive viewer for GUI agent traces — navigate step-by-step through screenshots with SVG overlays showing clicks, bounding boxes, mouse paths, and scroll actions. Annotators rate each step with inline controls while a filmstrip bar provides quick navigation.
+
+### Ready-to-Use Agent Examples
+
+| Example | What It Evaluates |
+|---------|-------------------|
+| [agent-trace-evaluation](examples/agent-traces/agent-trace-evaluation/) | Text agent traces with MAST error taxonomy + hallucination spans |
+| [visual-agent-evaluation](examples/agent-traces/visual-agent-evaluation/) | GUI agents with screenshot grounding accuracy |
+| [agent-comparison](examples/agent-traces/agent-comparison/) | Side-by-side A/B agent comparison |
+| [rag-evaluation](examples/agent-traces/rag-evaluation/) | RAG retrieval relevance and citation accuracy |
+| [openai-evaluation](examples/agent-traces/openai-evaluation/) | OpenAI Chat API traces with tool calls |
+| [anthropic-evaluation](examples/agent-traces/anthropic-evaluation/) | Claude messages with tool_use blocks |
+| [swebench-evaluation](examples/agent-traces/swebench-evaluation/) | Coding agents with patch correctness ratings |
+| [multi-agent-evaluation](examples/agent-traces/multi-agent-evaluation/) | Multi-agent coordination (CrewAI, AutoGen, LangGraph) |
+| [web-agent-review](examples/agent-traces/web-agent-review/) | Pre-recorded web traces with step-by-step overlay viewer |
+| [web-agent-creation](examples/agent-traces/web-agent-creation/) | Live web browsing with automatic trace recording |
+
+---
+
+## AI-Powered Annotation
+
+### LLM Label Suggestions
+
+Integrate any LLM provider to pre-annotate instances and suggest labels. Annotators review and correct — dramatically faster than labeling from scratch.
+
+Supported backends: **OpenAI**, **Anthropic**, **Ollama**, **vLLM**, **Gemini**, **HuggingFace**, **OpenRouter**
+
+### Active Learning
+
+Potato reorders your annotation queue based on model uncertainty so annotators label the most informative instances first. Supports uncertainty sampling, BADGE, BALD, diversity, and hybrid strategies ([docs](docs/active_learning_guide.md)).
+
+### Solo Mode
+
+A human-LLM collaborative workflow where the system learns from annotator feedback and progressively transitions to autonomous LLM labeling as agreement improves ([docs](docs/solo_mode.md)).
+
+### Chat Assistant
+
+An LLM-powered sidebar where annotators can ask questions about difficult instances. The AI provides guidance informed by your task description and annotation guidelines — helping annotators think through decisions without auto-labeling ([docs](docs/chat_support.md)).
+
+---
+
+## Quality Control & Workflows
+
+### Quality Assurance
+
+| Feature | Description |
+|---------|-------------|
+| Attention checks | Automatically inserted known-answer items to verify engagement |
+| Gold standards | Track annotator accuracy against expert labels |
+| Inter-annotator agreement | Built-in Krippendorff's alpha and Cohen's kappa |
+| Training phase | Practice annotations with feedback before the real task |
+| Behavioral tracking | Timing, click patterns, and annotation change history |
+
+### Annotation Workflows
+
+| Workflow | Description |
+|----------|-------------|
+| **Multi-annotator** | Multiple annotators per item with overlap control and agreement metrics |
+| **Adjudication** | Expert review of annotator disagreements to produce gold labels ([docs](docs/admin_dashboard.md)) |
+| **Solo mode** | Human-LLM collaboration with progressive automation ([docs](docs/solo_mode.md)) |
+| **Crowdsourcing** | Prolific and MTurk integration with platform-specific auth ([docs](docs/crowdsourcing.md)) |
+| **Triage** | Rapid accept/reject/skip for data curation ([docs](docs/triage.md)) |
+
+---
+
+## Authentication & Deployment
+
+Potato supports multiple authentication methods, from passwordless quick-start to enterprise SSO:
+
+| Method | Use Case |
+|--------|----------|
+| **In-memory** | Local development, quick studies |
+| **Password + file persistence** | Team annotation with shared credential files ([docs](docs/password_management.md)) |
+| **Database** | Production deployments with SQLite or PostgreSQL ([docs](docs/password_management.md#database-authentication-backend)) |
+| **OAuth / SSO** | Google, GitHub, or institutional OIDC login ([docs](docs/sso_authentication.md)) |
+| **Passwordless** | Low-stakes tasks where ease of access matters ([docs](docs/passwordless_login.md)) |
+
+Passwords are hashed with per-user PBKDF2-SHA256 salts. Admins can reset passwords via CLI (`potato reset-password`) or REST API. Self-service token-based reset is also available.
 
 ---
 
 ## Example Projects
 
-Ready-to-use annotation templates organized by type in [`examples/`](examples/):
+Ready-to-use templates organized by type in [`examples/`](examples/):
 
-| Category | Examples | Description |
-|----------|----------|-------------|
-| [Classification](examples/classification/) | Radio, checkbox, Likert, slider, pairwise | Label selection and rating tasks |
-| [Span](examples/span/) | Span labeling, linking, coreference, NER | Text span annotation |
-| [Audio](examples/audio/) | Audio annotation, classification, tiered | Audio annotation with waveforms |
-| [Video](examples/video/) | Video annotation, tracking, frame-level | Video annotation with playback |
-| [Image](examples/image/) | Image, PDF, document annotation | Image and document annotation |
-| [Advanced](examples/advanced/) | Multi-modal, quality control, adjudication | Complex features and workflows |
-| [AI-Assisted](examples/ai-assisted/) | AI keywords, Ollama integration | AI/ML-powered annotation |
-| [Custom Layouts](examples/custom-layouts/) | Content moderation, dialogue QA | Layout customization |
+| Category | Examples |
+|----------|----------|
+| [Classification](examples/classification/) | Radio, checkbox, Likert, slider, pairwise comparison |
+| [Span](examples/span/) | NER, span linking, coreference, entity linking |
+| [Agent Traces](examples/agent-traces/) | LLM agents, web agents, RAG, multi-agent, code agents |
+| [Audio](examples/audio/) | Waveform annotation, classification, ELAN-style tiered |
+| [Video](examples/video/) | Frame-level labeling, temporal segments |
+| [Image](examples/image/) | Bounding boxes, PDF/document annotation |
+| [Advanced](examples/advanced/) | Solo mode, adjudication, quality control, conditional logic |
+| [AI-Assisted](examples/ai-assisted/) | LLM suggestions, Ollama integration |
+| [Custom Layouts](examples/custom-layouts/) | Content moderation, dialogue QA, medical review |
 
-### Research Project Showcase
+### Research Showcase
 
-Looking for real-world examples from published research? The **[Potato Showcase](https://github.com/davidjurgens/potato-showcase/)** contains paper-specific annotation projects including sentiment analysis, dialogue analysis, summarization evaluation, and more.
+The **[Potato Showcase](https://github.com/davidjurgens/potato-showcase/)** contains annotation projects from published research — sentiment analysis, dialogue evaluation, summarization, and more.
 
-Use `potato list all` to see downloadable projects, or `potato get <project>` to fetch one.
+```bash
+potato list all          # Browse available projects
+potato get <project>     # Download one
+```
 
 ---
 
-## What's New in v2.1
+## Documentation
 
-- **Conditional Logic**: Show/hide annotation questions based on prior answers
-- **Document Formats**: PDF, Word, Markdown annotation with coordinate mapping
-- **Code Annotation**: Syntax-highlighted source code with line-level spans
-- **Spreadsheet Support**: Row and cell-level tabular data annotation
-- **Bounding Box Annotation**: Draw boxes on PDFs and documents
-
-## What's New in v2.0
-
-- **AI Support**: Integrated LLM assistance with OpenAI, Anthropic, Gemini, Ollama, vLLM
-- **Audio Annotation**: Waveform-based segmentation with Peaks.js
-- **Video Annotation**: Frame-by-frame labeling with playback controls
-- **Active Learning**: Uncertainty sampling for efficient annotation
-- **Training Phase**: Practice annotations with feedback
-- **Quality Control**: Attention checks, gold standards, agreement metrics
-- **User Simulator**: Automated testing with configurable annotator behaviors
-- **Database Backend**: MySQL support for large-scale deployments
-- **Debug Mode**: Skip to specific phases, selective logging
-
-See [CHANGELOG.md](CHANGELOG.md) for full release history.
-
----
-
-## Architecture
-
-```
-potato/
-├── flask_server.py      # Main application server
-├── routes.py            # HTTP endpoints
-├── templates/           # Jinja2 HTML templates
-├── static/              # JavaScript, CSS
-├── server_utils/
-│   └── schemas/         # Annotation type implementations
-├── ai/                  # LLM endpoint integrations
-├── simulator/           # User simulation for testing
-└── quality_control.py   # QC validation logic
-
-examples/                # Annotation templates by type
-tests/                   # Test suite
-docs/                    # Documentation
-```
+| Topic | Link |
+|-------|------|
+| Quick Start | [docs/quick-start.md](docs/quick-start.md) |
+| Configuration Reference | [docs/configuration.md](docs/configuration.md) |
+| Schema Gallery | [docs/schemas_and_templates.md](docs/schemas_and_templates.md) |
+| Agent Trace Evaluation | [docs/agent_traces.md](docs/agent_traces.md) |
+| Web Agent Annotation | [docs/web_agent_annotation.md](docs/web_agent_annotation.md) |
+| AI Support | [docs/ai_support.md](docs/ai_support.md) |
+| Active Learning | [docs/active_learning_guide.md](docs/active_learning_guide.md) |
+| Solo Mode | [docs/solo_mode.md](docs/solo_mode.md) |
+| Quality Control | [docs/quality_control.md](docs/quality_control.md) |
+| Password Management | [docs/password_management.md](docs/password_management.md) |
+| SSO & OAuth | [docs/sso_authentication.md](docs/sso_authentication.md) |
+| Admin Dashboard | [docs/admin_dashboard.md](docs/admin_dashboard.md) |
+| Crowdsourcing | [docs/crowdsourcing.md](docs/crowdsourcing.md) |
+| Export Formats | [docs/export_formats.md](docs/export_formats.md) |
+| Full Documentation Index | [docs/index.md](docs/index.md) |
 
 ---
 
@@ -192,12 +230,12 @@ docs/                    # Documentation
 # Run tests
 pytest tests/ -v
 
-# Run specific test categories
-pytest tests/unit/ -v        # Unit tests
-pytest tests/simulator/ -v   # Simulator tests
+# By category
+pytest tests/unit/ -v        # Unit tests (fast)
 pytest tests/server/ -v      # Integration tests
+pytest tests/selenium/ -v    # Browser tests
 
-# Run with coverage
+# With coverage
 pytest --cov=potato --cov-report=html
 ```
 
@@ -207,13 +245,13 @@ pytest --cov=potato --cov-report=html
 
 - **Issues**: [GitHub Issues](https://github.com/davidjurgens/potato/issues)
 - **Questions**: jurgens@umich.edu
-- **Documentation**: [potatoannotator.readthedocs.io](https://potatoannotator.readthedocs.io/)
+- **Docs**: [potatoannotator.readthedocs.io](https://potatoannotator.readthedocs.io/)
 
 ---
 
 ## License
 
-Potato is licensed under [Polyform Shield](LICENSE). Short-summary: Non-commercial applications can use Potato however they want. Commercial applications can use Potato to annotate all they want, but cannot integrate Potato into a commecial product. 
+Potato is licensed under [Polyform Shield](LICENSE). Non-commercial applications can use Potato however they want. Commercial applications can use Potato to annotate all they want, but cannot integrate Potato into a commercial product.
 
 <details>
 <summary>License FAQ</summary>

@@ -169,6 +169,53 @@ Only return the JSON object, no other text."""
             logger.error(traceback.format_exc())
             raise AIEndpointRequestError(f"Anthropic vision query failed: {e}")
 
+    def chat_query_with_image(
+        self,
+        messages: List[Dict[str, Any]],
+        images: Any = None,
+    ) -> str:
+        """
+        Multi-turn chat with interleaved images for vision-based agent loops.
+
+        Messages may have 'content' as a string (text only) or a list of
+        content blocks (text + image dicts in Anthropic format).
+
+        Args:
+            messages: List of message dicts with 'role' and 'content'.
+            images: Unused (images are inline in messages).
+
+        Returns:
+            The model's response as a plain text string.
+        """
+        try:
+            system = ""
+            api_messages = []
+
+            for msg in messages:
+                if msg["role"] == "system":
+                    system = msg["content"] if isinstance(msg["content"], str) else str(msg["content"])
+                else:
+                    api_messages.append({
+                        "role": msg["role"],
+                        "content": msg["content"],
+                    })
+
+            kwargs = {
+                "model": self.model,
+                "max_tokens": self.max_tokens,
+                "temperature": self.temperature,
+                "messages": api_messages,
+            }
+            if system:
+                kwargs["system"] = system
+
+            response = self.client.messages.create(**kwargs)
+            return response.content[0].text
+
+        except Exception as e:
+            logger.error(f"Anthropic vision chat query failed: {e}")
+            raise AIEndpointRequestError(f"Anthropic vision chat query failed: {e}")
+
     def _build_image_block(self, image_data: ImageData) -> Dict[str, Any]:
         """
         Build image content block for Anthropic API.

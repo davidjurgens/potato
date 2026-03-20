@@ -41,6 +41,7 @@
 ## Agent Evaluation
 
 - [Agent Traces](agent_traces.md) - Evaluate AI agent traces and trajectories
+- [Live Agent Interaction](live_agent.md) - Observe and interact with a live AI agent in real time
 
 ## Solo Mode
 
@@ -55,13 +56,11 @@
 - [Active Learning Strategies](active_learning_strategies.md) - Query strategies reference (BADGE, BALD, hybrid, cold-start)
 - [ICL Labeling](icl_labeling.md) - In-context learning for labeling
 
-## User Management
+## Authentication & User Management
 
-- [Users & Collaboration](user_and_collaboration.md) - User settings and access control
-- [Passwordless Login](passwordless_login.md) - URL-based authentication
-
-## Authentication & Access Control
-
+- [Users & Collaboration](user_and_collaboration.md) - User registration, access control, and collaboration
+- [Password Management](password_management.md) - Password security, reset flows, database backend, and shared credentials
+- [Passwordless Login](passwordless_login.md) - Authentication without passwords
 - [SSO & OAuth Authentication](sso_authentication.md) - Google, GitHub, and institutional SSO login
 
 ## Crowdsourcing
@@ -79,8 +78,14 @@
 
 - [Data Format](data_format.md) - Input and output data formats
 - [Export Formats](export_formats.md) - Export to COCO, YOLO, CoNLL, and more
+- [HuggingFace Hub Export](huggingface_export.md) - Push annotations to HuggingFace Hub
 - [UI Configuration](ui_configuration.md) - Interface customization
 - [Layout Customization](layout_customization.md) - Custom CSS layouts and styling
+
+## Integrations
+
+- [Webhooks](webhooks.md) - Outgoing webhook notifications for annotation events
+- [HuggingFace Spaces](huggingface_spaces.md) - Deploy Potato on HuggingFace Spaces
 
 ## Tools & Utilities
 
@@ -95,6 +100,7 @@
 
 ## Release Notes
 
+- [v2.4.0](releasenotes/v2.4.0.md) - Agent Evaluation, AI-Assisted Annotation & Enterprise Integration
 - [v2.2.0](releasenotes/v2.2.0.md) - Comprehensive Annotation & Export Platform
 - [v2.1.0](releasenotes/v2.1.0.md) - Adjudication & Multi-Modal Annotation
 - [v2.0.0](releasenotes/v2.0.0.md) - Backend Refactor
@@ -115,6 +121,8 @@
 | Show/hide questions based on answers | [Conditional Logic](conditional_logic.md) |
 | Annotate PDFs, Word docs, or code | [Format Support](format_support.md) |
 | Set up SSO/OAuth login | [SSO Authentication](sso_authentication.md) |
+| Reset a user's password | [Password Management](password_management.md) |
+| Use a database for user storage | [Password Management](password_management.md#database-authentication-backend) |
 | Configure for MTurk | [MTurk Integration](mturk_integration.md) |
 | Configure for Prolific | [Crowdsourcing Guide](crowdsourcing.md#prolific-integration) |
 | Monitor annotation progress | [Admin Dashboard](admin_dashboard.md) |
@@ -132,6 +140,9 @@
 | Use Solo Mode for collaborative annotation | [Solo Mode](solo_mode.md) |
 | Export annotations to Parquet | [Export Formats](export_formats.md#parquet) |
 | Export to COCO/YOLO/CoNLL | [Export Formats](export_formats.md) |
+| Push annotations to HuggingFace Hub | [HuggingFace Export](huggingface_export.md) |
+| Deploy on HuggingFace Spaces | [HuggingFace Spaces](huggingface_spaces.md) |
+| Set up webhook notifications | [Webhooks](webhooks.md) |
 
 ---
 

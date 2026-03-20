@@ -229,8 +229,10 @@ If no key is configured, Potato automatically generates a secure random key and 
 
 ```yaml
 data_files:
-  - data/my_data.json
-  - data/another_dataset.csv
+  - data/my_data.json                      # simple string path (utf-8)
+  - path: data/another_dataset.csv         # dict form (utf-8 default)
+  - path: data/latin1_data.json            # dict form with explicit encoding
+    encoding: latin-1
 
 item_properties:
   id_key: id           # Field name for item ID
@@ -239,6 +241,15 @@ item_properties:
   kwargs:              # Optional: additional fields to pass to templates
     - metadata
     - source
+```
+
+The `encoding` field (optional, default `utf-8`) can be set per-file using the dict form. Any [Python-recognized encoding](https://docs.python.org/3/library/codecs.html#standard-encodings) is accepted.
+
+For directory watching, set `data_directory_encoding` to apply a single encoding to all files in the watched directory:
+
+```yaml
+data_directory: ./data/incoming
+data_directory_encoding: shift_jis
 ```
 
 ### Output Configuration
@@ -474,6 +485,36 @@ user_config:
   allow_all_users: true  # Allow any user to register
   users: []             # Pre-defined users (empty = none)
 ```
+
+### Authentication Configuration
+
+```yaml
+# Require password for login (default: true)
+require_password: true
+
+authentication:
+  # Backend: "in_memory" (default), "database", "clerk", or "oauth"
+  method: in_memory
+
+  # Path to persistent user credential file (in_memory method only)
+  # When set, user registrations and password changes persist to this file
+  # Mutually exclusive with method: database
+  user_config_path: user_credentials.jsonl
+
+  # Database connection URL (database method only)
+  # Alternatively set POTATO_DB_CONNECTION environment variable
+  # database_url: "sqlite:///data/auth.db"
+```
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `require_password` | boolean | `true` | Require password for login |
+| `authentication.method` | string | `"in_memory"` | Backend: `in_memory`, `database`, `clerk`, `oauth` |
+| `authentication.user_config_path` | string | auto-generated | Path to JSONL file for user persistence |
+| `authentication.database_url` | string | `sqlite:///potato_users.db` | Database URL (for `database` method) |
+
+See [Password Management](password_management.md) for password security, reset flows, and database backend details.
+See [SSO & OAuth Authentication](sso_authentication.md) for Google, GitHub, and institutional SSO.
 
 ### Advanced User Settings
 

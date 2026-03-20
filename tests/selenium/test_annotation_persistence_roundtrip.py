@@ -34,6 +34,10 @@ from tests.helpers.port_manager import find_free_port
 from tests.helpers.test_utils import create_test_config, create_test_data_file
 
 
+import pytest
+
+pytestmark = pytest.mark.core
+
 def create_multiselect_annotation_config(test_dir: str, num_instances: int = 3, **kwargs):
     """
     Create a test configuration with multiselect (checkbox) annotation.
@@ -136,7 +140,7 @@ class TestAnnotationPersistenceRoundtrip(unittest.TestCase):
             cls.test_dir,
             num_instances=3,
             annotation_task_name="Annotation Persistence Roundtrip Test",
-            require_password=False
+            require_password=True
         )
 
         cls.server = FlaskTestServer(port=find_free_port(), debug=False, config_file=cls.config_file)
@@ -268,8 +272,8 @@ class TestAnnotationPersistenceRoundtrip(unittest.TestCase):
         self.assertEqual(instance_id, "1", "Should start on instance 1")
 
         # Check some checkboxes on instance 1
-        self._click_checkbox("1")  # "red" (value "1" with sequential keybinding)
-        self._click_checkbox("3")  # "blue" (value "3")
+        self._click_checkbox("red")
+        self._click_checkbox("blue")
 
         # Verify checkboxes are checked
         states_before = self._get_checkbox_states()
@@ -313,8 +317,8 @@ class TestAnnotationPersistenceRoundtrip(unittest.TestCase):
         self._wait_for_page_ready()
 
         # Check checkboxes on instance 1
-        self._click_checkbox("1")  # red
-        self._click_checkbox("2")  # green
+        self._click_checkbox("red")
+        self._click_checkbox("green")
 
         # Navigate to instance 2, then instance 3
         self._navigate_next()
@@ -336,13 +340,13 @@ class TestAnnotationPersistenceRoundtrip(unittest.TestCase):
         self._wait_for_page_ready()
 
         # Annotate instance 1: red and blue
-        self._click_checkbox("1")  # red
-        self._click_checkbox("3")  # blue
+        self._click_checkbox("red")
+        self._click_checkbox("blue")
 
         # Navigate to instance 2 and annotate: green and yellow
         self._navigate_next()
-        self._click_checkbox("2")  # green
-        self._click_checkbox("4")  # yellow
+        self._click_checkbox("green")
+        self._click_checkbox("yellow")
 
         # Navigate back to instance 1 and verify its state
         self._navigate_prev()
@@ -399,7 +403,7 @@ class TestRadioButtonPersistenceRoundtrip(unittest.TestCase):
             cls.test_dir,
             num_instances=3,
             annotation_task_name="Radio Persistence Roundtrip Test",
-            require_password=False
+            require_password=True
         )
 
         cls.server = FlaskTestServer(port=find_free_port(), debug=False, config_file=cls.config_file)
@@ -502,7 +506,7 @@ class TestRadioButtonPersistenceRoundtrip(unittest.TestCase):
         self._wait_for_page_ready()
 
         # Select "positive" on instance 1
-        self._click_radio("1")  # positive
+        self._click_radio("positive")
 
         # Verify selection
         selected_before = self._get_selected_radio()
@@ -526,11 +530,11 @@ class TestRadioButtonPersistenceRoundtrip(unittest.TestCase):
         self._wait_for_page_ready()
 
         # Select "positive" on instance 1
-        self._click_radio("1")  # positive
+        self._click_radio("positive")
 
         # Navigate to instance 2 and select "negative"
         self._navigate_next()
-        self._click_radio("3")  # negative
+        self._click_radio("negative")
 
         # Navigate back to instance 1 and verify
         self._navigate_prev()

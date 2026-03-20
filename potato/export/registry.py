@@ -138,6 +138,13 @@ def _register_builtin_exporters():
         ParquetExporter(),
     ]
 
+    # Optional exporters with external dependencies
+    try:
+        from .huggingface_exporter import HuggingFaceExporter
+        exporters.append(HuggingFaceExporter())
+    except ImportError:
+        logger.debug("HuggingFace exporter not available (missing dependencies)")
+
     for exporter in exporters:
         export_registry.register(exporter)
 
