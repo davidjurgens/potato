@@ -259,6 +259,9 @@ def annotate():
     # Get next instance ID
     instance_id = manager.get_next_instance_for_human(user_id)
 
+    # Get available labels (needed for all render paths)
+    labels = manager.get_available_labels()
+
     if instance_id is None:
         # Check if annotation is complete (atomic check-and-advance)
         if manager.check_and_advance_to_autonomous():
@@ -268,6 +271,7 @@ def annotate():
             'solo/annotate.html',
             instance=None,
             instance_id=None,
+            labels=labels,
             message='No more instances available',
             phase=manager.get_current_phase().value,
         )
@@ -287,6 +291,7 @@ def annotate():
             'solo/annotate.html',
             instance=None,
             instance_id=None,
+            labels=labels,
             message='Error: Item state manager not available. Please restart the server.',
             phase=manager.get_current_phase().value,
         )
@@ -296,15 +301,13 @@ def annotate():
             'solo/annotate.html',
             instance=None,
             instance_id=None,
+            labels=labels,
             message=f'Error: Instance {instance_id} not found.',
             phase=manager.get_current_phase().value,
         )
 
     # Get LLM prediction if available
     llm_prediction = manager.get_llm_prediction_for_instance(instance_id)
-
-    # Get available labels
-    labels = manager.get_available_labels()
 
     return render_template(
         'solo/annotate.html',
@@ -335,7 +338,11 @@ def disagreements():
         notes = request.form.get('notes', '')
 
         if disagreement_id and resolution:
-            manager.resolve_disagreement(disagreement_id, resolution, notes)
+            # disagreement_id is "instance_id:schema_name"
+            parts = disagreement_id.split(':', 1)
+            instance_id = parts[0]
+            schema_name = parts[1] if len(parts) > 1 else 'default'
+            manager.resolve_disagreement(instance_id, schema_name, resolution, 'human')
 
             # Check for more disagreements
             pending = manager.get_pending_disagreements()
@@ -354,7 +361,7 @@ def disagreements():
     else:
         # Get next pending disagreement
         pending = manager.get_pending_disagreements()
-        disagreement = pending[0] if pending else None
+        disagreement = manager.get_disagreement(pending[0]) if pending else None
 
     if disagreement is None:
         return redirect(url_for('solo_mode.annotate'))

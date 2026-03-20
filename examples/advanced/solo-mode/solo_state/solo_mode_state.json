@@ -1,6 +1,6 @@
 {
-  "task_description": "I want to classify customer reviews as good, bad or neutral",
-  "current_prompt_version": 8,
+  "task_description": "I want to classify if this one line reflection as positive, negative, or neutral",
+  "current_prompt_version": 14,
   "prompt_versions": [
     {
       "version": 1,
@@ -72,6 +72,60 @@
       "created_by": "user_setup",
       "source_description": "Initial prompt from task description",
       "parent_version": 7,
+      "validation_accuracy": null
+    },
+    {
+      "version": 9,
+      "prompt_text": "Label the following text according to this task: I want to classify if this reflection prompt is sad, happy, angry, anxious, or neutral",
+      "created_at": "2026-03-18T15:40:20.402775",
+      "created_by": "user_setup",
+      "source_description": "Initial prompt from task description",
+      "parent_version": 8,
+      "validation_accuracy": null
+    },
+    {
+      "version": 10,
+      "prompt_text": "Label the following text according to this task: I want to classify customer reviews as positive negative or neutral",
+      "created_at": "2026-03-20T15:02:39.538952",
+      "created_by": "user_setup",
+      "source_description": "Initial prompt from task description",
+      "parent_version": 9,
+      "validation_accuracy": null
+    },
+    {
+      "version": 11,
+      "prompt_text": "Label the following text according to this task: I want to classify customer reviews as positive negative or neutral",
+      "created_at": "2026-03-20T15:04:05.459125",
+      "created_by": "user_setup",
+      "source_description": "Initial prompt from task description",
+      "parent_version": 10,
+      "validation_accuracy": null
+    },
+    {
+      "version": 12,
+      "prompt_text": "Label the following text according to this task: I want to classify positive negative and neutral customer reviews",
+      "created_at": "2026-03-20T15:06:39.921739",
+      "created_by": "user_setup",
+      "source_description": "Initial prompt from task description",
+      "parent_version": 11,
+      "validation_accuracy": null
+    },
+    {
+      "version": 13,
+      "prompt_text": "Label the following text according to this task: I want to classify reflection prompts as negative positive or neutral",
+      "created_at": "2026-03-20T15:11:49.499800",
+      "created_by": "user_setup",
+      "source_description": "Initial prompt from task description",
+      "parent_version": 12,
+      "validation_accuracy": null
+    },
+    {
+      "version": 14,
+      "prompt_text": "Label the following text according to this task: I want to classify if this one line reflection as positive, negative, or neutral",
+      "created_at": "2026-03-20T15:29:59.535389",
+      "created_by": "user_setup",
+      "source_description": "Initial prompt from task description",
+      "parent_version": 13,
       "validation_accuracy": null
     }
   ],
@@ -189,8 +243,8 @@
         "timestamp": "2026-03-18T15:13:47.879567",
         "model_name": "llama3.2:3b",
         "reasoning": "The reviewer mentions that the product broke after a short period of use, indicating dissatisfaction with its performance and durability. This suggests a negative experience with the product.",
-        "human_label": null,
-        "agrees_with_human": null,
+        "human_label": "positive",
+        "agrees_with_human": false,
         "disagreement_resolved": false,
         "resolution_label": null
       }
@@ -364,55 +418,80 @@
         "disagreement_resolved": false,
         "resolution_label": null
       }
+    },
+    "21": {
+      "sentiment": {
+        "instance_id": "21",
+        "schema_name": "sentiment",
+        "predicted_label": "negative",
+        "confidence_score": 0.8,
+        "uncertainty_score": 0.19999999999999996,
+        "prompt_version": 12,
+        "timestamp": "2026-03-20T15:10:58.509008",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The reviewer expresses a sense of frustration and feeling unheard, which are common negative emotions in customer reviews. The phrase 'no one is listening to me' implies a lack of satisfaction or concern, indicating a negative sentiment towards the product or service.",
+        "human_label": "positive",
+        "agrees_with_human": false,
+        "disagreement_resolved": true,
+        "resolution_label": "negative"
+      }
     }
   },
   "human_labeled_ids": [
-    "3",
-    "19",
-    "4",
-    "7",
-    "17",
-    "20",
-    "11",
-    "16",
-    "9",
-    "6",
-    "13",
     "14",
-    "5",
+    "11",
+    "4",
+    "2",
+    "21",
+    "6",
+    "18",
+    "8",
+    "9",
     "10",
     "1",
-    "2",
-    "15"
+    "12",
+    "3",
+    "15",
+    "7",
+    "5",
+    "16",
+    "13",
+    "20",
+    "19",
+    "17"
   ],
   "llm_labeled_ids": [
-    "2",
-    "4",
-    "7",
-    "17",
-    "19",
-    "20",
-    "11",
-    "16",
-    "9",
     "6",
-    "8",
     "13",
     "14",
+    "11",
+    "4",
     "10",
     "1",
+    "8",
+    "20",
+    "15",
+    "21",
+    "19",
+    "7",
     "5",
-    "15"
+    "16",
+    "17",
+    "2",
+    "9"
   ],
-  "disagreement_ids": [],
+  "disagreement_ids": [
+    "8",
+    "21"
+  ],
   "validation_sample_ids": [],
   "edge_case_ids": [],
   "edge_case_labels": {},
   "agreement_metrics": {
-    "total_compared": 16,
+    "total_compared": 18,
     "agreements": 16,
-    "disagreements": 0,
-    "agreement_rate": 1.0
+    "disagreements": 2,
+    "agreement_rate": 0.8888888888888888
   },
   "confidence_history": {
     "1": [
@@ -514,6 +593,12 @@
     "20": [
       [
         8,
+        0.8
+      ]
+    ],
+    "21": [
+      [
+        12,
         0.8
       ]
     ]

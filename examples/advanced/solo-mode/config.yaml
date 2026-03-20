@@ -57,7 +57,7 @@ solo_mode:
 
 # Data configuration
 data_files:
-  - "data/sentiment-examples.json"
+  - "data/reflection-examples.json"
 
 item_properties:
   id_key: "id"
