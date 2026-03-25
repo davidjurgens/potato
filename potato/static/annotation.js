@@ -463,7 +463,10 @@ function getCurrentOverlayCount() {
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function () {
     // Skip annotation initialization on non-annotation pages (consent, instructions, etc.)
+    // but still show the page content and enable navigation
     if (window.config && !window.config.is_annotation_page) {
+        setLoading(false);
+        validateRequiredFields();
         return;
     }
     loadCurrentInstance();
