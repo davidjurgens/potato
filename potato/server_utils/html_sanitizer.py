@@ -29,20 +29,29 @@ ALLOWED_ELEMENTS: Set[str] = {
     'span',
     # Basic formatting (may be in source data)
     'b', 'i', 'u', 'strong', 'em', 'mark',
+    's', 'del', 'ins',
     # Line breaks and horizontal rules
-    'br', 'hr',
+    'br', 'hr', 'wbr',
     # Dialogue/conversation layout elements
     'div',
     # Structural elements for instructional content (Issue #120)
     'p',
     'ul', 'ol', 'li',
+    'dl', 'dt', 'dd',
     'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
     # Tables for formatted content
-    'table', 'thead', 'tbody', 'tr', 'th', 'td',
+    'table', 'thead', 'tbody', 'tr', 'th', 'td', 'caption',
     # Inline semantics
     'sub', 'sup', 'small', 'code', 'pre', 'blockquote',
+    'abbr', 'cite', 'kbd', 'samp', 'var',
+    # Collapsible sections
+    'details', 'summary',
     # Links (href sanitized against dangerous patterns)
     'a',
+    # Media and figures for instructional/survey content (Issue #129)
+    'img', 'figure', 'figcaption',
+    # Ruby annotations for CJK text
+    'ruby', 'rt', 'rp',
 }
 
 # Attributes allowed per element
@@ -70,11 +79,30 @@ ALLOWED_ATTRIBUTES: Dict[str, Set[str]] = {
     'table': {'class', 'style'},
     # Ordered lists
     'ol': {'start', 'type'},
+    # Definition lists
+    'dl': {'class', 'style'},
+    'dt': {'class', 'style'},
+    'dd': {'class', 'style'},
     # Block-level elements that may need class/style
     'blockquote': {'class', 'style'},
     'p': {'class', 'style'},
     'pre': {'class', 'style'},
     'code': {'class'},
+    # Collapsible sections
+    'details': {'class', 'style', 'open'},
+    'summary': {'class', 'style'},
+    # Abbreviations with tooltip
+    'abbr': {'title'},
+    # Deletion/insertion with optional metadata
+    'del': {'datetime', 'cite'},
+    'ins': {'datetime', 'cite'},
+    # Table captions
+    'caption': {'class', 'style'},
+    # Images — src checked against dangerous patterns like href
+    'img': {'src', 'alt', 'title', 'style', 'width', 'height'},
+    # Figures and captions for instructional content
+    'figure': {'class', 'style'},
+    'figcaption': {'class', 'style'},
     # Most elements get no attributes
     '*': set(),
 }
@@ -226,10 +254,10 @@ def _sanitize_attributes(tag_name: str, attrs_str: str) -> str:
         if attr_name not in allowed:
             continue
 
-        # Special handling for href attribute — block dangerous URLs
-        if attr_name == 'href':
+        # Special handling for href/src attributes — block dangerous URLs
+        if attr_name in ('href', 'src'):
             if any(p.search(attr_value) for p in DANGEROUS_PATTERNS):
-                logger.warning("Blocked dangerous pattern in href attribute")
+                logger.warning(f"Blocked dangerous pattern in {attr_name} attribute")
                 continue
 
         # Special handling for style attribute

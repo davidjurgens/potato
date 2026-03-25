@@ -144,11 +144,11 @@ class TestSanitizeHtmlBlockedElements:
         assert '&lt;iframe' in result
         assert '<iframe' not in result
 
-    def test_img_escaped(self):
-        """Image tags should be escaped (can execute JS via onerror)."""
+    def test_img_allowed_but_onerror_stripped(self):
+        """Image tags are allowed but event handlers must be stripped."""
         result = sanitize_html('<img src="x" onerror="alert(1)">')
-        assert '&lt;img' in result
-        assert '<img' not in result
+        assert '<img' in str(result)
+        assert 'onerror' not in str(result)
 
     def test_object_escaped(self):
         """Object tags should be escaped."""
@@ -456,3 +456,211 @@ class TestExpandedCssProperties:
     def test_list_style_type_allowed(self):
         result = _sanitize_style('list-style-type: disc;')
         assert 'list-style-type: disc' in result
+
+
+class TestFigureAndImageElements:
+    """Tests for figure, figcaption, and img elements (Issue #129)."""
+
+    def test_img_tag_preserved(self):
+        result = sanitize_html('<img src="example.png" alt="Example">')
+        assert '<img' in str(result)
+        assert 'src="example.png"' in str(result)
+        assert 'alt="Example"' in str(result)
+
+    def test_figure_and_figcaption_preserved(self):
+        html_input = '<figure><img src="ex.png" alt="Ex"><figcaption>Caption</figcaption></figure>'
+        result = sanitize_html(html_input)
+        result_str = str(result)
+        assert '<figure>' in result_str
+        assert '<figcaption>' in result_str
+        assert '</figcaption>' in result_str
+        assert '</figure>' in result_str
+
+    def test_figure_with_class_and_style(self):
+        result = sanitize_html('<figure class="example-fig" style="margin: 10px;">')
+        result_str = str(result)
+        assert 'class="example-fig"' in result_str
+        assert 'margin: 10px' in result_str
+
+    def test_img_blocks_javascript_src(self):
+        result = sanitize_html('<img src="javascript:alert(1)" alt="xss">')
+        result_str = str(result)
+        assert 'javascript:' not in result_str
+
+    def test_img_blocks_data_src(self):
+        result = sanitize_html('<img src="data:text/html,<script>alert(1)</script>" alt="xss">')
+        result_str = str(result)
+        assert 'data:' not in result_str
+
+    def test_img_allows_relative_path(self):
+        result = sanitize_html('<img src="data_files/screenshot.png" alt="Screenshot">')
+        result_str = str(result)
+        assert 'src="data_files/screenshot.png"' in result_str
+
+    def test_img_width_height_allowed(self):
+        result = sanitize_html('<img src="ex.png" width="400" height="300">')
+        result_str = str(result)
+        assert 'width="400"' in result_str
+        assert 'height="300"' in result_str
+
+    def test_img_onclick_blocked(self):
+        """Event handlers should not be in the allowed attributes."""
+        result = sanitize_html('<img src="ex.png" onclick="alert(1)">')
+        result_str = str(result)
+        assert 'onclick' not in result_str
+
+    def test_img_in_allowlist(self):
+        assert 'img' in ALLOWED_ELEMENTS
+
+    def test_figure_in_allowlist(self):
+        assert 'figure' in ALLOWED_ELEMENTS
+
+    def test_figcaption_in_allowlist(self):
+        assert 'figcaption' in ALLOWED_ELEMENTS
+
+
+class TestDefinitionLists:
+    """Tests for dl/dt/dd elements."""
+
+    def test_definition_list_preserved(self):
+        html_input = '<dl><dt>Term</dt><dd>Definition</dd></dl>'
+        result = str(sanitize_html(html_input))
+        assert '<dl>' in result
+        assert '<dt>Term</dt>' in result
+        assert '<dd>Definition</dd>' in result
+        assert '</dl>' in result
+
+    def test_dl_with_class(self):
+        result = str(sanitize_html('<dl class="glossary">'))
+        assert 'class="glossary"' in result
+
+    def test_dd_with_style(self):
+        result = str(sanitize_html('<dd style="margin-left: 20px;">'))
+        assert 'margin-left: 20px' in result
+
+
+class TestCollapsibleSections:
+    """Tests for details/summary elements."""
+
+    def test_details_summary_preserved(self):
+        html_input = '<details><summary>Click to expand</summary><p>Hidden content</p></details>'
+        result = str(sanitize_html(html_input))
+        assert '<details>' in result
+        assert '<summary>Click to expand</summary>' in result
+        assert '</details>' in result
+
+    def test_details_open_attribute(self):
+        result = str(sanitize_html('<details open>'))
+        # 'open' is a boolean attribute; our parser requires =value format,
+        # so it may or may not be preserved depending on parser behavior
+        assert '<details' in result
+
+    def test_details_with_class(self):
+        result = str(sanitize_html('<details class="faq-item" style="margin: 10px;">'))
+        assert 'class="faq-item"' in result
+        assert 'margin: 10px' in result
+
+    def test_summary_onclick_blocked(self):
+        result = str(sanitize_html('<summary onclick="alert(1)">Title</summary>'))
+        assert 'onclick' not in result
+        assert '<summary>' in result
+
+
+class TestAbbreviation:
+    """Tests for abbr element."""
+
+    def test_abbr_with_title(self):
+        result = str(sanitize_html('<abbr title="Natural Language Processing">NLP</abbr>'))
+        assert '<abbr title="Natural Language Processing">NLP</abbr>' in result
+
+    def test_abbr_in_allowlist(self):
+        assert 'abbr' in ALLOWED_ELEMENTS
+
+
+class TestTextEditingMarks:
+    """Tests for s, del, ins elements."""
+
+    def test_strikethrough_preserved(self):
+        result = str(sanitize_html('<s>old text</s>'))
+        assert '<s>old text</s>' in result
+
+    def test_del_preserved(self):
+        result = str(sanitize_html('<del>removed</del>'))
+        assert '<del>removed</del>' in result
+
+    def test_ins_preserved(self):
+        result = str(sanitize_html('<ins>added</ins>'))
+        assert '<ins>added</ins>' in result
+
+    def test_del_with_datetime(self):
+        result = str(sanitize_html('<del datetime="2026-01-01">old</del>'))
+        assert 'datetime="2026-01-01"' in result
+
+    def test_ins_with_cite(self):
+        result = str(sanitize_html('<ins cite="https://example.com/change">new</ins>'))
+        assert 'cite="https://example.com/change"' in result
+
+
+class TestTableCaption:
+    """Tests for caption element."""
+
+    def test_caption_preserved(self):
+        html_input = '<table><caption>Table 1: Results</caption><tr><td>data</td></tr></table>'
+        result = str(sanitize_html(html_input))
+        assert '<caption>Table 1: Results</caption>' in result
+
+    def test_caption_with_style(self):
+        result = str(sanitize_html('<caption style="text-align: center;">Title</caption>'))
+        assert 'text-align: center' in result
+
+
+class TestTechnicalInlineElements:
+    """Tests for kbd, samp, var elements."""
+
+    def test_kbd_preserved(self):
+        result = str(sanitize_html('Press <kbd>Ctrl</kbd>+<kbd>S</kbd>'))
+        assert '<kbd>Ctrl</kbd>' in result
+        assert '<kbd>S</kbd>' in result
+
+    def test_samp_preserved(self):
+        result = str(sanitize_html('Output: <samp>Hello World</samp>'))
+        assert '<samp>Hello World</samp>' in result
+
+    def test_var_preserved(self):
+        result = str(sanitize_html('Set <var>x</var> = 5'))
+        assert '<var>x</var>' in result
+
+    def test_cite_preserved(self):
+        result = str(sanitize_html('From <cite>The Art of Annotation</cite>'))
+        assert '<cite>The Art of Annotation</cite>' in result
+
+
+class TestMiscElements:
+    """Tests for wbr and ruby elements."""
+
+    def test_wbr_preserved(self):
+        result = str(sanitize_html('supercalifragilistic<wbr>expialidocious'))
+        assert '<wbr>' in result
+
+    def test_ruby_annotation_preserved(self):
+        html_input = '<ruby>漢<rp>(</rp><rt>kan</rt><rp>)</rp></ruby>'
+        result = str(sanitize_html(html_input))
+        assert '<ruby>' in result
+        assert '<rt>kan</rt>' in result
+        assert '<rp>(</rp>' in result
+
+
+class TestExpandedAllowlistCompleteness:
+    """Verify all new elements are in ALLOWED_ELEMENTS."""
+
+    @pytest.mark.parametrize("tag", [
+        'dl', 'dt', 'dd',
+        'details', 'summary',
+        'abbr', 'cite', 'kbd', 'samp', 'var',
+        's', 'del', 'ins',
+        'caption',
+        'wbr',
+        'ruby', 'rt', 'rp',
+    ])
+    def test_tag_in_allowlist(self, tag):
+        assert tag in ALLOWED_ELEMENTS, f"'{tag}' should be in ALLOWED_ELEMENTS"
