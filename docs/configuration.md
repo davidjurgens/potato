@@ -256,9 +256,19 @@ data_directory_encoding: shift_jis
 
 ```yaml
 output_annotation_dir: your_task_dir/annotations/
-output_annotation_format: json  # Options: json, jsonl, csv, tsv
 annotation_codebook_url: https://docs.google.com/document/d/...
+
+# Auto-export: automatically export annotations in additional formats
+# during annotation. Accepts a single format or a list.
+# Supported: csv, tsv, jsonl, parquet, coco, yolo, conll_2003, etc.
+export_annotation_format: "csv"              # single format
+export_annotation_format: ["csv", "jsonl"]   # multiple formats
+auto_export_interval: 60                     # seconds between exports (default: 60)
 ```
+
+Annotations are always saved as per-user `user_state.json` files in `output_annotation_dir`. The `export_annotation_format` setting additionally auto-exports to the specified format(s) into an `exports/` subdirectory. You can also export manually at any time using the export CLI — see [Export Formats](export_formats.md).
+
+> **Note:** The older `output_annotation_format` config key is legacy and has no effect. Use `export_annotation_format` instead.
 
 ## Instance Display
 

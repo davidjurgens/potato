@@ -124,6 +124,7 @@ def _register_builtin_exporters():
     from .textgrid_exporter import TextGridExporter
     from .agent_eval_exporter import AgentEvalExporter
     from .parquet_exporter import ParquetExporter
+    from .tabular_exporter import CSVExporter, TSVExporter, JSONLExporter
 
     exporters = [
         COCOExporter(),
@@ -136,6 +137,9 @@ def _register_builtin_exporters():
         TextGridExporter(),
         AgentEvalExporter(),
         ParquetExporter(),
+        CSVExporter(),
+        TSVExporter(),
+        JSONLExporter(),
     ]
 
     # Optional exporters with external dependencies

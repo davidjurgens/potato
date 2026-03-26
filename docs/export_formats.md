@@ -4,25 +4,31 @@ Potato supports exporting annotations to multiple industry-standard formats for 
 
 ## Overview
 
-Potato provides two levels of export:
+Potato's annotation pipeline works in two stages:
 
-1. **Native Export** - Annotations are automatically saved in JSON/JSONL/CSV/TSV format as configured
-2. **Format Conversion** - Export CLI converts annotations to specialized formats (COCO, YOLO, CoNLL, etc.)
+1. **Live Persistence** — During annotation, all data is automatically saved as per-user `user_state.json` files inside `output_annotation_dir`
+2. **Export** — After annotation, use the Export CLI or admin API to convert annotations into analysis-ready formats (JSON, CSV, COCO, YOLO, CoNLL, etc.)
 
-## Native Output Formats
+## Live Annotation Storage
 
 ### Configuration
 
-Set the output format in your config file:
-
 ```yaml
 output_annotation_dir: annotation_output/
-output_annotation_format: json  # json, jsonl, csv, or tsv
 ```
 
-### JSON Format
+During annotation, Potato automatically persists all user state to JSON files:
 
-Each user's annotations are saved as a single JSON file with structure:
+```
+annotation_output/
+├── user1/
+│   └── user_state.json
+├── user2/
+│   └── user_state.json
+└── ...
+```
+
+Each `user_state.json` contains the complete annotation state for that user:
 
 ```json
 {
@@ -42,24 +48,26 @@ Each user's annotations are saved as a single JSON file with structure:
 }
 ```
 
-### JSONL Format
+> **Note:** The older `output_annotation_format` config key is legacy and has no effect. Use `export_annotation_format` for auto-export (see below).
 
-One JSON object per line, suitable for streaming processing:
+## Auto-Export
 
-```jsonl
-{"instance_id": "item_001", "sentiment": "positive", "spans": [...]}
-{"instance_id": "item_002", "sentiment": "negative", "spans": [...]}
+You can configure Potato to automatically export annotations in additional formats during annotation. Exports are written to `{output_annotation_dir}/exports/{format}/`.
+
+```yaml
+# Single format
+export_annotation_format: "csv"
+
+# Multiple formats
+export_annotation_format:
+  - "csv"
+  - "jsonl"
+
+# Control how often auto-export runs (default: 60 seconds)
+auto_export_interval: 60
 ```
 
-### CSV/TSV Format
-
-Tabular format with columns for each annotation field:
-
-```csv
-instance_id,sentiment,confidence
-item_001,positive,0.95
-item_002,negative,0.87
-```
+Supported auto-export formats include `csv`, `tsv`, `jsonl`, `parquet`, `coco`, `yolo`, `conll_2003`, and all other registered exporters. Run `python -m potato.export --list-formats` to see all available formats.
 
 ## Export CLI
 

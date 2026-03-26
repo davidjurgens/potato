@@ -67,7 +67,10 @@ item_properties:
   text_key: text
 
 # Output Configuration
-output_annotation_format: json
+# Annotations are always saved as per-user JSON (user_state.json).
+# To auto-export in additional formats during annotation:
+# export_annotation_format: "csv"             # single format
+# export_annotation_format: ["csv", "jsonl"] # multiple formats
 annotation_codebook_url: ""
 
 # User Configuration

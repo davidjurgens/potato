@@ -500,6 +500,14 @@ class UserStateManager:
         self.logger.setLevel(logging.DEBUG)
         logging.basicConfig()
 
+        # Auto-export configuration
+        export_formats = config.get("export_annotation_format", [])
+        if isinstance(export_formats, str):
+            export_formats = [export_formats] if export_formats else []
+        self._auto_export_formats = export_formats
+        self._auto_export_interval = config.get("auto_export_interval", 60)
+        self._last_auto_export_time = 0
+
     def add_phase(self, phase_type: UserPhase, phase_name: str, page_fname: str):
         """
         Add a phase page to the phase mapping.
@@ -853,6 +861,64 @@ class UserStateManager:
 
         # Save the user state
         user_state.save(user_dir)
+
+        # Trigger auto-export if configured
+        self._maybe_auto_export()
+
+    def _maybe_auto_export(self):
+        """Run auto-export if configured and enough time has passed since last export."""
+        if not self._auto_export_formats:
+            return
+
+        import time
+        now = time.time()
+        if now - self._last_auto_export_time < self._auto_export_interval:
+            return
+
+        self._last_auto_export_time = now
+
+        try:
+            self._run_auto_export()
+        except Exception as e:
+            self.logger.error(f"Auto-export failed: {e}")
+
+    def _run_auto_export(self):
+        """Execute auto-export for all configured formats."""
+        from potato.export.registry import export_registry
+        from potato.export.base import ExportContext
+        from potato.export.cli import load_annotations_from_output_dir
+
+        output_dir = self.config["output_annotation_dir"]
+        schemas = self.config.get("annotation_schemes", [])
+        annotations = load_annotations_from_output_dir(output_dir, schemas)
+
+        if not annotations:
+            return
+
+        context = ExportContext(
+            config=self.config,
+            annotations=annotations,
+            items={},  # Items not needed for tabular exports
+            schemas=schemas,
+            output_dir=output_dir,
+        )
+
+        export_output_dir = os.path.join(output_dir, "exports")
+
+        for fmt in self._auto_export_formats:
+            if not export_registry.is_registered(fmt):
+                self.logger.warning(f"Auto-export format '{fmt}' is not registered, skipping")
+                continue
+
+            try:
+                fmt_output = os.path.join(export_output_dir, fmt)
+                result = export_registry.export(fmt, context, fmt_output)
+                if result.success:
+                    self.logger.info(f"Auto-export to {fmt}: {result.files_written}")
+                else:
+                    self.logger.warning(f"Auto-export to {fmt} failed: {result.errors}")
+            except Exception as e:
+                self.logger.error(f"Auto-export to {fmt} error: {e}")
 
     def load_user_state(self, user_dir: str) -> UserState:
         '''Loads the user state for the given user ID'''
