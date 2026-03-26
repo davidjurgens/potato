@@ -2821,6 +2821,7 @@ def create_app(config_file=None):
             'debug_phase': config.get('debug_phase'),
             # Add common config values needed by templates
             'annotation_task_name': config.get('annotation_task_name', 'Annotation Task'),
+            'annotation_codebook_url': config.get('annotation_codebook_url', ''),
             # Multilingual UI strings
             'ui_lang': ui_lang,
             # Project-level base CSS
