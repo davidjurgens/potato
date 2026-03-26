@@ -1642,8 +1642,51 @@ def get_current_page_html(config, username):
         'total_count': user_state.get_assigned_instance_count() if hasattr(user_state, 'get_assigned_instance_count') else 0,
         'ui_config': config.get('ui_config', {}),
         'is_annotation_page': is_annotation_page,
+        'annotation_instructions': config.get('annotation_instructions', ''),
     }
-    return render_template(html_fname, **context)
+    rendered_html = render_template(html_fname, **context)
+    soup = BeautifulSoup(rendered_html, "html.parser")
+
+    phase_annotations = user_state.phase_to_page_to_label_to_value.get(phase, {}).get(page, {})
+    for label_obj, value in phase_annotations.items():
+        schema = label_obj.get_schema()
+        label = label_obj.get_name()
+        name = schema + ":::" + label
+
+        input_fields = soup.find_all(["input", "select", "textarea"], {"name": name})
+        if not input_fields:
+            input_fields = soup.find_all(["input"], {"schema": schema, "label_name": label})
+
+        for input_field in input_fields:
+            if input_field is None:
+                continue
+
+            if input_field.get('type') == 'checkbox' or input_field.get('type') == 'radio':
+                if value:
+                    if input_field.get('type') == 'radio':
+                        if input_field.get('value') == value:
+                            input_field['checked'] = True
+                    else:
+                        input_field['checked'] = True
+
+            if input_field.get('type') == 'text':
+                if isinstance(value, str):
+                    input_field['value'] = value
+
+            if input_field.get('type') == 'number':
+                input_field['value'] = str(value)
+
+            if input_field.name == 'textarea':
+                if isinstance(value, str):
+                    input_field.string = value
+
+            if input_field.name == 'select':
+                if isinstance(value, str):
+                    options = input_field.find_all("option", {"value": value})
+                    if options:
+                        options[0]["selected"] = "selected"
+
+    return str(soup)
 
 def _is_user_adjudicator(username: str) -> bool:
     """Check if a user is an authorized adjudicator."""

@@ -680,6 +680,12 @@ class UserStateManager:
                     ),
                 )
 
+    def retreat_phase(self, user_id: str) -> None:
+        '''Moves the user to the previous page in the current phase or the previous configured phase.'''
+        user_state = self.get_user_state(user_id)
+        phase, page = self.get_prev_user_phase_page(user_id)
+        user_state.advance_to_phase(phase, page)
+
     def _get_configured_phase_sequence(self) -> list:
         '''Return the ordered list of UserPhase enums derived from the config.
 
@@ -757,6 +763,45 @@ class UserStateManager:
                 return first_phase, first_page
 
         return UserPhase.DONE, None
+
+    def get_prev_user_phase_page(self, user_id: str) -> tuple[UserPhase, str]:
+        '''Returns the previous page for the user, either in the current phase
+           or the previous configured phase.'''
+
+        user_state = self.get_user_state(user_id)
+        cur_phase, cur_page = user_state.get_current_phase_and_page()
+
+        if cur_phase == UserPhase.LOGIN:
+            return UserPhase.LOGIN, None
+
+        if cur_phase == UserPhase.DONE:
+            config_phases = self._get_configured_phase_sequence()
+            if config_phases:
+                prev_phase = config_phases[-1]
+                if prev_phase == UserPhase.ANNOTATION:
+                    return prev_phase, None
+                prev_page = list(self.phase_type_to_name_to_page[prev_phase].keys())[-1]
+                return prev_phase, prev_page
+            return UserPhase.LOGIN, None
+
+        if cur_phase != UserPhase.ANNOTATION and cur_phase in self.phase_type_to_name_to_page:
+            pages_for_cur_phase = list(self.phase_type_to_name_to_page[cur_phase].keys())
+            if len(pages_for_cur_phase) > 1 and cur_page in pages_for_cur_phase:
+                cur_page_index = pages_for_cur_phase.index(cur_page)
+                if cur_page_index > 0:
+                    return cur_phase, pages_for_cur_phase[cur_page_index - 1]
+
+        config_phases = self._get_configured_phase_sequence()
+        if cur_phase in config_phases:
+            cur_phase_index = config_phases.index(cur_phase)
+            if cur_phase_index > 0:
+                prev_phase = config_phases[cur_phase_index - 1]
+                if prev_phase == UserPhase.ANNOTATION:
+                    return prev_phase, None
+                prev_page = list(self.phase_type_to_name_to_page[prev_phase].keys())[-1]
+                return prev_phase, prev_page
+
+        return cur_phase, cur_page
 
     def get_user_ids(self) -> list[str]:
         '''Gets all user IDs from the user state manager'''

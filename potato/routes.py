@@ -1783,13 +1783,13 @@ def annotate():
                 action = request.form.get('action')
 
             if action == 'next_instance':
-                # Treat as "submit current phase page" — advance to next phase
+                # Treat as "submit current phase page" - advance to next phase
                 logger.info(f"Leaked next_instance from phase {cur_phase}, advancing phase")
                 get_user_state_manager().advance_phase(username)
                 return redirect(url_for("home"))
             elif action == 'prev_instance':
-                # No backward navigation — just redirect without changing state
-                logger.info(f"Leaked prev_instance from phase {cur_phase}, ignoring")
+                logger.info(f"Leaked prev_instance from phase {cur_phase}, moving to previous phase/page")
+                get_user_state_manager().retreat_phase(username)
                 return redirect(url_for("home"))
 
         # For non-nav POSTs (phase form submissions) and GETs, delegate to home()
@@ -1842,7 +1842,11 @@ def annotate():
 
     if action == "prev_instance":
         logger.debug(f"Moving to previous instance for user: {username}")
-        move_to_prev_instance(username)
+        moved_back = move_to_prev_instance(username)
+        if not moved_back and user_state.get_current_instance_index() <= 0:
+            logger.debug(f"User {username} is at first annotation instance, moving back to previous phase/page")
+            get_user_state_manager().retreat_phase(username)
+            return redirect(url_for("home"))
         acm = get_ai_cache_manager()
         if acm:
             acm.start_prefetch(user_state.current_instance_index,
