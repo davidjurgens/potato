@@ -886,7 +886,7 @@ class UserStateManager:
         """Execute auto-export for all configured formats."""
         from potato.export.registry import export_registry
         from potato.export.base import ExportContext
-        from potato.export.cli import load_annotations_from_output_dir
+        from potato.export.cli import load_annotations_from_output_dir, load_phase_responses_from_output_dir
 
         output_dir = self.config["output_annotation_dir"]
         schemas = self.config.get("annotation_schemes", [])
@@ -895,12 +895,15 @@ class UserStateManager:
         if not annotations:
             return
 
+        phase_responses = load_phase_responses_from_output_dir(output_dir) if self.config.get("export_include_phase_data", False) else []
+
         context = ExportContext(
             config=self.config,
             annotations=annotations,
             items={},  # Items not needed for tabular exports
             schemas=schemas,
             output_dir=output_dir,
+            phase_responses=phase_responses,
         )
 
         export_output_dir = os.path.join(output_dir, "exports")

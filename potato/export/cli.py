@@ -123,6 +123,70 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list) -> list:
     return annotations
 
 
+def load_phase_responses_from_output_dir(output_dir: str) -> list:
+    """
+    Load phase/surveyflow responses from the Potato output directory.
+
+    Reads phase_to_page_to_label_to_value from each user's user_state.json
+    and flattens into a list of records.
+
+    Returns:
+        List of dicts with keys: user_id, phase, page, schema, label_name, value
+    """
+    responses = []
+
+    if not os.path.isdir(output_dir):
+        return responses
+
+    for user_dir in sorted(os.listdir(output_dir)):
+        user_path = os.path.join(output_dir, user_dir)
+        if not os.path.isdir(user_path):
+            continue
+
+        state_file = os.path.join(user_path, "user_state.json")
+        if not os.path.exists(state_file):
+            continue
+
+        with open(state_file, "r") as f:
+            user_state = json.load(f)
+
+        user_id = user_state.get("user_id", user_dir)
+        phase_data = user_state.get("phase_to_page_to_label_to_value", {})
+
+        for phase, pages in phase_data.items():
+            for page, label_values in pages.items():
+                # label_values is a list of [[{schema, name}, value], ...]
+                if isinstance(label_values, list):
+                    for entry in label_values:
+                        if isinstance(entry, (list, tuple)) and len(entry) == 2:
+                            label_obj, value = entry
+                            if isinstance(label_obj, dict):
+                                schema = label_obj.get("schema", "")
+                                label_name = label_obj.get("name", "")
+                            else:
+                                schema, label_name = str(label_obj), ""
+                            responses.append({
+                                "user_id": user_id,
+                                "phase": phase,
+                                "page": page,
+                                "schema": schema,
+                                "label_name": label_name,
+                                "value": value,
+                            })
+                elif isinstance(label_values, dict):
+                    for label_obj, value in label_values.items():
+                        responses.append({
+                            "user_id": user_id,
+                            "phase": phase,
+                            "page": page,
+                            "schema": str(label_obj),
+                            "label_name": "",
+                            "value": value,
+                        })
+
+    return responses
+
+
 def load_items_from_data_files(config: dict, config_dir: str) -> dict:
     """
     Load item data from the data files specified in config.
@@ -212,6 +276,7 @@ def build_export_context(config_path: str) -> ExportContext:
 
     items = load_items_from_data_files(config, config_dir)
     annotations = load_annotations_from_output_dir(output_annotation_dir, schemas)
+    phase_responses = load_phase_responses_from_output_dir(output_annotation_dir)
 
     return ExportContext(
         config=config,
@@ -219,6 +284,7 @@ def build_export_context(config_path: str) -> ExportContext:
         items=items,
         schemas=schemas,
         output_dir=output_annotation_dir,
+        phase_responses=phase_responses,
     )
 
 

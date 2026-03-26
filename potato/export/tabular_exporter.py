@@ -100,12 +100,61 @@ class JSONLExporter(BaseExporter):
                 }
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
+        files_written = [out_file]
+        phase_file = _write_phase_jsonl(context, output_path)
+        if phase_file:
+            files_written.append(phase_file)
+
         return ExportResult(
             success=True,
             format_name=self.format_name,
-            files_written=[out_file],
-            stats={"num_records": len(context.annotations)},
+            files_written=files_written,
+            stats={
+                "num_records": len(context.annotations),
+                "num_phase_responses": len(context.phase_responses) if phase_file else 0,
+            },
         )
+
+
+def _should_include_phase_data(context: ExportContext) -> bool:
+    """Check if phase response export is enabled."""
+    return (
+        bool(context.phase_responses)
+        and context.config.get("export_include_phase_data", False)
+    )
+
+
+def _write_phase_delimited(context: ExportContext, output_path: str,
+                           fmt_name: str, delimiter: str) -> Optional[str]:
+    """Write phase responses as a separate delimited file. Returns file path or None."""
+    if not _should_include_phase_data(context):
+        return None
+
+    out_file = os.path.join(output_path, f"phase_responses.{fmt_name}")
+    columns = ["user_id", "phase", "page", "schema", "label_name", "value"]
+
+    with open(out_file, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=columns, delimiter=delimiter,
+                                extrasaction="ignore")
+        writer.writeheader()
+        for row in context.phase_responses:
+            writer.writerow(row)
+
+    return out_file
+
+
+def _write_phase_jsonl(context: ExportContext, output_path: str) -> Optional[str]:
+    """Write phase responses as a JSONL file. Returns file path or None."""
+    if not _should_include_phase_data(context):
+        return None
+
+    out_file = os.path.join(output_path, "phase_responses.jsonl")
+
+    with open(out_file, "w", encoding="utf-8") as f:
+        for row in context.phase_responses:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+    return out_file
 
 
 def _write_delimited(context: ExportContext, output_path: str,
@@ -141,9 +190,18 @@ def _write_delimited(context: ExportContext, output_path: str,
         for row in rows:
             writer.writerow(row)
 
+    files_written = [out_file]
+    phase_file = _write_phase_delimited(context, output_path, fmt_name, delimiter)
+    if phase_file:
+        files_written.append(phase_file)
+
     return ExportResult(
         success=True,
         format_name=fmt_name,
-        files_written=[out_file],
-        stats={"num_records": len(rows), "num_columns": len(columns)},
+        files_written=files_written,
+        stats={
+            "num_records": len(rows),
+            "num_columns": len(columns),
+            "num_phase_responses": len(context.phase_responses) if phase_file else 0,
+        },
     )

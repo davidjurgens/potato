@@ -32,6 +32,7 @@ class ExportContext:
     items: Dict[str, dict]
     schemas: List[dict]
     output_dir: str
+    phase_responses: List[dict] = field(default_factory=list)
 
 
 @dataclass
