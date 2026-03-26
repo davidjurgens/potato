@@ -1801,11 +1801,18 @@ class InMemoryUserState(UserState):
         if self.current_instance_index >= len(self.instance_id_ordering):
             return None
         inst_id = self.instance_id_ordering[self.current_instance_index]
-        return get_item_state_manager().get_item(inst_id)
+        ism = get_item_state_manager()
+        if not ism.has_item(inst_id):
+            # Item may be a dynamically injected QC item that wasn't
+            # rehydrated after restart. Skip it gracefully.
+            logger.warning(f"Instance '{inst_id}' in user ordering but not in item manager, skipping")
+            return None
+        return ism.get_item(inst_id)
 
     def get_current_instance_id(self) -> str:
         '''Returns the ID of the instance that the user is currently annotating'''
-        return self.get_current_instance().get_id()
+        instance = self.get_current_instance()
+        return instance.get_id() if instance else None
 
     def get_labels(self) -> dict[str, dict[str, str]]:
         return self.labels

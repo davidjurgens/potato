@@ -3759,6 +3759,11 @@ def get_current_instance():
             logger.error(f"User state not found for user: {username}")
             return jsonify({"error": "User state not found"}), 404
 
+        # Guard: only return instance data during annotation phase
+        if user_state.get_phase() != UserPhase.ANNOTATION:
+            logger.debug(f"User {username} not in annotation phase, no current instance")
+            return jsonify({"error": "Not in annotation phase"}), 404
+
         current_instance = user_state.get_current_instance()
         if not current_instance:
             logger.error(f"No current instance for user: {username}")
@@ -3803,6 +3808,11 @@ def get_instance_data():
         if not user_state:
             logger.error(f"User state not found for user: {username}")
             return jsonify({"error": "User state not found"}), 404
+
+        # Guard: only return instance data during annotation phase
+        if user_state.get_phase() != UserPhase.ANNOTATION:
+            logger.debug(f"User {username} not in annotation phase, no instance data")
+            return jsonify({"error": "Not in annotation phase"}), 404
 
         current_instance = user_state.get_current_instance()
         if not current_instance:
