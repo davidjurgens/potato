@@ -659,15 +659,21 @@ automatic_assignment:
 
 ## UI and Layout Configuration
 
-### Template Selection
+### Layout Configuration
 
 ```yaml
-html_layout: default  # Options: default, fixed_keybinding, kwargs, or custom path
-surveyflow_html_layout: default
+# Custom layout for the annotation page (does NOT apply to phase pages)
+task_layout: "templates/my_layout.html"
 
-task_layout: templates/my_layout.html
-use_dedicated_layout: true  # Generate annotation_layout.html file
+# Per-phase layout overrides (optional)
+phases:
+  consent:
+    type: consent
+    file: surveyflow/consent.json
+    task_layout: "templates/consent_layout.html"  # only for this phase
 ```
+
+> **Note:** `html_layout`, `surveyflow_html_layout`, and `use_dedicated_layout` are legacy keys that have no effect in the current version. Use `task_layout` for the annotation page and per-phase `task_layout` overrides for phase pages.
 
 ### UI Customization
 
@@ -951,7 +957,6 @@ assignment:
   random_seed: 1234
 
 site_dir: default
-use_dedicated_layout: true
 customjs: null
 customjs_hostname: null
 

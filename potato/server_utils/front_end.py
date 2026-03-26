@@ -606,9 +606,11 @@ def generate_html_from_schematic(annotation_schemas: list[dict],
         if name in allocation:
             annotation_scheme["_allocated_keys"] = allocation[name]
 
-    # Handle annotation layout generation for surveyflow phases
-    # Check if user provided a custom task_layout file (either from config or phase)
-    if not task_layout_file:
+    # Handle annotation layout generation for surveyflow phases.
+    # Only fall back to the global task_layout for the main annotation page
+    # (phase_name is None). Phase pages should not inherit the global
+    # annotation layout since it may expect annotation-only context.
+    if not task_layout_file and not phase_name:
         task_layout_file = config.get("task_layout")
 
     if task_layout_file:
