@@ -7,8 +7,8 @@ from potato.user_state_management import UserStateManager
 from potato.phase import UserPhase
 
 
-def _make_usm_config():
-    return {
+def _make_usm_config(**overrides):
+    cfg = {
         "output_annotation_dir": ".",
         "annotation_task_name": "Phase Flow Test",
         "annotation_schemes": [],
@@ -19,6 +19,8 @@ def _make_usm_config():
             "poststudy": {"type": "poststudy"},
         },
     }
+    cfg.update(overrides)
+    return cfg
 
 
 def _build_routes_app():
@@ -26,6 +28,20 @@ def _build_routes_app():
     app.secret_key = "test-secret"
     app.add_url_rule("/", "home", lambda: "home")
     return app
+
+
+def _make_usm_with_phases(**config_overrides):
+    """Create a USM with standard phase page mappings."""
+    usm = UserStateManager(_make_usm_config(**config_overrides))
+    usm.phase_type_to_name_to_page = {
+        UserPhase.CONSENT: {"consent_page": "consent.html"},
+        UserPhase.INSTRUCTIONS: {
+            "instructions_a": "instructions_a.html",
+            "instructions_b": "instructions_b.html",
+        },
+        UserPhase.POSTSTUDY: {"poststudy_page": "poststudy.html"},
+    }
+    return usm
 
 
 class _StubPhaseUserState:
@@ -52,17 +68,10 @@ class _StubAnnotationUserState:
         return self.current_instance_index
 
 
-def test_get_prev_user_phase_page_returns_previous_page_within_same_phase():
-    usm = UserStateManager(_make_usm_config())
-    usm.phase_type_to_name_to_page = {
-        UserPhase.CONSENT: {"consent_page": "consent.html"},
-        UserPhase.INSTRUCTIONS: {
-            "instructions_a": "instructions_a.html",
-            "instructions_b": "instructions_b.html",
-        },
-        UserPhase.POSTSTUDY: {"poststudy_page": "poststudy.html"},
-    }
+# ---- get_prev_user_phase_page tests (pure query, no config gating) ----
 
+def test_get_prev_user_phase_page_returns_previous_page_within_same_phase():
+    usm = _make_usm_with_phases()
     user_state = MagicMock()
     user_state.get_current_phase_and_page.return_value = (UserPhase.INSTRUCTIONS, "instructions_b")
     usm.user_to_annotation_state["user1"] = user_state
@@ -71,16 +80,7 @@ def test_get_prev_user_phase_page_returns_previous_page_within_same_phase():
 
 
 def test_get_prev_user_phase_page_returns_previous_phase_boundary():
-    usm = UserStateManager(_make_usm_config())
-    usm.phase_type_to_name_to_page = {
-        UserPhase.CONSENT: {"consent_page": "consent.html"},
-        UserPhase.INSTRUCTIONS: {
-            "instructions_a": "instructions_a.html",
-            "instructions_b": "instructions_b.html",
-        },
-        UserPhase.POSTSTUDY: {"poststudy_page": "poststudy.html"},
-    }
-
+    usm = _make_usm_with_phases()
     user_state = MagicMock()
     user_state.get_current_phase_and_page.return_value = (UserPhase.ANNOTATION, None)
     usm.user_to_annotation_state["user1"] = user_state
@@ -88,14 +88,72 @@ def test_get_prev_user_phase_page_returns_previous_phase_boundary():
     assert usm.get_prev_user_phase_page("user1") == (UserPhase.INSTRUCTIONS, "instructions_b")
 
 
+# ---- retreat_phase tests (config-gated) ----
+
+def test_retreat_phase_within_phase_always_allowed():
+    """Within-phase backward navigation works regardless of config."""
+    usm = _make_usm_with_phases()  # default: allow_phase_back_navigation not set
+    user_state = MagicMock()
+    user_state.get_current_phase_and_page.return_value = (UserPhase.INSTRUCTIONS, "instructions_b")
+    usm.user_to_annotation_state["user1"] = user_state
+
+    result = usm.retreat_phase("user1")
+
+    assert result is True
+    user_state.advance_to_phase.assert_called_once_with(UserPhase.INSTRUCTIONS, "instructions_a")
+
+
+def test_retreat_phase_cross_phase_blocked_by_default():
+    """Cross-phase backward navigation is blocked when config flag is not set."""
+    usm = _make_usm_with_phases()
+    user_state = MagicMock()
+    user_state.get_current_phase_and_page.return_value = (UserPhase.ANNOTATION, None)
+    usm.user_to_annotation_state["user1"] = user_state
+
+    result = usm.retreat_phase("user1")
+
+    assert result is False
+    user_state.advance_to_phase.assert_not_called()
+
+
+def test_retreat_phase_cross_phase_allowed_when_enabled():
+    """Cross-phase backward navigation works when allow_phase_back_navigation is True."""
+    usm = _make_usm_with_phases(allow_phase_back_navigation=True)
+    user_state = MagicMock()
+    user_state.get_current_phase_and_page.return_value = (UserPhase.ANNOTATION, None)
+    usm.user_to_annotation_state["user1"] = user_state
+
+    result = usm.retreat_phase("user1")
+
+    assert result is True
+    user_state.advance_to_phase.assert_called_once_with(UserPhase.INSTRUCTIONS, "instructions_b")
+
+
+def test_retreat_phase_at_first_phase_first_page_returns_false():
+    """Cannot retreat before the first configured phase."""
+    usm = _make_usm_with_phases(allow_phase_back_navigation=True)
+    user_state = MagicMock()
+    user_state.get_current_phase_and_page.return_value = (UserPhase.CONSENT, "consent_page")
+    usm.user_to_annotation_state["user1"] = user_state
+
+    # get_prev_user_phase_page returns (CONSENT, "consent_page") — same place
+    result = usm.retreat_phase("user1")
+
+    assert result is False
+    user_state.advance_to_phase.assert_not_called()
+
+
+# ---- Route-level tests ----
+
 def test_annotate_prev_instance_on_non_annotation_phase_retreats(monkeypatch):
+    """Leaked prev_instance from non-annotation phase calls retreat_phase."""
     app = _build_routes_app()
     retreat_calls = []
 
     usm = MagicMock()
     usm.has_user.return_value = True
     usm.get_user_ids.return_value = ["user1"]
-    usm.retreat_phase.side_effect = lambda username: retreat_calls.append(username)
+    usm.retreat_phase.side_effect = lambda username: retreat_calls.append(username) or True
 
     monkeypatch.setattr(routes, "app", app, raising=False)
     monkeypatch.setattr(routes, "config", {"debug": False}, raising=False)
@@ -112,6 +170,7 @@ def test_annotate_prev_instance_on_non_annotation_phase_retreats(monkeypatch):
 
 
 def test_annotate_prev_instance_from_first_annotation_item_retreats(monkeypatch):
+    """Back on first annotation item calls retreat_phase."""
     app = _build_routes_app()
     retreat_calls = []
 
@@ -119,7 +178,7 @@ def test_annotate_prev_instance_from_first_annotation_item_retreats(monkeypatch)
     usm = MagicMock()
     usm.has_user.return_value = True
     usm.get_user_ids.return_value = ["user1"]
-    usm.retreat_phase.side_effect = lambda username: retreat_calls.append(username)
+    usm.retreat_phase.side_effect = lambda username: retreat_calls.append(username) or True
 
     monkeypatch.setattr(routes, "app", app, raising=False)
     monkeypatch.setattr(routes, "config", {"debug": False}, raising=False)

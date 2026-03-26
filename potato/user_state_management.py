@@ -680,11 +680,27 @@ class UserStateManager:
                     ),
                 )
 
-    def retreat_phase(self, user_id: str) -> None:
-        '''Moves the user to the previous page in the current phase or the previous configured phase.'''
+    def retreat_phase(self, user_id: str) -> bool:
+        '''Moves the user to the previous page in the current phase, or to the
+        previous configured phase if ``allow_phase_back_navigation`` is enabled.
+
+        Returns True if the user was moved, False if navigation was blocked.
+        '''
         user_state = self.get_user_state(user_id)
-        phase, page = self.get_prev_user_phase_page(user_id)
-        user_state.advance_to_phase(phase, page)
+        cur_phase, cur_page = user_state.get_current_phase_and_page()
+        prev_phase, prev_page = self.get_prev_user_phase_page(user_id)
+
+        # If the target is a different phase, only allow when config permits
+        if prev_phase != cur_phase:
+            if not self.config.get('allow_phase_back_navigation', False):
+                return False
+
+        # Don't move if we'd stay in the same place
+        if prev_phase == cur_phase and prev_page == cur_page:
+            return False
+
+        user_state.advance_to_phase(prev_phase, prev_page)
+        return True
 
     def _get_configured_phase_sequence(self) -> list:
         '''Return the ordered list of UserPhase enums derived from the config.
