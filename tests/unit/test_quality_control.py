@@ -8,6 +8,7 @@ and response validation logic.
 import pytest
 import json
 import tempfile
+import unittest.mock
 import os
 from pathlib import Path
 from datetime import datetime
@@ -126,7 +127,22 @@ class TestAttentionChecks:
                 "id": "attn_002",
                 "text": "Select negative for this item.",
                 "expected_answer": {"sentiment": "negative"}
-            }
+            },
+            {
+                "id": "attn_003",
+                "text": "Select neutral for this item.",
+                "expected_answer": {"sentiment": "neutral"}
+            },
+            {
+                "id": "attn_004",
+                "text": "Select positive for this item.",
+                "expected_answer": {"sentiment": "positive"}
+            },
+            {
+                "id": "attn_005",
+                "text": "Select negative for this item.",
+                "expected_answer": {"sentiment": "negative"}
+            },
         ]
         file_path = tmp_path / "attention.json"
         file_path.write_text(json.dumps(items))
@@ -151,9 +167,9 @@ class TestAttentionChecks:
 
     def test_load_attention_items(self, manager_with_attention):
         """Test that attention check items are loaded correctly."""
-        assert len(manager_with_attention.attention_items) == 2
-        assert "attn_001" in manager_with_attention.attention_expected
-        assert "attn_002" in manager_with_attention.attention_expected
+        assert len(manager_with_attention.attention_items) == 5
+        for i in range(1, 6):
+            assert f"attn_00{i}" in manager_with_attention.attention_expected
 
     def test_is_attention_check(self, manager_with_attention):
         """Test attention check identification."""
@@ -197,11 +213,13 @@ class TestAttentionChecks:
 
     def test_warning_threshold(self, manager_with_attention):
         """Test that warning is triggered at threshold."""
-        # Fail twice to trigger warning
-        for i in range(2):
-            result = manager_with_attention.validate_attention_response(
-                "user1", "attn_001", {"sentiment": "wrong"}
-            )
+        # Fail on 2 distinct items to trigger warning (warn_threshold=2)
+        manager_with_attention.validate_attention_response(
+            "user1", "attn_001", {"sentiment": "wrong"}
+        )
+        result = manager_with_attention.validate_attention_response(
+            "user1", "attn_002", {"sentiment": "wrong"}
+        )
 
         assert result["passed"] is False
         assert result.get("warning") is True
@@ -209,15 +227,73 @@ class TestAttentionChecks:
 
     def test_block_threshold(self, manager_with_attention):
         """Test that blocking is triggered at threshold."""
-        # Fail 4 times to trigger block
-        for i in range(4):
+        # Fail on 4 distinct items to trigger block (block_threshold=4)
+        for i in range(1, 5):
             result = manager_with_attention.validate_attention_response(
-                "user1", "attn_001", {"sentiment": "wrong"}
+                "user1", f"attn_00{i}", {"sentiment": "wrong"}
             )
 
         assert result["passed"] is False
         assert result.get("blocked") is True
         assert "message" in result
+
+    def test_resave_same_item_does_not_duplicate(self, manager_with_attention):
+        """Re-saving the same attention check item should not increase failure count."""
+        # Fail on attn_001 three times (autosave simulation)
+        for _ in range(3):
+            result = manager_with_attention.validate_attention_response(
+                "user1", "attn_001", {"sentiment": "wrong"}
+            )
+
+        stats = manager_with_attention.get_attention_check_stats("user1")
+        # Only 1 failure, not 3
+        assert stats["failed"] == 1
+        assert stats["total"] == 1
+        # warn_threshold is 2, so no warning from a single item
+        assert result.get("warning") is None
+
+    def test_correcting_answer_removes_failure(self, manager_with_attention):
+        """If a user corrects their answer on re-save, failure should be removed."""
+        # First save: wrong answer
+        manager_with_attention.validate_attention_response(
+            "user1", "attn_001", {"sentiment": "wrong"}
+        )
+        stats = manager_with_attention.get_attention_check_stats("user1")
+        assert stats["failed"] == 1
+
+        # Second save: correct answer (replaces the failure)
+        manager_with_attention.validate_attention_response(
+            "user1", "attn_001", {"sentiment": "positive"}
+        )
+        stats = manager_with_attention.get_attention_check_stats("user1")
+        assert stats["failed"] == 0
+        assert stats["passed"] == 1
+
+    def test_threshold_log_only_on_crossing(self, manager_with_attention):
+        """Warning/block logs should only fire when threshold is first crossed."""
+        import logging
+
+        with unittest.mock.patch.object(manager_with_attention.logger, 'info') as mock_info:
+            # First failure — no warning (below threshold)
+            manager_with_attention.validate_attention_response(
+                "user1", "attn_001", {"sentiment": "wrong"}
+            )
+            warn_calls = [c for c in mock_info.call_args_list if "warned" in str(c)]
+            assert len(warn_calls) == 0
+
+            # Second failure on different item — crosses warn_threshold=2
+            manager_with_attention.validate_attention_response(
+                "user1", "attn_002", {"sentiment": "wrong"}
+            )
+            warn_calls = [c for c in mock_info.call_args_list if "warned" in str(c)]
+            assert len(warn_calls) == 1
+
+            # Re-save attn_002 — still at 2 failures but already crossed, no new log
+            manager_with_attention.validate_attention_response(
+                "user1", "attn_002", {"sentiment": "wrong"}
+            )
+            warn_calls = [c for c in mock_info.call_args_list if "warned" in str(c)]
+            assert len(warn_calls) == 1  # still just 1
 
     def test_get_stats(self, manager_with_attention):
         """Test getting attention check statistics."""

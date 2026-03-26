@@ -385,7 +385,9 @@ class QualityControlManager:
                               f"in {response_time_seconds:.1f}s (min: {self.qc_config.attention_min_response_time}s)")
             # Still record the result but log the fast response
 
-        # Record result
+        # Record result — at most one result per (user, item) pair.
+        # Re-saves on the same item replace the prior result rather than
+        # appending, so a single attention-check item can only count once.
         result = AttentionCheckResult(
             item_id=item_id,
             user_id=user_id,
@@ -396,20 +398,30 @@ class QualityControlManager:
         )
 
         with self._lock:
+            user_results = self.attention_results[user_id]
+            previous_failures = len([r for r in user_results if not r.passed])
+
+            # Replace any existing result for this (user, item) pair
+            self.attention_results[user_id] = [
+                r for r in user_results if r.item_id != item_id
+            ]
             self.attention_results[user_id].append(result)
+
             failures = len([r for r in self.attention_results[user_id] if not r.passed])
 
-        # Check thresholds
+        # Check thresholds — only log when crossing for the first time
         response_data = {"passed": passed}
 
         if failures >= self.qc_config.attention_block_threshold:
             response_data["blocked"] = True
             response_data["message"] = self.qc_config.attention_block_message
-            self.logger.warning(f"User {user_id} blocked after {failures} attention check failures")
+            if previous_failures < self.qc_config.attention_block_threshold:
+                self.logger.warning(f"User {user_id} blocked after {failures} attention check failures")
         elif failures >= self.qc_config.attention_warn_threshold:
             response_data["warning"] = True
             response_data["message"] = self.qc_config.attention_warn_message
-            self.logger.info(f"User {user_id} warned after {failures} attention check failures")
+            if previous_failures < self.qc_config.attention_warn_threshold:
+                self.logger.info(f"User {user_id} warned after {failures} attention check failures")
 
         return response_data
 
