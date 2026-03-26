@@ -37,6 +37,7 @@ def _build_template_app():
                 "error_heading": "Error",
                 "retry_button": "Retry",
                 "adjudicate": "Adjudicate",
+                "codebook": "Codebook",
             },
         }
 
@@ -145,3 +146,39 @@ def test_render_page_with_annotations_hides_codebook_link_without_url(monkeypatc
     assert 'class="codebook-btn"' not in rendered
     assert 'title="Open annotation codebook"' not in rendered
     assert 'href="/media/' not in rendered
+
+
+def test_codebook_url_javascript_blocked(monkeypatch):
+    """javascript: URLs in annotation_codebook_url should be blocked."""
+    app = _build_template_app()
+    _configure_render_mocks(monkeypatch, app, "javascript:alert(1)")
+
+    with app.test_request_context("/annotate"):
+        rendered = fs.render_page_with_annotations("user1")
+
+    assert 'javascript:' not in rendered
+    assert 'class="codebook-btn"' not in rendered
+
+
+def test_codebook_url_data_blocked(monkeypatch):
+    """data: URLs in annotation_codebook_url should be blocked."""
+    app = _build_template_app()
+    _configure_render_mocks(monkeypatch, app, "data:text/html,<script>alert(1)</script>")
+
+    with app.test_request_context("/annotate"):
+        rendered = fs.render_page_with_annotations("user1")
+
+    assert 'data:' not in rendered
+    assert 'class="codebook-btn"' not in rendered
+
+
+def test_codebook_i18n_label(monkeypatch):
+    """Codebook button should use ui_lang.codebook for the label."""
+    app = _build_template_app()
+    _configure_render_mocks(monkeypatch, app, "https://example.com/codebook.pdf")
+
+    with app.test_request_context("/annotate"):
+        rendered = fs.render_page_with_annotations("user1")
+
+    # Default label from ui_lang_defaults
+    assert "> Codebook" in rendered

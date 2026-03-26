@@ -114,6 +114,14 @@
                     <span class="fw-medium" id="progress-counter">{{finished}}/{{total_count}}</span>
                 </div>
 
+                {% if ibws_round_info %}
+                <div class="navbar-divider"></div>
+                <div class="ibws-round-banner" id="ibws-round-banner">
+                    <span class="ibws-round-label">Round {{ ibws_round_info.current_round }}{% if ibws_round_info.max_rounds %} of {{ ibws_round_info.max_rounds }}{% endif %}</span>
+                    <span class="ibws-round-detail">{{ ibws_round_info.terminal_items }}/{{ ibws_round_info.total_items }} ranked</span>
+                </div>
+                {% endif %}
+
                 <div class="navbar-divider"></div>
 
                 <div class="nav-controls">
@@ -149,7 +157,7 @@
                    target="_blank"
                    rel="noopener noreferrer"
                    title="Open annotation codebook">
-                    <i class="fas fa-book-open"></i> Codebook
+                    <i class="fas fa-book-open"></i> {{ ui_lang.codebook }}
                 </a>
                 {% endif %}
                 <div class="user-pill">
@@ -183,7 +191,7 @@
                 <div id="main-content" style="display: none;">
                     {% if annotation_instructions | default('') %}
                     <details class="annotation-instructions-banner" open>
-                        <summary>Annotation Instructions (click to collapse)</summary>
+                        <summary>Instructions</summary>
                         <div class="annotation-instructions-content">
                             {{ annotation_instructions | safe }}
                         </div>
@@ -218,8 +226,8 @@
                         </div>
                         {% else %}
                         {% if is_annotation_page %}
-                                <h5 class="mb-3">Text to Annotate:</h5>
-                                <div id="instance-text" class="p-3 border rounded instance-text-container" style="background-color: var(--light-bg); min-height: 100px; position: relative;">
+                                <h5 class="instance-text-heading">Text to Annotate:</h5>
+                                <div id="instance-text" class="p-3 border rounded instance-text-container" style="background-color: var(--light-bg); position: relative;">
                                     <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}" style="position: relative; z-index: 1; pointer-events: auto;">{{instance | sanitize_html}}
                                         <div id="span-overlays" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;">
                                         </div>
@@ -337,7 +345,7 @@
     {% if has_instance_display | default(false) %}
     <script src="{{ url_for('static', filename='instance-display.js') }}?v=2"></script>
     {% endif %}
-    <script src="{{ url_for('static', filename='annotation.js') }}?v=20"></script>
+    <script src="{{ url_for('static', filename='annotation.js') }}?v=21"></script>
 
     <!-- Fabric.js for image annotation (loaded from CDN) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>

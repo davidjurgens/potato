@@ -570,6 +570,36 @@ def load_instance_data(config: dict):
 
         logger.info(f"BWS: Replaced {len(pool_items)} pool items with {len(tuples)} tuples")
 
+    # If IBWS config is present, initialize iterative BWS manager and generate round 1 tuples
+    ibws_config = config.get("ibws_config")
+    if ibws_config:
+        from potato.ibws_manager import init_ibws_manager
+
+        # Collect all loaded pool items
+        pool_items = [item.get_data() for item in ism.items()]
+
+        # Store pool items for scoring
+        config["_bws_pool_items"] = [dict(item) for item in pool_items]
+
+        # Initialize IBWS manager
+        ibws_mgr = init_ibws_manager(config, pool_items, id_key, text_key)
+
+        # Generate round 1 tuples
+        round1_tuples = ibws_mgr.generate_round_tuples()
+
+        # Clear pool items and replace with round 1 tuples
+        ism.clear()
+        for t in round1_tuples:
+            ism.add_item(str(t[id_key]), t)
+
+        # Set unlimited annotations — IBWS manager controls completion
+        get_user_state_manager().set_max_annotations_per_user(-1)
+
+        logger.info(
+            f"IBWS: Initialized with {len(pool_items)} pool items, "
+            f"generated {len(round1_tuples)} round-1 tuples"
+        )
+
     # For each item, render the text to display in the UI ahead of time.
     _render_displayed_text(text_key)
 
@@ -1445,6 +1475,13 @@ def get_displayed_text(text):
     """
     import re
 
+    # Handle dict inputs (for tree structures, agent traces, complex data)
+    # Convert to JSON string for display — the actual rendering is handled by
+    # display types (conversation_tree, web_agent_trace, live_agent, etc.)
+    if isinstance(text, dict):
+        import json as _json
+        return _json.dumps(text, ensure_ascii=False, indent=2)
+
     # Handle list inputs (for dialogue or pairwise comparisons with list_as_text config)
     if isinstance(text, list):
         list_config = config.get("list_as_text", {})
@@ -1631,7 +1668,7 @@ def get_current_page_html(config, username):
     context = {
         'username': username,
         'annotation_task_name': config.get('annotation_task_name', ''),
-        'annotation_codebook_url': config.get('annotation_codebook_url', ''),
+        'annotation_codebook_url': _sanitize_codebook_url(config.get('annotation_codebook_url', '')),
         'debug_mode': config.get('debug', False),
         'ui_debug': config.get('ui_debug', False),
         'server_debug': config.get('server_debug', False),
@@ -1646,6 +1683,20 @@ def get_current_page_html(config, username):
         'annotation_instructions': config.get('annotation_instructions', ''),
     }
     return render_template(html_fname, **context)
+
+def _sanitize_codebook_url(url: str) -> str:
+    """Sanitize codebook URL to prevent javascript: and other dangerous protocols."""
+    if not url:
+        return ""
+    stripped = url.strip()
+    # Block dangerous URL schemes
+    lower = stripped.lower().replace('\t', '').replace('\n', '').replace('\r', '')
+    for scheme in ('javascript:', 'vbscript:', 'data:'):
+        if lower.startswith(scheme):
+            logger.warning(f"Blocked dangerous scheme in annotation_codebook_url: {scheme}")
+            return ""
+    return stripped
+
 
 def _is_user_adjudicator(username: str) -> bool:
     """Check if a user is an authorized adjudicator."""
@@ -1718,6 +1769,14 @@ def render_page_with_annotations(username: str):
         "emphasis": list(emphasis_corpus_to_schemas)
     }
 
+    # Include full instance data for dynamic schemas (extractive_qa, text_edit,
+    # error_span, card_sort, conjoint) that need fields beyond text_key
+    if item_data and isinstance(item_data, dict):
+        var_elems["instance_data"] = {
+            k: v for k, v in item_data.items()
+            if isinstance(v, (str, int, float, bool, list))
+        }
+
     # also save the displayed text in the metadata dict
     # instance_id_to_data[instance_id]['displayed_text'] = text
 
@@ -1754,7 +1813,7 @@ def render_page_with_annotations(username: str):
     var_elems["suggestions"] = list(label_suggestion_json)
 
     # Pass BWS items data to frontend JS
-    if config.get("bws_config"):
+    if config.get("bws_config") or config.get("ibws_config"):
         var_elems["bws_items"] = item.get_data().get("_bws_items", [])
     # Fill in the kwargs that the user wanted us to include when rendering the page
     kwargs = {}
@@ -1877,6 +1936,14 @@ def render_page_with_annotations(username: str):
             logger.error(f"Error rendering instance display: {e}")
             has_instance_display = False  # Fall back to legacy mode
 
+    # Get IBWS round info if active
+    ibws_round_info = None
+    if config.get("ibws_config"):
+        from potato.ibws_manager import get_ibws_manager
+        ibws_mgr = get_ibws_manager()
+        if ibws_mgr:
+            ibws_round_info = ibws_mgr.get_round_info()
+
     rendered_html = render_template(
         html_file,
         username=username,
@@ -1922,11 +1989,13 @@ def render_page_with_annotations(username: str):
         annotation_instructions=config.get("annotation_instructions", ""),
         # Adjudication: show link for adjudicators
         is_adjudicator=_is_user_adjudicator(username),
-        annotation_codebook_url=config.get("annotation_codebook_url", ""),
+        annotation_codebook_url=_sanitize_codebook_url(config.get("annotation_codebook_url", "")),
         # Annotation status indicator
         instance_has_annotations=instance_has_annotations,
         # if this is an annotation page
         is_annotation_page=is_annotation_page,
+        # IBWS round info (for round banner)
+        ibws_round_info=ibws_round_info,
         # ai=ai_hints,
         **kwargs
     )
@@ -2030,8 +2099,9 @@ def render_page_with_annotations(username: str):
                         logger.debug(f"No input for {name}")
                         continue
 
-                    # If it's a slider, set the value for the slider
-                    if input_field.get('type') == 'range' and name.endswith(':::slider'):
+                    # If it's a range input (slider, soft_label, vas, range_slider, etc.),
+                    # set the value attribute so loadAnnotations() reads it back
+                    if input_field.get('type') == 'range':
                         input_field['value'] = value
                         continue
 
@@ -2259,7 +2329,7 @@ def render_page_with_annotations_WEIRD(username):
         progress=progress,
         username=username,
         ui_config=ui_config,
-        annotation_codebook_url=config.get("annotation_codebook_url", ""),
+        annotation_codebook_url=_sanitize_codebook_url(config.get("annotation_codebook_url", "")),
     )
 
 def randomize_options(soup, legend_names, seed):
@@ -2802,6 +2872,7 @@ def create_app(config_file=None):
             'error_heading': 'Error',
             'retry_button': 'Retry',
             'adjudicate': 'Adjudicate',
+            'codebook': 'Codebook',
         }
         ui_lang_config = config.get('ui_language', {})
         ui_lang = {**ui_lang_defaults, **ui_lang_config}
@@ -2824,7 +2895,7 @@ def create_app(config_file=None):
             'debug_phase': config.get('debug_phase'),
             # Add common config values needed by templates
             'annotation_task_name': config.get('annotation_task_name', 'Annotation Task'),
-            'annotation_codebook_url': config.get('annotation_codebook_url', ''),
+            'annotation_codebook_url': _sanitize_codebook_url(config.get('annotation_codebook_url', '')),
             # Multilingual UI strings
             'ui_lang': ui_lang,
             # Project-level base CSS
@@ -3080,15 +3151,6 @@ def run_server(args):
     # Initialize authenticator
     UserAuthenticator.init_from_config(config)
 
-    # Initialize OAuth with Flask app if using OAuth authentication
-    auth_method = config.get("authentication", {}).get("method", "in_memory")
-    if auth_method == "oauth":
-        authenticator = UserAuthenticator.get_instance()
-        oauth_backend = authenticator.get_oauth_backend()
-        if oauth_backend:
-            oauth_backend.init_oauth(app)
-            logger.info("OAuth providers initialized with Flask app")
-
     init_user_state_manager(config)
     init_item_state_manager(config)
 
@@ -3293,6 +3355,16 @@ def run_server(args):
 
     # Create and configure the Flask app
     app = create_app()
+
+    # Initialize OAuth with Flask app if using OAuth authentication
+    # (must happen after create_app() since OAuth needs the Flask app instance)
+    auth_method = config.get("authentication", {}).get("method", "in_memory")
+    if auth_method == "oauth":
+        authenticator = UserAuthenticator.get_instance()
+        oauth_backend = authenticator.get_oauth_backend()
+        if oauth_backend:
+            oauth_backend.init_oauth(app)
+            logger.info("OAuth providers initialized with Flask app")
 
     # Run the Flask app
     host = config.get("host", "0.0.0.0")
