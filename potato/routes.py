@@ -212,96 +212,19 @@ def apply_debug_phase_skip(user_id: str) -> bool:
 
     return False
 
-# Cache for auto-generated admin API key
-_generated_admin_api_key = None
+# Admin API key resolution — delegated to shared utility
+from potato.server_utils.admin_key import (
+    get_admin_api_key as _get_admin_api_key,
+    validate_admin_api_key as _validate_admin_api_key,
+)
 
 def get_admin_api_key():
-    """Get the admin API key from config, environment variable, or auto-generate one.
-
-    Priority order:
-    1. Config file: admin_api_key setting
-    2. Environment variable: POTATO_ADMIN_API_KEY
-    3. Auto-generated: Creates a random key and saves it to {task_dir}/admin_api_key.txt
-
-    Returns:
-        str or None: The admin API key, or None if generation fails.
-    """
-    global _generated_admin_api_key
-
-    # Check config first
-    configured_key = config.get("admin_api_key")
-    if configured_key:
-        return configured_key
-
-    # Check environment variable
-    env_key = os.environ.get("POTATO_ADMIN_API_KEY")
-    if env_key:
-        return env_key
-
-    # Return cached generated key if we have one
-    if _generated_admin_api_key:
-        return _generated_admin_api_key
-
-    # Auto-generate a key and save it to task directory
-    task_dir = config.get("task_dir", ".")
-    if not task_dir:
-        task_dir = "."
-
-    key_file_path = os.path.join(task_dir, "admin_api_key.txt")
-
-    # Check if a key file already exists (from previous run)
-    if os.path.exists(key_file_path):
-        try:
-            with open(key_file_path, 'r', encoding='utf-8') as f:
-                existing_key = f.read().strip()
-                if existing_key:
-                    _generated_admin_api_key = existing_key
-                    logger.info(f"Loaded existing admin API key from {key_file_path}")
-                    return _generated_admin_api_key
-        except Exception as e:
-            logger.warning(f"Could not read existing admin API key file: {e}")
-
-    # Generate a new key
-    import secrets
-    _generated_admin_api_key = secrets.token_urlsafe(32)
-
-    # Save to file
-    try:
-        with open(key_file_path, 'w', encoding='utf-8') as f:
-            f.write(_generated_admin_api_key)
-        logger.info(f"Generated admin API key and saved to {key_file_path}")
-        logger.info(f"Use this key to access the admin dashboard at /admin")
-    except Exception as e:
-        logger.warning(f"Could not save admin API key to file: {e}")
-        logger.info(f"Auto-generated admin API key (not persisted): {_generated_admin_api_key}")
-
-    return _generated_admin_api_key
+    """Get the admin API key. See potato.server_utils.admin_key for details."""
+    return _get_admin_api_key(config)
 
 def validate_admin_api_key(provided_key: str) -> bool:
-    """Validate an admin API key against the configured or auto-generated key.
-
-    In debug mode, admin endpoints are accessible without a key.
-    Otherwise, the provided key must match the configured or auto-generated key.
-
-    Args:
-        provided_key: The API key provided in the request.
-
-    Returns:
-        bool: True if the key is valid or debug mode is enabled.
-    """
-    debug_val = config.get("debug", False)
-    if debug_val:
-        return True
-
-    expected_key = get_admin_api_key()
-    if not expected_key:
-        # This should rarely happen since we auto-generate keys
-        logger.warning("Could not obtain admin API key")
-        return False
-
-    # Use constant-time comparison to prevent timing attacks
-    import hmac
-    return hmac.compare_digest(str(provided_key or ""), expected_key)
+    """Validate an admin API key. See potato.server_utils.admin_key for details."""
+    return _validate_admin_api_key(provided_key, config)
 
 
 # -------------------------------------------------------------------
@@ -1733,6 +1656,59 @@ def _check_required_or_block(user_state, instance_id: str):
     return None
 
 
+def _ibws_check_and_advance(user_state) -> bool:
+    """Check if IBWS round is complete and advance to next round if so.
+
+    Returns True if new tuples were added and the user was reassigned.
+    """
+    from potato.ibws_manager import get_ibws_manager
+
+    ibws_mgr = get_ibws_manager()
+    if not ibws_mgr or ibws_mgr.is_completed():
+        return False
+
+    ism = get_item_state_manager()
+    usm = get_user_state_manager()
+
+    # Find the BWS schema name
+    bws_schema_name = None
+    for scheme in config.get("annotation_schemes", []):
+        if scheme.get("annotation_type") == "bws":
+            bws_schema_name = scheme["name"]
+            break
+
+    if not bws_schema_name:
+        return False
+
+    if not ibws_mgr.check_round_complete(ism, bws_schema_name):
+        return False
+
+    # Round is complete — advance to next round
+    logger.info(f"IBWS: Round {ibws_mgr.current_round} complete, advancing")
+    new_tuples = ibws_mgr.advance_round(ism, usm, bws_schema_name)
+
+    if not new_tuples:
+        logger.info("IBWS: No more rounds needed, annotation complete")
+        return False
+
+    # Add new tuples to ISM
+    id_key = config["item_properties"]["id_key"]
+    for t in new_tuples:
+        ism.add_item(str(t[id_key]), t)
+
+    # Re-render displayed text for new items
+    from potato.flask_server import _render_displayed_text
+    text_key = config["item_properties"]["text_key"]
+    _render_displayed_text(text_key)
+
+    # Reassign instances to all active users
+    for us in usm.get_all_users():
+        ism.assign_instances_to_user(us)
+
+    logger.info(f"IBWS: Added {len(new_tuples)} new tuples for round {ibws_mgr.current_round}")
+    return True
+
+
 @app.route("/annotate", methods=["GET", "POST"])
 def annotate():
     """
@@ -1812,11 +1788,27 @@ def annotate():
                 logger.info(f"Adjudicator {username} has no annotation items, redirecting to /adjudicate")
                 return redirect(url_for("adjudicate"))
 
+    # IBWS: Check if round is complete and advance if needed
+    if config.get("ibws_config"):
+        _ibws_check_and_advance(user_state)
+
     # See if this user has finished annotating all of their assigned instances
     if not user_state.has_remaining_assignments():
-        logger.debug(f"User {username} has no remaining assignments, advancing phase")
-        get_user_state_manager().advance_phase(username)
-        return redirect(url_for("home"))
+        # For IBWS, don't advance phase if more rounds are possible
+        if config.get("ibws_config"):
+            from potato.ibws_manager import get_ibws_manager
+            ibws_mgr = get_ibws_manager()
+            if ibws_mgr and not ibws_mgr.is_completed():
+                # Still waiting for other annotators to finish the round
+                pass
+            else:
+                logger.debug(f"User {username} has no remaining assignments (IBWS complete), advancing phase")
+                get_user_state_manager().advance_phase(username)
+                return redirect(url_for("home"))
+        else:
+            logger.debug(f"User {username} has no remaining assignments, advancing phase")
+            get_user_state_manager().advance_phase(username)
+            return redirect(url_for("home"))
 
     _inject_quality_control_item_if_needed(username, user_state)
 
@@ -1867,9 +1859,23 @@ def annotate():
         if not moved_forward and user_state.is_at_end_index():
             logger.debug(f"User {username} reached the end of assigned instances")
             if not user_state.has_remaining_assignments():
-                logger.debug(f"User {username} completed all assignments at end-of-list")
-                get_user_state_manager().advance_phase(username)
-                return redirect(url_for("home"))
+                # IBWS: try to advance round before giving up
+                if config.get("ibws_config"):
+                    advanced = _ibws_check_and_advance(user_state)
+                    if advanced:
+                        # New tuples were added — reassign and continue
+                        pass
+                    else:
+                        from potato.ibws_manager import get_ibws_manager
+                        ibws_mgr = get_ibws_manager()
+                        if ibws_mgr and ibws_mgr.is_completed():
+                            logger.debug(f"User {username} completed all IBWS rounds")
+                            get_user_state_manager().advance_phase(username)
+                            return redirect(url_for("home"))
+                else:
+                    logger.debug(f"User {username} completed all assignments at end-of-list")
+                    get_user_state_manager().advance_phase(username)
+                    return redirect(url_for("home"))
         acm = get_ai_cache_manager()
         if acm:
             acm.start_prefetch(user_state.current_instance_index, getattr(acm,"prefetch_page_count_on_next", 0))
@@ -1934,10 +1940,21 @@ def annotate():
     # After processing the action, check again if user has completed all assignments
     # This handles the case where the user just finished their last item
     if not user_state.has_remaining_assignments():
-        logger.debug(f"User {username} has completed all assignments, advancing phase")
-        get_user_state_manager().advance_phase(username)
-        # Use redirect to ensure next phase handler gets a GET request (fixes issue #115)
-        return redirect(url_for("home"))
+        if config.get("ibws_config"):
+            from potato.ibws_manager import get_ibws_manager
+            ibws_mgr = get_ibws_manager()
+            if ibws_mgr and not ibws_mgr.is_completed():
+                # IBWS still running — don't advance phase, try to get more tuples
+                _ibws_check_and_advance(user_state)
+            else:
+                logger.debug(f"User {username} has completed all IBWS assignments, advancing phase")
+                get_user_state_manager().advance_phase(username)
+                return redirect(url_for("home"))
+        else:
+            logger.debug(f"User {username} has completed all assignments, advancing phase")
+            get_user_state_manager().advance_phase(username)
+            # Use redirect to ensure next phase handler gets a GET request (fixes issue #115)
+            return redirect(url_for("home"))
 
     # Handle GET requests with instance_id query parameter
     if request.method == 'GET' and request.args.get('instance_id'):
@@ -6713,6 +6730,10 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/api/bws_scoring", "admin_api_bws_scoring", admin_api_bws_scoring, methods=["GET"])
     app.add_url_rule("/admin/api/bws_scoring/generate", "admin_api_bws_scoring_generate", admin_api_bws_scoring_generate, methods=["POST"])
 
+    # IBWS admin API routes
+    app.add_url_rule("/admin/api/ibws_status", "admin_api_ibws_status", admin_api_ibws_status, methods=["GET"])
+    app.add_url_rule("/admin/api/ibws_ranking", "admin_api_ibws_ranking", admin_api_ibws_ranking, methods=["GET"])
+
     # MACE admin API routes
     app.add_url_rule("/admin/api/mace/overview", "admin_api_mace_overview", admin_api_mace_overview, methods=["GET"])
     app.add_url_rule("/admin/api/mace/predictions", "admin_api_mace_predictions", admin_api_mace_predictions, methods=["GET"])
@@ -7050,6 +7071,51 @@ def admin_api_bws_scoring_generate():
         "total_annotations": len(annotations),
         "method": method,
         "scores": scores_list,
+    })
+
+
+# ============================================================================
+# IBWS Admin API Routes
+# ============================================================================
+
+@app.route('/admin/api/ibws_status', methods=['GET'])
+def admin_api_ibws_status():
+    """Get current IBWS round status and progress."""
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    if not config.get("ibws_config"):
+        return jsonify({"error": "IBWS not configured"}), 400
+
+    from potato.ibws_manager import get_ibws_manager
+    ibws_mgr = get_ibws_manager()
+    if not ibws_mgr:
+        return jsonify({"error": "IBWS manager not initialized"}), 500
+
+    return jsonify(ibws_mgr.get_round_info())
+
+
+@app.route('/admin/api/ibws_ranking', methods=['GET'])
+def admin_api_ibws_ranking():
+    """Get current IBWS ordinal ranking."""
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    if not config.get("ibws_config"):
+        return jsonify({"error": "IBWS not configured"}), 400
+
+    from potato.ibws_manager import get_ibws_manager
+    ibws_mgr = get_ibws_manager()
+    if not ibws_mgr:
+        return jsonify({"error": "IBWS manager not initialized"}), 500
+
+    ranking = ibws_mgr.get_final_ranking()
+    return jsonify({
+        "completed": ibws_mgr.is_completed(),
+        "current_round": ibws_mgr.current_round,
+        "ranking": ranking,
     })
 
 

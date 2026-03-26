@@ -132,22 +132,15 @@ class AdminDashboard:
         """
         Check if the current request has admin access via API key.
 
+        Validates against all key sources (config, env var, auto-generated file)
+        and accepts keys from X-API-Key header or session.
+
         Returns:
             bool: True if admin access is granted, False otherwise
         """
-        api_key = request.headers.get('X-API-Key')
-        configured_api_key = config.get("admin_api_key")
-
-        # In debug mode, allow access without API key
-        if config.get("debug", False):
-            return True
-
-        # If no admin API key is configured, deny access
-        if not configured_api_key:
-            return False
-
-        # Check if the provided API key matches the configured one
-        return api_key == configured_api_key
+        from potato.server_utils.admin_key import validate_admin_api_key
+        api_key = request.headers.get('X-API-Key') or session.get('admin_api_key')
+        return validate_admin_api_key(api_key, config)
 
     def get_dashboard_overview(self) -> Dict[str, Any]:
         """
