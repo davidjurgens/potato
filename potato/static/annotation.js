@@ -463,9 +463,16 @@ function getCurrentOverlayCount() {
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function () {
     // Skip annotation initialization on non-annotation pages (consent, instructions, etc.)
-    // but still show the page content and enable navigation
+    // but still show the page content, enable navigation, and wire up input persistence
     if (window.config && !window.config.is_annotation_page) {
+        // Create a synthetic instance so saveAnnotations() can send updates.
+        // The backend routes non-annotation saves to phase_to_page_to_label_to_value.
+        currentInstance = { id: '__phase_page__', text: '', displayed_text: '' };
+        window.currentInstance = currentInstance;
+        currentAnnotations = {};
+
         setLoading(false);
+        setupInputEventListeners();
         validateRequiredFields();
         return;
     }
@@ -970,6 +977,9 @@ async function loadCurrentInstance() {
         // Populate pairwise item boxes after forms are generated
         populatePairwiseTileContent();
 
+        // Populate dynamic schema content (extractive_qa, text_edit, error_span, card_sort, conjoint)
+        await populateDynamicSchemaContent();
+
         // Load span annotations
         debugLog('🔍 [DEBUG] loadCurrentInstance() - About to call loadSpanAnnotations()');
         debugLog('🔍 [DEBUG] loadCurrentInstance() - currentInstance.id:', currentInstance?.id);
@@ -1091,6 +1101,37 @@ function clearAllFormInputs() {
         tile => tile.classList.remove('selected')
     );
 
+    // Clear ranking visual state (reset order numbers)
+    document.querySelectorAll('.ranking-list .ranking-item').forEach((item, idx) => {
+        const rank = item.querySelector('.ranking-rank');
+        if (rank) rank.textContent = idx + 1;
+    });
+
+    // Clear hierarchical multiselect checkboxes
+    document.querySelectorAll('.hier-checkbox').forEach(cb => {
+        cb.checked = false;
+    });
+    document.querySelectorAll('.hier-selected-tags').forEach(tags => {
+        tags.innerHTML = '';
+    });
+
+    // Clear trajectory eval visual state
+    document.querySelectorAll('.traj-correctness-btn.selected').forEach(btn => {
+        btn.classList.remove('selected');
+    });
+    document.querySelectorAll('.traj-error-details').forEach(div => {
+        div.style.display = 'none';
+    });
+    document.querySelectorAll('.traj-step-status').forEach(el => {
+        el.textContent = '';
+        el.className = 'traj-step-status';
+    });
+    if (window._trajState) {
+        Object.keys(window._trajState).forEach(k => {
+            window._trajState[k] = { steps: [] };
+        });
+    }
+
     // Clear hidden annotation data inputs (image/audio/video annotations)
     // BUT only if they don't have server-provided data (data-server-set="true")
     // This prevents browser form restoration from persisting annotations across instances
@@ -1192,6 +1233,23 @@ async function loadAnnotations() {
             }
             // Sync browser state to server state
             input.value = serverValue;
+            if (schema && labelName && serverValue) {
+                if (!currentAnnotations[schema]) {
+                    currentAnnotations[schema] = {};
+                }
+                currentAnnotations[schema][labelName] = serverValue;
+            }
+        });
+
+        // Read number input state from HTML 'value' ATTRIBUTE (constant_sum, etc.)
+        const numberInputs = document.querySelectorAll('input[type="number"].annotation-input');
+        numberInputs.forEach(input => {
+            const schema = input.getAttribute('schema');
+            const labelName = input.getAttribute('label_name');
+            const serverValue = input.getAttribute('value');
+            if (serverValue) {
+                input.value = serverValue;
+            }
             if (schema && labelName && serverValue) {
                 if (!currentAnnotations[schema]) {
                     currentAnnotations[schema] = {};
@@ -2208,6 +2266,8 @@ function populateInputValues() {
             if (valueDisplay) {
                 valueDisplay.textContent = currentAnnotations[schema][labelName];
             }
+            // Dispatch input event to trigger display updates (constant_sum, VAS, etc.)
+            input.dispatchEvent(new Event('input', { bubbles: true }));
             debugLog(`Populated slider ${input.id} with value:`, currentAnnotations[schema][labelName]);
         }
     });
@@ -2232,6 +2292,8 @@ function populateInputValues() {
 
         if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
             input.value = currentAnnotations[schema][labelName];
+            // Dispatch input event to trigger constant_sum display updates
+            input.dispatchEvent(new Event('input', { bubbles: true }));
             debugLog(`Populated number ${input.id} with value:`, currentAnnotations[schema][labelName]);
         }
     });
@@ -2242,7 +2304,422 @@ function populateInputValues() {
     // Populate BWS annotations
     restoreBwsAnnotations();
 
+    // Populate ranking annotations
+    restoreRankingAnnotations();
+
+    // Populate hierarchical multiselect annotations
+    restoreHierarchicalAnnotations();
+
+    // Populate soft label slider displays
+    restoreSoftLabelDisplays();
+
+    // Populate range slider displays
+    restoreRangeSliderDisplays();
+
+    // Populate semantic differential radios
+    restoreSemanticDifferentialAnnotations();
+
+    // Restore text edit schemas (populate editor textarea from saved data)
+    restoreTextEditAnnotations();
+
+    // Restore extractive QA annotations
+    restoreExtractiveQaAnnotations();
+
+    // Restore error span annotations
+    restoreErrorSpanAnnotations();
+
+    // Restore card sort annotations
+    restoreCardSortAnnotations();
+
+    // Restore trajectory eval annotations
+    restoreTrajectoryEvalAnnotations();
+
+    // Update character counters for text schemas with min_chars/show_char_count
+    updateAllCharCounters();
+
     validateRequiredFields();
+}
+
+/**
+ * Restore ranking annotations by reordering items to match saved order.
+ */
+function restoreRankingAnnotations() {
+    const hiddenInputs = document.querySelectorAll('.ranking-order-input');
+    hiddenInputs.forEach(input => {
+        const schema = input.getAttribute('schema');
+        const labelName = input.getAttribute('label_name');
+        if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
+            const savedOrder = currentAnnotations[schema][labelName];
+            input.value = savedOrder;
+            input.setAttribute('data-modified', 'true');
+            input.setAttribute('data-server-set', 'true');
+            // Reorder DOM items
+            const list = input.closest('fieldset').querySelector('.ranking-list');
+            if (list) {
+                const order = savedOrder.split(',');
+                const items = Array.from(list.querySelectorAll('.ranking-item'));
+                order.forEach((val, idx) => {
+                    const item = items.find(it => it.getAttribute('data-value') === val);
+                    if (item) {
+                        list.appendChild(item);
+                        item.querySelector('.ranking-rank').textContent = idx + 1;
+                    }
+                });
+            }
+            debugLog('Restored ranking annotation for', schema);
+        }
+    });
+}
+
+/**
+ * Restore hierarchical multiselect annotations by checking saved labels.
+ */
+function restoreHierarchicalAnnotations() {
+    const hiddenInputs = document.querySelectorAll('.hier-selected-input');
+    hiddenInputs.forEach(input => {
+        const schema = input.getAttribute('schema');
+        const labelName = input.getAttribute('label_name');
+        if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
+            const savedLabels = currentAnnotations[schema][labelName];
+            input.value = savedLabels;
+            input.setAttribute('data-modified', 'true');
+            input.setAttribute('data-server-set', 'true');
+            // Check matching checkboxes
+            const selected = savedLabels.split(',').map(s => s.trim()).filter(Boolean);
+            const tree = input.closest('fieldset').querySelector('.hier-tree');
+            if (tree) {
+                tree.querySelectorAll('.hier-checkbox').forEach(cb => {
+                    cb.checked = selected.includes(cb.value);
+                });
+                // Update tags display
+                const tagsContainer = tree.parentElement.querySelector('.hier-selected-tags');
+                if (tagsContainer) {
+                    tagsContainer.innerHTML = selected.map(s =>
+                        '<span class="hier-tag">' + s + '</span>'
+                    ).join('');
+                }
+            }
+            debugLog('Restored hierarchical annotation for', schema);
+        }
+    });
+}
+
+/**
+ * Restore soft label slider display values and chart bars after populating range inputs.
+ */
+function restoreSoftLabelDisplays() {
+    document.querySelectorAll('.shadcn-soft-label-container').forEach(form => {
+        const schema = form.getAttribute('data-schema-name');
+        const total = parseInt(form.getAttribute('data-soft-label-total')) || 100;
+        const sliders = form.querySelectorAll('.soft-label-slider');
+        sliders.forEach((s, idx) => {
+            const valEl = document.getElementById('soft-label-val-' + s.id);
+            if (valEl) valEl.textContent = s.value;
+            const bar = document.getElementById('soft-label-bar-' + schema + '-' + idx);
+            if (bar) bar.style.width = (parseInt(s.value) / total * 100) + '%';
+        });
+        // Update allocated/remaining indicators
+        const sum = Array.from(sliders).reduce((acc, s) => acc + parseInt(s.value), 0);
+        const allocEl = document.getElementById('soft-label-allocated-' + schema);
+        if (allocEl) {
+            allocEl.innerHTML = 'Allocated: <strong>' + sum + '</strong> / ' + total;
+        }
+        const remEl = document.getElementById('soft-label-remaining-' + schema);
+        if (remEl) {
+            remEl.innerHTML = 'Remaining: <strong>' + (total - sum) + '</strong>';
+        }
+    });
+}
+
+/**
+ * Restore range slider fill and value displays.
+ */
+function restoreRangeSliderDisplays() {
+    document.querySelectorAll('.shadcn-range-slider-container').forEach(form => {
+        const schema = form.getAttribute('data-schema-name');
+        if (!schema) return;
+
+        // Get saved values or read defaults from hidden inputs
+        const lowInput = form.querySelector('[data-range-slider-role="low"]');
+        const highInput = form.querySelector('[data-range-slider-role="high"]');
+        if (!lowInput || !highInput) return;
+
+        let lowVal, highVal;
+        if (currentAnnotations[schema]) {
+            lowVal = currentAnnotations[schema]['range_low'];
+            highVal = currentAnnotations[schema]['range_high'];
+        }
+
+        // If we have saved values, restore them
+        if (lowVal != null && highVal != null) {
+            const renderFn = window['rangeSliderRender_' + schema];
+            if (renderFn) {
+                renderFn(parseInt(lowVal), parseInt(highVal));
+            }
+        }
+
+        // Always mark hidden inputs as modified so they get synced
+        lowInput.setAttribute('data-modified', 'true');
+        highInput.setAttribute('data-modified', 'true');
+    });
+}
+
+/**
+ * Restore semantic differential radio buttons using name-based matching.
+ */
+function restoreSemanticDifferentialAnnotations() {
+    const forms = document.querySelectorAll('.shadcn-semantic-differential-container');
+    forms.forEach(form => {
+        const schema = form.getAttribute('data-schema-name');
+        if (!schema || !currentAnnotations[schema]) return;
+        const radios = form.querySelectorAll('.semantic-differential-radio');
+        radios.forEach(radio => {
+            const labelName = radio.getAttribute('label_name');
+            if (labelName && currentAnnotations[schema][labelName]) {
+                if (radio.value === currentAnnotations[schema][labelName]) {
+                    radio.checked = true;
+                }
+            }
+        });
+    });
+}
+
+/**
+ * Restore text edit annotations (populate editor textarea and trigger diff).
+ */
+function restoreTextEditAnnotations() {
+    const forms = document.querySelectorAll('.shadcn-text-edit-container');
+    forms.forEach(form => {
+        const schema = form.getAttribute('data-schema-name');
+        if (!schema || !currentAnnotations[schema]) return;
+
+        const hiddenInput = form.querySelector('.text-edit-data-input');
+        if (!hiddenInput) return;
+
+        const labelName = hiddenInput.getAttribute('label_name');
+        if (!labelName || !currentAnnotations[schema][labelName]) return;
+
+        try {
+            const data = JSON.parse(currentAnnotations[schema][labelName]);
+            if (data && data.edited_text !== undefined) {
+                const editor = form.querySelector('.text-edit-textarea');
+                if (editor) {
+                    editor.value = data.edited_text;
+                    // Trigger diff update
+                    if (typeof window.textEditOnInput === 'function') {
+                        window.textEditOnInput(schema);
+                    }
+                }
+            }
+            hiddenInput.value = currentAnnotations[schema][labelName];
+            hiddenInput.setAttribute('data-server-set', 'true');
+            hiddenInput.setAttribute('data-modified', 'true');
+        } catch (e) {
+            debugLog('Error restoring text edit annotation:', e);
+        }
+    });
+}
+
+/**
+ * Restore extractive QA annotations (highlight answer span).
+ */
+function restoreExtractiveQaAnnotations() {
+    const forms = document.querySelectorAll('.shadcn-extractive-qa-container');
+    forms.forEach(form => {
+        const schema = form.getAttribute('data-schema-name');
+        if (!schema || !currentAnnotations[schema]) return;
+
+        const hiddenInput = form.querySelector('.eqa-data-input');
+        if (!hiddenInput) return;
+
+        const labelName = hiddenInput.getAttribute('label_name');
+        if (!labelName || !currentAnnotations[schema][labelName]) return;
+
+        try {
+            const data = JSON.parse(currentAnnotations[schema][labelName]);
+            hiddenInput.value = currentAnnotations[schema][labelName];
+            hiddenInput.setAttribute('data-server-set', 'true');
+            hiddenInput.setAttribute('data-modified', 'true');
+
+            if (data.unanswerable) {
+                document.getElementById(schema + '-answer-text').textContent = 'Unanswerable';
+                var unansBtn = document.getElementById(schema + '-unanswerable');
+                if (unansBtn) unansBtn.classList.add('eqa-unanswerable-active');
+            } else if (data.answer_text) {
+                document.getElementById(schema + '-answer-text').textContent = data.answer_text;
+                // Re-highlight the span in the passage
+                var container = document.getElementById(schema + '-passage');
+                if (container && data.start >= 0 && data.end > data.start) {
+                    var text = container.textContent;
+                    var color = container.dataset.highlightColor || '#FFEB3B';
+                    container.innerHTML = text.substring(0, data.start) +
+                        '<span class="eqa-highlight" style="background-color:' + color + '">' +
+                        text.substring(data.start, data.end) + '</span>' +
+                        text.substring(data.end);
+                }
+            }
+        } catch (e) {
+            debugLog('Error restoring extractive QA annotation:', e);
+        }
+    });
+}
+
+/**
+ * Restore error span annotations.
+ */
+function restoreErrorSpanAnnotations() {
+    const forms = document.querySelectorAll('.shadcn-error-span-container');
+    forms.forEach(form => {
+        const schema = form.getAttribute('data-schema-name');
+        if (!schema || !currentAnnotations[schema]) return;
+
+        const hiddenInput = form.querySelector('.error-span-data-input');
+        if (!hiddenInput) return;
+
+        const labelName = hiddenInput.getAttribute('label_name');
+        if (!labelName || !currentAnnotations[schema][labelName]) return;
+
+        try {
+            const data = JSON.parse(currentAnnotations[schema][labelName]);
+            hiddenInput.value = currentAnnotations[schema][labelName];
+            hiddenInput.setAttribute('data-server-set', 'true');
+            hiddenInput.setAttribute('data-modified', 'true');
+
+            if (data.errors && typeof window._errorSpanGetState === 'function') {
+                var state = window._errorSpanGetState(schema);
+                state.errors = data.errors;
+                window._errorSpanUpdateDisplay(schema);
+            }
+        } catch (e) {
+            debugLog('Error restoring error span annotation:', e);
+        }
+    });
+}
+
+/**
+ * Restore card sort annotations by placing cards into groups.
+ */
+function restoreCardSortAnnotations() {
+    const forms = document.querySelectorAll('.shadcn-card-sort-container');
+    forms.forEach(form => {
+        const schema = form.getAttribute('data-schema-name');
+        if (!schema || !currentAnnotations[schema]) return;
+
+        const hiddenInput = form.querySelector('.card-sort-data-input');
+        if (!hiddenInput) return;
+
+        const labelName = hiddenInput.getAttribute('label_name');
+        if (!labelName || !currentAnnotations[schema][labelName]) return;
+
+        try {
+            const data = JSON.parse(currentAnnotations[schema][labelName]);
+            hiddenInput.value = currentAnnotations[schema][labelName];
+            hiddenInput.setAttribute('data-server-set', 'true');
+            hiddenInput.setAttribute('data-modified', 'true');
+
+            // Move cards into their saved groups
+            if (data && typeof data === 'object') {
+                Object.keys(data).forEach(function(groupName) {
+                    var items = data[groupName];
+                    var groups = form.querySelectorAll('.card-sort-group');
+                    groups.forEach(function(g) {
+                        if (g.dataset.group === groupName) {
+                            var container = g.querySelector('.card-sort-group-items');
+                            items.forEach(function(text) {
+                                // Find card in source and move it
+                                var source = form.querySelector('.card-sort-source-items');
+                                var cards = source ? source.querySelectorAll('.card-sort-card') : [];
+                                cards.forEach(function(c) {
+                                    if (c.textContent.trim() === text) {
+                                        container.appendChild(c);
+                                    }
+                                });
+                            });
+                        }
+                    });
+                });
+                if (typeof window._cardSortUpdateCounts === 'function') {
+                    window._cardSortUpdateCounts(schema);
+                }
+            }
+        } catch (e) {
+            debugLog('Error restoring card sort annotation:', e);
+        }
+    });
+}
+
+/**
+ * Restore trajectory eval annotations from currentAnnotations.
+ * Mirrors the error_span restore pattern: parse JSON, push into IIFE state,
+ * then call the IIFE's visual-restore function.
+ */
+function restoreTrajectoryEvalAnnotations() {
+    const forms = document.querySelectorAll('.trajectory-eval-container');
+    forms.forEach(form => {
+        const schema = form.getAttribute('data-schema-name');
+        if (!schema || !currentAnnotations[schema]) return;
+
+        const hiddenInput = form.querySelector('.trajectory-eval-data-input');
+        if (!hiddenInput) return;
+
+        const labelName = hiddenInput.getAttribute('label_name');
+        if (!labelName || !currentAnnotations[schema][labelName]) return;
+
+        try {
+            const data = JSON.parse(currentAnnotations[schema][labelName]);
+            hiddenInput.value = currentAnnotations[schema][labelName];
+            hiddenInput.setAttribute('data-server-set', 'true');
+            hiddenInput.setAttribute('data-modified', 'true');
+
+            if (data.steps && typeof window._trajGetState === 'function') {
+                var state = window._trajGetState();
+                state.steps = data.steps;
+                if (typeof window._trajBuildStepCards === 'function') {
+                    window._trajBuildStepCards();
+                }
+                if (typeof window._trajRestoreVisualState === 'function') {
+                    window._trajRestoreVisualState();
+                }
+            }
+        } catch (e) {
+            debugLog('Error restoring trajectory eval annotation:', e);
+        }
+    });
+}
+
+/**
+ * Update all character counters for text schemas with min_chars/show_char_count.
+ */
+function updateAllCharCounters() {
+    const counters = document.querySelectorAll('.shadcn-textbox-char-counter');
+    counters.forEach(counter => {
+        const inputId = counter.dataset.inputId;
+        const minChars = parseInt(counter.dataset.minChars || '0', 10);
+        const input = document.getElementById(inputId);
+        if (!input) return;
+
+        const len = (input.value || input.textContent || '').length;
+        const countSpan = counter.querySelector('.shadcn-textbox-char-count');
+        if (countSpan) countSpan.textContent = len;
+
+        if (minChars > 0) {
+            counter.classList.toggle('char-count-met', len >= minChars);
+            counter.classList.toggle('char-count-unmet', len < minChars);
+        }
+
+        // Set up live updating if not already done
+        if (!input.dataset.charCounterBound) {
+            input.dataset.charCounterBound = 'true';
+            input.addEventListener('input', function() {
+                const l = (input.value || input.textContent || '').length;
+                if (countSpan) countSpan.textContent = l;
+                if (minChars > 0) {
+                    counter.classList.toggle('char-count-met', l >= minChars);
+                    counter.classList.toggle('char-count-unmet', l < minChars);
+                }
+            });
+        }
+    });
 }
 
 // Span annotation functions
@@ -3954,6 +4431,14 @@ function initPairwiseAnnotation() {
         });
     });
 
+    // Setup justification checkbox handlers
+    document.querySelectorAll('.pairwise-reason-cb').forEach(cb => {
+        cb.addEventListener('change', function() {
+            const schema = this.getAttribute('data-schema');
+            savePairwiseJustification(schema);
+        });
+    });
+
     // Populate pairwise tile content from instance data
     populatePairwiseTileContent();
 
@@ -4152,21 +4637,30 @@ function escapeHtml(text) {
 function selectPairwiseTile(tile) {
     const schema = tile.getAttribute('data-schema');
     const value = tile.getAttribute('data-value');
+    const dimension = tile.getAttribute('data-dimension');
     const form = tile.closest('form');
 
     if (!form) return;
 
-    debugLog(`[PAIRWISE] Selecting tile: schema=${schema}, value=${value}`);
+    debugLog(`[PAIRWISE] Selecting tile: schema=${schema}, value=${value}, dim=${dimension || 'none'}`);
 
-    // Deselect all tiles and buttons in this form
-    form.querySelectorAll('.pairwise-tile').forEach(t => t.classList.remove('selected'));
-    form.querySelectorAll('.pairwise-tie-btn, .pairwise-neither-btn').forEach(b => b.classList.remove('selected'));
+    // For multi-dimension mode, scope to the dimension row
+    const scope = dimension ? tile.closest('.pairwise-dimension-row') : form;
+
+    // Deselect all tiles and buttons in scope
+    scope.querySelectorAll('.pairwise-tile').forEach(t => t.classList.remove('selected'));
+    scope.querySelectorAll('.pairwise-tie-btn, .pairwise-neither-btn').forEach(b => b.classList.remove('selected'));
 
     // Select this tile
     tile.classList.add('selected');
 
-    // Update hidden input
-    const hiddenInput = form.querySelector('.pairwise-value');
+    // Update hidden input — in multi-dim mode find the dimension-specific input
+    let hiddenInput;
+    if (dimension) {
+        hiddenInput = scope.querySelector(`.pairwise-dim-input[data-dimension="${dimension}"]`);
+    } else {
+        hiddenInput = form.querySelector('.pairwise-value');
+    }
     if (hiddenInput) {
         hiddenInput.value = value;
         // Trigger annotation save
@@ -4186,21 +4680,30 @@ function selectPairwiseTile(tile) {
 function selectPairwiseOption(btn) {
     const schema = btn.getAttribute('data-schema');
     const value = btn.getAttribute('data-value');
+    const dimension = btn.getAttribute('data-dimension');
     const form = btn.closest('form');
 
     if (!form) return;
 
-    debugLog(`[PAIRWISE] Selecting option: schema=${schema}, value=${value}`);
+    debugLog(`[PAIRWISE] Selecting option: schema=${schema}, value=${value}, dim=${dimension || 'none'}`);
 
-    // Deselect all tiles and buttons in this form
-    form.querySelectorAll('.pairwise-tile').forEach(t => t.classList.remove('selected'));
-    form.querySelectorAll('.pairwise-tie-btn, .pairwise-neither-btn').forEach(b => b.classList.remove('selected'));
+    // For multi-dimension mode, scope to the dimension row
+    const scope = dimension ? btn.closest('.pairwise-dimension-row') : form;
+
+    // Deselect all tiles and buttons in scope
+    scope.querySelectorAll('.pairwise-tile').forEach(t => t.classList.remove('selected'));
+    scope.querySelectorAll('.pairwise-tie-btn, .pairwise-neither-btn').forEach(b => b.classList.remove('selected'));
 
     // Select this button
     btn.classList.add('selected');
 
     // Update hidden input
-    const hiddenInput = form.querySelector('.pairwise-value');
+    let hiddenInput;
+    if (dimension) {
+        hiddenInput = scope.querySelector(`.pairwise-dim-input[data-dimension="${dimension}"]`);
+    } else {
+        hiddenInput = form.querySelector('.pairwise-value');
+    }
     if (hiddenInput) {
         hiddenInput.value = value;
         // Trigger annotation save
@@ -4281,6 +4784,101 @@ function restorePairwiseAnnotations() {
             debugLog(`[PAIRWISE] Restored scale value: ${schema}/${labelName} = ${savedValue}`);
         }
     });
+
+    // Restore multi-dimension mode
+    document.querySelectorAll('.annotation-form.pairwise-multi-dimension').forEach(form => {
+        const schema = form.getAttribute('data-schema-name');
+        if (!schema || !currentAnnotations[schema]) return;
+
+        form.querySelectorAll('.pairwise-dim-input').forEach(input => {
+            const dim = input.getAttribute('data-dimension');
+            if (!dim || !currentAnnotations[schema][dim]) return;
+            const val = currentAnnotations[schema][dim];
+            input.value = val;
+
+            const row = input.closest('.pairwise-dimension-row');
+            if (!row) return;
+
+            row.querySelectorAll('.pairwise-tile, .pairwise-tie-btn').forEach(t => t.classList.remove('selected'));
+            if (val === 'tie') {
+                const btn = row.querySelector('.pairwise-tie-btn');
+                if (btn) btn.classList.add('selected');
+            } else {
+                const tile = row.querySelector(`.pairwise-tile[data-value="${val}"]`);
+                if (tile) tile.classList.add('selected');
+            }
+            debugLog(`[PAIRWISE] Restored multi-dim: ${schema}/${dim} = ${val}`);
+        });
+    });
+
+    // Restore justification data
+    document.querySelectorAll('.pairwise-justification').forEach(div => {
+        const schema = div.getAttribute('data-schema');
+        if (!schema || !currentAnnotations[schema] || !currentAnnotations[schema]['justification']) return;
+
+        try {
+            const jdata = JSON.parse(currentAnnotations[schema]['justification']);
+            const hiddenInput = div.querySelector('.pairwise-justification-value');
+            if (hiddenInput) {
+                hiddenInput.value = currentAnnotations[schema]['justification'];
+                hiddenInput.setAttribute('data-server-set', 'true');
+                hiddenInput.setAttribute('data-modified', 'true');
+            }
+
+            if (jdata.reasons) {
+                div.querySelectorAll('.pairwise-reason-cb').forEach(cb => {
+                    cb.checked = jdata.reasons.includes(cb.value);
+                });
+            }
+            if (jdata.rationale) {
+                const ta = div.querySelector('.pairwise-rationale-textarea');
+                if (ta) {
+                    ta.value = jdata.rationale;
+                    updatePairwiseRationaleCounter(ta);
+                }
+            }
+        } catch(e) {
+            debugLog('[PAIRWISE] Error restoring justification:', e);
+        }
+    });
+}
+
+/**
+ * Update the rationale character counter.
+ * @param {HTMLElement} textarea - The rationale textarea
+ */
+function updatePairwiseRationaleCounter(textarea) {
+    const schema = textarea.getAttribute('data-schema');
+    const minChars = parseInt(textarea.getAttribute('data-min-chars') || '0', 10);
+    const counter = textarea.closest('.pairwise-justification').querySelector('.pairwise-rationale-counter');
+    if (!counter) return;
+    const len = textarea.value.length;
+    counter.textContent = `${len} / ${minChars} characters`;
+    counter.classList.toggle('insufficient', len < minChars && minChars > 0);
+
+    // Save justification data
+    savePairwiseJustification(schema);
+}
+
+/**
+ * Save pairwise justification (reasons + rationale) to hidden input.
+ */
+function savePairwiseJustification(schema) {
+    const div = document.querySelector(`.pairwise-justification[data-schema="${schema}"]`);
+    if (!div) return;
+
+    const reasons = [];
+    div.querySelectorAll('.pairwise-reason-cb:checked').forEach(cb => reasons.push(cb.value));
+    const ta = div.querySelector('.pairwise-rationale-textarea');
+    const rationale = ta ? ta.value : '';
+
+    const data = JSON.stringify({ reasons: reasons, rationale: rationale });
+    const input = div.querySelector('.pairwise-justification-value');
+    if (input) {
+        input.value = data;
+        input.setAttribute('data-modified', 'true');
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
 }
 
 // Export pairwise functions globally
@@ -4289,6 +4887,8 @@ window.selectPairwiseTile = selectPairwiseTile;
 window.selectPairwiseOption = selectPairwiseOption;
 window.updatePairwiseScaleDisplay = updatePairwiseScaleDisplay;
 window.restorePairwiseAnnotations = restorePairwiseAnnotations;
+window.updatePairwiseRationaleCounter = updatePairwiseRationaleCounter;
+window.savePairwiseJustification = savePairwiseJustification;
 
 // ========================================
 // BWS (BEST-WORST SCALING) ANNOTATION HANDLERS
@@ -4392,12 +4992,30 @@ function selectBwsTile(tile) {
 
     debugLog(`[BWS] Selecting tile: schema=${schema}, value=${value}, role=${role}`);
 
+    // Prevent selecting the same item as both best and worst
+    const otherRole = role === 'best' ? 'worst' : 'best';
+    const otherRoleClass = role === 'best' ? '.bws-worst-tile' : '.bws-best-tile';
+    const otherSelected = form.querySelector(`${otherRoleClass}.selected`);
+    if (otherSelected && otherSelected.getAttribute('data-value') === value) {
+        debugLog(`[BWS] Blocked: cannot select same item as both best and worst`);
+        return;
+    }
+
     // Deselect all tiles of the same role in this form
     const roleClass = role === 'best' ? '.bws-best-tile' : '.bws-worst-tile';
     form.querySelectorAll(roleClass).forEach(t => t.classList.remove('selected'));
 
     // Select this tile
     tile.classList.add('selected');
+
+    // Disable the same item in the other role, enable all others
+    form.querySelectorAll(otherRoleClass).forEach(t => {
+        if (t.getAttribute('data-value') === value) {
+            t.classList.add('bws-disabled');
+        } else {
+            t.classList.remove('bws-disabled');
+        }
+    });
 
     // Update the corresponding hidden input
     const labelName = role; // "best" or "worst"
@@ -4408,9 +5026,6 @@ function selectBwsTile(tile) {
         registerAnnotation(hiddenInput);
         hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
     }
-
-    // Validate best != worst
-    validateBwsSelection(form);
 
     // Update validation
     validateRequiredFields();
@@ -4487,3 +5102,238 @@ function restoreBwsAnnotations() {
 window.initBwsAnnotation = initBwsAnnotation;
 window.selectBwsTile = selectBwsTile;
 window.restoreBwsAnnotations = restoreBwsAnnotations;
+
+/**
+ * Populate dynamic schema content from instance data.
+ *
+ * Schemas like extractive_qa, text_edit, error_span, card_sort, and conjoint
+ * need data from the current instance (question text, source text, items list, etc.)
+ * that is NOT available at schema generation time. This function fetches the
+ * instance data and injects it into the appropriate DOM containers.
+ */
+async function populateDynamicSchemaContent() {
+    // Check if any dynamic schemas exist on the page
+    const dynamicForms = document.querySelectorAll(
+        '.shadcn-extractive-qa-container, .shadcn-text-edit-container, ' +
+        '.shadcn-error-span-container, .shadcn-card-sort-container, ' +
+        '.shadcn-conjoint-container'
+    );
+    if (dynamicForms.length === 0) return;
+
+    // Fetch instance data from server
+    let instanceData = null;
+    try {
+        const resp = await fetch('/api/instance_data');
+        if (resp.ok) {
+            instanceData = resp.json ? await resp.json() : null;
+        }
+    } catch (e) {
+        // Fallback: try to parse from embedded JSON
+        debugLog('[DynamicSchema] Could not fetch instance data, using fallback');
+    }
+
+    // Fallback: read from the embedded <script id="instance_data"> tag (full instance data)
+    if (!instanceData) {
+        try {
+            const instanceDataScript = document.getElementById('instance_data');
+            if (instanceDataScript) {
+                instanceData = JSON.parse(instanceDataScript.textContent);
+            }
+        } catch (e) {
+            debugLog('[DynamicSchema] Could not parse embedded instance_data');
+        }
+    }
+
+    // Second fallback: read from the embedded <script id="instance"> tag (text only)
+    if (!instanceData) {
+        try {
+            const instanceScript = document.getElementById('instance');
+            if (instanceScript) {
+                instanceData = JSON.parse(instanceScript.textContent);
+            }
+        } catch (e) {
+            debugLog('[DynamicSchema] Could not parse embedded instance data');
+        }
+    }
+
+    if (!instanceData) {
+        debugLog('[DynamicSchema] No instance data available');
+        return;
+    }
+
+    // Store globally for schema inline scripts
+    window.currentInstanceData = instanceData;
+
+    // Get the instance text from the DOM (already rendered by the template)
+    const instanceTextEl = document.getElementById('text-content') || document.getElementById('instance-text');
+    const instanceText = instanceTextEl ? (instanceTextEl.textContent || '') : '';
+
+    dynamicForms.forEach(form => {
+        const type = form.getAttribute('data-annotation-type');
+        const schemaName = form.getAttribute('data-schema-name');
+
+        switch (type) {
+            case 'extractive_qa':
+                populateExtractiveQa(form, schemaName, instanceData, instanceText);
+                break;
+            case 'text_edit':
+                populateTextEdit(form, schemaName, instanceData);
+                break;
+            case 'error_span':
+                populateErrorSpan(form, schemaName, instanceData, instanceText);
+                break;
+            case 'card_sort':
+                populateCardSort(form, schemaName, instanceData);
+                break;
+            case 'conjoint':
+                populateConjoint(form, schemaName, instanceData);
+                break;
+        }
+    });
+}
+
+function populateExtractiveQa(form, schemaName, data, instanceText) {
+    // Populate question text
+    const questionField = form.getAttribute('data-question-field') || 'question';
+    const questionEl = form.querySelector('.eqa-question-text');
+    if (questionEl && data[questionField]) {
+        questionEl.textContent = data[questionField];
+    }
+
+    // Populate passage text (for selection)
+    const passageField = form.getAttribute('data-passage-field') || 'passage';
+    const passageEl = document.getElementById(schemaName + '-passage');
+    if (passageEl) {
+        const passageText = data[passageField] || instanceText;
+        if (passageText && !passageEl.textContent.trim()) {
+            passageEl.textContent = passageText;
+        }
+    }
+}
+
+function populateTextEdit(form, schemaName, data) {
+    const sourceField = form.getAttribute('data-source-field');
+    if (!sourceField || !data[sourceField]) return;
+
+    const sourceText = data[sourceField];
+
+    // Set the source (original) text display
+    const sourceEl = document.getElementById(schemaName + '-source-text');
+    if (sourceEl && !sourceEl.textContent.trim()) {
+        sourceEl.textContent = sourceText;
+    }
+
+    // Pre-fill the editor textarea with source text
+    const editor = document.getElementById(schemaName + '-editor');
+    if (editor && !editor.value.trim()) {
+        editor.value = sourceText;
+    }
+}
+
+function populateErrorSpan(form, schemaName, data, instanceText) {
+    const textContainer = document.getElementById(schemaName + '-text');
+    if (textContainer && !textContainer.textContent.trim()) {
+        textContainer.textContent = instanceText;
+    }
+
+    // Hide the duplicate "Text to Annotate" section — the error span container
+    // IS the interactive text area and showing the same text twice is confusing
+    const instanceTextSection = document.getElementById('instance-text');
+    if (instanceTextSection) {
+        instanceTextSection.style.display = 'none';
+    }
+}
+
+function populateCardSort(form, schemaName, data) {
+    const itemsField = form.getAttribute('data-items-field') || 'items';
+    const items = data[itemsField];
+    if (!items || !Array.isArray(items)) return;
+
+    const sourceItems = document.getElementById(schemaName + '-source-items');
+    if (!sourceItems || sourceItems.children.length > 0) return;
+
+    items.forEach(function(item, idx) {
+        const card = document.createElement('div');
+        card.className = 'card-sort-card';
+        card.draggable = true;
+        card.setAttribute('data-card-text', item);
+        card.textContent = item;
+        card.ondragstart = function(e) {
+            e.dataTransfer.setData('text/plain', item);
+            e.dataTransfer.setData('application/x-source-group', '__source__');
+            card.classList.add('card-sort-dragging');
+        };
+        card.ondragend = function() {
+            card.classList.remove('card-sort-dragging');
+        };
+        sourceItems.appendChild(card);
+    });
+}
+
+function populateConjoint(form, schemaName, data) {
+    // Check if profiles are in the instance data
+    const profilesField = form.getAttribute('data-profiles-field');
+    let profiles = null;
+
+    if (profilesField && data[profilesField]) {
+        profiles = data[profilesField];
+    }
+
+    // If no profiles in data, generate from config attributes
+    if (!profiles) {
+        // Read attribute definitions from the form's data-attributes or from inline config
+        const attrCells = form.querySelectorAll('.conjoint-attr-value');
+        if (attrCells.length === 0) return;
+
+        // Collect unique attributes
+        const attrs = {};
+        attrCells.forEach(cell => {
+            const attrName = cell.getAttribute('data-attr');
+            if (attrName && !attrs[attrName]) attrs[attrName] = [];
+        });
+
+        // Try to read levels from inline script config
+        const formScript = form.closest('.annotation_schema');
+        const scriptEl = formScript ? formScript.querySelector('script') : null;
+        let configData = null;
+        if (scriptEl) {
+            try {
+                // Look for conjointConfig in the script text
+                const scriptText = scriptEl.textContent;
+                const match = scriptText.match(/var\s+conjointConfig\s*=\s*(\{[^;]+\})/);
+                if (match) configData = JSON.parse(match[1]);
+            } catch (e) {}
+        }
+
+        // If we have config data, use it to generate random profiles
+        if (configData && configData.attributes) {
+            const profileCards = form.querySelectorAll('.conjoint-profile-card');
+            profileCards.forEach((card, idx) => {
+                const profileNum = card.getAttribute('data-profile');
+                configData.attributes.forEach(attr => {
+                    const cell = card.querySelector(`.conjoint-attr-value[data-attr="${attr.name}"]`);
+                    if (cell && attr.levels && attr.levels.length > 0) {
+                        // Use a deterministic index based on profile num and attribute
+                        // to vary levels across profiles for each instance
+                        const instanceId = document.getElementById('instance_id');
+                        const seed = (instanceId ? instanceId.value.length : 0) + idx;
+                        const levelIdx = (seed + attr.name.length + idx * 7) % attr.levels.length;
+                        cell.textContent = attr.levels[levelIdx];
+                    }
+                });
+            });
+        }
+    } else if (Array.isArray(profiles)) {
+        // Profiles from data
+        const profileCards = form.querySelectorAll('.conjoint-profile-card');
+        profiles.forEach((profile, idx) => {
+            if (idx < profileCards.length) {
+                const card = profileCards[idx];
+                Object.keys(profile).forEach(attrName => {
+                    const cell = card.querySelector(`.conjoint-attr-value[data-attr="${attrName}"]`);
+                    if (cell) cell.textContent = profile[attrName];
+                });
+            }
+        });
+    }
+}
