@@ -143,6 +143,15 @@
                     <i class="fas fa-gavel"></i> {{ ui_lang.adjudicate }}
                 </a>
                 {% endif %}
+                {% if annotation_codebook_url %}
+                <a href="{{ annotation_codebook_url | replace('data_files/', '/media/') }}"
+                   class="codebook-btn"
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   title="Open annotation codebook">
+                    <i class="fas fa-book-open"></i> Codebook
+                </a>
+                {% endif %}
                 <div class="user-pill">
                     <span class="username" id="username-display">{{username}}</span>
                     <a href="/logout" class="logout-btn">{{ ui_lang.logout }}</a>
