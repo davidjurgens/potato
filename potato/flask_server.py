@@ -1631,6 +1631,7 @@ def get_current_page_html(config, username):
     context = {
         'username': username,
         'annotation_task_name': config.get('annotation_task_name', ''),
+        'annotation_codebook_url': config.get('annotation_codebook_url', ''),
         'debug_mode': config.get('debug', False),
         'ui_debug': config.get('ui_debug', False),
         'server_debug': config.get('server_debug', False),
@@ -1921,6 +1922,7 @@ def render_page_with_annotations(username: str):
         annotation_instructions=config.get("annotation_instructions", ""),
         # Adjudication: show link for adjudicators
         is_adjudicator=_is_user_adjudicator(username),
+        annotation_codebook_url=config.get("annotation_codebook_url", ""),
         # Annotation status indicator
         instance_has_annotations=instance_has_annotations,
         # if this is an annotation page
@@ -2256,7 +2258,8 @@ def render_page_with_annotations_WEIRD(username):
         span_annotations=span_annotations,
         progress=progress,
         username=username,
-        ui_config=ui_config
+        ui_config=ui_config,
+        annotation_codebook_url=config.get("annotation_codebook_url", ""),
     )
 
 def randomize_options(soup, legend_names, seed):
@@ -2821,6 +2824,7 @@ def create_app(config_file=None):
             'debug_phase': config.get('debug_phase'),
             # Add common config values needed by templates
             'annotation_task_name': config.get('annotation_task_name', 'Annotation Task'),
+            'annotation_codebook_url': config.get('annotation_codebook_url', ''),
             # Multilingual UI strings
             'ui_lang': ui_lang,
             # Project-level base CSS
