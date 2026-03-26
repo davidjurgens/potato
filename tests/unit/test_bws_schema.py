@@ -64,16 +64,16 @@ class TestBwsSchema:
         _, keybindings = generate_bws_layout(scheme)
 
         keys = [kb[0] for kb in keybindings]
-        # 4 best keys (1-4) + 4 worst keys (a-d) = 8 total
+        # 4 best keys (1-4) + 4 worst keys (q-r) = 8 total
         assert len(keybindings) == 8
         assert "1" in keys
         assert "2" in keys
         assert "3" in keys
         assert "4" in keys
-        assert "a" in keys
-        assert "b" in keys
-        assert "c" in keys
-        assert "d" in keys
+        assert "q" in keys
+        assert "w" in keys
+        assert "e" in keys
+        assert "r" in keys
 
     def test_no_keybindings_when_disabled(self):
         """No keybindings when sequential_key_binding is false."""
