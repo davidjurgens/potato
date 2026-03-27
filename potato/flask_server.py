@@ -91,7 +91,7 @@ from potato.knowledge_base import init_kb_manager
 from potato.solo_mode import init_solo_mode_manager, get_solo_mode_manager
 from potato.solo_mode.routes import solo_mode_bp
 
-from potato.create_task_cli import create_task_cli, yes_or_no
+from potato.create_task_cli import create_task_cli
 from potato.server_utils.arg_utils import arguments
 from potato.server_utils.config_module import init_config, config
 from potato.server_utils.schemas.span import render_span_annotations
