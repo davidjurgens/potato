@@ -1,0 +1,64 @@
+# Coding Agent Comparison
+#
+# Pairwise comparison of two coding agent traces on the same task.
+# Annotators compare agents across multiple dimensions.
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/agent-traces/coding-agent-comparison/config.yaml -p 8000
+
+annotation_task_name: "Coding Agent Comparison"
+
+data_files:
+  - data/traces.jsonl
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+  fields:
+    - key: task_description
+      type: text
+      label: "Task"
+    - key: structured_turns
+      type: coding_trace
+      label: "Agent Session"
+      display_options:
+        show_file_tree: true
+        collapse_long_outputs: true
+
+annotation_schemes:
+  - annotation_type: likert
+    name: correctness
+    description: "How correct was the agent's solution?"
+    min_label: "Completely wrong"
+    max_label: "Perfectly correct"
+    size: 5
+
+  - annotation_type: likert
+    name: efficiency
+    description: "How efficient was the agent's approach?"
+    min_label: "Very wasteful"
+    max_label: "Highly efficient"
+    size: 5
+
+  - annotation_type: likert
+    name: code_quality
+    description: "Quality of the code changes?"
+    min_label: "Poor"
+    max_label: "Excellent"
+    size: 5
+
+  - annotation_type: text
+    name: notes
+    description: "Additional observations"
+
+user_config:
+  allow_all_users: true

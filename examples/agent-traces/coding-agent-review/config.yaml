@@ -1,0 +1,62 @@
+# Coding Agent Code Review
+#
+# GitHub PR review-style annotation for coding agent traces.
+# Annotators can add inline comments on diff lines, rate files,
+# and give an overall verdict.
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/agent-traces/coding-agent-review/config.yaml -p 8000
+
+annotation_task_name: "Coding Agent Code Review"
+
+data_files:
+  - data/traces.jsonl
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+  fields:
+    - key: task_description
+      type: text
+      label: "Task"
+    - key: structured_turns
+      type: coding_trace
+      label: "Agent Session"
+      display_options:
+        show_file_tree: true
+        diff_view: unified
+        collapse_long_outputs: true
+
+annotation_schemes:
+  - annotation_type: code_review
+    name: review
+    description: "Review the agent's code changes"
+    comment_categories:
+      - bug
+      - style
+      - suggestion
+      - security
+      - question
+    verdict_options:
+      - approve
+      - request_changes
+      - comment_only
+    file_rating_dimensions:
+      - correctness
+      - quality
+
+  - annotation_type: text
+    name: summary
+    description: "Overall review summary"
+
+user_config:
+  allow_all_users: true

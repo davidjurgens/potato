@@ -645,7 +645,7 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
 
     # Validate annotation_type
     # Note: Keep in sync with potato.server_utils.schemas.registry
-    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'span_link', 'select', 'number', 'multirate', 'pure_display', 'video', 'image_annotation', 'audio_annotation', 'video_annotation', 'pairwise', 'coreference', 'tree_annotation', 'triage', 'event_annotation', 'tiered_annotation', 'bws', 'soft_label', 'confidence', 'constant_sum', 'semantic_differential', 'ranking', 'range_slider', 'hierarchical_multiselect', 'vas', 'extractive_qa', 'rubric_eval', 'text_edit', 'error_span', 'card_sort', 'conjoint', 'trajectory_eval']
+    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'span_link', 'select', 'number', 'multirate', 'pure_display', 'video', 'image_annotation', 'audio_annotation', 'video_annotation', 'pairwise', 'coreference', 'tree_annotation', 'triage', 'event_annotation', 'tiered_annotation', 'bws', 'soft_label', 'confidence', 'constant_sum', 'semantic_differential', 'ranking', 'range_slider', 'hierarchical_multiselect', 'vas', 'extractive_qa', 'rubric_eval', 'text_edit', 'error_span', 'card_sort', 'conjoint', 'trajectory_eval', 'process_reward', 'code_review']
     if scheme['annotation_type'] not in valid_types:
         raise ConfigValidationError(f"{path}.annotation_type must be one of: {', '.join(valid_types)}")
 

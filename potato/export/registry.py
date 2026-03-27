@@ -123,6 +123,7 @@ def _register_builtin_exporters():
     from .eaf_exporter import EAFExporter
     from .textgrid_exporter import TextGridExporter
     from .agent_eval_exporter import AgentEvalExporter
+    from .coding_eval_exporter import CodingEvalExporter
     from .parquet_exporter import ParquetExporter
     from .tabular_exporter import CSVExporter, TSVExporter, JSONLExporter
 
@@ -136,6 +137,7 @@ def _register_builtin_exporters():
         EAFExporter(),
         TextGridExporter(),
         AgentEvalExporter(),
+        CodingEvalExporter(),
         ParquetExporter(),
         CSVExporter(),
         TSVExporter(),

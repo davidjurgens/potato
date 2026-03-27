@@ -20,6 +20,23 @@ from .triage import generate_triage_layout
 from .event_annotation import generate_event_annotation_layout
 from .tiered_annotation import generate_tiered_annotation_layout
 from .bws import generate_bws_layout
+from .soft_label import generate_soft_label_layout
+from .confidence import generate_confidence_layout
+from .constant_sum import generate_constant_sum_layout
+from .semantic_differential import generate_semantic_differential_layout
+from .ranking import generate_ranking_layout
+from .range_slider import generate_range_slider_layout
+from .hierarchical_multiselect import generate_hierarchical_multiselect_layout
+from .vas import generate_vas_layout
+from .extractive_qa import generate_extractive_qa_layout
+from .rubric_eval import generate_rubric_eval_layout
+from .text_edit import generate_text_edit_layout
+from .error_span import generate_error_span_layout
+from .card_sort import generate_card_sort_layout
+from .conjoint import generate_conjoint_layout
+from .trajectory_eval import generate_trajectory_eval_layout
+from .process_reward import generate_process_reward_layout
+from .code_review import generate_code_review_layout
 
 # Import identifier utilities for use by other modules
 from .identifier_utils import (

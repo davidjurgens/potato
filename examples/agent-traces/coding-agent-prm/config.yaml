@@ -1,0 +1,55 @@
+# Coding Agent PRM Data Collection
+#
+# Fast process reward model (PRM) annotation for coding agent traces.
+# Uses "first_error" mode: click the first incorrect step and all
+# subsequent steps are auto-marked as incorrect.
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/agent-traces/coding-agent-prm/config.yaml -p 8000
+
+annotation_task_name: "Coding Agent PRM Annotation"
+
+data_files:
+  - data/traces.jsonl
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+  fields:
+    - key: task_description
+      type: text
+      label: "Task"
+    - key: structured_turns
+      type: coding_trace
+      label: "Agent Session"
+      display_options:
+        show_file_tree: true
+        collapse_long_outputs: true
+        max_output_lines: 30
+
+annotation_schemes:
+  - annotation_type: process_reward
+    name: step_rewards
+    description: "Mark the first incorrect step (all subsequent auto-marked wrong)"
+    steps_key: structured_turns
+    mode: first_error
+
+  - annotation_type: radio
+    name: overall_quality
+    description: "Overall trace quality"
+    labels:
+      - name: good
+      - name: acceptable
+      - name: poor
+
+user_config:
+  allow_all_users: true

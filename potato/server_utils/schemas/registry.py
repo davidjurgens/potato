@@ -245,6 +245,23 @@ def _register_builtin_schemas():
     from .event_annotation import generate_event_annotation_layout
     from .tiered_annotation import generate_tiered_annotation_layout
     from .bws import generate_bws_layout
+    from .soft_label import generate_soft_label_layout
+    from .confidence import generate_confidence_layout
+    from .constant_sum import generate_constant_sum_layout
+    from .semantic_differential import generate_semantic_differential_layout
+    from .ranking import generate_ranking_layout
+    from .range_slider import generate_range_slider_layout
+    from .hierarchical_multiselect import generate_hierarchical_multiselect_layout
+    from .vas import generate_vas_layout
+    from .extractive_qa import generate_extractive_qa_layout
+    from .rubric_eval import generate_rubric_eval_layout
+    from .text_edit import generate_text_edit_layout
+    from .error_span import generate_error_span_layout
+    from .card_sort import generate_card_sort_layout
+    from .conjoint import generate_conjoint_layout
+    from .trajectory_eval import generate_trajectory_eval_layout
+    from .process_reward import generate_process_reward_layout
+    from .code_review import generate_code_review_layout
 
     schemas = [
         SchemaDefinition(
@@ -422,6 +439,142 @@ def _register_builtin_schemas():
             optional_fields=["best_description", "worst_description", "tuple_size", "sequential_key_binding", "label_requirement"],
             supports_keybindings=True,
             description="Best-Worst Scaling: select the best and worst item from a set"
+        ),
+        SchemaDefinition(
+            name="soft_label",
+            generator=generate_soft_label_layout,
+            required_fields=["name", "description", "labels"],
+            optional_fields=["total", "min_per_label", "show_distribution_chart"],
+            supports_keybindings=False,
+            description="Probability distribution across labels via constrained sliders"
+        ),
+        SchemaDefinition(
+            name="confidence",
+            generator=generate_confidence_layout,
+            required_fields=["name", "description"],
+            optional_fields=["target_schema", "scale_type", "scale_points", "labels", "min_value", "max_value", "step", "left_label", "right_label"],
+            supports_keybindings=False,
+            description="Confidence rating meta-annotation for any primary annotation"
+        ),
+        SchemaDefinition(
+            name="constant_sum",
+            generator=generate_constant_sum_layout,
+            required_fields=["name", "description", "labels"],
+            optional_fields=["total_points", "min_per_item", "input_type"],
+            supports_keybindings=False,
+            description="Allocate a fixed budget of points across categories"
+        ),
+        SchemaDefinition(
+            name="semantic_differential",
+            generator=generate_semantic_differential_layout,
+            required_fields=["name", "description", "pairs"],
+            optional_fields=["scale_points"],
+            supports_keybindings=False,
+            description="Bipolar adjective scales for measuring connotative meaning"
+        ),
+        SchemaDefinition(
+            name="ranking",
+            generator=generate_ranking_layout,
+            required_fields=["name", "description", "labels"],
+            optional_fields=["allow_ties"],
+            supports_keybindings=False,
+            description="Drag-and-drop ranking of items by preference or relevance"
+        ),
+        SchemaDefinition(
+            name="range_slider",
+            generator=generate_range_slider_layout,
+            required_fields=["name", "description"],
+            optional_fields=["min_value", "max_value", "step", "left_label", "right_label", "show_values"],
+            supports_keybindings=False,
+            description="Dual-thumb slider for selecting an acceptable range"
+        ),
+        SchemaDefinition(
+            name="hierarchical_multiselect",
+            generator=generate_hierarchical_multiselect_layout,
+            required_fields=["name", "description", "taxonomy"],
+            optional_fields=["auto_select_children", "auto_select_parent", "show_search", "max_selections"],
+            supports_keybindings=False,
+            description="Hierarchical tree-structured multi-label selection"
+        ),
+        SchemaDefinition(
+            name="vas",
+            generator=generate_vas_layout,
+            required_fields=["name", "description"],
+            optional_fields=["left_label", "right_label", "min_value", "max_value", "show_value"],
+            supports_keybindings=False,
+            description="Continuous visual analog scale for fine-grained magnitude estimation"
+        ),
+        SchemaDefinition(
+            name="extractive_qa",
+            generator=generate_extractive_qa_layout,
+            required_fields=["name", "description"],
+            optional_fields=["question_field", "passage_field", "allow_unanswerable", "highlight_color"],
+            supports_keybindings=False,
+            description="SQuAD-style extractive question answering with answer span highlighting"
+        ),
+        SchemaDefinition(
+            name="rubric_eval",
+            generator=generate_rubric_eval_layout,
+            required_fields=["name", "description", "criteria"],
+            optional_fields=["scale_points", "scale_labels", "show_overall"],
+            supports_keybindings=False,
+            description="Multi-criteria rubric evaluation grid for LLM and text quality assessment"
+        ),
+        SchemaDefinition(
+            name="text_edit",
+            generator=generate_text_edit_layout,
+            required_fields=["name", "description"],
+            optional_fields=["source_field", "show_diff", "show_edit_distance", "allow_reset"],
+            supports_keybindings=False,
+            description="Inline text editing with diff tracking for post-editing and correction tasks"
+        ),
+        SchemaDefinition(
+            name="error_span",
+            generator=generate_error_span_layout,
+            required_fields=["name", "description", "error_types"],
+            optional_fields=["severities", "show_score", "max_score"],
+            supports_keybindings=False,
+            description="MQM-style error span annotation with typed severity for quality evaluation"
+        ),
+        SchemaDefinition(
+            name="card_sort",
+            generator=generate_card_sort_layout,
+            required_fields=["name", "description"],
+            optional_fields=["mode", "groups", "items_field", "allow_empty_groups", "allow_multiple"],
+            supports_keybindings=False,
+            description="Drag-and-drop card sorting into predefined or user-created groups"
+        ),
+        SchemaDefinition(
+            name="conjoint",
+            generator=generate_conjoint_layout,
+            required_fields=["name", "description"],
+            optional_fields=["profiles_per_set", "attributes", "show_none_option", "profiles_field"],
+            supports_keybindings=False,
+            description="Discrete choice conjoint analysis with side-by-side profile comparison"
+        ),
+        SchemaDefinition(
+            name="trajectory_eval",
+            generator=generate_trajectory_eval_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "step_text_key", "correctness_options", "error_types", "severities", "show_score", "max_score"],
+            supports_keybindings=False,
+            description="Per-step trajectory evaluation with error taxonomy and severity scoring"
+        ),
+        SchemaDefinition(
+            name="process_reward",
+            generator=generate_process_reward_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "step_text_key", "mode"],
+            supports_keybindings=False,
+            description="Binary per-step process reward signals for PRM training"
+        ),
+        SchemaDefinition(
+            name="code_review",
+            generator=generate_code_review_layout,
+            required_fields=["name", "description"],
+            optional_fields=["comment_categories", "verdict_options", "file_rating_dimensions"],
+            supports_keybindings=False,
+            description="GitHub PR-style code review with inline comments and file ratings"
         ),
     ]
 
