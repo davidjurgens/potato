@@ -264,16 +264,94 @@ The display renders each tool type with appropriate formatting:
 | `Grep`, `Glob`, `Search`, `Find` | Code block (search results) | Purple badge |
 | Other tools | JSON-formatted input/output | Grey badge |
 
+## Live Coding Agent Mode
+
+Watch a coding agent work in real-time, intervene, rollback, replay with different instructions, and edit agent actions.
+
+### Quick Start
+
+```bash
+# With Ollama (fully local, no API key needed)
+python potato/flask_server.py start examples/agent-traces/live-coding-agent/config.yaml -p 8000
+```
+
+### Configuration
+
+```yaml
+live_coding_agent:
+  backend_type: ollama_tool_use   # or anthropic_tool_use, claude_sdk
+  ai_config:
+    model: qwen2.5-coder:7b       # Any Ollama model with tool support
+    base_url: http://localhost:11434
+  working_dir: ./workspace
+  max_turns: 20
+  sandbox_mode: worktree          # worktree (default), docker, direct
+```
+
+### Agent Backends
+
+| Backend | Config Key | Requirements |
+|---------|-----------|-------------|
+| Ollama (local) | `ollama_tool_use` | Ollama running locally, no API key |
+| Anthropic API | `anthropic_tool_use` | `ANTHROPIC_API_KEY` env var |
+| Claude Agent SDK | `claude_sdk` | `claude-agent-sdk` package installed |
+
+### Sandbox Modes
+
+| Mode | Description | Best For |
+|------|------------|---------|
+| `worktree` | Git worktree per session (lightweight copy) | Production use, safe isolation |
+| `docker` | Docker container with mounted workspace | Maximum isolation |
+| `direct` | Agent works directly in working_dir | Development, simple setup |
+
+### Controls
+
+During a live session, annotators can:
+- **Pause/Resume**: Stop the agent between tool calls
+- **Send Instructions**: Guide the agent ("try a different approach")
+- **Stop**: End the session and save the trace
+
+### Checkpoints and Rollback
+
+After each file-modifying tool call, a git checkpoint is created. Annotators can:
+- View all checkpoints in a timeline
+- **Rollback** to any previous step (restores files and conversation)
+- See diffs between checkpoints
+
+### Branching and Replay
+
+From any checkpoint, create alternative trajectories:
+- **Replay from step**: Branch with new instructions
+- **Edit action**: Modify a tool call's input and re-execute
+- **Compare branches**: View different approaches side by side
+- All branches are saved in the trace export
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/live_coding_agent/start` | POST | Start a session |
+| `/api/live_coding_agent/stream/<id>` | GET | SSE event stream |
+| `/api/live_coding_agent/pause/<id>` | POST | Pause agent |
+| `/api/live_coding_agent/resume/<id>` | POST | Resume agent |
+| `/api/live_coding_agent/instruct/<id>` | POST | Send instruction |
+| `/api/live_coding_agent/stop/<id>` | POST | Stop and save |
+| `/api/live_coding_agent/checkpoints/<id>` | GET | List checkpoints |
+| `/api/live_coding_agent/rollback/<id>` | POST | Rollback to step |
+| `/api/live_coding_agent/replay/<id>` | POST | Create branch and replay |
+| `/api/live_coding_agent/branches/<id>` | GET | List branches |
+| `/api/live_coding_agent/switch_branch/<id>` | POST | Switch branch |
+
 ## Examples
 
 See `examples/agent-traces/` for complete example projects:
 
-- **`coding-agent-evaluation/`** -- Basic coding agent trace evaluation with task success, code quality, and issue identification
+- **`live-coding-agent/`** -- Live coding agent with real-time streaming and controls
+- **`coding-agent-evaluation/`** -- Static coding agent trace evaluation
 - **`coding-agent-prm/`** -- Fast PRM data collection with first_error mode
 - **`coding-agent-review/`** -- GitHub PR-style code review with inline comments
 - **`coding-agent-comparison/`** -- Multi-dimensional agent quality comparison
 - **`swebench-evaluation/`** -- SWE-bench coding agent evaluation
-- **`agent-trace-evaluation/`** -- Comprehensive agent evaluation with trajectory_eval schema
 
 ## Related Documentation
 
