@@ -471,6 +471,159 @@ annotation_schemes:
 
 See [Tiered Annotation](tiered_annotation.md) for detailed documentation.
 
+### 16. Visual Analog Scale (`vas`)
+
+A continuous line scale with no tick marks or discrete bins. Returns a precise float value. Psychophysically superior to Likert scales for fine-grained judgments.
+
+```yaml
+annotation_schemes:
+  - annotation_type: vas
+    name: pain_level
+    description: "Rate the intensity of pain described"
+    left_label: "No pain"
+    right_label: "Worst imaginable"
+    min_value: 0
+    max_value: 100
+    show_value: false
+```
+
+See [Visual Analog Scale](vas.md) for detailed documentation.
+
+### 17. Extractive QA (`extractive_qa`)
+
+SQuAD-style question answering — display a question, annotator highlights the answer span in the passage.
+
+```yaml
+annotation_schemes:
+  - annotation_type: extractive_qa
+    name: answer_span
+    description: "Highlight the answer in the passage"
+    question_field: "question"
+    allow_unanswerable: true
+```
+
+See [Extractive QA](extractive_qa.md) for detailed documentation.
+
+### 18. Rubric Evaluation (`rubric_eval`)
+
+Multi-criteria rating grid for LLM evaluation. Rate items on multiple criteria simultaneously.
+
+```yaml
+annotation_schemes:
+  - annotation_type: rubric_eval
+    name: quality
+    description: "Evaluate response quality"
+    scale_points: 5
+    criteria:
+      - name: helpfulness
+        description: "Does it answer the question?"
+      - name: accuracy
+        description: "Is the information correct?"
+    show_overall: true
+```
+
+See [Rubric Evaluation](rubric_eval.md) for detailed documentation.
+
+### 19. Text Edit / Post-Edit (`text_edit`)
+
+Inline text editing with real-time diff visualization and edit distance tracking.
+
+```yaml
+annotation_schemes:
+  - annotation_type: text_edit
+    name: post_edit
+    description: "Correct the machine translation"
+    source_field: "mt_output"
+    show_diff: true
+    show_edit_distance: true
+```
+
+See [Text Edit](text_edit.md) for detailed documentation.
+
+### 20. Error Span with Typed Severity (`error_span`)
+
+MQM-style error annotation — mark error spans with configurable error types, severity levels, and quality scoring.
+
+```yaml
+annotation_schemes:
+  - annotation_type: error_span
+    name: translation_quality
+    description: "Mark errors in the translation"
+    error_types:
+      - name: Accuracy
+        subtypes: ["Omission", "Mistranslation"]
+      - name: Fluency
+        subtypes: ["Grammar", "Spelling"]
+    show_score: true
+```
+
+See [Error Span](error_span.md) for detailed documentation.
+
+### 21. Card Sorting (`card_sort`)
+
+Drag-and-drop grouping of items into predefined or user-created categories.
+
+```yaml
+annotation_schemes:
+  - annotation_type: card_sort
+    name: topic_groups
+    description: "Sort items into topic groups"
+    mode: closed
+    groups: ["Science", "Politics", "Sports"]
+    items_field: "items"
+```
+
+See [Card Sorting](card_sort.md) for detailed documentation.
+
+### 22. Conjoint Analysis (`conjoint`)
+
+Discrete choice between multi-attribute profile cards for preference elicitation and attribute importance estimation.
+
+```yaml
+annotation_schemes:
+  - annotation_type: conjoint
+    name: preference
+    description: "Which option do you prefer?"
+    profiles_per_set: 3
+    attributes:
+      - name: Speed
+        levels: ["Fast", "Medium", "Slow"]
+      - name: Price
+        levels: ["$10", "$20", "$50"]
+    show_none_option: true
+```
+
+See [Conjoint Analysis](conjoint.md) for detailed documentation.
+
+### 23. Process Reward (`process_reward`)
+
+Binary per-step correctness signals for Process Reward Model (PRM) training. Two modes: `first_error` (click first wrong step, rest auto-marked) and `per_step` (annotate each independently).
+
+```yaml
+  - annotation_type: process_reward
+    name: step_rewards
+    description: "Mark the first incorrect step"
+    steps_key: structured_turns
+    mode: first_error
+```
+
+See [Coding Agent Annotation](coding_agent_annotation.md) for detailed documentation.
+
+### 24. Code Review (`code_review`)
+
+GitHub PR review-style annotation with inline diff comments, file-level ratings, and overall verdict. Click on diff lines in the `coding_trace` display to add comments.
+
+```yaml
+  - annotation_type: code_review
+    name: review
+    description: "Review the code changes"
+    comment_categories: [bug, style, suggestion, security]
+    verdict_options: [approve, request_changes, comment_only]
+    file_rating_dimensions: [correctness, quality]
+```
+
+See [Coding Agent Annotation](coding_agent_annotation.md) for detailed documentation.
+
 ## Advanced Features
 
 ### Discontinuous Span Selection

@@ -14,6 +14,7 @@
 
 ## Annotation Schemas
 
+- **[Choosing the Right Annotation Type](choosing_annotation_types.md)** - Decision guide for selecting the best schema for your task
 - [Schema Gallery](schemas_and_templates.md) - All annotation types with examples
 - [Instance Display](instance_display.md) - Display images, video, audio, and text separately from annotation collection
 - [Conditional Logic](conditional_logic.md) - Show/hide questions based on prior answers
@@ -27,6 +28,20 @@
 - [Conversation Tree Annotation](conversation_tree_annotation.md) - Annotate hierarchical conversation structures
 - [Format Support](format_support.md) - PDF, Word, code, and spreadsheet annotation
 - [Span Linking](span_linking.md) - Relationship linking between text spans
+- [Soft Label](soft_label.md) - Probability distribution across labels via constrained sliders
+- [Confidence Annotation](confidence_annotation.md) - Pair any annotation with an explicit confidence rating
+- [Constant Sum](constant_sum.md) - Allocate a fixed budget of points across categories
+- [Semantic Differential](semantic_differential.md) - Bipolar adjective scales measuring connotative meaning
+- [Ranking](ranking.md) - Drag-and-drop ordering of items by preference
+- [Range Slider](range_slider.md) - Dual-thumb slider for selecting an acceptable min-max range
+- [Hierarchical Multi-Label Selection](hierarchical_multiselect.md) - Select labels from an expandable tree taxonomy
+- [Visual Analog Scale (VAS)](vas.md) - Continuous analog scale for fine-grained magnitude estimation
+- [Extractive QA](extractive_qa.md) - SQuAD-style answer span highlighting
+- [Rubric Evaluation](rubric_eval.md) - Multi-criteria rubric grid for LLM evaluation
+- [Text Edit / Post-Edit](text_edit.md) - Inline text editing with diff tracking
+- [Error Span (MQM)](error_span.md) - Error annotation with typed severity and quality scoring
+- [Card Sorting](card_sort.md) - Drag-and-drop grouping of items into categories
+- [Conjoint Analysis](conjoint.md) - Discrete choice between multi-attribute profiles
 
 ## Workflow & Quality
 
@@ -35,11 +50,13 @@
 - [Diversity Ordering](diversity_ordering.md) - Embedding-based clustering for diverse item presentation
 - [Training Phase](training_phase.md) - Annotator training and qualification
 - [Quality Control](quality_control.md) - Attention checks and gold standards
+- [Iterative BWS](iterative_bws.md) - Adaptive Best-Worst Scaling for fine-grained ordinal rankings
 - [Category Assignment](category_assignment.md) - Category-based item assignment
 - [Surveyflow](surveyflow.md) - Pre/post annotation surveys
 
 ## Agent Evaluation
 
+- **[Coding Agent Annotation](coding_agent_annotation.md)** - Evaluate agentic coding systems (Claude Code, SWE-Agent, Aider) with diff rendering, PRM annotation, and code review
 - [Agent Traces](agent_traces.md) - Evaluate AI agent traces and trajectories
 - [Live Agent Interaction](live_agent.md) - Observe and interact with a live AI agent in real time
 

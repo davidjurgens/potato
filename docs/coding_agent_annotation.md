@@ -179,6 +179,78 @@ annotation_schemes:
     description: "Additional observations"
 ```
 
+### Process Reward Schema (PRM)
+
+For collecting binary per-step correctness signals for training Process Reward Models:
+
+```yaml
+  - annotation_type: process_reward
+    name: step_rewards
+    description: "Mark the first incorrect step"
+    steps_key: structured_turns
+    mode: first_error  # or "per_step"
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `steps_key` | `steps` | Key in instance data containing the steps array |
+| `step_text_key` | `action` | Key within each step for display text |
+| `mode` | `first_error` | `first_error`: click first wrong step, rest auto-marked. `per_step`: annotate each independently |
+
+### Code Review Schema
+
+For GitHub PR review-style annotation with inline comments:
+
+```yaml
+  - annotation_type: code_review
+    name: review
+    description: "Review the agent's code changes"
+    comment_categories: [bug, style, suggestion, security]
+    verdict_options: [approve, request_changes, comment_only]
+    file_rating_dimensions: [correctness, quality]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `comment_categories` | `[bug, style, suggestion, security, question]` | Categories for inline comments |
+| `verdict_options` | `[approve, request_changes, comment_only]` | Overall review verdict options |
+| `file_rating_dimensions` | `[correctness, quality]` | Per-file rating dimensions (1-5 scale) |
+
+Click on diff lines in the `coding_trace` display to add inline comments with file path and line number auto-filled.
+
+## Trace Converters
+
+Convert traces from various coding agent formats:
+
+```bash
+# Claude Code / Anthropic Messages API
+python -m potato.trace_converter -i traces.json -f claude_code -o data/converted.jsonl
+
+# Aider chat history
+python -m potato.trace_converter -i chat.md -f aider -o data/converted.jsonl
+
+# SWE-Agent trajectories
+python -m potato.trace_converter -i trajectory.json -f swe_agent_trajectory -o data/converted.jsonl
+
+# Auto-detect format
+python -m potato.trace_converter -i traces.json --auto-detect -o data/converted.jsonl
+```
+
+## Export Formats
+
+Export annotations for ML training pipelines:
+
+```bash
+python -m potato.export -f coding_eval -o exports/ --types prm,preference,swebench,code_review
+```
+
+| Format | Output | Use Case |
+|--------|--------|----------|
+| `prm` | `prm_training_data.jsonl` | Process Reward Model training |
+| `preference` | `preference_pairs.jsonl` | DPO/RLHF from pairwise annotations |
+| `swebench` | `swebench_results.jsonl` | SWE-bench compatible evaluation |
+| `code_review` | `code_reviews.jsonl` | Structured review data |
+
 ## Supported Tool Types
 
 The display renders each tool type with appropriate formatting:
@@ -197,6 +269,9 @@ The display renders each tool type with appropriate formatting:
 See `examples/agent-traces/` for complete example projects:
 
 - **`coding-agent-evaluation/`** -- Basic coding agent trace evaluation with task success, code quality, and issue identification
+- **`coding-agent-prm/`** -- Fast PRM data collection with first_error mode
+- **`coding-agent-review/`** -- GitHub PR-style code review with inline comments
+- **`coding-agent-comparison/`** -- Multi-dimensional agent quality comparison
 - **`swebench-evaluation/`** -- SWE-bench coding agent evaluation
 - **`agent-trace-evaluation/`** -- Comprehensive agent evaluation with trajectory_eval schema
 
