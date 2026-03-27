@@ -141,38 +141,45 @@ class CodingTraceDisplay(BaseDisplay):
 
         # Build file tree
         file_tree_html = ""
+        file_count = 0
         if options.get("show_file_tree", True):
-            file_tree_html = self._build_file_tree(turns)
+            file_tree_html, file_count = self._build_file_tree(turns)
 
         # Build turn cards
         turns_html = self._build_turns(turns, options, field_key, is_span_target)
 
-        # Build summary
-        summary_html = self._build_summary(turns)
+        # Build summary with collapse/expand toggle
+        total_tools = sum(len(t.get("tool_calls", [])) for t in turns)
+        summary_html = self._build_summary(turns, file_tree_html, file_count)
 
         # Wrap in span target if needed
         if is_span_target:
             plain_text = self._extract_plain_text(turns)
             reasoning_html = self._extract_reasoning_html(turns)
-            # The span target wraps only the reasoning text portions
             inner = reasoning_html
             span_wrapper = self.render_span_wrapper(field_key, inner, plain_text)
         else:
             span_wrapper = ""
 
         layout_class = "coding-trace-with-sidebar" if file_tree_html else ""
+        # Auto-collapse sidebar when only 1 file
+        sidebar_class = "ct-sidebar-collapsed" if file_count <= 1 and file_tree_html else ""
+
+        # Client-side JS for collapse/expand and sidebar toggle
+        js_init = self._build_js_init(field_key)
 
         return f'''
         <div class="coding-trace-display {layout_class}" data-field-key="{field_key}">
             {summary_html}
             <div class="coding-trace-layout">
-                {f'<div class="coding-trace-sidebar">{file_tree_html}</div>' if file_tree_html else ''}
+                {f'<div class="coding-trace-sidebar {sidebar_class}" id="ct-sidebar-{field_key}">{file_tree_html}</div>' if file_tree_html else ''}
                 <div class="coding-trace-main">
                     {span_wrapper}
                     {turns_html}
                 </div>
             </div>
         </div>
+        <script>{js_init}</script>
         '''
 
     def _normalize_turns(self, data: Any) -> List[Dict[str, Any]]:
@@ -224,10 +231,10 @@ class CodingTraceDisplay(BaseDisplay):
             "tool_calls": tool_calls,
         }
 
-    def _build_summary(self, turns: List[Dict[str, Any]]) -> str:
-        """Build a summary header with counts."""
+    def _build_summary(self, turns: List[Dict[str, Any]],
+                       file_tree_html: str = "", file_count: int = 0) -> str:
+        """Build a summary header with counts and toggle buttons."""
         total_tools = sum(len(t.get("tool_calls", [])) for t in turns)
-        user_turns = sum(1 for t in turns if t.get("role") == "user")
         assistant_turns = sum(1 for t in turns if t.get("role") != "user")
 
         # Count tool types
@@ -245,12 +252,31 @@ class CodingTraceDisplay(BaseDisplay):
                 f'{count} {tool_type}</span>'
             )
 
+        # Toggle buttons
+        sidebar_toggle = ""
+        if file_tree_html:
+            sidebar_toggle = (
+                '<button type="button" class="ct-sidebar-toggle" '
+                'data-action="toggle-sidebar" '
+                f'title="Toggle file tree">Files ({file_count})</button>'
+            )
+
+        collapse_toggle = ""
+        if total_tools > 2:
+            collapse_toggle = (
+                '<button type="button" class="ct-toggle-tools" '
+                'data-action="toggle-tools" '
+                'title="Collapse/expand tool outputs">Collapse outputs</button>'
+            )
+
         return f'''
         <div class="ct-summary">
             <span class="ct-summary-total">{assistant_turns} turn{"s" if assistant_turns != 1 else ""}</span>
             <span class="ct-summary-sep">&middot;</span>
             <span class="ct-summary-tools">{total_tools} tool call{"s" if total_tools != 1 else ""}</span>
             {" ".join(badges)}
+            {sidebar_toggle}
+            {collapse_toggle}
         </div>
         '''
 
@@ -594,8 +620,12 @@ class CodingTraceDisplay(BaseDisplay):
 
         return "\n".join(parts) if parts else '<div class="ct-generic-empty">No data</div>'
 
-    def _build_file_tree(self, turns: List[Dict[str, Any]]) -> str:
-        """Build a file tree sidebar from all tool calls."""
+    def _build_file_tree(self, turns: List[Dict[str, Any]]) -> Tuple[str, int]:
+        """Build a file tree sidebar from all tool calls.
+
+        Returns:
+            Tuple of (html_string, file_count).
+        """
         files: Dict[str, Set[str]] = {}  # path -> set of operations
 
         for turn in turns:
@@ -612,34 +642,34 @@ class CodingTraceDisplay(BaseDisplay):
                         files[file_path].add(tool_type)
 
         if not files:
-            return ""
+            return "", 0
 
-        # Group by operation type
-        op_icons = {
-            "read": ("eye", "#1976d2"),
-            "edit": ("pencil", "#ef6c00"),
-            "write": ("plus", "#388e3c"),
-            "search": ("search", "#7b1fa2"),
-            "bash": ("terminal", "#78909c"),
+        # Operation badge colors (domain-specific, kept as-is)
+        op_colors = {
+            "read": "#1976d2",
+            "edit": "#ef6c00",
+            "write": "#388e3c",
+            "search": "#7b1fa2",
+            "bash": "#78909c",
         }
 
         parts = []
         parts.append('<div class="ct-file-tree">')
-        parts.append('<div class="ct-file-tree-header">Files</div>')
+        parts.append('<div class="ct-file-tree-header">')
+        parts.append(f'<span>Files ({len(files)})</span>')
+        parts.append('</div>')
         parts.append('<ul class="ct-file-list">')
 
         for path in sorted(files.keys()):
             ops = files[path]
-            # Pick the most significant operation for the icon
+            # Pick the most significant operation for the name color
             op = "write" if "write" in ops else "edit" if "edit" in ops else "read"
-            _, color = op_icons.get(op, ("file", "#666"))
+            color = op_colors.get(op, "#666")
 
-            # Show just the filename with the directory as a tooltip
             basename = os.path.basename(path) or path
-            dirname = os.path.dirname(path)
 
             op_badges = " ".join(
-                f'<span class="ct-file-op" style="color:{op_icons.get(o, ("", "#666"))[1]}">'
+                f'<span class="ct-file-op" style="color:{op_colors.get(o, "#666")}">'
                 f'{o[0].upper()}</span>'
                 for o in sorted(ops)
             )
@@ -653,7 +683,39 @@ class CodingTraceDisplay(BaseDisplay):
 
         parts.append('</ul>')
         parts.append('</div>')
-        return "\n".join(parts)
+        return "\n".join(parts), len(files)
+
+    def _build_js_init(self, field_key: str) -> str:
+        """Build client-side JS for collapse/expand and sidebar toggle."""
+        esc_key = _escape(field_key)
+        return f'''
+        (function() {{
+            var container = document.querySelector('.coding-trace-display[data-field-key="{esc_key}"]');
+            if (!container) return;
+
+            // Collapse/expand tool outputs
+            var toggleBtn = container.querySelector('[data-action="toggle-tools"]');
+            if (toggleBtn) {{
+                var collapsed = false;
+                toggleBtn.addEventListener('click', function() {{
+                    collapsed = !collapsed;
+                    container.querySelectorAll('.ct-tool-call').forEach(function(tc) {{
+                        tc.classList.toggle('ct-tool-collapsed', collapsed);
+                    }});
+                    toggleBtn.textContent = collapsed ? 'Expand outputs' : 'Collapse outputs';
+                }});
+            }}
+
+            // Toggle sidebar
+            var sidebarBtn = container.querySelector('[data-action="toggle-sidebar"]');
+            var sidebar = document.getElementById('ct-sidebar-{esc_key}');
+            if (sidebarBtn && sidebar) {{
+                sidebarBtn.addEventListener('click', function() {{
+                    sidebar.classList.toggle('ct-sidebar-collapsed');
+                }});
+            }}
+        }})();
+        '''
 
     def _extract_plain_text(self, turns: List[Dict[str, Any]]) -> str:
         """Extract plain text from reasoning for span annotation."""

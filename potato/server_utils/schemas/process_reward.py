@@ -77,7 +77,8 @@ def _generate_internal(
 
             <div class="prm-steps-container" id="{esc_schema}-steps"></div>
 
-            <div class="prm-actions">
+            <div class="prm-footer">
+                <div class="prm-count" id="{esc_schema}-count"></div>
                 <button type="button" class="prm-reset-btn" id="{esc_schema}-reset">Reset All</button>
             </div>
 
@@ -161,8 +162,8 @@ def _generate_internal(
                     '</div>' +
                     '<div class="prm-step-text">' + escapeHtml(stepText) + '</div>' +
                     '<div class="prm-step-btns">' +
-                        '<button type="button" class="prm-btn prm-btn-correct" data-step="' + idx + '" data-value="1" title="Correct">&#10003;</button>' +
-                        '<button type="button" class="prm-btn prm-btn-incorrect" data-step="' + idx + '" data-value="-1" title="Incorrect">&#10007;</button>' +
+                        '<button type="button" class="prm-btn prm-btn-correct" data-step="' + idx + '" data-value="1" title="Correct">&#10003; Correct</button>' +
+                        '<button type="button" class="prm-btn prm-btn-incorrect" data-step="' + idx + '" data-value="-1" title="Incorrect">&#10007; Wrong</button>' +
                     '</div>';
                 container.appendChild(card);
             }});
@@ -170,6 +171,7 @@ def _generate_internal(
             attachHandlers();
             // Restore visual state from _steps
             _steps.forEach(function(s) {{ updateStepVisual(s.index); }});
+            updateCount();
         }}
 
         function attachHandlers() {{
@@ -258,6 +260,22 @@ def _generate_internal(
             }}
         }}
 
+        function updateCount() {{
+            var el = document.getElementById(SCHEMA + '-count');
+            if (!el) return;
+            var correct = 0, incorrect = 0, total = _steps.length;
+            _steps.forEach(function(s) {{
+                if (s.reward === 1) correct++;
+                else if (s.reward === -1) incorrect++;
+            }});
+            var unmarked = total - correct - incorrect;
+            var parts = [];
+            if (correct > 0) parts.push('<span class="prm-count-correct">' + correct + ' correct</span>');
+            if (incorrect > 0) parts.push('<span class="prm-count-incorrect">' + incorrect + ' incorrect</span>');
+            if (unmarked > 0) parts.push('<span class="prm-count-unmarked">' + unmarked + ' unmarked</span>');
+            el.innerHTML = parts.join(' &middot; ') + ' of ' + total + ' steps';
+        }}
+
         function saveState() {{
             var data = JSON.stringify({{ steps: _steps, mode: CONFIG.mode }});
             var input = document.getElementById(SCHEMA).querySelector('.process-reward-data-input');
@@ -266,6 +284,7 @@ def _generate_internal(
                 input.setAttribute('data-modified', 'true');
                 input.dispatchEvent(new Event('change', {{ bubbles: true }}));
             }}
+            updateCount();
         }}
 
         function escapeHtml(text) {{
@@ -302,14 +321,14 @@ def _generate_internal(
     .process-reward-container {{ font-family: inherit; }}
     .prm-title {{ font-weight: 600; font-size: 1em; margin-bottom: 4px; }}
     .prm-mode-label {{
-        font-size: 0.85em; color: #666; margin-bottom: 8px;
-        padding: 4px 8px; background: #f5f5f5; border-radius: 4px;
+        font-size: 0.85em; color: var(--muted-foreground, #71717a); margin-bottom: 8px;
+        padding: 4px 8px; background: var(--secondary, #f4f4f5); border-radius: var(--radius, 0.5rem);
     }}
     .prm-steps-container {{ display: flex; flex-direction: column; gap: 4px; }}
     .prm-step-card {{
         display: flex; align-items: center; gap: 8px;
-        padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 6px;
-        background: #fafafa; transition: background 0.15s, border-color 0.15s;
+        padding: 10px 14px; border: 1px solid var(--border, #e4e4e7); border-radius: var(--radius, 0.5rem);
+        background: var(--card, #fff); transition: background 0.15s, border-color 0.15s;
     }}
     .prm-step-card.prm-correct {{
         background: #e8f5e9; border-color: #66bb6a;
@@ -322,9 +341,9 @@ def _generate_internal(
         min-width: 60px; flex: 0 0 auto;
     }}
     .prm-step-num {{
-        font-size: 0.8em; font-weight: 600; color: #666;
+        font-size: 0.8em; font-weight: 600; color: var(--muted-foreground, #71717a);
     }}
-    .prm-step-status {{ font-size: 0.7em; margin-top: 2px; }}
+    .prm-step-status {{ font-size: 0.75em; margin-top: 2px; }}
     .prm-status-correct {{ color: #2e7d32; }}
     .prm-status-incorrect {{ color: #c62828; }}
     .prm-step-text {{
@@ -333,30 +352,40 @@ def _generate_internal(
         max-height: 80px; overflow-y: auto;
     }}
     .prm-step-btns {{
-        display: flex; gap: 4px; flex: 0 0 auto;
+        display: flex; gap: 6px; flex: 0 0 auto;
     }}
     .prm-btn {{
-        width: 32px; height: 32px; border: 1px solid #ccc; border-radius: 50%;
-        background: #fff; cursor: pointer; font-size: 16px; line-height: 30px;
-        text-align: center; padding: 0; transition: all 0.15s;
+        height: 36px; border: 1px solid var(--border, #e4e4e7); border-radius: var(--radius, 0.5rem);
+        background: var(--card, #fff); cursor: pointer; font-size: 13px;
+        padding: 0 12px; transition: all 0.15s; display: inline-flex;
+        align-items: center; gap: 4px; white-space: nowrap;
     }}
-    .prm-btn:hover {{ border-color: #999; }}
+    .prm-btn:hover {{ border-color: #999; background: var(--secondary, #f4f4f5); }}
+    .prm-btn:focus-visible {{ outline: 2px solid var(--ring, #6e56cf); outline-offset: 2px; }}
     .prm-btn-correct.selected {{
         background: #4caf50; color: #fff; border-color: #4caf50;
     }}
     .prm-btn-incorrect.selected {{
         background: #f44336; color: #fff; border-color: #f44336;
     }}
-    .prm-actions {{
-        margin-top: 8px; display: flex; gap: 8px;
+    .prm-footer {{
+        margin-top: 10px; display: flex; align-items: center; gap: 12px;
     }}
+    .prm-count {{
+        font-size: 0.85em; color: var(--muted-foreground, #71717a); flex: 1;
+    }}
+    .prm-count-correct {{ color: #2e7d32; font-weight: 500; }}
+    .prm-count-incorrect {{ color: #c62828; font-weight: 500; }}
+    .prm-count-unmarked {{ color: var(--muted-foreground, #71717a); }}
     .prm-reset-btn {{
-        padding: 4px 12px; font-size: 0.85em; border: 1px solid #ccc;
-        border-radius: 4px; background: #fff; cursor: pointer; color: #666;
+        padding: 4px 12px; font-size: 0.85em; border: 1px solid var(--border, #e4e4e7);
+        border-radius: var(--radius, 0.5rem); background: var(--card, #fff);
+        cursor: pointer; color: var(--muted-foreground, #71717a);
     }}
-    .prm-reset-btn:hover {{ background: #f5f5f5; }}
+    .prm-reset-btn:hover {{ background: var(--secondary, #f4f4f5); }}
+    .prm-reset-btn:focus-visible {{ outline: 2px solid var(--ring, #6e56cf); outline-offset: 2px; }}
     .prm-no-steps {{
-        padding: 12px; color: #999; font-style: italic; text-align: center;
+        padding: 12px; color: var(--muted-foreground, #71717a); font-style: italic; text-align: center;
     }}
     </style>
     """

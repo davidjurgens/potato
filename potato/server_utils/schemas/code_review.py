@@ -186,10 +186,14 @@ def _generate_internal(
         }}
 
         function attachHandlers() {{
-            // Verdict radios
+            // Verdict radios (with :has() fallback via .cr-checked class)
             document.querySelectorAll('#' + SCHEMA + '-verdicts input[type="radio"]').forEach(function(r) {{
                 r.addEventListener('change', function() {{
                     _state.verdict = r.value;
+                    // Fallback for browsers without :has() support
+                    document.querySelectorAll('#' + SCHEMA + '-verdicts .cr-verdict-option').forEach(function(opt) {{
+                        opt.classList.toggle('cr-checked', opt.querySelector('input:checked') !== null);
+                    }});
                     saveState();
                 }});
             }});
@@ -384,76 +388,89 @@ def _generate_internal(
     .cr-title {{ font-weight: 600; font-size: 1em; margin-bottom: 4px; }}
     .cr-section {{ margin-bottom: 12px; }}
     .cr-section-label {{
-        font-size: 0.85em; font-weight: 600; color: #555;
+        font-size: 0.85em; font-weight: 600; color: var(--muted-foreground, #71717a);
         margin-bottom: 6px; display: flex; align-items: center; gap: 8px;
     }}
     .cr-verdict-group {{ display: flex; gap: 8px; flex-wrap: wrap; }}
     .cr-verdict-option {{
-        padding: 6px 12px; border: 1px solid #ddd; border-radius: 6px;
+        padding: 6px 12px; border: 1px solid var(--border, #e4e4e7);
+        border-radius: var(--radius, 0.5rem);
         cursor: pointer; font-size: 0.9em; transition: all 0.15s;
     }}
     .cr-verdict-option:hover {{ border-color: #999; }}
     .cr-verdict-option input {{ margin-right: 4px; }}
-    .cr-verdict-option:has(input:checked) {{
-        border-color: #1976d2; background: #e3f2fd;
+    /* :has() with JS fallback class .cr-checked */
+    .cr-verdict-option:has(input:checked),
+    .cr-verdict-option.cr-checked {{
+        border-color: var(--primary, #6e56cf); background: color-mix(in srgb, var(--primary, #6e56cf) 8%, transparent);
     }}
-    .cr-verdict-approve:has(input:checked) {{
+    .cr-verdict-approve:has(input:checked),
+    .cr-verdict-approve.cr-checked {{
         border-color: #388e3c; background: #e8f5e9;
     }}
-    .cr-verdict-request_changes:has(input:checked) {{
+    .cr-verdict-request_changes:has(input:checked),
+    .cr-verdict-request_changes.cr-checked {{
         border-color: #d32f2f; background: #ffebee;
     }}
+    .cr-verdict-option:focus-within {{ outline: 2px solid var(--ring, #6e56cf); outline-offset: 2px; }}
     .cr-add-comment-btn {{
-        padding: 2px 8px; font-size: 0.85em; border: 1px solid #ccc;
-        border-radius: 4px; background: #fff; cursor: pointer; color: #1976d2;
+        padding: 2px 8px; font-size: 0.85em; border: 1px solid var(--border, #e4e4e7);
+        border-radius: 4px; background: var(--card, #fff); cursor: pointer;
+        color: var(--primary, #6e56cf);
     }}
-    .cr-add-comment-btn:hover {{ background: #f5f5f5; }}
+    .cr-add-comment-btn:hover {{ background: var(--secondary, #f4f4f5); }}
+    .cr-add-comment-btn:focus-visible {{ outline: 2px solid var(--ring, #6e56cf); outline-offset: 2px; }}
     .cr-comments-list {{ display: flex; flex-direction: column; gap: 6px; }}
     .cr-comment-card {{
-        border: 1px solid #e0e0e0; border-radius: 6px; padding: 8px;
-        background: #fafafa;
+        border: 1px solid var(--border, #e4e4e7); border-radius: var(--radius, 0.5rem); padding: 8px;
+        background: var(--card, #fff);
     }}
     .cr-comment-header {{
         display: flex; gap: 6px; align-items: center; margin-bottom: 4px;
     }}
     .cr-comment-category {{
-        padding: 2px 6px; border: 1px solid #ddd; border-radius: 4px;
+        padding: 2px 6px; border: 1px solid var(--border, #e4e4e7); border-radius: 4px;
         font-size: 0.85em;
     }}
     .cr-comment-file {{
-        flex: 1; padding: 2px 6px; border: 1px solid #ddd; border-radius: 4px;
-        font-size: 0.85em; font-family: monospace;
+        flex: 1; padding: 2px 6px; border: 1px solid var(--border, #e4e4e7); border-radius: 4px;
+        font-size: 0.85em; font-family: var(--font-mono, monospace);
     }}
     .cr-comment-line {{
-        padding: 2px 6px; border: 1px solid #ddd; border-radius: 4px;
+        padding: 2px 6px; border: 1px solid var(--border, #e4e4e7); border-radius: 4px;
         font-size: 0.85em;
     }}
     .cr-comment-delete {{
-        background: none; border: none; cursor: pointer; color: #999;
+        background: none; border: none; cursor: pointer; color: var(--muted-foreground, #71717a);
         font-size: 1.2em; padding: 0 4px; line-height: 1;
     }}
-    .cr-comment-delete:hover {{ color: #f44336; }}
+    .cr-comment-delete:hover {{ color: var(--destructive, #ef4444); }}
     .cr-comment-text {{
-        width: 100%; padding: 4px 6px; border: 1px solid #ddd;
+        width: 100%; padding: 4px 6px; border: 1px solid var(--border, #e4e4e7);
         border-radius: 4px; font-size: 0.85em; resize: vertical;
         box-sizing: border-box;
     }}
+    .cr-comment-text:focus, .cr-comment-file:focus, .cr-comment-line:focus, .cr-comment-category:focus {{
+        outline: 2px solid var(--ring, #6e56cf); outline-offset: -1px;
+    }}
     .cr-rating-row {{
-        padding: 6px 0; border-bottom: 1px solid #f0f0f0;
+        padding: 6px 0; border-bottom: 1px solid var(--secondary, #f4f4f5);
     }}
     .cr-rating-file {{
-        font-family: monospace; font-size: 0.85em; color: #555; margin-bottom: 4px;
+        font-family: var(--font-mono, monospace); font-size: 0.85em;
+        color: var(--muted-foreground, #71717a); margin-bottom: 4px;
     }}
     .cr-rating-dim {{
         display: inline-flex; align-items: center; gap: 2px; margin-right: 12px;
     }}
-    .cr-dim-label {{ font-size: 0.8em; color: #666; margin-right: 4px; }}
+    .cr-dim-label {{ font-size: 0.8em; color: var(--muted-foreground, #71717a); margin-right: 4px; }}
     .cr-star {{
-        width: 24px; height: 24px; border: 1px solid #ddd; border-radius: 4px;
-        background: #fff; cursor: pointer; font-size: 0.8em; padding: 0;
+        width: 24px; height: 24px; border: 1px solid var(--border, #e4e4e7); border-radius: 4px;
+        background: var(--card, #fff); cursor: pointer; font-size: 0.8em; padding: 0;
         transition: all 0.1s;
     }}
     .cr-star:hover {{ border-color: #ffa726; }}
+    .cr-star:focus-visible {{ outline: 2px solid var(--ring, #6e56cf); outline-offset: 2px; }}
     .cr-star.selected {{ background: #ffa726; color: #fff; border-color: #ffa726; }}
     </style>
     """

@@ -1,8 +1,12 @@
-/* Coding Trace Display Styles */
+/* Coding Trace Display Styles
+ *
+ * Uses parent design system tokens (var(--font-sans), var(--border), etc.)
+ * with domain-specific colors for diffs, terminal, and tool badges.
+ */
 
 /* Layout */
 .coding-trace-display {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--font-sans, inherit);
     font-size: 14px;
     line-height: 1.5;
 }
@@ -15,6 +19,15 @@
 .coding-trace-sidebar {
     flex: 0 0 220px;
     min-width: 180px;
+    transition: flex-basis 0.2s, min-width 0.2s, opacity 0.2s;
+}
+
+.coding-trace-sidebar.ct-sidebar-collapsed {
+    flex: 0 0 0px;
+    min-width: 0;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
 }
 
 .coding-trace-main {
@@ -22,29 +35,30 @@
     min-width: 0;
 }
 
-/* Summary */
+/* Summary bar */
 .ct-summary {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
     margin-bottom: 12px;
-    background: #f8f9fa;
-    border-radius: 6px;
+    background: var(--secondary, #f4f4f5);
+    border-radius: var(--radius, 0.5rem);
     font-size: 0.9em;
     flex-wrap: wrap;
 }
 
 .ct-summary-total {
     font-weight: 600;
+    color: var(--foreground, #09090b);
 }
 
 .ct-summary-sep {
-    color: #aaa;
+    color: var(--muted-foreground, #71717a);
 }
 
 .ct-summary-tools {
-    color: #666;
+    color: var(--muted-foreground, #71717a);
 }
 
 .ct-summary-badge {
@@ -52,6 +66,52 @@
     border-radius: 12px;
     font-size: 0.85em;
     font-weight: 500;
+}
+
+/* Collapse/Expand toggle in summary */
+.ct-toggle-tools {
+    margin-left: auto;
+    padding: 3px 10px;
+    font-size: 0.8em;
+    font-weight: 500;
+    border: 1px solid var(--border, #e4e4e7);
+    border-radius: 4px;
+    background: var(--card, #fff);
+    color: var(--muted-foreground, #71717a);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.ct-toggle-tools:hover {
+    background: var(--secondary, #f4f4f5);
+    color: var(--foreground, #09090b);
+}
+
+.ct-toggle-tools:focus-visible {
+    outline: 2px solid var(--ring, #6e56cf);
+    outline-offset: 2px;
+}
+
+/* File tree toggle */
+.ct-sidebar-toggle {
+    padding: 3px 8px;
+    font-size: 0.8em;
+    border: 1px solid var(--border, #e4e4e7);
+    border-radius: 4px;
+    background: var(--card, #fff);
+    color: var(--muted-foreground, #71717a);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.ct-sidebar-toggle:hover {
+    background: var(--secondary, #f4f4f5);
+    color: var(--foreground, #09090b);
+}
+
+.ct-sidebar-toggle:focus-visible {
+    outline: 2px solid var(--ring, #6e56cf);
+    outline-offset: 2px;
 }
 
 /* Turns */
@@ -64,24 +124,25 @@
     align-items: flex-start;
     gap: 8px;
     padding: 10px 14px;
-    background: #e3f2fd;
-    border-radius: 8px;
-    border-left: 4px solid #1976d2;
+    background: var(--secondary, #f4f4f5);
+    border-radius: var(--radius, 0.5rem);
+    border-left: 4px solid var(--primary, #6e56cf);
 }
 
 .ct-user-badge {
     flex: 0 0 auto;
     padding: 2px 8px;
-    background: rgba(25, 118, 210, 0.15);
+    background: color-mix(in srgb, var(--primary, #6e56cf) 12%, transparent);
     border-radius: 4px;
     font-size: 0.8em;
     font-weight: 600;
-    color: #1565c0;
+    color: var(--primary, #6e56cf);
 }
 
 .ct-user-text {
     white-space: pre-wrap;
     word-break: break-word;
+    color: var(--foreground, #09090b);
 }
 
 .ct-turn-assistant {
@@ -95,9 +156,9 @@
 .ct-step-num {
     font-size: 0.85em;
     font-weight: 600;
-    color: #666;
+    color: var(--muted-foreground, #71717a);
     padding: 2px 8px;
-    background: #f0f0f0;
+    background: var(--secondary, #f4f4f5);
     border-radius: 4px;
 }
 
@@ -107,19 +168,24 @@
     margin: 4px 0 8px;
     white-space: pre-wrap;
     word-break: break-word;
-    color: #333;
+    color: var(--foreground, #09090b);
     line-height: 1.6;
-    background: #fafafa;
-    border-radius: 6px;
-    border-left: 3px solid #e0e0e0;
+    background: var(--muted, #f4f4f5);
+    border-radius: var(--radius, 0.5rem);
+    border-left: 3px solid var(--border, #e4e4e7);
 }
 
 /* Tool calls */
 .ct-tool-call {
     margin: 6px 0;
-    border: 1px solid #e0e0e0;
-    border-radius: 6px;
+    border: 1px solid var(--border, #e4e4e7);
+    border-radius: var(--radius, 0.5rem);
     overflow: hidden;
+}
+
+/* Collapsed tool calls */
+.ct-tool-call.ct-tool-collapsed .ct-tool-body {
+    display: none;
 }
 
 .ct-tool-header {
@@ -127,8 +193,8 @@
     align-items: center;
     gap: 8px;
     padding: 6px 10px;
-    background: #f5f5f5;
-    border-bottom: 1px solid #e0e0e0;
+    background: var(--secondary, #f4f4f5);
+    border-bottom: 1px solid var(--border, #e4e4e7);
 }
 
 .ct-tool-badge {
@@ -137,13 +203,13 @@
     border-radius: 4px;
     font-size: 0.8em;
     font-weight: 600;
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-family: var(--font-mono, monospace);
 }
 
 .ct-file-path {
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-family: var(--font-mono, monospace);
     font-size: 0.85em;
-    color: #555;
+    color: var(--muted-foreground, #71717a);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -153,9 +219,9 @@
     padding: 0;
 }
 
-/* Diff rendering */
+/* Diff rendering — domain-specific colors (GitHub conventions) */
 .ct-diff {
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-family: var(--font-mono, monospace);
     font-size: 13px;
     line-height: 1.4;
 }
@@ -164,6 +230,12 @@
     display: flex;
     padding: 1px 10px;
     min-height: 20px;
+    cursor: pointer;
+    transition: filter 0.1s;
+}
+
+.ct-diff-line:hover {
+    filter: brightness(0.95);
 }
 
 .ct-diff-removed {
@@ -187,19 +259,19 @@
 .ct-diff-text {
     flex: 1;
     white-space: pre-wrap;
-    word-break: break-all;
+    overflow-wrap: break-word;
     tab-size: 4;
 }
 
 .ct-edit-status {
     padding: 4px 10px;
     font-size: 0.85em;
-    color: #666;
-    background: #f9f9f9;
-    border-top: 1px solid #eee;
+    color: var(--muted-foreground, #71717a);
+    background: var(--muted, #f4f4f5);
+    border-top: 1px solid var(--border, #e4e4e7);
 }
 
-/* Terminal blocks */
+/* Terminal blocks — dark theme is domain-specific */
 .ct-terminal {
     background: #1e1e1e;
     border-radius: 0 0 6px 6px;
@@ -208,7 +280,7 @@
 
 .ct-terminal-cmd {
     padding: 8px 12px;
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-family: var(--font-mono, monospace);
     font-size: 13px;
     color: #d4d4d4;
     background: #2d2d2d;
@@ -224,12 +296,12 @@
 .ct-terminal-output {
     margin: 0;
     padding: 8px 12px;
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-family: var(--font-mono, monospace);
     font-size: 12px;
     color: #cccccc;
     background: #1e1e1e;
     white-space: pre-wrap;
-    word-break: break-all;
+    overflow-wrap: break-word;
     max-height: 400px;
     overflow-y: auto;
     line-height: 1.4;
@@ -256,7 +328,7 @@
     font-size: 12px;
     color: #888;
     cursor: pointer;
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-family: var(--font-mono, monospace);
 }
 
 .ct-terminal-output-details summary:hover {
@@ -271,7 +343,7 @@
 .ct-code-table {
     width: 100%;
     border-collapse: collapse;
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-family: var(--font-mono, monospace);
     font-size: 13px;
     line-height: 1.4;
 }
@@ -280,22 +352,31 @@
     padding: 1px 0;
 }
 
+.ct-code-line {
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.ct-code-line:hover {
+    background: color-mix(in srgb, var(--primary, #6e56cf) 6%, transparent);
+}
+
 .ct-line-num {
     width: 45px;
     min-width: 45px;
     padding: 1px 8px 1px 12px;
     text-align: right;
-    color: #999;
-    background: #f8f8f8;
+    color: var(--muted-foreground, #71717a);
+    background: var(--muted, #f4f4f5);
     user-select: none;
-    border-right: 1px solid #e8e8e8;
+    border-right: 1px solid var(--border, #e4e4e7);
     font-size: 12px;
 }
 
 .ct-line-content {
     padding: 1px 12px;
     white-space: pre-wrap;
-    word-break: break-all;
+    overflow-wrap: break-word;
     tab-size: 4;
 }
 
@@ -309,15 +390,15 @@
 .ct-code-truncated {
     padding: 6px 12px;
     font-size: 0.85em;
-    color: #888;
-    background: #f8f8f8;
-    border-top: 1px solid #eee;
+    color: var(--muted-foreground, #71717a);
+    background: var(--muted, #f4f4f5);
+    border-top: 1px solid var(--border, #e4e4e7);
     font-style: italic;
 }
 
 .ct-code-empty {
     padding: 8px 12px;
-    color: #999;
+    color: var(--muted-foreground, #71717a);
     font-style: italic;
 }
 
@@ -351,14 +432,14 @@
 }
 
 .ct-generic-input + .ct-generic-output {
-    border-top: 1px solid #eee;
+    border-top: 1px solid var(--border, #e4e4e7);
 }
 
 .ct-generic-label {
     font-size: 0.75em;
     font-weight: 600;
     text-transform: uppercase;
-    color: #888;
+    color: var(--muted-foreground, #71717a);
     letter-spacing: 0.5px;
     margin-bottom: 4px;
 }
@@ -366,39 +447,42 @@
 .ct-generic-pre {
     margin: 0;
     padding: 8px;
-    background: #f8f8f8;
+    background: var(--muted, #f4f4f5);
     border-radius: 4px;
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-family: var(--font-mono, monospace);
     font-size: 12px;
     white-space: pre-wrap;
-    word-break: break-all;
+    overflow-wrap: break-word;
     max-height: 300px;
     overflow-y: auto;
 }
 
 .ct-generic-empty {
     padding: 8px 12px;
-    color: #999;
+    color: var(--muted-foreground, #71717a);
     font-style: italic;
 }
 
 /* File tree sidebar */
 .ct-file-tree {
-    background: #fafafa;
-    border: 1px solid #e0e0e0;
-    border-radius: 6px;
+    background: var(--card, #fff);
+    border: 1px solid var(--border, #e4e4e7);
+    border-radius: var(--radius, 0.5rem);
     overflow: hidden;
     position: sticky;
     top: 16px;
 }
 
 .ct-file-tree-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     padding: 8px 12px;
     font-weight: 600;
     font-size: 0.85em;
-    color: #333;
-    background: #f0f0f0;
-    border-bottom: 1px solid #e0e0e0;
+    color: var(--foreground, #09090b);
+    background: var(--secondary, #f4f4f5);
+    border-bottom: 1px solid var(--border, #e4e4e7);
 }
 
 .ct-file-list {
@@ -416,7 +500,7 @@
     padding: 4px 12px;
     font-size: 0.85em;
     cursor: default;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--secondary, #f4f4f5);
 }
 
 .ct-file-item:last-child {
@@ -424,11 +508,11 @@
 }
 
 .ct-file-item:hover {
-    background: #f0f0f0;
+    background: var(--secondary, #f4f4f5);
 }
 
 .ct-file-name {
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-family: var(--font-mono, monospace);
     font-size: 0.9em;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -442,6 +526,15 @@
     font-weight: 700;
     width: 16px;
     text-align: center;
+}
+
+/* Focus states */
+.ct-toggle-tools:focus-visible,
+.ct-sidebar-toggle:focus-visible,
+.ct-diff-line:focus-visible,
+.ct-code-line:focus-visible {
+    outline: 2px solid var(--ring, #6e56cf);
+    outline-offset: -2px;
 }
 
 /* Responsive */
