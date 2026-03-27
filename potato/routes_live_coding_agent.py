@@ -159,6 +159,111 @@ def instruct_session(session_id):
     return jsonify({"state": runner.state.value, "instruction": instruction})
 
 
+@live_coding_agent_bp.route("/api/live_coding_agent/checkpoints/<session_id>")
+def get_checkpoints(session_id):
+    """List all checkpoints for a session."""
+    manager = _get_manager()
+    runner = manager.get_session(session_id)
+    if not runner:
+        return jsonify({"error": "Session not found"}), 404
+    return jsonify({"checkpoints": runner.get_checkpoints()})
+
+
+@live_coding_agent_bp.route("/api/live_coding_agent/rollback/<session_id>", methods=["POST"])
+def rollback_session(session_id):
+    """Rollback to a specific step."""
+    manager = _get_manager()
+    runner = manager.get_session(session_id)
+    if not runner:
+        return jsonify({"error": "Session not found"}), 404
+
+    data = request.get_json() or {}
+    step_index = data.get("step_index")
+    if step_index is None:
+        return jsonify({"error": "step_index is required"}), 400
+
+    success = runner.rollback_to_step(int(step_index))
+    return jsonify({
+        "success": success,
+        "state": runner.state.value,
+        "remaining_turns": len(runner.get_structured_turns()),
+    })
+
+
+@live_coding_agent_bp.route("/api/live_coding_agent/diff/<session_id>/<int:step>")
+def get_diff(session_id, step):
+    """Get diff from a step to current state."""
+    manager = _get_manager()
+    runner = manager.get_session(session_id)
+    if not runner:
+        return jsonify({"error": "Session not found"}), 404
+    diff = runner.get_diff_since_step(step)
+    return jsonify({"diff": diff, "step_index": step})
+
+
+@live_coding_agent_bp.route("/api/live_coding_agent/replay/<session_id>", methods=["POST"])
+def replay_session(session_id):
+    """Replay from a step with optional new instructions or edited actions."""
+    manager = _get_manager()
+    runner = manager.get_session(session_id)
+    if not runner:
+        return jsonify({"error": "Session not found"}), 404
+
+    data = request.get_json() or {}
+    step_index = data.get("step_index")
+    if step_index is None:
+        return jsonify({"error": "step_index is required"}), 400
+
+    instructions = data.get("instructions")
+    edited_actions = data.get("edited_actions")
+
+    branch_id = runner.replay_from_step(
+        int(step_index),
+        instructions=instructions,
+        edited_actions=edited_actions,
+    )
+
+    if branch_id:
+        return jsonify({
+            "success": True,
+            "branch_id": branch_id,
+            "state": runner.state.value,
+        })
+    else:
+        return jsonify({"error": "Failed to create branch"}), 500
+
+
+@live_coding_agent_bp.route("/api/live_coding_agent/branches/<session_id>")
+def get_branches(session_id):
+    """List all branches for a session."""
+    manager = _get_manager()
+    runner = manager.get_session(session_id)
+    if not runner:
+        return jsonify({"error": "Session not found"}), 404
+    return jsonify({"branches": runner.get_branches()})
+
+
+@live_coding_agent_bp.route("/api/live_coding_agent/switch_branch/<session_id>", methods=["POST"])
+def switch_branch(session_id):
+    """Switch to a different branch."""
+    manager = _get_manager()
+    runner = manager.get_session(session_id)
+    if not runner:
+        return jsonify({"error": "Session not found"}), 404
+
+    data = request.get_json() or {}
+    branch_id = data.get("branch_id")
+    if not branch_id:
+        return jsonify({"error": "branch_id is required"}), 400
+
+    success = runner.switch_branch(branch_id)
+    return jsonify({
+        "success": success,
+        "active_branch": branch_id if success else None,
+        "turns": len(runner.get_structured_turns()),
+    })
+
+
 @live_coding_agent_bp.route("/api/live_coding_agent/stop/<session_id>", methods=["POST"])
 def stop_session(session_id):
     manager = _get_manager()
