@@ -314,6 +314,7 @@ def _register_builtin_displays():
     from .interactive_chat_display import InteractiveChatDisplay
     from .web_agent_trace_display import WebAgentTraceDisplay
     from .live_agent_display import LiveAgentDisplay
+    from .coding_trace_display import CodingTraceDisplay
 
     displays = [
         DisplayDefinition(
@@ -542,6 +543,24 @@ def _register_builtin_displays():
             },
             supports_span_target=False,
             description="Web agent trace viewer with screenshots, SVG overlays, and step navigation"
+        ),
+        DisplayDefinition(
+            name="coding_trace",
+            renderer=CodingTraceDisplay(),
+            required_fields=["key"],
+            optional_fields={
+                "show_file_tree": True,
+                "diff_view": "unified",
+                "collapse_long_outputs": True,
+                "max_output_lines": 50,
+                "terminal_theme": "dark",
+                "show_step_numbers": True,
+                "show_tool_badges": True,
+                "show_reasoning": True,
+                "compact": False,
+            },
+            supports_span_target=True,
+            description="Coding agent trace display with diff rendering, terminal blocks, and file tree"
         ),
         DisplayDefinition(
             name="live_agent",

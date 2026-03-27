@@ -138,6 +138,7 @@ def _register_builtin_converters():
     from .converters.openai_converter import OpenAIConverter
     from .converters.multi_agent_converter import MultiAgentConverter
     from .converters.web_agent_converter import WebAgentConverter
+    from .converters.claude_code_converter import ClaudeCodeConverter
 
     converters = [
         # Existing converters (specific formats first)
@@ -152,6 +153,7 @@ def _register_builtin_converters():
         SWEBenchConverter(),
         OTELConverter(),
         MCPConverter(),
+        ClaudeCodeConverter(),  # Before Anthropic (more specific: coding tool names)
         AnthropicConverter(),
         OpenAIConverter(),
         MultiAgentConverter(),

@@ -1,0 +1,87 @@
+annotation_task_name: "Coding Agent Trace Evaluation"
+
+data_files:
+  - data/traces.jsonl
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+task_dir: .
+port: 8000
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+  fields:
+    - key: task_description
+      type: text
+      label: "Task Description"
+    - key: structured_turns
+      type: coding_trace
+      label: "Agent Session"
+      display_options:
+        show_file_tree: true
+        diff_view: unified
+        collapse_long_outputs: true
+        max_output_lines: 50
+        terminal_theme: dark
+        show_step_numbers: true
+
+annotation_schemes:
+  - annotation_type: radio
+    name: task_success
+    description: "Did the agent successfully complete the task?"
+    labels:
+      - name: success
+        tooltip: "Task completed correctly with no issues"
+      - name: partial
+        tooltip: "Partially completed or completed with minor issues"
+      - name: failure
+        tooltip: "Task not completed or completed incorrectly"
+    sequential_key_binding: true
+
+  - annotation_type: likert
+    name: code_quality
+    description: "Rate the quality of the code changes"
+    min_label: "Poor"
+    max_label: "Excellent"
+    size: 5
+
+  - annotation_type: likert
+    name: efficiency
+    description: "How efficiently did the agent approach the task?"
+    min_label: "Very inefficient"
+    max_label: "Very efficient"
+    size: 5
+
+  - annotation_type: multiselect
+    name: issues
+    description: "Select any issues observed (if applicable)"
+    labels:
+      - name: unnecessary_reads
+        tooltip: "Agent read files that were not relevant"
+      - name: wrong_tool
+        tooltip: "Agent used the wrong tool for the job"
+      - name: incomplete_fix
+        tooltip: "The fix doesn't fully address the issue"
+      - name: regression
+        tooltip: "The change introduces a new bug"
+      - name: missing_tests
+        tooltip: "Agent didn't test the changes adequately"
+      - name: scope_creep
+        tooltip: "Agent changed more than necessary"
+      - name: security_issue
+        tooltip: "The change has security implications"
+      - name: style_violation
+        tooltip: "Code doesn't follow project conventions"
+
+  - annotation_type: text
+    name: notes
+    description: "Additional observations or comments"
+
+user_config:
+  allow_all_users: true

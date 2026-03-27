@@ -213,6 +213,10 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     if 'bws_config' in config_data:
         _validate_bws_config(config_data)
 
+    # Validate IBWS configuration if present
+    if 'ibws_config' in config_data:
+        _validate_ibws_config(config_data)
+
     # Validate MACE configuration if present
     if 'mace' in config_data:
         _validate_mace_config(config_data)
@@ -451,6 +455,67 @@ def _validate_bws_config(config_data: Dict[str, Any]) -> None:
             raise ConfigValidationError(f"bws_config.scoring.method must be one of: {valid_methods}")
 
 
+def _validate_ibws_config(config_data: Dict[str, Any]) -> None:
+    """
+    Validate Iterative Best-Worst Scaling configuration.
+
+    Args:
+        config_data: The configuration data
+
+    Raises:
+        ConfigValidationError: If the IBWS config is invalid
+    """
+    # Mutual exclusivity with bws_config
+    if 'bws_config' in config_data:
+        raise ConfigValidationError(
+            "ibws_config and bws_config are mutually exclusive. "
+            "Use ibws_config for iterative BWS or bws_config for standard BWS."
+        )
+
+    ibws = config_data['ibws_config']
+    if not isinstance(ibws, dict):
+        raise ConfigValidationError("ibws_config must be a dictionary")
+
+    # Require at least one BWS annotation scheme
+    schemes = config_data.get('annotation_schemes', [])
+    has_bws_scheme = any(s.get('annotation_type') == 'bws' for s in schemes)
+    if not has_bws_scheme:
+        raise ConfigValidationError(
+            "ibws_config requires at least one annotation scheme with annotation_type: bws"
+        )
+
+    # tuple_size
+    if 'tuple_size' in ibws:
+        if not isinstance(ibws['tuple_size'], int) or ibws['tuple_size'] < 2:
+            raise ConfigValidationError("ibws_config.tuple_size must be an integer >= 2")
+
+    # max_rounds
+    if 'max_rounds' in ibws and ibws['max_rounds'] is not None:
+        if not isinstance(ibws['max_rounds'], int) or ibws['max_rounds'] < 1:
+            raise ConfigValidationError("ibws_config.max_rounds must be a positive integer or null")
+
+    # seed
+    if 'seed' in ibws:
+        if not isinstance(ibws['seed'], int):
+            raise ConfigValidationError("ibws_config.seed must be an integer")
+
+    # scoring_method
+    valid_methods = ['counting', 'bradley_terry', 'plackett_luce']
+    if 'scoring_method' in ibws:
+        if ibws['scoring_method'] not in valid_methods:
+            raise ConfigValidationError(
+                f"ibws_config.scoring_method must be one of: {valid_methods}"
+            )
+
+    # tuples_per_item_per_round
+    if 'tuples_per_item_per_round' in ibws:
+        val = ibws['tuples_per_item_per_round']
+        if not isinstance(val, int) or val < 1:
+            raise ConfigValidationError(
+                "ibws_config.tuples_per_item_per_round must be a positive integer"
+            )
+
+
 def _validate_mace_config(config_data: Dict[str, Any]) -> None:
     """
     Validate MACE competence estimation configuration.
@@ -580,7 +645,7 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
 
     # Validate annotation_type
     # Note: Keep in sync with potato.server_utils.schemas.registry
-    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'span_link', 'select', 'number', 'multirate', 'pure_display', 'video', 'image_annotation', 'audio_annotation', 'video_annotation', 'pairwise', 'coreference', 'tree_annotation', 'triage', 'event_annotation', 'tiered_annotation', 'bws']
+    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'span_link', 'select', 'number', 'multirate', 'pure_display', 'video', 'image_annotation', 'audio_annotation', 'video_annotation', 'pairwise', 'coreference', 'tree_annotation', 'triage', 'event_annotation', 'tiered_annotation', 'bws', 'soft_label', 'confidence', 'constant_sum', 'semantic_differential', 'ranking', 'range_slider', 'hierarchical_multiselect', 'vas', 'extractive_qa', 'rubric_eval', 'text_edit', 'error_span', 'card_sort', 'conjoint', 'trajectory_eval']
     if scheme['annotation_type'] not in valid_types:
         raise ConfigValidationError(f"{path}.annotation_type must be one of: {', '.join(valid_types)}")
 
@@ -816,7 +881,7 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
 
     elif annotation_type == 'pairwise':
         # Validate mode
-        valid_modes = ['binary', 'scale']
+        valid_modes = ['binary', 'scale', 'multi_dimension']
         mode = scheme.get('mode', 'binary')
         if mode not in valid_modes:
             raise ConfigValidationError(f"{path}.mode must be one of: {valid_modes}")
@@ -853,11 +918,127 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
                 if not isinstance(scale_labels, dict):
                     raise ConfigValidationError(f"{path}.scale.labels must be a dictionary")
 
+        # Validate multi_dimension mode
+        if mode == 'multi_dimension':
+            dimensions = scheme.get('dimensions', [])
+            if not isinstance(dimensions, list) or not dimensions:
+                raise ConfigValidationError(f"{path}.dimensions must be a non-empty list for multi_dimension mode")
+            for i, dim in enumerate(dimensions):
+                if not isinstance(dim, dict):
+                    raise ConfigValidationError(f"{path}.dimensions[{i}] must be a dictionary")
+                if 'name' not in dim:
+                    raise ConfigValidationError(f"{path}.dimensions[{i}] must have a 'name' field")
+
     elif annotation_type == 'bws':
         # Validate tuple_size
         if 'tuple_size' in scheme:
             if not isinstance(scheme['tuple_size'], int) or scheme['tuple_size'] < 2:
                 raise ConfigValidationError(f"{path}.tuple_size must be an integer >= 2")
+
+    elif annotation_type == 'soft_label':
+        if 'labels' not in scheme:
+            raise ConfigValidationError(f"{path} missing 'labels' field for soft_label annotation type")
+        if not isinstance(scheme['labels'], list) or not scheme['labels']:
+            raise ConfigValidationError(f"{path}.labels must be a non-empty list")
+        if 'total' in scheme:
+            if not isinstance(scheme['total'], int) or scheme['total'] < 1:
+                raise ConfigValidationError(f"{path}.total must be a positive integer")
+
+    elif annotation_type == 'confidence':
+        if 'scale_type' in scheme:
+            if scheme['scale_type'] not in ['likert', 'slider']:
+                raise ConfigValidationError(f"{path}.scale_type must be 'likert' or 'slider'")
+        if 'scale_points' in scheme:
+            if not isinstance(scheme['scale_points'], int) or scheme['scale_points'] < 2:
+                raise ConfigValidationError(f"{path}.scale_points must be an integer >= 2")
+
+    elif annotation_type == 'constant_sum':
+        if 'labels' not in scheme:
+            raise ConfigValidationError(f"{path} missing 'labels' field for constant_sum annotation type")
+        if not isinstance(scheme['labels'], list) or not scheme['labels']:
+            raise ConfigValidationError(f"{path}.labels must be a non-empty list")
+        if 'total_points' in scheme:
+            if not isinstance(scheme['total_points'], int) or scheme['total_points'] < 1:
+                raise ConfigValidationError(f"{path}.total_points must be a positive integer")
+
+    elif annotation_type == 'semantic_differential':
+        if 'pairs' not in scheme:
+            raise ConfigValidationError(f"{path} missing 'pairs' field for semantic_differential annotation type")
+        if not isinstance(scheme['pairs'], list) or not scheme['pairs']:
+            raise ConfigValidationError(f"{path}.pairs must be a non-empty list")
+        for i, pair in enumerate(scheme['pairs']):
+            if not isinstance(pair, list) or len(pair) != 2:
+                raise ConfigValidationError(f"{path}.pairs[{i}] must be a list of exactly two strings")
+
+    elif annotation_type == 'ranking':
+        if 'labels' not in scheme:
+            raise ConfigValidationError(f"{path} missing 'labels' field for ranking annotation type")
+        if not isinstance(scheme['labels'], list) or not scheme['labels']:
+            raise ConfigValidationError(f"{path}.labels must be a non-empty list")
+
+    elif annotation_type == 'range_slider':
+        if 'min_value' in scheme and 'max_value' in scheme:
+            if not isinstance(scheme['min_value'], (int, float)) or not isinstance(scheme['max_value'], (int, float)):
+                raise ConfigValidationError(f"{path}.min_value and max_value must be numbers")
+            if scheme['min_value'] >= scheme['max_value']:
+                raise ConfigValidationError(f"{path}.min_value must be less than max_value")
+
+    elif annotation_type == 'hierarchical_multiselect':
+        if 'taxonomy' not in scheme:
+            raise ConfigValidationError(f"{path} missing 'taxonomy' field for hierarchical_multiselect annotation type")
+        if not isinstance(scheme['taxonomy'], dict) or not scheme['taxonomy']:
+            raise ConfigValidationError(f"{path}.taxonomy must be a non-empty dictionary")
+
+    elif annotation_type == 'vas':
+        if 'min_value' in scheme and 'max_value' in scheme:
+            if not isinstance(scheme['min_value'], (int, float)) or not isinstance(scheme['max_value'], (int, float)):
+                raise ConfigValidationError(f"{path}.min_value and max_value must be numbers")
+            if scheme['min_value'] >= scheme['max_value']:
+                raise ConfigValidationError(f"{path}.min_value must be less than max_value")
+
+    elif annotation_type == 'rubric_eval':
+        if 'criteria' not in scheme:
+            raise ConfigValidationError(f"{path} missing 'criteria' field for rubric_eval annotation type")
+        if not isinstance(scheme['criteria'], list) or not scheme['criteria']:
+            raise ConfigValidationError(f"{path}.criteria must be a non-empty list")
+        for i, crit in enumerate(scheme['criteria']):
+            if not isinstance(crit, dict) or 'name' not in crit:
+                raise ConfigValidationError(f"{path}.criteria[{i}] must be a dict with 'name'")
+        if 'scale_points' in scheme:
+            if not isinstance(scheme['scale_points'], int) or scheme['scale_points'] < 2:
+                raise ConfigValidationError(f"{path}.scale_points must be an integer >= 2")
+
+    elif annotation_type == 'error_span':
+        if 'error_types' not in scheme:
+            raise ConfigValidationError(f"{path} missing 'error_types' field for error_span annotation type")
+        if not isinstance(scheme['error_types'], list) or not scheme['error_types']:
+            raise ConfigValidationError(f"{path}.error_types must be a non-empty list")
+        for i, et in enumerate(scheme['error_types']):
+            if not isinstance(et, dict) or 'name' not in et:
+                raise ConfigValidationError(f"{path}.error_types[{i}] must be a dict with 'name'")
+
+    elif annotation_type == 'card_sort':
+        mode = scheme.get('mode', 'closed')
+        if mode not in ['open', 'closed']:
+            raise ConfigValidationError(f"{path}.mode must be 'open' or 'closed'")
+        if mode == 'closed':
+            if 'groups' not in scheme:
+                raise ConfigValidationError(f"{path} missing 'groups' field for card_sort in closed mode")
+            if not isinstance(scheme['groups'], list) or not scheme['groups']:
+                raise ConfigValidationError(f"{path}.groups must be a non-empty list for closed mode")
+
+    elif annotation_type == 'conjoint':
+        if 'attributes' not in scheme and 'profiles_field' not in scheme:
+            raise ConfigValidationError(f"{path} requires 'attributes' or 'profiles_field' for conjoint annotation type")
+        if 'attributes' in scheme:
+            if not isinstance(scheme['attributes'], list) or not scheme['attributes']:
+                raise ConfigValidationError(f"{path}.attributes must be a non-empty list")
+            for i, attr in enumerate(scheme['attributes']):
+                if not isinstance(attr, dict) or 'name' not in attr:
+                    raise ConfigValidationError(f"{path}.attributes[{i}] must be a dict with 'name'")
+        if 'profiles_per_set' in scheme:
+            if not isinstance(scheme['profiles_per_set'], int) or scheme['profiles_per_set'] < 2:
+                raise ConfigValidationError(f"{path}.profiles_per_set must be an integer >= 2")
 
     # Validate display_logic if present
     if 'display_logic' in scheme:
@@ -3191,7 +3372,7 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
         "text", "html", "image", "video", "audio", "dialogue", "pairwise",
         "pdf", "document", "spreadsheet", "code", "agent_trace", "gallery",
         "conversation_tree", "interactive_chat", "web_agent_trace",
-        "live_agent",
+        "live_agent", "coding_trace",
     ]
 
     for i, field in enumerate(fields):

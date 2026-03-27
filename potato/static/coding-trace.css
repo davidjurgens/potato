@@ -1,0 +1,460 @@
+/* Coding Trace Display Styles */
+
+/* Layout */
+.coding-trace-display {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.coding-trace-with-sidebar .coding-trace-layout {
+    display: flex;
+    gap: 16px;
+}
+
+.coding-trace-sidebar {
+    flex: 0 0 220px;
+    min-width: 180px;
+}
+
+.coding-trace-main {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Summary */
+.ct-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    font-size: 0.9em;
+    flex-wrap: wrap;
+}
+
+.ct-summary-total {
+    font-weight: 600;
+}
+
+.ct-summary-sep {
+    color: #aaa;
+}
+
+.ct-summary-tools {
+    color: #666;
+}
+
+.ct-summary-badge {
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.85em;
+    font-weight: 500;
+}
+
+/* Turns */
+.ct-turn {
+    margin: 8px 0;
+}
+
+.ct-turn-user {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 14px;
+    background: #e3f2fd;
+    border-radius: 8px;
+    border-left: 4px solid #1976d2;
+}
+
+.ct-user-badge {
+    flex: 0 0 auto;
+    padding: 2px 8px;
+    background: rgba(25, 118, 210, 0.15);
+    border-radius: 4px;
+    font-size: 0.8em;
+    font-weight: 600;
+    color: #1565c0;
+}
+
+.ct-user-text {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.ct-turn-assistant {
+    padding: 4px 0;
+}
+
+.ct-turn-header {
+    margin-bottom: 4px;
+}
+
+.ct-step-num {
+    font-size: 0.85em;
+    font-weight: 600;
+    color: #666;
+    padding: 2px 8px;
+    background: #f0f0f0;
+    border-radius: 4px;
+}
+
+/* Reasoning text */
+.ct-reasoning {
+    padding: 8px 12px;
+    margin: 4px 0 8px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #333;
+    line-height: 1.6;
+    background: #fafafa;
+    border-radius: 6px;
+    border-left: 3px solid #e0e0e0;
+}
+
+/* Tool calls */
+.ct-tool-call {
+    margin: 6px 0;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.ct-tool-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: #f5f5f5;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.ct-tool-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    font-weight: 600;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+.ct-file-path {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.85em;
+    color: #555;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ct-tool-body {
+    padding: 0;
+}
+
+/* Diff rendering */
+.ct-diff {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.ct-diff-line {
+    display: flex;
+    padding: 1px 10px;
+    min-height: 20px;
+}
+
+.ct-diff-removed {
+    background: #ffeef0;
+    color: #cb2431;
+}
+
+.ct-diff-added {
+    background: #e6ffed;
+    color: #22863a;
+}
+
+.ct-diff-marker {
+    flex: 0 0 20px;
+    font-weight: 700;
+    user-select: none;
+    color: inherit;
+    opacity: 0.7;
+}
+
+.ct-diff-text {
+    flex: 1;
+    white-space: pre-wrap;
+    word-break: break-all;
+    tab-size: 4;
+}
+
+.ct-edit-status {
+    padding: 4px 10px;
+    font-size: 0.85em;
+    color: #666;
+    background: #f9f9f9;
+    border-top: 1px solid #eee;
+}
+
+/* Terminal blocks */
+.ct-terminal {
+    background: #1e1e1e;
+    border-radius: 0 0 6px 6px;
+    overflow: hidden;
+}
+
+.ct-terminal-cmd {
+    padding: 8px 12px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 13px;
+    color: #d4d4d4;
+    background: #2d2d2d;
+    border-bottom: 1px solid #3a3a3a;
+}
+
+.ct-terminal-prompt {
+    color: #4ec9b0;
+    font-weight: 700;
+    margin-right: 4px;
+}
+
+.ct-terminal-output {
+    margin: 0;
+    padding: 8px 12px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 12px;
+    color: #cccccc;
+    background: #1e1e1e;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 400px;
+    overflow-y: auto;
+    line-height: 1.4;
+}
+
+.ct-terminal-truncated {
+    display: block;
+}
+
+.ct-terminal-output-details {
+    display: none;
+}
+
+.ct-terminal-output-details[open] + .ct-terminal-truncated {
+    display: none;
+}
+
+.ct-terminal-output-details[open] {
+    display: block;
+}
+
+.ct-terminal-output-details summary {
+    padding: 4px 12px;
+    font-size: 12px;
+    color: #888;
+    cursor: pointer;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+.ct-terminal-output-details summary:hover {
+    color: #4ec9b0;
+}
+
+/* Code blocks */
+.ct-code-block {
+    overflow-x: auto;
+}
+
+.ct-code-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.ct-code-line td {
+    padding: 1px 0;
+}
+
+.ct-line-num {
+    width: 45px;
+    min-width: 45px;
+    padding: 1px 8px 1px 12px;
+    text-align: right;
+    color: #999;
+    background: #f8f8f8;
+    user-select: none;
+    border-right: 1px solid #e8e8e8;
+    font-size: 12px;
+}
+
+.ct-line-content {
+    padding: 1px 12px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    tab-size: 4;
+}
+
+.ct-line-content code {
+    background: none;
+    padding: 0;
+    font-size: inherit;
+    color: inherit;
+}
+
+.ct-code-truncated {
+    padding: 6px 12px;
+    font-size: 0.85em;
+    color: #888;
+    background: #f8f8f8;
+    border-top: 1px solid #eee;
+    font-style: italic;
+}
+
+.ct-code-empty {
+    padding: 8px 12px;
+    color: #999;
+    font-style: italic;
+}
+
+/* Write blocks */
+.ct-write-block {
+    overflow-x: auto;
+}
+
+.ct-write-label {
+    padding: 3px 10px;
+    font-size: 0.8em;
+    font-weight: 600;
+    color: #2e7d32;
+    background: #e8f5e9;
+    border-bottom: 1px solid #c8e6c9;
+}
+
+.ct-write-block .ct-code-line {
+    background: #f6fff6;
+}
+
+.ct-write-block .ct-line-num {
+    background: #e8f5e9;
+    border-right-color: #c8e6c9;
+}
+
+/* Generic tool display */
+.ct-generic-input,
+.ct-generic-output {
+    padding: 8px 12px;
+}
+
+.ct-generic-input + .ct-generic-output {
+    border-top: 1px solid #eee;
+}
+
+.ct-generic-label {
+    font-size: 0.75em;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #888;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.ct-generic-pre {
+    margin: 0;
+    padding: 8px;
+    background: #f8f8f8;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.ct-generic-empty {
+    padding: 8px 12px;
+    color: #999;
+    font-style: italic;
+}
+
+/* File tree sidebar */
+.ct-file-tree {
+    background: #fafafa;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    overflow: hidden;
+    position: sticky;
+    top: 16px;
+}
+
+.ct-file-tree-header {
+    padding: 8px 12px;
+    font-weight: 600;
+    font-size: 0.85em;
+    color: #333;
+    background: #f0f0f0;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.ct-file-list {
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.ct-file-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    font-size: 0.85em;
+    cursor: default;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.ct-file-item:last-child {
+    border-bottom: none;
+}
+
+.ct-file-item:hover {
+    background: #f0f0f0;
+}
+
+.ct-file-name {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.9em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+
+.ct-file-op {
+    flex: 0 0 auto;
+    font-size: 0.75em;
+    font-weight: 700;
+    width: 16px;
+    text-align: center;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .coding-trace-with-sidebar .coding-trace-layout {
+        flex-direction: column;
+    }
+
+    .coding-trace-sidebar {
+        flex: none;
+    }
+
+    .ct-file-tree {
+        position: static;
+    }
+}
