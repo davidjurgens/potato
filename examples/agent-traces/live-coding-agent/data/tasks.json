@@ -1,0 +1,14 @@
+[
+  {
+    "id": "task_001",
+    "task_description": "Create a Python function that checks if a string is a valid palindrome, ignoring spaces and punctuation. Include type hints and a docstring."
+  },
+  {
+    "id": "task_002",
+    "task_description": "Write a simple HTTP server in Python that serves static files from a 'public' directory and returns 404 for missing files."
+  },
+  {
+    "id": "task_003",
+    "task_description": "Create a Python script that reads a CSV file and generates a summary report with column statistics (mean, median, min, max for numeric columns)."
+  }
+]

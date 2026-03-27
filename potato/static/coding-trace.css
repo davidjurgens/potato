@@ -537,6 +537,201 @@
     outline-offset: -2px;
 }
 
+/* ===== Live Coding Agent Viewer ===== */
+
+.live-coding-agent-viewer {
+    font-family: var(--font-sans, inherit);
+}
+
+/* Start form */
+.lca-start-form {
+    padding: 20px;
+    background: var(--card, #fff);
+    border: 1px solid var(--border, #e4e4e7);
+    border-radius: var(--radius, 0.5rem);
+    text-align: center;
+}
+
+.lca-start-header {
+    font-weight: 600;
+    font-size: 1.1em;
+    margin-bottom: 12px;
+    color: var(--foreground, #09090b);
+}
+
+.lca-task-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border, #e4e4e7);
+    border-radius: var(--radius, 0.5rem);
+    font-size: 0.95em;
+    resize: vertical;
+    box-sizing: border-box;
+    margin-bottom: 12px;
+    font-family: var(--font-sans, inherit);
+}
+
+.lca-task-input:focus {
+    outline: 2px solid var(--ring, #6e56cf);
+    outline-offset: -1px;
+}
+
+/* Buttons */
+.lca-btn {
+    padding: 6px 16px;
+    border: 1px solid var(--border, #e4e4e7);
+    border-radius: var(--radius, 0.5rem);
+    background: var(--card, #fff);
+    color: var(--foreground, #09090b);
+    cursor: pointer;
+    font-size: 0.9em;
+    font-family: var(--font-sans, inherit);
+    transition: all 0.15s;
+}
+
+.lca-btn:hover {
+    background: var(--secondary, #f4f4f5);
+}
+
+.lca-btn:focus-visible {
+    outline: 2px solid var(--ring, #6e56cf);
+    outline-offset: 2px;
+}
+
+.lca-btn-start {
+    background: var(--primary, #6e56cf);
+    color: var(--primary-foreground, #fff);
+    border-color: var(--primary, #6e56cf);
+}
+
+.lca-btn-start:hover {
+    opacity: 0.9;
+}
+
+.lca-btn-stop {
+    color: var(--destructive, #ef4444);
+    border-color: var(--destructive, #ef4444);
+}
+
+.lca-btn-stop:hover {
+    background: #fef2f2;
+}
+
+/* Status bar */
+.lca-status-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--secondary, #f4f4f5);
+    border-radius: var(--radius, 0.5rem);
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.lca-status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #999;
+}
+
+.lca-status-running { background: #4caf50; animation: lca-pulse 1.5s infinite; }
+.lca-status-paused { background: #ff9800; }
+.lca-status-completed { background: #2196f3; }
+.lca-status-error { background: #f44336; }
+
+@keyframes lca-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+.lca-status-text {
+    font-weight: 500;
+    font-size: 0.9em;
+}
+
+.lca-turn-counter {
+    color: var(--muted-foreground, #71717a);
+    font-size: 0.85em;
+    margin-left: auto;
+}
+
+.lca-controls {
+    display: flex;
+    gap: 6px;
+}
+
+/* Instruction input */
+.lca-instruction {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.lca-instruction-input {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid var(--border, #e4e4e7);
+    border-radius: var(--radius, 0.5rem);
+    font-size: 0.9em;
+    font-family: var(--font-sans, inherit);
+}
+
+.lca-instruction-input:focus {
+    outline: 2px solid var(--ring, #6e56cf);
+    outline-offset: -1px;
+}
+
+/* Thinking indicator */
+.lca-thinking {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    color: var(--muted-foreground, #71717a);
+    font-size: 0.9em;
+    font-style: italic;
+}
+
+.lca-thinking-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--primary, #6e56cf);
+    animation: lca-pulse 1s infinite;
+}
+
+/* Streaming turns container */
+.lca-turns {
+    max-height: 600px;
+    overflow-y: auto;
+    scroll-behavior: smooth;
+}
+
+/* Pending tool call */
+.lca-tool-pending {
+    opacity: 0.7;
+}
+
+.lca-tool-spinner {
+    font-size: 0.8em;
+    color: var(--muted-foreground, #71717a);
+    font-style: italic;
+    margin-left: auto;
+}
+
+/* Error message */
+.lca-error-msg {
+    padding: 8px 12px;
+    margin: 6px 0;
+    background: #ffebee;
+    border: 1px solid #ef5350;
+    border-radius: var(--radius, 0.5rem);
+    color: #c62828;
+    font-size: 0.9em;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .coding-trace-with-sidebar .coding-trace-layout {

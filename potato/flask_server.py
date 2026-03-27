@@ -2817,6 +2817,28 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
                 pass
         atexit.register(_cleanup_agent_sessions)
 
+    # Check for live_coding_agent display type
+    needs_live_coding_agent = False
+    for field in fields:
+        if isinstance(field, dict) and field.get("type") == "live_coding_agent":
+            needs_live_coding_agent = True
+            break
+
+    if needs_live_coding_agent:
+        from potato.routes_live_coding_agent import live_coding_agent_bp
+        flask_app.register_blueprint(live_coding_agent_bp)
+        flask_app.config["live_coding_agent_enabled"] = True
+        logger.info("Registered live coding agent blueprint (live_coding_agent display type detected)")
+
+        import atexit
+        def _cleanup_coding_agent_sessions():
+            try:
+                from potato.coding_agent_runner_manager import CodingAgentRunnerManager
+                CodingAgentRunnerManager.clear_instance()
+            except Exception:
+                pass
+        atexit.register(_cleanup_coding_agent_sessions)
+
     # Check for trace_ingestion config
     trace_ingestion_config = config.get("trace_ingestion", {})
     if trace_ingestion_config.get("enabled", False):

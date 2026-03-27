@@ -1,0 +1,85 @@
+# Live Coding Agent Example
+#
+# Watch a coding agent work in real-time, with pause/resume/instruct controls.
+# After the session, annotate the trace with existing schemas.
+#
+# Requires either:
+# - Ollama running locally (default, no API key needed)
+# - ANTHROPIC_API_KEY env var (for anthropic_tool_use backend)
+# - claude-agent-sdk installed (for claude_sdk backend)
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/agent-traces/live-coding-agent/config.yaml -p 8000
+
+annotation_task_name: "Live Coding Agent Evaluation"
+
+data_files:
+  - data/tasks.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+# Live coding agent configuration
+live_coding_agent:
+  # Backend options: ollama_tool_use (local), anthropic_tool_use, claude_sdk
+  backend_type: ollama_tool_use
+  ai_config:
+    model: qwen2.5-coder:7b
+    base_url: http://localhost:11434
+    max_tokens: 4096
+    temperature: 0.3
+  working_dir: ./workspace
+  max_turns: 20
+  sandbox_mode: direct
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+  fields:
+    - key: task_description
+      type: text
+      label: "Task"
+    - key: structured_turns
+      type: live_coding_agent
+      label: "Coding Agent Session"
+      display_options:
+        show_file_tree: true
+        show_reasoning: true
+        collapse_long_outputs: true
+        show_controls: true
+        allow_instructions: true
+
+annotation_schemes:
+  - annotation_type: radio
+    name: task_success
+    description: "Did the agent complete the task?"
+    labels:
+      - name: success
+      - name: partial
+      - name: failure
+
+  - annotation_type: process_reward
+    name: step_rewards
+    description: "Mark the first incorrect step"
+    steps_key: structured_turns
+    mode: first_error
+
+  - annotation_type: likert
+    name: code_quality
+    description: "Rate the quality of the code changes"
+    min_label: "Poor"
+    max_label: "Excellent"
+    size: 5
+
+  - annotation_type: text
+    name: notes
+    description: "Additional observations"
+
+user_config:
+  allow_all_users: true

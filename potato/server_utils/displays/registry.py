@@ -315,6 +315,7 @@ def _register_builtin_displays():
     from .web_agent_trace_display import WebAgentTraceDisplay
     from .live_agent_display import LiveAgentDisplay
     from .coding_trace_display import CodingTraceDisplay
+    from .live_coding_agent_display import LiveCodingAgentDisplay
 
     displays = [
         DisplayDefinition(
@@ -579,6 +580,21 @@ def _register_builtin_displays():
             },
             supports_span_target=False,
             description="Live AI agent viewer with real-time screenshots, controls, and interaction"
+        ),
+        DisplayDefinition(
+            name="live_coding_agent",
+            renderer=LiveCodingAgentDisplay(),
+            required_fields=["key"],
+            optional_fields={
+                "show_file_tree": True,
+                "show_reasoning": True,
+                "collapse_long_outputs": True,
+                "max_output_lines": 50,
+                "show_controls": True,
+                "allow_instructions": True,
+            },
+            supports_span_target=False,
+            description="Live coding agent viewer with real-time streaming and intervention controls"
         ),
     ]
 
