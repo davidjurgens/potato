@@ -2924,19 +2924,49 @@ def create_app(config_file=None):
 
         # Build ui_lang dict with defaults, overridden by config
         ui_lang_defaults = {
+            # Navigation & controls
             'next_button': 'Next',
             'previous_button': 'Previous',
+            'submit_button': 'Submit',
+            'go_button': 'Go',
+            'retry_button': 'Retry',
+            'logout': 'Logout',
+            # Status indicators
             'labeled_badge': 'Labeled',
             'not_labeled_badge': 'Not labeled',
-            'submit_button': 'Submit',
             'progress_label': 'Progress',
-            'go_button': 'Go',
-            'logout': 'Logout',
             'loading': 'Loading annotation interface...',
             'error_heading': 'Error',
-            'retry_button': 'Retry',
+            # Annotation interface
             'adjudicate': 'Adjudicate',
             'codebook': 'Codebook',
+            'instructions_heading': 'Instructions',
+            'text_to_annotate': 'Text to Annotate:',
+            'video_to_annotate': 'Video to Annotate:',
+            'audio_to_annotate': 'Audio to Annotate:',
+            # Login / registration page
+            'login_title': 'Annotation Platform',
+            'login_subtitle_password': 'Sign in to continue',
+            'login_subtitle_username': 'Enter your username to continue',
+            'sign_in_tab': 'Sign In',
+            'register_tab': 'Register',
+            'username_label': 'Username',
+            'password_label': 'Password',
+            'sign_in_button': 'Sign In',
+            'continue_button': 'Continue',
+            'register_button': 'Register',
+            'forgot_password': 'Forgot Password?',
+            'username_placeholder': 'Enter your username',
+            'choose_username_placeholder': 'Choose a username',
+            'create_password_placeholder': 'Create a password',
+            'sign_in_with': 'Sign in with',
+            'or_divider': 'or',
+            # Footer
+            'powered_by': 'Powered by',
+            'cite_us': 'Cite Us',
+            # Language / direction
+            'html_lang': 'en',
+            'html_dir': 'ltr',
         }
         ui_lang_config = config.get('ui_language', {})
         ui_lang = {**ui_lang_defaults, **ui_lang_config}

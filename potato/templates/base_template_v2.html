@@ -1,9 +1,9 @@
 {# Default ui_lang values if not provided by context processor #}
 {% if ui_lang is not defined %}
-{% set ui_lang = {'next_button': 'Next', 'previous_button': 'Previous', 'labeled_badge': 'Labeled', 'not_labeled_badge': 'Not labeled', 'submit_button': 'Submit', 'progress_label': 'Progress', 'go_button': 'Go', 'logout': 'Logout', 'loading': 'Loading annotation interface...', 'error_heading': 'Error', 'retry_button': 'Retry', 'adjudicate': 'Adjudicate'} %}
+{% set ui_lang = {'next_button': 'Next', 'previous_button': 'Previous', 'labeled_badge': 'Labeled', 'not_labeled_badge': 'Not labeled', 'submit_button': 'Submit', 'progress_label': 'Progress', 'go_button': 'Go', 'logout': 'Logout', 'loading': 'Loading annotation interface...', 'error_heading': 'Error', 'retry_button': 'Retry', 'adjudicate': 'Adjudicate', 'codebook': 'Codebook', 'instructions_heading': 'Instructions', 'text_to_annotate': 'Text to Annotate:', 'video_to_annotate': 'Video to Annotate:', 'audio_to_annotate': 'Audio to Annotate:', 'powered_by': 'Powered by', 'cite_us': 'Cite Us', 'html_lang': 'en', 'html_dir': 'ltr'} %}
 {% endif %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ ui_lang.html_lang|default('en') }}" dir="{{ ui_lang.html_dir|default('ltr') }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -197,7 +197,7 @@
                 <div id="main-content" style="display: none;">
                     {% if annotation_instructions | default('') %}
                     <details class="annotation-instructions-banner" open>
-                        <summary>Instructions</summary>
+                        <summary>{{ ui_lang.instructions_heading|default('Instructions') }}</summary>
                         <div class="annotation-instructions-content">
                             {{ annotation_instructions | safe }}
                         </div>
@@ -213,13 +213,13 @@
                             <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}">{{instance | sanitize_html}}</div>
                         </div>
                         {% elif has_video_annotation | default(false) %}
-                        <h5 class="mb-3">Video to Annotate:</h5>
+                        <h5 class="mb-3">{{ ui_lang.video_to_annotate|default('Video to Annotate:') }}</h5>
                         <!-- For video annotation, keep the text-content element accessible for JS but visually hidden -->
                         <div id="instance-text" class="instance-text-container" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0);">
                             <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}">{{instance | sanitize_html}}</div>
                         </div>
                         {% elif has_audio_annotation | default(false) %}
-                        <h5 class="mb-3">Audio to Annotate:</h5>
+                        <h5 class="mb-3">{{ ui_lang.audio_to_annotate|default('Audio to Annotate:') }}</h5>
                         <!-- For audio annotation, keep the text-content element accessible for JS but visually hidden -->
                         <div id="instance-text" class="instance-text-container" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0);">
                             <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}">{{instance | sanitize_html}}</div>
@@ -232,7 +232,7 @@
                         </div>
                         {% else %}
                         {% if is_annotation_page %}
-                                <h5 class="instance-text-heading">Text to Annotate:</h5>
+                                <h5 class="instance-text-heading">{{ ui_lang.text_to_annotate|default('Text to Annotate:') }}</h5>
                                 <div id="instance-text" class="p-3 border rounded instance-text-container" style="background-color: var(--light-bg); position: relative;">
                                     <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}" style="position: relative; z-index: 1; pointer-events: auto;">{{instance | sanitize_html}}
                                         <div id="span-overlays" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;">
@@ -277,11 +277,11 @@
 
         <!-- Footer -->
         <footer class="potato-footer">
-            Powered by <a href="https://potatoannotator.com/" target="_blank" rel="noopener noreferrer">Potato</a>
+            {{ ui_lang.powered_by|default('Powered by') }} <a href="https://potatoannotator.com/" target="_blank" rel="noopener noreferrer">Potato</a>
             <span class="footer-sep">&middot;</span>
             <a href="https://github.com/davidjurgens/potato" target="_blank" rel="noopener noreferrer">GitHub</a>
             <span class="footer-sep">&middot;</span>
-            <a href="https://github.com/davidjurgens/potato#cite-us" target="_blank" rel="noopener noreferrer">Cite Us</a>
+            <a href="https://github.com/davidjurgens/potato#cite-us" target="_blank" rel="noopener noreferrer">{{ ui_lang.cite_us|default('Cite Us') }}</a>
         </footer>
     </div>
 
