@@ -1,0 +1,26 @@
+annotation_task_name: Soft Label Sentiment Distribution
+task_dir: .
+output_annotation_dir: annotation_output/soft-label/
+output_annotation_format: json
+annotation_codebook_url: ''
+data_files:
+- data/soft-label-example.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: soft_label
+  name: sentiment_dist
+  description: "Distribute probability across sentiment labels (must sum to 100)"
+  labels:
+  - Positive
+  - Neutral
+  - Negative
+  total: 100
+  min_per_label: 0
+  show_distribution_chart: true
+site_dir: default

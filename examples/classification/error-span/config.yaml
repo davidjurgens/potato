@@ -1,0 +1,43 @@
+annotation_task_name: MQM Translation Quality Evaluation
+task_dir: .
+output_annotation_dir: annotation_output/error-span/
+output_annotation_format: json
+annotation_codebook_url: ''
+data_files:
+- data/error-span-example.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: error_span
+  name: mqm_errors
+  description: "Select error spans in the translation and classify each by type and severity"
+  error_types:
+  - name: Accuracy
+    subtypes:
+    - Mistranslation
+    - Omission
+    - Addition
+    - Untranslated
+  - name: Fluency
+    subtypes:
+    - Grammar
+    - Spelling
+    - Punctuation
+    - Register
+  - name: Terminology
+  - name: Style
+  severities:
+  - name: Minor
+    weight: -1
+  - name: Major
+    weight: -5
+  - name: Critical
+    weight: -10
+  show_score: true
+  max_score: 100
+site_dir: default

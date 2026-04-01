@@ -1,0 +1,23 @@
+annotation_task_name: Machine Translation Post-Editing
+task_dir: .
+output_annotation_dir: annotation_output/text-edit/
+output_annotation_format: json
+annotation_codebook_url: ''
+data_files:
+- data/text-edit-example.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: text_edit
+  name: post_edit
+  description: "Edit the machine translation output to produce a fluent, accurate translation"
+  source_field: mt_output
+  show_diff: true
+  show_edit_distance: true
+  allow_reset: true
+site_dir: default

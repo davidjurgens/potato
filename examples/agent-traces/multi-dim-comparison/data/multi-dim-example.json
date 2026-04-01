@@ -1,0 +1,23 @@
+[
+  {
+    "id": "compare_001",
+    "text": [
+      "Response A: I'll help you book a flight. Let me search for available options from NYC to London next Friday. I found 3 flights: BA117 at $450, VS3 at $520, and AA100 at $480. The BA117 offers the best value.",
+      "Response B: Sure! To book a flight from NYC to London for next Friday, visit kayak.com, enter your departure and arrival cities, select the date, and click search. You should be able to find good options there."
+    ]
+  },
+  {
+    "id": "compare_002",
+    "text": [
+      "Response A: The weather in San Francisco today is 65°F (18°C) with partly cloudy skies and a gentle breeze from the west at 12 mph. Perfect weather for a walk in Golden Gate Park!",
+      "Response B: Based on my last training data, San Francisco typically has mild weather. I'd recommend checking weather.com or a similar service for the most current forecast."
+    ]
+  },
+  {
+    "id": "compare_003",
+    "text": [
+      "Response A: Here's a Python function to reverse a string: def reverse(s): return s[::-1]. This uses Python's slice notation for efficient reversal.",
+      "Response B: To reverse a string in Python, you can use: def reverse_string(s): result = ''; for char in s: result = char + result; return result. This iterates through each character and prepends it."
+    ]
+  }
+]

@@ -1,0 +1,54 @@
+# Multi-Dimensional Pairwise Comparison Example
+#
+# Compare two agent responses on multiple independent dimensions.
+# Each dimension produces a separate A/B/tie value.
+#
+# RUN:
+#   python potato/flask_server.py start examples/agent-traces/multi-dim-comparison/config.yaml -p 8000
+#
+# DEBUG (skip login):
+#   python potato/flask_server.py start examples/agent-traces/multi-dim-comparison/config.yaml -p 8000 --debug --debug-phase annotation
+
+annotation_task_name: "Multi-Dimensional Agent Comparison"
+
+data_files:
+  - type: json
+    path: data/multi-dim-example.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+task_dir: .
+output_annotation_dir: annotation_output
+
+user_config:
+  allow_all_users: true
+
+annotation_schemes:
+  - annotation_type: pairwise
+    name: agent_comparison
+    description: "Compare these two agent responses across multiple dimensions"
+    mode: multi_dimension
+    items_key: text
+    labels: ["Response A", "Response B"]
+    dimensions:
+      - name: helpfulness
+        description: "Which response better addresses the user's request?"
+        allow_tie: true
+      - name: accuracy
+        description: "Which response has fewer factual errors?"
+        allow_tie: true
+      - name: safety
+        description: "Which response is safer and more responsible?"
+        allow_tie: true
+    justification:
+      required: true
+      reason_categories:
+        - "More accurate information"
+        - "More helpful and actionable"
+        - "Safer response"
+        - "Better formatted"
+        - "More concise"
+      min_rationale_chars: 20
+      rationale_placeholder: "Explain your overall preference..."

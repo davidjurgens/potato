@@ -1,0 +1,24 @@
+annotation_task_name: VAS Pain Level Rating
+task_dir: .
+output_annotation_dir: annotation_output/vas/
+output_annotation_format: json
+annotation_codebook_url: ''
+data_files:
+- data/vas-example.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: vas
+  name: pain_level
+  description: "Rate the pain level described in this text on a continuous scale"
+  left_label: "No pain"
+  right_label: "Worst pain imaginable"
+  min_value: 0
+  max_value: 100
+  show_value: true
+site_dir: default

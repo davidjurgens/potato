@@ -1,0 +1,36 @@
+annotation_task_name: LLM Response Quality Rubric
+task_dir: .
+output_annotation_dir: annotation_output/rubric-eval/
+output_annotation_format: json
+annotation_codebook_url: ''
+data_files:
+- data/rubric-eval-example.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: rubric_eval
+  name: response_quality
+  description: "Evaluate the AI response on each criterion"
+  scale_points: 5
+  scale_labels:
+  - Poor
+  - Below Average
+  - Average
+  - Good
+  - Excellent
+  criteria:
+  - name: accuracy
+    description: "Are the facts and claims in the response correct?"
+  - name: completeness
+    description: "Does the response address all aspects of the question?"
+  - name: clarity
+    description: "Is the response well-organized and easy to understand?"
+  - name: helpfulness
+    description: "Would this response be useful to someone asking the question?"
+  show_overall: true
+site_dir: default

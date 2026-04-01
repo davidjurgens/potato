@@ -1,0 +1,41 @@
+annotation_task_name: "Sentiment Intensity (Iterative BWS)"
+
+# Data and directories
+task_dir: .
+data_files:
+  - data/sentiment-pool.jsonl
+output_annotation_dir: annotation_output/ibws/
+
+# Item properties
+item_properties:
+  id_key: id
+  text_key: text
+
+# Iterative BWS configuration
+# Extends standard BWS with adaptive rounds:
+# Round 1: tuples from full pool → score → partition into upper/middle/lower
+# Round N: tuples within each bucket → score → partition again
+# Stops when all buckets have fewer items than tuple_size
+ibws_config:
+  tuple_size: 4                    # Items per tuple
+  max_rounds: null                 # null = auto-stop when all buckets terminal
+  seed: 42                         # Random seed for reproducibility
+  scoring_method: counting         # counting | bradley_terry | plackett_luce
+  tuples_per_item_per_round: 2     # How many tuples each item appears in per round
+
+# Annotation schema (same as standard BWS)
+annotation_schemes:
+  - annotation_type: bws
+    name: sentiment_ibws
+    description: "Sentiment Intensity"
+    best_description: "Which sentence expresses the MOST positive sentiment?"
+    worst_description: "Which sentence expresses the LEAST positive sentiment?"
+    tuple_size: 4
+    sequential_key_binding: true
+
+# User settings
+user_config:
+  allow_all_users: true
+
+# Display settings
+site_file: templates/base_template_v2.html

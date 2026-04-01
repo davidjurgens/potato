@@ -1,0 +1,29 @@
+annotation_task_name: Topic Card Sorting
+task_dir: .
+output_annotation_dir: annotation_output/card-sort/
+output_annotation_format: json
+annotation_codebook_url: ''
+data_files:
+- data/card-sort-example.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: card_sort
+  name: topic_groups
+  description: "Drag each item into the topic group where it best fits"
+  mode: closed
+  groups:
+  - Science
+  - Technology
+  - Health
+  - Business
+  - Entertainment
+  items_field: items
+  allow_empty_groups: true
+  allow_multiple: false
+site_dir: default

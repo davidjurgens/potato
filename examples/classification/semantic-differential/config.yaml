@@ -1,0 +1,25 @@
+annotation_task_name: Semantic Differential Word Connotation
+task_dir: .
+output_annotation_dir: annotation_output/semantic-differential/
+output_annotation_format: json
+annotation_codebook_url: ''
+data_files:
+- data/semantic-differential-example.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: semantic_differential
+  name: word_connotation
+  description: "Rate the word or concept on each of these dimensions (1 = left pole, 7 = right pole)"
+  scale_points: 7
+  pairs:
+  - ["Good", "Bad"]
+  - ["Strong", "Weak"]
+  - ["Active", "Passive"]
+  - ["Happy", "Sad"]
+site_dir: default

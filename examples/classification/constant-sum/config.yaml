@@ -1,0 +1,27 @@
+annotation_task_name: Constant-Sum Topic Relevance Allocation
+task_dir: .
+output_annotation_dir: annotation_output/constant-sum/
+output_annotation_format: json
+annotation_codebook_url: ''
+data_files:
+- data/constant-sum-example.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: constant_sum
+  name: topic_relevance
+  description: "Allocate 100 points across topics by relevance to the text (must sum to 100)"
+  labels:
+  - Politics
+  - Technology
+  - Sports
+  - Entertainment
+  total_points: 100
+  min_per_item: 0
+  input_type: number
+site_dir: default

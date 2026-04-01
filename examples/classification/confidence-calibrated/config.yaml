@@ -1,0 +1,36 @@
+annotation_task_name: Confidence-Calibrated Sentiment Annotation
+task_dir: .
+output_annotation_dir: annotation_output/confidence-calibrated/
+output_annotation_format: json
+annotation_codebook_url: ''
+data_files:
+- data/confidence-example.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: radio
+  name: sentiment
+  description: "Select the sentiment of the text"
+  labels:
+  - Positive
+  - Negative
+  - Neutral
+  sequential_key_binding: true
+- annotation_type: confidence
+  name: sentiment_confidence
+  description: "How confident are you in your label?"
+  target_schema: sentiment
+  scale_type: likert
+  scale_points: 5
+  labels:
+  - Guessing
+  - Somewhat confident
+  - Fairly confident
+  - Confident
+  - Certain
+site_dir: default

@@ -1,0 +1,63 @@
+# Trajectory Evaluation Example
+#
+# Per-step error marking for agent traces. Each step can be marked as
+# correct, incorrect, or partially correct, with structured error types,
+# severity levels, and free-text rationale.
+#
+# RUN:
+#   python potato/flask_server.py start examples/agent-traces/trajectory-evaluation/config.yaml -p 8000
+#
+# DEBUG (skip login):
+#   python potato/flask_server.py start examples/agent-traces/trajectory-evaluation/config.yaml -p 8000 --debug --debug-phase annotation
+
+annotation_task_name: "Agent Trajectory Evaluation"
+
+data_files:
+  - type: json
+    path: data/trajectory-eval-example.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+task_dir: .
+output_annotation_dir: annotation_output
+
+user_config:
+  allow_all_users: true
+
+annotation_schemes:
+  - annotation_type: trajectory_eval
+    name: step_evaluation
+    description: "Evaluate each agent step for correctness and errors"
+    steps_key: steps
+    step_text_key: action
+    correctness_options:
+      - correct
+      - incorrect
+      - partially_correct
+    error_types:
+      - name: reasoning
+        subtypes:
+          - logical_error
+          - factual_error
+          - planning_error
+      - name: execution
+        subtypes:
+          - wrong_tool
+          - wrong_args
+          - api_error
+      - name: safety
+        subtypes:
+          - harmful_action
+          - data_leak
+          - scope_violation
+    severities:
+      - name: minor
+        weight: -1
+      - name: major
+        weight: -5
+      - name: critical
+        weight: -10
+    show_score: true
+    max_score: 100

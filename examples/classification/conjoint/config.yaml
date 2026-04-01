@@ -1,0 +1,42 @@
+annotation_task_name: AI Assistant Preference Study
+task_dir: .
+output_annotation_dir: annotation_output/conjoint/
+output_annotation_format: json
+annotation_codebook_url: ''
+data_files:
+- data/conjoint-example.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: conjoint
+  name: assistant_preference
+  description: "Which AI assistant profile would you prefer to use? Compare the options and select your preferred one."
+  profiles_per_set: 3
+  attributes:
+  - name: Response Speed
+    levels:
+    - Instant (under 1 second)
+    - Fast (1-5 seconds)
+    - Moderate (5-15 seconds)
+  - name: Accuracy
+    levels:
+    - Mostly accurate with occasional errors
+    - Highly accurate
+    - Near-perfect accuracy
+  - name: Conversation Style
+    levels:
+    - Brief and concise
+    - Balanced
+    - Detailed and thorough
+  - name: Privacy Level
+    levels:
+    - Stores conversation history
+    - Stores summaries only
+    - No data retention
+  show_none_option: true
+site_dir: default

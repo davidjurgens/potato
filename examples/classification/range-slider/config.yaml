@@ -1,0 +1,25 @@
+annotation_task_name: Range Slider Formality Assessment
+task_dir: .
+output_annotation_dir: annotation_output/range-slider/
+output_annotation_format: json
+annotation_codebook_url: ''
+data_files:
+- data/range-slider-example.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: range_slider
+  name: formality_range
+  description: "What range of formality is appropriate for this text? Drag both handles to indicate the acceptable range."
+  min_value: 0
+  max_value: 100
+  step: 1
+  left_label: "Very informal"
+  right_label: "Very formal"
+  show_values: true
+site_dir: default

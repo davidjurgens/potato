@@ -1,0 +1,34 @@
+[
+  {
+    "id": "trace_001",
+    "task_description": "Find the current weather in San Francisco and save it to a file.",
+    "steps": [
+      {"action": "search_web('San Francisco weather')", "thought": "I need to find the current weather."},
+      {"action": "click_result(0)", "thought": "Clicking the first search result for weather info."},
+      {"action": "extract_text('.weather-info')", "thought": "Extracting the weather information from the page."},
+      {"action": "write_file('weather.txt', extracted_text)", "thought": "Saving the weather data to a file."}
+    ]
+  },
+  {
+    "id": "trace_002",
+    "task_description": "Book a flight from NYC to London for next Friday.",
+    "steps": [
+      {"action": "navigate('https://flights.example.com')", "thought": "Going to the flight booking site."},
+      {"action": "fill_form(from='NYC', to='London', date='next Friday')", "thought": "Filling in the search form."},
+      {"action": "click_button('Search Flights')", "thought": "Searching for available flights."},
+      {"action": "select_flight(cheapest=True)", "thought": "Selecting the cheapest available flight."},
+      {"action": "click_button('Book Now')", "thought": "Proceeding to book the selected flight."},
+      {"action": "fill_payment(card='****1234')", "thought": "Entering payment details to complete booking."}
+    ]
+  },
+  {
+    "id": "trace_003",
+    "task_description": "Summarize the top 3 articles on Hacker News.",
+    "steps": [
+      {"action": "navigate('https://news.ycombinator.com')", "thought": "Going to Hacker News."},
+      {"action": "extract_links('.titleline a', limit=3)", "thought": "Getting the top 3 article links."},
+      {"action": "navigate(links[0])", "thought": "Opening the first article."},
+      {"action": "summarize(page_text)", "thought": "Summarizing the first article content."}
+    ]
+  }
+]

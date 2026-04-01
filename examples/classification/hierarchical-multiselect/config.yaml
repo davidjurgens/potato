@@ -1,0 +1,38 @@
+annotation_task_name: Hierarchical Topic Classification
+task_dir: .
+output_annotation_dir: annotation_output/hierarchical-multiselect/
+output_annotation_format: json
+annotation_codebook_url: ''
+data_files:
+- data/hierarchical-example.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: hierarchical_multiselect
+  name: topic_hierarchy
+  description: "Select all topics that apply to this text. You may select at any level of the hierarchy."
+  taxonomy:
+    Science:
+      Physics:
+        - Quantum Mechanics
+        - Thermodynamics
+      Biology:
+        - Genetics
+        - Ecology
+    Technology:
+      - Artificial Intelligence
+      - Blockchain
+      - Cybersecurity
+    Arts:
+      - Music
+      - Painting
+      - Literature
+  auto_select_children: false
+  auto_select_parent: false
+  show_search: true
+site_dir: default

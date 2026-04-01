@@ -1,0 +1,23 @@
+annotation_task_name: SQuAD-Style Extractive QA
+task_dir: .
+output_annotation_dir: annotation_output/extractive-qa/
+output_annotation_format: json
+annotation_codebook_url: ''
+data_files:
+- data/extractive-qa-example.json
+item_properties:
+  id_key: id
+  text_key: passage
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: extractive_qa
+  name: answer_span
+  description: "Highlight the span in the passage that answers the question"
+  question_field: question
+  passage_field: passage
+  allow_unanswerable: true
+  highlight_color: "#FFEB3B"
+site_dir: default
