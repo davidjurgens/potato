@@ -1014,6 +1014,15 @@ class ItemStateManager:
     # Assignment Methods
     # =========================================================================
 
+    def has_unlabeled_items_for_user(self, user_state: 'UserState') -> bool:
+        """Check whether any items remain for this user to annotate (read-only)."""
+        for iid in self.remaining_instance_ids:
+            if self.max_annotations_per_item >= 0 and len(self.instance_annotators[iid]) >= self.max_annotations_per_item:
+                continue
+            if not user_state.has_annotated(iid):
+                return True
+        return False
+
     def assign_instances_to_user(self, user_state: UserState) -> int:
         """
         Assigns a set of instances to a user based on the current state of the system
