@@ -11,6 +11,8 @@ import os
 import json
 from unittest.mock import Mock, patch, MagicMock
 
+pytest.importorskip("mysql.connector", reason="mysql-connector-python is required for MySQL database tests")
+
 # Import the modules we're testing
 from potato.database.connection import DatabaseManager
 from potato.database.mysql_user_state import MysqlUserState

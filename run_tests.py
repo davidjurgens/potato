@@ -46,7 +46,7 @@ def main():
     args = parser.parse_args()
 
     # Base pytest command
-    base_cmd = ["python", "-m", "pytest"]
+    base_cmd = [sys.executable, "-m", "pytest", "--import-mode=importlib"]
 
     if args.verbose:
         base_cmd.append("-v")
@@ -76,7 +76,7 @@ def main():
 
     elif args.type == "unit":
         print("Running unit tests...")
-        cmd = base_cmd + ["tests/", "-m", "unit"]
+        cmd = base_cmd + ["tests/unit/"]
         success = run_command(cmd, "Unit tests")
 
     elif args.type == "integration":
