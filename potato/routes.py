@@ -1963,7 +1963,10 @@ def annotate():
 
         # Find the index of this instance in the user's assigned instances
         try:
-            instance_index = user_state.instance_id_ordering.index(instance_id)
+            instance_index = user_state.instance_id_to_order.get(instance_id)
+            if instance_index is None:
+                instance_index = user_state.instance_id_ordering.index(instance_id)
+                user_state.instance_id_to_order[instance_id] = instance_index
             logger.debug(f"Found instance {instance_id} at index {instance_index}")
 
             # Update the user's current instance to match the URL parameter
