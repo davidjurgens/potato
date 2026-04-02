@@ -1918,6 +1918,17 @@ def render_page_with_annotations(username: str):
 
     # Get UI configuration from config
     ui_config = config.get("ui", {})
+    annotation_schemes = config.get("annotation_schemes", [])
+    annotation_types = {
+        scheme.get("annotation_type")
+        for scheme in annotation_schemes
+        if scheme.get("annotation_type")
+    }
+    display_types = {
+        field.get("type")
+        for field in config.get("instance_display", {}).get("fields", [])
+        if field.get("type")
+    }
 
     # Add layout configuration to ui_config for JavaScript access
     if config.get("layout"):
@@ -1928,7 +1939,7 @@ def render_page_with_annotations(username: str):
     # This is used to customize the display (show "Video to Annotate:" instead of "Text to Annotate:")
     has_video_annotation = any(
         scheme.get("annotation_type") == "video_annotation"
-        for scheme in config.get("annotation_schemes", [])
+        for scheme in annotation_schemes
     )
 
     # Detect if any annotation scheme is audio_annotation type (or tiered_annotation with audio media)
@@ -1936,15 +1947,35 @@ def render_page_with_annotations(username: str):
     has_audio_annotation = any(
         scheme.get("annotation_type") == "audio_annotation"
         or (scheme.get("annotation_type") == "tiered_annotation" and scheme.get("media_type") == "audio")
-        for scheme in config.get("annotation_schemes", [])
+        for scheme in annotation_schemes
     )
 
     # Detect if any annotation scheme is image_annotation type
     # This is used to customize the display (show "Image to Annotate:" instead of "Text to Annotate:")
     has_image_annotation = any(
         scheme.get("annotation_type") == "image_annotation"
-        for scheme in config.get("annotation_schemes", [])
+        for scheme in annotation_schemes
     )
+
+    frontend_assets = {
+        "image_annotation": has_image_annotation,
+        "audio_annotation": has_audio_annotation,
+        "video_annotation": has_video_annotation,
+        "segmentation_tools": has_image_annotation,
+        "span_link": "span_link" in annotation_types or "coreference" in annotation_types,
+        "event_annotation": "event_annotation" in annotation_types,
+        "coreference": "coreference" in annotation_types,
+        "conversation_tree": "conversation_tree" in display_types,
+        "tracking": has_video_annotation or "video" in display_types,
+        "triage": "triage" in annotation_types,
+        "tiered_annotation": "tiered_annotation" in annotation_types,
+        "document_bbox": "document" in display_types,
+        "pdf_bbox": "pdf" in display_types,
+        "web_agent_viewer": bool(display_types & {"web_agent_trace", "live_agent"}),
+        "web_agent_playback": "web_agent_trace" in display_types,
+        "web_agent_recorder": "web_agent_recorder" in display_types,
+        "live_coding_agent": "live_coding_agent" in display_types,
+    }
 
     # Check if AI support is enabled (for conditional loading of visual_ai_assistant.js)
     ai_enabled = config.get("ai_support", {}).get("enabled", False)
@@ -2003,7 +2034,7 @@ def render_page_with_annotations(username: str):
         var_elems=var_elems_html,
         custom_js=custom_js,
         # Pass annotation schemes to the template
-        annotation_schemes=config["annotation_schemes"],
+        annotation_schemes=annotation_schemes,
         annotation_task_name=config["annotation_task_name"],
         debug=config.get("debug", False),
         ui_config=ui_config,
@@ -2021,6 +2052,7 @@ def render_page_with_annotations(username: str):
         display_raw=display_template_vars.get("display_raw", {}),
         span_targets=display_template_vars.get("span_targets", []),
         multi_span_mode=display_template_vars.get("multi_span_mode", False),
+        frontend_assets=frontend_assets,
         # Agent proxy (for conditional loading of agent-chat assets)
         agent_proxy_enabled=agent_proxy_enabled,
         # Chat support (for conditional loading of llm-chat-sidebar assets)

@@ -21,20 +21,32 @@
     <!-- Span Annotation Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}">
 
+    {% set frontend_assets = frontend_assets | default({}) %}
+
     <!-- Image Annotation Styles -->
+    {% if frontend_assets.image_annotation | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='image-annotation.css') }}?v=2">
+    {% endif %}
 
     <!-- Audio Annotation Styles -->
+    {% if frontend_assets.audio_annotation | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='audio-annotation.css') }}?v=2">
+    {% endif %}
 
     <!-- Video Annotation Styles -->
+    {% if frontend_assets.video_annotation | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='video-annotation.css') }}">
+    {% endif %}
 
     <!-- Span Link Styles -->
+    {% if frontend_assets.span_link | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='span-link-styles.css') }}">
+    {% endif %}
 
     <!-- Event Annotation Styles -->
+    {% if frontend_assets.event_annotation | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='event-annotation.css') }}">
+    {% endif %}
 
     <!-- Spreadsheet Display Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='spreadsheet-display.css') }}">
@@ -43,40 +55,58 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='coding-trace.css') }}">
 
     <!-- Live Coding Agent Viewer -->
+    {% if frontend_assets.live_coding_agent | default(false) %}
     <script src="{{ url_for('static', filename='live-coding-agent-viewer.js') }}" defer></script>
+    {% endif %}
 
     <!-- Format Display Styles (document, code, etc.) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/format-displays.css') }}">
 
     <!-- Document Bounding Box Styles -->
+    {% if frontend_assets.document_bbox | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='document-bbox.css') }}">
+    {% endif %}
 
     <!-- PDF Annotation Styles -->
+    {% if frontend_assets.pdf_bbox | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='pdf-annotation.css') }}">
+    {% endif %}
 
     <!-- Display Logic Styles (conditional schema branching) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='display-logic.css') }}">
 
     <!-- Coreference Chain Styles -->
+    {% if frontend_assets.coreference | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/coreference.css') }}">
+    {% endif %}
 
     <!-- Segmentation Tool Styles -->
+    {% if frontend_assets.segmentation_tools | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/segmentation.css') }}">
+    {% endif %}
 
     <!-- Conversation Tree Styles -->
+    {% if frontend_assets.conversation_tree | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/conversation-tree.css') }}">
+    {% endif %}
 
     <!-- Video Tracking Styles -->
+    {% if frontend_assets.tracking | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tracking.css') }}">
+    {% endif %}
 
     <!-- Triage Styles -->
+    {% if frontend_assets.triage | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/triage.css') }}">
+    {% endif %}
 
     <!-- Entity Linking Styles (knowledge base linking) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/entity-linking.css') }}">
 
     <!-- Tiered Annotation Styles (ELAN-style hierarchical annotation) -->
+    {% if frontend_assets.tiered_annotation | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tiered-annotation.css') }}">
+    {% endif %}
 
     {% if agent_proxy_enabled | default(false) %}
     <!-- Agent Chat Styles -->
@@ -354,56 +384,84 @@
     <script src="{{ url_for('static', filename='annotation.js') }}?v=21"></script>
 
     <!-- Fabric.js for image annotation (loaded from CDN) -->
+    {% if frontend_assets.image_annotation | default(false) %}
     <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
     <!-- Image annotation manager -->
     <script src="{{ url_for('static', filename='image-annotation.js') }}?v=2"></script>
+    {% endif %}
     <!-- Visual AI Assistant for image/video annotation (loaded conditionally) -->
-    {% if ai_enabled %}
+    {% if ai_enabled and ((frontend_assets.image_annotation | default(false)) or (frontend_assets.video_annotation | default(false))) %}
     <script src="{{ url_for('static', filename='visual_ai_assistant.js') }}?v=1"></script>
     <!-- Option Highlight Manager for dimming less-likely options -->
     <script src="{{ url_for('static', filename='option_highlight_manager.js') }}?v=2"></script>
     {% endif %}
 
     <!-- Peaks.js for audio/video annotation (stored locally for reliability) -->
+    {% if (frontend_assets.audio_annotation | default(false)) or (frontend_assets.video_annotation | default(false)) %}
     <script src="{{ url_for('static', filename='peaks.min.js') }}"></script>
+    {% endif %}
     <!-- Audio annotation manager -->
+    {% if frontend_assets.audio_annotation | default(false) %}
     <script src="{{ url_for('static', filename='audio-annotation.js') }}?v=2"></script>
+    {% endif %}
     <!-- Video annotation manager -->
+    {% if frontend_assets.video_annotation | default(false) %}
     <script src="{{ url_for('static', filename='video-annotation.js') }}?v=10"></script>
+    {% endif %}
 
     <!-- Span link manager -->
+    {% if frontend_assets.span_link | default(false) %}
     <script src="{{ url_for('static', filename='span-link-manager.js') }}?v=7"></script>
+    {% endif %}
 
     <!-- Event annotation manager -->
+    {% if frontend_assets.event_annotation | default(false) %}
     <script src="{{ url_for('static', filename='event-annotation.js') }}?v=1"></script>
+    {% endif %}
 
     <!-- Entity linking for knowledge bases (Wikidata, UMLS) -->
     <script src="{{ url_for('static', filename='entity-linking.js') }}?v=1"></script>
 
     <!-- Coreference chain manager -->
+    {% if frontend_assets.coreference | default(false) %}
     <script src="{{ url_for('static', filename='coreference-manager.js') }}?v=1"></script>
+    {% endif %}
 
     <!-- Segmentation tools -->
+    {% if frontend_assets.segmentation_tools | default(false) %}
     <script src="{{ url_for('static', filename='segmentation-tools.js') }}?v=1"></script>
+    {% endif %}
 
     <!-- Conversation tree interaction -->
+    {% if frontend_assets.conversation_tree | default(false) %}
     <script src="{{ url_for('static', filename='conversation-tree.js') }}?v=1"></script>
+    {% endif %}
 
     <!-- Video tracking interpolation and UI -->
+    {% if frontend_assets.tracking | default(false) %}
     <script src="{{ url_for('static', filename='tracking-interpolation.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='tracking-ui.js') }}?v=1"></script>
+    {% endif %}
 
     <!-- Triage annotation manager -->
+    {% if frontend_assets.triage | default(false) %}
     <script src="{{ url_for('static', filename='triage.js') }}?v=1"></script>
+    {% endif %}
 
     <!-- Tiered annotation manager (ELAN-style hierarchical annotation) -->
+    {% if frontend_assets.tiered_annotation | default(false) %}
     <script src="{{ url_for('static', filename='tiered-annotation.js') }}?v=1"></script>
+    {% endif %}
 
     <!-- Document bounding box annotation -->
+    {% if frontend_assets.document_bbox | default(false) %}
     <script src="{{ url_for('static', filename='document-bbox.js') }}?v=2"></script>
+    {% endif %}
 
     <!-- PDF bounding box annotation -->
+    {% if frontend_assets.pdf_bbox | default(false) %}
     <script src="{{ url_for('static', filename='pdf-bbox.js') }}?v=2"></script>
+    {% endif %}
 
     {% if agent_proxy_enabled | default(false) %}
     <!-- Agent Chat UI -->
@@ -416,11 +474,17 @@
     {% endif %}
 
     <!-- Web Agent Trace Viewer (overlays + step navigation) -->
+    {% if frontend_assets.web_agent_viewer | default(false) %}
     <script src="{{ url_for('static', filename='web-agent-overlays.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='web-agent-viewer.js') }}?v=1"></script>
+    {% endif %}
+    {% if frontend_assets.web_agent_playback | default(false) %}
     <script src="{{ url_for('static', filename='web-agent-playback.js') }}?v=1"></script>
+    {% endif %}
     <!-- Web Agent Interaction Recorder (creation mode) -->
+    {% if frontend_assets.web_agent_recorder | default(false) %}
     <script src="{{ url_for('static', filename='web-agent-recorder.js') }}?v=1"></script>
+    {% endif %}
     <!-- Live Agent Viewer (real-time agent interaction) -->
     {% if live_agent_enabled | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/live-agent.css') }}?v=1">
