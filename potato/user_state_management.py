@@ -471,6 +471,10 @@ class UserStateManager:
         self.task_assignment = {}
         self.prolific_study = None
         self.phase_type_to_name_to_page = defaultdict(OrderedDict)
+        self._configured_phase_sequence_cache: Optional[tuple[UserPhase, ...]] = None
+        self._configured_phase_index_cache: Dict[UserPhase, int] = {}
+        self._phase_page_order_cache: Dict[UserPhase, tuple[str, ...]] = {}
+        self._phase_page_index_cache: Dict[UserPhase, Dict[str, int]] = {}
 
         # Thread-safe lock for shared state access
         self._state_lock = threading.RLock()
@@ -517,7 +521,32 @@ class UserStateManager:
             phase_name: The name of the page within the phase
             page_fname: The filename of the HTML page
         """
+        self._ensure_phase_caches()
         self.phase_type_to_name_to_page[phase_type][phase_name] = page_fname
+        self._configured_phase_sequence_cache = None
+        self._configured_phase_index_cache = {}
+        self._phase_page_order_cache.pop(phase_type, None)
+        self._phase_page_index_cache.pop(phase_type, None)
+
+    def _ensure_phase_caches(self) -> None:
+        """Initialize derived phase caches when older tests bypass __init__."""
+        if not hasattr(self, "_configured_phase_sequence_cache"):
+            self._configured_phase_sequence_cache = None
+        if not hasattr(self, "_configured_phase_index_cache"):
+            self._configured_phase_index_cache = {}
+        if not hasattr(self, "_phase_page_order_cache"):
+            self._phase_page_order_cache = {}
+        if not hasattr(self, "_phase_page_index_cache"):
+            self._phase_page_index_cache = {}
+
+    def _get_phase_pages(self, phase: UserPhase) -> tuple[str, ...]:
+        """Return cached page ordering for a phase."""
+        self._ensure_phase_caches()
+        if phase not in self._phase_page_order_cache:
+            pages = tuple(self.phase_type_to_name_to_page.get(phase, {}).keys())
+            self._phase_page_order_cache[phase] = pages
+            self._phase_page_index_cache[phase] = {page: i for i, page in enumerate(pages)}
+        return self._phase_page_order_cache[phase]
 
     def add_user(self, user_id: str) -> UserState:
         """
@@ -718,6 +747,10 @@ class UserStateManager:
         falls back to the enum declaration order filtered to phases that
         have registered page templates.
         '''
+        self._ensure_phase_caches()
+        if self._configured_phase_sequence_cache is not None:
+            return list(self._configured_phase_sequence_cache)
+
         if "phases" in self.config and "order" in self.config["phases"]:
             config_phase_order = self.config["phases"]["order"]
             config_phases = []
@@ -734,14 +767,19 @@ class UserStateManager:
 
             if UserPhase.ANNOTATION not in config_phases:
                 config_phases.append(UserPhase.ANNOTATION)
-            return config_phases
+            configured = tuple(config_phases)
         else:
-            return [p for p in list(UserPhase) if p in self.phase_type_to_name_to_page]
+            configured = tuple(p for p in list(UserPhase) if p in self.phase_type_to_name_to_page)
+
+        self._configured_phase_sequence_cache = configured
+        self._configured_phase_index_cache = {phase: i for i, phase in enumerate(configured)}
+        return list(configured)
 
     def get_next_user_phase_page(self, user_id: str) -> tuple[UserPhase,str]:
         '''Returns the name and filename of next the page for the user, either
            in the current phase or next phase. This method handles the
            case of where there are multiple pages within the same phase type'''
+        self._ensure_phase_caches()
 
         # Get the current user's state
         user_state = self.get_user_state(user_id)
@@ -751,22 +789,17 @@ class UserStateManager:
         if cur_phase == UserPhase.DONE:
             return UserPhase.DONE, None
 
-        page2file_for_cur_phase = self.phase_type_to_name_to_page[cur_phase]
-        if len(page2file_for_cur_phase) > 1 and cur_page is not None:
-            pages_for_cur_phase = list(page2file_for_cur_phase.keys())
-            # Handle case where cur_page is not in the list
-            if cur_page in pages_for_cur_phase:
-                cur_page_index = pages_for_cur_phase.index(cur_page)
-                # If there are more pages in this phase, return the next one
-                if cur_page_index < len(pages_for_cur_phase) - 1:
-                    next_page = pages_for_cur_phase[cur_page_index + 1]
-                    return cur_phase, next_page
+        pages_for_cur_phase = self._get_phase_pages(cur_phase)
+        if len(pages_for_cur_phase) > 1 and cur_page is not None:
+            cur_page_index = self._phase_page_index_cache.get(cur_phase, {}).get(cur_page)
+            if cur_page_index is not None and cur_page_index < len(pages_for_cur_phase) - 1:
+                return cur_phase, pages_for_cur_phase[cur_page_index + 1]
 
         # If there are no more pages in this phase, return the next phase.
         config_phases = self._get_configured_phase_sequence()
 
-        if cur_phase in config_phases:
-            cur_phase_index = config_phases.index(cur_phase)
+        cur_phase_index = self._configured_phase_index_cache.get(cur_phase)
+        if cur_phase_index is not None:
             if cur_phase_index < len(config_phases) - 1:
                 next_phase = config_phases[cur_phase_index + 1]
                 # ANNOTATION phase is handled by the annotate route
@@ -774,8 +807,8 @@ class UserStateManager:
                 if next_phase == UserPhase.ANNOTATION:
                     return next_phase, None
                 # Use the first page in the next phase
-                next_page = list(self.phase_type_to_name_to_page[next_phase].keys())[0]
-                return next_phase, next_page
+                next_pages = self._get_phase_pages(next_phase)
+                return next_phase, next_pages[0] if next_pages else None
         else:
             # Current phase not in config_phases (e.g., LOGIN).
             # Advance to the first config phase.
@@ -783,14 +816,15 @@ class UserStateManager:
                 first_phase = config_phases[0]
                 if first_phase == UserPhase.ANNOTATION:
                     return first_phase, None
-                first_page = list(self.phase_type_to_name_to_page[first_phase].keys())[0]
-                return first_phase, first_page
+                first_pages = self._get_phase_pages(first_phase)
+                return first_phase, first_pages[0] if first_pages else None
 
         return UserPhase.DONE, None
 
     def get_prev_user_phase_page(self, user_id: str) -> tuple[UserPhase, str]:
         '''Returns the previous page for the user, either in the current phase
            or the previous configured phase.'''
+        self._ensure_phase_caches()
 
         user_state = self.get_user_state(user_id)
         cur_phase, cur_page = user_state.get_current_phase_and_page()
@@ -804,26 +838,25 @@ class UserStateManager:
                 prev_phase = config_phases[-1]
                 if prev_phase == UserPhase.ANNOTATION:
                     return prev_phase, None
-                prev_page = list(self.phase_type_to_name_to_page[prev_phase].keys())[-1]
-                return prev_phase, prev_page
+                prev_pages = self._get_phase_pages(prev_phase)
+                return prev_phase, prev_pages[-1] if prev_pages else None
             return UserPhase.LOGIN, None
 
         if cur_phase != UserPhase.ANNOTATION and cur_phase in self.phase_type_to_name_to_page:
-            pages_for_cur_phase = list(self.phase_type_to_name_to_page[cur_phase].keys())
-            if len(pages_for_cur_phase) > 1 and cur_page in pages_for_cur_phase:
-                cur_page_index = pages_for_cur_phase.index(cur_page)
-                if cur_page_index > 0:
-                    return cur_phase, pages_for_cur_phase[cur_page_index - 1]
+            pages_for_cur_phase = self._get_phase_pages(cur_phase)
+            cur_page_index = self._phase_page_index_cache.get(cur_phase, {}).get(cur_page)
+            if len(pages_for_cur_phase) > 1 and cur_page_index is not None and cur_page_index > 0:
+                return cur_phase, pages_for_cur_phase[cur_page_index - 1]
 
         config_phases = self._get_configured_phase_sequence()
-        if cur_phase in config_phases:
-            cur_phase_index = config_phases.index(cur_phase)
+        cur_phase_index = self._configured_phase_index_cache.get(cur_phase)
+        if cur_phase_index is not None:
             if cur_phase_index > 0:
                 prev_phase = config_phases[cur_phase_index - 1]
                 if prev_phase == UserPhase.ANNOTATION:
                     return prev_phase, None
-                prev_page = list(self.phase_type_to_name_to_page[prev_phase].keys())[-1]
-                return prev_phase, prev_page
+                prev_pages = self._get_phase_pages(prev_phase)
+                return prev_phase, prev_pages[-1] if prev_pages else None
 
         return cur_phase, cur_page
 
@@ -942,10 +975,15 @@ class UserStateManager:
 
     def clear(self):
         """Clear all user state (for testing/debugging)."""
+        self._ensure_phase_caches()
         self.user_to_annotation_state.clear()
         self.task_assignment.clear()
         self.prolific_study = None
         self.phase_type_to_name_to_page.clear()
+        self._configured_phase_sequence_cache = None
+        self._configured_phase_index_cache = {}
+        self._phase_page_order_cache.clear()
+        self._phase_page_index_cache.clear()
         self.max_annotations_per_user = -1
 
         # Clear database if using it
@@ -1642,6 +1680,8 @@ class InMemoryUserState(UserState):
         # labeled so that, should orderings differ between users, we can still determine
         # the previous and next instances if a user navigates back and forth.
         self.instance_id_ordering = []
+        self.instance_id_to_order = {}
+        self.instance_id_to_data = {}
 
         # Utilit data structure for O(1) look up of whether some ID is already in our ordering
         self.assigned_instance_ids = set()
@@ -1770,8 +1810,8 @@ class InMemoryUserState(UserState):
         """
         for key in new_assigned_data:
             self.instance_id_to_data[key] = new_assigned_data[key]
+            self.instance_id_to_order[key] = len(self.instance_id_ordering)
             self.instance_id_ordering.append(key)
-        self.instance_id_to_order = self.generate_id_order_mapping(self.instance_id_ordering)
 
     def advance_to_phase(self, phase: UserPhase, page: str) -> None:
         # print('advancing to', phase, page)
@@ -1784,8 +1824,10 @@ class InMemoryUserState(UserState):
         if item.get_id() in self.assigned_instance_ids:
             return
         #print('Assigned %s to %s' % (item.get_id(), self.instance_id_ordering   ))
-        self.instance_id_ordering.append(item.get_id())
-        self.assigned_instance_ids.add(item.get_id())
+        item_id = item.get_id()
+        self.instance_id_to_order[item_id] = len(self.instance_id_ordering)
+        self.instance_id_ordering.append(item_id)
+        self.assigned_instance_ids.add(item_id)
         # If this is the first assigned instance, set the current instance to be the first one
         if self.current_instance_index == -1:
             self.current_instance_index = 0
@@ -1805,12 +1847,13 @@ class InMemoryUserState(UserState):
             return None
         inst_id = self.instance_id_ordering[self.current_instance_index]
         ism = get_item_state_manager()
-        if not ism.has_item(inst_id):
+        try:
+            return ism.get_item(inst_id)
+        except KeyError:
             # Item may be a dynamically injected QC item that wasn't
             # rehydrated after restart. Skip it gracefully.
             logger.warning(f"Instance '{inst_id}' in user ordering but not in item manager, skipping")
             return None
-        return ism.get_item(inst_id)
 
     def get_current_instance_id(self) -> str:
         '''Returns the ID of the instance that the user is currently annotating'''

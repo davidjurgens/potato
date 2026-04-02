@@ -9,7 +9,7 @@ Tests for:
 
 import pytest
 from potato.user_state_management import InMemoryUserState, UserPhase
-from potato.item_state_management import Label, SpanAnnotation
+from potato.item_state_management import Item, Label, SpanAnnotation
 
 
 class TestFindNextUnannotatedIndex:
@@ -373,3 +373,17 @@ class TestNavigationIntegration:
         # Valid: go back to 0
         user.go_to_index(0)
         assert user.current_instance_index == 0
+
+
+class TestInstanceOrderingLookup:
+    """Tests that instance ordering lookups stay in sync during assignment."""
+
+    def test_assign_instance_updates_order_lookup(self):
+        user = InMemoryUserState("test_user")
+
+        user.assign_instance(Item("item0", {"text": "first"}))
+        user.assign_instance(Item("item1", {"text": "second"}))
+
+        assert user.instance_id_ordering == ["item0", "item1"]
+        assert user.instance_id_to_order == {"item0": 0, "item1": 1}
+        assert user.get_current_instance_index() == 0

@@ -122,6 +122,8 @@ app.register_blueprint(solo_mode_bp)
 from potato.logging_config import get_logger, setup_logging
 logger = get_logger(__name__)
 
+_FRONTEND_TEMPLATE_TEXT_CACHE: dict[str, tuple[float, str]] = {}
+
 # Set random seed for reproducible behavior
 random.seed(0)
 
@@ -260,6 +262,70 @@ class ActiveLearningState:
 
 # Set session timeout duration (e.g., 30 minutes)
 SESSION_TIMEOUT = timedelta(minutes=1)
+
+
+def _read_cached_template_text(path: str) -> str:
+    """Read a generated template file with a lightweight mtime cache."""
+    if not path:
+        return ""
+
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        return ""
+
+    cached = _FRONTEND_TEMPLATE_TEXT_CACHE.get(path)
+    if cached and cached[0] == mtime:
+        return cached[1]
+
+    try:
+        with open(path, "rt", encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return ""
+
+    _FRONTEND_TEMPLATE_TEXT_CACHE[path] = (mtime, text)
+    return text
+
+
+def _detect_frontend_assets_for_page(html_file: str, display_html: str = "") -> dict[str, bool]:
+    """
+    Detect which frontend assets are needed for the current page only.
+
+    This avoids loading every specialized bundle just because some other phase
+    in the overall task config happens to use it.
+    """
+    page_html = _read_cached_template_text(html_file)
+    combined_html = f"{page_html}\n{display_html or ''}"
+
+    def has_any(*markers: str) -> bool:
+        return any(marker in combined_html for marker in markers)
+
+    image_annotation = has_any("image-annotation-container")
+    audio_annotation = has_any("audio-annotation-container")
+    video_annotation = has_any("video-annotation-container")
+    coreference = has_any('data-annotation-type="coreference"', "coref-chain-panel")
+    web_agent_viewer = has_any('class="web-agent-viewer"', 'class="live-agent-viewer"')
+
+    return {
+        "image_annotation": image_annotation,
+        "audio_annotation": audio_annotation,
+        "video_annotation": video_annotation,
+        "segmentation_tools": image_annotation,
+        "span_link": has_any("span-link-container") or coreference,
+        "event_annotation": has_any("event-annotation-container"),
+        "coreference": coreference,
+        "conversation_tree": has_any("conversation-tree"),
+        "tracking": has_any("tracking-panel", "tracking-overlay", "tracking-controls-group"),
+        "triage": has_any('class="annotation-form triage"', 'data-annotation-type="triage"', "triage-container"),
+        "tiered_annotation": has_any("tiered-annotation-container"),
+        "document_bbox": has_any("document-bbox-mode", "document-bbox-container", "document-bbox-canvas"),
+        "pdf_bbox": has_any("pdf-bbox-mode", "pdf-bbox-container", "pdf-bbox-canvas"),
+        "web_agent_viewer": web_agent_viewer,
+        "web_agent_playback": has_any('data-auto-playback="true"'),
+        "web_agent_recorder": has_any("web-agent-recorder"),
+        "live_coding_agent": has_any("live-coding-agent-viewer"),
+    }
 
 
 def _apply_annotation_filter(items: list, filter_config: dict, id_key: str) -> list:
@@ -1918,6 +1984,7 @@ def render_page_with_annotations(username: str):
 
     # Get UI configuration from config
     ui_config = config.get("ui", {})
+    annotation_schemes = config.get("annotation_schemes", [])
 
     # Add layout configuration to ui_config for JavaScript access
     if config.get("layout"):
@@ -1928,7 +1995,7 @@ def render_page_with_annotations(username: str):
     # This is used to customize the display (show "Video to Annotate:" instead of "Text to Annotate:")
     has_video_annotation = any(
         scheme.get("annotation_type") == "video_annotation"
-        for scheme in config.get("annotation_schemes", [])
+        for scheme in annotation_schemes
     )
 
     # Detect if any annotation scheme is audio_annotation type (or tiered_annotation with audio media)
@@ -1936,15 +2003,17 @@ def render_page_with_annotations(username: str):
     has_audio_annotation = any(
         scheme.get("annotation_type") == "audio_annotation"
         or (scheme.get("annotation_type") == "tiered_annotation" and scheme.get("media_type") == "audio")
-        for scheme in config.get("annotation_schemes", [])
+        for scheme in annotation_schemes
     )
 
     # Detect if any annotation scheme is image_annotation type
     # This is used to customize the display (show "Image to Annotate:" instead of "Text to Annotate:")
     has_image_annotation = any(
         scheme.get("annotation_type") == "image_annotation"
-        for scheme in config.get("annotation_schemes", [])
+        for scheme in annotation_schemes
     )
+
+    frontend_assets = _detect_frontend_assets_for_page(html_file, display_html)
 
     # Check if AI support is enabled (for conditional loading of visual_ai_assistant.js)
     ai_enabled = config.get("ai_support", {}).get("enabled", False)
@@ -2003,7 +2072,7 @@ def render_page_with_annotations(username: str):
         var_elems=var_elems_html,
         custom_js=custom_js,
         # Pass annotation schemes to the template
-        annotation_schemes=config["annotation_schemes"],
+        annotation_schemes=annotation_schemes,
         annotation_task_name=config["annotation_task_name"],
         debug=config.get("debug", False),
         ui_config=ui_config,
@@ -2021,6 +2090,7 @@ def render_page_with_annotations(username: str):
         display_raw=display_template_vars.get("display_raw", {}),
         span_targets=display_template_vars.get("span_targets", []),
         multi_span_mode=display_template_vars.get("multi_span_mode", False),
+        frontend_assets=frontend_assets,
         # Agent proxy (for conditional loading of agent-chat assets)
         agent_proxy_enabled=agent_proxy_enabled,
         # Chat support (for conditional loading of llm-chat-sidebar assets)
