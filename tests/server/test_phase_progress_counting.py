@@ -975,13 +975,16 @@ class TestHasRemainingAssignments:
                 # Should always have remaining with unlimited
                 assert user_state.has_remaining_assignments() is True
 
-                # Even after annotating
+                # After annotating some items, still has remaining
                 label = Label(schema="sentiment", name="test")
-                for i in range(1, 6):
+                for i in range(1, 4):
                     user_state.add_label_annotation(f"item_{i}", label, "Positive")
+                assert user_state.has_remaining_assignments() is True  # 3/5 annotated
 
-                # Still has remaining (unlimited mode)
-                assert user_state.has_remaining_assignments() is True
+                # After annotating all items, no remaining even in unlimited mode
+                for i in range(4, 6):
+                    user_state.add_label_annotation(f"item_{i}", label, "Positive")
+                assert user_state.has_remaining_assignments() is False  # all items exhausted
 
             finally:
                 os.chdir(old_cwd)
@@ -1046,6 +1049,76 @@ class TestHasRemainingAssignments:
 
                 user_state.add_label_annotation("item_3", label, "Positive")
                 assert user_state.has_remaining_assignments() is False  # 3/3 - done!
+
+            finally:
+                os.chdir(old_cwd)
+                reset_singletons()
+
+    def test_cap_exceeds_available_items(self):
+        """Test that users finish cleanly when max_assignments exceeds the item pool.
+
+        Reproduces the bug from PR #141: if max_assignments=20 but only 3 items
+        exist, has_remaining_assignments() should return False once those 3 items
+        are annotated, rather than keeping the user stuck because 3 < 20.
+        """
+        reset_singletons()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            create_multi_phase_config(tmpdir,
+                training={"enabled": False},
+                max_annotations_per_user=20  # Cap far exceeds available items
+            )
+            create_test_data(tmpdir, num_items=3)  # Only 3 items
+
+            old_cwd = os.getcwd()
+            os.chdir(tmpdir)
+
+            try:
+                from potato.server_utils.config_module import init_config, config
+                from potato.item_state_management import init_item_state_manager, Label
+                from potato.user_state_management import init_user_state_manager
+                from potato.phase import UserPhase
+
+                class Args:
+                    config_file = os.path.join(tmpdir, 'config.yaml')
+                    verbose = False
+                    very_verbose = False
+                    customjs = None
+                    customjs_hostname = None
+                    debug = False
+                    persist_sessions = False
+                    require_password = None
+                    port = None
+
+                init_config(Args())
+                ism = init_item_state_manager(config)
+                usm = init_user_state_manager(config)
+
+                # Load data (only 3 items)
+                with open(os.path.join(tmpdir, 'test_data.json')) as f:
+                    data = json.load(f)
+                for item in data:
+                    ism.add_item(item['id'], item)
+
+                usm.add_user("test_user")
+                user_state = usm.get_user_state("test_user")
+                user_state.advance_to_phase(UserPhase.ANNOTATION, None)
+                user_state.set_max_assignments(20)
+
+                # Should have remaining initially (3 items available, 0/20 annotated)
+                assert user_state.has_remaining_assignments() is True
+
+                # Annotate all 3 available items
+                label = Label(schema="sentiment", name="test")
+                user_state.add_label_annotation("item_1", label, "Positive")
+                assert user_state.has_remaining_assignments() is True  # 1/20, 2 items left
+
+                user_state.add_label_annotation("item_2", label, "Positive")
+                assert user_state.has_remaining_assignments() is True  # 2/20, 1 item left
+
+                user_state.add_label_annotation("item_3", label, "Positive")
+                # Key assertion: 3/20 annotated but pool is exhausted — user should finish
+                assert user_state.has_remaining_assignments() is False
 
             finally:
                 os.chdir(old_cwd)

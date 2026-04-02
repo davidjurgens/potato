@@ -288,6 +288,30 @@ def _read_cached_template_text(path: str) -> str:
     return text
 
 
+# Authoritative mapping from asset key to the HTML markers that trigger loading.
+# Tests verify these markers appear in the actual schema/display generators,
+# so adding a new generator or renaming a CSS class will cause a test failure
+# rather than a silent asset-loading miss.
+FRONTEND_ASSET_MARKERS: dict[str, tuple[str, ...]] = {
+    "image_annotation": ("image-annotation-container",),
+    "audio_annotation": ("audio-annotation-container",),
+    "video_annotation": ("video-annotation-container",),
+    "span_link": ("span-link-container",),
+    "event_annotation": ("event-annotation-container",),
+    "coreference": ('data-annotation-type="coreference"', "coref-chain-panel"),
+    "conversation_tree": ("conv-tree",),
+    "tracking": ("tracking-panel", "tracking-overlay", "tracking-controls-group"),
+    "triage": ('class="annotation-form triage"', 'data-annotation-type="triage"', "triage-container"),
+    "tiered_annotation": ("tiered-annotation-container",),
+    "document_bbox": ("document-bbox-mode", "document-bbox-container", "document-bbox-canvas"),
+    "pdf_bbox": ("pdf-bbox-mode", "pdf-bbox-container", "pdf-bbox-canvas"),
+    "web_agent_viewer": ('class="web-agent-viewer"', 'class="live-agent-viewer"'),
+    "web_agent_playback": ('data-auto-playback="true"',),
+    "web_agent_recorder": ("web-agent-recorder",),
+    "live_coding_agent": ("live-coding-agent-viewer",),
+}
+
+
 def _detect_frontend_assets_for_page(html_file: str, display_html: str = "") -> dict[str, bool]:
     """
     Detect which frontend assets are needed for the current page only.
@@ -301,31 +325,14 @@ def _detect_frontend_assets_for_page(html_file: str, display_html: str = "") -> 
     def has_any(*markers: str) -> bool:
         return any(marker in combined_html for marker in markers)
 
-    image_annotation = has_any("image-annotation-container")
-    audio_annotation = has_any("audio-annotation-container")
-    video_annotation = has_any("video-annotation-container")
-    coreference = has_any('data-annotation-type="coreference"', "coref-chain-panel")
-    web_agent_viewer = has_any('class="web-agent-viewer"', 'class="live-agent-viewer"')
+    detected = {key: has_any(*markers) for key, markers in FRONTEND_ASSET_MARKERS.items()}
 
-    return {
-        "image_annotation": image_annotation,
-        "audio_annotation": audio_annotation,
-        "video_annotation": video_annotation,
-        "segmentation_tools": image_annotation,
-        "span_link": has_any("span-link-container") or coreference,
-        "event_annotation": has_any("event-annotation-container"),
-        "coreference": coreference,
-        "conversation_tree": has_any("conversation-tree"),
-        "tracking": has_any("tracking-panel", "tracking-overlay", "tracking-controls-group"),
-        "triage": has_any('class="annotation-form triage"', 'data-annotation-type="triage"', "triage-container"),
-        "tiered_annotation": has_any("tiered-annotation-container"),
-        "document_bbox": has_any("document-bbox-mode", "document-bbox-container", "document-bbox-canvas"),
-        "pdf_bbox": has_any("pdf-bbox-mode", "pdf-bbox-container", "pdf-bbox-canvas"),
-        "web_agent_viewer": web_agent_viewer,
-        "web_agent_playback": has_any('data-auto-playback="true"'),
-        "web_agent_recorder": has_any("web-agent-recorder"),
-        "live_coding_agent": has_any("live-coding-agent-viewer"),
-    }
+    # segmentation_tools is an alias — loaded whenever image_annotation is present
+    detected["segmentation_tools"] = detected["image_annotation"]
+    # span_link also loads when coreference is present
+    detected["span_link"] = detected["span_link"] or detected["coreference"]
+
+    return detected
 
 
 def _apply_annotation_filter(items: list, filter_config: dict, id_key: str) -> list:
