@@ -4046,12 +4046,27 @@ def update_instance():
             logger.error(f"User state not found for user: {username}")
             return jsonify({"status": "error", "message": "User state not found"})
 
-        # Guard: reject updates for instances not assigned to this user
-        if user_state.get_phase() == UserPhase.ANNOTATION:
+        # Synthetic phase-page saves use a sentinel instance ID from annotation.js.
+        # They should be routed by the current user phase instead of assignment checks.
+        is_phase_page_update = instance_id == "__phase_page__"
+
+        # Guard: reject updates for instances not assigned to this user.
+        # Skip this for synthetic phase-page updates so non-annotation page autosaves
+        # do not get treated like dataset item writes.
+        if user_state.get_phase() == UserPhase.ANNOTATION and not is_phase_page_update:
             assigned_ids = user_state.get_assigned_instance_ids()
             if assigned_ids and instance_id not in assigned_ids:
                 logger.warning(f"User {username} tried to update unassigned instance {instance_id}")
                 return jsonify({"status": "error", "message": "Instance not assigned to user"})
+
+        # If a synthetic phase-page save arrives while the backend still thinks the user
+        # is in annotation, acknowledge it without writing item state. This avoids a
+        # noisy warning/error path during end-of-annotation transitions.
+        if user_state.get_phase() == UserPhase.ANNOTATION and is_phase_page_update:
+            logger.info(
+                f"Ignoring synthetic phase-page update for user {username} while still in annotation phase"
+            )
+            return jsonify({"status": "ok", "message": "Ignored synthetic phase-page update"})
 
         # Debug: Log user phase for debugging annotation storage issues
         logger.debug(f"User '{username}' phase: {user_state.get_phase()}, current_phase_and_page: {user_state.current_phase_and_page}")

@@ -2182,12 +2182,16 @@ class InMemoryUserState(UserState):
 
     def has_remaining_assignments(self) -> bool:
         """Returns True if the user has any remaining instances to annotate."""
-        if self.max_assignments >= 0:
-            # Explicit cap: user must annotate exactly this many items
-            return len(self.get_annotated_instance_ids()) < self.max_assignments
-        # Unlimited: check if there are actually items left in the dataset
         from potato.item_state_management import get_item_state_manager
-        return get_item_state_manager().has_unlabeled_items_for_user(self)
+
+        has_available_items = get_item_state_manager().has_unlabeled_items_for_user(self)
+
+        if self.max_assignments >= 0:
+            # Explicit cap: the user may annotate up to this many items, but should
+            # still finish cleanly if the dataset/eligible pool is exhausted first.
+            return len(self.get_annotated_instance_ids()) < self.max_assignments and has_available_items
+
+        return has_available_items
 
     def find_next_unannotated_index(self) -> Optional[int]:
         """

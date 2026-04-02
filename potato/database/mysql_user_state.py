@@ -462,9 +462,14 @@ class MysqlUserState(UserState):
 
     def has_remaining_assignments(self) -> bool:
         """Check if the user has remaining assignments."""
-        if self.max_assignments < 0:
-            return True
-        return self.get_annotation_count() < self.max_assignments
+        from potato.item_state_management import get_item_state_manager
+
+        has_available_items = get_item_state_manager().has_unlabeled_items_for_user(self)
+
+        if self.max_assignments >= 0:
+            return self.get_annotation_count() < self.max_assignments and has_available_items
+
+        return has_available_items
 
     def set_max_assignments(self, max_assignments: int) -> None:
         """Set the maximum number of assignments."""
