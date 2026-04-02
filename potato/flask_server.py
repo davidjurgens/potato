@@ -122,6 +122,8 @@ app.register_blueprint(solo_mode_bp)
 from potato.logging_config import get_logger, setup_logging
 logger = get_logger(__name__)
 
+_FRONTEND_TEMPLATE_TEXT_CACHE: dict[str, tuple[float, str]] = {}
+
 # Set random seed for reproducible behavior
 random.seed(0)
 
@@ -260,6 +262,70 @@ class ActiveLearningState:
 
 # Set session timeout duration (e.g., 30 minutes)
 SESSION_TIMEOUT = timedelta(minutes=1)
+
+
+def _read_cached_template_text(path: str) -> str:
+    """Read a generated template file with a lightweight mtime cache."""
+    if not path:
+        return ""
+
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        return ""
+
+    cached = _FRONTEND_TEMPLATE_TEXT_CACHE.get(path)
+    if cached and cached[0] == mtime:
+        return cached[1]
+
+    try:
+        with open(path, "rt", encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return ""
+
+    _FRONTEND_TEMPLATE_TEXT_CACHE[path] = (mtime, text)
+    return text
+
+
+def _detect_frontend_assets_for_page(html_file: str, display_html: str = "") -> dict[str, bool]:
+    """
+    Detect which frontend assets are needed for the current page only.
+
+    This avoids loading every specialized bundle just because some other phase
+    in the overall task config happens to use it.
+    """
+    page_html = _read_cached_template_text(html_file)
+    combined_html = f"{page_html}\n{display_html or ''}"
+
+    def has_any(*markers: str) -> bool:
+        return any(marker in combined_html for marker in markers)
+
+    image_annotation = has_any("image-annotation-container")
+    audio_annotation = has_any("audio-annotation-container")
+    video_annotation = has_any("video-annotation-container")
+    coreference = has_any('data-annotation-type="coreference"', "coref-chain-panel")
+    web_agent_viewer = has_any('class="web-agent-viewer"', 'class="live-agent-viewer"')
+
+    return {
+        "image_annotation": image_annotation,
+        "audio_annotation": audio_annotation,
+        "video_annotation": video_annotation,
+        "segmentation_tools": image_annotation,
+        "span_link": has_any("span-link-container") or coreference,
+        "event_annotation": has_any("event-annotation-container"),
+        "coreference": coreference,
+        "conversation_tree": has_any("conversation-tree"),
+        "tracking": has_any("tracking-panel", "tracking-overlay", "tracking-controls-group"),
+        "triage": has_any('class="annotation-form triage"', 'data-annotation-type="triage"', "triage-container"),
+        "tiered_annotation": has_any("tiered-annotation-container"),
+        "document_bbox": has_any("document-bbox-mode", "document-bbox-container", "document-bbox-canvas"),
+        "pdf_bbox": has_any("pdf-bbox-mode", "pdf-bbox-container", "pdf-bbox-canvas"),
+        "web_agent_viewer": web_agent_viewer,
+        "web_agent_playback": has_any('data-auto-playback="true"'),
+        "web_agent_recorder": has_any("web-agent-recorder"),
+        "live_coding_agent": has_any("live-coding-agent-viewer"),
+    }
 
 
 def _apply_annotation_filter(items: list, filter_config: dict, id_key: str) -> list:
@@ -1919,16 +1985,6 @@ def render_page_with_annotations(username: str):
     # Get UI configuration from config
     ui_config = config.get("ui", {})
     annotation_schemes = config.get("annotation_schemes", [])
-    annotation_types = {
-        scheme.get("annotation_type")
-        for scheme in annotation_schemes
-        if scheme.get("annotation_type")
-    }
-    display_types = {
-        field.get("type")
-        for field in config.get("instance_display", {}).get("fields", [])
-        if field.get("type")
-    }
 
     # Add layout configuration to ui_config for JavaScript access
     if config.get("layout"):
@@ -1957,25 +2013,7 @@ def render_page_with_annotations(username: str):
         for scheme in annotation_schemes
     )
 
-    frontend_assets = {
-        "image_annotation": has_image_annotation,
-        "audio_annotation": has_audio_annotation,
-        "video_annotation": has_video_annotation,
-        "segmentation_tools": has_image_annotation,
-        "span_link": "span_link" in annotation_types or "coreference" in annotation_types,
-        "event_annotation": "event_annotation" in annotation_types,
-        "coreference": "coreference" in annotation_types,
-        "conversation_tree": "conversation_tree" in display_types,
-        "tracking": has_video_annotation or "video" in display_types,
-        "triage": "triage" in annotation_types,
-        "tiered_annotation": "tiered_annotation" in annotation_types,
-        "document_bbox": "document" in display_types,
-        "pdf_bbox": "pdf" in display_types,
-        "web_agent_viewer": bool(display_types & {"web_agent_trace", "live_agent"}),
-        "web_agent_playback": "web_agent_trace" in display_types,
-        "web_agent_recorder": "web_agent_recorder" in display_types,
-        "live_coding_agent": "live_coding_agent" in display_types,
-    }
+    frontend_assets = _detect_frontend_assets_for_page(html_file, display_html)
 
     # Check if AI support is enabled (for conditional loading of visual_ai_assistant.js)
     ai_enabled = config.get("ai_support", {}).get("enabled", False)
