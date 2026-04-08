@@ -2013,8 +2013,6 @@ def render_page_with_annotations(username: str):
         for scheme in annotation_schemes
     )
 
-    frontend_assets = _detect_frontend_assets_for_page(html_file, display_html)
-
     # Check if AI support is enabled (for conditional loading of visual_ai_assistant.js)
     ai_enabled = config.get("ai_support", {}).get("enabled", False)
 
@@ -2046,6 +2044,8 @@ def render_page_with_annotations(username: str):
         except Exception as e:
             logger.error(f"Error rendering instance display: {e}")
             has_instance_display = False  # Fall back to legacy mode
+
+    frontend_assets = _detect_frontend_assets_for_page(html_file, display_html)
 
     # Get IBWS round info if active
     ibws_round_info = None

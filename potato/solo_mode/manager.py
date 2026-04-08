@@ -1560,22 +1560,26 @@ class SoloModeManager:
         schemes = self.app_config.get('annotation_schemes', [])
         schema_name = schemes[0].get('name', 'default') if schemes else 'default'
 
-        instances = []
+        # Collect candidate IDs under the lock, then fetch texts outside it
+        # to avoid blocking the main thread during potentially slow text lookups.
         with self._lock:
-            for instance_id in ism.instance_id_ordering:
-                if instance_id in self.llm_labeled_ids:
-                    continue
-                if instance_id in self.human_labeled_ids:
-                    continue
-                text = self._get_instance_text(instance_id)
-                if text:
-                    instances.append({
-                        'instance_id': instance_id,
-                        'text': text,
-                        'schema_name': schema_name,
-                    })
-                if len(instances) >= batch_size:
-                    break
+            candidate_ids = [
+                instance_id for instance_id in ism.instance_id_ordering
+                if instance_id not in self.llm_labeled_ids
+                and instance_id not in self.human_labeled_ids
+            ]
+
+        instances = []
+        for instance_id in candidate_ids:
+            text = self._get_instance_text(instance_id)
+            if text:
+                instances.append({
+                    'instance_id': instance_id,
+                    'text': text,
+                    'schema_name': schema_name,
+                })
+            if len(instances) >= batch_size:
+                break
         return instances
 
     # === Validation ===
@@ -1800,7 +1804,7 @@ class SoloModeManager:
             if instance_id not in self.predictions:
                 return False
             for schema_name, pred in self.predictions[instance_id].items():
-                if pred.agrees_with_human is False:
+                if pred.agrees_with_human is False and not pred.disagreement_resolved:
                     return True
             return False
 

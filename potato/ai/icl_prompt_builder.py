@@ -136,12 +136,13 @@ Respond with a JSON object containing:
 
 **Important:**
 - Only use labels from the provided list
-- Be honest about your confidence - if uncertain, give a lower score
+- Be honest about your confidence - reflect your actual certainty, not a fixed value
 - Base your decision on the examples and schema description
+- Use the full 0.0–1.0 range: reserve 0.9+ for near-certain cases, use 0.4–0.6 when genuinely unsure
 
-Example response:
+Example response (the confidence value here is illustrative only — yours should reflect actual certainty):
 ```json
-{{"label": "example_label", "confidence": 0.85, "reasoning": "The text shows clear indicators of..."}}
+{{"label": "example_label", "confidence": 0.72, "reasoning": "The text shows clear indicators of..."}}
 ```
 
 Now provide your response as JSON:
@@ -277,12 +278,12 @@ class MultiSelectPromptBuilder(ICLPromptBuilder):
 
 Respond with a JSON object containing:
 - `labels`: Array of selected labels (from: {labels_json})
-- `confidence`: Your overall confidence score from 0.0 to 1.0
+- `confidence`: Your overall confidence score from 0.0 to 1.0 — reflect actual certainty, not a fixed value
 - `reasoning`: Brief explanation for your choices
 
-Example response:
+Example response (the confidence value here is illustrative only — yours should reflect actual certainty):
 ```json
-{{"labels": ["label1", "label2"], "confidence": 0.8, "reasoning": "The text exhibits both..."}}
+{{"labels": ["label1", "label2"], "confidence": 0.65, "reasoning": "The text exhibits both..."}}
 ```
 
 Now provide your response as JSON:
