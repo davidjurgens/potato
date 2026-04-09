@@ -117,7 +117,11 @@
 
 ## Release Notes
 
+- [v2.4.4](releasenotes/v2.4.4.md) - Span Annotation Fixes & UX Improvements
+- [v2.4.3](releasenotes/v2.4.3.md) - Coding Agent Annotation, Localization & Stability
+- [v2.4.1](releasenotes/v2.4.1.md) - Bug Fixes
 - [v2.4.0](releasenotes/v2.4.0.md) - Agent Evaluation, AI-Assisted Annotation & Enterprise Integration
+- [v2.3.0](releasenotes/v2.3.0.md) - Solo Mode, Agent Workflows & Security Hardening
 - [v2.2.0](releasenotes/v2.2.0.md) - Comprehensive Annotation & Export Platform
 - [v2.1.0](releasenotes/v2.1.0.md) - Adjudication & Multi-Modal Annotation
 - [v2.0.0](releasenotes/v2.0.0.md) - Backend Refactor

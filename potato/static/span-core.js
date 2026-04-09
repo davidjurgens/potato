@@ -197,6 +197,10 @@ class UnifiedPositioningStrategy {
                 });
                 cumulativeOffset += node.textContent.length;
             } else if (node.nodeType === Node.ELEMENT_NODE) {
+                // Skip overlay containers - their label/button text must not affect offset calculations
+                if (node.id === 'span-overlays' || node.classList.contains('span-overlays-field')) {
+                    return;
+                }
                 for (const child of node.childNodes) {
                     collectTextNodes(child);
                 }
@@ -267,7 +271,10 @@ class UnifiedPositioningStrategy {
             return null;
         }
 
-        const positions = this.getTextPositions(start, end, text);
+        // Use getPositionsFromOffsets (offset-based) instead of getTextPositions (indexOf-based).
+        // getTextPositions ignores start/end and uses indexOf(text) on data-original-text,
+        // which can return wrong positions when data-original-text differs from DOM text.
+        const positions = this.getPositionsFromOffsets(start, end);
         if (!positions || positions.length === 0) {
             return null;
         }
@@ -340,6 +347,10 @@ class UnifiedPositioningStrategy {
                 });
                 cumulativeOffset += node.textContent.length;
             } else if (node.nodeType === Node.ELEMENT_NODE) {
+                // Skip overlay containers - their label/button text must not affect offset calculations
+                if (node.id === 'span-overlays' || node.classList.contains('span-overlays-field')) {
+                    return;
+                }
                 for (const child of node.childNodes) {
                     collectTextNodes(child);
                 }
@@ -424,6 +435,10 @@ class UnifiedPositioningStrategy {
                 });
                 cumulativeOffset += node.textContent.length;
             } else if (node.nodeType === Node.ELEMENT_NODE) {
+                // Skip overlay containers - their label/button text must not affect offset calculations
+                if (node.id === 'span-overlays' || node.classList.contains('span-overlays-field')) {
+                    return;
+                }
                 for (const child of node.childNodes) {
                     collectTextNodes(child);
                 }
@@ -521,6 +536,11 @@ class UnifiedPositioningStrategy {
         }
 
         overlay.style.position = 'absolute';
+        // Anchor at top-left of #span-overlays. Without explicit top/left, the browser
+        // uses the "hypothetical static position" which is offset by any rendered whitespace
+        // inside #span-overlays (caused by white-space:pre-wrap inherited from #text-content).
+        overlay.style.top = '0';
+        overlay.style.left = '0';
         overlay.style.pointerEvents = 'none';
         overlay.style.zIndex = isAiSpan ? OVERLAY_Z_INDEX.AI_KEYWORD : OVERLAY_Z_INDEX.USER_SPAN;
 
@@ -798,6 +818,8 @@ class SpanManager {
         overlay.dataset.spanId = span.id;
         overlay.dataset.label = span.label;
         overlay.style.position = 'absolute';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
         overlay.style.pointerEvents = 'none';
         overlay.style.zIndex = OVERLAY_Z_INDEX.AI_KEYWORD;
 
@@ -1042,6 +1064,9 @@ class SpanManager {
             this.setupOverlayInteractions();
             await this.loadAnnotations(serverInstanceId);
 
+            // Auto-select the label if a span schema has exactly one label
+            this.autoSelectSingleLabel();
+
             this.isInitialized = true;
             return true;
         } catch (error) {
@@ -1153,6 +1178,20 @@ class SpanManager {
         this.selectedTargetField = targetField || '';
         if (schema) {
             this.setCurrentSchema(schema, 'selectLabel');
+        }
+    }
+
+    /**
+     * If a span schema has exactly one label, auto-select it so the user
+     * can immediately start highlighting text without clicking the checkbox first.
+     */
+    autoSelectSingleLabel() {
+        const spanForms = document.querySelectorAll('.annotation-form.span');
+        for (const form of spanForms) {
+            const checkboxes = form.querySelectorAll('input[type="checkbox"][for_span="true"]');
+            if (checkboxes.length === 1 && !checkboxes[0].checked) {
+                checkboxes[0].click();  // triggers changeSpanLabel via onclick
+            }
         }
     }
 
@@ -1610,6 +1649,8 @@ class SpanManager {
         overlay.dataset.isDiscontinuousPart = 'true';
 
         overlay.style.position = 'absolute';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
         overlay.style.pointerEvents = 'none';
         overlay.style.zIndex = OVERLAY_Z_INDEX.USER_SPAN;
 
