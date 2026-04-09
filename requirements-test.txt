@@ -6,3 +6,4 @@ pytest-html>=3.0.0
 pytest-cov>=4.0.0
 webdriver-manager>=3.8.0
 responses>=0.23.0
+pytest-playwright>=0.4.0

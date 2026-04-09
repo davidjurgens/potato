@@ -20,6 +20,7 @@
       this.steps = [];
       this.currentStep = -1;
       this.overlayManager = null;
+      this._userPinnedStep = false;
 
       this._initElements();
       this._initEventHandlers();
@@ -86,6 +87,22 @@
         ".live-agent-instruct-btn"
       );
 
+      // Takeover toolbar
+      this.takeoverToolbar = this.container.querySelector(
+        ".live-agent-takeover-toolbar"
+      );
+      this.takeoverTypeInput = this.container.querySelector(
+        ".live-agent-takeover-type-input"
+      );
+      this.takeoverNavInput = this.container.querySelector(
+        ".live-agent-takeover-nav-input"
+      );
+
+      // Collapse toggle
+      this.collapseToggle = this.container.querySelector(
+        ".live-agent-collapse-toggle"
+      );
+
       // Filmstrip
       this.filmstrip = this.container.querySelector(".live-agent-filmstrip");
 
@@ -106,6 +123,16 @@
     }
 
     _initEventHandlers() {
+      // Collapse toggle
+      if (this.collapseToggle) {
+        this.collapseToggle.addEventListener("click", () => {
+          const isCollapsed = this.container.classList.toggle("collapsed");
+          this.collapseToggle.innerHTML = isCollapsed
+            ? "&#x25BC; Expand"
+            : "&#x25B2; Collapse";
+        });
+      }
+
       // Start button
       if (this.startBtn) {
         this.startBtn.addEventListener("click", () => this._startSession());
@@ -151,7 +178,8 @@
         });
       });
 
-      // Takeover click handler on screenshot
+      // Takeover click handler on screenshot — scale coordinates to actual
+      // Playwright viewport size (the displayed image is CSS-scaled)
       if (this.screenshotPanel) {
         this.screenshotPanel.addEventListener("click", (e) => {
           if (
@@ -161,9 +189,81 @@
             return;
           }
           const rect = this.screenshotImg.getBoundingClientRect();
-          const x = Math.round(e.clientX - rect.left);
-          const y = Math.round(e.clientY - rect.top);
+          const displayX = e.clientX - rect.left;
+          const displayY = e.clientY - rect.top;
+
+          // Scale from displayed size to actual viewport size
+          const scaleX =
+            this.screenshotImg.naturalWidth / rect.width || 1;
+          const scaleY =
+            this.screenshotImg.naturalHeight / rect.height || 1;
+          const x = Math.round(displayX * scaleX);
+          const y = Math.round(displayY * scaleY);
+
           this._sendManualAction({ type: "click", x: x, y: y });
+          this._showClickFeedback(e.clientX - rect.left, e.clientY - rect.top);
+          this._showActionToast(`Click at (${x}, ${y})`);
+        });
+
+        // Scroll wheel in takeover mode → scroll action (debounced)
+        // Trackpads fire many small wheel events; accumulate and send
+        // at most once per 300ms with a minimum threshold.
+        let _scrollAccum = 0;
+        let _scrollTimer = null;
+        this.screenshotPanel.addEventListener("wheel", (e) => {
+          if (!this.screenshotPanel.classList.contains("takeover-mode")) {
+            return;
+          }
+          e.preventDefault();
+          _scrollAccum += e.deltaY;
+
+          if (!_scrollTimer) {
+            _scrollTimer = setTimeout(() => {
+              // Only send if accumulated scroll exceeds threshold
+              if (Math.abs(_scrollAccum) >= 30) {
+                const direction = _scrollAccum > 0 ? "down" : "up";
+                const amount = Math.min(Math.abs(Math.round(_scrollAccum)), 600);
+                this._sendManualAction({
+                  type: "scroll",
+                  direction: direction,
+                  amount: amount,
+                });
+                this._showActionToast(`Scroll ${direction} ${amount}px`);
+              }
+              _scrollAccum = 0;
+              _scrollTimer = null;
+            }, 300);
+          }
+        }, { passive: false });
+      }
+
+      // Takeover type input — Enter sends the text as a type action
+      if (this.takeoverTypeInput) {
+        this.takeoverTypeInput.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            const text = this.takeoverTypeInput.value;
+            if (text) {
+              this._sendManualAction({ type: "type", text: text });
+              this._showActionToast(`Typed: "${text}"`);
+              this.takeoverTypeInput.value = "";
+            }
+          }
+        });
+      }
+
+      // Takeover nav input — Enter sends navigate action
+      if (this.takeoverNavInput) {
+        this.takeoverNavInput.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            const url = this.takeoverNavInput.value.trim();
+            if (url) {
+              this._sendManualAction({ type: "navigate", url: url });
+              this._showActionToast(`Navigating to ${url}`);
+              this.takeoverNavInput.value = "";
+            }
+          }
         });
       }
     }
@@ -171,7 +271,42 @@
     _initKeyboardShortcuts() {
       this.container.setAttribute("tabindex", "0");
       this.container.addEventListener("keydown", (e) => {
+        // Let the takeover type input handle its own keys
+        if (e.target.classList.contains("live-agent-takeover-type-input")) {
+          return;
+        }
         if (e.target.tagName === "INPUT") return;
+
+        // In takeover mode, forward printable keys as type actions
+        if (
+          this._currentState === "takeover" &&
+          e.key.length === 1 &&
+          !e.ctrlKey &&
+          !e.metaKey
+        ) {
+          e.preventDefault();
+          this._sendManualAction({ type: "type", text: e.key });
+          this._showActionToast(`Typed: ${e.key}`);
+          return;
+        }
+
+        // In takeover mode, handle Enter and Backspace
+        if (this._currentState === "takeover") {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            this._sendManualAction({ type: "type", text: "\n" });
+            this._showActionToast("Pressed Enter");
+            return;
+          }
+          if (e.key === "Backspace") {
+            e.preventDefault();
+            // Playwright doesn't have a "backspace" action in our schema,
+            // but we can simulate via keyboard press
+            this._sendManualAction({ type: "type", text: "\b" });
+            this._showActionToast("Pressed Backspace");
+            return;
+          }
+        }
 
         switch (e.key) {
           case " ":
@@ -180,7 +315,11 @@
             else if (this._currentState === "paused") this._resume();
             break;
           case "Escape":
-            this._stop();
+            if (this._currentState === "takeover") {
+              this._toggleTakeover(); // Return to agent
+            } else {
+              this._stop();
+            }
             break;
         }
       });
@@ -260,7 +399,17 @@
       this.eventSource.addEventListener("step", (e) => {
         const step = JSON.parse(e.data);
         this.steps.push(step);
-        this._renderStep(step);
+        // Always add a filmstrip thumb for new steps
+        this._addFilmstripThumb(step);
+        // Only update the main view if the user hasn't pinned to an older step
+        if (!this._userPinnedStep) {
+          this._renderStep(step);
+          this._setFilmstripActive(step.step_index);
+        }
+        // Dispatch event for trajectory_eval schema to pick up
+        document.dispatchEvent(
+          new CustomEvent("live-agent-step", { detail: step })
+        );
       });
 
       this.eventSource.addEventListener("state_change", (e) => {
@@ -382,7 +531,7 @@
 
     // --- Rendering ---
 
-    _renderStep(step) {
+    _renderStep(step, { addThumb = false } = {}) {
       // Update screenshot
       if (step.screenshot_url && this.screenshotImg) {
         const url = `/api/live_agent/screenshot/${this.sessionId}/${step.step_index}`;
@@ -417,8 +566,10 @@
         this.urlDisplay.textContent = step.url;
       }
 
-      // Update filmstrip
-      this._addFilmstripThumb(step);
+      // Only add a filmstrip thumb for new steps, not when revisiting
+      if (addThumb) {
+        this._addFilmstripThumb(step);
+      }
 
       this.currentStep = step.step_index;
     }
@@ -446,39 +597,47 @@
 
       this.filmstrip.style.display = "flex";
 
+      // Don't add a duplicate thumb if one already exists for this step
+      const existing = this.filmstrip.querySelector(
+        `.live-agent-filmstrip-thumb[data-step="${step.step_index}"]`
+      );
+      if (existing) return;
+
       const thumb = document.createElement("img");
-      thumb.className = "live-agent-filmstrip-thumb active";
+      thumb.className = "live-agent-filmstrip-thumb";
       thumb.src = `/api/live_agent/screenshot/${this.sessionId}/${step.step_index}`;
       thumb.dataset.step = step.step_index;
       thumb.alt = `Step ${step.step_index + 1}`;
       thumb.addEventListener("click", () => this._goToStep(step.step_index));
 
-      // Deactivate previous thumbs
-      this.filmstrip
-        .querySelectorAll(".live-agent-filmstrip-thumb.active")
-        .forEach((t) => t.classList.remove("active"));
-
       this.filmstrip.appendChild(thumb);
 
-      // Scroll to end
+      // Scroll to end so the new thumb is visible
       this.filmstrip.scrollLeft = this.filmstrip.scrollWidth;
+    }
+
+    _setFilmstripActive(index) {
+      if (!this.filmstrip) return;
+      this.filmstrip
+        .querySelectorAll(".live-agent-filmstrip-thumb")
+        .forEach((t) => {
+          t.classList.toggle(
+            "active",
+            parseInt(t.dataset.step) === index
+          );
+        });
     }
 
     _goToStep(index) {
       if (index < 0 || index >= this.steps.length) return;
-      this._renderStep(this.steps[index]);
 
-      // Update filmstrip active state
-      if (this.filmstrip) {
-        this.filmstrip
-          .querySelectorAll(".live-agent-filmstrip-thumb")
-          .forEach((t) => {
-            t.classList.toggle(
-              "active",
-              parseInt(t.dataset.step) === index
-            );
-          });
-      }
+      // Mark that the user has pinned to a specific step
+      // (prevents SSE updates from stealing focus)
+      const latestStep = this.steps.length - 1;
+      this._userPinnedStep = index < latestStep;
+
+      this._renderStep(this.steps[index]);
+      this._setFilmstripActive(index);
     }
 
     // --- UI state management ---
@@ -532,14 +691,20 @@
         }
         if (this.screenshotPanel)
           this.screenshotPanel.classList.add("takeover-mode");
+        if (this.takeoverToolbar)
+          this.takeoverToolbar.style.display = "block";
       }
 
-      if (state !== "takeover" && this.takeoverBtn) {
-        this.takeoverBtn.textContent = "Take Over";
-        this.takeoverBtn.classList.add("warning");
-        this.takeoverBtn.classList.remove("active");
+      if (state !== "takeover") {
+        if (this.takeoverBtn) {
+          this.takeoverBtn.textContent = "Take Over";
+          this.takeoverBtn.classList.add("warning");
+          this.takeoverBtn.classList.remove("active");
+        }
         if (this.screenshotPanel)
           this.screenshotPanel.classList.remove("takeover-mode");
+        if (this.takeoverToolbar)
+          this.takeoverToolbar.style.display = "none";
       }
     }
 
@@ -617,6 +782,36 @@
       const div = document.createElement("div");
       div.textContent = text;
       return div.innerHTML;
+    }
+
+    /**
+     * Show a pulsing circle at the click position in the screenshot panel.
+     */
+    _showClickFeedback(displayX, displayY) {
+      if (!this.screenshotPanel) return;
+      const marker = document.createElement("div");
+      marker.className = "live-agent-click-marker";
+      marker.style.left = displayX + "px";
+      marker.style.top = displayY + "px";
+      this.screenshotPanel.appendChild(marker);
+      marker.addEventListener("animationend", () => marker.remove());
+    }
+
+    /**
+     * Show a brief toast at the bottom of the screenshot panel
+     * confirming what action was sent.
+     */
+    _showActionToast(message) {
+      if (!this.screenshotPanel) return;
+      // Remove any existing toast
+      const old = this.screenshotPanel.querySelector(".live-agent-action-toast");
+      if (old) old.remove();
+
+      const toast = document.createElement("div");
+      toast.className = "live-agent-action-toast";
+      toast.textContent = message;
+      this.screenshotPanel.appendChild(toast);
+      toast.addEventListener("animationend", () => toast.remove());
     }
 
     destroy() {

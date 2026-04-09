@@ -1,5 +1,12 @@
 """
 Textbox Layout
+
+Supports enhanced rationale/justification features:
+- min_chars: Minimum character count with counter display
+- show_char_count: Show character counter below textarea
+- collapsible: Start collapsed, expand on click
+- target_schema: Visual grouping with a preceding schema
+- placeholder: Placeholder text in the input
 """
 
 import logging
@@ -33,6 +40,11 @@ def generate_textbox_layout(annotation_scheme):
                 - cols (int): Number of columns for textarea
             - allow_paste (bool): Whether to allow pasting text
             - custom_css (dict): Optional CSS styling
+            - min_chars (int): Minimum characters required
+            - show_char_count (bool): Show character counter
+            - collapsible (bool): Start collapsed, expand on click
+            - target_schema (str): Name of schema this is a rationale for
+            - placeholder (str): Placeholder text
 
     Returns:
         tuple: (html_string, key_bindings)
@@ -50,14 +62,36 @@ def _generate_textbox_layout_internal(annotation_scheme):
     # Layout attributes for grid positioning
     layout_attrs = generate_layout_attributes(annotation_scheme)
 
+    # Enhanced features
+    min_chars = annotation_scheme.get("min_chars", 0)
+    show_char_count = annotation_scheme.get("show_char_count", False)
+    collapsible = annotation_scheme.get("collapsible", False)
+    target_schema = annotation_scheme.get("target_schema", "")
+    placeholder = escape_html_content(annotation_scheme.get("placeholder", ""))
+
+    # CSS classes for target_schema grouping
+    target_class = "shadcn-textbox-target-grouped" if target_schema else ""
+
     # Initialize form wrapper
     schema_name = annotation_scheme['name']
     schematic = f"""
-    <form id="{escape_html_content(schema_name)}" class="annotation-form textbox shadcn-textbox-container" action="/action_page.php" data-annotation-id="{escape_html_content(str(annotation_scheme.get("annotation_id", "")))}" data-annotation-type="text" data-schema-name="{escape_html_content(schema_name)}" {layout_attrs}>
+    <form id="{escape_html_content(schema_name)}" class="annotation-form textbox shadcn-textbox-container {target_class}" action="/action_page.php" data-annotation-id="{escape_html_content(str(annotation_scheme.get("annotation_id", "")))}" data-annotation-type="text" data-schema-name="{escape_html_content(schema_name)}" {f'data-target-schema="{escape_html_content(target_schema)}"' if target_schema else ''} {f'data-min-chars="{min_chars}"' if min_chars else ''} {layout_attrs}>
             {get_ai_wrapper()}
         <fieldset schema_name="{escape_html_content(annotation_scheme['name'])}">
-            <legend class="shadcn-textbox-title">{escape_html_content(annotation_scheme["description"])}</legend>
     """
+
+    # Collapsible wrapper
+    if collapsible:
+        schematic += f"""
+            <legend class="shadcn-textbox-title shadcn-textbox-collapsible-toggle" onclick="this.closest('.shadcn-textbox-container').classList.toggle('shadcn-textbox-expanded')" role="button" tabindex="0">
+                <span class="shadcn-textbox-collapse-icon">&#9654;</span> {escape_html_content(annotation_scheme["description"])}
+            </legend>
+            <div class="shadcn-textbox-collapsible-body">
+        """
+    else:
+        schematic += f"""
+            <legend class="shadcn-textbox-title">{escape_html_content(annotation_scheme["description"])}</legend>
+        """
 
     # Handle custom CSS if provided
     display_info = annotation_scheme.get("display_config", {})
@@ -104,6 +138,9 @@ def _generate_textbox_layout_internal(annotation_scheme):
         # Show label if not the default text_box label
         label_text = "" if label == "text_box" else label
 
+        # Placeholder attribute
+        placeholder_attr = f'placeholder="{placeholder}"' if placeholder else ''
+
         schematic += f"""
             <div class="shadcn-textbox-item">
                 {f'<label for="{identifiers["id"]}" schema="{identifiers["schema"]}" class="shadcn-textbox-label">{escape_html_content(label_text)}</label>' if label_text else ''}
@@ -119,6 +156,7 @@ def _generate_textbox_layout_internal(annotation_scheme):
                           schema="{identifiers['schema']}"
                           label_name="{identifiers['label_name']}"
                           {textarea_attrs}
+                          {placeholder_attr}
                           style="{custom_css}"
                           {paste_setting}></textarea>
             """
@@ -132,10 +170,24 @@ def _generate_textbox_layout_internal(annotation_scheme):
                        validation="{validation}"
                        schema="{identifiers['schema']}"
                        label_name="{identifiers['label_name']}"
+                       {placeholder_attr}
                        style="{custom_css}"
                        {paste_setting}>
             """
 
+        # Character counter
+        if show_char_count or min_chars:
+            min_label = f"/{min_chars} min" if min_chars else ""
+            schematic += f"""
+                <div class="shadcn-textbox-char-counter" data-input-id="{identifiers['id']}" data-min-chars="{min_chars}">
+                    <span class="shadcn-textbox-char-count">0</span>{min_label} characters
+                </div>
+            """
+
+        schematic += "</div>"
+
+    # Close collapsible body if needed
+    if collapsible:
         schematic += "</div>"
 
     schematic += "</fieldset></form>"

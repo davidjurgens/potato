@@ -165,7 +165,7 @@ class LiveAgentDisplay(BaseDisplay):
     flex: 1;
     position: relative;
     background: #000;
-    min-height: 300px;
+    min-height: 200px;
     max-width: {max_w}px;
 }}
 .live-agent-screenshot {{
@@ -173,6 +173,67 @@ class LiveAgentDisplay(BaseDisplay):
     max-height: {max_h}px;
     object-fit: contain;
     display: block;
+}}
+/* Collapsed state — shrink screenshot for more annotation space */
+.live-agent-viewer.collapsed .live-agent-main {{
+    max-height: 220px;
+    overflow: hidden;
+}}
+.live-agent-viewer.collapsed .live-agent-screenshot {{
+    max-height: 200px;
+}}
+.live-agent-viewer.collapsed .live-agent-side-panel {{
+    display: none;
+}}
+/* Collapse toggle */
+.live-agent-collapse-toggle {{
+    cursor: pointer;
+    font-size: 12px;
+    color: #666;
+    padding: 2px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+}}
+.live-agent-collapse-toggle:hover {{ background: #f0f0f0; }}
+
+/* Takeover click feedback */
+.live-agent-click-marker {{
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    border: 2px solid #F44336;
+    border-radius: 50%;
+    background: rgba(244, 67, 54, 0.2);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    animation: click-pulse 0.6s ease-out forwards;
+    z-index: 100;
+}}
+@keyframes click-pulse {{
+    0% {{ transform: translate(-50%, -50%) scale(0.5); opacity: 1; }}
+    100% {{ transform: translate(-50%, -50%) scale(2); opacity: 0; }}
+}}
+
+/* Takeover action toast */
+.live-agent-action-toast {{
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    pointer-events: none;
+    z-index: 100;
+    animation: toast-fade 1.5s ease-out forwards;
+}}
+@keyframes toast-fade {{
+    0% {{ opacity: 1; }}
+    70% {{ opacity: 1; }}
+    100% {{ opacity: 0; }}
 }}
 .live-agent-screenshot-placeholder {{
     display: flex;
@@ -372,7 +433,10 @@ class LiveAgentDisplay(BaseDisplay):
         <span class="live-agent-status-text">Ready</span>
         <span class="live-agent-step-counter" style="margin-left: 12px; color: #888;">Step 0</span>
     </div>
-    <div class="live-agent-url-display" style="color: #666; font-size: 12px;"></div>
+    <div style="display:flex;align-items:center;gap:8px;">
+        <span class="live-agent-url-display" style="color: #666; font-size: 12px;"></span>
+        <button class="live-agent-collapse-toggle" title="Collapse/expand agent view">&#x25B2; Collapse</button>
+    </div>
 </div>
 """)
 
@@ -454,6 +518,29 @@ class LiveAgentDisplay(BaseDisplay):
     <button class="live-agent-btn live-agent-instruct-btn" disabled>Send</button>
 </div>
 """)
+
+            # Takeover toolbar — visible only in takeover mode
+            if allow_takeover:
+                parts.append("""
+<div class="live-agent-takeover-toolbar" style="display:none;">
+    <div style="font-size:12px;color:#666;margin-bottom:4px;">
+        <strong>Manual Control</strong> &mdash;
+        Click screenshot to click &bull;
+        Scroll wheel to scroll &bull;
+        Type to enter text &bull;
+        Esc to return
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;">
+        <input type="text" class="live-agent-takeover-type-input"
+               placeholder="Type text and press Enter to send..."
+               style="flex:1;padding:5px 8px;border:1px solid #2196F3;border-radius:4px;font-size:13px;">
+        <input type="url" class="live-agent-takeover-nav-input"
+               placeholder="Navigate to URL..."
+               style="width:240px;padding:5px 8px;border:1px solid #2196F3;border-radius:4px;font-size:13px;">
+    </div>
+</div>
+""")
+
             parts.append('</div>')  # controls
 
         parts.append('</div>')  # side panel

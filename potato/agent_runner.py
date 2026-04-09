@@ -736,8 +736,19 @@ class AgentRunner:
 
             elif action_type == "type":
                 text = action.get("text", "")
-                success = await pw.type_text(text)
-                return f"Typed '{text}'" if success else f"Type failed: '{text}'"
+                # Handle control characters via keyboard.press
+                if text == "\b":
+                    success = await pw.page.keyboard.press("Backspace") or True
+                    return "Pressed Backspace"
+                elif text == "\n":
+                    success = await pw.page.keyboard.press("Enter") or True
+                    return "Pressed Enter"
+                elif text == "\t":
+                    success = await pw.page.keyboard.press("Tab") or True
+                    return "Pressed Tab"
+                else:
+                    success = await pw.type_text(text)
+                    return f"Typed '{text}'" if success else f"Type failed: '{text}'"
 
             elif action_type == "scroll":
                 direction = action.get("direction", "down")

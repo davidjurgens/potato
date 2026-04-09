@@ -15,6 +15,7 @@
 port: 8000
 server_name: AI-Assisted Image Annotation
 annotation_task_name: "AI-Assisted Object Detection"
+task_dir: .
 output_annotation_dir: annotation_output
 output_annotation_format: json
 

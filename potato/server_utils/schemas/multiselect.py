@@ -242,7 +242,7 @@ def _generate_free_response(annotation_scheme, n_columns):
     """
     free_response_identifiers = generate_element_identifier(annotation_scheme["name"], "free_response", "text")
     free_response_config = annotation_scheme["has_free_response"]
-    instruction = free_response_config.get("instruction", "Other") if isinstance(free_response_config, dict) else "Other"
+    instruction = free_response_config.get("instruction", "Other (please specify)") if isinstance(free_response_config, dict) else "Other (please specify)"
 
     return f"""
         <div class="shadcn-multiselect-free-response" style="grid-column: 1 / -1;">

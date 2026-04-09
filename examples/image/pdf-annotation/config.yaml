@@ -39,13 +39,11 @@ annotation_schemes:
   - annotation_type: span
     name: entities
     description: "Highlight and label named entities in the document"
-    label_names:
-      - PERSON
-      - ORGANIZATION
-      - LOCATION
-      - DATE
-    span_mode: single  # Annotate on one field
-    source_field: text
+    labels:
+      - name: PERSON
+      - name: ORGANIZATION
+      - name: LOCATION
+      - name: DATE
 
 # User configuration
 user_config:

@@ -51,7 +51,7 @@ annotation_schemes:
       - name: no_issues
         tooltip: "No data quality issues found"
 
-  - annotation_type: textbox
+  - annotation_type: text
     name: notes
     description: "Additional notes about data quality"
     text_box_single_line: false

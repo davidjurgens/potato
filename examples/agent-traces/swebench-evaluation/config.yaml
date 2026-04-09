@@ -15,8 +15,8 @@ data_files:
   - data/swebench-traces.json
 
 item_properties:
-  id_key: id
-  text_key: task_description
+  id_key: instance_id
+  text_key: problem_statement
 
 task_dir: .
 output_annotation_dir: annotation_output

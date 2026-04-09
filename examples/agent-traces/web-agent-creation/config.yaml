@@ -35,7 +35,7 @@ instance_display:
     # Web agent recorder display type
     # Provides an iframe for browsing with interaction recording
     - key: browsing_session
-      type: web_agent_recorder
+      type: live_agent
       label: "Browse and Complete the Task"
       display_options:
         start_url: "https://www.google.com"

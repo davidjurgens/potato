@@ -8,6 +8,8 @@ port: 8000
 
 # Task directory
 task_dir: "."
+annotation_task_name: "Embedding Visualization Demo"
+output_annotation_dir: "annotation_output"
 
 # Output directory for annotations (contains pre-populated annotations)
 output_dir: "annotation_output"

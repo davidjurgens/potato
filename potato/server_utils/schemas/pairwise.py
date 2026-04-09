@@ -70,6 +70,8 @@ def _generate_pairwise_layout_internal(annotation_scheme: Dict[str, Any]) -> Tup
 
     if mode == "scale":
         return _generate_scale_mode(annotation_scheme)
+    elif mode == "multi_dimension":
+        return _generate_multi_dimension_mode(annotation_scheme)
     else:
         return _generate_binary_mode(annotation_scheme)
 
@@ -160,6 +162,12 @@ def _generate_binary_mode(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[
                    label_name="selection"
                    validation="{validation}"
                    value="">
+    """
+
+    # Add justification section if configured
+    schematic += _generate_justification_html(annotation_scheme, schema_name)
+
+    schematic += """
         </fieldset>
     </form>
     """
@@ -276,4 +284,160 @@ def _generate_scale_mode(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[T
     key_bindings = []
 
     logger.info(f"Successfully generated pairwise scale layout for {schema_name}")
+    return schematic, key_bindings
+
+
+def _generate_justification_html(annotation_scheme: Dict[str, Any], schema_name: str) -> str:
+    """
+    Generate justification section HTML (reason checkboxes + rationale textarea).
+
+    Used by both binary and multi_dimension modes when ``justification`` config is present.
+    """
+    justification = annotation_scheme.get("justification")
+    if not justification:
+        return ""
+
+    reason_categories = justification.get("reason_categories", [])
+    min_chars = justification.get("min_rationale_chars", 0)
+    placeholder = justification.get("rationale_placeholder", "Explain your preference...")
+    required = justification.get("required", False)
+
+    escaped_schema = escape_html_content(schema_name)
+
+    # Reason category checkboxes
+    reasons_html = ""
+    for reason in reason_categories:
+        escaped_reason = escape_html_content(reason)
+        reasons_html += f"""
+            <label><input type="checkbox" class="pairwise-reason-cb"
+                   data-schema="{escaped_schema}" value="{escaped_reason}">
+                {escaped_reason}</label>"""
+
+    req_attr = 'data-required="true"' if required else ''
+
+    html = f"""
+        <div class="pairwise-justification" data-schema="{escaped_schema}" {req_attr}>
+            <div class="pairwise-justification-title">Justification</div>
+    """
+
+    if reasons_html:
+        html += f"""
+            <div class="pairwise-reason-categories">{reasons_html}</div>
+        """
+
+    html += f"""
+            <textarea class="pairwise-rationale-textarea"
+                      data-schema="{escaped_schema}"
+                      data-min-chars="{min_chars}"
+                      placeholder="{escape_html_content(placeholder)}"
+                      oninput="updatePairwiseRationaleCounter(this);"></textarea>
+            <div class="pairwise-rationale-counter" data-schema="{escaped_schema}">
+                0 / {min_chars} characters
+            </div>
+            <input type="hidden" class="annotation-input pairwise-justification-value"
+                   name="{escaped_schema}:::justification"
+                   schema="{escaped_schema}"
+                   label_name="justification"
+                   value="">
+        </div>
+    """
+    return html
+
+
+def _generate_multi_dimension_mode(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tuple[str, str]]]:
+    """
+    Generate multi-dimension pairwise interface.
+
+    Each dimension gets its own A/B tile row with a dimension label.
+    Hidden inputs use ``{schema}:::{dimension}`` naming.
+    """
+    schema_name = annotation_scheme["name"]
+    description = annotation_scheme["description"]
+    dimensions = annotation_scheme.get("dimensions", [])
+
+    if not dimensions:
+        raise ValueError(f"pairwise multi_dimension mode requires 'dimensions' list for schema '{schema_name}'")
+
+    labels = annotation_scheme.get("labels", ["A", "B"])
+    if len(labels) < 2:
+        labels = ["A", "B"]
+
+    items_key = annotation_scheme.get("items_key", "text")
+    validation = generate_validation_attribute(annotation_scheme)
+    layout_attrs = generate_layout_attributes(annotation_scheme)
+
+    escaped_schema = escape_html_content(schema_name)
+    escaped_items_key = escape_html_content(items_key)
+    label_a = escape_html_content(labels[0])
+    label_b = escape_html_content(labels[1])
+
+    data_attrs = (
+        f'data-annotation-type="pairwise" data-schema-name="{escaped_schema}" '
+        f'data-mode="multi_dimension" data-items-key="{escaped_items_key}"'
+    )
+
+    schematic = f"""
+    <form id="{escaped_schema}" class="annotation-form pairwise pairwise-multi-dimension"
+          action="/action_page.php"
+          data-annotation-id="{escape_html_content(str(annotation_scheme.get('annotation_id', '')))}"
+          {data_attrs} {layout_attrs}>
+        {get_ai_wrapper()}
+        <fieldset schema="{escaped_schema}">
+            <legend class="pairwise-question">{escape_html_content(description)}</legend>
+    """
+
+    key_bindings = []
+
+    for i, dim in enumerate(dimensions):
+        dim_name = dim.get("name", f"dimension_{i}")
+        dim_desc = dim.get("description", "")
+        allow_tie = dim.get("allow_tie", annotation_scheme.get("allow_tie", False))
+        tie_label = dim.get("tie_label", annotation_scheme.get("tie_label", "Tie"))
+
+        escaped_dim = escape_html_content(dim_name)
+        dim_schema_key = f"{escaped_schema}:::{escaped_dim}"
+
+        tie_btn_html = ""
+        if allow_tie:
+            tie_btn_html = f"""
+                <button type="button" class="pairwise-tie-btn"
+                        data-value="tie" data-schema="{escaped_schema}"
+                        data-dimension="{escaped_dim}">
+                    {escape_html_content(tie_label)}
+                </button>"""
+
+        schematic += f"""
+            <div class="pairwise-dimension-row" data-dimension="{escaped_dim}">
+                <div class="pairwise-dimension-label">{escape_html_content(dim_name.replace('_', ' ').title())}</div>
+                <div class="pairwise-dimension-description">{escape_html_content(dim_desc)}</div>
+                <div class="pairwise-dimension-tiles">
+                    <div class="pairwise-tile" data-value="A" data-schema="{escaped_schema}"
+                         data-dimension="{escaped_dim}" tabindex="0">
+                        <span class="pairwise-tile-label">{label_a}</span>
+                    </div>
+                    <div class="pairwise-tile" data-value="B" data-schema="{escaped_schema}"
+                         data-dimension="{escaped_dim}" tabindex="0">
+                        <span class="pairwise-tile-label">{label_b}</span>
+                    </div>
+                    {tie_btn_html}
+                </div>
+                <input type="hidden" class="pairwise-value annotation-input pairwise-dim-input"
+                       name="{dim_schema_key}"
+                       schema="{escaped_schema}"
+                       label_name="{escaped_dim}"
+                       data-dimension="{escaped_dim}"
+                       validation="{validation}"
+                       value="">
+            </div>
+        """
+
+    # Add justification section if configured
+    schematic += _generate_justification_html(annotation_scheme, schema_name)
+
+    schematic += """
+        </fieldset>
+    </form>
+    """
+
+    logger.info(f"Successfully generated pairwise multi_dimension layout for {schema_name}")
     return schematic, key_bindings

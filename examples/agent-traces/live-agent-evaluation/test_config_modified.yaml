@@ -86,7 +86,7 @@ live_agent:
 output_annotation_dir: annotation_output
 output_annotation_format: json
 persist_sessions: false
-port: 9499
+port: 9757
 random_seed: 1234
 require_password: false
 secret_key: test-secret-key

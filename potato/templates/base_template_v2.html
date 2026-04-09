@@ -305,6 +305,11 @@
             </button>
         </div>
 
+        {% if custom_footer_html | default('') %}
+        <!-- Custom footer (e.g., HF Space promotional banner) -->
+        {{ custom_footer_html | safe }}
+        {% endif %}
+
         <!-- Footer -->
         <footer class="potato-footer">
             {{ ui_lang.powered_by|default('Powered by') }} <a href="https://potatoannotator.com/" target="_blank" rel="noopener noreferrer">Potato</a>

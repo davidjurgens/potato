@@ -1,8 +1,10 @@
 # Simple Survey Demo Configuration
 # This example demonstrates using standard survey instruments in prestudy/poststudy phases
 
-title: Survey Instruments Demo
+annotation_task_name: Survey Instruments Demo
 task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
 
 # Data files
 data_files:

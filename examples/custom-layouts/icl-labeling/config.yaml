@@ -51,6 +51,8 @@
   "ai_config":
     "model": "gpt-4o-mini"
     "api_key": "${OPENAI_API_KEY}"  # Uses environment variable
+  "cache_config":
+    "enabled": false
 
 # ICL Labeling Configuration
 "icl_labeling":

@@ -16,6 +16,9 @@ item_properties:
   id_key: id
   text_key: text
 
+data_files:
+  - data/example-items.json
+
 # Data sources - demonstrating the new extended loading
 # This example uses a local file source (the simplest case)
 # For URL, S3, or other remote sources, see the comments below

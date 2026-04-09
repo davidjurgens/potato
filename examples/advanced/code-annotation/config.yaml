@@ -67,7 +67,7 @@ annotation_schemes:
       - name: no_issues
         tooltip: "No significant issues found"
 
-  - annotation_type: textbox
+  - annotation_type: text
     name: feedback
     description: "Detailed feedback for the code author"
     text_box_single_line: false

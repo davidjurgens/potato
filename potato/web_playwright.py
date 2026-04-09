@@ -52,16 +52,58 @@ class PlaywrightSession:
 
         try:
             self._playwright = await async_playwright().start()
-            self.browser = await self._playwright.chromium.launch(headless=True)
+
+            # Launch with flags that reduce bot detection signals.
+            # Sites use these JS-side checks to trigger captchas:
+            #   navigator.webdriver, missing plugins, headless UA, etc.
+            self.browser = await self._playwright.chromium.launch(
+                headless=True,
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-infobars",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                    "--disable-background-timer-throttling",
+                    "--disable-backgrounding-occluded-windows",
+                    "--disable-renderer-backgrounding",
+                ],
+            )
+
+            # Current, realistic user-agent and locale/timezone
             self.context = await self.browser.new_context(
                 viewport={"width": self.width, "height": self.height},
                 user_agent=(
                     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/120.0.0.0 Safari/537.36"
+                    "Chrome/131.0.0.0 Safari/537.36"
                 ),
+                locale="en-US",
+                timezone_id="America/New_York",
+                color_scheme="light",
             )
+
             self.page = await self.context.new_page()
+
+            # Remove the navigator.webdriver flag that headless Chromium sets.
+            # This is the single most common bot-detection signal.
+            await self.page.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined,
+                });
+                // Fake plugins array (headless has 0 plugins)
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5],
+                });
+                // Fake languages
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['en-US', 'en'],
+                });
+                // Remove chrome.runtime that automation sets
+                if (window.chrome) {
+                    window.chrome.runtime = undefined;
+                }
+            """)
+
             await self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
             logger.info(f"Playwright session started at {url}")
             return True

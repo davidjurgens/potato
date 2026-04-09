@@ -2020,6 +2020,11 @@ def render_page_with_annotations(username: str):
         for scheme in annotation_schemes
     )
 
+    # Initialize display_html before it's referenced by _detect_frontend_assets_for_page
+    display_html = ""
+
+    frontend_assets = _detect_frontend_assets_for_page(html_file, display_html)
+
     # Check if AI support is enabled (for conditional loading of visual_ai_assistant.js)
     ai_enabled = config.get("ai_support", {}).get("enabled", False)
 
@@ -3073,6 +3078,8 @@ def create_app(config_file=None):
             'PROJECT_BASE_CSS': project_base_css,
             # Header logo
             'header_logo_url': header_logo_url,
+            # Custom footer HTML (e.g., promotional banner for HF Spaces)
+            'custom_footer_html': config.get('custom_footer_html', ''),
         }
 
     return app

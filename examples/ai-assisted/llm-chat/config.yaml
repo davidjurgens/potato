@@ -15,7 +15,7 @@ annotation_task_description: "Classify the sentiment of each text as positive, n
 
 data_files:
   - type: json
-    path: examples/ai-assisted/llm-chat/data/sentiment-data.json
+    path: data/sentiment-data.json
 
 item_properties:
   id_key: id
@@ -48,3 +48,4 @@ chat_support:
     max_tokens: 500
 
 task_dir: .
+output_annotation_dir: annotation_output

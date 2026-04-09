@@ -140,11 +140,11 @@ class AiCacheManager:
         ai_support = config["ai_support"]
         if not ai_support["enabled"]:
             return
-        cache_config = ai_support["cache_config"]
-        ai_config = ai_support["ai_config"]
-        include = ai_config.get("include")
+        cache_config = ai_support.get("cache_config", {})
+        ai_config = ai_support.get("ai_config", {})
+        include = ai_config.get("include") or {}
         special_include = include.get("special_include", None)
-        self.include_all = include["all"]
+        self.include_all = include.get("all", False)
         self.special_includes = {}
 
         self.model_manager = ModelManager()
@@ -1368,29 +1368,28 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
 
         annotation_type_str = config["annotation_schemes"][annotation_id]["annotation_type"]
         annotation_type = Annotation_Type(annotation_type_str)
-        match annotation_type:
-            case Annotation_Type.LIKERT:
-                return self.generate_likert(instance_id, annotation_id, ai_assistant)
-            case Annotation_Type.RADIO:
-                return self.generate_radio(instance_id, annotation_id, ai_assistant)
-            case Annotation_Type.MULTISELECT:
-                return self.generate_multiselect(instance_id,annotation_id, ai_assistant)
-            case Annotation_Type.NUMBER:
-                return self.generate_number(instance_id,annotation_id, ai_assistant)
-            case Annotation_Type.SELECT:
-                return self.generate_select(instance_id,annotation_id, ai_assistant)
-            case Annotation_Type.SLIDER:
-                return self.generate_slider(instance_id, annotation_id, ai_assistant)
-            case Annotation_Type.SPAN:
-                return self.generate_span(instance_id, annotation_id, ai_assistant)
-            case Annotation_Type.TEXTBOX:
-                return self.generate_textbox(instance_id, annotation_id, ai_assistant)
-            case Annotation_Type.IMAGE_ANNOTATION:
-                return self.generate_image_annotation(instance_id, annotation_id, ai_assistant)
-            case Annotation_Type.VIDEO_ANNOTATION:
-                return self.generate_video_annotation(instance_id, annotation_id, ai_assistant)
-            case _:
-                raise ValueError(f"Unknown annotation type: {annotation_type}")
+        if annotation_type == Annotation_Type.LIKERT:
+            return self.generate_likert(instance_id, annotation_id, ai_assistant)
+        elif annotation_type == Annotation_Type.RADIO:
+            return self.generate_radio(instance_id, annotation_id, ai_assistant)
+        elif annotation_type == Annotation_Type.MULTISELECT:
+            return self.generate_multiselect(instance_id, annotation_id, ai_assistant)
+        elif annotation_type == Annotation_Type.NUMBER:
+            return self.generate_number(instance_id, annotation_id, ai_assistant)
+        elif annotation_type == Annotation_Type.SELECT:
+            return self.generate_select(instance_id, annotation_id, ai_assistant)
+        elif annotation_type == Annotation_Type.SLIDER:
+            return self.generate_slider(instance_id, annotation_id, ai_assistant)
+        elif annotation_type == Annotation_Type.SPAN:
+            return self.generate_span(instance_id, annotation_id, ai_assistant)
+        elif annotation_type == Annotation_Type.TEXTBOX:
+            return self.generate_textbox(instance_id, annotation_id, ai_assistant)
+        elif annotation_type == Annotation_Type.IMAGE_ANNOTATION:
+            return self.generate_image_annotation(instance_id, annotation_id, ai_assistant)
+        elif annotation_type == Annotation_Type.VIDEO_ANNOTATION:
+            return self.generate_video_annotation(instance_id, annotation_id, ai_assistant)
+        else:
+            raise ValueError(f"Unknown annotation type: {annotation_type}")
 
     def get_cache_stats(self) -> Dict[str, int]:
         """returns statistics on disk cache and in-progress cache entries."""

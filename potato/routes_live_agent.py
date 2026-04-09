@@ -100,8 +100,10 @@ def start_session():
     merged = {**server_config, **override_config}
     agent_config = AgentConfig.from_config(merged)
 
-    # Screenshot directory
+    # Screenshot directory — must be absolute so both the agent runner
+    # (which saves files) and Flask's send_file (which serves them) agree
     task_dir = current_app.config.get("task_dir", ".")
+    task_dir = os.path.abspath(task_dir)
     session_key = f"{user_id}_{instance_id}_{int(time.time())}"
     screenshot_dir = os.path.join(
         task_dir, "live_sessions", session_key, "screenshots"
@@ -280,7 +282,7 @@ def stop_session(session_id):
     trace = runner.get_trace()
 
     # Save trace to disk
-    task_dir = current_app.config.get("task_dir", ".")
+    task_dir = os.path.abspath(current_app.config.get("task_dir", "."))
     trace_dir = os.path.join(task_dir, "live_sessions", session_id)
     os.makedirs(trace_dir, exist_ok=True)
     trace_path = os.path.join(trace_dir, "trace.json")
@@ -306,7 +308,7 @@ def get_screenshot(session_id, step):
     if step < 0 or step >= len(steps):
         return jsonify({"error": f"Step {step} not found"}), 404
 
-    screenshot_path = steps[step].screenshot_path
+    screenshot_path = os.path.abspath(steps[step].screenshot_path)
     if not os.path.isfile(screenshot_path):
         return jsonify({"error": "Screenshot file not found"}), 404
 

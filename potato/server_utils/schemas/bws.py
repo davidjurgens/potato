@@ -7,7 +7,7 @@ Features include:
 - Best selection row — clickable tiles
 - Worst selection row — clickable tiles
 - Validation that best != worst
-- Keyboard shortcuts: 1-9 for best, a-z for worst
+- Keyboard shortcuts: 1-9 for best, q/w/e/r for worst
 - Two hidden inputs storing the best/worst position labels
 
 Config keys:
@@ -100,10 +100,11 @@ def _generate_bws_layout_internal(
                     <span class="bws-tile-shortcut">{shortcut}</span>
                 </div>"""
 
-    # Build worst tiles
+    # Build worst tiles — keys q, w, e, r (row below 1, 2, 3, 4)
+    worst_keys = "qwer"
     worst_tiles_html = ""
     for idx, pos in enumerate(positions):
-        key_letter = chr(ord("a") + idx)
+        key_letter = worst_keys[idx] if idx < len(worst_keys) else chr(ord("a") + idx)
         shortcut = f"[{key_letter}]" if enable_keybindings else ""
         data_key = f'data-key="{key_letter}"' if enable_keybindings else ""
         worst_tiles_html += f"""
@@ -156,13 +157,15 @@ def _generate_bws_layout_internal(
     </form>
     """
 
-    # Key bindings
+    # Key bindings — best: 1,2,3,4  worst: q,w,e,r
+    worst_binding_keys = "qwer"
     key_bindings = []
     if enable_keybindings:
         for idx, pos in enumerate(positions):
             key_bindings.append((str(idx + 1), f"{schema_name}: Best {pos}"))
+            wk = worst_binding_keys[idx] if idx < len(worst_binding_keys) else chr(ord("a") + idx)
             key_bindings.append(
-                (chr(ord("a") + idx), f"{schema_name}: Worst {pos}")
+                (wk, f"{schema_name}: Worst {pos}")
             )
 
     logger.info(f"Successfully generated BWS layout for {schema_name}")

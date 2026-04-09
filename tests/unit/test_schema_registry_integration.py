@@ -23,7 +23,10 @@ class TestSchemaRegistryCompleteness:
             'select', 'number', 'multirate', 'pure_display', 'video',
             'image_annotation', 'audio_annotation', 'video_annotation', 'span_link',
             'pairwise', 'coreference', 'tree_annotation', 'triage', 'event_annotation',
-            'tiered_annotation', 'bws'
+            'tiered_annotation', 'bws', 'soft_label', 'confidence', 'constant_sum',
+            'semantic_differential', 'ranking', 'range_slider', 'hierarchical_multiselect',
+            'vas', 'extractive_qa', 'rubric_eval', 'text_edit', 'error_span',
+            'card_sort', 'conjoint', 'trajectory_eval'
         ]
 
         registry_types = schema_registry.get_supported_types()
@@ -41,7 +44,10 @@ class TestSchemaRegistryCompleteness:
             'select', 'number', 'multirate', 'pure_display', 'video',
             'image_annotation', 'audio_annotation', 'video_annotation', 'span_link',
             'pairwise', 'coreference', 'tree_annotation', 'triage', 'event_annotation',
-            'tiered_annotation', 'bws'
+            'tiered_annotation', 'bws', 'soft_label', 'confidence', 'constant_sum',
+            'semantic_differential', 'ranking', 'range_slider', 'hierarchical_multiselect',
+            'vas', 'extractive_qa', 'rubric_eval', 'text_edit', 'error_span',
+            'card_sort', 'conjoint', 'trajectory_eval'
         ]
 
         registry_types = schema_registry.get_supported_types()
@@ -221,6 +227,121 @@ class TestSchemaGeneration:
 
         html, keybindings = schema_registry.generate(scheme)
 
+        assert html is not None
+        assert len(html) > 0
+
+    def test_vas_generates_html(self):
+        """VAS annotation type should generate valid HTML."""
+        from potato.server_utils.schemas.registry import schema_registry
+
+        scheme = {
+            "annotation_type": "vas",
+            "name": "test_vas",
+            "description": "Test VAS",
+            "left_label": "Low",
+            "right_label": "High"
+        }
+
+        html, keybindings = schema_registry.generate(scheme)
+        assert html is not None
+        assert len(html) > 0
+
+    def test_extractive_qa_generates_html(self):
+        """Extractive QA annotation type should generate valid HTML."""
+        from potato.server_utils.schemas.registry import schema_registry
+
+        scheme = {
+            "annotation_type": "extractive_qa",
+            "name": "test_eqa",
+            "description": "Test EQA",
+            "question_field": "question"
+        }
+
+        html, keybindings = schema_registry.generate(scheme)
+        assert html is not None
+        assert len(html) > 0
+
+    def test_rubric_eval_generates_html(self):
+        """Rubric eval annotation type should generate valid HTML."""
+        from potato.server_utils.schemas.registry import schema_registry
+
+        scheme = {
+            "annotation_type": "rubric_eval",
+            "name": "test_rubric",
+            "description": "Test rubric",
+            "criteria": [
+                {"name": "quality", "description": "Overall quality"},
+                {"name": "accuracy", "description": "Factual accuracy"}
+            ]
+        }
+
+        html, keybindings = schema_registry.generate(scheme)
+        assert html is not None
+        assert len(html) > 0
+
+    def test_text_edit_generates_html(self):
+        """Text edit annotation type should generate valid HTML."""
+        from potato.server_utils.schemas.registry import schema_registry
+
+        scheme = {
+            "annotation_type": "text_edit",
+            "name": "test_edit",
+            "description": "Test edit"
+        }
+
+        html, keybindings = schema_registry.generate(scheme)
+        assert html is not None
+        assert len(html) > 0
+
+    def test_error_span_generates_html(self):
+        """Error span annotation type should generate valid HTML."""
+        from potato.server_utils.schemas.registry import schema_registry
+
+        scheme = {
+            "annotation_type": "error_span",
+            "name": "test_errors",
+            "description": "Test errors",
+            "error_types": [
+                {"name": "Accuracy", "subtypes": ["Omission"]},
+                {"name": "Fluency"}
+            ]
+        }
+
+        html, keybindings = schema_registry.generate(scheme)
+        assert html is not None
+        assert len(html) > 0
+
+    def test_card_sort_generates_html(self):
+        """Card sort annotation type should generate valid HTML."""
+        from potato.server_utils.schemas.registry import schema_registry
+
+        scheme = {
+            "annotation_type": "card_sort",
+            "name": "test_sort",
+            "description": "Test sort",
+            "mode": "closed",
+            "groups": ["Group A", "Group B"]
+        }
+
+        html, keybindings = schema_registry.generate(scheme)
+        assert html is not None
+        assert len(html) > 0
+
+    def test_conjoint_generates_html(self):
+        """Conjoint annotation type should generate valid HTML."""
+        from potato.server_utils.schemas.registry import schema_registry
+
+        scheme = {
+            "annotation_type": "conjoint",
+            "name": "test_conjoint",
+            "description": "Test conjoint",
+            "attributes": [
+                {"name": "Speed", "levels": ["Fast", "Slow"]},
+                {"name": "Price", "levels": ["$10", "$50"]}
+            ]
+        }
+
+        html, keybindings = schema_registry.generate(scheme)
         assert html is not None
         assert len(html) > 0
 

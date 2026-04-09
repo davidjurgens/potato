@@ -46,6 +46,22 @@ PERSISTENCE_TEST_MAP = {
     "triage": "tests/selenium/test_triage_ui.py",
     "tiered_annotation": "tests/selenium/test_tiered_annotation_ui.py",
     "bws": "tests/selenium/test_bws_ui.py",
+    "soft_label": "tests/selenium/test_soft_label_ui.py",
+    "confidence": "tests/selenium/test_confidence_ui.py",
+    "constant_sum": "tests/selenium/test_constant_sum_ui.py",
+    "semantic_differential": "tests/selenium/test_semantic_differential_ui.py",
+    "ranking": "tests/selenium/test_ranking_ui.py",
+    "range_slider": "tests/selenium/test_range_slider_ui.py",
+    "hierarchical_multiselect": "tests/selenium/test_hierarchical_ui.py",
+    # Batch 2 schemas — Selenium persistence tests to be created
+    "vas": "tests/selenium/test_vas_ui.py",
+    "extractive_qa": "tests/selenium/test_extractive_qa_ui.py",
+    "rubric_eval": "tests/selenium/test_rubric_eval_ui.py",
+    "text_edit": "tests/selenium/test_text_edit_ui.py",
+    "error_span": "tests/selenium/test_error_span_ui.py",
+    "card_sort": "tests/selenium/test_card_sort_ui.py",
+    "conjoint": "tests/selenium/test_conjoint_ui.py",
+    "trajectory_eval": "tests/playwright/test_trajectory_eval.py",
 }
 
 # Types that are exempt from the file-existence check because their
@@ -54,6 +70,10 @@ PERSISTENCE_TEST_MAP = {
 EXEMPT_FROM_FILE_CHECK = {
     "radio", "multiselect", "likert", "text", "number", "slider",
     "select", "multirate", "image_annotation", "video_annotation",
+    "soft_label", "confidence", "constant_sum", "semantic_differential",
+    "ranking", "range_slider", "hierarchical_multiselect",
+    "vas", "extractive_qa", "rubric_eval", "text_edit", "error_span",
+    "card_sort", "conjoint", "trajectory_eval",
 }
 
 

@@ -19,6 +19,7 @@
 
 annotation_task_name: "OAuth Login Demo"
 task_dir: "."
+output_annotation_dir: annotation_output
 port: 8000
 
 # --- Authentication ---
