@@ -262,7 +262,9 @@
                         </div>
                         {% else %}
                         {% if is_annotation_page %}
+                                {% if ui_lang.text_to_annotate|default('Text to Annotate:') %}
                                 <h5 class="instance-text-heading">{{ ui_lang.text_to_annotate|default('Text to Annotate:') }}</h5>
+                                {% endif %}
                                 <div id="instance-text" class="p-3 border rounded instance-text-container" style="background-color: var(--light-bg); position: relative;">
                                     <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}" style="position: relative; z-index: 1; pointer-events: auto;">{{instance | sanitize_html}}
                                         <div id="span-overlays" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;">
