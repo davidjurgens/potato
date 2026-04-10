@@ -540,13 +540,46 @@ class UserStateManager:
             self._phase_page_index_cache = {}
 
     def _get_phase_pages(self, phase: UserPhase) -> tuple[str, ...]:
-        """Return cached page ordering for a phase."""
+        """Return cached page ordering for a phase, using config order."""
         self._ensure_phase_caches()
         if phase not in self._phase_page_order_cache:
-            pages = tuple(self.phase_type_to_name_to_page.get(phase, {}).keys())
+            pages = self._get_phase_pages_from_config_order(phase)
             self._phase_page_order_cache[phase] = pages
-            self._phase_page_index_cache[phase] = {page: i for i, page in enumerate(pages)}
+            self._phase_page_index_cache[phase] = {p: i for i, p in enumerate(pages)}
         return self._phase_page_order_cache[phase]
+
+    def _get_phase_pages_from_config_order(self, phase: UserPhase) -> tuple[str, ...]:
+        """Derive page ordering from config phases.order when available.
+
+        Falls back to registration order (OrderedDict insertion order) when
+        the config does not specify a phases.order list.
+        """
+        registered = self.phase_type_to_name_to_page.get(phase, {})
+        if not registered:
+            return ()
+
+        phases_config = self.config.get("phases")
+        if not isinstance(phases_config, dict) or "order" not in phases_config:
+            return tuple(registered.keys())
+
+        ordered: list[str] = []
+        for name in phases_config["order"]:
+            entry = phases_config.get(name)
+            if not isinstance(entry, dict):
+                continue
+            entry_type = entry.get("type", "")
+            try:
+                if UserPhase.fromstr(entry_type) == phase and name in registered:
+                    ordered.append(name)
+            except ValueError:
+                continue
+
+        # Append any registered pages not represented in config order.
+        for name in registered:
+            if name not in ordered:
+                ordered.append(name)
+
+        return tuple(ordered)
 
     def add_user(self, user_id: str) -> UserState:
         """

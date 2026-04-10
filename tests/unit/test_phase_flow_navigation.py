@@ -88,6 +88,108 @@ def test_get_prev_user_phase_page_returns_previous_phase_boundary():
     assert usm.get_prev_user_phase_page("user1") == (UserPhase.INSTRUCTIONS, "instructions_b")
 
 
+# ---- get_next_user_phase_page tests ----
+
+def test_get_next_within_multipage_phase():
+    """Next page within a multi-page phase stays in the same phase."""
+    usm = _make_usm_with_phases()
+    user_state = MagicMock()
+    user_state.get_current_phase_and_page.return_value = (UserPhase.INSTRUCTIONS, "instructions_a")
+    usm.user_to_annotation_state["user1"] = user_state
+
+    assert usm.get_next_user_phase_page("user1") == (UserPhase.INSTRUCTIONS, "instructions_b")
+
+
+def test_get_next_crosses_phase_boundary():
+    """Last page of a phase advances to the next configured phase."""
+    usm = _make_usm_with_phases()
+    user_state = MagicMock()
+    user_state.get_current_phase_and_page.return_value = (UserPhase.INSTRUCTIONS, "instructions_b")
+    usm.user_to_annotation_state["user1"] = user_state
+
+    # Config order: consent, instructions, annotation, poststudy
+    # After last instruction page → ANNOTATION (special: page=None)
+    assert usm.get_next_user_phase_page("user1") == (UserPhase.ANNOTATION, None)
+
+
+def test_get_next_from_login():
+    """LOGIN (not in config phases) advances to the first configured phase."""
+    usm = _make_usm_with_phases()
+    user_state = MagicMock()
+    user_state.get_current_phase_and_page.return_value = (UserPhase.LOGIN, None)
+    usm.user_to_annotation_state["user1"] = user_state
+
+    assert usm.get_next_user_phase_page("user1") == (UserPhase.CONSENT, "consent_page")
+
+
+def test_get_next_at_last_phase_returns_done():
+    """Advancing past the last configured phase returns DONE."""
+    usm = _make_usm_with_phases()
+    user_state = MagicMock()
+    user_state.get_current_phase_and_page.return_value = (UserPhase.POSTSTUDY, "poststudy_page")
+    usm.user_to_annotation_state["user1"] = user_state
+
+    assert usm.get_next_user_phase_page("user1") == (UserPhase.DONE, None)
+
+
+def test_get_next_already_done():
+    """DONE stays DONE."""
+    usm = _make_usm_with_phases()
+    user_state = MagicMock()
+    user_state.get_current_phase_and_page.return_value = (UserPhase.DONE, None)
+    usm.user_to_annotation_state["user1"] = user_state
+
+    assert usm.get_next_user_phase_page("user1") == (UserPhase.DONE, None)
+
+
+def test_advance_through_multipage_then_cross():
+    """advance_phase walks through all pages then crosses to next phase."""
+    usm = _make_usm_with_phases()
+    user_state = MagicMock()
+    user_state.get_current_phase_and_page.return_value = (UserPhase.INSTRUCTIONS, "instructions_a")
+    usm.user_to_annotation_state["user1"] = user_state
+
+    # First advance: within phase
+    usm.advance_phase("user1")
+    user_state.advance_to_phase.assert_called_with(UserPhase.INSTRUCTIONS, "instructions_b")
+
+    # Simulate the state update
+    user_state.get_current_phase_and_page.return_value = (UserPhase.INSTRUCTIONS, "instructions_b")
+
+    # Second advance: crosses to ANNOTATION
+    usm.advance_phase("user1")
+    user_state.advance_to_phase.assert_called_with(UserPhase.ANNOTATION, None)
+
+
+def test_get_prev_from_done():
+    """DONE retreats to the last page of the last configured phase."""
+    usm = _make_usm_with_phases()
+    user_state = MagicMock()
+    user_state.get_current_phase_and_page.return_value = (UserPhase.DONE, None)
+    usm.user_to_annotation_state["user1"] = user_state
+
+    assert usm.get_prev_user_phase_page("user1") == (UserPhase.POSTSTUDY, "poststudy_page")
+
+
+def test_forward_backward_round_trip():
+    """Advance then retreat returns to the starting page."""
+    usm = _make_usm_with_phases(allow_phase_back_navigation=True)
+    user_state = MagicMock()
+    user_state.get_current_phase_and_page.return_value = (UserPhase.INSTRUCTIONS, "instructions_a")
+    usm.user_to_annotation_state["user1"] = user_state
+
+    # Advance to instructions_b
+    next_phase, next_page = usm.get_next_user_phase_page("user1")
+    assert (next_phase, next_page) == (UserPhase.INSTRUCTIONS, "instructions_b")
+
+    # Simulate advance
+    user_state.get_current_phase_and_page.return_value = (UserPhase.INSTRUCTIONS, "instructions_b")
+
+    # Retreat back to instructions_a
+    prev_phase, prev_page = usm.get_prev_user_phase_page("user1")
+    assert (prev_phase, prev_page) == (UserPhase.INSTRUCTIONS, "instructions_a")
+
+
 # ---- retreat_phase tests (config-gated) ----
 
 def test_retreat_phase_within_phase_always_allowed():
