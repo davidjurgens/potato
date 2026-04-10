@@ -7,21 +7,25 @@ nav:
     - Comparison: comparison.md
     - Configuration:
         - Overview: configuration.md
-        - Config File Structure: config_file_structure.md
         - Data Format: data_format.md
         - Data Directory: data_directory.md
         - Remote Data Sources: remote_data_sources.md
         - UI Configuration: ui_configuration.md
         - Form Layout: form_layout.md
+        - Form Layout Advanced: form_layout_advanced.md
         - Layout Customization: layout_customization.md
         - Conditional Logic: conditional_logic.md
+        - Multilingual: multilingual.md
     - Annotation Types:
         - Schemas and Templates: schemas_and_templates.md
+        - Choosing Annotation Types: choosing_annotation_types.md
         - Image Annotation: image_annotation.md
         - Audio Annotation: audio_annotation.md
         - Video Annotation: video_annotation.md
         - Dialogue Annotation: dialogue_annotation.md
+        - Text Annotation: text_annotation.md
         - Pairwise Comparison: pairwise_annotation.md
+        - Multi-Dimensional Pairwise: multi_dimensional_pairwise.md
         - Triage: triage.md
         - Event Annotation: event_annotation.md
         - Entity Linking: entity_linking.md
@@ -29,6 +33,22 @@ nav:
         - Conversation Trees: conversation_tree_annotation.md
         - Tiered Annotation: tiered_annotation.md
         - Span Linking: span_linking.md
+        - Extractive QA: extractive_qa.md
+        - Text Edit: text_edit.md
+        - Error Span: error_span.md
+        - Soft Label: soft_label.md
+        - Confidence Annotation: confidence_annotation.md
+        - Constant Sum: constant_sum.md
+        - Semantic Differential: semantic_differential.md
+        - Ranking: ranking.md
+        - Range Slider: range_slider.md
+        - Hierarchical Multiselect: hierarchical_multiselect.md
+        - Visual Analog Scale: vas.md
+        - Rubric Evaluation: rubric_eval.md
+        - Card Sorting: card_sort.md
+        - Conjoint Analysis: conjoint.md
+        - Best-Worst Scaling: bws.md
+        - Iterative BWS: iterative_bws.md
         - Instance Display: instance_display.md
         - Format Support: format_support.md
     - Workflow Phases:
@@ -38,41 +58,61 @@ nav:
         - Annotation Navigation: annotation_navigation.md
         - Annotation Filtering: annotation_filtering.md
         - Diversity Ordering: diversity_ordering.md
-    - Advanced Features:
+    - Agent Evaluation:
+        - Agent Traces: agent_traces.md
+        - Coding Agent Annotation: coding_agent_annotation.md
+        - Web Agent Annotation: web_agent_annotation.md
+        - Trajectory Evaluation: trajectory_eval.md
+        - Live Agent Interaction: live_agent.md
+    - Solo Mode:
+        - Solo Mode: solo_mode.md
+        - Advanced Features: solo_mode_advanced.md
+        - Developer Guide: solo_mode_developer_guide.md
+    - AI & Intelligence:
         - AI Support: ai_support.md
+        - Visual AI Support: visual_ai_support.md
+        - Chat Support: chat_support.md
         - AI Integration Internals: ai_integration_internals.md
         - Option Highlighting: option_highlighting.md
         - Active Learning Guide: active_learning_guide.md
+        - Active Learning Strategies: active_learning_strategies.md
         - Active Learning Status: active_learning_status.md
         - ICL Labeling: icl_labeling.md
+    - Advanced Features:
         - MACE: mace.md
         - Embedding Visualization: embedding_visualization.md
         - Survey Instruments: survey_instruments.md
         - Category-Based Assignment: category_assignment.md
         - Task Assignment: task_assignment.md
-        - Assignment Strategies: assignment_strategies_summary.md
         - Behavioral Tracking: behavioral_tracking.md
+    - Authentication & Users:
+        - User and Collaboration: user_and_collaboration.md
+        - Password Management: password_management.md
+        - Passwordless Login: passwordless_login.md
+        - SSO & OAuth: sso_authentication.md
     - Administration:
         - Admin Dashboard: admin_dashboard.md
         - Adjudication: adjudication.md
-        - Annotator Stats: annotator_stats.md
-        - User and Collaboration: user_and_collaboration.md
-        - Passwordless Login: passwordless_login.md
         - Annotation History: annotation_history.md
         - Productivity: productivity.md
     - Data & Export:
         - Export Formats: export_formats.md
+        - HuggingFace Export: huggingface_export.md
+        - HuggingFace Datasets: datasets_integration.md
+        - HuggingFace Spaces: huggingface_spaces.md
     - Tools:
         - Preview CLI: preview_cli.md
         - Migration CLI: migration_cli.md
         - Simulator: simulator.md
         - Debugging Guide: debugging_guide.md
+    - Integrations:
+        - Webhooks: webhooks.md
+        - LangChain Integration: langchain_integration.md
     - Deployment:
         - Usage: usage.md
         - Crowdsourcing: crowdsourcing.md
         - MTurk Integration: mturk_integration.md
         - Open Sourcing: open-sourcing.md
     - API Reference:
-        - REST API: api.md
         - API Reference: api_reference.md
 theme: readthedocs

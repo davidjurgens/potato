@@ -9,6 +9,7 @@ Potato supports single sign-on (SSO) via OAuth 2.0 and OpenID Connect (OIDC). An
 3. [Provider Setup Guides](#provider-setup-guides)
    - [Google](#google-oauth)
    - [GitHub](#github-oauth)
+   - [HuggingFace](#huggingface-oauth)
    - [Generic OIDC](#generic-oidc-provider)
 4. [Configuration Reference](#configuration-reference)
 5. [Mixed Mode (SSO + Local Login)](#mixed-mode)
@@ -231,6 +232,31 @@ Users must be members of the specified organization to log in. Potato checks org
 
 ---
 
+### HuggingFace OAuth
+
+Allow users to log in with their HuggingFace account.
+
+#### Prerequisites
+
+- A HuggingFace account
+- Create an OAuth application at [huggingface.co/settings/applications](https://huggingface.co/settings/applications)
+
+#### Configuration
+
+```yaml
+authentication:
+  method: oauth
+  oauth:
+    provider: huggingface
+    client_id: "your-client-id"
+    client_secret: "your-client-secret"
+    identity_field: "preferred_username"
+```
+
+The HuggingFace provider uses the `openid profile email` scopes by default and connects to HuggingFace's OIDC discovery endpoint automatically.
+
+---
+
 ### Generic OIDC Provider
 
 For identity providers that support OpenID Connect (most enterprise SSO systems): Okta, Azure AD, Auth0, Keycloak, etc.
@@ -404,6 +430,11 @@ export GOOGLE_CLIENT_SECRET="abc..."
 You can offer both SSO and traditional login simultaneously:
 
 ```yaml
+require_password: true
+
+user_config:
+  allow_all_users: true
+
 authentication:
   method: "oauth"
   providers:
@@ -411,10 +442,6 @@ authentication:
       client_id: ${GOOGLE_CLIENT_ID}
       client_secret: ${GOOGLE_CLIENT_SECRET}
   allow_local_login: true
-
-user_config:
-  allow_all_users: true
-  require_password: true
 ```
 
 This shows SSO buttons at the top of the login page with an "or" divider and the standard username/password form below.

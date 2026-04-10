@@ -42,6 +42,13 @@
 - [Error Span (MQM)](error_span.md) - Error annotation with typed severity and quality scoring
 - [Card Sorting](card_sort.md) - Drag-and-drop grouping of items into categories
 - [Conjoint Analysis](conjoint.md) - Discrete choice between multi-attribute profiles
+- [Pairwise Comparison](pairwise_annotation.md) - Binary or scale-based A/B comparisons
+- [Multi-Dimensional Pairwise](multi_dimensional_pairwise.md) - Compare items on multiple axes simultaneously
+- [Best-Worst Scaling](bws.md) - Select best and worst from tuples
+- [Dialogue Annotation](dialogue_annotation.md) - Multi-turn conversation annotation
+- [Text Annotation](text_annotation.md) - Free-text input and rationale annotation
+- [Event Annotation](event_annotation.md) - N-ary event structures with triggers and arguments
+- [Trajectory Evaluation](trajectory_eval.md) - Per-step error annotation for agent traces
 
 ## Workflow & Quality
 
@@ -50,15 +57,20 @@
 - [Diversity Ordering](diversity_ordering.md) - Embedding-based clustering for diverse item presentation
 - [Training Phase](training_phase.md) - Annotator training and qualification
 - [Quality Control](quality_control.md) - Attention checks and gold standards
+- [Adjudication](adjudication.md) - Multi-annotator disagreement resolution
+- [MACE](mace.md) - Multi-Annotator Competence Estimation via variational inference
 - [Iterative BWS](iterative_bws.md) - Adaptive Best-Worst Scaling for fine-grained ordinal rankings
 - [Category Assignment](category_assignment.md) - Category-based item assignment
 - [Surveyflow](surveyflow.md) - Pre/post annotation surveys
+- [Annotation Filtering](annotation_filtering.md) - Filter data based on prior annotations
+- [Survey Instruments](survey_instruments.md) - 55 pre-built validated psychological instruments
 
 ## Agent Evaluation
 
 - **[Coding Agent Annotation](coding_agent_annotation.md)** - Evaluate agentic coding systems (Claude Code, SWE-Agent, Aider) with diff rendering, PRM annotation, and code review
 - [Agent Traces](agent_traces.md) - Evaluate AI agent traces and trajectories
 - [Live Agent Interaction](live_agent.md) - Observe and interact with a live AI agent in real time
+- [Web Agent Annotation](web_agent_annotation.md) - Review and create web agent browsing traces
 
 ## Solo Mode
 
@@ -72,6 +84,10 @@
 - [Active Learning](active_learning_guide.md) - ML-based prioritization
 - [Active Learning Strategies](active_learning_strategies.md) - Query strategies reference (BADGE, BALD, hybrid, cold-start)
 - [ICL Labeling](icl_labeling.md) - In-context learning for labeling
+- [Visual AI Support](visual_ai_support.md) - YOLO and vision LLM support for image/video annotation
+- [Chat Support](chat_support.md) - LLM-powered sidebar for annotator assistance
+- [Option Highlighting](option_highlighting.md) - AI-assisted highlighting of likely annotation options
+- [Embedding Visualization](embedding_visualization.md) - UMAP-based instance similarity dashboard
 
 ## Authentication & User Management
 
@@ -96,13 +112,23 @@
 - [Data Format](data_format.md) - Input and output data formats
 - [Export Formats](export_formats.md) - Export to COCO, YOLO, CoNLL, and more
 - [HuggingFace Hub Export](huggingface_export.md) - Push annotations to HuggingFace Hub
+- [HuggingFace Datasets Integration](datasets_integration.md) - Load annotations as DatasetDict or DataFrame
+- [Remote Data Sources](remote_data_sources.md) - Load data from S3, Google Drive, Dropbox, URLs, and databases
+- [Data Directory](data_directory.md) - Load data from a directory with optional live watching
+
+## UI & Customization
+
 - [UI Configuration](ui_configuration.md) - Interface customization
 - [Layout Customization](layout_customization.md) - Custom CSS layouts and styling
+- [Form Layout](form_layout.md) - Grid and column layout for annotation forms
+- [Form Layout Advanced](form_layout_advanced.md) - Styling, alignment, and padding options
+- [Multilingual](multilingual.md) - Localization and RTL support
 
 ## Integrations
 
 - [Webhooks](webhooks.md) - Outgoing webhook notifications for annotation events
 - [HuggingFace Spaces](huggingface_spaces.md) - Deploy Potato on HuggingFace Spaces
+- [LangChain Integration](langchain_integration.md) - Send LangChain agent traces to Potato
 
 ## Tools & Utilities
 
@@ -110,6 +136,7 @@
 - [Migration CLI](migration_cli.md) - Upgrade v1 configs to v2
 - [Debugging Guide](debugging_guide.md) - Debug flags and troubleshooting
 - [Simulator](simulator.md) - Annotation simulation tool
+- [API Reference](api_reference.md) - REST API endpoints documentation
 
 ## Productivity Features
 
@@ -164,6 +191,14 @@
 | Push annotations to HuggingFace Hub | [HuggingFace Export](huggingface_export.md) |
 | Deploy on HuggingFace Spaces | [HuggingFace Spaces](huggingface_spaces.md) |
 | Set up webhook notifications | [Webhooks](webhooks.md) |
+| Use LLM chat assistant for annotators | [Chat Support](chat_support.md) |
+| Evaluate coding agents | [Coding Agent Annotation](coding_agent_annotation.md) |
+| Review web agent traces | [Web Agent Annotation](web_agent_annotation.md) |
+| Load data from S3/GDrive/Dropbox | [Remote Data Sources](remote_data_sources.md) |
+| Use pre-built survey instruments | [Survey Instruments](survey_instruments.md) |
+| Set up multilingual interface | [Multilingual](multilingual.md) |
+| Resolve annotator disagreements | [Adjudication](adjudication.md) |
+| Browse the REST API | [API Reference](api_reference.md) |
 
 ---
 

@@ -115,6 +115,43 @@ In many cases you might need to use Potato within your local network. For exampl
 
 6. You can also try the above link on your iPad or smartphones as long as they are connected to the same WiFi as the server (could be your own laptop)
 
+## CLI Command Reference
+
+Potato provides several CLI commands beyond `start`:
+
+### Browse and Download Projects
+
+```bash
+# List all available annotation project templates
+potato list all
+
+# Download a project template
+potato get sentiment_analysis
+```
+
+The `get` command downloads projects from the [Potato Showcase](https://github.com/davidjurgens/potato-showcase/) repository and extracts them to a local directory.
+
+### Reset User Passwords
+
+```bash
+# Reset password for a specific user
+potato reset-password config.yaml --username annotator1
+
+# Reset all passwords (interactive)
+potato reset-password config.yaml
+```
+
+See [Password Management](password_management.md) for more details on password reset flows.
+
+### Migrate Configs
+
+```bash
+# Migrate a v1 config to v2 format
+potato migrate --to-v2 old_config.yaml --output new_config.yaml
+```
+
+See [Migration CLI](migration_cli.md) for details.
+
 ## Next Steps
 
 - [Configuration Guide](configuration.md) - Complete configuration reference

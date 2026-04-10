@@ -1,11 +1,12 @@
 # Quality Control Features
 
-Potato provides comprehensive quality control features to ensure high-quality annotations in your projects. This guide covers four key features:
+Potato provides comprehensive quality control features to ensure high-quality annotations in your projects. This guide covers five key features:
 
 1. **Attention Checks** - Verify annotator engagement with known-answer items
 2. **Gold Standards** - Track accuracy against expert-labeled items
 3. **Pre-annotation Support** - Pre-fill forms with model predictions
 4. **Agreement Metrics** - Calculate inter-annotator agreement in real-time
+5. **Step-Level QC** - Per-step quality control for agent trace evaluation
 
 ---
 
@@ -422,6 +423,35 @@ agreement_metrics:
   min_overlap: 2
   refresh_interval: 60
 ```
+
+---
+
+## Step-Level Quality Control
+
+For agent trace evaluation and trajectory annotation tasks, Potato supports step-level quality control — checking annotator performance at the granularity of individual agent steps rather than whole instances.
+
+### Configuration
+
+```yaml
+quality_control:
+  step_level:
+    enabled: true
+
+    # Gold standards with known-correct step labels
+    gold_standards_file: "data/gold_steps.json"
+
+    # Attention checks at the step level
+    attention_checks:
+      enabled: true
+      frequency: 5  # Insert attention check every N steps
+```
+
+Step-level QC is particularly useful for:
+- **Trajectory evaluation** tasks where each step has independent correctness
+- **Process reward model** annotation where per-step labels are critical
+- **Code review** tasks with multiple files to review
+
+Step-level agreement metrics (Cohen's kappa) are computed per annotator pair for step-level schemas and available in the admin dashboard.
 
 ---
 

@@ -81,7 +81,7 @@ Import traces from any major agent framework with the built-in converter:
 python -m potato.trace_converter --input traces.json --input-format openai --output data.jsonl
 ```
 
-Supported formats: **OpenAI**, **Anthropic/Claude**, **ReAct**, **LangChain**, **LangFuse**, **WebArena**, **SWE-bench**, **OpenTelemetry**, **CrewAI/AutoGen/LangGraph**, **MCP**, and more. Auto-detection is available with `--auto-detect`.
+Supported formats: **OpenAI**, **Anthropic/Claude**, **ReAct**, **LangChain**, **LangFuse**, **WebArena**, **SWE-bench**, **OpenTelemetry**, **CrewAI/AutoGen/LangGraph**, **MCP**, **Aider**, **Claude Code**, **ATIF**, **SWE-Agent**, and **Web Agent**. Auto-detection is available with `--auto-detect`.
 
 ### Evaluation Levels
 
@@ -143,7 +143,7 @@ An LLM-powered sidebar where annotators can ask questions about difficult instan
 |---------|-------------|
 | Attention checks | Automatically inserted known-answer items to verify engagement |
 | Gold standards | Track annotator accuracy against expert labels |
-| Inter-annotator agreement | Built-in Krippendorff's alpha and Cohen's kappa |
+| Inter-annotator agreement | Krippendorff's alpha (general) and Cohen's kappa (step-level agent evaluation) |
 | Training phase | Practice annotations with feedback before the real task |
 | Behavioral tracking | Timing, click patterns, and annotation change history |
 
@@ -169,6 +169,7 @@ Potato supports multiple authentication methods, from passwordless quick-start t
 | **Password + file persistence** | Team annotation with shared credential files ([docs](docs/password_management.md)) |
 | **Database** | Production deployments with SQLite or PostgreSQL ([docs](docs/password_management.md#database-authentication-backend)) |
 | **OAuth / SSO** | Google, GitHub, or institutional OIDC login ([docs](docs/sso_authentication.md)) |
+| **Clerk** | Managed authentication via Clerk.com ([docs](docs/sso_authentication.md)) |
 | **Passwordless** | Low-stakes tasks where ease of access matters ([docs](docs/passwordless_login.md)) |
 
 Passwords are hashed with per-user PBKDF2-SHA256 salts. Admins can reset passwords via CLI (`potato reset-password`) or REST API. Self-service token-based reset is also available.

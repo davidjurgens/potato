@@ -350,6 +350,10 @@ python -m potato.trace_converter --list-formats
 | `otel` | OpenTelemetry/OTLP | `resourceSpans` (OTLP) or `trace_id`/`span_id` (flat) |
 | `multi_agent` | CrewAI, AutoGen, LangGraph | Auto-detected: `agents`+`steps[].agent`, `messages[].sender`, `events[].node` |
 | `mcp` | Model Context Protocol | `interactions[].method` (tools/call, resources/read, prompts/get) |
+| `aider` | Aider code editing | Chat history with edit blocks and file changes |
+| `claude_code` | Claude Code CLI | Session traces with tool calls and file edits |
+| `web_agent` | Generic web agent | `actions[].action_type` with DOM selectors and screenshots |
+| `swe_agent_trajectory` | SWE-Agent trajectory | Full trajectory with `history[].action/observation` pairs |
 
 ### New Format Examples
 

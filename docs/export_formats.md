@@ -413,6 +413,70 @@ FROM 'export/annotations.parquet' a
 JOIN 'export/items.parquet' i ON a.instance_id = i.item_id;
 ```
 
+### CSV (csv)
+
+Export annotations as comma-separated values with one row per annotation.
+
+```bash
+python -m potato.export --config config.yaml --format csv --output ./export/
+```
+
+### TSV (tsv)
+
+Export annotations as tab-separated values. Same structure as CSV but with tab delimiters.
+
+```bash
+python -m potato.export --config config.yaml --format tsv --output ./export/
+```
+
+### JSONL (jsonl)
+
+Export annotations as JSON Lines (one JSON object per line). Preserves full annotation structure.
+
+```bash
+python -m potato.export --config config.yaml --format jsonl --output ./export/
+```
+
+### EAF - ELAN Annotation Format (eaf)
+
+Export tiered annotations as ELAN EAF XML files for use with [ELAN](https://archive.mpi.nl/tla/elan), a tool for linguistic and phonetic annotation of audio/video.
+
+```bash
+python -m potato.export --config config.yaml --format eaf --output ./export/
+```
+
+### TextGrid - Praat (textgrid)
+
+Export tiered annotations as Praat TextGrid files for use with [Praat](https://www.fon.hum.uva.nl/praat/), a tool for phonetic analysis.
+
+```bash
+python -m potato.export --config config.yaml --format textgrid --output ./export/
+```
+
+### Agent Evaluation (agent_eval)
+
+Export agent trace evaluation results with aggregated scores, step-level ratings, and error taxonomies.
+
+```bash
+python -m potato.export --config config.yaml --format agent_eval --output ./export/
+```
+
+### Coding Agent Evaluation (coding_eval)
+
+Export coding agent evaluation results including process reward model (PRM) labels, code review annotations, DPO pairs, and SWE-bench compatibility scores.
+
+```bash
+python -m potato.export --config config.yaml --format coding_eval --output ./export/
+```
+
+### HuggingFace Datasets (huggingface)
+
+Export annotations directly as a HuggingFace Dataset. See [HuggingFace Hub Export](huggingface_export.md) for detailed options.
+
+```bash
+python -m potato.export --config config.yaml --format huggingface --output ./export/
+```
+
 ## Programmatic Export
 
 Use the export registry directly in Python:
@@ -471,13 +535,15 @@ export_registry.register(MyExporter())
 
 ## Format Compatibility Matrix
 
-| Annotation Type | COCO | YOLO | Pascal VOC | CoNLL-2003 | CoNLL-U | Mask | Parquet |
-|----------------|------|------|------------|------------|---------|------|---------|
-| Bounding boxes | Yes | Yes | Yes | - | - | - | Yes |
-| Polygons | Yes | - | - | - | - | Yes | Yes |
-| Keypoints | Yes | - | - | - | - | - | Yes |
-| Text spans | - | - | - | Yes | Yes | - | Yes |
-| Classifications | Partial | - | - | - | - | - | Yes |
+| Annotation Type | COCO | YOLO | Pascal VOC | CoNLL-2003 | CoNLL-U | Mask | Parquet | CSV/TSV | EAF/TextGrid | Agent Eval |
+|----------------|------|------|------------|------------|---------|------|---------|---------|--------------|------------|
+| Bounding boxes | Yes | Yes | Yes | - | - | - | Yes | Yes | - | - |
+| Polygons | Yes | - | - | - | - | Yes | Yes | - | - | - |
+| Keypoints | Yes | - | - | - | - | - | Yes | - | - | - |
+| Text spans | - | - | - | Yes | Yes | - | Yes | Yes | - | - |
+| Classifications | Partial | - | - | - | - | - | Yes | Yes | - | - |
+| Tiered segments | - | - | - | - | - | - | Yes | - | Yes | - |
+| Agent traces | - | - | - | - | - | - | Yes | - | - | Yes |
 
 ## Best Practices
 

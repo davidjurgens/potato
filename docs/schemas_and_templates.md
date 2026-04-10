@@ -26,6 +26,14 @@ Below are examples of the different annotation schema types available in Potato:
 |:---:|:---:|:---:|
 | ![Triage](img/screenshots/triage_annotation.png) | ![Coreference](img/screenshots/coreference_annotation.png) | ![Tree](img/screenshots/tree_annotation.png) |
 
+| Soft Label | Constant Sum | Semantic Differential |
+|:---:|:---:|:---:|
+| Probability distribution sliders | Points allocation across categories | Bipolar adjective rating scales |
+
+| Ranking | Range Slider | Hierarchical Multiselect |
+|:---:|:---:|:---:|
+| Drag-and-drop reordering | Dual-thumb min-max range | Tree taxonomy with checkboxes |
+
 ## Core Schema Structure
 
 All annotation schemas share these **required fields**:
@@ -264,7 +272,7 @@ annotation_schemes:
     max: 100
 ```
 
-### 9. Image Annotation (`image`)
+### 9. Image Annotation (`image_annotation`)
 
 Allows annotators to draw bounding boxes, polygons, and place landmarks on images.
 
@@ -278,7 +286,7 @@ Allows annotators to draw bounding boxes, polygons, and place landmarks on image
 **Example:**
 ```yaml
 annotation_schemes:
-  - annotation_type: "image"
+  - annotation_type: "image_annotation"
     name: "object_detection"
     description: "Draw boxes around all vehicles"
     labels: ["car", "truck", "motorcycle", "bicycle"]
@@ -287,7 +295,7 @@ annotation_schemes:
 
 See [Image Annotation](image_annotation.md) for detailed documentation.
 
-### 10. Audio Annotation (`audio`)
+### 10. Audio Annotation (`audio_annotation`)
 
 Allows annotators to segment and label audio files using waveform visualization.
 
@@ -301,7 +309,7 @@ Allows annotators to segment and label audio files using waveform visualization.
 **Example:**
 ```yaml
 annotation_schemes:
-  - annotation_type: "audio"
+  - annotation_type: "audio_annotation"
     name: "speaker_diarization"
     description: "Label who is speaking in each segment"
     labels: ["Speaker A", "Speaker B", "Overlap", "Silence"]
@@ -309,7 +317,7 @@ annotation_schemes:
 
 See [Audio Annotation](audio_annotation.md) for detailed documentation.
 
-### 11. Video Annotation (`video`)
+### 11. Video Annotation (`video_annotation`)
 
 Allows frame-by-frame labeling of video content with playback controls.
 
@@ -323,7 +331,7 @@ Allows frame-by-frame labeling of video content with playback controls.
 **Example:**
 ```yaml
 annotation_schemes:
-  - annotation_type: "video"
+  - annotation_type: "video_annotation"
     name: "action_recognition"
     description: "Label the action being performed"
     labels: ["walking", "running", "sitting", "standing"]
@@ -623,6 +631,390 @@ GitHub PR review-style annotation with inline diff comments, file-level ratings,
 ```
 
 See [Coding Agent Annotation](coding_agent_annotation.md) for detailed documentation.
+
+### 25. Dropdown Selection (`select`)
+
+A dropdown menu for selecting a single option from a predefined list. Supports predefined datasets (country, ethnicity, religion).
+
+**Required Fields:**
+- `labels` (list): Array of option labels
+
+**Optional Fields:**
+- `use_predefined_labels` (string): Use built-in label sets - "country", "ethnicity", or "religion"
+
+**Example:**
+```yaml
+annotation_schemes:
+  - annotation_type: "select"
+    name: "genre"
+    description: "Select the genre of this text"
+    labels: ["news", "opinion", "review", "social_media"]
+```
+
+### 26. Span Linking (`span_link`)
+
+Creates typed relationships between previously annotated spans. Works with a span annotation schema to add directed or undirected links with visual arc rendering.
+
+**Required Fields:**
+- `span_schema` (string): Name of the span schema to link from
+- `link_types` (list): Link type definitions with `name` and optional constraints
+
+**Optional Fields:**
+- `link_types[].directed` (boolean): Whether link is directed (default: false)
+- `link_types[].allowed_source_labels` / `allowed_target_labels` (list): Constrain which span labels can be source/target
+- `visual_display` (object): Arc rendering options
+
+**Example:**
+```yaml
+annotation_schemes:
+  - annotation_type: "span_link"
+    name: "relations"
+    description: "Annotate relationships between entities"
+    span_schema: "entities"
+    link_types:
+      - name: "WORKS_FOR"
+        directed: true
+        allowed_source_labels: ["PERSON"]
+        allowed_target_labels: ["ORGANIZATION"]
+```
+
+See [Span Linking](span_linking.md) for detailed documentation.
+
+### 27. Display Only (`pure_display`)
+
+Renders read-only text content without interactive elements. Useful for instructions, headers, or formatted content within annotation forms.
+
+**Required Fields:**
+- `description` (string): Text to display (supports markdown-style headers)
+
+**Optional Fields:**
+- `labels` (list): Additional text content to render
+- `allow_html` (boolean): Enable sanitized HTML rendering
+
+**Example:**
+```yaml
+annotation_schemes:
+  - annotation_type: "pure_display"
+    name: "instructions"
+    description: "## Please read the text carefully before annotating"
+```
+
+### 28. Video Player (`video`)
+
+Embeds a video player for display alongside other annotation schemas. This is for video playback only — use `video_annotation` for annotating video content.
+
+**Required Fields:**
+- `video_path` (string): Path to video file or URL
+
+**Optional Fields:**
+- `autoplay` (boolean): Auto-start playback (default: false)
+- `loop` (boolean): Loop playback (default: false)
+- `controls` (boolean): Show player controls (default: true)
+- `custom_css` (object): Width/height settings
+
+**Example:**
+```yaml
+annotation_schemes:
+  - annotation_type: "video"
+    name: "video_display"
+    description: "Watch the video below"
+    video_path: "videos/sample.mp4"
+    controls: true
+```
+
+### 29. Pairwise Comparison (`pairwise`)
+
+Compares two items side-by-side with three modes: binary (clickable tiles), scale (slider), or multi_dimension (multiple dimensions).
+
+**Required Fields:**
+- `mode` (string): "binary", "scale", or "multi_dimension"
+
+**Optional Fields:**
+- `labels` (list): Custom labels for items (default: ["A", "B"])
+- `allow_tie` (boolean): Show tie/no-preference option (default: false)
+- `scale` (object): For scale mode — `min`, `max`, `step`, `labels.min/max/center`
+- `dimensions` (list): For multi_dimension mode — list of comparison dimensions
+- `justification` (object): Optional reason selection and rationale textarea
+- `sequential_key_binding` (boolean): Enable keyboard shortcuts
+
+**Example:**
+```yaml
+annotation_schemes:
+  - annotation_type: "pairwise"
+    name: "preference"
+    description: "Which response is better?"
+    mode: "binary"
+    labels: ["Response A", "Response B"]
+    allow_tie: true
+```
+
+See [Pairwise Comparison](pairwise_annotation.md) for detailed documentation.
+
+### 30. Event Annotation (`event_annotation`)
+
+Marks events with triggers and typed arguments. Works with span annotations to identify trigger words and fill argument roles.
+
+**Required Fields:**
+- `span_schema` (string): Name of the span schema for entities/triggers
+- `event_types` (list): Event type definitions with arguments
+
+**Optional Fields:**
+- `event_types[].trigger_labels` (list): Span labels that can trigger this event
+- `event_types[].arguments[].required` (boolean): Whether argument is mandatory
+- `visual_display` (object): Arc rendering options
+
+**Example:**
+```yaml
+annotation_schemes:
+  - annotation_type: "event_annotation"
+    name: "events"
+    description: "Annotate events with triggers and arguments"
+    span_schema: "entities"
+    event_types:
+      - type: "ATTACK"
+        trigger_labels: ["EVENT_TRIGGER"]
+        arguments:
+          - role: "attacker"
+            entity_types: ["PERSON", "ORGANIZATION"]
+```
+
+See [Event Annotation](event_annotation.md) for detailed documentation.
+
+### 31. Best-Worst Scaling (`bws`)
+
+Select best and worst items from a tuple for efficient ordinal ranking. Keyboard shortcuts enable rapid annotation.
+
+**Required Fields:**
+- `best_description` (string): Question text for best selection
+- `worst_description` (string): Question text for worst selection
+
+**Optional Fields:**
+- `tuple_size` (integer): Items per tuple (default: 4)
+- `sequential_key_binding` (boolean): Enable keyboard shortcuts
+
+**Example:**
+```yaml
+annotation_schemes:
+  - annotation_type: "bws"
+    name: "sentiment_bws"
+    description: "Sentiment Intensity"
+    best_description: "Which expresses the MOST positive sentiment?"
+    worst_description: "Which expresses the LEAST positive sentiment?"
+```
+
+See [Best-Worst Scaling](bws.md) for detailed documentation.
+
+### 32. Soft Label / Probability Distribution (`soft_label`)
+
+Constrained sliders where values must sum to a fixed total (default 100). Annotators distribute probability across labels.
+
+**Required Fields:**
+- `labels` (list): Label names for distribution
+
+**Optional Fields:**
+- `total` (number): Sum constraint (default: 100)
+- `min_per_label` (number): Minimum per label (default: 0)
+- `show_distribution_chart` (boolean): Show bar chart visualization (default: true)
+
+**Example:**
+```yaml
+annotation_schemes:
+  - annotation_type: "soft_label"
+    name: "sentiment_dist"
+    description: "Distribute probability across sentiment labels"
+    labels: ["Positive", "Neutral", "Negative"]
+    total: 100
+```
+
+See [Soft Label](soft_label.md) for detailed documentation.
+
+### 33. Confidence Rating (`confidence`)
+
+Rates annotator confidence paired with a primary annotation. Supports Likert-style discrete scale or continuous slider.
+
+**Required Fields:**
+- (none beyond core fields)
+
+**Optional Fields:**
+- `target_schema` (string): Name of the primary schema this confidence is for
+- `scale_type` (string): "likert" (default) or "slider"
+- `scale_points` (integer): Number of points for Likert (default: 5)
+- `labels` (list): Custom scale labels
+
+**Example:**
+```yaml
+annotation_schemes:
+  - annotation_type: "confidence"
+    name: "confidence"
+    description: "How confident are you in your label?"
+    target_schema: "sentiment"
+    scale_points: 5
+```
+
+See [Confidence Annotation](confidence_annotation.md) for detailed documentation.
+
+### 34. Constant Sum / Points Allocation (`constant_sum`)
+
+Distributes a fixed point budget across categories using number inputs or sliders.
+
+**Required Fields:**
+- `labels` (list): Category names
+
+**Optional Fields:**
+- `total_points` (number): Point budget (default: 100)
+- `min_per_item` (number): Minimum per item (default: 0)
+- `input_type` (string): "number" (default) or "slider"
+
+**Example:**
+```yaml
+annotation_schemes:
+  - annotation_type: "constant_sum"
+    name: "topic_relevance"
+    description: "Allocate 100 points across topics by relevance"
+    labels: ["Politics", "Technology", "Sports"]
+    total_points: 100
+```
+
+See [Constant Sum](constant_sum.md) for detailed documentation.
+
+### 35. Semantic Differential (`semantic_differential`)
+
+Matrix of bipolar adjective scales. Each row pairs left and right poles with radio buttons between them.
+
+**Required Fields:**
+- `pairs` (list): List of [left_adjective, right_adjective] pairs
+
+**Optional Fields:**
+- `scale_points` (integer): Number of points per scale (default: 7)
+
+**Example:**
+```yaml
+annotation_schemes:
+  - annotation_type: "semantic_differential"
+    name: "word_connotation"
+    description: "Rate the word on each dimension"
+    scale_points: 7
+    pairs:
+      - ["Good", "Bad"]
+      - ["Strong", "Weak"]
+      - ["Active", "Passive"]
+```
+
+See [Semantic Differential](semantic_differential.md) for detailed documentation.
+
+### 36. Ranking / Drag-and-Drop (`ranking`)
+
+Draggable list for reordering items by preference or quality. Supports mouse drag, arrow buttons, and keyboard controls.
+
+**Required Fields:**
+- `labels` (list): Items to rank
+
+**Optional Fields:**
+- `allow_ties` (boolean): Whether ties are allowed (default: false)
+
+**Example:**
+```yaml
+annotation_schemes:
+  - annotation_type: "ranking"
+    name: "response_quality"
+    description: "Rank responses from best to worst"
+    labels: ["Response A", "Response B", "Response C"]
+```
+
+See [Ranking](ranking.md) for detailed documentation.
+
+### 37. Range Slider / Dual-Thumb (`range_slider`)
+
+Goldilocks slider with two draggable handles for selecting a min-max range.
+
+**Required Fields:**
+- (none beyond core fields)
+
+**Optional Fields:**
+- `min_value` (number): Minimum value (default: 0)
+- `max_value` (number): Maximum value (default: 100)
+- `step` (number): Step size (default: 1)
+- `left_label` / `right_label` (string): Endpoint labels
+- `show_values` (boolean): Display numeric values (default: true)
+
+**Example:**
+```yaml
+annotation_schemes:
+  - annotation_type: "range_slider"
+    name: "formality_range"
+    description: "What range of formality is appropriate?"
+    min_value: 0
+    max_value: 100
+    left_label: "Very informal"
+    right_label: "Very formal"
+```
+
+See [Range Slider](range_slider.md) for detailed documentation.
+
+### 38. Hierarchical Multi-Label Selection (`hierarchical_multiselect`)
+
+Expandable/collapsible tree of checkboxes for hierarchical taxonomy selection. Supports automatic parent/child selection and search filtering.
+
+**Required Fields:**
+- `taxonomy` (object): Nested dict/list defining the label hierarchy
+
+**Optional Fields:**
+- `auto_select_children` (boolean): Auto-select children when parent selected (default: false)
+- `auto_select_parent` (boolean): Auto-select parent when all children selected (default: false)
+- `show_search` (boolean): Show search/filter box (default: false)
+- `max_selections` (integer): Maximum selections allowed
+
+**Example:**
+```yaml
+annotation_schemes:
+  - annotation_type: "hierarchical_multiselect"
+    name: "topic_hierarchy"
+    description: "Select topics that apply"
+    taxonomy:
+      Science:
+        Physics: ["Quantum Mechanics", "Thermodynamics"]
+        Biology: ["Genetics"]
+      Technology: ["AI", "Blockchain"]
+    show_search: true
+```
+
+See [Hierarchical Multi-Label Selection](hierarchical_multiselect.md) for detailed documentation.
+
+### 39. Trajectory Evaluation (`trajectory_eval`)
+
+Per-step error marking for agent/LLM traces. Marks each step with correctness status, structured error types, severity levels, and optional scoring.
+
+**Required Fields:**
+- (none beyond core fields)
+
+**Optional Fields:**
+- `steps_key` (string): Key in instance data containing steps (default: "steps")
+- `step_text_key` (string): Key for step text (default: "action")
+- `correctness_options` (list): Status options (default: ["correct", "incorrect", "partially_correct"])
+- `error_types` (list): Error type definitions with optional subtypes
+- `severities` (list): Severity levels with penalty weights
+- `show_score` (boolean): Display cumulative score (default: true)
+
+**Example:**
+```yaml
+annotation_schemes:
+  - annotation_type: "trajectory_eval"
+    name: "step_evaluation"
+    description: "Evaluate each agent step"
+    steps_key: "steps"
+    error_types:
+      - name: "reasoning"
+        subtypes: ["logical_error", "factual_error"]
+      - name: "execution"
+        subtypes: ["wrong_tool", "wrong_args"]
+    severities:
+      - name: "minor"
+        weight: -1
+      - name: "major"
+        weight: -5
+```
+
+See [Trajectory Evaluation](trajectory_eval.md) for detailed documentation.
 
 ## Advanced Features
 

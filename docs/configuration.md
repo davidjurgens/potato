@@ -846,6 +846,131 @@ keyword_highlight_settings:
 
 See [Productivity Features](productivity.md#admin-keyword-highlights) for detailed documentation.
 
+### Best-Worst Scaling (BWS)
+
+Configure Best-Worst Scaling for efficient ordinal ranking. See [BWS documentation](bws.md) for details.
+
+```yaml
+bws_config:
+  tuple_size: 4
+  seed: 42
+  scoring:
+    method: counting  # Options: counting, bradley_terry, plackett_luce
+```
+
+### Iterative BWS
+
+Adaptive Best-Worst Scaling with multiple rounds. See [Iterative BWS](iterative_bws.md) for details.
+
+```yaml
+ibws_config:
+  max_rounds: 5
+  scoring_method: counting
+```
+
+### MACE (Multi-Annotator Competence Estimation)
+
+Estimate annotator competence using variational Bayes EM. See [MACE documentation](mace.md) for details.
+
+```yaml
+mace:
+  enabled: true
+  min_annotations_per_item: 3
+  trigger_every_n: 50
+```
+
+### Category Assignment
+
+Assign instances to annotators based on expertise categories. See [Category Assignment](category_assignment.md) for details.
+
+```yaml
+category_assignment:
+  enabled: true
+  categories:
+    - name: "medical"
+      qualification_test: "data/medical_test.json"
+    - name: "legal"
+      qualification_test: "data/legal_test.json"
+```
+
+### Diversity Ordering
+
+Present instances in diverse order using embedding-based clustering. See [Diversity Ordering](diversity_ordering.md) for details.
+
+```yaml
+diversity_ordering:
+  enabled: true
+  model_name: "all-MiniLM-L6-v2"
+  num_clusters: 10
+```
+
+### Embedding Visualization
+
+UMAP-based similarity visualization in the admin dashboard. See [Embedding Visualization](embedding_visualization.md) for details.
+
+```yaml
+embedding_visualization:
+  enabled: true
+  model_name: "all-MiniLM-L6-v2"
+```
+
+### Chat Support
+
+LLM-powered annotator assistance sidebar. See [Chat Support](chat_support.md) for details.
+
+```yaml
+chat_support:
+  enabled: true
+  endpoint_type: "anthropic"
+  model: "claude-sonnet-4-20250514"
+  api_key: "${ANTHROPIC_API_KEY}"
+```
+
+### Directory Watching
+
+Monitor a directory for new data files. See [Data Directory](data_directory.md) for details.
+
+```yaml
+data_directory: "./data/incoming"
+watch_data_directory: true
+watch_poll_interval: 5.0  # seconds
+```
+
+### Partial Loading
+
+Lazy-load large datasets for memory efficiency.
+
+```yaml
+partial_loading:
+  enabled: true
+  batch_size: 100
+  cache_size: 500
+```
+
+### Format Handling
+
+Configure handlers for non-standard file formats. See [Format Support](format_support.md) for details.
+
+```yaml
+format_handling:
+  pdf:
+    enabled: true
+    renderer: "pdfjs"
+  markdown:
+    enabled: true
+  code:
+    enabled: true
+    theme: "monokai"
+```
+
+### Header Logo
+
+Display a custom logo in the annotation interface header.
+
+```yaml
+header_logo: "static/logo.png"
+```
+
 ## Complete Example
 
 Here's a complete configuration file that demonstrates most features:
