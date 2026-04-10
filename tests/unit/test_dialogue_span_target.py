@@ -56,13 +56,11 @@ class TestDialogueSpanTarget:
     def test_data_original_text_contains_concatenated_turns(
         self, display, dialogue_data, span_field_config
     ):
-        """data-original-text must contain turns concatenated as 'Speaker: text\\n...'."""
+        """Each turn's text must appear in a data-original-text attribute."""
         html = display.render(span_field_config, dialogue_data)
-        # The expected text is HTML-escaped for attribute embedding
-        # Newlines become &#10; or are escaped; check the content pieces
-        assert "Agent: I will search for flights." in html
-        assert "Environment: Found 3 flights." in html
-        assert "Agent: The cheapest is BA117 at $450." in html
+        assert 'data-original-text="I will search for flights."' in html
+        assert 'data-original-text="Found 3 flights."' in html
+        assert 'data-original-text="The cheapest is BA117 at $450."' in html
 
     def test_no_text_content_wrapper_without_span_target(
         self, display, dialogue_data, no_span_field_config
@@ -75,16 +73,16 @@ class TestDialogueSpanTarget:
     def test_concatenation_format_matches_expected(
         self, display, span_field_config
     ):
-        """Verify the exact concatenation format: 'Speaker: text' joined by newlines."""
+        """Verify each turn renders with speaker label and text in separate spans."""
         data = [
             {"speaker": "Alice", "text": "Hello"},
             {"speaker": "Bob", "text": "Hi there"},
         ]
         html = display.render(span_field_config, data)
-        # The data-original-text should contain the concatenated text
-        expected_parts = ["Alice: Hello", "Bob: Hi there"]
-        for part in expected_parts:
-            assert part in html
+        assert 'data-speaker="Alice"' in html
+        assert 'data-original-text="Hello"' in html
+        assert 'data-speaker="Bob"' in html
+        assert 'data-original-text="Hi there"' in html
 
     def test_no_speaker_concatenation(self, display, span_field_config):
         """Turns without a speaker should just use the text."""
@@ -93,8 +91,9 @@ class TestDialogueSpanTarget:
             {"speaker": "Agent", "text": "I have a speaker"},
         ]
         html = display.render(span_field_config, data)
-        assert "No speaker here" in html
-        assert "Agent: I have a speaker" in html
+        assert 'data-original-text="No speaker here"' in html
+        assert 'data-speaker="Agent"' in html
+        assert 'data-original-text="I have a speaker"' in html
 
     def test_dialogue_turns_still_rendered_inside_wrapper(
         self, display, dialogue_data, span_field_config
