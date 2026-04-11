@@ -26,7 +26,7 @@ training:
     min_correct: 3
     require_all_correct: false
   allow_retry: true
-  failure_action: "retry"  # or "advance"
+  failure_action: "repeat_training"  # or "move_to_done"
 ```
 
 ### Configuration Options
@@ -41,7 +41,7 @@ training:
 | `passing_criteria.max_mistakes` | integer | No | -1 | Maximum total mistakes before failure (-1 = unlimited) |
 | `passing_criteria.max_mistakes_per_question` | integer | No | -1 | Maximum mistakes per question before failure (-1 = unlimited) |
 | `allow_retry` | boolean | No | true | Whether to allow retrying incorrect answers |
-| `failure_action` | string | No | "move_to_done" | Action when user fails ("move_to_done" or "advance") |
+| `failure_action` | string | No | "move_to_done" | Action when user fails ("move_to_done" or "repeat_training") |
 
 ### Training Strategies
 
@@ -297,7 +297,7 @@ training:
     min_correct: 2
     require_all_correct: false
   allow_retry: true
-  failure_action: "retry"
+  failure_action: "repeat_training"
 ```
 
 ### Advanced Multi-Scheme Training
@@ -311,7 +311,7 @@ training:
     min_correct: 5
     require_all_correct: false
   allow_retry: true
-  failure_action: "retry"
+  failure_action: "repeat_training"
 ```
 
 ### Strict Training (No Retries)
@@ -325,7 +325,7 @@ training:
     min_correct: 3
     require_all_correct: true
   allow_retry: false
-  failure_action: "advance"
+  failure_action: "move_to_done"
 ```
 
 ## Integration with Existing Workflows

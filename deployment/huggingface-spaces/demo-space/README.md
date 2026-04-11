@@ -16,7 +16,7 @@ tags:
 
 # Potato Agent Trace Evaluation Demo
 
-Live demo of [Potato](https://github.com/davidjurgens/potato), the portable text annotation tool for NLP research.
+Live demo of [Potato](https://github.com/davidjurgens/potato), the portable annotation tool for NLP research.
 
 This Space showcases **agent trace evaluation** — annotating AI agent execution traces to assess:
 - Task completion success

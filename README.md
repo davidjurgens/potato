@@ -263,7 +263,7 @@ Potato is licensed under [Polyform Shield](LICENSE). Non-commercial applications
 
 ```bibtex
 @inproceedings{pei2022potato,
-  title={POTATO: The Portable Text Annotation Tool},
+  title={POTATO: The Portable Annotation Tool},
   author={Pei, Jiaxin and Ananthasubramaniam, Aparna and Wang, Xingyao and Zhou, Naitian and Dedeloudis, Apostolos and Sargent, Jackson and Jurgens, David},
   booktitle={Proceedings of the 2022 Conference on Empirical Methods in Natural Language Processing: System Demonstrations},
   year={2022}

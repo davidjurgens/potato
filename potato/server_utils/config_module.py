@@ -173,10 +173,27 @@ KNOWN_CONFIG_KEYS = {
     # === UI & layout ===
     "ui": None,
     "ui_config": None,
-    "layout": {"grid", "breakpoints", "groups", "order"},
+    "layout": {"grid", "breakpoints", "groups", "order", "styling"},
     "instance_display": {"fields", "layout", "resizable"},
     "format_handling": {"enabled", "default_format", "pdf", "spreadsheet"},
-    "ui_language": {"html_lang", "html_dir"},
+    "ui_language": {
+        "html_lang", "html_dir",
+        "next_button", "previous_button", "submit_button", "go_button",
+        "retry_button", "logout",
+        "labeled_badge", "in_progress_badge", "not_labeled_badge",
+        "progress_label", "loading", "error_heading",
+        "adjudicate", "codebook", "instructions_heading",
+        "text_to_annotate", "video_to_annotate", "audio_to_annotate",
+        "login_title", "login_subtitle_password", "login_subtitle_username",
+        "sign_in_tab", "register_tab",
+        "username_label", "password_label",
+        "sign_in_button", "continue_button", "register_button",
+        "forgot_password", "username_placeholder",
+        "choose_username_placeholder", "create_password_placeholder",
+        "sign_in_with", "or_divider",
+        "powered_by", "cite_us",
+    },
+    "base_css": None,
     "ui_debug": None,
     "hide_navbar": None,
     "task_layout": None,
@@ -203,6 +220,7 @@ KNOWN_CONFIG_KEYS = {
     # === Media ===
     "audio_annotation": {
         "waveform_cache_dir", "waveform_look_ahead", "waveform_cache_max_size",
+        "client_fallback_max_duration",
     },
     "spectrogram": None,
     "media_directory": None,
@@ -231,6 +249,11 @@ KNOWN_CONFIG_KEYS = {
     "live_agent": None,
     "live_coding_agent": None,
     "agent_proxy": None,
+
+    # === Legacy / multi-task ===
+    "surveyflow": None,
+    "prestudy": None,
+    "automatic_assignment": None,
 
     # === Other ===
     "random_seed": None,

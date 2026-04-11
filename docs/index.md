@@ -1,6 +1,6 @@
 # Potato Documentation
 
-**Potato** (POrtable Text Annotation TOol) is a **fully free** data annotation tool supporting a wide range of features throughout your entire annotation pipeline.
+**Potato** (POrTable Annotation TOol) is a **fully free** data annotation tool supporting a wide range of features throughout your entire annotation pipeline.
 
 ---
 

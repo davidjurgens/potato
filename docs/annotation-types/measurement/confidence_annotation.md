@@ -25,7 +25,7 @@ The confidence schema is a lightweight add-on: it contributes a single additiona
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `annotation_type` | — | Must be `confidence_annotation` |
+| `annotation_type` | — | Must be `confidence` |
 | `name` | — | Schema identifier (required) |
 | `description` | — | Prompt shown to annotators |
 | `target_schema` | `null` | Name of the primary schema this confidence rating applies to |
@@ -34,10 +34,11 @@ The confidence schema is a lightweight add-on: it contributes a single additiona
 | `labels` | see below | Label text for Likert options (auto-generated if omitted) |
 | `slider_min` | `0` | Minimum value for slider mode |
 | `slider_max` | `100` | Maximum value for slider mode |
+| `step` | `1` | Step increment for slider mode |
 | `label_requirement.required` | `false` | Require a confidence rating before proceeding |
 
 Default Likert labels (5-point):
-`["Not at all confident", "Slightly confident", "Moderately confident", "Very confident", "Completely confident"]`
+`["Guessing", "Somewhat confident", "Fairly confident", "Confident", "Certain"]`
 
 ### YAML Example — Likert Scale
 
@@ -51,7 +52,7 @@ annotation_schemes:
       - Neutral
       - Negative
 
-  - annotation_type: confidence_annotation
+  - annotation_type: confidence
     name: sentiment_confidence
     description: "How confident are you in your sentiment rating above?"
     target_schema: sentiment
@@ -65,7 +66,7 @@ annotation_schemes:
 
 ```yaml
 annotation_schemes:
-  - annotation_type: confidence_annotation
+  - annotation_type: confidence
     name: toxicity_confidence
     description: "Rate your confidence (0 = completely uncertain, 100 = fully certain)."
     target_schema: toxicity

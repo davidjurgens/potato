@@ -28,7 +28,6 @@ Potato's implementation presents all bipolar pairs for a single item simultaneou
 | `description` | — | Instruction shown above the scale grid |
 | `pairs` | — | List of `[left_adjective, right_adjective]` pairs (required) |
 | `scale_points` | `7` | Number of points on each scale (typically 5 or 7) |
-| `show_center_label` | `true` | Label the center point as "Neutral" |
 | `label_requirement.required` | `false` | Require all scales to be rated |
 
 ### YAML Example
@@ -39,7 +38,6 @@ annotation_schemes:
     name: word_meaning
     description: "Rate the meaning of the highlighted word on each scale. Select the point that best reflects your sense of the word's connotation."
     scale_points: 7
-    show_center_label: true
     pairs:
       - [Bad, Good]
       - [Unpleasant, Pleasant]

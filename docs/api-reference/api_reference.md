@@ -491,7 +491,7 @@ GET /admin/api/annotation_history
 **Query Parameters:**
 - `user_id` - Filter by user
 - `instance_id` - Filter by instance
-- `limit` - Maximum results
+- `minutes` - Time window in minutes
 
 **Response:**
 ```json
@@ -682,7 +682,7 @@ GET /admin/api/agreement
 
 ### Get AI Suggestion
 ```http
-GET /get_ai_suggestion?instance_id={instance_id}
+GET /get_ai_suggestion?annotationId={annotation_index}&aiAssistant={ai_assistant_type}
 ```
 
 **Response:**
@@ -871,6 +871,483 @@ Content-Type: application/json
   "fps": 30
 }
 ```
+
+---
+
+## Behavioral Tracking API
+
+### Track Interactions
+```http
+POST /api/track_interactions
+Content-Type: application/json
+```
+
+Records batched interaction events from the frontend (mouse clicks, focus time, scroll depth).
+
+### Track AI Usage
+```http
+POST /api/track_ai_usage
+Content-Type: application/json
+```
+
+Records AI assistance requests, responses, and user decisions for analytics.
+
+### Track Annotation Change
+```http
+POST /api/track_annotation_change
+Content-Type: application/json
+```
+
+Records annotation changes from the frontend (select, deselect, update, clear actions).
+
+### Get Behavioral Data
+```http
+GET /api/behavioral_data/{instance_id}
+```
+
+Returns behavioral data for a specific instance (interaction events, timing, AI usage).
+
+---
+
+## Option Highlighting API
+
+### Get Option Highlighting Config
+```http
+GET /api/option_highlights/config
+```
+
+Returns the option highlighting configuration for AI-suggested labels.
+
+### Trigger Option Highlight Prefetch
+```http
+POST /api/option_highlights/prefetch
+```
+
+Triggers prefetching of option highlights for upcoming items.
+
+### Get Option Highlights
+```http
+GET /api/option_highlights/{annotation_id}
+```
+
+Returns AI-suggested option highlights for a specific annotation scheme index.
+
+---
+
+## Entity Linking API
+
+### Search Knowledge Base
+```http
+GET /api/entity_linking/search?query={query}&kb={kb_name}
+```
+
+Searches a configured knowledge base for entities matching the query.
+
+### Get Entity Details
+```http
+GET /api/entity_linking/entity/{kb_name}/{entity_id}
+```
+
+Returns detailed information about a specific entity from a knowledge base.
+
+### Get Configured Knowledge Bases
+```http
+GET /api/entity_linking/configured_kbs
+```
+
+Returns the list of configured knowledge bases.
+
+### Update Span with Entity Link
+```http
+POST /api/entity_linking/update_span
+Content-Type: application/json
+```
+
+Updates a span annotation with entity linking information.
+
+---
+
+## Link and Event Annotation API
+
+### Get Links
+```http
+GET /api/links/{instance_id}
+```
+
+Returns link annotations (span relationships) for a specific instance.
+
+### Delete Link
+```http
+DELETE /api/links/{instance_id}/{link_id}
+```
+
+Deletes a specific link annotation.
+
+### Get Events
+```http
+GET /api/events/{instance_id}
+```
+
+Returns event annotations for a specific instance.
+
+### Delete Event
+```http
+DELETE /api/events/{instance_id}/{event_id}
+```
+
+Deletes a specific event annotation.
+
+---
+
+## Span API
+
+### Get Span Data
+```http
+GET /api/spans/{instance_id}
+```
+
+Returns text content and existing span annotations for an instance.
+
+### Clear Spans
+```http
+DELETE /api/spans/{instance_id}/clear
+```
+
+Clears all span annotations for an instance.
+
+### Get Span Colors
+```http
+GET /api/colors
+```
+
+Returns the color mapping for span labels.
+
+---
+
+## Chat Support API
+
+### Send Chat Message
+```http
+POST /api/chat/send
+Content-Type: application/json
+```
+
+Sends a message to the LLM chat assistant and returns the response.
+
+### Get Chat History
+```http
+GET /api/chat/history?instance_id={instance_id}
+```
+
+Returns chat history for a specific instance.
+
+### Get Chat Config
+```http
+GET /api/chat/config
+```
+
+Returns chat UI configuration.
+
+---
+
+## Agent Chat API
+
+### Send Agent Message
+```http
+POST /agent_chat/send
+Content-Type: application/json
+```
+
+Sends a message to the agent and returns a response.
+
+### Finish Agent Chat
+```http
+POST /agent_chat/finish
+```
+
+Finishes the chat and writes conversation data to the item.
+
+### Get Agent Chat Status
+```http
+GET /agent_chat/status
+```
+
+Returns the current agent chat session status (for page refresh recovery).
+
+---
+
+## ICL Labeling API (Admin)
+
+### Get ICL Status
+```http
+GET /admin/api/icl/status
+```
+
+Returns ICL labeler status and statistics.
+
+### Get ICL Examples
+```http
+GET /admin/api/icl/examples?schema={schema_name}
+```
+
+Returns current high-confidence examples, optionally filtered by schema.
+
+### Get ICL Predictions
+```http
+GET /admin/api/icl/predictions?schema={schema_name}&status={status}&limit={limit}
+```
+
+Returns LLM predictions with filtering options.
+
+### Get ICL Accuracy
+```http
+GET /admin/api/icl/accuracy
+```
+
+Returns accuracy metrics for ICL labeling.
+
+### Trigger ICL Operation
+```http
+POST /admin/api/icl/trigger
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "action": "refresh_examples | batch_label | save_state"
+}
+```
+
+### Record ICL Verification
+```http
+POST /api/icl/record_verification
+Content-Type: application/json
+```
+
+Records human verification of an LLM prediction.
+
+---
+
+## Adjudication API
+
+### Get Adjudication Queue
+```http
+GET /adjudicate/api/queue
+```
+
+Returns the adjudication queue (items needing adjudication).
+
+### Get Adjudication Item
+```http
+GET /adjudicate/api/item/{instance_id}
+```
+
+Returns full item detail for adjudication review.
+
+### Submit Adjudication Decision
+```http
+POST /adjudicate/api/submit
+Content-Type: application/json
+```
+
+Submits an adjudication decision.
+
+### Get Adjudication Stats
+```http
+GET /adjudicate/api/stats
+```
+
+Returns adjudication progress statistics.
+
+### Skip Adjudication Item
+```http
+POST /adjudicate/api/skip/{instance_id}
+```
+
+Skips an adjudication item.
+
+### Get Next Adjudication Item
+```http
+GET /adjudicate/api/next
+```
+
+Returns the next adjudication item in the queue.
+
+### Get Similar Items
+```http
+GET /adjudicate/api/similar/{instance_id}
+```
+
+Returns similar items for a specific instance (lazy-loading).
+
+### Admin Adjudication Overview
+```http
+GET /admin/api/adjudication
+```
+
+Returns admin dashboard overview of adjudication status.
+
+---
+
+## BWS / IBWS Scoring API (Admin)
+
+### Get BWS Scoring Status
+```http
+GET /admin/api/bws_scoring
+```
+
+Returns current BWS (Best-Worst Scaling) scoring status and cached scores.
+
+### Generate BWS Scores
+```http
+POST /admin/api/bws_scoring/generate
+```
+
+Generates BWS scores from current annotations.
+
+### Get IBWS Status
+```http
+GET /admin/api/ibws_status
+```
+
+Returns current IBWS (Iterative Best-Worst Scaling) round status and progress.
+
+### Get IBWS Ranking
+```http
+GET /admin/api/ibws_ranking
+```
+
+Returns current IBWS ordinal ranking.
+
+---
+
+## MACE API (Admin)
+
+### Get MACE Overview
+```http
+GET /admin/api/mace/overview
+```
+
+Returns MACE (Multiple Annotator Competence Estimation) results overview.
+
+### Get MACE Predictions
+```http
+GET /admin/api/mace/predictions?schema={schema_name}&instance_id={instance_id}
+```
+
+Returns MACE predicted labels, optionally filtered by schema and instance.
+
+### Trigger MACE Computation
+```http
+POST /admin/api/mace/trigger
+```
+
+Manually triggers a MACE recomputation.
+
+---
+
+## Embedding Visualization API (Admin)
+
+### Get Visualization Data
+```http
+GET /admin/api/embedding_viz/data
+```
+
+Returns visualization data for the embedding scatter plot.
+
+### Reorder Queue from Embeddings
+```http
+POST /admin/api/embedding_viz/reorder
+Content-Type: application/json
+```
+
+Reorders the annotation queue based on selected instances in the visualization.
+
+### Refresh Embeddings
+```http
+POST /admin/api/embedding_viz/refresh
+```
+
+Forces re-computation of embeddings and UMAP projection.
+
+### Get Embedding Stats
+```http
+GET /admin/api/embedding_viz/stats
+```
+
+Returns embedding visualization statistics.
+
+---
+
+## Export API (Admin)
+
+### List Export Formats
+```http
+GET /admin/api/export/formats
+```
+
+Returns available export formats with metadata.
+
+### Run Export
+```http
+POST /admin/api/export
+Content-Type: application/json
+```
+
+Runs an export in the requested format and returns the result.
+
+---
+
+## Admin Analytics API
+
+### Get Behavioral Analytics
+```http
+GET /admin/api/behavioral_analytics
+```
+
+Returns behavioral analytics data for all annotators (AI usage, interaction types, suspicion scores).
+
+### Get Stale Assignments
+```http
+GET /admin/api/stale_assignments
+```
+
+Returns a list of stale instance assignments (assigned but not annotated past timeout).
+
+### Reclaim Instance
+```http
+POST /admin/api/reclaim_instance
+Content-Type: application/json
+```
+
+Manually reclaims a specific instance assignment from a user.
+
+### Set User Instances
+```http
+POST /admin/api/user/{username}/set_instances
+Content-Type: application/json
+```
+
+Sets the maximum number of instances for a specific user.
+
+### Get Question Analytics
+```http
+GET /admin/api/questions
+```
+
+Returns aggregate analysis data for all annotation schemas/questions.
+
+---
+
+## Schema API
+
+### Get Annotation Schemas
+```http
+GET /api/schemas
+```
+
+Returns annotation schema information for the current configuration.
 
 ---
 
