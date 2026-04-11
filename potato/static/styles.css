@@ -171,6 +171,15 @@ body {
   background-color: #fbbf24;
 }
 
+.status-badge.in_progress {
+  background-color: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.status-badge.in_progress::before {
+  background-color: #fb923c;
+}
+
 /* Skip to unannotated button hover states */
 #jump-unannotated-btn:hover,
 #jump-unannotated-prev-btn:hover {

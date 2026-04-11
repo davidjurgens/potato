@@ -35,6 +35,272 @@ class ConfigSecurityError(Exception):
     pass
 
 
+import difflib
+
+# ============================================================================
+# Known config key schema (hierarchical)
+# Keys map to None (leaf), set (known sub-keys), or dict (nested schema).
+# Used by validate_unknown_keys() to warn about typos at all nesting levels.
+# ============================================================================
+KNOWN_CONFIG_KEYS = {
+    # === Core / required ===
+    "item_properties": {
+        "id_key", "text_key", "category_key", "kwargs",
+    },
+    "data_files": None,
+    "task_dir": None,
+    "output_annotation_dir": None,
+    "output_annotation_format": None,
+    "annotation_task_name": None,
+    "task_description": None,
+    "annotation_task_description": None,
+
+    # === Data sources ===
+    "data_directory": None,
+    "data_directory_encoding": None,
+    "data_sources": None,
+    "data_cache": {"enabled", "ttl_seconds", "max_size_mb"},
+    "watch_data_directory": None,
+    "watch_poll_interval": None,
+    "partial_loading": None,
+
+    # === Annotation ===
+    "annotation_schemes": None,
+    "phases": None,
+    "output_annotation_format": None,
+
+    # === Auth / login ===
+    "authentication": {
+        "method", "providers", "user_identity_field", "database_url",
+        "user_config_path", "auto_register", "allow_local_login",
+        "allowed_domain", "allowed_domains", "allowed_org",
+    },
+    "login": {"type", "url_argument", "auto_redirect_delay", "auto_redirect_on_completion"},
+    "require_password": None,
+    "require_no_password": None,
+    "secret_key": None,
+
+    # === Server ===
+    "server": {"port", "host", "debug"},
+    "port": None,
+    "host": None,
+    "customjs": None,
+    "customjs_hostname": None,
+    "site_dir": None,
+    "site_file": None,
+    "persist_sessions": None,
+    "session_lifetime_days": None,
+    "base_html_template": None,
+
+    # === Quality control ===
+    "attention_checks": {
+        "enabled", "items_file", "frequency", "probability",
+        "min_response_time", "failure_handling",
+    },
+    "gold_standards": {
+        "enabled", "items_file", "mode", "frequency",
+        "accuracy", "auto_promote",
+    },
+    "gold_standards_file": None,
+    "pre_annotation": {
+        "enabled", "field", "highlight_low_confidence",
+        "agreement_metrics", "predictions_file",
+    },
+    "agreement_metrics": {"min_overlap", "refresh_interval"},
+    "quality_control": None,
+
+    # === AI ===
+    "ai_support": {
+        "enabled", "endpoint_type", "ai_config_file", "ai_config",
+        "option_highlighting", "features",
+    },
+    "chat_support": {
+        "enabled", "endpoint_type", "ai_config", "ui",
+    },
+
+    # === Advanced features ===
+    "training": {
+        "enabled", "data_file", "annotation_schemes",
+        "passing_criteria", "feedback", "failure_action",
+    },
+    "active_learning": {
+        "enabled", "classifier", "vectorizer",
+        "min_annotations_per_instance", "min_instances_for_training",
+        "max_instances_to_reorder", "update_frequency",
+        "resolution_strategy", "random_sample_percent", "schema_names",
+        "database", "model_persistence", "llm", "query_strategy",
+        "hybrid_weights", "cold_start_strategy", "confidence_method",
+        "classifier_params", "vectorizer_params", "calibrate_probabilities",
+        "bald_params", "use_icl_ensemble", "icl_ensemble_params",
+        "annotation_routing", "routing_thresholds",
+    },
+    "category_assignment": {
+        "enabled", "category_key", "qualification", "fallback", "dynamic",
+    },
+    "diversity_ordering": {
+        "enabled", "model_name", "num_clusters", "items_per_cluster",
+        "auto_clusters", "prefill_count", "batch_size",
+        "recluster_threshold", "preserve_visited",
+        "trigger_ai_prefetch", "cache_dir",
+    },
+    "diversity_config": None,
+    "embedding_visualization": {
+        "enabled", "sample_size", "include_all_annotated",
+        "embedding_model", "image_embedding_model", "umap", "label_source",
+    },
+    "adjudication": {
+        "enabled", "adjudicator_users", "min_annotations",
+        "agreement_threshold", "fast_decision_warning_ms",
+        "error_taxonomy", "similarity",
+        "require_notes_on_override", "show_agreement_scores",
+        "show_annotator_names",
+    },
+    "database": {"type", "host", "database", "username", "password", "port",
+                 "pool_size", "pool_timeout", "connection_string"},
+    "bws_config": {
+        "tuple_size", "num_tuples", "seed", "min_item_appearances", "scoring",
+    },
+    "ibws_config": {
+        "tuple_size", "max_rounds", "seed", "scoring_method",
+        "tuples_per_item_per_round",
+    },
+    "mace": {
+        "enabled", "min_annotations_per_item", "trigger_every_n", "num_restarts",
+    },
+    "icl_labeling": None,
+    "llm_labeling": None,
+
+    # === UI & layout ===
+    "ui": None,
+    "ui_config": None,
+    "layout": {"grid", "breakpoints", "groups", "order"},
+    "instance_display": {"fields", "layout", "resizable"},
+    "format_handling": {"enabled", "default_format", "pdf", "spreadsheet"},
+    "ui_language": {"html_lang", "html_dir"},
+    "ui_debug": None,
+    "hide_navbar": None,
+    "task_layout": None,
+
+    # === Content ===
+    "annotation_instructions": None,
+    "annotation_codebook_url": None,
+    "custom_footer_html": None,
+    "header_file": None,
+    "header_logo": None,
+
+    # === Annotation features ===
+    "keyword_highlight_settings": None,
+    "keyword_highlights_file": None,
+    "highlight_linebreaks": None,
+    "list_as_text": {"text_list_prefix_type", "horizontal", "alternating_shading"},
+    "jumping_to_id_disabled": None,
+    "allow_phase_back_navigation": None,
+    "require_fully_annotated": None,
+    "export_include_phase_data": None,
+    "export_annotation_format": None,
+    "auto_export_interval": None,
+
+    # === Media ===
+    "audio_annotation": {
+        "waveform_cache_dir", "waveform_look_ahead", "waveform_cache_max_size",
+    },
+    "spectrogram": None,
+    "media_directory": None,
+    "default_video_fps": None,
+
+    # === External integrations ===
+    "mturk": None,
+    "prolific": {
+        "config_file_path", "token", "study_id",
+        "max_concurrent_sessions", "workload_checker_period",
+        "completion_code", "sandbox_mode",
+    },
+    "webhooks": {"enabled", "endpoints"},
+    "trace_ingestion": {"enabled", "sources"},
+    "huggingface_backup": None,
+
+    # === Debug / logging ===
+    "debug": None,
+    "debug_phase": None,
+    "server_debug": None,
+    "verbose": None,
+    "very_verbose": None,
+    "debug_log": None,
+
+    # === Agent ===
+    "live_agent": None,
+    "live_coding_agent": None,
+    "agent_proxy": None,
+
+    # === Other ===
+    "random_seed": None,
+    "max_annotations_per_user": None,
+    "max_annotations_per_item": None,
+    "num_annotators_per_item": None,
+    "min_annotators_per_instance": None,
+    "solo_mode": {"enabled"},
+    "admin_api_key": None,
+    "alert_time_each_instance": None,
+    "assignment_strategy": None,
+    "reclaim_stale_assignments": None,
+    "instance_reclaim": None,
+    "max_session_seconds": None,
+    "env_substitution": None,
+
+    # === Internal (set by system, not user) ===
+    "config_file": None,
+    "__config_file__": None,
+    "_bws_pool_items": None,
+}
+
+
+def validate_unknown_keys(config_data, schema=None, path=""):
+    """Recursively warn about unrecognized config keys and suggest corrections.
+
+    Args:
+        config_data: The config dict (or sub-dict) to validate.
+        schema: The known-keys schema for this level (defaults to KNOWN_CONFIG_KEYS).
+        path: Dot-separated path prefix for nested key reporting (e.g., "training").
+    """
+    if schema is None:
+        schema = KNOWN_CONFIG_KEYS
+
+    if not isinstance(config_data, dict):
+        return
+
+    known_keys = set(schema.keys()) if isinstance(schema, dict) else schema
+    unknown_keys = set(config_data.keys()) - known_keys
+
+    for key in sorted(unknown_keys):
+        full_key = f"{path}.{key}" if path else key
+        matches = difflib.get_close_matches(key, known_keys, n=3, cutoff=0.6)
+        if matches:
+            suggestions = ", ".join(f"'{m}'" for m in matches)
+            logger.warning(
+                "Unrecognized config key '%s'. Did you mean: %s?",
+                full_key, suggestions
+            )
+        else:
+            logger.warning(
+                "Unrecognized config key '%s'. This key will be ignored.",
+                full_key
+            )
+
+    # Recurse into nested dicts that have sub-key schemas
+    if isinstance(schema, dict):
+        for key, sub_schema in schema.items():
+            if sub_schema is not None and key in config_data:
+                value = config_data[key]
+                if isinstance(value, dict):
+                    child_path = f"{path}.{key}" if path else key
+                    if isinstance(sub_schema, dict):
+                        validate_unknown_keys(value, sub_schema, child_path)
+                    elif isinstance(sub_schema, set):
+                        validate_unknown_keys(
+                            value, {k: None for k in sub_schema}, child_path
+                        )
+
+
 def validate_path_security(path: str, base_dir: str, project_dir: str = None) -> str:
     """
     Validate that a path is secure and contained within the base directory.
@@ -220,6 +486,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Validate MACE configuration if present
     if 'mace' in config_data:
         _validate_mace_config(config_data)
+
+    # Warn about unrecognized keys at all nesting levels
+    validate_unknown_keys(config_data)
 
 
 def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:

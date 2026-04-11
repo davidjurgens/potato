@@ -1754,6 +1754,8 @@ def get_current_page_html(config, username):
         'ui_config': config.get('ui_config', {}),
         'is_annotation_page': is_annotation_page,
         'annotation_instructions': config.get('annotation_instructions', ''),
+        'annotation_status': 'unlabeled',
+        'instance_has_annotations': False,
     }
     rendered_html = render_template(html_fname, **context)
     soup = BeautifulSoup(rendered_html, "html.parser")
@@ -1986,8 +1988,18 @@ def render_page_with_annotations(username: str):
     # Total = finished + remaining (so counter shows "X / Total" not "X / Remaining")
     total_count = finished_count + remaining_count
 
-    # Check if the current instance has been annotated (for status indicator)
-    instance_has_annotations = user_state.has_annotated(instance_id)
+    # Cap total by max_assignments if set (so progress shows "3/6" not "3/100")
+    max_assignments = get_user_state(username).get_max_assignments()
+    if max_assignments >= 0:
+        total_count = min(total_count, max_assignments)
+
+    # Determine annotation status for the status badge (three-state)
+    annotation_status = "unlabeled"
+    if user_state.has_annotated(instance_id):
+        from potato.routes import _instance_meets_required_annotation_rules
+        unsatisfied = _instance_meets_required_annotation_rules(user_state, instance_id)
+        annotation_status = "labeled" if not unsatisfied else "in_progress"
+    instance_has_annotations = (annotation_status != "unlabeled")
 
     # Get UI configuration from config
     ui_config = config.get("ui", {})
@@ -2114,7 +2126,8 @@ def render_page_with_annotations(username: str):
         # Adjudication: show link for adjudicators
         is_adjudicator=_is_user_adjudicator(username),
         annotation_codebook_url=_sanitize_codebook_url(config.get("annotation_codebook_url", "")),
-        # Annotation status indicator
+        # Annotation status indicator (three-state: labeled/in_progress/unlabeled)
+        annotation_status=annotation_status,
         instance_has_annotations=instance_has_annotations,
         # if this is an annotation page
         is_annotation_page=is_annotation_page,
@@ -3015,6 +3028,7 @@ def create_app(config_file=None):
             'logout': 'Logout',
             # Status indicators
             'labeled_badge': 'Labeled',
+            'in_progress_badge': 'In Progress',
             'not_labeled_badge': 'Not labeled',
             'progress_label': 'Progress',
             'loading': 'Loading annotation interface...',

@@ -138,8 +138,14 @@
 
             <div class="navbar-center">
                 <div class="annotation-status-indicator" id="annotation-status">
-                    <span class="status-badge {{ 'labeled' if instance_has_annotations else 'unlabeled' }}">
-                        {{ ui_lang.labeled_badge if instance_has_annotations else ui_lang.not_labeled_badge }}
+                    <span class="status-badge {{ annotation_status }}">
+                        {% if annotation_status == 'labeled' %}
+                            {{ ui_lang.labeled_badge }}
+                        {% elif annotation_status == 'in_progress' %}
+                            {{ ui_lang.in_progress_badge }}
+                        {% else %}
+                            {{ ui_lang.not_labeled_badge }}
+                        {% endif %}
                     </span>
                 </div>
 
