@@ -537,7 +537,11 @@ login:
 
 jumping_to_id_disabled: true   # Disable go-to instance feature
 hide_navbar: true              # Hide navigation bar
+
+allow_phase_back_navigation: true  # Allow backward navigation across phases (default: false)
 ```
+
+When `allow_phase_back_navigation` is disabled (the default), the Back button is automatically hidden on the first page of the workflow and on the first annotation instance, since there is no valid previous destination. When enabled, the Back button is always shown, allowing users to return to previous phases.
 
 ## Database Configuration
 

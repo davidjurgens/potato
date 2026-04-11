@@ -1885,12 +1885,12 @@ function setLoading(loading) {
     if (loading) {
         loadingState.style.display = 'block';
         mainContent.style.display = 'none';
-        prevBtn.disabled = true;
+        if (prevBtn) prevBtn.disabled = true;
         nextBtn.disabled = true;
     } else {
         loadingState.style.display = 'none';
         mainContent.style.display = 'block';
-        prevBtn.disabled = false;
+        if (prevBtn) prevBtn.disabled = false;
         // Re-enable next button, then run validation which may re-disable it
         // if required fields are unfilled
         nextBtn.disabled = false;

@@ -893,6 +893,35 @@ class UserStateManager:
 
         return cur_phase, cur_page
 
+    def can_user_go_back(self, user_id: str) -> bool:
+        '''Returns True if the user has a previous page/phase to navigate to.
+
+        For annotation phase users, this checks whether they are on the first
+        instance AND whether phase back-navigation would be blocked.
+        For non-annotation phase users, this checks whether retreat_phase
+        would succeed.
+        '''
+        user_state = self.get_user_state(user_id)
+        cur_phase, cur_page = user_state.get_current_phase_and_page()
+        prev_phase, prev_page = self.get_prev_user_phase_page(user_id)
+
+        # If prev == current, there's nowhere to go back to
+        if prev_phase == cur_phase and prev_page == cur_page:
+            # For annotation phase, user can still go back within instances
+            if cur_phase == UserPhase.ANNOTATION:
+                return user_state.get_current_instance_index() > 0
+            return False
+
+        # If going back would cross phases, check if that's allowed
+        if prev_phase != cur_phase:
+            if not self.config.get('allow_phase_back_navigation', False):
+                # For annotation phase, user can still go back within instances
+                if cur_phase == UserPhase.ANNOTATION:
+                    return user_state.get_current_instance_index() > 0
+                return False
+
+        return True
+
     def get_user_ids(self) -> list[str]:
         '''Gets all user IDs from the user state manager'''
         return [user.user_id for user in self.get_all_users()]

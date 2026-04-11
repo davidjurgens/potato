@@ -17,6 +17,21 @@ Potato's workflow consists of the following phases (in order):
 
 Users automatically progress through enabled phases in this order.
 
+## Back Navigation
+
+By default, the **Back button is hidden** when there is no previous page to navigate to. This means:
+
+- On the very first page of the workflow (e.g., the consent page), the Back button is not shown.
+- On the first annotation instance, the Back button is hidden unless phase back-navigation is enabled.
+
+To allow users to navigate backward across phases (e.g., from the annotation phase back to the instructions phase), set:
+
+```yaml
+allow_phase_back_navigation: true
+```
+
+When this is enabled, the Back button will appear on all pages, allowing users to return to previous phases. When disabled (the default), users can only navigate backward within the current phase — for example, moving between annotation instances or between pages within a multi-page instructions phase.
+
 ## Configuration
 
 ### Modern Phases Configuration (Recommended)

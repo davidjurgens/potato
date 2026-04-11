@@ -1755,6 +1755,7 @@ def get_current_page_html(config, username):
         'annotation_instructions': config.get('annotation_instructions', ''),
         'annotation_status': 'unlabeled',
         'instance_has_annotations': False,
+        'can_go_back': usm.can_user_go_back(username),
     }
     rendered_html = render_template(html_fname, **context)
     soup = BeautifulSoup(rendered_html, "html.parser")
@@ -2132,6 +2133,8 @@ def render_page_with_annotations(username: str):
         is_annotation_page=is_annotation_page,
         # IBWS round info (for round banner)
         ibws_round_info=ibws_round_info,
+        # Hide back button when on first instance with no previous phase
+        can_go_back=get_user_state_manager().can_user_go_back(username),
         # ai=ai_hints,
         **kwargs
     )

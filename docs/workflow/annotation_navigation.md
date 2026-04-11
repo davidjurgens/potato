@@ -68,6 +68,21 @@ Note: Custom keybindings can be configured through the keyboard shortcuts system
 
 Navigation features are enabled by default. No additional configuration is required.
 
+### Back Button Visibility
+
+The Back (Previous) button is automatically hidden when there is no previous page to navigate to. Specifically, it is hidden when:
+
+- The user is on the first page of the first phase (e.g., the consent page)
+- The user is on the first annotation instance and cross-phase back navigation is disabled
+
+To allow users to navigate backward across phases (e.g., from annotation back to instructions):
+
+```yaml
+allow_phase_back_navigation: true  # default: false
+```
+
+When enabled, users can return to previous phases using the Back button or the `←` keyboard shortcut. When disabled, backward navigation is limited to within the current phase only.
+
 ### Hiding Navigation Elements
 
 To hide navigation elements (useful for crowdsourcing):
