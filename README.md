@@ -45,15 +45,15 @@ Potato handles the full spectrum of annotation tasks — from traditional NLP la
 
 | Modality | Capabilities |
 |----------|-------------|
-| **Text** | Classification, span labeling, entity linking, coreference, pairwise comparison ([docs](docs/schemas_and_templates.md)) |
-| **Agent Traces** | Step-by-step evaluation of LLM agents, tool calls, ReAct chains, and multi-agent systems ([docs](docs/agent_traces.md)) |
-| **Web Agents** | Screenshot-based review with SVG click/scroll overlays, or live browsing with automatic trace recording ([docs](docs/web_agent_annotation.md)) |
+| **Text** | Classification, span labeling, entity linking, coreference, pairwise comparison ([docs](docs/annotation-types/schemas_and_templates.md)) |
+| **Agent Traces** | Step-by-step evaluation of LLM agents, tool calls, ReAct chains, and multi-agent systems ([docs](docs/agent-evaluation/agent_traces.md)) |
+| **Web Agents** | Screenshot-based review with SVG click/scroll overlays, or live browsing with automatic trace recording ([docs](docs/agent-evaluation/web_agent_annotation.md)) |
 | **RAG Pipelines** | Retrieval relevance, answer faithfulness, citation accuracy, hallucination detection |
-| **Audio** | Waveform visualization, segment labeling, ELAN-style tiered annotation ([docs](docs/audio_annotation.md)) |
-| **Video** | Frame-by-frame labeling, temporal segments, playback sync ([docs](docs/video_annotation.md)) |
-| **Images** | Bounding boxes, polygons, landmarks, classification ([docs](docs/image_annotation.md)) |
+| **Audio** | Waveform visualization, segment labeling, ELAN-style tiered annotation ([docs](docs/annotation-types/multimedia/audio_annotation.md)) |
+| **Video** | Frame-by-frame labeling, temporal segments, playback sync ([docs](docs/annotation-types/multimedia/video_annotation.md)) |
+| **Images** | Bounding boxes, polygons, landmarks, classification ([docs](docs/annotation-types/multimedia/image_annotation.md)) |
 | **Dialogue** | Turn-level annotation, conversation trees, interactive chat evaluation |
-| **Documents** | PDF, Word, Markdown, code, and spreadsheets with coordinate mapping ([docs](docs/format_support.md)) |
+| **Documents** | PDF, Word, Markdown, code, and spreadsheets with coordinate mapping ([docs](docs/annotation-types/format_support.md)) |
 
 ### Annotation Schemes
 
@@ -64,8 +64,8 @@ Potato handles the full spectrum of annotation tasks — from traditional NLP la
 | Pairwise comparison | A/B testing, best-worst scaling |
 | Per-step ratings | Evaluate individual agent actions or dialogue turns |
 | Free text | Open-ended responses with validation |
-| Triage | Rapid accept/reject/skip curation ([docs](docs/triage.md)) |
-| Conditional logic | Adaptive forms that respond to prior answers ([docs](docs/conditional_logic.md)) |
+| Triage | Rapid accept/reject/skip curation ([docs](docs/annotation-types/triage.md)) |
+| Conditional logic | Adaptive forms that respond to prior answers ([docs](docs/configuration/conditional_logic.md)) |
 
 ---
 
@@ -123,15 +123,15 @@ Supported backends: **OpenAI**, **Anthropic**, **Ollama**, **vLLM**, **Gemini**,
 
 ### Active Learning
 
-Potato reorders your annotation queue based on model uncertainty so annotators label the most informative instances first. Supports uncertainty sampling, BADGE, BALD, diversity, and hybrid strategies ([docs](docs/active_learning_guide.md)).
+Potato reorders your annotation queue based on model uncertainty so annotators label the most informative instances first. Supports uncertainty sampling, BADGE, BALD, diversity, and hybrid strategies ([docs](docs/ai-intelligence/active_learning_guide.md)).
 
 ### Solo Mode
 
-A human-LLM collaborative workflow where the system learns from annotator feedback and progressively transitions to autonomous LLM labeling as agreement improves ([docs](docs/solo_mode.md)).
+A human-LLM collaborative workflow where the system learns from annotator feedback and progressively transitions to autonomous LLM labeling as agreement improves ([docs](docs/solo-mode/solo_mode.md)).
 
 ### Chat Assistant
 
-An LLM-powered sidebar where annotators can ask questions about difficult instances. The AI provides guidance informed by your task description and annotation guidelines — helping annotators think through decisions without auto-labeling ([docs](docs/chat_support.md)).
+An LLM-powered sidebar where annotators can ask questions about difficult instances. The AI provides guidance informed by your task description and annotation guidelines — helping annotators think through decisions without auto-labeling ([docs](docs/ai-intelligence/chat_support.md)).
 
 ---
 
@@ -152,10 +152,10 @@ An LLM-powered sidebar where annotators can ask questions about difficult instan
 | Workflow | Description |
 |----------|-------------|
 | **Multi-annotator** | Multiple annotators per item with overlap control and agreement metrics |
-| **Adjudication** | Expert review of annotator disagreements to produce gold labels ([docs](docs/admin_dashboard.md)) |
-| **Solo mode** | Human-LLM collaboration with progressive automation ([docs](docs/solo_mode.md)) |
-| **Crowdsourcing** | Prolific and MTurk integration with platform-specific auth ([docs](docs/crowdsourcing.md)) |
-| **Triage** | Rapid accept/reject/skip for data curation ([docs](docs/triage.md)) |
+| **Adjudication** | Expert review of annotator disagreements to produce gold labels ([docs](docs/administration/admin_dashboard.md)) |
+| **Solo mode** | Human-LLM collaboration with progressive automation ([docs](docs/solo-mode/solo_mode.md)) |
+| **Crowdsourcing** | Prolific and MTurk integration with platform-specific auth ([docs](docs/deployment/crowdsourcing.md)) |
+| **Triage** | Rapid accept/reject/skip for data curation ([docs](docs/annotation-types/triage.md)) |
 
 ---
 
@@ -166,11 +166,11 @@ Potato supports multiple authentication methods, from passwordless quick-start t
 | Method | Use Case |
 |--------|----------|
 | **In-memory** | Local development, quick studies |
-| **Password + file persistence** | Team annotation with shared credential files ([docs](docs/password_management.md)) |
-| **Database** | Production deployments with SQLite or PostgreSQL ([docs](docs/password_management.md#database-authentication-backend)) |
-| **OAuth / SSO** | Google, GitHub, or institutional OIDC login ([docs](docs/sso_authentication.md)) |
-| **Clerk** | Managed authentication via Clerk.com ([docs](docs/sso_authentication.md)) |
-| **Passwordless** | Low-stakes tasks where ease of access matters ([docs](docs/passwordless_login.md)) |
+| **Password + file persistence** | Team annotation with shared credential files ([docs](docs/auth-users/password_management.md)) |
+| **Database** | Production deployments with SQLite or PostgreSQL ([docs](docs/auth-users/password_management.md#database-authentication-backend)) |
+| **OAuth / SSO** | Google, GitHub, or institutional OIDC login ([docs](docs/auth-users/sso_authentication.md)) |
+| **Clerk** | Managed authentication via Clerk.com ([docs](docs/auth-users/sso_authentication.md)) |
+| **Passwordless** | Low-stakes tasks where ease of access matters ([docs](docs/auth-users/passwordless_login.md)) |
 
 Passwords are hashed with per-user PBKDF2-SHA256 salts. Admins can reset passwords via CLI (`potato reset-password`) or REST API. Self-service token-based reset is also available.
 
@@ -208,19 +208,19 @@ potato get <project>     # Download one
 | Topic | Link |
 |-------|------|
 | Quick Start | [docs/quick-start.md](docs/quick-start.md) |
-| Configuration Reference | [docs/configuration.md](docs/configuration.md) |
-| Schema Gallery | [docs/schemas_and_templates.md](docs/schemas_and_templates.md) |
-| Agent Trace Evaluation | [docs/agent_traces.md](docs/agent_traces.md) |
-| Web Agent Annotation | [docs/web_agent_annotation.md](docs/web_agent_annotation.md) |
-| AI Support | [docs/ai_support.md](docs/ai_support.md) |
-| Active Learning | [docs/active_learning_guide.md](docs/active_learning_guide.md) |
-| Solo Mode | [docs/solo_mode.md](docs/solo_mode.md) |
-| Quality Control | [docs/quality_control.md](docs/quality_control.md) |
-| Password Management | [docs/password_management.md](docs/password_management.md) |
-| SSO & OAuth | [docs/sso_authentication.md](docs/sso_authentication.md) |
-| Admin Dashboard | [docs/admin_dashboard.md](docs/admin_dashboard.md) |
-| Crowdsourcing | [docs/crowdsourcing.md](docs/crowdsourcing.md) |
-| Export Formats | [docs/export_formats.md](docs/export_formats.md) |
+| Configuration Reference | [docs/configuration/configuration.md](docs/configuration/configuration.md) |
+| Schema Gallery | [docs/annotation-types/schemas_and_templates.md](docs/annotation-types/schemas_and_templates.md) |
+| Agent Trace Evaluation | [docs/agent-evaluation/agent_traces.md](docs/agent-evaluation/agent_traces.md) |
+| Web Agent Annotation | [docs/agent-evaluation/web_agent_annotation.md](docs/agent-evaluation/web_agent_annotation.md) |
+| AI Support | [docs/ai-intelligence/ai_support.md](docs/ai-intelligence/ai_support.md) |
+| Active Learning | [docs/ai-intelligence/active_learning_guide.md](docs/ai-intelligence/active_learning_guide.md) |
+| Solo Mode | [docs/solo-mode/solo_mode.md](docs/solo-mode/solo_mode.md) |
+| Quality Control | [docs/workflow/quality_control.md](docs/workflow/quality_control.md) |
+| Password Management | [docs/auth-users/password_management.md](docs/auth-users/password_management.md) |
+| SSO & OAuth | [docs/auth-users/sso_authentication.md](docs/auth-users/sso_authentication.md) |
+| Admin Dashboard | [docs/administration/admin_dashboard.md](docs/administration/admin_dashboard.md) |
+| Crowdsourcing | [docs/deployment/crowdsourcing.md](docs/deployment/crowdsourcing.md) |
+| Export Formats | [docs/data-export/export_formats.md](docs/data-export/export_formats.md) |
 | Full Documentation Index | [docs/index.md](docs/index.md) |
 
 ---

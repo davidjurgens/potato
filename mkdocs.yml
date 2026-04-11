@@ -3,116 +3,134 @@ site_url: https://github.com/davidjurgens/potato
 nav:
     - Home: index.md
     - Quick Start: quick-start.md
-    - "What's New in v2": new_features_v2.md
     - Comparison: comparison.md
+    - Guides:
+        - Getting Started: guides/getting-started.md
+        - Administrator Guide: guides/admin-guide.md
+        - Developer Guide: guides/developer-guide.md
+        - Crowdsourcing Guide: guides/crowdsourcing-guide.md
+        - Agent Evaluation Guide: guides/agent-evaluation-guide.md
+        - AI-Assisted Annotation: guides/ai-assisted-annotation-guide.md
     - Configuration:
-        - Overview: configuration.md
-        - Data Format: data_format.md
-        - Data Directory: data_directory.md
-        - Remote Data Sources: remote_data_sources.md
-        - UI Configuration: ui_configuration.md
-        - Form Layout: form_layout.md
-        - Form Layout Advanced: form_layout_advanced.md
-        - Layout Customization: layout_customization.md
-        - Conditional Logic: conditional_logic.md
-        - Multilingual: multilingual.md
+        - Overview: configuration/configuration.md
+        - Data Format: configuration/data_format.md
+        - Data Directory: configuration/data_directory.md
+        - Remote Data Sources: configuration/remote_data_sources.md
+        - UI Configuration: configuration/ui_configuration.md
+        - Form Layout: configuration/form_layout.md
+        - Layout Customization: configuration/layout_customization.md
+        - Conditional Logic: configuration/conditional_logic.md
+        - Multilingual: configuration/multilingual.md
     - Annotation Types:
-        - Schemas and Templates: schemas_and_templates.md
-        - Choosing Annotation Types: choosing_annotation_types.md
-        - Image Annotation: image_annotation.md
-        - Audio Annotation: audio_annotation.md
-        - Video Annotation: video_annotation.md
-        - Dialogue Annotation: dialogue_annotation.md
-        - Text Annotation: text_annotation.md
-        - Pairwise Comparison: pairwise_annotation.md
-        - Multi-Dimensional Pairwise: multi_dimensional_pairwise.md
-        - Triage: triage.md
-        - Event Annotation: event_annotation.md
-        - Entity Linking: entity_linking.md
-        - Coreference Annotation: coreference_annotation.md
-        - Conversation Trees: conversation_tree_annotation.md
-        - Tiered Annotation: tiered_annotation.md
-        - Span Linking: span_linking.md
-        - Extractive QA: extractive_qa.md
-        - Text Edit: text_edit.md
-        - Error Span: error_span.md
-        - Soft Label: soft_label.md
-        - Confidence Annotation: confidence_annotation.md
-        - Constant Sum: constant_sum.md
-        - Semantic Differential: semantic_differential.md
-        - Ranking: ranking.md
-        - Range Slider: range_slider.md
-        - Hierarchical Multiselect: hierarchical_multiselect.md
-        - Visual Analog Scale: vas.md
-        - Rubric Evaluation: rubric_eval.md
-        - Card Sorting: card_sort.md
-        - Conjoint Analysis: conjoint.md
-        - Best-Worst Scaling: bws.md
-        - Iterative BWS: iterative_bws.md
-        - Instance Display: instance_display.md
-        - Format Support: format_support.md
+        - Schemas and Templates: annotation-types/schemas_and_templates.md
+        - Choosing Annotation Types: annotation-types/choosing_annotation_types.md
+        - Instance Display: annotation-types/instance_display.md
+        - Format Support: annotation-types/format_support.md
+        - Triage: annotation-types/triage.md
+        - Comparison:
+            - Pairwise Comparison: annotation-types/comparison/pairwise_annotation.md
+            - Multi-Dimensional Pairwise: annotation-types/comparison/multi_dimensional_pairwise.md
+            - Best-Worst Scaling: annotation-types/comparison/bws.md
+            - Iterative BWS: annotation-types/comparison/iterative_bws.md
+            - Ranking: annotation-types/comparison/ranking.md
+            - Conjoint Analysis: annotation-types/comparison/conjoint.md
+        - Text:
+            - Text Annotation: annotation-types/text/text_annotation.md
+            - Extractive QA: annotation-types/text/extractive_qa.md
+            - Coreference Annotation: annotation-types/text/coreference_annotation.md
+            - Entity Linking: annotation-types/text/entity_linking.md
+            - Span Linking: annotation-types/text/span_linking.md
+            - Error Span: annotation-types/text/error_span.md
+            - Text Edit: annotation-types/text/text_edit.md
+            - Event Annotation: annotation-types/text/event_annotation.md
+        - Multimedia:
+            - Image Annotation: annotation-types/multimedia/image_annotation.md
+            - Audio Annotation: annotation-types/multimedia/audio_annotation.md
+            - Video Annotation: annotation-types/multimedia/video_annotation.md
+            - Tiered Annotation: annotation-types/multimedia/tiered_annotation.md
+        - Measurement:
+            - Visual Analog Scale: annotation-types/measurement/vas.md
+            - Range Slider: annotation-types/measurement/range_slider.md
+            - Constant Sum: annotation-types/measurement/constant_sum.md
+            - Semantic Differential: annotation-types/measurement/semantic_differential.md
+            - Soft Label: annotation-types/measurement/soft_label.md
+            - Confidence Annotation: annotation-types/measurement/confidence_annotation.md
+            - Rubric Evaluation: annotation-types/measurement/rubric_eval.md
+        - Structured:
+            - Conversation Trees: annotation-types/structured/conversation_tree_annotation.md
+            - Dialogue Annotation: annotation-types/structured/dialogue_annotation.md
+            - Hierarchical Multiselect: annotation-types/structured/hierarchical_multiselect.md
+            - Card Sorting: annotation-types/structured/card_sort.md
     - Workflow Phases:
-        - Multi-Phase Workflows: surveyflow.md
-        - Training Phase: training_phase.md
-        - Quality Control: quality_control.md
-        - Annotation Navigation: annotation_navigation.md
-        - Annotation Filtering: annotation_filtering.md
-        - Diversity Ordering: diversity_ordering.md
+        - Multi-Phase Workflows: workflow/surveyflow.md
+        - Training Phase: workflow/training_phase.md
+        - Quality Control: workflow/quality_control.md
+        - Annotation Navigation: workflow/annotation_navigation.md
+        - Annotation Filtering: workflow/annotation_filtering.md
+        - Diversity Ordering: workflow/diversity_ordering.md
     - Agent Evaluation:
-        - Agent Traces: agent_traces.md
-        - Coding Agent Annotation: coding_agent_annotation.md
-        - Web Agent Annotation: web_agent_annotation.md
-        - Trajectory Evaluation: trajectory_eval.md
-        - Live Agent Interaction: live_agent.md
+        - Agent Traces: agent-evaluation/agent_traces.md
+        - Coding Agent Annotation: agent-evaluation/coding_agent_annotation.md
+        - Web Agent Annotation: agent-evaluation/web_agent_annotation.md
+        - Trajectory Evaluation: agent-evaluation/trajectory_eval.md
+        - Live Agent Interaction: agent-evaluation/live_agent.md
     - Solo Mode:
-        - Solo Mode: solo_mode.md
-        - Advanced Features: solo_mode_advanced.md
-        - Developer Guide: solo_mode_developer_guide.md
+        - Solo Mode: solo-mode/solo_mode.md
+        - Advanced Features: solo-mode/solo_mode_advanced.md
+        - Developer Guide: solo-mode/solo_mode_developer_guide.md
     - AI & Intelligence:
-        - AI Support: ai_support.md
-        - Visual AI Support: visual_ai_support.md
-        - Chat Support: chat_support.md
-        - AI Integration Internals: ai_integration_internals.md
-        - Option Highlighting: option_highlighting.md
-        - Active Learning Guide: active_learning_guide.md
-        - Active Learning Strategies: active_learning_strategies.md
-        - Active Learning Status: active_learning_status.md
-        - ICL Labeling: icl_labeling.md
+        - AI Support: ai-intelligence/ai_support.md
+        - Visual AI Support: ai-intelligence/visual_ai_support.md
+        - Chat Support: ai-intelligence/chat_support.md
+        - AI Integration Internals: ai-intelligence/ai_integration_internals.md
+        - Option Highlighting: ai-intelligence/option_highlighting.md
+        - Active Learning Guide: ai-intelligence/active_learning_guide.md
+        - Active Learning Strategies: ai-intelligence/active_learning_strategies.md
+        - ICL Labeling: ai-intelligence/icl_labeling.md
     - Advanced Features:
-        - MACE: mace.md
-        - Embedding Visualization: embedding_visualization.md
-        - Survey Instruments: survey_instruments.md
-        - Category-Based Assignment: category_assignment.md
-        - Task Assignment: task_assignment.md
-        - Behavioral Tracking: behavioral_tracking.md
+        - MACE: advanced/mace.md
+        - Embedding Visualization: advanced/embedding_visualization.md
+        - Survey Instruments: advanced/survey_instruments.md
+        - Category-Based Assignment: advanced/category_assignment.md
+        - Task Assignment: advanced/task_assignment.md
+        - Behavioral Tracking: advanced/behavioral_tracking.md
     - Authentication & Users:
-        - User and Collaboration: user_and_collaboration.md
-        - Password Management: password_management.md
-        - Passwordless Login: passwordless_login.md
-        - SSO & OAuth: sso_authentication.md
+        - User and Collaboration: auth-users/user_and_collaboration.md
+        - Password Management: auth-users/password_management.md
+        - Passwordless Login: auth-users/passwordless_login.md
+        - SSO & OAuth: auth-users/sso_authentication.md
     - Administration:
-        - Admin Dashboard: admin_dashboard.md
-        - Adjudication: adjudication.md
-        - Annotation History: annotation_history.md
-        - Productivity: productivity.md
+        - Admin Dashboard: administration/admin_dashboard.md
+        - Adjudication: administration/adjudication.md
+        - Annotation History: administration/annotation_history.md
+        - Productivity: administration/productivity.md
     - Data & Export:
-        - Export Formats: export_formats.md
-        - HuggingFace Export: huggingface_export.md
-        - HuggingFace Datasets: datasets_integration.md
-        - HuggingFace Spaces: huggingface_spaces.md
+        - Export Formats: data-export/export_formats.md
+        - HuggingFace Export: data-export/huggingface_export.md
+        - HuggingFace Datasets: data-export/datasets_integration.md
+        - HuggingFace Spaces: data-export/huggingface_spaces.md
     - Tools:
-        - Preview CLI: preview_cli.md
-        - Migration CLI: migration_cli.md
-        - Simulator: simulator.md
-        - Debugging Guide: debugging_guide.md
+        - Preview CLI: tools/preview_cli.md
+        - Migration CLI: tools/migration_cli.md
+        - Simulator: tools/simulator.md
+        - Debugging Guide: tools/debugging_guide.md
     - Integrations:
-        - Webhooks: webhooks.md
-        - LangChain Integration: langchain_integration.md
+        - Webhooks: integrations/webhooks.md
+        - LangChain Integration: integrations/langchain_integration.md
     - Deployment:
-        - Usage: usage.md
-        - Crowdsourcing: crowdsourcing.md
-        - MTurk Integration: mturk_integration.md
-        - Open Sourcing: open-sourcing.md
+        - Usage: deployment/usage.md
+        - Crowdsourcing: deployment/crowdsourcing.md
+        - MTurk Integration: deployment/mturk_integration.md
+        - Open Sourcing: deployment/open-sourcing.md
     - API Reference:
-        - API Reference: api_reference.md
+        - API Reference: api-reference/api_reference.md
+    - Release Notes:
+        - v2.4.4: releasenotes/v2.4.4.md
+        - v2.4.3: releasenotes/v2.4.3.md
+        - v2.4.1: releasenotes/v2.4.1.md
+        - v2.4.0: releasenotes/v2.4.0.md
+        - v2.3.0: releasenotes/v2.3.0.md
+        - v2.2.0: releasenotes/v2.2.0.md
+        - v2.1.0: releasenotes/v2.1.0.md
+        - v2.0.0: releasenotes/v2.0.0.md
 theme: readthedocs
