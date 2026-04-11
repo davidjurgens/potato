@@ -22,12 +22,11 @@ For full installation details, see [Installation & Usage](../deployment/usage.md
 The fastest way to get started:
 
 ```bash
-potato list all              # Browse available templates
-potato get sentiment_analysis  # Download a template
-potato start sentiment_analysis  # Start annotating
+pip install potato-annotation
+potato start examples/classification/single-choice/config.yaml -p 8000
 ```
 
-Open [http://localhost:8000](http://localhost:8000) and you're ready to annotate.
+Open [http://localhost:8000](http://localhost:8000) and you're ready to annotate. Browse the `examples/` directory for ready-to-use templates.
 
 For the step-by-step walkthrough, see [Quick Start](../quick-start.md).
 

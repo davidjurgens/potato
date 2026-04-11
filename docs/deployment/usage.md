@@ -119,18 +119,6 @@ In many cases you might need to use Potato within your local network. For exampl
 
 Potato provides several CLI commands beyond `start`:
 
-### Browse and Download Projects
-
-```bash
-# List all available annotation project templates
-potato list all
-
-# Download a project template
-potato get sentiment_analysis
-```
-
-The `get` command downloads projects from the [Potato Showcase](https://github.com/davidjurgens/potato-showcase/) repository and extracts them to a local directory.
-
 ### Reset User Passwords
 
 ```bash

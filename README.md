@@ -16,13 +16,7 @@
 
 ```bash
 pip install potato-annotation
-
-# List available templates
-potato list all
-
-# Get a template and start annotating
-potato get sentiment_analysis
-potato start sentiment_analysis
+potato start examples/classification/single-choice/config.yaml -p 8000
 ```
 
 Or run from source:
@@ -33,7 +27,7 @@ cd potato && pip install -r requirements.txt
 python potato/flask_server.py start examples/classification/single-choice/config.yaml -p 8000
 ```
 
-Open [http://localhost:8000](http://localhost:8000) and start annotating.
+Open [http://localhost:8000](http://localhost:8000) and start annotating. Browse the [`examples/`](examples/) directory for ready-to-use templates.
 
 ---
 
@@ -195,11 +189,6 @@ Ready-to-use templates organized by type in [`examples/`](examples/):
 ### Research Showcase
 
 The **[Potato Showcase](https://github.com/davidjurgens/potato-showcase/)** contains annotation projects from published research — sentiment analysis, dialogue evaluation, summarization, and more.
-
-```bash
-potato list all          # Browse available projects
-potato get <project>     # Download one
-```
 
 ---
 

@@ -149,9 +149,4 @@ python potato/flask_server.py start examples/classification/check-box/config.yam
 
 ## Paper-Specific Projects
 
-Research paper annotation projects have moved to the **[Potato Showcase](https://github.com/davidjurgens/potato-showcase/)** repository. Use `potato get <project>` to download them:
-
-```bash
-potato list all           # See available projects
-potato get sentiment_analysis  # Download a project
-```
+Research paper annotation projects are available in the **[Potato Showcase](https://github.com/davidjurgens/potato-showcase/)** repository.

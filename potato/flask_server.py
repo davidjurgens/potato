@@ -95,7 +95,6 @@ from potato.create_task_cli import create_task_cli
 from potato.server_utils.arg_utils import arguments
 from potato.server_utils.config_module import init_config, config
 from potato.server_utils.schemas.span import render_span_annotations
-from potato.server_utils.cli_utlis import get_project_from_hub, show_project_hub
 from potato.server_utils.prolific_apis import ProlificStudy
 from potato.server_utils.mturk_apis import init_mturk_hit, get_mturk_hit
 from potato.server_utils.json import easy_json
@@ -3577,12 +3576,6 @@ def main():
     if args.mode == 'start':
         logger.info("Starting server mode")
         run_server(args)
-    elif args.mode == 'get':
-        logger.info("Starting project retrieval")
-        get_project_from_hub(args.config_file)
-    elif args.mode == 'list':
-        logger.info("Listing available projects")
-        show_project_hub(args.config_file)
     elif args.mode == 'reset-password':
         logger.info("Starting password reset")
         from potato.password_reset import cli_reset_password
