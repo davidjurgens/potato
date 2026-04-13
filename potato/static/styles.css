@@ -3769,6 +3769,18 @@ body > .container-fluid {
   margin-right: 0.25rem;
 }
 
+.potato-navbar .instance-number-section {
+  color: var(--light-color);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.potato-navbar .instance-number-section .instance-number-label {
+  opacity: 0.65;
+  margin-right: 0.25rem;
+}
+
 .potato-navbar .ibws-round-banner {
   color: var(--light-color);
   font-size: var(--text-sm);

@@ -2135,6 +2135,8 @@ def render_page_with_annotations(username: str):
         ibws_round_info=ibws_round_info,
         # Hide back button when on first instance with no previous phase
         can_go_back=get_user_state_manager().can_user_go_back(username),
+        # Hide jump-to-ID navigation controls when disabled
+        jumping_to_id_disabled=config.get("jumping_to_id_disabled", False),
         # ai=ai_hints,
         **kwargs
     )

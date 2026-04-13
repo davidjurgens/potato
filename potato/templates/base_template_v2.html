@@ -166,6 +166,14 @@
 
                 <div class="navbar-divider"></div>
 
+                <div class="instance-number-section">
+                    <span class="instance-number-label">Instance</span>
+                    <span class="fw-medium" id="instance-number">#{{ instance_index|int + 1 }}</span>
+                </div>
+
+                {% if not jumping_to_id_disabled %}
+                <div class="navbar-divider"></div>
+
                 <div class="nav-controls">
                     <button type="button" class="nav-control-btn" id="jump-unannotated-prev-btn"
                             onclick="jumpToUnannotatedPrev()" title="Previous unannotated">
@@ -185,6 +193,7 @@
                            onfocusin="user_input()" onfocusout="user_input_leave()">
                     <button type="button" class="goto-btn" id="go-to-btn">{{ ui_lang.go_button }}</button>
                 </div>
+                {% endif %}
             </div>
 
             <div class="navbar-end">
