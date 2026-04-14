@@ -1748,6 +1748,7 @@ def get_current_page_html(config, username):
         'instance': '',
         'instance_plain_text': '',
         'instance_id': '',
+        'instance_index': 0,
         'finished': 0,
         'total_count': user_state.get_assigned_instance_count() if hasattr(user_state, 'get_assigned_instance_count') else 0,
         'ui_config': config.get('ui_config', {}),
@@ -1756,6 +1757,7 @@ def get_current_page_html(config, username):
         'annotation_status': 'unlabeled',
         'instance_has_annotations': False,
         'can_go_back': usm.can_user_go_back(username),
+        'jumping_to_id_disabled': config.get('jumping_to_id_disabled', False),
     }
     rendered_html = render_template(html_fname, **context)
     soup = BeautifulSoup(rendered_html, "html.parser")

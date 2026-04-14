@@ -166,10 +166,12 @@
 
                 <div class="navbar-divider"></div>
 
+                {% if instance_index is defined %}
                 <div class="instance-number-section">
                     <span class="instance-number-label">Instance</span>
                     <span class="fw-medium" id="instance-number">#{{ instance_index|int + 1 }}</span>
                 </div>
+                {% endif %}
 
                 {% if not jumping_to_id_disabled %}
                 <div class="navbar-divider"></div>
