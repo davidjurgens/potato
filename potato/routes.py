@@ -1633,7 +1633,7 @@ def _ibws_check_and_advance(user_state) -> bool:
         ism.add_item(str(t[id_key]), t)
 
     # Re-render displayed text for new items
-    from potato.flask_server import _render_displayed_text
+    from potato.flask_server import _render_displayed_text  # noqa: cross-import
     text_key = config["item_properties"]["text_key"]
     _render_displayed_text(text_key)
 
@@ -2494,7 +2494,7 @@ def admin_api_test_reset_state():
     try:
         from potato.user_state_management import clear_user_state_manager, init_user_state_manager
         from potato.item_state_management import clear_item_state_manager, init_item_state_manager
-        from potato.flask_server import load_all_data
+        from potato.flask_server import load_all_data  # noqa: cross-import
         from potato.authentication import UserAuthenticator
 
         # Clear existing state
