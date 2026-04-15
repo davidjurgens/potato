@@ -51,7 +51,6 @@ class OpenRouterEndpoint(BaseAIEndpoint):
         """
         try:
             url = "https://openrouter.ai/api/v1/chat/completions"
-            print("keykeykey", self.ai_config.get('api_key'))
             headers = {
                 "Authorization": f"Bearer {self.ai_config.get('api_key')}",
                 "Content-Type": "application/json"
@@ -87,7 +86,6 @@ class OpenRouterEndpoint(BaseAIEndpoint):
                 raise AIEndpointRequestError(f"OpenRouter error {r.status_code}: {r.text}")
             
             data = r.json()
-            print("openrouter data", data)
             if self.supports_structured_output():
                 return self.parseStringToJson(data["choices"][0]["message"]["content"])
             return data["choices"][0]["message"]["content"]

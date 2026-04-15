@@ -1,0 +1,1121 @@
+# Configuration Guide
+
+This document provides a comprehensive guide to configuring Potato annotation tasks using YAML configuration files. Potato uses YAML files to define all aspects of an annotation task, from server settings to annotation schemes and user management.
+
+## Table of Contents
+
+1. [Config File Structure and Validation](#config-file-structure-and-validation)
+2. [Basic Configuration](#basic-configuration)
+3. [Server Configuration](#server-configuration)
+4. [Data Configuration](#data-configuration)
+5. [Instance Display](#instance-display)
+6. [Annotation Schemes](#annotation-schemes)
+7. [User Management](#user-management)
+8. [Assignment Strategies](#assignment-strategies)
+9. [UI and Layout Configuration](#ui-and-layout-configuration)
+10. [AI Support](#ai-support)
+11. [Advanced Features](#advanced-features)
+12. [Complete Example](#complete-example)
+
+## Config File Structure and Validation
+
+### Config File Location Requirements
+
+**Important**: Your YAML configuration file must be located within the `task_dir` specified in the configuration. This is a security requirement that ensures all project files are properly contained.
+
+#### Valid Config File Structure
+
+```
+my_annotation_project/
+├── config.yaml                    # ✅ Config file in task_dir
+├── data/
+│   └── my_data.json
+├── output/
+│   └── annotations/
+└── templates/
+    └── custom_layout.html
+```
+
+With this structure, your `config.yaml` would contain:
+```yaml
+task_dir: my_annotation_project/
+data_files:
+  - data/my_data.json
+output_annotation_dir: output/annotations/
+# ... other configuration
+```
+
+#### Alternative Structure: Using task_dir='.' (Recommended for Portability)
+
+Using `task_dir: .` makes your configuration portable because paths are resolved relative to the config file's location.
+
+```
+my_annotation_project/
+├── config.yaml                    # ✅ Config file with task_dir: .
+├── data/
+│   └── my_data.json
+└── output/
+    └── annotations/
+```
+
+```yaml
+task_dir: .                        # Resolves to my_annotation_project/
+data_files:
+  - data/my_data.json
+output_annotation_dir: output/annotations/
+# ... other configuration
+```
+
+#### Alternative Structure with Configs Subdirectory
+
+```
+my_annotation_project/
+├── configs/
+│   ├── config1.yaml              # ✅ Config files in configs/ subdirectory
+│   └── config2.yaml
+├── data/
+│   └── my_data.json
+└── output/
+    └── annotations/
+```
+
+With this structure, your config files would contain:
+```yaml
+task_dir: ..                       # Resolves to my_annotation_project/ (parent of configs/)
+data_files:
+  - data/my_data.json
+output_annotation_dir: output/annotations/
+# ... other configuration
+```
+
+**Note**: `task_dir` is resolved relative to the config file's directory, so `..` from `configs/` becomes `my_annotation_project/`.
+
+### Starting the Server
+
+#### Option 1: Direct Config File (Recommended)
+```bash
+# Start with a specific config file
+python potato/flask_server.py start my_annotation_project/config.yaml -p 8000
+```
+
+#### Option 2: Project Directory (Multiple Configs)
+```bash
+# Start with a project directory (will prompt to choose config if multiple exist)
+python potato/flask_server.py start my_annotation_project/ -p 8000
+```
+
+### Path Resolution Rules
+
+#### Task Directory Resolution
+
+**Important**: The `task_dir` setting is resolved relative to the config file's directory, not the current working directory. This makes configurations portable.
+
+| `task_dir` Value | Config File Location | Resolved `task_dir` |
+|------------------|---------------------|---------------------|
+| `.` | `/project/configs/config.yaml` | `/project/configs/` |
+| `..` | `/project/configs/config.yaml` | `/project/` |
+| `../output` | `/project/configs/config.yaml` | `/project/output/` |
+| `/absolute/path` | (anywhere) | `/absolute/path` (unchanged) |
+
+#### Other Paths
+
+All other relative paths in your configuration are resolved relative to the `task_dir`:
+
+- **Data files**: `data/my_data.json` → `{task_dir}/data/my_data.json`
+- **Output directory**: `output/annotations/` → `{task_dir}/output/annotations/`
+- **Site directory**: `templates/` → `{task_dir}/templates/`
+- **Custom datasets**: `custom_data/` → `{task_dir}/custom_data/`
+
+### Special Path Values
+
+Some configuration fields accept special values instead of file paths:
+
+- `"null"` - Disable the feature
+- `"default"` - Use the default implementation
+- `null` (YAML null) - Disable the feature
+
+Example:
+```yaml
+site_dir: default          # Use default templates
+customjs: null            # No custom JavaScript
+custom_ds: "default"      # Use default dataset handling
+```
+
+### Validation Requirements
+
+Potato validates your configuration to ensure:
+
+1. **Config file location**: The config file must be within the specified `task_dir`
+2. **Required fields**: All mandatory configuration fields are present
+3. **File existence**: All referenced data files exist and are accessible
+4. **Path security**: All paths are secure and don't escape the project directory
+5. **Schema validation**: Annotation schemes have valid configurations
+
+### Common Validation Errors
+
+- **"Configuration file must be in the task_dir"**: Your config file is outside the `task_dir` specified in the YAML
+- **"Data file not found"**: A referenced data file doesn't exist at the specified path
+- **"Missing required configuration fields"**: Required fields like `task_dir`, `data_files`, etc. are missing
+- **"Path resolves outside project directory"**: A file path would escape the project directory (security violation)
+
+## Basic Configuration
+
+### Core Settings
+
+```yaml
+# Server identification
+server_name: My Annotation Task
+annotation_task_name: Sentiment Analysis Task
+
+# Root directory for your task's design and output
+task_dir: my_task/
+
+# Port for the server to run on
+port: 8000
+```
+
+**Key Options:**
+- **`server_name`**: Display name for the server (shown in browser title)
+- **`annotation_task_name`**: Name of the annotation task (shown to annotators)
+- **`port`**: Port number for the server (default: 8000)
+- **`task_dir`**: The root directory for the task. All custom layout, data, and annotations will be placed in this directory. When set to `.` or a relative path, it is resolved relative to the config file's directory (not the current working directory). Using `task_dir: .` is recommended for portable configurations.
+
+## Server Configuration
+
+### Basic Server Settings
+
+```yaml
+server:
+  port: 8000
+  host: "0.0.0.0"  # Listen on all interfaces
+  require_password: true
+  persist_sessions: false
+```
+
+### Advanced Server Settings
+
+```yaml
+customjs: null  # Path to custom JavaScript file
+customjs_hostname: null  # Hostname for custom JS
+site_dir: default  # or path to custom template directory
+alert_time_each_instance: 10  # Seconds before alert (very high = disabled)
+debug: false  # Enable debug mode (bypasses admin authentication)
+```
+
+### Admin Dashboard Authentication
+
+The admin dashboard at `/admin` requires an API key for access. Configure it using one of these methods:
+
+```yaml
+# Option 1: Set in config file
+admin_api_key: your_secret_key_here
+```
+
+```bash
+# Option 2: Set via environment variable
+export POTATO_ADMIN_API_KEY=your_secret_key_here
+```
+
+If no key is configured, Potato automatically generates a secure random key and saves it to `admin_api_key.txt` in your task directory. The key persists across server restarts.
+
+| Setting | Description |
+|---------|-------------|
+| `admin_api_key` | API key for admin dashboard access. If not set, auto-generated. |
+| `debug` | When `true`, admin endpoints are accessible without authentication. |
+
+## Data Configuration
+
+### Input Data
+
+```yaml
+data_files:
+  - data/my_data.json                      # simple string path (utf-8)
+  - path: data/another_dataset.csv         # dict form (utf-8 default)
+  - path: data/latin1_data.json            # dict form with explicit encoding
+    encoding: latin-1
+
+item_properties:
+  id_key: id           # Field name for item ID
+  text_key: text       # Field name for item text
+  context_key: context # Optional: field name for context
+  kwargs:              # Optional: additional fields to pass to templates
+    - metadata
+    - source
+```
+
+The `encoding` field (optional, default `utf-8`) can be set per-file using the dict form. Any [Python-recognized encoding](https://docs.python.org/3/library/codecs.html#standard-encodings) is accepted.
+
+For directory watching, set `data_directory_encoding` to apply a single encoding to all files in the watched directory:
+
+```yaml
+data_directory: ./data/incoming
+data_directory_encoding: shift_jis
+```
+
+### Output Configuration
+
+```yaml
+output_annotation_dir: your_task_dir/annotations/
+annotation_codebook_url: https://docs.google.com/document/d/...
+
+# Auto-export: automatically export annotations in additional formats
+# during annotation. Accepts a single format or a list.
+# Supported: csv, tsv, jsonl, parquet, coco, yolo, conll_2003, etc.
+export_annotation_format: "csv"              # single format
+export_annotation_format: ["csv", "jsonl"]   # multiple formats
+auto_export_interval: 60                     # seconds between exports (default: 60)
+```
+
+Annotations are always saved as per-user `user_state.json` files in `output_annotation_dir`. The `export_annotation_format` setting additionally auto-exports to the specified format(s) into an `exports/` subdirectory. You can also export manually at any time using the export CLI — see [Export Formats](../data-export/export_formats.md).
+
+> **Note:** The older `output_annotation_format` config key is legacy and has no effect. Use `export_annotation_format` instead.
+
+## Instance Display
+
+Instance display separates **what content to show annotators** from **what annotations to collect**. This allows you to display any combination of content types (images, videos, audio, text) alongside any annotation schemes.
+
+### Basic Configuration
+
+```yaml
+instance_display:
+  fields:
+    - key: "image_url"           # Field name in your data JSON
+      type: "image"              # Content type
+      label: "Image to classify" # Optional header
+      display_options:
+        max_width: 600
+        zoomable: true
+
+  layout:
+    direction: "vertical"        # vertical or horizontal
+    gap: "20px"
+```
+
+### Supported Display Types
+
+| Type | Description |
+|------|-------------|
+| `text` | Plain text content |
+| `html` | Sanitized HTML content |
+| `image` | Image display with zoom |
+| `video` | Video player |
+| `audio` | Audio player |
+| `dialogue` | Conversation turns |
+| `pairwise` | Side-by-side comparison |
+
+### Example: Image Classification
+
+Previously, to show an image with radio buttons, you had to use a workaround with `image_annotation` schema. Now you can use `instance_display`:
+
+```yaml
+# Clean approach with instance_display
+instance_display:
+  fields:
+    - key: image_url
+      type: image
+
+annotation_schemes:
+  - annotation_type: radio
+    name: category
+    labels: [A, B, C]
+```
+
+For comprehensive documentation including all display options, span annotation support, and multi-modal examples, see [Instance Display Configuration](../annotation-types/instance_display.md).
+
+## Annotation Schemes
+
+Potato supports multiple annotation types. Each scheme defines one annotation question or task.
+
+### Radio Button (Single Choice)
+
+```yaml
+annotation_schemes:
+  - annotation_type: radio
+    name: sentiment
+    description: What is the sentiment of this text?
+    labels:
+      - positive
+      - negative
+      - neutral
+    sequential_key_binding: true  # Enable keyboard shortcuts (1, 2, 3)
+    horizontal: false             # Display horizontally
+    has_free_response:
+      instruction: Please specify other sentiment:
+```
+
+### Multiselect (Multiple Choice)
+
+```yaml
+annotation_schemes:
+  - annotation_type: multiselect
+    name: topics
+    description: What topics are mentioned? (Select all that apply)
+    labels:
+      - politics
+      - technology
+      - sports
+      - entertainment
+    sequential_key_binding: true
+    has_free_response:
+      instruction: Other topics:
+```
+
+### Likert Scale
+
+```yaml
+annotation_schemes:
+  - annotation_type: likert
+    name: quality
+    description: How would you rate the quality of this text?
+    min_label: Very Poor
+    max_label: Excellent
+    size: 5  # Number of scale points
+    sequential_key_binding: true
+```
+
+### Text Input
+
+```yaml
+annotation_schemes:
+  - annotation_type: text
+    name: summary
+    description: Please provide a brief summary:
+    multiline: true
+    rows: 4
+    cols: 60
+    allow_paste: true  # Allow pasting (default: true)
+```
+
+### Slider
+
+```yaml
+annotation_schemes:
+  - annotation_type: slider
+    name: confidence
+    description: How confident are you in your assessment?
+    min: 0
+    max: 10
+    step: 1
+    min_label: Not Confident
+    max_label: Very Confident
+```
+
+### Number Input
+
+```yaml
+annotation_schemes:
+  - annotation_type: number
+    name: word_count
+    description: How many words are in this text?
+    min: 0
+    max: 1000
+    step: 1
+```
+
+### Select Dropdown
+
+```yaml
+annotation_schemes:
+  - annotation_type: select
+    name: category
+    description: Select the most appropriate category:
+    labels:
+      - News
+      - Opinion
+      - Review
+      - Tutorial
+      - Story
+```
+
+### Span Annotation (Text Highlighting)
+
+```yaml
+annotation_schemes:
+  - annotation_type: span
+    name: sentiment_spans
+    description: Highlight text spans with different sentiments
+    labels:
+      - positive
+      - negative
+      - neutral
+    colors:  # Optional: custom colors for each label
+      positive: "#4CAF50"
+      negative: "#f44336"
+      neutral: "#9E9E9E"
+    bad_text_label:  # Optional: checkbox for invalid text
+      label_content: No answer
+```
+
+### Multirate (Matrix Rating)
+
+```yaml
+annotation_schemes:
+  - annotation_type: multirate
+    name: quality_ratings
+    description: Rate the following aspects:
+    display_config:
+      num_columns: 1
+    options:
+      - Clarity
+      - Accuracy
+      - Relevance
+    labels:
+      - Strongly Disagree
+      - Disagree
+      - Neutral
+      - Agree
+      - Strongly Agree
+    label_requirement:
+      required: true
+    option_randomization: false
+    sequential_key_binding: true
+```
+
+### Video/GIF Labels
+
+```yaml
+annotation_schemes:
+  - annotation_type: multiselect
+    name: gif_reply
+    video_as_label: true
+    description: Select appropriate GIF replies
+    labels:
+      - name: "{{instance_obj.gifs[0]}}"
+        videopath: /files/{{instance_obj.gifs_path[0]}}
+      - name: "{{instance_obj.gifs[1]}}"
+        videopath: /files/{{instance_obj.gifs_path[1]}}
+```
+
+## User Management
+
+### Basic User Configuration
+
+```yaml
+user_config:
+  allow_all_users: true  # Allow any user to register
+  users: []             # Pre-defined users (empty = none)
+```
+
+### Authentication Configuration
+
+```yaml
+# Require password for login (default: true)
+require_password: true
+
+authentication:
+  # Backend: "in_memory" (default), "database", "clerk", or "oauth"
+  method: in_memory
+
+  # Path to persistent user credential file (in_memory method only)
+  # When set, user registrations and password changes persist to this file
+  # Mutually exclusive with method: database
+  user_config_path: user_credentials.jsonl
+
+  # Database connection URL (database method only)
+  # Alternatively set POTATO_DB_CONNECTION environment variable
+  # database_url: "sqlite:///data/auth.db"
+```
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `require_password` | boolean | `true` | Require password for login |
+| `authentication.method` | string | `"in_memory"` | Backend: `in_memory`, `database`, `clerk`, `oauth` |
+| `authentication.user_config_path` | string | auto-generated | Path to JSONL file for user persistence |
+| `authentication.database_url` | string | `sqlite:///potato_users.db` | Database URL (for `database` method) |
+
+See [Password Management](../auth-users/password_management.md) for password security, reset flows, and database backend details.
+See [SSO & OAuth Authentication](../auth-users/sso_authentication.md) for Google, GitHub, and institutional SSO.
+
+### Advanced User Settings
+
+```yaml
+max_annotations_per_user: 10  # Maximum annotations per user
+
+login:
+  type: url_direct           # Login type
+  url_argument: PROLIFIC_PID # URL parameter for user ID
+
+jumping_to_id_disabled: true   # Disable go-to instance feature
+hide_navbar: true              # Hide navigation bar
+
+allow_phase_back_navigation: true  # Allow backward navigation across phases (default: false)
+```
+
+When `allow_phase_back_navigation` is disabled (the default), the Back button is automatically hidden on the first page of the workflow and on the first annotation instance, since there is no valid previous destination. When enabled, the Back button is always shown, allowing users to return to previous phases.
+
+## Database Configuration
+
+### MySQL Database Setup
+
+Potato supports MySQL database backend for improved performance and scalability. To use MySQL:
+
+```yaml
+database:
+  type: mysql
+  host: localhost
+  port: 3306
+  database: potato_annotations
+  username: potato_user
+  password: ${POTATO_DB_PASSWORD}  # Use environment variable for security
+  charset: utf8mb4
+  pool_size: 10
+  max_overflow: 20
+  pool_timeout: 30
+  pool_recycle: 3600
+```
+
+### Database Configuration Options
+
+- **`type`**: Database type (`mysql` or `file` for file-based storage)
+- **`host`**: Database server hostname
+- **`port`**: Database server port (default: 3306)
+- **`database`**: Database name
+- **`username`**: Database username
+- **`password`**: Database password (use environment variables for security)
+- **`charset`**: Character encoding (default: utf8mb4)
+- **`pool_size`**: Connection pool size (default: 10)
+- **`max_overflow`**: Maximum overflow connections (default: 20)
+- **`pool_timeout`**: Connection timeout in seconds (default: 30)
+- **`pool_recycle`**: Connection recycle time in seconds (default: 3600)
+
+### Environment Variables
+
+For security, use environment variables for database credentials:
+
+```bash
+export POTATO_DB_PASSWORD="your_secure_password"
+```
+
+Then reference it in your config:
+
+```yaml
+database:
+  password: ${POTATO_DB_PASSWORD}
+```
+
+### Database Setup
+
+1. **Create Database**:
+   ```sql
+   CREATE DATABASE potato_annotations CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+   ```
+
+2. **Create User**:
+   ```sql
+   CREATE USER 'potato_user'@'localhost' IDENTIFIED BY 'your_password';
+   GRANT ALL PRIVILEGES ON potato_annotations.* TO 'potato_user'@'localhost';
+   FLUSH PRIVILEGES;
+   ```
+
+3. **Tables**: Potato will automatically create the required tables on first startup.
+
+### Migration from File-Based Storage
+
+To migrate existing annotations from file-based to database storage:
+
+1. Backup your existing annotation data
+2. Configure the database connection
+3. Start Potato with the new configuration
+4. Existing data will be loaded from files and stored in the database
+
+### Performance Considerations
+
+- **Connection Pooling**: Adjust `pool_size` based on expected concurrent users
+- **Indexing**: Database tables include appropriate indexes for common queries
+- **Backup**: Regular database backups are recommended for production use
+
+## Assignment Strategies
+
+Potato supports multiple strategies for assigning items to annotators.
+
+### Strategy Configuration
+
+```yaml
+assignment_strategy: random  # Options: random, fixed_order, least_annotated, max_diversity
+
+# Alternative: nested configuration
+assignment:
+  strategy: random
+  max_annotations_per_item: 3
+  random_seed: 1234
+```
+
+### Available Strategies
+
+- `random`: Assigns items randomly to annotators
+- `fixed_order`: Assigns items in the order they appear in the dataset
+- `least_annotated`: Prioritizes items with the fewest annotations
+- `max_diversity`: Prioritizes items with highest disagreement in existing annotations
+- `active_learning`: Uses ML to prioritize uncertain items (placeholder)
+- `llm_confidence`: Uses LLM confidence scores (placeholder)
+
+### Legacy Assignment Configuration
+
+```yaml
+automatic_assignment:
+  on: true
+  output_filename: task_assignment.json
+  sampling_strategy: random  # random or ordered
+  labels_per_instance: 3
+  instance_per_annotator: 5
+  test_question_per_annotator: 0
+```
+
+## UI and Layout Configuration
+
+### Layout Configuration
+
+```yaml
+# Custom layout for the annotation page (does NOT apply to phase pages)
+task_layout: "templates/my_layout.html"
+
+# Per-phase layout overrides (optional)
+phases:
+  consent:
+    type: consent
+    file: surveyflow/consent.json
+    task_layout: "templates/consent_layout.html"  # only for this phase
+```
+
+> **Note:** `html_layout`, `surveyflow_html_layout`, and `use_dedicated_layout` are legacy keys that have no effect in the current version. Use `task_layout` for the annotation page and per-phase `task_layout` overrides for phase pages.
+
+### UI Customization
+
+```yaml
+ui:
+  show_progress: true
+  show_instructions: true
+  allow_navigation: true
+  allow_editing: true
+```
+
+### Keyboard Shortcuts
+
+```yaml
+horizontal_key_bindings: true
+sequential_key_binding: true
+```
+
+## AI Support
+
+Potato provides integrated AI support to enhance annotation workflows with intelligent hints and keyword highlighting. This feature uses Large Language Models (LLMs) to provide contextual assistance to annotators.
+
+### Basic AI Configuration
+
+```yaml
+ai_support:
+  enabled: true
+  endpoint_type: "openai"  # or "anthropic", "huggingface", "ollama", "gemini", "vllm"
+  ai_config:
+    model: "gpt-4o-mini"
+    api_key: "your-api-key-here"
+    temperature: 0.7
+    max_tokens: 100
+```
+
+### Supported Providers
+
+- **Cloud-based**: OpenAI, Anthropic, Google Gemini, Hugging Face
+- **Local**: Ollama, VLLM
+
+For detailed setup instructions and configuration options, see [AI Support Documentation](../ai-intelligence/ai_support.md).
+
+## Advanced Features
+
+### SurveyFlow Configuration
+
+```yaml
+surveyflow:
+  on: true
+  order:
+    - pre_annotation
+    - post_annotation
+  pre_annotation:
+    - surveyflow/intro.jsonl
+    - surveyflow/instruction.jsonl
+    - surveyflow/consent.jsonl
+  post_annotation:
+    - surveyflow/experience.jsonl
+    - surveyflow/demographic_questions.jsonl
+    - surveyflow/end.jsonl
+  testing:
+    - surveyflow/testing.jsonl
+```
+
+### Prestudy Configuration
+
+```yaml
+prestudy:
+  on: true
+  minimum_score: 0.8
+  groundtruth_key: whether_match
+  question_key: Whether the presented sentences are discussing the same scientific finding
+  answer_mapping:
+    Yes: true
+    No: false
+  pass_page: surveyflow/prestudy_pass.jsonl
+  fail_page: surveyflow/prestudy_fail.jsonl
+```
+
+### Active Learning
+
+Active learning uses machine learning to intelligently prioritize annotation tasks. For comprehensive configuration options, see the [Active Learning Guide](../ai-intelligence/active_learning_guide.md).
+
+```yaml
+active_learning:
+  enabled: true
+  schema_names: ["sentiment", "topic"]
+  min_annotations_per_instance: 2
+  min_instances_for_training: 20
+  update_frequency: 10
+  max_instances_to_reorder: 100
+  classifier_name: "sklearn.linear_model.LogisticRegression"
+  vectorizer_name: "sklearn.feature_extraction.text.TfidfVectorizer"
+  vectorizer_kwargs:
+    max_features: 1000
+    stop_words: "english"
+  resolution_strategy: "majority_vote"
+  random_sample_percent: 20
+
+  # Optional: LLM integration
+  llm_enabled: false
+  llm_config:
+    endpoint_url: "http://localhost:8000"
+    model_name: "llama-2-7b"
+    use_mock: true
+
+  # Optional: Model persistence
+  model_persistence_enabled: false
+  model_save_directory: "./models"
+  model_retention_count: 2
+```
+
+### List as Text Configuration
+
+```yaml
+list_as_text:
+  text_list_prefix_type: alphabet  # Options: alphabet, number, none
+  horizontal: true
+```
+
+### Keyword Highlights
+
+Admin-defined keywords that are automatically highlighted in the text to help annotators identify relevant content.
+
+```yaml
+# Path to TSV file with keywords (relative to task_dir)
+keyword_highlights_file: data/keywords.tsv
+
+# Configure colors for keyword labels (optional)
+ui:
+  spans:
+    span_colors:
+      sentiment:
+        positive: "(34, 197, 94)"    # Green
+        negative: "(239, 68, 68)"    # Red
+```
+
+The TSV file format:
+```
+Word	Label	Schema
+love	positive	sentiment
+excel*	positive	sentiment
+terrible	negative	sentiment
+```
+
+Features:
+- **Wildcard support**: Use `*` for prefix/suffix matching (e.g., `excel*` matches "excellent")
+- **Case-insensitive**: Matching ignores case
+- **Word boundaries**: Non-wildcard terms match whole words only
+- **Multiple schemas**: One file can define keywords for multiple annotation schemas
+
+#### Randomization Settings
+
+For research purposes, you can configure keyword highlight randomization:
+
+```yaml
+keyword_highlight_settings:
+  keyword_probability: 1.0       # Probability of showing each matched keyword (0.0-1.0)
+  random_word_probability: 0.05  # Probability of highlighting random words as distractors
+  random_word_label: "distractor" # Label for random word highlights
+  random_word_schema: "keyword"   # Schema for random word highlights
+```
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `keyword_probability` | 1.0 | Probability (0.0-1.0) that each matched keyword is shown |
+| `random_word_probability` | 0.05 | Probability of highlighting random words as distractors |
+| `random_word_label` | "distractor" | Label for randomly highlighted words |
+| `random_word_schema` | "keyword" | Schema for random word highlights |
+
+See [Productivity Features](../administration/productivity.md#admin-keyword-highlights) for detailed documentation.
+
+### Best-Worst Scaling (BWS)
+
+Configure Best-Worst Scaling for efficient ordinal ranking. See [BWS documentation](../annotation-types/comparison/bws.md) for details.
+
+```yaml
+bws_config:
+  tuple_size: 4
+  seed: 42
+  scoring:
+    method: counting  # Options: counting, bradley_terry, plackett_luce
+```
+
+### Iterative BWS
+
+Adaptive Best-Worst Scaling with multiple rounds. See [Iterative BWS](../annotation-types/comparison/iterative_bws.md) for details.
+
+```yaml
+ibws_config:
+  max_rounds: 5
+  scoring_method: counting
+```
+
+### MACE (Multi-Annotator Competence Estimation)
+
+Estimate annotator competence using variational Bayes EM. See [MACE documentation](../advanced/mace.md) for details.
+
+```yaml
+mace:
+  enabled: true
+  min_annotations_per_item: 3
+  trigger_every_n: 50
+```
+
+### Category Assignment
+
+Assign instances to annotators based on expertise categories. See [Category Assignment](../advanced/category_assignment.md) for details.
+
+```yaml
+category_assignment:
+  enabled: true
+  categories:
+    - name: "medical"
+      qualification_test: "data/medical_test.json"
+    - name: "legal"
+      qualification_test: "data/legal_test.json"
+```
+
+### Diversity Ordering
+
+Present instances in diverse order using embedding-based clustering. See [Diversity Ordering](../workflow/diversity_ordering.md) for details.
+
+```yaml
+diversity_ordering:
+  enabled: true
+  model_name: "all-MiniLM-L6-v2"
+  num_clusters: 10
+```
+
+### Embedding Visualization
+
+UMAP-based similarity visualization in the admin dashboard. See [Embedding Visualization](../advanced/embedding_visualization.md) for details.
+
+```yaml
+embedding_visualization:
+  enabled: true
+  model_name: "all-MiniLM-L6-v2"
+```
+
+### Chat Support
+
+LLM-powered annotator assistance sidebar. See [Chat Support](../ai-intelligence/chat_support.md) for details.
+
+```yaml
+chat_support:
+  enabled: true
+  endpoint_type: "anthropic"
+  model: "claude-sonnet-4-20250514"
+  api_key: "${ANTHROPIC_API_KEY}"
+```
+
+### Directory Watching
+
+Monitor a directory for new data files. See [Data Directory](data_directory.md) for details.
+
+```yaml
+data_directory: "./data/incoming"
+watch_data_directory: true
+watch_poll_interval: 5.0  # seconds
+```
+
+### Partial Loading
+
+Lazy-load large datasets for memory efficiency.
+
+```yaml
+partial_loading:
+  enabled: true
+  batch_size: 100
+  cache_size: 500
+```
+
+### Format Handling
+
+Configure handlers for non-standard file formats. See [Format Support](../annotation-types/format_support.md) for details.
+
+```yaml
+format_handling:
+  pdf:
+    enabled: true
+    renderer: "pdfjs"
+  markdown:
+    enabled: true
+  code:
+    enabled: true
+    theme: "monokai"
+```
+
+### Header Logo
+
+Display a custom logo in the annotation interface header.
+
+```yaml
+header_logo: "static/logo.png"
+```
+
+## Complete Example
+
+Here's a complete configuration file that demonstrates most features:
+
+```yaml
+# Basic Configuration
+port: 8000
+server_name: Comprehensive Annotation Task
+annotation_task_name: Multi-Modal Text Analysis
+
+data_files:
+  - data/my_dataset.json
+item_properties:
+  id_key: id
+  text_key: text
+  context_key: context
+
+task_dir: output/comprehensive_task/
+output_annotation_format: json
+annotation_codebook_url: https://docs.google.com/document/d/...
+
+user_config:
+  allow_all_users: true
+  users: []
+max_annotations_per_user: 20
+
+assignment_strategy: least_annotated
+max_annotations_per_item: 3
+
+annotation_schemes:
+  - annotation_type: radio
+    name: sentiment
+    description: What is the overall sentiment of this text?
+    labels:
+      - positive
+      - negative
+      - neutral
+    sequential_key_binding: true
+
+  - annotation_type: multiselect
+    name: topics
+    description: What topics are mentioned? (Select all that apply)
+    labels:
+      - politics
+      - technology
+      - sports
+      - entertainment
+      - science
+    has_free_response:
+      instruction: Other topics:
+    sequential_key_binding: true
+
+  - annotation_type: likert
+    name: quality
+    description: How would you rate the quality of this text?
+    min_label: Very Poor
+    max_label: Excellent
+    size: 5
+    sequential_key_binding: true
+
+  - annotation_type: text
+    name: summary
+    description: Please provide a brief summary of this text:
+    multiline: true
+    rows: 4
+    cols: 60
+
+  - annotation_type: slider
+    name: confidence
+    description: How confident are you in your assessment?
+    min: 0
+    max: 10
+    step: 1
+    min_label: Not Confident
+    max_label: Very Confident
+
+  - annotation_type: select
+    name: category
+    description: Select the most appropriate category:
+    labels:
+      - News
+      - Opinion
+      - Review
+      - Tutorial
+      - Story
+
+  - annotation_type: number
+    name: word_count
+    description: How many words are in this text?
+    min: 0
+    max: 10
+    step: 1
+
+ui:
+  show_progress: true
+  show_instructions: true
+  allow_navigation: true
+  allow_editing: true
+
+server:
+  port: 8000
+  host: 0.0.0.0
+  require_password: true
+  persist_sessions: false
+
+assignment:
+  strategy: least_annotated
+  max_annotations_per_item: 3
+  random_seed: 1234
+
+site_dir: default
+customjs: null
+customjs_hostname: null
+
+alert_time_each_instance: 10000000
+```
+
+## Configuration Validation
+
+When you start Potato with a configuration file, it will validate the configuration and report any errors. Common issues include:
+
+- Missing required fields
+- Invalid annotation types
+- File paths that dont exist
+- Invalid assignment strategies
+- Malformed YAML syntax
+
+## Best Practices
+1. **Start Simple**: Begin with basic configuration and add complexity gradually
+2. **Test Thoroughly**: Always test your configuration with a small dataset first
+3. **Use Descriptive Names**: Choose clear, descriptive names for annotation schemes
+4. **Document Your Choices**: Add comments to explain non-obvious configuration choices
+5. **Version Control**: Keep your configuration files in version control
+6. **Environment Variables**: Use environment variables for sensitive information
+7. **Backup Data**: Always backup your data and configuration before making changes
+
+## Troubleshooting
+
+### Common Issues
+1. **Port Already in Use**: Change the port number in your configuration
+2. **File Not Found**: Check that all file paths are correct and files exist
+3. **Invalid YAML**: Use a YAML validator to check syntax
+4. **Permission Errors**: Ensure Potato has read/write access to directories
+5. **Template Errors**: Check that template files exist and are valid HTML

@@ -581,21 +581,25 @@ function debugVerifyOverlayCleanup() {
 }
 
 function setupEventListeners() {
-    // Go to button
-    document.getElementById('go-to-btn').addEventListener('click', function () {
-        const goToValue = document.getElementById('go_to').value;
-        if (goToValue && goToValue > 0) {
-            // User enters 1-based index (item 1, 2, 3...) but server uses 0-based
-            navigateToInstance(parseInt(goToValue) - 1);
-        }
-    });
+    // Go to button (may not exist when jumping_to_id_disabled is true)
+    const goToBtn = document.getElementById('go-to-btn');
+    const goToInput = document.getElementById('go_to');
+    if (goToBtn && goToInput) {
+        goToBtn.addEventListener('click', function () {
+            const goToValue = goToInput.value;
+            if (goToValue && goToValue > 0) {
+                // User enters 1-based index (item 1, 2, 3...) but server uses 0-based
+                navigateToInstance(parseInt(goToValue) - 1);
+            }
+        });
 
-    // Enter key on go to input
-    document.getElementById('go_to').addEventListener('keypress', function (e) {
-        if (e.key === 'Enter') {
-            document.getElementById('go-to-btn').click();
-        }
-    });
+        // Enter key on go to input
+        goToInput.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                goToBtn.click();
+            }
+        });
+    }
 
     // Keyboard navigation and shortcuts
     document.addEventListener('keydown', function (e) {
@@ -1885,12 +1889,12 @@ function setLoading(loading) {
     if (loading) {
         loadingState.style.display = 'block';
         mainContent.style.display = 'none';
-        prevBtn.disabled = true;
+        if (prevBtn) prevBtn.disabled = true;
         nextBtn.disabled = true;
     } else {
         loadingState.style.display = 'none';
         mainContent.style.display = 'block';
-        prevBtn.disabled = false;
+        if (prevBtn) prevBtn.disabled = false;
         // Re-enable next button, then run validation which may re-disable it
         // if required fields are unfilled
         nextBtn.disabled = false;

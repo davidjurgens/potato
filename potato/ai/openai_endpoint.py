@@ -29,7 +29,7 @@ class OpenAIEndpoint(BaseAIEndpoint):
         """Initialize the OpenAI client."""
         api_key = self.ai_config.get("api_key", "")
         if not api_key:
-            raise AIEndpointRequestError("OpenRouter API key is required")
+            raise AIEndpointRequestError("OpenAI API key is required")
 
         # Default timeout of 30 seconds, configurable via ai_config
         timeout = self.ai_config.get("timeout", 30)

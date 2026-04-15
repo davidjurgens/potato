@@ -14,8 +14,8 @@ def arguments():
 
     parser.add_argument(
         "mode",
-        choices=['start', 'get', 'list', 'migrate', 'reset-password'],
-        help="set the mode when potato is used, currently supporting: start, get, list, migrate, reset-password",
+        choices=['start', 'migrate', 'reset-password'],
+        help="set the mode when potato is used, currently supporting: start, migrate, reset-password",
         default="start",
     )
 

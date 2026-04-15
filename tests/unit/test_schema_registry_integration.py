@@ -10,6 +10,24 @@ These tests verify that:
 import pytest
 
 
+def _get_config_valid_types():
+    """Extract valid_types from config_module's validate_single_annotation_scheme.
+
+    Parses the source to find the valid_types list so the test stays in sync
+    automatically when new schema types are added.
+    """
+    import inspect, ast
+    from potato.server_utils import config_module
+    source = inspect.getsource(config_module.validate_single_annotation_scheme)
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == 'valid_types':
+                    return ast.literal_eval(node.value)
+    raise RuntimeError("Could not find valid_types in validate_single_annotation_scheme")
+
+
 class TestSchemaRegistryCompleteness:
     """Test that the schema registry contains all expected annotation types."""
 
@@ -17,18 +35,7 @@ class TestSchemaRegistryCompleteness:
         """All annotation types in config_module.valid_types should be in registry."""
         from potato.server_utils.schemas.registry import schema_registry
 
-        # Valid types from config_module.py (line 275)
-        config_valid_types = [
-            'radio', 'multiselect', 'likert', 'text', 'slider', 'span',
-            'select', 'number', 'multirate', 'pure_display', 'video',
-            'image_annotation', 'audio_annotation', 'video_annotation', 'span_link',
-            'pairwise', 'coreference', 'tree_annotation', 'triage', 'event_annotation',
-            'tiered_annotation', 'bws', 'soft_label', 'confidence', 'constant_sum',
-            'semantic_differential', 'ranking', 'range_slider', 'hierarchical_multiselect',
-            'vas', 'extractive_qa', 'rubric_eval', 'text_edit', 'error_span',
-            'card_sort', 'conjoint', 'trajectory_eval'
-        ]
-
+        config_valid_types = _get_config_valid_types()
         registry_types = schema_registry.get_supported_types()
 
         for annotation_type in config_valid_types:
@@ -39,17 +46,7 @@ class TestSchemaRegistryCompleteness:
         """Schema registry should not have extra types not in config_module."""
         from potato.server_utils.schemas.registry import schema_registry
 
-        config_valid_types = [
-            'radio', 'multiselect', 'likert', 'text', 'slider', 'span',
-            'select', 'number', 'multirate', 'pure_display', 'video',
-            'image_annotation', 'audio_annotation', 'video_annotation', 'span_link',
-            'pairwise', 'coreference', 'tree_annotation', 'triage', 'event_annotation',
-            'tiered_annotation', 'bws', 'soft_label', 'confidence', 'constant_sum',
-            'semantic_differential', 'ranking', 'range_slider', 'hierarchical_multiselect',
-            'vas', 'extractive_qa', 'rubric_eval', 'text_edit', 'error_span',
-            'card_sort', 'conjoint', 'trajectory_eval'
-        ]
-
+        config_valid_types = _get_config_valid_types()
         registry_types = schema_registry.get_supported_types()
 
         for registry_type in registry_types:

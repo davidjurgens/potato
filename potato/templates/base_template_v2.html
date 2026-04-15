@@ -138,8 +138,14 @@
 
             <div class="navbar-center">
                 <div class="annotation-status-indicator" id="annotation-status">
-                    <span class="status-badge {{ 'labeled' if instance_has_annotations else 'unlabeled' }}">
-                        {{ ui_lang.labeled_badge if instance_has_annotations else ui_lang.not_labeled_badge }}
+                    <span class="status-badge {{ annotation_status }}">
+                        {% if annotation_status == 'labeled' %}
+                            {{ ui_lang.labeled_badge }}
+                        {% elif annotation_status == 'in_progress' %}
+                            {{ ui_lang.in_progress_badge }}
+                        {% else %}
+                            {{ ui_lang.not_labeled_badge }}
+                        {% endif %}
                     </span>
                 </div>
 
@@ -158,6 +164,16 @@
                 </div>
                 {% endif %}
 
+                <div class="navbar-divider"></div>
+
+                {% if instance_index is defined %}
+                <div class="instance-number-section">
+                    <span class="instance-number-label">Instance</span>
+                    <span class="fw-medium" id="instance-number">#{{ instance_index|int + 1 }}</span>
+                </div>
+                {% endif %}
+
+                {% if not jumping_to_id_disabled %}
                 <div class="navbar-divider"></div>
 
                 <div class="nav-controls">
@@ -179,6 +195,7 @@
                            onfocusin="user_input()" onfocusout="user_input_leave()">
                     <button type="button" class="goto-btn" id="go-to-btn">{{ ui_lang.go_button }}</button>
                 </div>
+                {% endif %}
             </div>
 
             <div class="navbar-end">
@@ -262,7 +279,9 @@
                         </div>
                         {% else %}
                         {% if is_annotation_page %}
+                                {% if ui_lang.text_to_annotate|default('Text to Annotate:') %}
                                 <h5 class="instance-text-heading">{{ ui_lang.text_to_annotate|default('Text to Annotate:') }}</h5>
+                                {% endif %}
                                 <div id="instance-text" class="p-3 border rounded instance-text-container" style="background-color: var(--light-bg); position: relative;">
                                     <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}" style="position: relative; z-index: 1; pointer-events: auto;">{{instance | sanitize_html}}
                                         <div id="span-overlays" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;">
@@ -297,9 +316,13 @@
 
         <!-- Navigation buttons -->
         <div class="potato-nav">
+            {% if can_go_back | default(true) %}
             <button class="shadcn-button shadcn-button-outline" id="prev-btn" onclick="navigateToPrevious()">
                 <i class="fas fa-arrow-left me-2"></i>{{ ui_lang.previous_button }}
             </button>
+            {% else %}
+            <div id="prev-btn-placeholder"></div>
+            {% endif %}
             <button class="shadcn-button shadcn-button-primary" id="next-btn" onclick="navigateToNext()">
                 {{ ui_lang.next_button }}<i class="fas fa-arrow-right ms-2"></i>
             </button>

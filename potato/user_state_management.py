@@ -540,72 +540,46 @@ class UserStateManager:
             self._phase_page_index_cache = {}
 
     def _get_phase_pages(self, phase: UserPhase) -> tuple[str, ...]:
-        """Return cached page ordering for a phase."""
+        """Return cached page ordering for a phase, using config order."""
         self._ensure_phase_caches()
         if phase not in self._phase_page_order_cache:
             pages = self._get_phase_pages_from_config_order(phase)
             self._phase_page_order_cache[phase] = pages
-            self._phase_page_index_cache[phase] = {page: i for i, page in enumerate(pages)}
+            self._phase_page_index_cache[phase] = {p: i for i, p in enumerate(pages)}
         return self._phase_page_order_cache[phase]
 
     def _get_phase_pages_from_config_order(self, phase: UserPhase) -> tuple[str, ...]:
-        """
-        Derive page ordering for a phase from config when possible.
+        """Derive page ordering from config phases.order when available.
 
-        This avoids depending on internal registration order, which can drift
-        from the config order when phases are loaded through different paths.
+        Falls back to registration order (OrderedDict insertion order) when
+        the config does not specify a phases.order list.
         """
-        registered_pages = self.phase_type_to_name_to_page.get(phase, {})
-        if not registered_pages:
-            return tuple()
+        registered = self.phase_type_to_name_to_page.get(phase, {})
+        if not registered:
+            return ()
 
         phases_config = self.config.get("phases")
-        configured_pages: list[str] = []
+        if not isinstance(phases_config, dict) or "order" not in phases_config:
+            return tuple(registered.keys())
 
-        if isinstance(phases_config, list):
-            for phase_config in phases_config:
-                if not isinstance(phase_config, dict):
-                    continue
-                phase_name = phase_config.get("name")
-                phase_type_name = phase_config.get("type")
-                if not phase_name or not phase_type_name:
-                    continue
-                try:
-                    phase_type = UserPhase.fromstr(phase_type_name)
-                except ValueError:
-                    continue
-                if phase_type == phase and phase_name in registered_pages:
-                    configured_pages.append(phase_name)
-        elif isinstance(phases_config, dict):
-            phase_order = phases_config.get("order")
-            if not isinstance(phase_order, list):
-                phase_order = [name for name in phases_config.keys() if name != "order"]
+        ordered: list[str] = []
+        for name in phases_config["order"]:
+            entry = phases_config.get(name)
+            if not isinstance(entry, dict):
+                continue
+            entry_type = entry.get("type", "")
+            try:
+                if UserPhase.fromstr(entry_type) == phase and name in registered:
+                    ordered.append(name)
+            except ValueError:
+                continue
 
-            for phase_name in phase_order:
-                if phase_name == "annotation":
-                    continue
-                phase_config = phases_config.get(phase_name)
-                if not isinstance(phase_config, dict):
-                    continue
-                phase_type_name = phase_config.get("type")
-                if not phase_type_name:
-                    continue
-                try:
-                    phase_type = UserPhase.fromstr(phase_type_name)
-                except ValueError:
-                    continue
-                if phase_type == phase and phase_name in registered_pages:
-                    configured_pages.append(phase_name)
+        # Append any registered pages not represented in config order.
+        for name in registered:
+            if name not in ordered:
+                ordered.append(name)
 
-        if not configured_pages:
-            return tuple(registered_pages.keys())
-
-        # Keep any registered pages that were not represented in config order.
-        for page_name in registered_pages.keys():
-            if page_name not in configured_pages:
-                configured_pages.append(page_name)
-
-        return tuple(configured_pages)
+        return tuple(ordered)
 
     def add_user(self, user_id: str) -> UserState:
         """
@@ -918,6 +892,35 @@ class UserStateManager:
                 return prev_phase, prev_pages[-1] if prev_pages else None
 
         return cur_phase, cur_page
+
+    def can_user_go_back(self, user_id: str) -> bool:
+        '''Returns True if the user has a previous page/phase to navigate to.
+
+        For annotation phase users, this checks whether they are on the first
+        instance AND whether phase back-navigation would be blocked.
+        For non-annotation phase users, this checks whether retreat_phase
+        would succeed.
+        '''
+        user_state = self.get_user_state(user_id)
+        cur_phase, cur_page = user_state.get_current_phase_and_page()
+        prev_phase, prev_page = self.get_prev_user_phase_page(user_id)
+
+        # If prev == current, there's nowhere to go back to
+        if prev_phase == cur_phase and prev_page == cur_page:
+            # For annotation phase, user can still go back within instances
+            if cur_phase == UserPhase.ANNOTATION:
+                return user_state.get_current_instance_index() > 0
+            return False
+
+        # If going back would cross phases, check if that's allowed
+        if prev_phase != cur_phase:
+            if not self.config.get('allow_phase_back_navigation', False):
+                # For annotation phase, user can still go back within instances
+                if cur_phase == UserPhase.ANNOTATION:
+                    return user_state.get_current_instance_index() > 0
+                return False
+
+        return True
 
     def get_user_ids(self) -> list[str]:
         '''Gets all user IDs from the user state manager'''

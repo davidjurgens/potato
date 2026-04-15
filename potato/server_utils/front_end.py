@@ -350,15 +350,6 @@ def generate_annotation_html_template(config: dict) -> str:
 
     html_template = html_template.replace("{{ HEADER }}", header)
 
-    if config.get("jumping_to_id_disabled"):
-        html_template = html_template.replace(
-            '<input type="submit" value="go">', '<input type="submit" value="go" hidden>'
-        )
-        html_template = html_template.replace(
-            '<input type="number" name="go_to" id="go_to" value="" onfocusin="user_input()" onfocusout="user_input_leave()" max={{total_count}} min=0 required>',
-            '<input type="number" name="go_to" id="go_to" value="" onfocusin="user_input()" onfocusout="user_input_leave()" max={{total_count}} min=0 required hidden>',
-        )
-
     if config.get("hide_navbar"):
         html_template = html_template.replace(
             '<div class="navbar-nav">', '<div class="navbar-nav" hidden>'

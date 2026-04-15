@@ -1163,23 +1163,8 @@ def instructions():
 
     # Show the current set of instructions
     else:
-        # Get the page the user is currently on
-        phase, page = user_state.get_current_phase_and_page()
-        logger.debug(f'GET <-- INSTRUCTIONS: phase, page: {phase}, {page}')
-
-        usm = get_user_state_manager()
-        # Look up the html template for the current instructions
-        instructions_html_fname = usm.get_phase_html_fname(phase, page)
-        # Render the instructions with necessary context variables
-        return render_template(instructions_html_fname,
-                             annotation_task_name=config.get("annotation_task_name", "Annotation Task"),
-                             title=config.get("annotation_task_name", "Instructions"),
-                             username=session.get('username', ''),
-                             debug_mode=config.get("debug", False),
-                             ui_debug=config.get("ui_debug", False),
-                             server_debug=config.get("server_debug", False),
-                             debug_phase=config.get("debug_phase"),
-                             ui_config=config.get("ui_config", {}))
+        logger.debug(f'GET <-- INSTRUCTIONS')
+        return get_current_page_html(config, username)
 
 @app.route("/training", methods=["GET", "POST"])
 def training():

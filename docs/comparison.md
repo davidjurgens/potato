@@ -329,6 +329,6 @@ See the [Quick Start Guide](quick-start.md) for a 5-minute setup, or browse [exa
 
 ## Related Documentation
 
-- [AI Support](ai_support.md) - Potato's AI integration features
-- [Quality Control](quality_control.md) - Attention checks and gold standards
-- [Schema Gallery](schemas_and_templates.md) - All annotation types
+- [AI Support](ai-intelligence/ai_support.md) - Potato's AI integration features
+- [Quality Control](workflow/quality_control.md) - Attention checks and gold standards
+- [Schema Gallery](annotation-types/schemas_and_templates.md) - All annotation types

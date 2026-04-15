@@ -519,3 +519,9 @@ try:
     AIEndpointFactory.register_endpoint("anthropic_vision", AnthropicVisionEndpoint)
 except ImportError:
     logger.debug("Anthropic Vision endpoint not available")
+
+try:
+    from .openrouter_endpoint import OpenRouterEndpoint
+    AIEndpointFactory.register_endpoint("openrouter", OpenRouterEndpoint)
+except ImportError:
+    logger.debug("OpenRouter endpoint not available")
