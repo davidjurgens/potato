@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest.mock import patch
 
 import potato.flask_server as fs
 from flask import Flask
@@ -76,11 +77,19 @@ class _StubUserState:
     def get_annotation_count(self):
         return 0
 
+    def get_max_assignments(self):
+        return -1
+
     def has_annotated(self, instance_id):
         return False
 
     def generate_user_statistics(self):
         return {}
+
+
+class _RequiredLabelKey:
+    def get_schema(self):
+        return "sentiment"
 
 
 class _StubUSM:
@@ -89,6 +98,9 @@ class _StubUSM:
 
     def get_phase_html_fname(self, phase, page):
         return "base_template_v2.html"
+
+    def can_user_go_back(self, username):
+        return True
 
 
 class _StubISM:
@@ -182,3 +194,57 @@ def test_codebook_i18n_label(monkeypatch):
 
     # Default label from ui_lang_defaults
     assert "> Codebook" in rendered
+
+
+def test_render_page_with_annotations_does_not_import_routes_for_required_status(monkeypatch):
+    """Rendering annotated items should not import potato.routes at request time."""
+    app = _build_template_app()
+
+    class _AnnotatedUserState(_StubUserState):
+        instance_id_to_label_to_value = {"item-1": {_RequiredLabelKey(): True}}
+        instance_id_to_span_to_value = {}
+
+        def has_annotated(self, instance_id):
+            return True
+
+    class _AnnotatedUSM(_StubUSM):
+        def get_user_state(self, username):
+            return _AnnotatedUserState()
+
+    monkeypatch.setattr(fs, "app", app, raising=False)
+    monkeypatch.setattr(fs, "config", {
+        "annotation_task_name": "Header Codebook Test",
+        "annotation_schemes": [{
+            "name": "sentiment",
+            "annotation_type": "radio",
+            "description": "Select sentiment",
+            "labels": [{"name": "positive"}, {"name": "negative"}],
+            "required": True,
+        }],
+        "item_properties": {"text_key": "text", "kwargs": []},
+        "site_file": "base_template_v2.html",
+        "ui": {},
+        "customjs": False,
+        "debug": False,
+        "alert_time_each_instance": 10000000,
+    }, raising=False)
+    monkeypatch.setattr(fs, "get_user_state_manager", lambda: _AnnotatedUSM())
+    monkeypatch.setattr(fs, "get_item_state_manager", lambda: _StubISM())
+    monkeypatch.setattr(fs, "get_quality_control_manager", lambda: None)
+    monkeypatch.setattr(fs, "get_annotations_for_user_on", lambda username, instance_id: None)
+    monkeypatch.setattr(fs, "get_span_annotations_for_user_on", lambda username, instance_id: [])
+    monkeypatch.setattr(fs, "get_label_suggestions", lambda item, config, prefill: set())
+    monkeypatch.setattr(fs, "_is_user_adjudicator", lambda username: False)
+
+    original_import = __import__
+
+    def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "potato.routes":
+            raise AssertionError("render_page_with_annotations should not import potato.routes")
+        return original_import(name, globals, locals, fromlist, level)
+
+    with patch("builtins.__import__", side_effect=guarded_import):
+        with app.test_request_context("/annotate"):
+            rendered = fs.render_page_with_annotations("user1")
+
+    assert "Not labeled" not in rendered
