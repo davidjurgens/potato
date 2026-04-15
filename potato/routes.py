@@ -1579,42 +1579,6 @@ def prestudy():
         logger.debug("GET <-- PRESTUDY")
         return get_current_page_html(config, username)
 
-def _scheme_has_required_annotation_DEPRECATED(user_state, instance_id: str, scheme: dict) -> bool:
-    """Check whether a specific required scheme has been annotated for the given instance."""
-    schema_name = scheme.get("name", "")
-
-    # Check label annotations — keys are Label objects with .get_schema() and .get_name()
-    label_annotations = user_state.instance_id_to_label_to_value.get(instance_id, {})
-    for label_key, value in label_annotations.items():
-        if hasattr(label_key, 'get_schema') and label_key.get_schema() == schema_name:
-            # Found a label for this schema — check if it has a truthy value
-            if value:
-                return True
-
-    # Check span annotations
-    span_annotations = user_state.instance_id_to_span_to_value.get(instance_id, {})
-    if span_annotations:
-        # Span annotations are stored differently — check if any spans exist
-        if isinstance(span_annotations, dict) and span_annotations:
-            return True
-        elif isinstance(span_annotations, list) and len(span_annotations) > 0:
-            return True
-
-    return False
-
-
-def _instance_meets_required_annotation_rules_DEPRECATED(user_state, instance_id: str) -> list:
-    """Check if all required annotation schemes are satisfied for an instance.
-
-    Returns a list of unsatisfied scheme names (empty if all satisfied).
-    """
-    unsatisfied = []
-    for scheme in config.get("annotation_schemes", []):
-        if _scheme_is_required(scheme) and not _scheme_has_required_annotation(user_state, instance_id, scheme):
-            unsatisfied.append(scheme.get("name", "unknown"))
-    return unsatisfied
-
-
 def _check_required_or_block(user_state, instance_id: str):
     """Check required annotations and return a 400 response if not met, or None if OK."""
     unsatisfied = _instance_meets_required_annotation_rules(user_state, instance_id)
