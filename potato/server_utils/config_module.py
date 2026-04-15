@@ -76,6 +76,7 @@ KNOWN_CONFIG_KEYS = {
         "allowed_domain", "allowed_domains", "allowed_org",
     },
     "login": {"type", "url_argument", "auto_redirect_delay", "auto_redirect_on_completion"},
+    "user_config": {"allow_all_users", "users"},
     "require_password": None,
     "require_no_password": None,
     "secret_key": None,
