@@ -43,6 +43,7 @@ from potato.flask_server import (
     init_user_state, UserAuthenticator, UserPhase,
     move_to_prev_instance, move_to_next_instance, go_to_id,
     get_annotations_for_user_on, get_span_annotations_for_user_on,
+    _instance_meets_required_annotation_rules,
     render_page_with_annotations, get_current_page_html,
     validate_annotation, parse_html_span_annotation, Label, SpanAnnotation,
     get_users, get_total_annotations, update_annotation_state,
@@ -1578,21 +1579,7 @@ def prestudy():
         logger.debug("GET <-- PRESTUDY")
         return get_current_page_html(config, username)
 
-def _scheme_is_required(scheme: dict) -> bool:
-    """Check if an annotation scheme is marked as required."""
-    # required: true at top level
-    if scheme.get("required") is True:
-        return True
-    # label_requirement: true (bool) or label_requirement.required: true
-    lr = scheme.get("label_requirement", {})
-    if lr is True:
-        return True
-    if isinstance(lr, dict) and lr.get("required") is True:
-        return True
-    return False
-
-
-def _scheme_has_required_annotation(user_state, instance_id: str, scheme: dict) -> bool:
+def _scheme_has_required_annotation_DEPRECATED(user_state, instance_id: str, scheme: dict) -> bool:
     """Check whether a specific required scheme has been annotated for the given instance."""
     schema_name = scheme.get("name", "")
 
@@ -1616,7 +1603,7 @@ def _scheme_has_required_annotation(user_state, instance_id: str, scheme: dict) 
     return False
 
 
-def _instance_meets_required_annotation_rules(user_state, instance_id: str) -> list:
+def _instance_meets_required_annotation_rules_DEPRECATED(user_state, instance_id: str) -> list:
     """Check if all required annotation schemes are satisfied for an instance.
 
     Returns a list of unsatisfied scheme names (empty if all satisfied).

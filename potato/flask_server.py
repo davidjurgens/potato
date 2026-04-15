@@ -1817,6 +1817,48 @@ def _sanitize_codebook_url(url: str) -> str:
     return stripped
 
 
+def _scheme_is_required(scheme: dict) -> bool:
+    """Check if an annotation scheme is marked as required."""
+    if scheme.get("required") is True:
+        return True
+
+    lr = scheme.get("label_requirement", {})
+    if lr is True:
+        return True
+    if isinstance(lr, dict) and lr.get("required") is True:
+        return True
+    return False
+
+
+def _scheme_has_required_annotation(user_state, instance_id: str, scheme: dict) -> bool:
+    """Check whether a required scheme has any annotation value for an instance."""
+    schema_name = scheme.get("name", "")
+
+    label_annotations = user_state.instance_id_to_label_to_value.get(instance_id, {})
+    for label_key, value in label_annotations.items():
+        if hasattr(label_key, "get_schema") and label_key.get_schema() == schema_name:
+            if value:
+                return True
+
+    span_annotations = user_state.instance_id_to_span_to_value.get(instance_id, {})
+    if span_annotations:
+        if isinstance(span_annotations, dict) and span_annotations:
+            return True
+        if isinstance(span_annotations, list) and len(span_annotations) > 0:
+            return True
+
+    return False
+
+
+def _instance_meets_required_annotation_rules(user_state, instance_id: str) -> list:
+    """Return the names of required schemes that are still unsatisfied."""
+    unsatisfied = []
+    for scheme in config.get("annotation_schemes", []):
+        if _scheme_is_required(scheme) and not _scheme_has_required_annotation(user_state, instance_id, scheme):
+            unsatisfied.append(scheme.get("name", "unknown"))
+    return unsatisfied
+
+
 def _is_user_adjudicator(username: str) -> bool:
     """Check if a user is an authorized adjudicator."""
     adj_mgr = get_adjudication_manager()
@@ -1998,7 +2040,6 @@ def render_page_with_annotations(username: str):
     # Determine annotation status for the status badge (three-state)
     annotation_status = "unlabeled"
     if user_state.has_annotated(instance_id):
-        from potato.routes import _instance_meets_required_annotation_rules
         unsatisfied = _instance_meets_required_annotation_rules(user_state, instance_id)
         annotation_status = "labeled" if not unsatisfied else "in_progress"
     instance_has_annotations = (annotation_status != "unlabeled")
