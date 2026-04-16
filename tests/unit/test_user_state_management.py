@@ -3,7 +3,7 @@ import shutil
 import tempfile
 import pytest
 from potato.user_state_management import InMemoryUserState, UserPhase
-from potato.item_state_management import Label, SpanAnnotation
+from potato.item_state_management import Item, Label, SpanAnnotation
 
 @pytest.fixture(scope="function")
 def temp_user_dir():
@@ -76,3 +76,28 @@ def test_span_annotation_save_and_load(temp_user_dir):
     spans = loaded.get_span_annotations(iid)
     assert span in spans
     assert spans[span] == "selected"
+
+
+def test_get_current_instance_skips_missing_items(monkeypatch):
+    user = InMemoryUserState("skip_user")
+    user.instance_id_ordering = ["missing_qc_item", "valid_item"]
+    user.current_instance_index = 0
+
+    valid_item = Item("valid_item", {"text": "Valid item"})
+
+    class StubItemManager:
+        def has_item(self, item_id):
+            return item_id == "valid_item"
+
+        def get_item(self, item_id):
+            return valid_item if item_id == "valid_item" else None
+
+    monkeypatch.setattr(
+        "potato.user_state_management.get_item_state_manager",
+        lambda: StubItemManager(),
+    )
+
+    current = user.get_current_instance()
+
+    assert current is valid_item
+    assert user.current_instance_index == 1
