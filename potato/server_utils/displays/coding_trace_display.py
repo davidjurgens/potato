@@ -137,7 +137,10 @@ class CodingTraceDisplay(BaseDisplay):
         # Parse turns from data
         turns = self._normalize_turns(data)
         if not turns:
-            return '<div class="coding-trace-empty">No trace steps found</div>'
+            empty_html = '<div class="coding-trace-empty">No trace steps found</div>'
+            if is_span_target:
+                return self.render_span_wrapper(field_key, empty_html, "")
+            return empty_html
 
         # Build file tree
         file_tree_html = ""
