@@ -1883,6 +1883,14 @@ def render_page_with_annotations(username: str):
     is_annotation_page = phase == UserPhase.ANNOTATION
 
     item = user_state.get_current_instance()
+    if item is None:
+        logger.warning(
+            f"User {username} has no valid current instance after loading state"
+        )
+        if not user_state.has_remaining_assignments():
+            get_user_state_manager().advance_phase(username)
+        return redirect(url_for("home"))
+
     instance_id = item.get_id()
 
     # Extract pre-annotation data if quality control is enabled

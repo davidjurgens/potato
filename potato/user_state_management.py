@@ -1026,7 +1026,7 @@ class UserStateManager:
 
         # TODO: make the user state type configurable between in-memory and DB-backed.
         user_state = InMemoryUserState.load(user_dir)
-
+        user_state.prune_missing_assigned_instances()
 
         if user_state.get_user_id() in self.user_to_annotation_state:
             logger.warning(f'User "{user_state.get_user_id()}" already exists in the user state manager, but is being overwritten by load_state()')
@@ -2449,6 +2449,48 @@ class InMemoryUserState(UserState):
         """Generate a mapping from instance ID to its position in the ordering."""
         return {id_: i for i, id_ in enumerate(id_order)}
 
+    def prune_missing_assigned_instances(self) -> int:
+        """Remove assigned instances that no longer exist in the item manager.
+
+        Called after reloading persisted state so stale injected QC items
+        from an older run do not keep resurfacing on every request.
+        """
+        ism = get_item_state_manager()
+
+        kept_ordering = []
+        removed_before_current = 0
+        removed_count = 0
+        for i, inst_id in enumerate(self.instance_id_ordering):
+            if ism.has_item(inst_id):
+                kept_ordering.append(inst_id)
+            else:
+                logger.warning(f"Instance '{inst_id}' in user ordering but not in item manager, removing")
+                removed_count += 1
+                if i < self.current_instance_index:
+                    removed_before_current += 1
+
+        if removed_count == 0:
+            return 0
+
+        self.instance_id_ordering = kept_ordering
+        self.assigned_instance_ids = set(kept_ordering)
+        self.instance_id_to_order = self.generate_id_order_mapping(self.instance_id_ordering)
+
+        if not self.instance_id_ordering:
+            self.current_instance_index = -1
+        elif self.current_instance_index < 0:
+            pass
+        else:
+            self.current_instance_index = min(
+                self.current_instance_index - removed_before_current,
+                len(self.instance_id_ordering) - 1,
+            )
+
+        logger.info(
+            f"Pruned {removed_count} stale assigned instances from user {self.user_id}"
+        )
+        return removed_count
+
     def update(self, annotation_order, annotated_instances):
         """
         Updates the entire state of annotations for this user by inserting
@@ -2788,6 +2830,11 @@ class InMemoryUserState(UserState):
                     event_id: EventAnnotation.from_dict(event_data)
                     for event_id, event_data in events_dict.items()
                 }
+
+        try:
+            user_state.prune_missing_assigned_instances()
+        except Exception:
+            pass
 
         return user_state
 
