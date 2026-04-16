@@ -101,3 +101,32 @@ def test_get_current_instance_skips_missing_items(monkeypatch):
 
     assert current is valid_item
     assert user.current_instance_index == 1
+
+
+def test_load_prunes_missing_items(monkeypatch, temp_user_dir):
+    user = InMemoryUserState("load_skip_user")
+    user.instance_id_ordering = ["missing_qc_item", "valid_item"]
+    user.assigned_instance_ids = set(user.instance_id_ordering)
+    user.current_instance_index = 0
+    user.current_phase_and_page = (UserPhase.ANNOTATION, None)
+    user.save(temp_user_dir)
+
+    valid_item = Item("valid_item", {"text": "Valid item"})
+
+    class StubItemManager:
+        def has_item(self, item_id):
+            return item_id == "valid_item"
+
+        def get_item(self, item_id):
+            return valid_item if item_id == "valid_item" else None
+
+    monkeypatch.setattr(
+        "potato.user_state_management.get_item_state_manager",
+        lambda: StubItemManager(),
+    )
+
+    loaded = InMemoryUserState.load(temp_user_dir)
+
+    assert loaded.instance_id_ordering == ["valid_item"]
+    assert loaded.get_assigned_instance_ids() == {"valid_item"}
+    assert loaded.get_current_instance().get_id() == "valid_item"

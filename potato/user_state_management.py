@@ -1026,6 +1026,7 @@ class UserStateManager:
 
         # TODO: make the user state type configurable between in-memory and DB-backed.
         user_state = InMemoryUserState.load(user_dir)
+        user_state.prune_missing_assigned_instances()
 
 
         if user_state.get_user_id() in self.user_to_annotation_state:
@@ -1919,6 +1920,47 @@ class InMemoryUserState(UserState):
 
         return None
 
+    def prune_missing_assigned_instances(self) -> int:
+        """
+        Remove assigned instances that no longer exist in the item manager.
+
+        This is used after reloading persisted state so stale injected QC items
+        from an older run do not keep resurfacing on every request.
+        """
+        try:
+            ism = get_item_state_manager()
+        except Exception:
+            return 0
+
+        kept_ordering = []
+        removed_count = 0
+        for inst_id in self.instance_id_ordering:
+            if ism.has_item(inst_id):
+                kept_ordering.append(inst_id)
+            else:
+                logger.warning(f"Instance '{inst_id}' in user ordering but not in item manager, removing")
+                removed_count += 1
+
+        if removed_count == 0:
+            return 0
+
+        old_index = self.current_instance_index
+        self.instance_id_ordering = kept_ordering
+        self.assigned_instance_ids = set(kept_ordering)
+        self.instance_id_to_order = self.generate_id_order_mapping(self.instance_id_ordering)
+
+        if not self.instance_id_ordering:
+            self.current_instance_index = -1
+        elif old_index < 0:
+            self.current_instance_index = -1
+        else:
+            self.current_instance_index = min(old_index, len(self.instance_id_ordering) - 1)
+
+        logger.info(
+            f"Pruned {removed_count} stale assigned instances from user {self.user_id}"
+        )
+        return removed_count
+
     def get_current_instance_id(self) -> str:
         '''Returns the ID of the instance that the user is currently annotating'''
         instance = self.get_current_instance()
@@ -2791,6 +2833,8 @@ class InMemoryUserState(UserState):
                     event_id: EventAnnotation.from_dict(event_data)
                     for event_id, event_data in events_dict.items()
                 }
+
+        user_state.prune_missing_assigned_instances()
 
         return user_state
 
