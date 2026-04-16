@@ -1,5 +1,4 @@
 port: 9002
-server_name: potato annotator
 annotation_task_name: Active Learning with LLM Cold-Start
 task_dir: .
 output_annotation_dir: annotation_output/active-learning-llm-cold-start/
@@ -21,8 +20,6 @@ user_config:
 active_learning:
   enabled: true
   query_strategy: "uncertainty"
-  vectorizer_name: "sklearn.feature_extraction.text.TfidfVectorizer"
-  classifier_name: "sklearn.linear_model.LogisticRegression"
   calibrate_probabilities: true
   min_instances_for_training: 10
   update_frequency: 5
@@ -33,7 +30,6 @@ active_learning:
   # LLM cold-start: use LLM to identify informative instances before
   # enough annotations exist for classifier training
   cold_start_strategy: "llm"
-  cold_start_batch_size: 20
 
   # ICL ensemble: blend classifier predictions with LLM ICL predictions
   use_icl_ensemble: true
@@ -47,7 +43,6 @@ active_learning:
   routing_thresholds:
     auto_label_min_confidence: 0.9
     show_suggestion_below: 0.5
-  verification_sample_rate: 0.2
 
   # LLM endpoint for cold-start and routing
   llm:

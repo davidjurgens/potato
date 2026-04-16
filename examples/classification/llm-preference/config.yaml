@@ -1,5 +1,4 @@
 port: 8080
-server_name: LLM Response Preference Annotation
 annotation_task_name: LLM Response Quality Comparison
 task_dir: .
 output_annotation_dir: annotation_output/llm-preference/
@@ -11,7 +10,6 @@ data_files:
 item_properties:
   id_key: id
   text_key: responses
-  context_key: prompt
 
 # Display responses side by side with A/B labels
 list_as_text:

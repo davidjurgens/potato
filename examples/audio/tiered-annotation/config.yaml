@@ -11,7 +11,6 @@ data_files:
 item_properties:
   id_key: id
   text_key: text
-  audio_key: audio_url
 
 # NOTE: We intentionally do NOT use instance_display here.
 # The tiered_annotation schema handles audio display directly in its player.
@@ -89,16 +88,10 @@ annotation_schemes:
     playback_rate_control: true
 
 # Basic layout
-html_layout: default
 
 # Task settings
 task_dir: .
 output_annotation_dir: annotation_output
 
 # User configuration
-user_config:
-  allow_new_users: true
-  require_password: false
-
 # Skip training
-require_train_phase: false

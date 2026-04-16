@@ -62,7 +62,6 @@ data_sources:
 # Cache configuration for remote sources
 data_cache:
   enabled: true
-  cache_dir: ".potato_cache"
   ttl_seconds: 3600
 
 # Annotation scheme - simple sentiment classification

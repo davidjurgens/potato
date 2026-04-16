@@ -41,8 +41,6 @@
 
 # User authentication
 "require_password": false
-"user_config":
-  "allow_new_users": true
 
 # AI Support (required for ICL labeling)
 "ai_support":
@@ -108,15 +106,3 @@
     "display_config":
       "label_display": "name_and_description"
 
-# Pages configuration
-"pages":
-  - "id": "annotation"
-    "type": "annotation"
-    "content":
-      "header": "Sentiment Classification"
-      "instruction": |
-        Please read the text and classify its overall sentiment.
-
-        **Positive**: The text expresses positive emotions, satisfaction, or happiness.
-        **Neutral**: The text is factual, informational, or has no clear sentiment.
-        **Negative**: The text expresses negative emotions, frustration, or dissatisfaction.

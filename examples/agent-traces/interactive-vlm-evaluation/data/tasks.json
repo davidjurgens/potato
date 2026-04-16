@@ -1,0 +1,23 @@
+[
+  {
+    "id": "vlm_task_001",
+    "task_description": "Go to https://news.ycombinator.com and find the top-voted story. Tell me the title and point count.",
+    "start_url": "https://news.ycombinator.com",
+    "difficulty": "easy",
+    "agent_trace": null
+  },
+  {
+    "id": "vlm_task_002",
+    "task_description": "Navigate to https://en.wikipedia.org and search for 'transformer neural network'. Find and report the year the original paper was published.",
+    "start_url": "https://en.wikipedia.org",
+    "difficulty": "medium",
+    "agent_trace": null
+  },
+  {
+    "id": "vlm_task_003",
+    "task_description": "Go to https://example.com and describe what you see on the page. Then navigate to any link you find.",
+    "start_url": "https://example.com",
+    "difficulty": "easy",
+    "agent_trace": null
+  }
+]

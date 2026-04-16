@@ -10,7 +10,6 @@
 
 task_dir: .
 port: 8000
-server_name: Image Annotation Example
 annotation_task_name: Object Detection Demo
 output_annotation_dir: annotation_output/simple-image-annotation/
 output_annotation_format: json

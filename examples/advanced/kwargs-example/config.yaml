@@ -1,5 +1,4 @@
 port: 9001
-server_name: potato annotator
 annotation_task_name: Example for using kwargs
 task_dir: .
 output_annotation_dir: annotation_output/kwargs-example/

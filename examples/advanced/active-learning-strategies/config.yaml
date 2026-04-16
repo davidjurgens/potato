@@ -1,5 +1,4 @@
 port: 9001
-server_name: potato annotator
 annotation_task_name: Active Learning Strategies Demo
 task_dir: .
 output_annotation_dir: annotation_output/active-learning-strategies/
@@ -24,11 +23,9 @@ active_learning:
   hybrid_weights:
     uncertainty: 0.7
     diversity: 0.3
-  vectorizer_name: "sklearn.feature_extraction.text.TfidfVectorizer"
   vectorizer_params:
     ngram_range: [1, 2]
     max_features: 5000
-  classifier_name: "sklearn.linear_model.LogisticRegression"
   classifier_params:
     C: 1.0
     max_iter: 500

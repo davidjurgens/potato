@@ -55,5 +55,3 @@ server:
   port: 8000
 
 # User configuration
-user_config:
-  allow_duplicate_annotations: false

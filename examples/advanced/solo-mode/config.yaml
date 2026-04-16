@@ -80,13 +80,7 @@ annotation_schemes:
         key_value: "3"
 
 # User configuration
-user_config:
-  allow_no_password: true
-
 # Output
-output:
-  annotation_output_format: "json"
-  annotation_output_dir: "annotations"
 
 # Session settings
 session_lifetime_days: 7

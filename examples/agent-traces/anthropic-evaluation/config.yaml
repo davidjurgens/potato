@@ -72,4 +72,3 @@ annotation_schemes:
 
 user_config:
   allow_all_users: true
-  require_password: false

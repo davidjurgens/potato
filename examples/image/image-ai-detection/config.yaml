@@ -13,7 +13,6 @@
 #   - For OpenAI: Set OPENAI_API_KEY environment variable
 
 port: 8000
-server_name: AI-Assisted Image Annotation
 annotation_task_name: "AI-Assisted Object Detection"
 task_dir: .
 output_annotation_dir: annotation_output
@@ -27,7 +26,6 @@ data_files:
 item_properties:
   id_key: "id"
   text_key: "image_url"
-  context_key: "context"
 
 # Authentication (disabled for demo)
 user_config:

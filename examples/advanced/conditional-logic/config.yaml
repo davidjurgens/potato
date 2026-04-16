@@ -23,10 +23,6 @@ output_annotation_dir: "annotation_output"
 output_annotation_format: json
 
 # Authentication
-user_config:
-  require_password: false
-  allow_free_usernames: true
-
 # Annotation schemes with conditional branching
 annotation_schemes:
   # Primary question - always visible

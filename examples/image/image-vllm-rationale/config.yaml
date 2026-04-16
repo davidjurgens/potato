@@ -20,7 +20,6 @@
 #     ollama pull moondream:latest  (smallest, fastest, good for testing)
 
 port: 8000
-server_name: Image Classification with AI Rationales
 annotation_task_name: "Image Classification with AI Rationales"
 task_dir: .
 output_annotation_dir: annotation_output
@@ -34,7 +33,6 @@ data_files:
 item_properties:
   id_key: "id"
   text_key: "image_url"
-  context_key: "context"
 
 # Authentication (disabled for demo)
 user_config:

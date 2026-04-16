@@ -1,5 +1,4 @@
 port: 9002
-server_name: potato annotator
 annotation_task_name: Pairwise Scale Comparison Example
 task_dir: .
 output_annotation_dir: annotation_output/simple-pairwise-scale/

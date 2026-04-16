@@ -151,6 +151,39 @@ authentication:
         report = validate_config_file(config_file)
         assert len(report.unknown_keys) == 3
 
+    def test_ai_support_requires_endpoint_type(self, tmp_path):
+        """Enabled ai_support without endpoint_type must fail."""
+        body = (
+            _minimal_valid_config(str(tmp_path))
+            + """
+ai_support:
+  enabled: true
+  ai_config:
+    temperature: 0.5
+"""
+        )
+        config_file = _write_config(tmp_path, body)
+        report = validate_config_file(config_file)
+        assert report.ok is False
+        assert any("endpoint_type" in e for e in report.errors)
+
+    def test_ai_config_file_defers_endpoint_type_check(self, tmp_path):
+        """When ai_config_file is set, endpoint_type may live in the external
+        file — validator should not require it in the YAML."""
+        body = (
+            _minimal_valid_config(str(tmp_path))
+            + """
+ai_support:
+  enabled: true
+  ai_config_file: ai-config.yaml
+  ai_config:
+    temperature: 0.5
+"""
+        )
+        config_file = _write_config(tmp_path, body)
+        report = validate_config_file(config_file)
+        assert report.ok is True, f"Unexpected errors: {report.errors}"
+
 
 # =====================================================================
 # main() — CLI entry point

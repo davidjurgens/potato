@@ -14,7 +14,6 @@
 #   http://localhost:8000/?workerId=test_worker&assignmentId=ASSIGNMENT_ID_NOT_AVAILABLE&hitId=test_hit
 
 port: 9001
-server_name: mturk_annotator
 
 # Task identification
 annotation_task_name: MTurk Annotation Task

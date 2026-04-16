@@ -27,9 +27,6 @@ output_annotation_dir: "annotation_output"
 max_annotations_per_item: 3
 
 # Simple password-free login for demo
-user_config:
-  allow_anonymous: true
-
 # Admin API key for the admin overview endpoint
 admin_api_key: "demo-admin-key"
 

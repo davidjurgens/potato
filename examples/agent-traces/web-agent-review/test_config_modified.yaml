@@ -1,0 +1,90 @@
+admin_api_key: test-admin-api-key
+annotation_schemes:
+- annotation_type: radio
+  description: Did the agent successfully complete the task?
+  labels:
+  - name: success
+    tooltip: Agent fully completed the task correctly
+  - name: partial
+    tooltip: Agent made progress but didn't fully complete the task
+  - name: failure
+    tooltip: Agent failed to complete the task
+  name: task_success
+  sequential_key_binding: true
+- annotation_type: likert
+  description: How efficient was the agent's approach?
+  max_label: Optimal
+  min_label: Very inefficient
+  name: efficiency
+  size: 5
+- annotation_type: radio
+  description: Was this step correct and necessary?
+  labels:
+  - name: correct
+    tooltip: Step was correct and necessary
+  - name: incorrect
+    tooltip: Step was wrong or led to errors
+  - name: unnecessary
+    tooltip: Step was not needed for the task
+  name: step_correctness
+  per_step: true
+  sequential_key_binding: true
+- annotation_type: multiselect
+  description: Select all error types observed in the trace
+  labels:
+  - name: wrong_element
+    tooltip: Clicked/interacted with wrong element
+  - name: wrong_page
+    tooltip: Navigated to wrong page
+  - name: missed_step
+    tooltip: Skipped a necessary step
+  - name: unnecessary_action
+    tooltip: Performed an action that wasn't needed
+  - name: loop_detected
+    tooltip: Got stuck repeating actions
+  - name: no_errors
+    tooltip: No errors observed
+  name: error_types
+- annotation_type: text
+  description: Additional observations about the agent's behavior
+  name: notes
+annotation_task_name: Web Agent Trace Review
+data_files:
+- data/web-traces.json
+debug: false
+host: 0.0.0.0
+instance_display:
+  fields:
+  - key: task_description
+    label: Task
+    type: text
+  - display_options:
+      filmstrip_size: 80
+      screenshot_max_height: 600
+      screenshot_max_width: 800
+      show_element_info: true
+      show_filmstrip: true
+      show_observation: true
+      show_overlays: true
+      show_thought: true
+    key: steps
+    label: Agent Browsing Trace
+    type: web_agent_trace
+  layout:
+    direction: vertical
+    gap: 16px
+item_properties:
+  id_key: id
+  text_key: task_description
+output_annotation_dir: annotation_output
+output_annotation_format: json
+persist_sessions: false
+port: 9378
+random_seed: 1234
+require_password: false
+secret_key: test-secret-key
+session_lifetime_days: 2
+task_dir: .
+user_config:
+  allow_all_users: true
+  require_password: false

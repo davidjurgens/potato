@@ -2,7 +2,6 @@
 # This example demonstrates how to annotate relationships between named entities
 
 port: 9001
-server_name: potato annotator
 annotation_task_name: Span Linking Example
 task_dir: .
 output_annotation_dir: annotation_output/simple-span-linking/

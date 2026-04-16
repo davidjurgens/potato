@@ -15,9 +15,6 @@ item_properties:
   text_key: text
 
 # User configuration
-user_config:
-  type: none
-
 # Annotation schemes
 annotation_schemes:
   # First define the entity span schema
@@ -98,4 +95,3 @@ annotation_schemes:
       show_labels: true
 
 # Display settings
-html_layout: default
