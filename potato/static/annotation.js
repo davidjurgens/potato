@@ -1940,7 +1940,8 @@ function handleQualityControlResponse(result) {
         return;
     }
 
-    const isWarning = result.warning || (qcResult && qcResult.warning);
+    const isWarning = (result.warning || (qcResult && qcResult.warning)) &&
+        !(qcResult && qcResult.passed === true);
     if (isWarning) {
         showNotification(message || 'Please read items carefully before answering.', 'warning');
     }

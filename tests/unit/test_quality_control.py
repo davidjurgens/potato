@@ -225,6 +225,23 @@ class TestAttentionChecks:
         assert result.get("warning") is True
         assert "message" in result
 
+    def test_correct_response_after_prior_failures_does_not_warn(self, manager_with_attention):
+        """A correct response should not keep warning once the current answer is right."""
+        manager_with_attention.validate_attention_response(
+            "user1", "attn_001", {"sentiment": "wrong"}
+        )
+        manager_with_attention.validate_attention_response(
+            "user1", "attn_002", {"sentiment": "wrong"}
+        )
+
+        result = manager_with_attention.validate_attention_response(
+            "user1", "attn_003", {"sentiment": "neutral"}
+        )
+
+        assert result["passed"] is True
+        assert "warning" not in result
+        assert "blocked" not in result
+
     def test_block_threshold(self, manager_with_attention):
         """Test that blocking is triggered at threshold."""
         # Fail on 4 distinct items to trigger block (block_threshold=4)
