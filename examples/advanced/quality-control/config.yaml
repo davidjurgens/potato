@@ -112,7 +112,4 @@ ui:
   show_statistics: true
 
 # User configuration
-user_config:
-  allow_anonymous: true
-
 site_dir: default

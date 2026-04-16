@@ -35,9 +35,6 @@ output_annotation_dir: "annotation_output"
 max_annotations_per_item: 10
 
 # Simple password-free login for demo
-user_config:
-  allow_anonymous: true
-
 # Admin API key for MACE endpoints
 admin_api_key: "demo-mace-key"
 

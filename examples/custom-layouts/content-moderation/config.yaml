@@ -124,4 +124,3 @@ annotation_schemes:
 # User configuration
 user_config:
   allow_all_users: true
-  require_password: false

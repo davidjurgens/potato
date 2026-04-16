@@ -3,7 +3,6 @@
 # It includes pre-annotated data to show how label coloring works.
 
 # Server configuration
-server_name: "Embedding Visualization Demo"
 port: 8000
 
 # Task directory
@@ -12,7 +11,6 @@ annotation_task_name: "Embedding Visualization Demo"
 output_annotation_dir: "annotation_output"
 
 # Output directory for annotations (contains pre-populated annotations)
-output_dir: "annotation_output"
 
 # Data files
 data_files:
@@ -43,12 +41,6 @@ annotation_schemes:
         key_binding: u
 
 # User configuration
-user_config:
-  allow_signup: true
-  allow_login: true
-  allow_guest_login: false
-  single_user_mode: false
-
 # Admin API key (for admin dashboard access)
 admin_api_key: "demo-admin-key-12345"
 

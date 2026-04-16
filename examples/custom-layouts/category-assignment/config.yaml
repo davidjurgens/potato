@@ -10,7 +10,6 @@
 # 4. Users who don't qualify for any category get uncategorized instances
 
 port: 9001
-server_name: potato annotator
 annotation_task_name: Category-Based Assignment Example
 task_dir: .
 output_annotation_dir: annotation_output/
@@ -54,7 +53,6 @@ training:
   passing_criteria:
     min_correct: 4
     max_mistakes: 3
-  allow_retry: true
 
 # Annotation scheme
 annotation_schemes:

@@ -3,7 +3,6 @@
 # like Wikidata for named entity recognition tasks.
 
 port: 9001
-server_name: potato annotator
 annotation_task_name: Entity Linking Example
 
 task_dir: .
@@ -17,7 +16,6 @@ data_files:
 item_properties:
   id_key: id
   text_key: text
-  context_key: context
 
 user_config:
   allow_all_users: true

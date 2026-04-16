@@ -1,5 +1,4 @@
 port: 9001
-server_name: potato annotator
 annotation_task_name: Simple Active Learning Example
 task_dir: .
 output_annotation_dir: annotation_output/simple-active-learning/
@@ -10,22 +9,9 @@ data_files:
 item_properties:
   id_key: id
   text_key: text
-  context_key: context
 user_config:
   allow_all_users: true
   users: []
-active_learning_config:
-  enable_active_learning: true
-  classifier_name: sklearn.linear_model.LogisticRegression
-  classifier_kwargs: {}
-  vectorizer_name: sklearn.feature_extraction.text.CountVectorizer
-  vectorizer_kwargs: {}
-  resolution_strategy: random
-  random_sample_percent: 50
-  active_learning_schema:
-  - favorite_food
-  update_rate: 5
-  max_inferred_predictions: 20
 alert_time_each_instance: 10000000
 annotation_schemes:
 - annotation_type: radio

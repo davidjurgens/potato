@@ -3,7 +3,6 @@
 # to draw annotators' attention to relevant words in the text.
 
 port: 8000
-server_name: potato annotator
 annotation_task_name: Sentiment Analysis with Keyword Highlights
 
 # Output settings

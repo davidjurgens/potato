@@ -15,7 +15,6 @@
 
 task_dir: .
 port: 8000
-server_name: Audio Annotation Example
 annotation_task_name: Audio Segmentation Demo
 output_annotation_dir: annotation_output/simple-audio-annotation/
 output_annotation_format: json

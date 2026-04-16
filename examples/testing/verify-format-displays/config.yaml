@@ -103,7 +103,6 @@ annotation_schemes:
 
 user_config:
   allow_all_users: true
-  require_password: false
 
 # Debug mode - auto-login and skip to annotation phase
 debug: true

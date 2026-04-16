@@ -16,7 +16,6 @@
 # Then open http://localhost:8000 in your browser.
 
 port: 8000
-server_name: potato annotator
 annotation_task_name: Video Frame Annotation Example
 task_dir: .
 output_annotation_dir: annotation_output/video-frame-annotation/

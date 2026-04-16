@@ -1,7 +1,6 @@
 {
     "port": 9001,
 
-    "server_name": "potato annotator",
 
     "annotation_task_name": "Simple Highlighting Example",
 
@@ -32,7 +31,6 @@
     "item_properties": {
         "id_key": "id",
         "text_key": "text",
-        "context_key": "context"
     },
 
 
@@ -70,7 +68,6 @@
     # HTML page, just the piece that does lays out your task's pieces
     # you may use templates in our lib, if you want to use your own template,
     # please replace the string as a path to the template
-    "html_layout": "default",
 
     # The core UI files for Potato. You should not need to change these normally.
     #

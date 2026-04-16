@@ -76,6 +76,7 @@ KNOWN_CONFIG_KEYS = {
         "allowed_domain", "allowed_domains", "allowed_org",
     },
     "login": {"type", "url_argument", "auto_redirect_delay", "auto_redirect_on_completion"},
+    "user_config": {"allow_all_users", "users"},
     "require_password": None,
     "require_no_password": None,
     "secret_key": None,
@@ -105,14 +106,15 @@ KNOWN_CONFIG_KEYS = {
     "pre_annotation": {
         "enabled", "field", "highlight_low_confidence",
         "agreement_metrics", "predictions_file",
+        "allow_modification", "show_confidence",
     },
-    "agreement_metrics": {"min_overlap", "refresh_interval"},
+    "agreement_metrics": {"min_overlap", "refresh_interval", "enabled"},
     "quality_control": None,
 
     # === AI ===
     "ai_support": {
         "enabled", "endpoint_type", "ai_config_file", "ai_config",
-        "option_highlighting", "features",
+        "option_highlighting", "features", "cache_config",
     },
     "chat_support": {
         "enabled", "endpoint_type", "ai_config", "ui",
@@ -154,6 +156,8 @@ KNOWN_CONFIG_KEYS = {
         "error_taxonomy", "similarity",
         "require_notes_on_override", "show_agreement_scores",
         "show_annotator_names",
+        "output_subdir", "require_confidence",
+        "show_all_items", "show_timing_data",
     },
     "database": {"type", "host", "database", "username", "password", "port",
                  "pool_size", "pool_timeout", "connection_string"},
@@ -166,6 +170,7 @@ KNOWN_CONFIG_KEYS = {
     },
     "mace": {
         "enabled", "min_annotations_per_item", "trigger_every_n", "num_restarts",
+        "min_items", "num_iters",
     },
     "icl_labeling": None,
     "llm_labeling": None,
@@ -211,6 +216,8 @@ KNOWN_CONFIG_KEYS = {
     "highlight_linebreaks": None,
     "list_as_text": {"text_list_prefix_type", "horizontal", "alternating_shading"},
     "jumping_to_id_disabled": None,
+    "horizontal_key_bindings": None,
+    "completion_code": None,
     "allow_phase_back_navigation": None,
     "require_fully_annotated": None,
     "export_include_phase_data": None,
@@ -234,7 +241,7 @@ KNOWN_CONFIG_KEYS = {
         "completion_code", "sandbox_mode",
     },
     "webhooks": {"enabled", "endpoints"},
-    "trace_ingestion": {"enabled", "sources"},
+    "trace_ingestion": {"enabled", "sources", "api_key", "notify_annotators"},
     "huggingface_backup": None,
 
     # === Debug / logging ===
@@ -261,7 +268,11 @@ KNOWN_CONFIG_KEYS = {
     "max_annotations_per_item": None,
     "num_annotators_per_item": None,
     "min_annotators_per_instance": None,
-    "solo_mode": {"enabled"},
+    "solo_mode": {
+        "enabled", "batches", "instance_selection",
+        "labeling_models", "revision_models", "state_dir",
+        "thresholds", "uncertainty",
+    },
     "admin_api_key": None,
     "alert_time_each_instance": None,
     "assignment_strategy": None,
@@ -3308,12 +3319,18 @@ def validate_ai_support_config(config_data: Dict[str, Any]) -> None:
         return  # Skip validation if not enabled
 
     # Validate ai_config_file (optional, string path to external AI config)
+    has_external_config = False
     if "ai_config_file" in ai_config:
         if not isinstance(ai_config["ai_config_file"], str):
             raise ConfigValidationError("ai_support.ai_config_file must be a string")
+        has_external_config = True
 
-    # Validate endpoint type
+    # Validate endpoint type. When ai_config_file is set, the endpoint_type is
+    # expected to live in the external file (which may be gitignored, e.g. when
+    # it holds API keys) and is loaded at server start.
     if "endpoint_type" not in ai_config:
+        if has_external_config:
+            return  # External file provides endpoint_type + model + credentials
         raise ConfigValidationError("ai_support.endpoint_type is required when ai_support is enabled")
 
     endpoint_type = ai_config["endpoint_type"]

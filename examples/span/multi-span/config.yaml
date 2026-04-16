@@ -3,7 +3,6 @@
 # Each field tracks spans independently using target_field.
 
 port: 9001
-server_name: potato annotator
 annotation_task_name: Multi-Span Annotation Example
 task_dir: .
 output_annotation_dir: annotation_output/simple-multi-span/

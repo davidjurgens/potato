@@ -1,6 +1,5 @@
 task_dir: .
 port: 9001
-server_name: potato annotator
 annotation_task_name: Simple Video as Label Example
 output_annotation_dir: annotation_output/simple-video-as-label/
 output_annotation_format: json
@@ -10,7 +9,6 @@ data_files:
 item_properties:
   id_key: id
   text_key: text
-  context_key: context
 user_config:
   allow_all_users: true
   users: []

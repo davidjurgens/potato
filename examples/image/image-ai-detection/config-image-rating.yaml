@@ -8,7 +8,6 @@
 #   python ../../../potato/flask_server.py start config-image-rating.yaml -p 8000
 
 port: 8000
-server_name: AI-Assisted Image Rating
 annotation_task_name: "Image Quality & Content Rating"
 output_annotation_dir: annotation_output_rating
 output_annotation_format: json
@@ -21,7 +20,6 @@ data_files:
 item_properties:
   id_key: "id"
   text_key: "image_url"
-  context_key: "context"
 
 # Authentication (disabled for demo)
 user_config:
