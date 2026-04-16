@@ -937,6 +937,8 @@ def test_render_page_with_injected_qc_item_without_displayed_text(monkeypatch):
             return 0
         def get_annotation_count(self):
             return 0
+        def get_max_assignments(self):
+            return 1
         def has_annotated(self, instance_id):
             return False
         def generate_user_statistics(self):
@@ -947,6 +949,8 @@ def test_render_page_with_injected_qc_item_without_displayed_text(monkeypatch):
             return StubUserState()
         def get_phase_html_fname(self, phase, page):
             return "base_template_v2.html"
+        def can_user_go_back(self, username):
+            return True
 
     class StubISM:
         def get_total_assignable_items_for_user(self, user_state):

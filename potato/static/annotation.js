@@ -1405,6 +1405,7 @@ async function saveAnnotations() {
             try {
                 const result = JSON.parse(responseText);
                 debugLog('[DEBUG] saveAnnotations: annotations saved:', result);
+                handleQualityControlResponse(result);
             } catch (jsonError) {
                 console.error('[DEBUG] saveAnnotations: JSON parse error:', jsonError);
                 console.error('[DEBUG] saveAnnotations: Response text (first 500 chars):', responseText.substring(0, 500));
@@ -1914,6 +1915,34 @@ function showError(show, message = '') {
     } else {
         errorState.style.display = 'none';
         mainContent.style.display = 'block';
+    }
+}
+
+/**
+ * Show quality-control feedback returned by /updateinstance.
+ * Attention-check warnings are surfaced as toasts so they are visible
+ * during autosave without changing the submission flow.
+ */
+function handleQualityControlResponse(result) {
+    if (!result || typeof result !== 'object') {
+        return;
+    }
+
+    const qcResult = result.qc_result && typeof result.qc_result === 'object'
+        ? result.qc_result
+        : null;
+    const message = result.warning_message || result.message || (qcResult && qcResult.message);
+
+    const isBlocked = result.status === 'blocked' || (qcResult && qcResult.blocked);
+    if (isBlocked) {
+        showNotification(message || 'You have been blocked.', 'error');
+        showError(true, message || 'You have been blocked.');
+        return;
+    }
+
+    const isWarning = result.warning || (qcResult && qcResult.warning);
+    if (isWarning) {
+        showNotification(message || 'Please read items carefully before answering.', 'warning');
     }
 }
 
@@ -4400,6 +4429,7 @@ window.navigateToPrevious = navigateToPrevious;
 window.jumpToUnannotated = jumpToUnannotated;
 window.jumpToUnannotatedPrev = jumpToUnannotatedPrev;
 window.showNotification = showNotification;
+window.handleQualityControlResponse = handleQualityControlResponse;
 window.loadCurrentInstance = loadCurrentInstance;
 
 // ========================================
