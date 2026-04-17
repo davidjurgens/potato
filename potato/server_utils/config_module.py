@@ -369,7 +369,7 @@ def validate_path_security(path: str, base_dir: str, project_dir: str = None) ->
         try:
             real_path = os.path.realpath(normalized_path)
             real_base = os.path.realpath(base_dir)
-            if not real_path.startswith(real_base):
+            if not (real_path == real_base or real_path.startswith(real_base + os.sep)):
                 raise ConfigSecurityError(f"Path '{path}' resolves to '{real_path}' which is outside the project directory '{real_base}'")
         except (OSError, ValueError) as e:
             raise ConfigSecurityError(f"Invalid path '{path}': {str(e)}")
@@ -385,7 +385,7 @@ def validate_path_security(path: str, base_dir: str, project_dir: str = None) ->
         # Use project_dir for final check if provided, otherwise use base_dir
         check_dir = project_dir if project_dir else base_dir
         real_check_dir = os.path.realpath(check_dir)
-        if not real_path.startswith(real_check_dir):
+        if not (real_path == real_check_dir or real_path.startswith(real_check_dir + os.sep)):
             raise ConfigSecurityError(f"Path '{path}' resolves to '{real_path}' which is outside the project directory '{real_check_dir}'")
     except (OSError, ValueError) as e:
         raise ConfigSecurityError(f"Invalid path '{path}': {str(e)}")
