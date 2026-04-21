@@ -393,6 +393,87 @@ def validate_path_security(path: str, base_dir: str, project_dir: str = None) ->
     return normalized_path
 
 
+# Optional field type specifications for validation.
+# Maps config key -> (expected_type, human description, allow_negative).
+# Only fields that are commonly misconfigured and cause silent failures.
+_OPTIONAL_INT_FIELDS = {
+    "alert_time_each_instance": ("seconds to alert per instance", False),
+    "max_annotations_per_item": ("max annotations per item", True),  # -1 = unlimited
+    "max_annotations_per_user": ("max annotations per user", True),
+    "num_annotators_per_item": ("annotators needed per item", False),
+    "min_annotators_per_instance": ("minimum annotators per instance", False),
+    "random_seed": ("random seed", True),
+    "max_session_seconds": ("max session duration in seconds", False),
+}
+
+_OPTIONAL_BOOL_FIELDS = {
+    "highlight_linebreaks": "whether to highlight linebreaks",
+    "jumping_to_id_disabled": "whether jumping to ID is disabled",
+    "require_fully_annotated": "whether full annotation is required",
+    "require_password": "whether password is required",
+    "require_no_password": "whether no-password mode is enabled",
+    "customjs": "whether custom JS is enabled",
+    "watch_data_directory": "whether to watch data directory for changes",
+    "persist_sessions": "whether to persist sessions across restarts",
+}
+
+_VALID_ASSIGNMENT_STRATEGIES = [
+    "random", "fixed_order", "active_learning", "llm_confidence",
+    "max_diversity", "least_annotated", "category_based", "diversity_clustering",
+]
+
+
+def validate_optional_field_types(config_data: Dict[str, Any]) -> None:
+    """
+    Validate types for commonly misconfigured optional fields.
+
+    Catches issues like string values for integer fields (e.g., alert_time_each_instance: "30")
+    or wrong types for booleans, which would silently produce incorrect behavior at runtime.
+
+    Args:
+        config_data: The parsed configuration dictionary
+
+    Raises:
+        ConfigValidationError: If a field has the wrong type
+    """
+    # Validate integer fields
+    for field, (desc, allow_negative) in _OPTIONAL_INT_FIELDS.items():
+        if field in config_data:
+            val = config_data[field]
+            if not isinstance(val, int) or isinstance(val, bool):
+                raise ConfigValidationError(
+                    f"'{field}' must be an integer ({desc}), "
+                    f"got {type(val).__name__}: {val!r}"
+                )
+            if not allow_negative and val < 0:
+                raise ConfigValidationError(
+                    f"'{field}' must be a non-negative integer ({desc}), got {val}"
+                )
+
+    # Validate boolean fields (None/null is allowed as "not set")
+    for field, desc in _OPTIONAL_BOOL_FIELDS.items():
+        if field in config_data:
+            val = config_data[field]
+            if val is not None and not isinstance(val, bool):
+                raise ConfigValidationError(
+                    f"'{field}' must be a boolean ({desc}), "
+                    f"got {type(val).__name__}: {val!r}"
+                )
+
+    # Validate assignment_strategy enum
+    if 'assignment_strategy' in config_data:
+        strat = config_data['assignment_strategy']
+        # Can be a string or a dict with a 'name' key
+        strat_name = strat
+        if isinstance(strat, dict):
+            strat_name = strat.get('name', '')
+        if isinstance(strat_name, str) and strat_name.lower() not in _VALID_ASSIGNMENT_STRATEGIES:
+            raise ConfigValidationError(
+                f"'assignment_strategy' value '{strat_name}' is not recognized. "
+                f"Valid strategies: {', '.join(_VALID_ASSIGNMENT_STRATEGIES)}"
+            )
+
+
 def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None, config_file_dir: str = None) -> None:
     """
     Validate the structure and content of the YAML configuration.
@@ -520,6 +601,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Validate MACE configuration if present
     if 'mace' in config_data:
         _validate_mace_config(config_data)
+
+    # Validate types for commonly misconfigured optional fields
+    validate_optional_field_types(config_data)
 
     # Warn about unrecognized keys at all nesting levels
     validate_unknown_keys(config_data)
@@ -946,14 +1030,39 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
     if missing_fields:
         raise ConfigValidationError(f"{path} missing required fields: {', '.join(missing_fields)}")
 
-    # Validate annotation_type
-    # Note: Keep in sync with potato.server_utils.schemas.registry
-    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'span_link', 'select', 'number', 'multirate', 'pure_display', 'video', 'image_annotation', 'audio_annotation', 'video_annotation', 'pairwise', 'coreference', 'tree_annotation', 'triage', 'event_annotation', 'tiered_annotation', 'bws', 'soft_label', 'confidence', 'constant_sum', 'semantic_differential', 'ranking', 'range_slider', 'hierarchical_multiselect', 'vas', 'extractive_qa', 'rubric_eval', 'text_edit', 'error_span', 'card_sort', 'conjoint', 'trajectory_eval', 'process_reward', 'code_review']
+    # Validate annotation_type against the schema registry (single source of truth)
+    from potato.server_utils.schemas.registry import schema_registry
+    valid_types = schema_registry.get_supported_types()
     if scheme['annotation_type'] not in valid_types:
-        raise ConfigValidationError(f"{path}.annotation_type must be one of: {', '.join(valid_types)}")
+        raise ConfigValidationError(f"{path}.annotation_type must be one of: {', '.join(sorted(valid_types))}")
 
-    # Type-specific validation
+    # Registry-driven required field check: validate fields that are unconditionally
+    # required for this type. Types with alternative forms (e.g., likert accepts either
+    # 'labels' OR 'min_label'+'max_label'+'size') have deeper validation in the
+    # type-specific blocks below. This check catches missing fields for types that
+    # don't have explicit type-specific validation blocks.
     annotation_type = scheme['annotation_type']
+    _types_with_explicit_validation = {
+        'radio', 'multiselect', 'select', 'likert', 'slider', 'span', 'multirate',
+        'image_annotation', 'audio_annotation', 'video_annotation', 'tiered_annotation',
+        'pairwise', 'bws', 'soft_label', 'confidence', 'constant_sum',
+        'semantic_differential', 'ranking', 'range_slider', 'hierarchical_multiselect',
+        'vas', 'rubric_eval', 'error_span', 'card_sort', 'conjoint',
+    }
+    if annotation_type not in _types_with_explicit_validation:
+        schema_def = schema_registry.get(annotation_type)
+        if schema_def and schema_def.required_fields:
+            # 'name' and 'description' are already checked above
+            extra_required = [f for f in schema_def.required_fields
+                              if f not in ('name', 'description')]
+            missing = [f for f in extra_required if f not in scheme]
+            if missing:
+                raise ConfigValidationError(
+                    f"{path} (type '{annotation_type}') missing required field(s): "
+                    f"{', '.join(missing)}"
+                )
+
+    # Type-specific validation (deep structural checks beyond registry required_fields)
     if annotation_type in ['radio', 'multiselect', 'select']:
         if 'labels' not in scheme:
             raise ConfigValidationError(f"{path} missing 'labels' field for {annotation_type} annotation type")

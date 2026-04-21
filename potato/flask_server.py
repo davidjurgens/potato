@@ -2446,8 +2446,12 @@ def ai_hints(text: str) -> str:
     """
     import requests
     logger.debug(f"AI hints text: {text}")
-    description = config["annotation_schemes"][0]["description"]
-    annotation_type = config["annotation_schemes"][0]["annotation_type"]
+    schemes = config.get("annotation_schemes", [])
+    if not schemes:
+        logger.warning("Cannot generate AI hints: no annotation_schemes configured")
+        return ""
+    description = schemes[0].get("description", "")
+    annotation_type = schemes[0].get("annotation_type", "")
     logger.debug(f"AI hints description: {description}")
     prompt = f'''You are assisting a user with an annotation task. Here is the annotation instruction: {description}
     Here is the annotation task type: {annotation_type}
@@ -2963,8 +2967,8 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
             try:
                 from potato.agent_runner_manager import AgentRunnerManager
                 AgentRunnerManager.clear_instance()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to clean up agent sessions: {e}")
         atexit.register(_cleanup_agent_sessions)
 
     # Check for live_coding_agent display type
@@ -2985,8 +2989,8 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
             try:
                 from potato.coding_agent_runner_manager import CodingAgentRunnerManager
                 CodingAgentRunnerManager.clear_instance()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to clean up coding agent sessions: {e}")
         atexit.register(_cleanup_coding_agent_sessions)
 
     # Check for trace_ingestion config
