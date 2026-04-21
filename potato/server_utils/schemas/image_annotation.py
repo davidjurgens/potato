@@ -206,7 +206,7 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
         ai_init_script = _generate_ai_init_script(escaped_name)
 
     html = f'''
-    <form id="{escaped_name}" class="annotation-form image-annotation" action="/action_page.php"{source_field_attr}>
+    <form id="{escaped_name}" class="annotation-form image-annotation" action="javascript:void(0)"{source_field_attr}>
         <fieldset schema="{escaped_name}">
             <legend>{description}</legend>
 

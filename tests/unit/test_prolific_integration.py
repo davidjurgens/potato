@@ -103,8 +103,8 @@ class TestCompletionCode:
     def test_prolific_redirect_url_construction(self):
         """Test that Prolific redirect URL is correctly constructed."""
         completion_code = 'ABC123XYZ'
-        expected_url = f"https://app.prolific.co/submissions/complete?cc={completion_code}"
-        assert expected_url == "https://app.prolific.co/submissions/complete?cc=ABC123XYZ"
+        expected_url = f"https://app.prolific.com/submissions/complete?cc={completion_code}"
+        assert expected_url == "https://app.prolific.com/submissions/complete?cc=ABC123XYZ"
 
 
 class TestProlificStudyInitialization:

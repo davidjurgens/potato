@@ -16,7 +16,7 @@ You should then be able to access the annotation page via `your_ip_address:the_p
 
 ## Prolific Integration
 
-[Prolific](https://www.prolific.co/) is a platform where you can easily recruit task participants. Potato provides seamless integration with Prolific through:
+[Prolific](https://www.prolific.com/) is a platform where you can easily recruit task participants. Potato provides seamless integration with Prolific through:
 
 1. **URL-Direct Login**: Automatic login using Prolific's URL parameters
 2. **Completion Codes**: Built-in support for completion code display and redirect
@@ -89,7 +89,7 @@ auto_redirect_delay: 5000  # milliseconds (default: 5000)
 The completion page features:
 - Large, prominent display of the completion code
 - Click-to-copy functionality
-- "Return to Prolific" button that redirects to `https://app.prolific.co/submissions/complete?cc=YOUR-CODE`
+- "Return to Prolific" button that redirects to `https://app.prolific.com/submissions/complete?cc=YOUR-CODE`
 - Optional auto-redirect after a configurable delay
 
 ### Full Configuration Example
@@ -152,7 +152,7 @@ For larger studies, Potato can integrate with Prolific's API to automatically ma
 
 ### Setup Prolific API
 
-1. **Get your Prolific API token** from your [Prolific account settings](https://app.prolific.co/account/general)
+1. **Get your Prolific API token** from your [Prolific account settings](https://app.prolific.com/account/general)
 
 2. **Create a Prolific config file** (`configs/prolific_config.yaml`):
 
@@ -201,7 +201,7 @@ If you need more control over the completion page, you can use surveyflow instea
 1. **Create an end page** (`surveyflow/end.jsonl`):
 
 ```json
-{"id":"1","text":"Thanks for your participation! Click the link below to complete the study.","schema": "pure_display", "choices": ["<a href=\"https://app.prolific.co/submissions/complete?cc=YOUR-CODE\" target=\"_blank\">Complete Study on Prolific</a>"]}
+{"id":"1","text":"Thanks for your participation! Click the link below to complete the study.","schema": "pure_display", "choices": ["<a href=\"https://app.prolific.com/submissions/complete?cc=YOUR-CODE\" target=\"_blank\">Complete Study on Prolific</a>"]}
 ```
 
 2. **Configure surveyflow** in your YAML:
@@ -431,7 +431,7 @@ Once tested:
 
 ### 1. Create Your Study on Prolific
 
-Go to [Prolific](https://app.prolific.co/) and create a new study. Note your study ID from the URL.
+Go to [Prolific](https://app.prolific.com/) and create a new study. Note your study ID from the URL.
 
 ### 2. Configure Your Potato Project
 

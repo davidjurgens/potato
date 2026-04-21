@@ -66,7 +66,7 @@ def _generate_extractive_qa_layout_internal(annotation_scheme):
 
     html = f"""
     <form id="{escape_html_content(schema_name)}" class="annotation-form shadcn-extractive-qa-container"
-          action="/action_page.php"
+          action="javascript:void(0)"
           data-annotation-id="{escape_html_content(str(annotation_scheme.get('annotation_id', '')))}"
           data-annotation-type="extractive_qa"
           data-schema-name="{escape_html_content(schema_name)}"

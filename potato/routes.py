@@ -849,14 +849,26 @@ def logout_page():
     """
     Handle user logout requests and redirect to login page.
 
+    For url_direct/prolific login types, renders a standalone logged-out page
+    instead of redirecting to home (which requires URL parameters like PROLIFIC_PID).
+
     Returns:
-        flask.Response: Redirect to login page
+        flask.Response: Redirect to login page or rendered logged-out template
     """
     logger.debug("Processing logout request")
+
+    # Check login type before clearing session (config is module-level, not session-dependent)
+    login_config = config.get('login', {})
+    login_type = login_config.get('type', 'standard')
 
     # Clear the session
     session.clear()
     logger.info("User logged out successfully")
+
+    if login_type in ['url_direct', 'prolific']:
+        # Cannot redirect to home — it requires a URL parameter (e.g., PROLIFIC_PID)
+        return render_template("logged_out.html",
+                               title=config.get("annotation_task_name", "Annotation Platform"))
 
     return redirect(url_for("home"))  # Redirect to the login page
 
@@ -4604,8 +4616,8 @@ def done():
         # Build the Prolific completion URL (only if using Prolific-style URL argument)
         url_argument = login_config.get('url_argument', 'PROLIFIC_PID')
         if url_argument in ['PROLIFIC_PID', 'prolific_pid']:
-            # Format: https://app.prolific.co/submissions/complete?cc=YOUR_CODE
-            prolific_redirect_url = f"https://app.prolific.co/submissions/complete?cc={completion_code}"
+            # Format: https://app.prolific.com/submissions/complete?cc=YOUR_CODE
+            prolific_redirect_url = f"https://app.prolific.com/submissions/complete?cc={completion_code}"
 
     # Get MTurk submission parameters from session
     mturk_submit_url = session.get('mturk_submit_to')

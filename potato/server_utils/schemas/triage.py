@@ -101,7 +101,7 @@ def _generate_triage_layout_internal(annotation_scheme: Dict[str, Any]) -> Tuple
 
     # Build the HTML
     html = f"""
-    <form id="{safe_schema_name}" class="annotation-form triage" action="/action_page.php"
+    <form id="{safe_schema_name}" class="annotation-form triage" action="javascript:void(0)"
           data-annotation-id="{escape_html_content(str(annotation_scheme.get('annotation_id', '')))}"
           data-annotation-type="triage"
           data-schema-name="{safe_schema_name}"

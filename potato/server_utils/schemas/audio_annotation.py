@@ -323,7 +323,7 @@ def _generate_html(
         '''
 
     html = f'''
-    <form id="{escaped_name}" class="annotation-form audio-annotation" action="/action_page.php"{source_field_attr}>
+    <form id="{escaped_name}" class="annotation-form audio-annotation" action="javascript:void(0)"{source_field_attr}>
         <fieldset schema="{escaped_name}">
             <legend>{description}</legend>
 

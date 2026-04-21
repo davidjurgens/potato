@@ -95,7 +95,7 @@ def _generate_pure_display_layout_internal(annotation_scheme):
 
     # Format content with header and body text
     schematic = f"""
-        <form id="{escaped_name}" class="annotation-form pure-display" action="/action_page.php" {layout_attrs}>
+        <form id="{escaped_name}" class="annotation-form pure-display" action="javascript:void(0)" {layout_attrs}>
             <fieldset schema="{escaped_name}">
                 <legend>{description}</legend>
                 <div class="display-content">

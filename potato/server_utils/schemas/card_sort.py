@@ -100,7 +100,7 @@ def _generate_card_sort_layout_internal(annotation_scheme):
 
     html = f"""
     <form id="{escape_html_content(schema_name)}" class="annotation-form shadcn-card-sort-container"
-          action="/action_page.php"
+          action="javascript:void(0)"
           data-annotation-id="{escape_html_content(str(annotation_scheme.get('annotation_id', '')))}"
           data-annotation-type="card_sort"
           data-schema-name="{escape_html_content(schema_name)}"

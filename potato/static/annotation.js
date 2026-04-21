@@ -581,6 +581,11 @@ function debugVerifyOverlayCleanup() {
 }
 
 function setupEventListeners() {
+    // Prevent default form submission on all annotation forms (defense in depth)
+    document.querySelectorAll('.annotation-form').forEach(function(form) {
+        form.addEventListener('submit', function(e) { e.preventDefault(); });
+    });
+
     // Go to button (may not exist when jumping_to_id_disabled is true)
     const goToBtn = document.getElementById('go-to-btn');
     const goToInput = document.getElementById('go_to');
@@ -1903,15 +1908,25 @@ function setLoading(loading) {
     }
 }
 
-function showError(show, message = '') {
+function showError(show, message = '', options = {}) {
     const errorState = document.getElementById('error-state');
     const errorMessage = document.getElementById('error-message-text');
     const mainContent = document.getElementById('main-content');
+    const retryBtn = document.getElementById('error-retry-btn');
+    const doneLink = document.getElementById('error-done-link');
 
     if (show) {
         errorState.style.display = 'block';
         mainContent.style.display = 'none';
         errorMessage.textContent = message;
+        // For permanent blocks (e.g., attention check failures), hide retry and show finish link
+        if (options.permanent) {
+            if (retryBtn) retryBtn.style.display = 'none';
+            if (doneLink) doneLink.style.display = 'inline-flex';
+        } else {
+            if (retryBtn) retryBtn.style.display = '';
+            if (doneLink) doneLink.style.display = 'none';
+        }
     } else {
         errorState.style.display = 'none';
         mainContent.style.display = 'block';
@@ -4366,7 +4381,7 @@ function handleQualityControlResponse(result) {
     const isBlocked = result.status === 'blocked' || (qcResult && qcResult.blocked);
     if (isBlocked) {
         showNotification(message || 'You have been blocked.', 'error');
-        showError(true, message || 'You have been blocked.');
+        showError(true, message || 'You have been blocked due to quality control checks. Your session has ended.', { permanent: true });
         return;
     }
 

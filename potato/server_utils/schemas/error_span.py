@@ -104,7 +104,7 @@ def _generate_error_span_layout_internal(annotation_scheme):
 
     html = f"""
     <form id="{escape_html_content(schema_name)}" class="annotation-form shadcn-error-span-container"
-          action="/action_page.php"
+          action="javascript:void(0)"
           data-annotation-id="{escape_html_content(str(annotation_scheme.get('annotation_id', '')))}"
           data-annotation-type="error_span"
           data-schema-name="{escape_html_content(schema_name)}"
