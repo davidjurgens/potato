@@ -1331,6 +1331,19 @@ async function loadAnnotations() {
             }
         });
 
+        // Read annotation-data-input state (image/audio/video/tiered annotations)
+        // These use a separate hidden input class and store serialized JSON data
+        const annotationDataInputs = document.querySelectorAll('input.annotation-data-input');
+        annotationDataInputs.forEach(input => {
+            if (input.name && input.value && input.getAttribute('data-server-set') === 'true') {
+                const schema = input.name;
+                if (!currentAnnotations[schema]) {
+                    currentAnnotations[schema] = {};
+                }
+                currentAnnotations[schema]['_data'] = input.value;
+            }
+        });
+
         debugLog('🔍 Annotations loaded from DOM:', currentAnnotations);
     } catch (error) {
         console.error('❌ Error loading annotations:', error);
@@ -1418,6 +1431,7 @@ async function saveAnnotations() {
             }
         } else {
             console.warn('[DEBUG] saveAnnotations: failed to save annotations:', await response.text());
+            return false;
         }
 
         return true;
@@ -1455,9 +1469,18 @@ async function navigateToPrevious() {
     }
 
     try {
+        // Flush any pending debounced save before the explicit save
+        clearTimeout(textSaveTimer);
+        textSaveTimer = null;
+
         // Save annotations before navigating away
         debugLog('[DEEP DEBUG NAV] navigateToPrevious - Saving annotations before navigation');
-        await saveAnnotations();
+        const saveSucceeded = await saveAnnotations();
+        if (saveSucceeded === false) {
+            showNotification('Failed to save annotations. Please try again.', 'error');
+            setLoading(false);
+            return;
+        }
 
         // FIREFOX FIX: Force overlay cleanup before navigation
         const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
@@ -1595,9 +1618,18 @@ async function navigateToNext() {
     }
 
     try {
+        // Flush any pending debounced save before the explicit save
+        clearTimeout(textSaveTimer);
+        textSaveTimer = null;
+
         // Save annotations before navigating away
         debugLog('[DEEP DEBUG NAV] navigateToNext - Saving annotations before navigation');
-        await saveAnnotations();
+        const saveSucceeded = await saveAnnotations();
+        if (saveSucceeded === false) {
+            showNotification('Failed to save annotations. Please try again.', 'error');
+            setLoading(false);
+            return;
+        }
 
         // FIREFOX FIX: Force overlay cleanup before navigation
         const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
@@ -1699,9 +1731,18 @@ async function navigateToInstance(instanceIndex) {
     try {
         setLoading(true);
 
+        // Flush any pending debounced save before the explicit save
+        clearTimeout(textSaveTimer);
+        textSaveTimer = null;
+
         // Save annotations before navigating away (same as navigateToPrevious/Next)
         debugLog('[DEEP DEBUG NAV] navigateToInstance - Saving annotations before navigation');
-        await saveAnnotations();
+        const saveSucceeded = await saveAnnotations();
+        if (saveSucceeded === false) {
+            showNotification('Failed to save annotations. Please try again.', 'error');
+            setLoading(false);
+            return;
+        }
 
         // DEBUG: Track overlays before navigation
         debugTrackOverlays('BEFORE_GO_TO_NAVIGATION', currentInstance?.id);
