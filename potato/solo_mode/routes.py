@@ -668,9 +668,15 @@ def api_advance_phase():
     if not target_phase:
         return jsonify({'error': 'Missing target phase'}), 400
 
+    force = request.json.get('force', False)
+
     try:
         phase = SoloPhase.from_str(target_phase)
-        success = manager.advance_to_phase(phase)
+    except (ValueError, KeyError):
+        return jsonify({'error': f'Unknown phase: {target_phase}'}), 400
+
+    try:
+        success = manager.advance_to_phase(phase, force=force)
 
         if success:
             return jsonify({
@@ -679,12 +685,18 @@ def api_advance_phase():
             })
         else:
             return jsonify({
-                'error': 'Invalid phase transition',
+                'error': (
+                    f'Invalid phase transition from '
+                    f'{manager.get_current_phase().name} to {phase.name}'
+                ),
                 'current_phase': manager.get_current_phase().value,
             }), 400
 
-    except (ValueError, KeyError):
-        return jsonify({'error': f'Unknown phase: {target_phase}'}), 400
+    except ValueError as e:
+        return jsonify({
+            'error': str(e),
+            'current_phase': manager.get_current_phase().value,
+        }), 400
 
 
 @solo_mode_bp.route('/api/pause-labeling', methods=['POST'])

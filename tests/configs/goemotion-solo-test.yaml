@@ -1,0 +1,126 @@
+task_dir: ../..
+port: 8300
+annotation_task_name: "goemotion-solo-test"
+output_annotation_dir: "tests/output/goemotion-solo-test"
+
+solo_mode:
+  enabled: true
+
+  labeling_models:
+    - endpoint_type: "ollama"
+      model: "gemma3:4b"
+      endpoint_url: "http://localhost:11434"
+      max_tokens: 300
+      temperature: 0.1
+      think: false
+
+  revision_models:
+    - endpoint_type: "ollama"
+      model: "gemma3:4b"
+      endpoint_url: "http://localhost:11434"
+      max_tokens: 1000
+      temperature: 0.3
+      think: false
+
+  uncertainty:
+    strategy: "direct_confidence"
+
+  thresholds:
+    end_human_annotation_agreement: 0.70
+    minimum_validation_sample: 10
+    confidence_low: 0.4
+    periodic_review_interval: 30
+
+  instance_selection:
+    low_confidence_weight: 0.25
+    diversity_weight: 0.15
+    random_weight: 0.1
+    disagreement_weight: 0.1
+    llm_predicted_weight: 0.4
+
+  batches:
+    llm_labeling_batch: 20
+    max_parallel_labels: 200
+
+  state_dir: "tests/output/goemotion-solo-test/solo_state"
+
+  confusion_analysis:
+    min_instances_for_pattern: 2
+
+  refinement_loop:
+    enabled: true
+    trigger_interval: 30
+    auto_apply_suggestions: true
+    max_cycles: 5
+    patience: 3
+
+data_files:
+  - "tests/data/goemotion_500.json"
+
+item_properties:
+  id_key: "id"
+  text_key: "text"
+
+annotation_schemes:
+  - name: "emotion"
+    annotation_type: "radio"
+    description: "Classify the primary emotion expressed in the Reddit comment"
+    labels:
+      - name: "admiration"
+        key_value: "a"
+      - name: "amusement"
+        key_value: "b"
+      - name: "anger"
+        key_value: "c"
+      - name: "annoyance"
+        key_value: "d"
+      - name: "approval"
+        key_value: "e"
+      - name: "caring"
+        key_value: "f"
+      - name: "confusion"
+        key_value: "g"
+      - name: "curiosity"
+        key_value: "h"
+      - name: "desire"
+        key_value: "i"
+      - name: "disappointment"
+        key_value: "j"
+      - name: "disapproval"
+        key_value: "k"
+      - name: "disgust"
+        key_value: "l"
+      - name: "embarrassment"
+        key_value: "m"
+      - name: "excitement"
+        key_value: "n"
+      - name: "fear"
+        key_value: "o"
+      - name: "gratitude"
+        key_value: "p"
+      - name: "grief"
+        key_value: "q"
+      - name: "joy"
+        key_value: "r"
+      - name: "love"
+        key_value: "s"
+      - name: "nervousness"
+        key_value: "t"
+      - name: "optimism"
+        key_value: "u"
+      - name: "pride"
+        key_value: "v"
+      - name: "realization"
+        key_value: "w"
+      - name: "relief"
+        key_value: "x"
+      - name: "remorse"
+        key_value: "y"
+      - name: "sadness"
+        key_value: "z"
+      - name: "surprise"
+        key_value: "1"
+      - name: "neutral"
+        key_value: "2"
+
+session_lifetime_days: 7

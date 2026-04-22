@@ -220,6 +220,9 @@ class SoloModeManager:
         self._labeling_function_manager = None
         self._disagreement_explorer = None
 
+        # Reannotation tracking (persisted across restarts)
+        self._reannotation_counts: Dict[str, int] = {}
+
         # State persistence
         self._state_file = 'solo_mode_state.json'
 
@@ -268,6 +271,7 @@ class SoloModeManager:
                 disagreement=self.config.instance_selection.disagreement_weight,
                 edge_case_rule=self.config.instance_selection.edge_case_rule_weight,
                 cartography=self.config.instance_selection.cartography_weight,
+                llm_predicted=self.config.instance_selection.llm_predicted_weight,
             )
             self._instance_selector = InstanceSelector(weights, self.app_config)
         return self._instance_selector
@@ -503,6 +507,13 @@ class SoloModeManager:
             reasoning=result.reasoning,
         )
         self.set_llm_prediction(result.instance_id, result.schema_name, prediction)
+        llm_count = len(self.llm_labeled_ids)
+        if llm_count % 10 == 0:
+            logger.info(
+                f"[LLM Progress] {llm_count} instances labeled "
+                f"(latest: {result.instance_id} -> {result.label}, "
+                f"conf={result.confidence:.2f})"
+            )
 
         # Record edge case rule if present
         if (
@@ -526,6 +537,11 @@ class SoloModeManager:
 
         # Check if we should extract labeling functions
         self._maybe_extract_labeling_functions()
+
+        # Retroactive comparison: if a human already labeled this instance,
+        # compare the LLM prediction against the stored human label.
+        # This handles the case where the human annotated before the LLM.
+        self._retroactive_compare(result.instance_id, result.schema_name)
 
     def _maybe_trigger_rule_clustering(self) -> None:
         """Check if enough unclustered rules have accumulated to trigger clustering."""
@@ -642,10 +658,6 @@ class SoloModeManager:
         Returns:
             Number of instances queued for re-annotation
         """
-        # Track re-annotation counts per instance
-        if not hasattr(self, '_reannotation_counts'):
-            self._reannotation_counts: Dict[str, int] = {}
-
         candidates = self.guideline_updater.get_instances_for_reannotation(
             predictions=self.predictions,
             old_prompt_version=old_prompt_version,
@@ -677,6 +689,13 @@ class SoloModeManager:
         loop = self.refinement_loop
         if not loop.record_annotation():
             return
+
+        logger.info(
+            f"[Refinement] Trigger interval reached "
+            f"(agreement_rate={self.agreement_metrics.agreement_rate:.3f}, "
+            f"compared={self.agreement_metrics.total_compared}). "
+            f"Starting refinement cycle {loop.cycle_count + 1}..."
+        )
 
         # Run in background thread to avoid blocking annotation flow
         thread = threading.Thread(
@@ -914,9 +933,20 @@ class SoloModeManager:
         Returns:
             True if transition successful
         """
+        old_phase = self.phase_controller.get_current_phase()
         result = self.phase_controller.transition_to(phase, reason=reason, force=force)
-        if result and phase in (SoloPhase.PARALLEL_ANNOTATION, SoloPhase.ACTIVE_ANNOTATION):
-            self.start_background_labeling()
+        if result:
+            logger.info(
+                f"[Phase Transition] {old_phase.name} -> {phase.name}"
+                f"{' (forced)' if force else ''}"
+                f"{f' reason: {reason}' if reason else ''}"
+            )
+            if phase in (SoloPhase.PARALLEL_ANNOTATION, SoloPhase.ACTIVE_ANNOTATION):
+                self.start_background_labeling()
+        else:
+            logger.warning(
+                f"[Phase Transition] FAILED: {old_phase.name} -> {phase.name}"
+            )
         return result
 
     def advance_to_next_phase(self, reason: str = "") -> bool:
@@ -976,10 +1006,44 @@ class SoloModeManager:
 
             self.prompt_versions.append(prompt)
             self.current_prompt_version = new_version
+
+            # Reset stale reannotation counts so instances can be re-annotated
+            # with the improved prompt. Keep counts only for recent prompt versions.
+            self._reset_stale_reannotation_counts(new_version)
+
             self._save_state()
 
             logger.info(f"Created prompt version {new_version} by {created_by}")
             return prompt
+
+    def _reset_stale_reannotation_counts(self, current_version: int) -> None:
+        """Reset reannotation counts for instances not recently re-annotated.
+
+        Keeps counts only for instances whose last reannotation was within
+        the last 2 prompt versions. This prevents instances from being
+        permanently excluded from re-annotation after prompt improvements.
+        """
+        if not self._reannotation_counts:
+            return
+
+        stale_ids = []
+        for instance_id in self._reannotation_counts:
+            # Check if this instance's prediction is from a recent prompt version
+            if instance_id in self.predictions:
+                for schema_preds in self.predictions[instance_id].values():
+                    if current_version - schema_preds.prompt_version > 2:
+                        stale_ids.append(instance_id)
+                        break
+            else:
+                stale_ids.append(instance_id)
+
+        for instance_id in stale_ids:
+            del self._reannotation_counts[instance_id]
+
+        if stale_ids:
+            logger.debug(
+                f"Reset reannotation counts for {len(stale_ids)} stale instances"
+            )
 
     def update_prompt(
         self,
@@ -1113,7 +1177,7 @@ class SoloModeManager:
             )
             prediction.agrees_with_human = agrees
 
-            # Update metrics
+            # Update agreement metrics
             self.agreement_metrics.total_compared += 1
             if agrees:
                 self.agreement_metrics.agreements += 1
@@ -1121,6 +1185,25 @@ class SoloModeManager:
                 self.agreement_metrics.disagreements += 1
                 self.disagreement_ids.add(instance_id)
             self.agreement_metrics.update_rate()
+
+            # Feed the validation tracker for confusion matrix / pattern analysis
+            self.validation_tracker.record_comparison(
+                instance_id=instance_id,
+                human_label=label,
+                llm_label=prediction.predicted_label,
+                schema_name=schema_name,
+                agrees=agrees,
+            )
+
+            human_count = len(self.human_labeled_ids)
+            if human_count % 5 == 0 or not agrees:
+                logger.info(
+                    f"[Human Label] #{human_count} {instance_id}: "
+                    f"human={label}, llm={prediction.predicted_label}, "
+                    f"{'AGREE' if agrees else 'DISAGREE'} "
+                    f"(rate={self.agreement_metrics.agreement_rate:.3f}, "
+                    f"compared={self.agreement_metrics.total_compared})"
+                )
 
             self._save_state()
             return agrees
@@ -1187,6 +1270,76 @@ class SoloModeManager:
             if scheme.get('name') == schema_name:
                 return scheme.get('annotation_type', 'radio')
         return 'radio'
+
+    def _retroactive_compare(self, instance_id: str, schema_name: str) -> None:
+        """Compare an LLM prediction against an existing human label.
+
+        Called when the LLM labels an instance that a human already annotated.
+        This ensures agreement metrics are updated regardless of annotation order.
+        """
+        with self._lock:
+            if instance_id not in self.human_labeled_ids:
+                return
+
+            prediction = self.get_llm_prediction(instance_id, schema_name)
+            if prediction is None or prediction.human_label is not None:
+                return  # No prediction or already compared
+
+            human_label = self._get_stored_human_label(instance_id, schema_name)
+            if human_label is None:
+                return
+
+            prediction.human_label = human_label
+            agrees = self._check_agreement(
+                prediction.predicted_label, human_label, schema_name
+            )
+            prediction.agrees_with_human = agrees
+
+            self.agreement_metrics.total_compared += 1
+            if agrees:
+                self.agreement_metrics.agreements += 1
+            else:
+                self.agreement_metrics.disagreements += 1
+                self.disagreement_ids.add(instance_id)
+            self.agreement_metrics.update_rate()
+
+            # Feed the validation tracker for confusion matrix / pattern analysis
+            self.validation_tracker.record_comparison(
+                instance_id=instance_id,
+                human_label=human_label,
+                llm_label=prediction.predicted_label,
+                schema_name=schema_name,
+                agrees=agrees,
+            )
+
+            logger.debug(
+                f"Retroactive comparison for {instance_id}: "
+                f"llm={prediction.predicted_label}, human={human_label}, "
+                f"agrees={agrees}"
+            )
+
+    def _get_stored_human_label(
+        self, instance_id: str, schema_name: str
+    ) -> Optional[Any]:
+        """Look up a human annotation label from the user state manager.
+
+        Returns:
+            The human label if found, None otherwise.
+        """
+        try:
+            from potato.user_state_management import get_user_state_manager
+            usm = get_user_state_manager()
+            # Check all users' annotations for this instance
+            for user_id in usm.get_all_user_ids():
+                user_state = usm.get_user_state(user_id)
+                if user_state is None:
+                    continue
+                annotations = user_state.get_annotations_for_instance(instance_id)
+                if annotations and schema_name in annotations:
+                    return annotations[schema_name]
+        except Exception as e:
+            logger.debug(f"Could not look up human label for {instance_id}: {e}")
+        return None
 
     # === Disagreement Resolution ===
 
@@ -1457,7 +1610,13 @@ class SoloModeManager:
         batch_size = self.config.batches.llm_labeling_batch
         max_labels = self.config.batches.max_parallel_labels
 
-        logger.info(f"Background labeling started (batch={batch_size}, max={max_labels})")
+        total_instances = self._get_total_instance_count()
+        logger.info(
+            f"[LLM Background] Labeling started "
+            f"(batch={batch_size}, max={max_labels}, "
+            f"total_instances={total_instances}, "
+            f"already_labeled={len(self.llm_labeled_ids)})"
+        )
 
         while not self._stop_labeling.is_set():
             try:
@@ -1562,11 +1721,13 @@ class SoloModeManager:
 
         # Collect candidate IDs under the lock, then fetch texts outside it
         # to avoid blocking the main thread during potentially slow text lookups.
+        # Note: we do NOT filter out human_labeled_ids — the LLM should label
+        # instances the human has already annotated so retroactive comparison
+        # can update agreement metrics. Only skip instances the LLM already labeled.
         with self._lock:
             candidate_ids = [
                 instance_id for instance_id in ism.instance_id_ordering
                 if instance_id not in self.llm_labeled_ids
-                and instance_id not in self.human_labeled_ids
             ]
 
         instances = []
@@ -1613,51 +1774,58 @@ class SoloModeManager:
     # === State Persistence ===
 
     def _save_state(self) -> None:
-        """Save manager state to disk."""
+        """Save manager state to disk.
+
+        Thread-safe: acquires self._lock (RLock) so callers that already
+        hold the lock won't deadlock, while callers from background threads
+        (e.g., labeling loop, rule clustering) are properly serialized.
+        """
         if not self.config.state_dir:
             return
 
-        try:
-            os.makedirs(self.config.state_dir, exist_ok=True)
-            filepath = os.path.join(self.config.state_dir, self._state_file)
+        with self._lock:
+            try:
+                os.makedirs(self.config.state_dir, exist_ok=True)
+                filepath = os.path.join(self.config.state_dir, self._state_file)
 
-            state = {
-                'task_description': self.task_description,
-                'current_prompt_version': self.current_prompt_version,
-                'prompt_versions': [p.to_dict() for p in self.prompt_versions],
-                'predictions': {
-                    iid: {s: p.to_dict() for s, p in schemas.items()}
-                    for iid, schemas in self.predictions.items()
-                },
-                'human_labeled_ids': list(self.human_labeled_ids),
-                'llm_labeled_ids': list(self.llm_labeled_ids),
-                'disagreement_ids': list(self.disagreement_ids),
-                'validation_sample_ids': list(self.validation_sample_ids),
-                'edge_case_ids': list(self.edge_case_ids),
-                'edge_case_labels': self.edge_case_labels,
-                'agreement_metrics': self.agreement_metrics.to_dict(),
-                'confidence_history': {
-                    iid: entries
-                    for iid, entries in self.confidence_history.items()
-                },
-            }
+                state = {
+                    'task_description': self.task_description,
+                    'current_prompt_version': self.current_prompt_version,
+                    'prompt_versions': [p.to_dict() for p in self.prompt_versions],
+                    'predictions': {
+                        iid: {s: p.to_dict() for s, p in schemas.items()}
+                        for iid, schemas in self.predictions.items()
+                    },
+                    'human_labeled_ids': list(self.human_labeled_ids),
+                    'llm_labeled_ids': list(self.llm_labeled_ids),
+                    'disagreement_ids': list(self.disagreement_ids),
+                    'validation_sample_ids': list(self.validation_sample_ids),
+                    'edge_case_ids': list(self.edge_case_ids),
+                    'edge_case_labels': self.edge_case_labels,
+                    'agreement_metrics': self.agreement_metrics.to_dict(),
+                    'confidence_history': {
+                        iid: entries
+                        for iid, entries in self.confidence_history.items()
+                    },
+                    'reannotation_counts': self._reannotation_counts,
+                }
 
-            # Include edge case rule manager state inline
-            if self._edge_case_rule_manager is not None:
-                state['edge_case_rule_data'] = self._edge_case_rule_manager.to_dict()
+                # Include edge case rule manager state inline
+                if self._edge_case_rule_manager is not None:
+                    state['edge_case_rule_data'] = self._edge_case_rule_manager.to_dict()
 
-            # Include confidence routing stats (informational only)
-            if self._confidence_router is not None:
-                state['confidence_routing_stats'] = self._confidence_router.get_stats()
+                # Include confidence routing stats (informational only)
+                if self._confidence_router is not None:
+                    state['confidence_routing_stats'] = self._confidence_router.get_stats()
 
-            # Atomic write
-            temp_path = filepath + '.tmp'
-            with open(temp_path, 'w') as f:
-                json.dump(state, f, indent=2)
-            os.replace(temp_path, filepath)
+                # Atomic write
+                temp_path = filepath + '.tmp'
+                with open(temp_path, 'w') as f:
+                    json.dump(state, f, indent=2)
+                os.replace(temp_path, filepath)
 
-        except Exception as e:
-            logger.error(f"Error saving Solo Mode state: {e}")
+            except Exception as e:
+                logger.error(f"Error saving Solo Mode state: {e}")
 
     def load_state(self) -> bool:
         """
@@ -1716,6 +1884,9 @@ class SoloModeManager:
                     disagreements=metrics.get('disagreements', 0),
                     agreement_rate=metrics.get('agreement_rate', 0.0),
                 )
+
+                # Restore reannotation counts
+                self._reannotation_counts = state.get('reannotation_counts', {})
 
                 # Load edge case rule manager state
                 ecr_data = state.get('edge_case_rule_data')

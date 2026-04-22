@@ -24,6 +24,7 @@ class SelectionWeights:
     disagreement: float = 0.1    # Instances with prior disagreements
     edge_case_rule: float = 0.0  # Instances matching edge case rule patterns
     cartography: float = 0.0     # Instances with high confidence variability
+    llm_predicted: float = 0.0   # Instances with LLM predictions needing human comparison
 
     def validate(self) -> None:
         """Validate that weights sum to 1.0."""
@@ -33,7 +34,8 @@ class SelectionWeights:
             self.random +
             self.disagreement +
             self.edge_case_rule +
-            self.cartography
+            self.cartography +
+            self.llm_predicted
         )
         if abs(total - 1.0) > 0.001:
             # Normalize
@@ -43,6 +45,7 @@ class SelectionWeights:
             self.disagreement /= total
             self.edge_case_rule /= total
             self.cartography /= total
+            self.llm_predicted /= total
             logger.warning(f"Normalized selection weights (original sum: {total})")
 
 
@@ -90,6 +93,7 @@ class InstanceSelector:
         self._disagreement_pool: List[str] = []
         self._edge_case_rule_pool: List[str] = []
         self._cartography_pool: List[str] = []
+        self._llm_predicted_pool: List[str] = []
 
         # Cache predictions for use in _select_lowest_confidence
         self._predictions_cache: Dict[str, Dict[str, Any]] = {}
@@ -147,6 +151,7 @@ class InstanceSelector:
             self._disagreement_pool = []
             self._edge_case_rule_pool = []
             self._cartography_pool = []
+            self._llm_predicted_pool = []
 
             # Build low confidence pool
             if llm_predictions:
@@ -159,6 +164,17 @@ class InstanceSelector:
                             if confidence < confidence_threshold:
                                 self._low_confidence_pool.append(instance_id)
                                 break
+
+            # Build LLM-predicted pool: instances with predictions that aren't
+            # already in the low_confidence pool (those are more valuable there).
+            # This pool steers human annotations toward instances where a comparison
+            # with the LLM can happen immediately.
+            if llm_predictions:
+                low_conf_set = set(self._low_confidence_pool)
+                self._llm_predicted_pool = [
+                    iid for iid in available_list
+                    if iid in llm_predictions and iid not in low_conf_set
+                ]
 
             # Build disagreement pool
             if disagreement_ids:
@@ -191,6 +207,7 @@ class InstanceSelector:
 
             logger.debug(
                 f"Refreshed pools: low_conf={len(self._low_confidence_pool)}, "
+                f"llm_predicted={len(self._llm_predicted_pool)}, "
                 f"diverse={len(self._diverse_pool)}, "
                 f"random={len(self._random_pool)}, "
                 f"disagreement={len(self._disagreement_pool)}, "
@@ -269,6 +286,10 @@ class InstanceSelector:
                     iid for iid in self._cartography_pool
                     if iid in available_ids and iid not in exclude
                 ],
+                'llm_predicted': [
+                    iid for iid in self._llm_predicted_pool
+                    if iid in available_ids and iid not in exclude
+                ],
             }
 
             # Select pool based on weights
@@ -299,6 +320,9 @@ class InstanceSelector:
             elif pool_name == 'cartography':
                 # Take first (already sorted by variability, highest first)
                 instance_id = selected_pool[0]
+            elif pool_name == 'llm_predicted':
+                # Random from LLM-predicted instances
+                instance_id = self.random.choice(selected_pool)
             else:  # random
                 instance_id = self.random.choice(selected_pool)
 
@@ -325,6 +349,7 @@ class InstanceSelector:
             'disagreement': self.weights.disagreement,
             'edge_case_rule': self.weights.edge_case_rule,
             'cartography': self.weights.cartography,
+            'llm_predicted': self.weights.llm_predicted,
         }
 
         for name, pool in pools.items():
@@ -420,6 +445,7 @@ class InstanceSelector:
                     'disagreement': len(self._disagreement_pool),
                     'edge_case_rule': len(self._edge_case_rule_pool),
                     'cartography': len(self._cartography_pool),
+                    'llm_predicted': len(self._llm_predicted_pool),
                 },
                 'weights': {
                     'low_confidence': self.weights.low_confidence,
@@ -428,6 +454,7 @@ class InstanceSelector:
                     'disagreement': self.weights.disagreement,
                     'edge_case_rule': self.weights.edge_case_rule,
                     'cartography': self.weights.cartography,
+                    'llm_predicted': self.weights.llm_predicted,
                 },
             }
 

@@ -297,11 +297,29 @@ class BaseAIEndpoint(ABC):
 
     def parseStringToJson(self, response_content: str) -> str:
         """
-        Parse the response content and extract JSON, handling markdown code blocks.
+        Parse structured output from any LLM response, with robust fallbacks.
+
+        Handles common issues across all endpoint types (ollama, vllm, openai, etc.):
+        1. Clean JSON responses -> direct parse
+        2. JSON wrapped in markdown code blocks (```json ... ```)
+        3. JSON embedded in surrounding prose text
+        4. Truncated JSON (max_tokens exceeded) -> extract complete key-value pairs
+        5. Plain text with no JSON structure -> return as {"response": text}
+
+        Args:
+            response_content: Raw response string from the LLM
+
+        Returns:
+            Parsed dict or the raw string if JSON extraction succeeds
+
+        Raises:
+            ValueError: Only if response is completely empty
         """
+        import re
+
         # Handle empty or None content
         if not response_content:
-            raise ValueError(f"Empty response content received from AI endpoint")
+            raise ValueError("Empty response content received from AI endpoint")
 
         # If it's already a dict, return it
         if isinstance(response_content, dict):
@@ -309,32 +327,175 @@ class BaseAIEndpoint(ABC):
 
         # Convert to string if needed
         content_str = str(response_content).strip()
-
-        # Check for empty after stripping whitespace
         if not content_str:
-            raise ValueError(f"Empty response content received from AI endpoint")
+            raise ValueError("Empty response content received from AI endpoint")
 
-        # Try to extract JSON from markdown code blocks if present
-        if '```json' in content_str:
-            import re
-            json_match = re.search(r'```json\s*([\s\S]*?)\s*```', content_str)
-            if json_match:
-                content_str = json_match.group(1).strip()
-        elif '```' in content_str:
-            import re
-            json_match = re.search(r'```\s*([\s\S]*?)\s*```', content_str)
-            if json_match:
-                content_str = json_match.group(1).strip()
+        # Strategy 0: Strip thinking/reasoning blocks that wrap the actual output
+        # Many models (qwen3, deepseek, etc.) produce <think>...</think> blocks
+        cleaned = content_str
+        for tag in ['think', 'thinking', 'thought', 'inner_monologue']:
+            cleaned = re.sub(
+                rf'<{tag}>[\s\S]*?</{tag}>\s*',
+                '', cleaned, flags=re.IGNORECASE
+            ).strip()
+        if cleaned and cleaned != content_str:
+            content_str = cleaned
 
+        # Strategy 1: Try direct JSON parse
         try:
-            parsed = json.loads(content_str)
-            return parsed
-        except json.JSONDecodeError as e:
-            # Log more details about the failure
-            logger.error(f"JSON parse error: {e}")
-            logger.error(f"Content length: {len(content_str)}")
-            logger.error(f"Content (first 500 chars): {content_str[:500]}")
-            raise ValueError(f"Failed to parse JSON from response: {e}. Content: {content_str[:200]}")
+            return json.loads(content_str)
+        except json.JSONDecodeError:
+            pass
+
+        # Strategy 2: Extract from markdown code blocks
+        for pattern in [
+            r'```json\s*([\s\S]*?)\s*```',
+            r'```\s*([\s\S]*?)\s*```',
+        ]:
+            match = re.search(pattern, content_str)
+            if match:
+                try:
+                    return json.loads(match.group(1).strip())
+                except json.JSONDecodeError:
+                    pass
+
+        # Strategy 3: Extract from tool call format
+        # Some models return: <tool_call>{"name": "...", "arguments": {...}}</tool_call>
+        # or function_call blocks
+        for pattern in [
+            r'<tool_call>\s*([\s\S]*?)\s*</tool_call>',
+            r'<function_call>\s*([\s\S]*?)\s*</function_call>',
+            r'<output>\s*([\s\S]*?)\s*</output>',
+            r'<result>\s*([\s\S]*?)\s*</result>',
+            r'<answer>\s*([\s\S]*?)\s*</answer>',
+        ]:
+            match = re.search(pattern, content_str, re.IGNORECASE)
+            if match:
+                try:
+                    parsed = json.loads(match.group(1).strip())
+                    # If it's a tool call wrapper, extract the arguments
+                    if isinstance(parsed, dict) and 'arguments' in parsed:
+                        return parsed['arguments']
+                    return parsed
+                except json.JSONDecodeError:
+                    pass
+
+        # Strategy 4: Find a JSON object anywhere in the text
+        # Greedy match for the outermost { ... }
+        match = re.search(r'\{[\s\S]*\}', content_str)
+        if match:
+            try:
+                return json.loads(match.group(0))
+            except json.JSONDecodeError:
+                pass
+
+        # Strategy 4: Salvage truncated JSON
+        # Extract complete "key": "value" and "key": number pairs
+        salvaged = self._salvage_key_value_pairs(content_str)
+        if salvaged:
+            logger.warning(
+                f"Salvaged {len(salvaged)} fields from truncated/malformed response"
+            )
+            return salvaged
+
+        # Strategy 6: Parse XML-style output
+        # Some models (especially larger ones) produce XML like:
+        # <label>joy</label><confidence>90</confidence>
+        # or <response><label>joy</label></response>
+        xml_result = self._parse_xml_to_dict(content_str)
+        if xml_result:
+            logger.info(
+                f"Parsed {len(xml_result)} fields from XML-style response"
+            )
+            return xml_result
+
+        # Strategy 7: Return raw text wrapped in a dict
+        logger.warning(
+            f"Could not parse JSON or XML from response ({len(content_str)} chars), "
+            f"returning as raw text"
+        )
+        return {"response": content_str}
+
+    @staticmethod
+    def _salvage_key_value_pairs(text: str) -> Optional[dict]:
+        """Extract key-value pairs from truncated or malformed JSON.
+
+        Handles cases where max_tokens cuts off a response mid-field, e.g.:
+        {"label": "joy", "confidence": 90, "reasoning": "The text expres...
+
+        Returns:
+            Dict of extracted key-value pairs, or None if nothing found.
+        """
+        import re
+        result = {}
+
+        # Extract "key": "value" pairs (string values)
+        for match in re.finditer(r'"(\w+)"\s*:\s*"([^"]*)"', text):
+            result[match.group(1)] = match.group(2)
+
+        # Extract "key": number pairs
+        for match in re.finditer(r'"(\w+)"\s*:\s*(-?\d+(?:\.\d+)?)\b', text):
+            key = match.group(1)
+            if key not in result:
+                try:
+                    val = float(match.group(2))
+                    result[key] = int(val) if val == int(val) else val
+                except ValueError:
+                    pass
+
+        # Extract "key": true/false/null
+        for match in re.finditer(r'"(\w+)"\s*:\s*(true|false|null)\b', text):
+            key = match.group(1)
+            if key not in result:
+                val_str = match.group(2)
+                result[key] = (
+                    True if val_str == 'true'
+                    else False if val_str == 'false'
+                    else None
+                )
+
+        return result if result else None
+
+    @staticmethod
+    def _parse_xml_to_dict(text: str) -> Optional[dict]:
+        """Extract key-value pairs from XML-style LLM output.
+
+        Handles patterns like:
+        - <label>joy</label><confidence>90</confidence>
+        - <response><label>joy</label></response>
+        - Mixed XML with text: "The emotion is <label>joy</label>"
+
+        Returns:
+            Dict of tag->content pairs, or None if no XML tags found.
+        """
+        import re
+        result = {}
+
+        # Find all <tag>content</tag> pairs (non-nested simple tags)
+        for match in re.finditer(
+            r'<(\w+)>([^<]*)</\1>', text, re.IGNORECASE
+        ):
+            tag = match.group(1).lower()
+            value = match.group(2).strip()
+
+            # Skip wrapper tags that contain other tags
+            if tag in ('response', 'output', 'result', 'answer', 'root'):
+                continue
+
+            # Try to parse numeric values
+            try:
+                if '.' in value:
+                    result[tag] = float(value)
+                else:
+                    result[tag] = int(value)
+            except ValueError:
+                # Boolean
+                if value.lower() in ('true', 'false'):
+                    result[tag] = value.lower() == 'true'
+                else:
+                    result[tag] = value
+
+        return result if result else None
 
     def get_ai(self, data: AnnotationInput, output_format) -> str:
         """

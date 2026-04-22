@@ -42,10 +42,11 @@ solo_mode:
 
   # Instance selection
   instance_selection:
-    low_confidence_weight: 0.4
-    diversity_weight: 0.3
-    random_weight: 0.2
+    low_confidence_weight: 0.3
+    diversity_weight: 0.2
+    random_weight: 0.1
     disagreement_weight: 0.1
+    llm_predicted_weight: 0.3
 
   # Batch sizes
   batches:

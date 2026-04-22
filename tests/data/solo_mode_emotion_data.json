@@ -1,0 +1,1252 @@
+[
+  {
+    "id": "emo_131",
+    "text": "Just heard footsteps on the porch outside and I'm home alone. I feel paralyzed.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_224",
+    "text": "I can't believe they actually did it. I genuinely can't believe it.",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_060",
+    "text": "Another rejection email. Miss them every day.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_132",
+    "text": "The doctor wants to run more tests. I don't know what to do.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_199",
+    "text": "Here's the summary: three action items, two pending reviews.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_122",
+    "text": "The doctor wants to run more tests. Please let everything be okay.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_139",
+    "text": "Every time I check the news I feel more anxious. My hands are shaking.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_133",
+    "text": "I have to present to the entire board tomorrow and I'm terrified.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_082",
+    "text": "It's been three months and I still think about that summer every day.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_004",
+    "text": "Best sushi I've ever had at the farmers market cafe. Highly recommend!",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_055",
+    "text": "Rain all week. Matches my mood perfectly.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_146",
+    "text": "Can't sleep. Keep thinking about losing my housing.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_152",
+    "text": "I just found a $100 bill in my storage unit. What on earth?",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_076",
+    "text": "I still can't believe uncle Joe is gone. Wish I could turn back time.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_097",
+    "text": "My landlord keeps parking in my spot and I've had it.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_194",
+    "text": "Reminder: the dentist appointment is on Friday.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_120",
+    "text": "Someone cut in front of me in line and didn't even apologize. This is completely unacceptable.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_128",
+    "text": "The street near my house is flooded and the water is still rising.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_203",
+    "text": "The prototype weighs approximately 2.5 kg and measures standard letter size.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_099",
+    "text": "How is it legal to charge $80 a month for parking?!",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_036",
+    "text": "Spent the whole afternoon hiking with my family and loved every minute.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_138",
+    "text": "The road near my house is flooded and the water is still rising.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_215",
+    "text": "According to the report, usage increased 12% quarter over quarter.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_189",
+    "text": "Here's the summary: three action items, two pending reviews.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_216",
+    "text": "Turned in the proposal draft before the deadline.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_188",
+    "text": "Switched from the old vendor to a local supplier for the catering.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_116",
+    "text": "Waited 45 minutes on hold just to be told my file was lost. Unbelievable.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_107",
+    "text": "My roommate keeps ignoring my messages and I've had it.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_149",
+    "text": "Every time I check the news I feel more anxious. Please let everything be okay.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_062",
+    "text": "It's been six weeks and I still think about the trip we planned every day.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_032",
+    "text": "My parrot learned a new trick today and I can't stop smiling.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_160",
+    "text": "The ending of the documentary completely blindsided me.",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_186",
+    "text": "Turned in the proposal draft before the deadline.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_002",
+    "text": "My dog learned a new trick today and I can't stop smiling.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_147",
+    "text": "What if I don't pass the exam? I can't stop spiraling.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_013",
+    "text": "Finally finished the garden redesign after months of effort. Feels amazing!",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_201",
+    "text": "The meeting is scheduled for 3 PM in room 204.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_213",
+    "text": "The prototype weighs approximately 500 grams and measures about a foot long.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_084",
+    "text": "I tried so hard but it still wasn't enough. I don't know how to move on.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_169",
+    "text": "Ran into my boss at a tiny village in Portugal of all places. Small world!",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_022",
+    "text": "My parrot learned a new trick today and I can't stop smiling.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_081",
+    "text": "Watched our old photo albums together and just started crying.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_089",
+    "text": "How is it legal to charge $50 for basic internet?!",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_108",
+    "text": "This blender broke after two weeks. This is completely unacceptable.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_087",
+    "text": "My landlord keeps blasting music at midnight and I've had it.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_019",
+    "text": "Today marks one year since I started this journey. So grateful for everyone who helped.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_104",
+    "text": "Stop telling me to calm down when you caused the problem!",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_148",
+    "text": "The park near my house is flooded and the water is still rising.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_227",
+    "text": "Wow, they gave me exactly what I asked for. First time for everything I guess.",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_048",
+    "text": "Feeling really lonely tonight. I don't know how to move on.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_245",
+    "text": "The sunset was beautiful but all I could think about was how she would have loved it.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_031",
+    "text": "Just got promoted at work! I've been working toward this for years.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_202",
+    "text": "Updated the spreadsheet with the latest vendor contacts.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_119",
+    "text": "How is it legal to charge $80 a month for basic internet?!",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_044",
+    "text": "Best brunch I've ever had at my neighbor's cookout. Highly recommend!",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_145",
+    "text": "The storm warnings keep getting worse. I feel paralyzed.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_185",
+    "text": "According to the report, usage increased 12% quarter over quarter.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_222",
+    "text": "Well that was certainly... an experience. I'll never forget it.",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_021",
+    "text": "Just got promoted at work! Feeling so blessed right now.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_141",
+    "text": "Just heard footsteps on the porch outside and I'm home alone. Trying to stay calm but failing.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_100",
+    "text": "Someone stole my idea at work and didn't even apologize. Never buying from them again.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_143",
+    "text": "I have to fly for the first time tomorrow and I'm terrified.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_051",
+    "text": "Watched our old photo albums together and just started crying.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_235",
+    "text": "Funny how the people who say 'I'm always here for you' are never actually here.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_166",
+    "text": "I've lived here my whole life and never knew there's a speakeasy behind the bookstore.",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_037",
+    "text": "Can't believe our local squad actually won! We're going to the finals!",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_217",
+    "text": "The library closes at 6 PM on weekdays.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_220",
+    "text": "The package arrived. It contains the replacement parts we ordered.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_175",
+    "text": "They just announced they're shutting down the project. Is this real?",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_083",
+    "text": "The house feels so empty since the kids moved out.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_123",
+    "text": "I have to testify in court tomorrow and I'm terrified.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_049",
+    "text": "My necklace broke today and it was the last thing my grandmother gave me.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_234",
+    "text": "I got the results. Not what I expected. Need some time to process.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_153",
+    "text": "Plot twist: they were twins the whole time. Did NOT see that coming.",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_017",
+    "text": "Can't believe the Packers actually won! We're going to the finals!",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_200",
+    "text": "The package arrived. It contains six textbooks and a lab manual.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_230",
+    "text": "It's fine. Everything's fine. I'm fine.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_195",
+    "text": "According to the report, 48% of respondents preferred option A.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_162",
+    "text": "I just found a hidden room in my old jacket. What on earth?",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_211",
+    "text": "The meeting is scheduled for 10 AM in the main hall.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_161",
+    "text": "Wait, my boss is a published author?! Since when?!",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_205",
+    "text": "According to the report, 48% of respondents preferred option A.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_182",
+    "text": "Updated the wiki page with the latest team assignments.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_016",
+    "text": "Spent the whole afternoon kayaking with the kids and loved every minute.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_129",
+    "text": "Every time I check the news I feel more anxious. I feel paralyzed.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_206",
+    "text": "Turned in the expense report before the deadline.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_080",
+    "text": "Another rejection email. Wish I could turn back time.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_043",
+    "text": "Finally finished the kitchen renovation after months of effort. Feels amazing!",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_115",
+    "text": "Can't believe they fired her for speaking up. Absolutely furious.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_009",
+    "text": "Today marks five years at this company. So grateful for everyone who helped.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_102",
+    "text": "I specifically asked for express shipping and got the exact opposite.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_047",
+    "text": "Didn't get the apartment I wanted. Back to square one.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_026",
+    "text": "Spent the whole afternoon baking with the kids and loved every minute.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_154",
+    "text": "Opened my door to find a delivery I never ordered. I have so many questions.",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_096",
+    "text": "Waited 45 minutes on hold just to be told I need to call back tomorrow. Unbelievable.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_179",
+    "text": "Ran into my cousin at the airport in Tokyo of all places. Small world!",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_093",
+    "text": "Third time this month my subscription has been delayed. Done with this brand.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_212",
+    "text": "Updated the spreadsheet with the latest vendor contacts.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_151",
+    "text": "Wait, Sarah is moving to Japan?! Since when?!",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_067",
+    "text": "Didn't get the promotion. Back to square one.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_198",
+    "text": "Switched from the old vendor to Teams for the catering.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_112",
+    "text": "I specifically asked for express shipping and got the exact opposite.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_165",
+    "text": "They just announced the merger. Is this real?",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_006",
+    "text": "Spent the whole afternoon hiking with my best friend and loved every minute.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_174",
+    "text": "Opened my door to find a delivery I never ordered. I have so many questions.",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_025",
+    "text": "Woke up to a surprise package from a friend. What a wonderful day!",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_074",
+    "text": "I tried so hard but it still wasn't enough. Wish I could turn back time.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_137",
+    "text": "What if the company goes under? I can't stop spiraling.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_127",
+    "text": "What if the treatment doesn't work? I can't stop spiraling.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_066",
+    "text": "I still can't believe uncle Joe is gone. The grief just hits out of nowhere.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_237",
+    "text": "They threw me a surprise party. I hate surprises. But I love these people.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_117",
+    "text": "My coworker keeps leaving messes everywhere and I've had it.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_178",
+    "text": "My DNA results came back and I'm apparently 30% Scandinavian. I'm speechless.",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_101",
+    "text": "The management lied to us again. People need to know about this.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_231",
+    "text": "Just watched my childhood home get demolished. Progress, they call it.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_045",
+    "text": "Woke up to an acceptance letter. What a wonderful day!",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_056",
+    "text": "I still can't believe grandma is gone. I don't know how to move on.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_228",
+    "text": "I passed! Barely, but I passed. Not sure if I should celebrate or panic about next semester.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_204",
+    "text": "Reminder: the quarterly review is on March 12.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_005",
+    "text": "Woke up to an acceptance letter. What a wonderful day!",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_124",
+    "text": "My bank account was compromised. I don't know what to do.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_075",
+    "text": "Rain all week. Matches my mood perfectly.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_023",
+    "text": "Finally finished my novel after months of effort. Feels amazing!",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_196",
+    "text": "Turned in the homework before the deadline.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_125",
+    "text": "The storm warnings keep getting worse. I don't know what to do.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_241",
+    "text": "The algorithm recommended my own blog post back to me. Peak internet.",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_015",
+    "text": "Woke up to an acceptance letter. What a wonderful day!",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_008",
+    "text": "This camera is incredible. Worth every penny.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_135",
+    "text": "The storm warnings keep getting worse. I don't know what to do.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_233",
+    "text": "The kids are finally asleep. Silence has never been this loud.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_183",
+    "text": "The prototype weighs approximately 12 pounds and measures standard letter size.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_134",
+    "text": "My bank account was compromised. My hands are shaking.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_247",
+    "text": "Interesting. Very interesting. I'll have to think about this.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_072",
+    "text": "It's been six weeks and I still think about the trip we planned every day.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_085",
+    "text": "Rain all week. Matches my mood perfectly.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_103",
+    "text": "Third time this month my order has arrived damaged. Done with this brand.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_050",
+    "text": "Another rejection email. The grief just hits out of nowhere.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_156",
+    "text": "I've lived here my whole life and never knew my neighbor is a famous musician.",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_058",
+    "text": "Feeling really lonely tonight. Some days are harder than others.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_059",
+    "text": "My mug broke today and it was the last thing dad gave me.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_172",
+    "text": "I just found a $100 bill in my old jacket. What on earth?",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_249",
+    "text": "Overheard someone complimenting my work without knowing I was there. Weird feeling.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_118",
+    "text": "This laptop broke after two weeks. People need to know about this.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_052",
+    "text": "It's been a year and I still think about the trip we planned every day.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_057",
+    "text": "Didn't get the scholarship. Back to square one.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_121",
+    "text": "Just heard someone trying the door handle outside and I'm home alone. Trying to stay calm but failing.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_180",
+    "text": "The ending of the movie completely blindsided me.",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_098",
+    "text": "This laptop broke after two weeks. This is completely unacceptable.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_221",
+    "text": "Oh great, another Monday. Can't wait to sit in traffic for two hours.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_242",
+    "text": "I keep refreshing my email even though I know the decision won't come until Friday.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_069",
+    "text": "My guitar broke today and it was the last thing my grandmother gave me.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_167",
+    "text": "Out of nowhere, the power went out citywide. I'm still processing.",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_236",
+    "text": "Can't stop replaying the conversation in my head. Should I have said something different?",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_197",
+    "text": "The office closes at 6 PM on weekdays.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_158",
+    "text": "My DNA results came back and I'm apparently 30% Scandinavian. I'm speechless.",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_007",
+    "text": "Can't believe the underdog team actually won! What a comeback!",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_106",
+    "text": "Waited an entire afternoon on hold just to be told they can't help me. Unbelievable.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_046",
+    "text": "I still can't believe our dog Max is gone. Miss them every day.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_193",
+    "text": "The sample weighs approximately 12 pounds and measures standard letter size.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_061",
+    "text": "Watched our old home videos together and just started crying.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_218",
+    "text": "Switched from the old vendor to Teams for the catering.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_159",
+    "text": "Ran into my cousin at the grocery store at 2 AM of all places. Small world!",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_105",
+    "text": "Can't believe they raised prices again while cutting quality. Absolutely furious.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_187",
+    "text": "The office closes at 6 PM on weekdays.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_091",
+    "text": "The the company lied to us again. Never buying from them again.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_246",
+    "text": "I won the argument but somehow I feel like I lost.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_064",
+    "text": "I tried so hard but it still wasn't enough. I don't know how to move on.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_240",
+    "text": "LOL this is absolutely ridiculous. Who approved this design?",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_092",
+    "text": "I specifically asked for express shipping and got the exact opposite.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_173",
+    "text": "Plot twist: the intern is the CEO's kid. Did NOT see that coming.",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_094",
+    "text": "Stop telling me to calm down when you caused the problem!",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_079",
+    "text": "My necklace broke today and it was the last thing my grandmother gave me.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_011",
+    "text": "Just got promoted at work! Feeling so blessed right now.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_033",
+    "text": "Finally finished the garden redesign after months of effort. Feels amazing!",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_111",
+    "text": "The the company lied to us again. Never buying from them again.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_038",
+    "text": "This laptop is incredible. Worth every penny.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_192",
+    "text": "Updated the spreadsheet with the latest vendor contacts.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_150",
+    "text": "I don't feel safe walking here after dark anymore.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_244",
+    "text": "Sure, let's have another meeting about the meetings we keep having. Very productive.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_010",
+    "text": "The sunset tonight was absolutely breathtaking. Feeling so blessed right now.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_250",
+    "text": "They postponed the deadline. Again. Not sure if that's a relief or a warning sign.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_039",
+    "text": "Today marks 100 days streak. So grateful for everyone who helped.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_177",
+    "text": "Out of nowhere, the power went out citywide. I'm still processing.",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_020",
+    "text": "The sunset tonight was absolutely breathtaking. Feeling so blessed right now.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_029",
+    "text": "Today marks five years at this company. So grateful for everyone who helped.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_232",
+    "text": "So apparently I've been pronouncing my coworker's name wrong for three years.",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_144",
+    "text": "My social media was compromised. I don't know what to do.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_110",
+    "text": "Someone cut in front of me in line and didn't even apologize. Absolutely furious.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_238",
+    "text": "Moving to a new city next month. Excited and terrified in equal measure.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_219",
+    "text": "Here's the summary: all systems operational, no incidents this week.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_114",
+    "text": "Stop telling me to calm down when you caused the problem!",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_190",
+    "text": "The package arrived. It contains three samples for testing.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_042",
+    "text": "My parrot learned a new trick today and I can't stop smiling.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_208",
+    "text": "Switched from Slack to a local supplier for the catering.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_164",
+    "text": "Opened my door to find a delivery I never ordered. I have so many questions.",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_034",
+    "text": "Best brunch I've ever had at the farmers market cafe. Highly recommend!",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_086",
+    "text": "Waited an entire afternoon on hold just to be told the office is closed. Unbelievable.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_001",
+    "text": "Just got promoted at work! I've been working toward this for years.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_012",
+    "text": "My dog learned a new trick today and I can't stop smiling.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_071",
+    "text": "Watched our old favorite songs together and just started crying.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_109",
+    "text": "How is it legal to charge $50 for parking?!",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_209",
+    "text": "Here's the summary: all systems operational, no incidents this week.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_024",
+    "text": "Best pizza I've ever had at the rooftop restaurant. Highly recommend!",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_014",
+    "text": "Best sushi I've ever had at the rooftop restaurant. Highly recommend!",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_065",
+    "text": "Rain all week. Matches my mood perfectly.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_126",
+    "text": "Can't sleep. Keep thinking about the layoffs.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_130",
+    "text": "I don't feel safe walking here after dark anymore.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_223",
+    "text": "Laughing so hard I'm crying. This is the worst day of my life.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_163",
+    "text": "Plot twist: the restaurant is closing permanently tomorrow. Did NOT see that coming.",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_176",
+    "text": "I've lived here my whole life and never knew there's a speakeasy behind the bookstore.",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_053",
+    "text": "The house feels so empty since she left.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_088",
+    "text": "This laptop broke after three days. People need to know about this.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_184",
+    "text": "Reminder: the maintenance window is on Friday.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_054",
+    "text": "I tried so hard but it still wasn't enough. Some days are harder than others.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_155",
+    "text": "They just announced they're shutting down the project. Is this real?",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_243",
+    "text": "Cleaned out the garage and found my dad's old tools. Spent an hour just holding them.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_070",
+    "text": "Another rejection email. I don't know how to move on.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_040",
+    "text": "The sunset tonight was absolutely breathtaking. Everything is coming together.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_229",
+    "text": "My ex texted me happy birthday. Don't know how to feel about that.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_191",
+    "text": "The meeting is scheduled for 10 AM in conference room B.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_028",
+    "text": "This camera is incredible. Exceeded all expectations.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_030",
+    "text": "The sunset tonight was absolutely breathtaking. Life is good.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_068",
+    "text": "Feeling really lonely tonight. I don't know how to move on.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_035",
+    "text": "Woke up to a surprise package from a friend. What a wonderful day!",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_225",
+    "text": "Thanks for nothing, customer service. You've really outdone yourselves.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_027",
+    "text": "Can't believe the underdog team actually won! What a comeback!",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_170",
+    "text": "The ending of that show completely blindsided me.",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_077",
+    "text": "Didn't get the promotion. Back to square one.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_142",
+    "text": "The doctor wants to run more tests. Please let everything be okay.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_210",
+    "text": "The package arrived. It contains the replacement parts we ordered.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_171",
+    "text": "Wait, my boss is moving to Japan?! Since when?!",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_003",
+    "text": "Finally finished my thesis after months of effort. Feels amazing!",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_136",
+    "text": "Can't sleep. Keep thinking about the layoffs.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_168",
+    "text": "My allergy results came back and I'm apparently 30% Scandinavian. I'm speechless.",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_207",
+    "text": "The lab closes at 5 PM on weekdays.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_157",
+    "text": "Out of nowhere, my phone rang and it was a job offer. I'm still processing.",
+    "gold_label": "surprise"
+  },
+  {
+    "id": "emo_078",
+    "text": "Feeling really lonely tonight. Some days are harder than others.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_181",
+    "text": "The meeting is scheduled for 10 AM in the main hall.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_140",
+    "text": "I don't feel safe walking here after dark anymore.",
+    "gold_label": "fear"
+  },
+  {
+    "id": "emo_214",
+    "text": "Reminder: the software update is on Friday.",
+    "gold_label": "neutral"
+  },
+  {
+    "id": "emo_113",
+    "text": "Third time this month my delivery has arrived damaged. Done with this brand.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_041",
+    "text": "Just got promoted at work! Life is good.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_073",
+    "text": "The house feels so empty since the move.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_095",
+    "text": "Can't believe they fired her for speaking up. This is completely unacceptable.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_063",
+    "text": "The house feels so empty since the move.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_248",
+    "text": "My plant is thriving. At least something in my life is growing.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_018",
+    "text": "This e-reader is incredible. Five stars easily.",
+    "gold_label": "joy"
+  },
+  {
+    "id": "emo_226",
+    "text": "She's finally at peace. I should be happy for her but I just feel empty.",
+    "gold_label": "sadness"
+  },
+  {
+    "id": "emo_090",
+    "text": "Someone scratched my car and didn't even apologize. People need to know about this.",
+    "gold_label": "anger"
+  },
+  {
+    "id": "emo_239",
+    "text": "My review said I'm 'meeting expectations.' Not exceeding. Just meeting.",
+    "gold_label": "sadness"
+  }
+]

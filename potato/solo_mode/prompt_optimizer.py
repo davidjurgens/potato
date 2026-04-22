@@ -189,6 +189,8 @@ class PromptOptimizer:
                     }
                     if model_config.api_key:
                         endpoint_config['ai_support']['ai_config']['api_key'] = model_config.api_key
+                    if model_config.base_url:
+                        endpoint_config['ai_support']['ai_config']['base_url'] = model_config.base_url
 
                     endpoint = AIEndpointFactory.create_endpoint(endpoint_config)
                     if endpoint:

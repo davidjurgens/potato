@@ -21,6 +21,7 @@ class ModelConfig:
     base_url: Optional[str] = None
     max_tokens: int = 1000
     temperature: float = 0.1
+    think: Optional[bool] = None  # None = use endpoint default, True/False = override
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for AI endpoint factory."""
@@ -36,6 +37,8 @@ class ModelConfig:
             result['ai_config']['api_key'] = self.api_key
         if self.base_url:
             result['ai_config']['base_url'] = self.base_url
+        if self.think is not None:
+            result['ai_config']['think'] = self.think
         return result
 
 
@@ -72,6 +75,7 @@ class InstanceSelectionConfig:
     disagreement_weight: float = 0.1
     edge_case_rule_weight: float = 0.0  # Instances matching edge case rule patterns
     cartography_weight: float = 0.0     # Instances with high confidence variability
+    llm_predicted_weight: float = 0.0   # Instances with LLM predictions needing human comparison
 
     def validate(self) -> None:
         """Validate that weights sum to 1.0."""
@@ -81,7 +85,8 @@ class InstanceSelectionConfig:
             self.random_weight +
             self.disagreement_weight +
             self.edge_case_rule_weight +
-            self.cartography_weight
+            self.cartography_weight +
+            self.llm_predicted_weight
         )
         if abs(total - 1.0) > 0.001:
             logger.warning(
@@ -291,6 +296,7 @@ def _parse_model_config(model_data: Dict[str, Any]) -> ModelConfig:
         base_url=model_data.get('base_url') or model_data.get('endpoint_url'),
         max_tokens=model_data.get('max_tokens', 1000),
         temperature=model_data.get('temperature', 0.1),
+        think=model_data.get('think'),  # None = endpoint default, True/False = override
     )
 
 
@@ -357,6 +363,7 @@ def parse_solo_mode_config(config_data: Dict[str, Any]) -> SoloModeConfig:
         disagreement_weight=sel_data.get('disagreement_weight', 0.1),
         edge_case_rule_weight=sel_data.get('edge_case_rule_weight', 0.0),
         cartography_weight=sel_data.get('cartography_weight', 0.0),
+        llm_predicted_weight=sel_data.get('llm_predicted_weight', 0.0),
     )
 
     # Parse batch config

@@ -152,19 +152,22 @@ class PromptManager:
             # Try revision models in order until one works
             for model_config in self.solo_config.revision_models:
                 try:
+                    ai_config = {
+                        'model': model_config.model,
+                        'max_tokens': model_config.max_tokens,
+                        'temperature': model_config.temperature,
+                    }
+                    if model_config.api_key:
+                        ai_config['api_key'] = model_config.api_key
+                    if model_config.base_url:
+                        ai_config['base_url'] = model_config.base_url
                     endpoint_config = {
                         'ai_support': {
                             'enabled': True,
                             'endpoint_type': model_config.endpoint_type,
-                            'ai_config': {
-                                'model': model_config.model,
-                                'max_tokens': model_config.max_tokens,
-                                'temperature': model_config.temperature,
-                            }
+                            'ai_config': ai_config,
                         }
                     }
-                    if model_config.api_key:
-                        endpoint_config['ai_support']['ai_config']['api_key'] = model_config.api_key
 
                     endpoint = AIEndpointFactory.create_endpoint(endpoint_config)
                     if endpoint:

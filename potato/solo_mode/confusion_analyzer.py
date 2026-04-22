@@ -274,9 +274,33 @@ class ConfusionAnalyzer:
         )
 
         try:
-            response = endpoint.query(prompt)
+            # OllamaEndpoint requires an output_format (Pydantic model).
+            # Other endpoints accept just a prompt string.
+            try:
+                from pydantic import BaseModel
+
+                class SuggestionResponse(BaseModel):
+                    suggestion: str = ""
+
+                response = endpoint.query(prompt, SuggestionResponse)
+            except TypeError:
+                # Endpoint doesn't require output_format (e.g., OpenAI)
+                response = endpoint.query(prompt)
+
             data = self._parse_json(response)
-            return data.get('suggestion')
+            suggestion = data.get('suggestion')
+            if suggestion:
+                logger.info(
+                    f"Generated guideline for {pattern.predicted_label}->"
+                    f"{pattern.actual_label}: {suggestion[:100]}"
+                )
+            else:
+                logger.warning(
+                    f"No suggestion extracted from LLM response for "
+                    f"{pattern.predicted_label}->{pattern.actual_label}: "
+                    f"{str(response)[:200]}"
+                )
+            return suggestion
         except Exception as e:
             logger.warning(f"Guideline suggestion failed: {e}")
             return None
@@ -295,21 +319,22 @@ class ConfusionAnalyzer:
             )
             for model_config in models:
                 try:
+                    ai_config = {
+                        'model': model_config.model,
+                        'max_tokens': model_config.max_tokens,
+                        'temperature': 0.3,
+                    }
+                    if model_config.api_key:
+                        ai_config['api_key'] = model_config.api_key
+                    if model_config.base_url:
+                        ai_config['base_url'] = model_config.base_url
                     endpoint_config = {
                         'ai_support': {
                             'enabled': True,
                             'endpoint_type': model_config.endpoint_type,
-                            'ai_config': {
-                                'model': model_config.model,
-                                'max_tokens': model_config.max_tokens,
-                                'temperature': 0.3,
-                            }
+                            'ai_config': ai_config,
                         }
                     }
-                    if model_config.api_key:
-                        endpoint_config['ai_support']['ai_config']['api_key'] = (
-                            model_config.api_key
-                        )
 
                     endpoint = AIEndpointFactory.create_endpoint(endpoint_config)
                     if endpoint:
@@ -331,18 +356,52 @@ class ConfusionAnalyzer:
         return text[:self.MAX_TEXT_LENGTH] + '...'
 
     def _parse_json(self, response: Any) -> Dict[str, Any]:
-        """Parse JSON from an LLM response."""
+        """Parse JSON from an LLM response, with robust fallbacks.
+
+        Handles common LLM output issues:
+        - JSON wrapped in markdown code blocks
+        - JSON embedded in surrounding prose
+        - Plain text suggestions (no JSON at all)
+        - Slightly malformed JSON (trailing commas, single quotes)
+        """
         if isinstance(response, dict):
             return response
         if hasattr(response, 'model_dump'):
             return response.model_dump()
 
         content = str(response).strip()
+
+        # Try markdown code block extraction
         match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', content)
         if match:
             content = match.group(1).strip()
 
+        # Try direct JSON parse
         try:
             return json.loads(content)
         except json.JSONDecodeError:
-            return {}
+            pass
+
+        # Try extracting a JSON object from anywhere in the text
+        match = re.search(r'\{[^{}]*\}', content)
+        if match:
+            try:
+                return json.loads(match.group(0))
+            except json.JSONDecodeError:
+                pass
+
+        # Fallback: treat the entire response as a plain text suggestion
+        # Strip common preamble patterns
+        cleaned = content
+        for prefix in [
+            'Here is', 'Here\'s', 'My suggestion', 'Suggestion:',
+            'Guideline:', 'I suggest', 'I would suggest',
+        ]:
+            if cleaned.lower().startswith(prefix.lower()):
+                cleaned = cleaned[len(prefix):].lstrip(':').strip()
+                break
+
+        if cleaned and len(cleaned) > 10:
+            return {'suggestion': cleaned}
+
+        return {}
