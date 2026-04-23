@@ -223,6 +223,11 @@ class SoloModeManager:
         # Reannotation tracking (persisted across restarts)
         self._reannotation_counts: Dict[str, int] = {}
 
+        # Per-prompt-version agreement tracking
+        # Tracks agreement separately for each prompt version so we can
+        # measure whether a refinement actually improved accuracy
+        self._per_version_agreement: Dict[int, Dict[str, int]] = {}  # version -> {compared, agreements}
+
         # State persistence
         self._state_file = 'solo_mode_state.json'
 
@@ -1338,6 +1343,14 @@ class SoloModeManager:
                 self.disagreement_ids.add(instance_id)
             self.agreement_metrics.update_rate()
 
+            # Track per-prompt-version agreement
+            pv = prediction.prompt_version
+            if pv not in self._per_version_agreement:
+                self._per_version_agreement[pv] = {'compared': 0, 'agreements': 0}
+            self._per_version_agreement[pv]['compared'] += 1
+            if agrees:
+                self._per_version_agreement[pv]['agreements'] += 1
+
             # Feed the validation tracker for confusion matrix / pattern analysis
             self.validation_tracker.record_comparison(
                 instance_id=instance_id,
@@ -1348,13 +1361,17 @@ class SoloModeManager:
             )
 
             human_count = len(self.human_labeled_ids)
+            pv_stats = self._per_version_agreement.get(pv, {})
+            pv_rate = (pv_stats['agreements'] / pv_stats['compared']
+                       if pv_stats.get('compared', 0) > 0 else 0)
             if human_count % 5 == 0 or not agrees:
                 logger.info(
                     f"[Human Label] #{human_count} {instance_id}: "
                     f"human={label}, llm={prediction.predicted_label}, "
                     f"{'AGREE' if agrees else 'DISAGREE'} "
-                    f"(rate={self.agreement_metrics.agreement_rate:.3f}, "
-                    f"compared={self.agreement_metrics.total_compared})"
+                    f"(overall={self.agreement_metrics.agreement_rate:.3f}, "
+                    f"prompt_v{pv}={pv_rate:.3f} [{pv_stats.get('compared',0)}], "
+                    f"total_compared={self.agreement_metrics.total_compared})"
                 )
 
             self._save_state()
@@ -1455,6 +1472,14 @@ class SoloModeManager:
                 self.disagreement_ids.add(instance_id)
             self.agreement_metrics.update_rate()
 
+            # Track per-prompt-version agreement
+            pv = prediction.prompt_version
+            if pv not in self._per_version_agreement:
+                self._per_version_agreement[pv] = {'compared': 0, 'agreements': 0}
+            self._per_version_agreement[pv]['compared'] += 1
+            if agrees:
+                self._per_version_agreement[pv]['agreements'] += 1
+
             # Feed the validation tracker for confusion matrix / pattern analysis
             self.validation_tracker.record_comparison(
                 instance_id=instance_id,
@@ -1467,7 +1492,7 @@ class SoloModeManager:
             logger.debug(
                 f"Retroactive comparison for {instance_id}: "
                 f"llm={prediction.predicted_label}, human={human_label}, "
-                f"agrees={agrees}"
+                f"agrees={agrees}, prompt_v{pv}"
             )
 
     def _get_stored_human_label(
@@ -1960,6 +1985,7 @@ class SoloModeManager:
                         for iid, entries in self.confidence_history.items()
                     },
                     'reannotation_counts': self._reannotation_counts,
+                    'per_version_agreement': self._per_version_agreement,
                 }
 
                 # Include edge case rule manager state inline
@@ -2039,6 +2065,12 @@ class SoloModeManager:
 
                 # Restore reannotation counts
                 self._reannotation_counts = state.get('reannotation_counts', {})
+
+                # Restore per-version agreement tracking
+                raw_pva = state.get('per_version_agreement', {})
+                self._per_version_agreement = {
+                    int(k): v for k, v in raw_pva.items()
+                }
 
                 # Load edge case rule manager state
                 ecr_data = state.get('edge_case_rule_data')
@@ -2311,6 +2343,14 @@ class SoloModeManager:
                     'background_running': self.is_background_labeling_running(),
                 },
                 'agreement': self.agreement_metrics.to_dict(),
+                'agreement_by_prompt_version': {
+                    str(v): {
+                        'compared': d['compared'],
+                        'agreements': d['agreements'],
+                        'rate': d['agreements'] / d['compared'] if d['compared'] > 0 else 0,
+                    }
+                    for v, d in self._per_version_agreement.items()
+                },
                 'disagreements': {
                     'total': len(self.disagreement_ids),
                     'pending': len(self.get_pending_disagreements()),

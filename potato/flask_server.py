@@ -3620,7 +3620,10 @@ def run_server(args):
     # Run the Flask app
     host = config.get("host", "0.0.0.0")
     port = config.get("port", 8000)
-    app.run(host=host, port=port, debug=config.get("debug", False), use_reloader=False)
+    # Use threaded=True so background LLM calls (solo mode refinement,
+    # edge case synthesis, etc.) don't block the HTTP server.
+    app.run(host=host, port=port, debug=config.get("debug", False),
+            use_reloader=False, threaded=True)
 
 
 # Define the main entry point for the Flask server

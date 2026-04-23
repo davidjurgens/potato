@@ -37,6 +37,14 @@ class TestConfig:
     expected_difficulty: str  # easy, medium, hard
 
 
+ALL_GOEMOTION_LABELS = [
+    'admiration', 'amusement', 'anger', 'annoyance', 'approval', 'caring',
+    'confusion', 'curiosity', 'desire', 'disappointment', 'disapproval',
+    'disgust', 'embarrassment', 'excitement', 'fear', 'gratitude', 'grief',
+    'joy', 'love', 'nervousness', 'optimism', 'pride', 'realization',
+    'relief', 'remorse', 'sadness', 'surprise', 'neutral',
+]
+
 TESTS = [
     TestConfig(
         name="SST-2 (2 labels)",
@@ -65,6 +73,15 @@ TESTS = [
         description="Classify whether the tweet contains hate speech.",
         expected_difficulty="hard-subjective",
     ),
+    TestConfig(
+        name="GoEmotions (28 labels)",
+        port=8400,
+        gold_file="tests/data/goemotion_500_gold.json",
+        schema_name="emotion",
+        labels=ALL_GOEMOTION_LABELS,
+        description="Classify the primary emotion expressed in each Reddit comment.",
+        expected_difficulty="very-hard",
+    ),
 ]
 
 
@@ -80,11 +97,11 @@ def run_test(tc: TestConfig) -> Dict:
 
     config = SoloSimulatorConfig(
         noise_rate=0.10,
-        parallel_annotation_count=60,
+        parallel_annotation_count=50,
         active_annotation_count=150,
         task_description=tc.description + " Labels: " + ", ".join(tc.labels),
         schema_name=tc.schema_name,
-        max_wait_autonomous=20,
+        max_wait_autonomous=15,
         annotation_delay=3.0,
         wait_for_predictions_timeout=180,
     )
