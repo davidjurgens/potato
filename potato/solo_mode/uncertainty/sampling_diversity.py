@@ -305,16 +305,21 @@ class SamplingDiversityEstimator(UncertaintyEstimator):
                 valid_labels.append(label.get('name', str(label)))
         return valid_labels if valid_labels else None
 
-    def _normalize_label(self, label: str, valid_labels: List[str]) -> Optional[str]:
+    def _normalize_label(self, label: Any, valid_labels: List[str]) -> Optional[str]:
         """
         Normalize a label to match one of the valid labels.
 
-        Returns None if no match found.
+        Returns None if no match found. Handles non-string inputs gracefully.
         """
-        label_lower = label.lower().strip()
+        if label is None:
+            return None
+        try:
+            label_lower = str(label).lower().strip()
+        except Exception:
+            return None
 
         for valid in valid_labels:
-            if valid.lower().strip() == label_lower:
+            if str(valid).lower().strip() == label_lower:
                 return valid
 
         # No match found
