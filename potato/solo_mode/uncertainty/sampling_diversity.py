@@ -132,6 +132,9 @@ class SamplingDiversityEstimator(UncertaintyEstimator):
         """
         Sample multiple responses from the model at high temperature.
 
+        Attempts batched sampling first (vLLM n parameter) for efficiency,
+        falls back to sequential calls for other endpoints.
+
         Args:
             prompt: The labeling prompt
             endpoint: The AI endpoint
@@ -140,56 +143,156 @@ class SamplingDiversityEstimator(UncertaintyEstimator):
         Returns:
             List of sampled labels
         """
-        sampled_labels = []
+        # Try batched sampling first (vLLM/OpenAI support n parameter)
+        batched = self._try_batched_sampling(prompt, endpoint, valid_labels)
+        if batched is not None:
+            return batched
 
-        # Store original temperature
+        # Fallback: sequential sampling
+        return self._sequential_sampling(prompt, endpoint, valid_labels)
+
+    def _try_batched_sampling(
+        self,
+        prompt: str,
+        endpoint: Any,
+        valid_labels: Optional[List[str]] = None
+    ) -> Optional[List[str]]:
+        """Try to sample N responses in a single API call using the n parameter.
+
+        Works with vLLM and OpenAI-compatible endpoints. Returns None if
+        the endpoint doesn't support batched completions.
+        """
+        # Only attempt for endpoints with base_url (vLLM, OpenAI-compatible)
+        base_url = getattr(endpoint, 'base_url', None)
+        if not base_url:
+            ai_config = getattr(endpoint, 'ai_config', {})
+            base_url = ai_config.get('base_url')
+        if not base_url:
+            return None
+
+        try:
+            import requests as req
+
+            headers = {"Content-Type": "application/json"}
+            api_key = getattr(endpoint, 'api_key', '')
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+
+            # Get think setting from endpoint config
+            ai_config = getattr(endpoint, 'ai_config', {})
+            think = ai_config.get('think', False)
+
+            payload = {
+                "model": getattr(endpoint, 'model', ''),
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": getattr(endpoint, 'max_tokens', 200),
+                "temperature": self.temperature,
+                "stream": False,
+                "n": self.num_samples,
+                "chat_template_kwargs": {"enable_thinking": think},
+            }
+
+            timeout = ai_config.get('timeout', 60)
+            response = req.post(
+                f"{base_url}/v1/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=timeout,
+            )
+
+            if response.status_code != 200:
+                return None
+
+            data = response.json()
+            choices = data.get("choices", [])
+            if len(choices) < 2:
+                return None  # Server didn't support n parameter
+
+            sampled_labels = []
+            for choice in choices:
+                content = choice.get("message", {}).get("content", "")
+                if not content:
+                    continue
+
+                # Parse label from response
+                label = self._extract_label_from_response(content)
+                if label and self.normalize_labels and valid_labels:
+                    label = self._normalize_label(label, valid_labels)
+                if label:
+                    sampled_labels.append(label)
+
+            return sampled_labels if sampled_labels else None
+
+        except Exception as e:
+            logger.debug(f"Batched sampling failed, falling back to sequential: {e}")
+            return None
+
+    def _sequential_sampling(
+        self,
+        prompt: str,
+        endpoint: Any,
+        valid_labels: Optional[List[str]] = None
+    ) -> List[str]:
+        """Sample responses one at a time (fallback for non-batching endpoints)."""
+        sampled_labels = []
         original_temp = getattr(endpoint, 'temperature', 0.1)
 
         try:
-            # Set high temperature for sampling
             if hasattr(endpoint, 'temperature'):
                 endpoint.temperature = self.temperature
 
             for i in range(self.num_samples):
                 try:
-                    # Query the model
                     from pydantic import BaseModel
 
                     class LabelResponse(BaseModel):
                         label: str
 
                     response = endpoint.query(prompt, LabelResponse)
+                    label = self._extract_label_from_response(response)
 
-                    # Parse response — handle all return types
-                    if isinstance(response, dict):
-                        label = response.get('label', str(response))
-                    elif isinstance(response, str):
-                        label = response.strip()
-                    elif hasattr(response, 'model_dump'):
-                        label = response.model_dump().get('label', str(response))
-                    elif hasattr(response, 'label'):
-                        label = response.label
-                    else:
-                        label = str(response)
-
-                    # Normalize label
-                    if self.normalize_labels and valid_labels:
+                    if label and self.normalize_labels and valid_labels:
                         label = self._normalize_label(label, valid_labels)
-                        if label is None:
-                            continue  # Skip invalid labels
-
-                    sampled_labels.append(label)
+                    if label:
+                        sampled_labels.append(label)
 
                 except Exception as e:
                     logger.debug(f"Error in sample {i}: {e}")
                     continue
 
         finally:
-            # Restore original temperature
             if hasattr(endpoint, 'temperature'):
                 endpoint.temperature = original_temp
 
         return sampled_labels
+
+    @staticmethod
+    def _extract_label_from_response(response) -> Optional[str]:
+        """Extract a label string from various response formats."""
+        import json as json_mod
+        import re
+
+        if isinstance(response, dict):
+            return response.get('label', str(response))
+        elif isinstance(response, str):
+            content = response.strip()
+            # Try JSON parse
+            try:
+                data = json_mod.loads(content)
+                if isinstance(data, dict):
+                    return data.get('label', '')
+            except (json_mod.JSONDecodeError, ValueError):
+                pass
+            # Try extracting from markdown
+            match = re.search(r'"label"\s*:\s*"([^"]+)"', content)
+            if match:
+                return match.group(1)
+            return content
+        elif hasattr(response, 'model_dump'):
+            return response.model_dump().get('label', str(response))
+        elif hasattr(response, 'label'):
+            return response.label
+        return str(response)
 
     def _get_valid_labels(self, schema_info: Dict[str, Any]) -> Optional[List[str]]:
         """Extract valid labels from schema info."""

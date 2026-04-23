@@ -83,7 +83,7 @@ solo_mode:
     periodic_review_interval: 50
   uncertainty:
     sampling_diversity:
-      num_samples: 5
+      num_samples: 10
       temperature: 1.0
     strategy: sampling_diversity
 task_dir: ../..
