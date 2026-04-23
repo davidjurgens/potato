@@ -499,11 +499,16 @@ Respond with JSON:
                 valid.append(label.get('name', str(label)))
         return valid
 
-    def _fuzzy_match_label(self, label: str, valid: List[str]) -> Optional[str]:
-        """Try to match label to valid labels."""
-        label_lower = label.lower().strip()
+    def _fuzzy_match_label(self, label, valid: List[str]) -> Optional[str]:
+        """Try to match label to valid labels. Handles non-string inputs gracefully."""
+        if label is None:
+            return None
+        try:
+            label_lower = str(label).lower().strip()
+        except Exception:
+            return None
         for v in valid:
-            if v.lower().strip() == label_lower:
+            if str(v).lower().strip() == label_lower:
                 return v
         return None
 
