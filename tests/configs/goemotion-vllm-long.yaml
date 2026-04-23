@@ -1,0 +1,86 @@
+annotation_schemes:
+- annotation_type: radio
+  description: Classify the primary emotion expressed in the Reddit comment
+  labels:
+  - name: admiration
+  - name: amusement
+  - name: anger
+  - name: annoyance
+  - name: approval
+  - name: caring
+  - name: confusion
+  - name: curiosity
+  - name: desire
+  - name: disappointment
+  - name: disapproval
+  - name: disgust
+  - name: embarrassment
+  - name: excitement
+  - name: fear
+  - name: gratitude
+  - name: grief
+  - name: joy
+  - name: love
+  - name: nervousness
+  - name: optimism
+  - name: pride
+  - name: realization
+  - name: relief
+  - name: remorse
+  - name: sadness
+  - name: surprise
+  - name: neutral
+  name: emotion
+annotation_task_name: goemotion-vllm-long
+data_files:
+- tests/data/goemotion_500.json
+item_properties:
+  id_key: id
+  text_key: text
+output_annotation_dir: tests/output/goemotion-vllm-long
+port: 8400
+session_lifetime_days: 7
+solo_mode:
+  batches:
+    llm_labeling_batch: 20
+    max_parallel_labels: 400
+  confusion_analysis:
+    min_instances_for_pattern: 3
+  enabled: true
+  instance_selection:
+    disagreement_weight: 0.15
+    diversity_weight: 0.1
+    llm_predicted_weight: 0.4
+    low_confidence_weight: 0.25
+    random_weight: 0.1
+  labeling_models:
+  - base_url: http://burger.si.umich.edu:8001
+    endpoint_type: vllm
+    max_tokens: 200
+    model: Qwen/Qwen3.5-4B
+    temperature: 0.1
+    think: false
+  refinement_loop:
+    auto_apply_suggestions: true
+    enabled: true
+    max_cycles: 10
+    patience: 3
+    refinement_strategy: focused_edit
+    trigger_interval: 50
+  revision_models:
+  - base_url: http://burger.si.umich.edu:8001
+    endpoint_type: vllm
+    max_tokens: 7000
+    model: Qwen/Qwen3.5-4B
+    temperature: 0.3
+    think: true
+    timeout: 180
+  state_dir: tests/output/goemotion-vllm-long/solo_state
+  thresholds:
+    confidence_low: 0.4
+    end_human_annotation_agreement: 0.6
+    minimum_validation_sample: 10
+    periodic_review_interval: 50
+  uncertainty:
+    strategy: direct_confidence
+task_dir: ../..

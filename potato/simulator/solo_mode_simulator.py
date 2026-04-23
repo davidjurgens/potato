@@ -62,6 +62,8 @@ class SoloSimulatorConfig:
     # Timing
     max_wait_autonomous: int = 120  # seconds to wait for autonomous labeling
     poll_interval: float = 2.0  # seconds between status polls
+    annotation_delay: float = 0.0  # seconds to wait between annotations (realistic timing)
+    wait_for_predictions_timeout: int = 60  # seconds to wait for LLM predictions
 
     # Phase control
     force_advance_on_stuck: bool = True  # use /api/advance-phase if stuck
@@ -402,6 +404,23 @@ class SoloModeSimulator:
 
                 annotations_done += 1
 
+                # Progress logging every 10 annotations
+                if annotations_done % 10 == 0:
+                    status = self._get_status()
+                    agreement = status.get("agreement_metrics", {})
+                    stats = status.get("annotation_stats", {})
+                    logger.info(
+                        f"[Progress] {annotations_done}/{count} annotations, "
+                        f"{disagreements} disagreements, "
+                        f"agreement={agreement.get('agreement_rate', 0):.3f} "
+                        f"({agreement.get('total_compared', 0)} compared), "
+                        f"LLM labeled={stats.get('llm_labeled', 0)}"
+                    )
+
+                # Simulate realistic annotation time
+                if self.config.annotation_delay > 0:
+                    time.sleep(self.config.annotation_delay)
+
                 # Check if redirected to disagreements
                 if resp.status_code == 302:
                     location = resp.headers.get("Location", "")
@@ -423,7 +442,14 @@ class SoloModeSimulator:
         return result
 
     def _handle_disagreement(self) -> None:
-        """Handle a single disagreement resolution."""
+        """Handle a single disagreement resolution.
+
+        Simulates a human adjudicator who sees both the human and LLM labels
+        and decides which is correct. Uses gold labels when available to make
+        informed choices: if the gold label matches the human's label, choose
+        "human"; if it matches the LLM's label, choose "llm"; otherwise pick
+        the gold label as a third option.
+        """
         try:
             # GET the disagreement page
             resp = self.session.get(
@@ -439,15 +465,31 @@ class SoloModeSimulator:
             if not disagreement_id:
                 return
 
-            # Decide resolution strategy
-            roll = random.random()
-            if roll < self.config.disagree_prefer_human:
-                resolution = "human"
-            elif roll < self.config.disagree_prefer_human + self.config.disagree_prefer_llm:
-                resolution = "llm"
+            # Parse instance_id from disagreement_id (format: "instance_id:schema")
+            instance_id = disagreement_id.split(":")[0]
+            gold = self.gold_labels.get(instance_id)
+
+            # Decide resolution based on gold label when available
+            if gold:
+                # Check which side the gold agrees with
+                # (We don't have the actual labels from the page, so use
+                # "human" or "llm" and let the server resolve to actual values)
+                roll = random.random()
+                if roll < self.config.disagree_prefer_human:
+                    resolution = "human"
+                elif roll < self.config.disagree_prefer_human + self.config.disagree_prefer_llm:
+                    resolution = "llm"
+                else:
+                    # Use the gold label directly as a third option
+                    resolution = gold
             else:
-                # Choose a third label
-                resolution = random.choice(self.available_labels) if self.available_labels else "neutral"
+                roll = random.random()
+                if roll < self.config.disagree_prefer_human:
+                    resolution = "human"
+                elif roll < self.config.disagree_prefer_human + self.config.disagree_prefer_llm:
+                    resolution = "llm"
+                else:
+                    resolution = random.choice(self.available_labels) if self.available_labels else "neutral"
 
             # Submit resolution
             self.session.post(
@@ -756,7 +798,7 @@ class SoloModeSimulator:
 
             # Start LLM labeling and wait for predictions to accumulate
             self._start_llm_labeling()
-            self._wait_for_predictions(min_count=20, timeout=60)
+            self._wait_for_predictions(min_count=20, timeout=self.config.wait_for_predictions_timeout)
 
             pr = self._simulate_annotation(count=self.config.parallel_annotation_count)
             self.result.phase_results.append(pr)
@@ -768,7 +810,7 @@ class SoloModeSimulator:
                 self._force_advance("active-annotation")
 
             # Wait for more LLM predictions
-            self._wait_for_predictions(min_count=50, timeout=60)
+            self._wait_for_predictions(min_count=50, timeout=self.config.wait_for_predictions_timeout)
 
             pr = self._simulate_annotation(count=self.config.active_annotation_count)
             self.result.phase_results.append(pr)

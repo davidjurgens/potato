@@ -1,0 +1,63 @@
+annotation_schemes:
+- annotation_type: radio
+  description: Classify the sentiment of the movie review sentence as positive or
+    negative
+  labels:
+  - key_value: a
+    name: positive
+  - key_value: b
+    name: negative
+  name: sentiment
+annotation_task_name: sst2-solo-test
+data_files:
+- tests/data/sst2_500.json
+item_properties:
+  id_key: id
+  text_key: text
+output_annotation_dir: tests/output/sst2-solo-test
+port: 8501
+session_lifetime_days: 7
+solo_mode:
+  batches:
+    llm_labeling_batch: 20
+    max_parallel_labels: 400
+  confusion_analysis:
+    min_instances_for_pattern: 3
+  enabled: true
+  instance_selection:
+    disagreement_weight: 0.15
+    diversity_weight: 0.1
+    llm_predicted_weight: 0.4
+    low_confidence_weight: 0.25
+    random_weight: 0.1
+  labeling_models:
+  - base_url: http://burger.si.umich.edu:8001
+    endpoint_type: vllm
+    max_tokens: 200
+    model: Qwen/Qwen3.5-4B
+    temperature: 0.1
+    think: false
+  refinement_loop:
+    auto_apply_suggestions: true
+    enabled: true
+    max_cycles: 10
+    patience: 3
+    refinement_strategy: focused_edit
+    trigger_interval: 50
+  revision_models:
+  - base_url: http://burger.si.umich.edu:8001
+    endpoint_type: vllm
+    max_tokens: 7000
+    model: Qwen/Qwen3.5-4B
+    temperature: 0.3
+    think: true
+    timeout: 180
+  state_dir: tests/output/sst2-solo-test/solo_state
+  thresholds:
+    confidence_low: 0.4
+    end_human_annotation_agreement: 0.7
+    minimum_validation_sample: 10
+    periodic_review_interval: 50
+  uncertainty:
+    strategy: direct_confidence
+task_dir: ../..

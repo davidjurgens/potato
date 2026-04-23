@@ -258,19 +258,34 @@ class ConfusionAnalyzer:
         if endpoint is None:
             return None
 
-        root_cause = pattern.root_cause or "Unknown"
+        # Build examples from the confusion pattern
+        examples_text = ""
+        for i, ex in enumerate(pattern.examples[:3]):
+            examples_text += (
+                f"  Example {i+1}: \"{ex.text}\"\n"
+                f"    Model labeled: {pattern.predicted_label}"
+            )
+            if ex.llm_confidence is not None:
+                examples_text += f" (confidence: {ex.llm_confidence:.0%})"
+            examples_text += f"\n    Correct label: {pattern.actual_label}\n"
+            if ex.llm_reasoning:
+                examples_text += f"    Model reasoning: {ex.llm_reasoning[:150]}\n"
 
         prompt = (
-            f"An annotation system confuses \"{pattern.predicted_label}\" with "
+            f"You are helping improve annotation guidelines. The system's LLM "
+            f"annotator keeps confusing \"{pattern.predicted_label}\" with "
             f"\"{pattern.actual_label}\" ({pattern.count} times).\n\n"
-            f"Root cause: {root_cause}\n\n"
-            f"Current annotation prompt (excerpt):\n"
-            f"---\n{current_prompt[:1000]}\n---\n\n"
-            f"Suggest a concise guideline (1-2 sentences) to add to the prompt "
-            f"that would help disambiguate \"{pattern.predicted_label}\" from "
-            f"\"{pattern.actual_label}\".\n\n"
-            f"Respond with JSON:\n"
-            f'{{"suggestion": "<your guideline>"}}'
+            f"## Confused Examples\n{examples_text}\n"
+            f"## Current Prompt\n{current_prompt[:1500]}\n\n"
+            f"## Task\n"
+            f"Write a specific, actionable guideline (1-2 sentences) that would "
+            f"help the annotator correctly distinguish \"{pattern.actual_label}\" "
+            f"from \"{pattern.predicted_label}\". The guideline should:\n"
+            f"- Reference concrete features (word choice, tone, context) "
+            f"that differentiate the two labels\n"
+            f"- Be specific enough to apply to the examples above\n"
+            f"- NOT repeat what the current prompt already says\n\n"
+            f"Respond with JSON: {{\"suggestion\": \"<your guideline>\"}}"
         )
 
         try:
@@ -305,6 +320,186 @@ class ConfusionAnalyzer:
             logger.warning(f"Guideline suggestion failed: {e}")
             return None
 
+    def generate_guidelines_rewrite(
+        self,
+        patterns: List[ConfusionPattern],
+        current_prompt: str,
+    ) -> Optional[List[str]]:
+        """Generate a complete, non-redundant set of guidelines addressing all confusion patterns.
+
+        Instead of generating one rule at a time (which leads to contradictions),
+        this method asks the LLM to produce a coherent set of rules that replaces
+        the existing guidelines section entirely.
+
+        Args:
+            patterns: List of confusion patterns to address (top N by count).
+            current_prompt: The full current annotation prompt.
+
+        Returns:
+            List of guideline strings, or None if generation failed.
+        """
+        endpoint = self._get_revision_endpoint()
+        if endpoint is None:
+            return None
+
+        # Extract existing guidelines from prompt
+        import re as re_mod
+        existing_match = re_mod.search(
+            r'## (?:Refinement |Annotation )?Guidelines\s*\n(.*)',
+            current_prompt, re_mod.DOTALL
+        )
+        existing_guidelines = existing_match.group(1).strip() if existing_match else "None yet"
+
+        # Format confusion patterns with examples
+        patterns_text = ""
+        for i, pattern in enumerate(patterns[:8]):
+            patterns_text += (
+                f"\n{i+1}. Model predicts \"{pattern.predicted_label}\" "
+                f"but correct label is \"{pattern.actual_label}\" "
+                f"({pattern.count} times)\n"
+            )
+            for ex in pattern.examples[:2]:
+                patterns_text += f"   Text: \"{ex.text}\"\n"
+                if ex.llm_reasoning:
+                    patterns_text += f"   Model reasoning: {ex.llm_reasoning[:100]}\n"
+
+        # Extract base prompt (without guidelines section) for context
+        base_prompt = current_prompt
+        if existing_match:
+            base_prompt = current_prompt[:existing_match.start()].strip()
+
+        prompt = (
+            f"You are improving annotation guidelines for a text classification task.\n\n"
+            f"## Base Task\n{base_prompt[:1000]}\n\n"
+            f"## Current Guidelines\n{existing_guidelines[:1500]}\n\n"
+            f"## Top Confusion Patterns\n"
+            f"These are the most frequent errors where the model predicts the wrong label:\n"
+            f"{patterns_text}\n"
+            f"## Instructions\n"
+            f"Write a complete, non-redundant list of 3-8 disambiguation rules.\n"
+            f"Each rule should:\n"
+            f"1. Target a specific confusion pattern listed above\n"
+            f"2. Give concrete criteria (word choice, tone, context) for the correct label\n"
+            f"3. NOT contradict other rules in your list\n\n"
+            f"If an existing guideline addresses a pattern NOT in the confusion list, keep it.\n"
+            f"If an existing guideline is contradicted by the evidence above, replace it.\n"
+            f"If an existing guideline didn't help (pattern still appears), rewrite it more specifically.\n\n"
+            f"Respond with JSON: {{\"guidelines\": [\"rule 1\", \"rule 2\", ...]}}"
+        )
+
+        try:
+            from pydantic import BaseModel
+
+            class GuidelinesResponse(BaseModel):
+                guidelines: List[str] = []
+
+            try:
+                response = endpoint.query(prompt, GuidelinesResponse)
+            except TypeError:
+                response = endpoint.query(prompt)
+
+            data = self._parse_json(response)
+            guidelines = data.get('guidelines', [])
+
+            if guidelines:
+                logger.info(
+                    f"[Focused Edit] Generated {len(guidelines)} guidelines "
+                    f"for {len(patterns)} confusion patterns"
+                )
+                return guidelines
+            else:
+                # Fallback: try to extract from 'suggestion' key or raw text
+                suggestion = data.get('suggestion')
+                if suggestion:
+                    return [suggestion]
+                logger.warning(
+                    f"No guidelines extracted from rewrite response: "
+                    f"{str(response)[:200]}"
+                )
+                return None
+
+        except Exception as e:
+            logger.warning(f"Guidelines rewrite failed: {e}")
+            return None
+
+    def generate_and_critique_guidelines(
+        self,
+        patterns: List[ConfusionPattern],
+        current_prompt: str,
+    ) -> List[str]:
+        """Two-pass guideline generation: generate candidates, then critique and filter.
+
+        Pass 1: Generate one suggestion per confusion pattern.
+        Pass 2: Evaluate all suggestions together for specificity, consistency,
+                and redundancy. Keep only the best ones.
+
+        Args:
+            patterns: Confusion patterns to address.
+            current_prompt: Current annotation prompt.
+
+        Returns:
+            List of approved guideline strings (may be empty).
+        """
+        endpoint = self._get_revision_endpoint()
+        if endpoint is None:
+            return []
+
+        # Pass 1: Generate candidates
+        candidates = []
+        for pattern in patterns[:5]:
+            suggestion = self.suggest_guideline(pattern, current_prompt)
+            if suggestion:
+                candidates.append({
+                    'pattern': f"{pattern.predicted_label} -> {pattern.actual_label} ({pattern.count}x)",
+                    'suggestion': suggestion,
+                })
+
+        if not candidates:
+            return []
+
+        logger.info(f"[Generator-Critic] Generated {len(candidates)} candidates, running critic...")
+
+        # Pass 2: Critic evaluates
+        candidates_text = "\n".join(
+            f"{i+1}. Pattern: {c['pattern']}\n   Suggestion: {c['suggestion']}"
+            for i, c in enumerate(candidates)
+        )
+
+        critic_prompt = (
+            f"You are a quality reviewer for annotation guidelines.\n\n"
+            f"## Current Annotation Prompt\n{current_prompt[:1000]}\n\n"
+            f"## Candidate Guidelines\n{candidates_text}\n\n"
+            f"## Task\n"
+            f"Evaluate each candidate and keep only the best ones. Remove any that are:\n"
+            f"- Too vague (e.g., 'consider the context' without specifying what to look for)\n"
+            f"- Redundant with another candidate (keep the more specific one)\n"
+            f"- Contradicting the base prompt or each other\n\n"
+            f"Respond with JSON: {{\"approved\": [\"guideline 1\", \"guideline 2\", ...]}}"
+        )
+
+        try:
+            from pydantic import BaseModel
+
+            class CriticResponse(BaseModel):
+                approved: List[str] = []
+
+            try:
+                response = endpoint.query(critic_prompt, CriticResponse)
+            except TypeError:
+                response = endpoint.query(critic_prompt)
+
+            data = self._parse_json(response)
+            approved = data.get('approved', [])
+
+            logger.info(
+                f"[Generator-Critic] Critic approved {len(approved)}/{len(candidates)} guidelines"
+            )
+            return approved
+
+        except Exception as e:
+            logger.warning(f"Critic pass failed: {e}, using all candidates")
+            return [c['suggestion'] for c in candidates]
+
     def _get_revision_endpoint(self) -> Optional[Any]:
         """Get or create an AI endpoint for LLM analysis."""
         if self._endpoint is not None:
@@ -319,22 +514,7 @@ class ConfusionAnalyzer:
             )
             for model_config in models:
                 try:
-                    ai_config = {
-                        'model': model_config.model,
-                        'max_tokens': model_config.max_tokens,
-                        'temperature': 0.3,
-                    }
-                    if model_config.api_key:
-                        ai_config['api_key'] = model_config.api_key
-                    if model_config.base_url:
-                        ai_config['base_url'] = model_config.base_url
-                    endpoint_config = {
-                        'ai_support': {
-                            'enabled': True,
-                            'endpoint_type': model_config.endpoint_type,
-                            'ai_config': ai_config,
-                        }
-                    }
+                    endpoint_config = model_config.to_endpoint_config(temperature_override=0.3)
 
                     endpoint = AIEndpointFactory.create_endpoint(endpoint_config)
                     if endpoint:

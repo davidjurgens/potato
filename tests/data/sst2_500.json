@@ -1,0 +1,2502 @@
+[
+  {
+    "id": "sst2_0000",
+    "text": "a great movie ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0001",
+    "text": "entertaining , if somewhat standardized , action ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0002",
+    "text": "even when there are lulls , the emotions seem authentic , ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0003",
+    "text": "a larger-than-life figure ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0004",
+    "text": "nothing special and , until the final act , nothing ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0005",
+    "text": "a journey back to your childhood ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0006",
+    "text": "a film that manages to find greatness in the hue of its drastic iconography ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0007",
+    "text": "much funnier film ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0008",
+    "text": "relies on more than special effects ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0009",
+    "text": "the music makes a nice album , ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0010",
+    "text": "protect your community ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0011",
+    "text": "comic relief ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0012",
+    "text": "this amiable picture talks tough , but it 's all bluster -- in the end it 's as sweet as greenfingers ... ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0013",
+    "text": "hooked on the delicious pulpiness of its lurid fiction . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0014",
+    "text": "stereotypical familial quandaries ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0015",
+    "text": "a sensitive , cultivated treatment of greene 's work as well as a remarkably faithful one . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0016",
+    "text": "for the most part , the film is deadly dull ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0017",
+    "text": "in the most blithe exchanges gives the film its lingering tug ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0018",
+    "text": "educates ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0019",
+    "text": "frankly , it 's pretty stupid . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0020",
+    "text": "that tian 's meticulous talent has not withered during his enforced hiatus ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0021",
+    "text": "it 's the little nuances that perhaps had to escape from director mark romanek 's self-conscious scrutiny to happen , that finally get under your skin ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0022",
+    "text": "good human ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0023",
+    "text": "the premise of `` abandon '' holds promise , ... ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0024",
+    "text": "remains uniquely itself ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0025",
+    "text": "the right to be favorably compared to das boot ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0026",
+    "text": "going at a rapid pace , occasionally using an omniscient voice-over narrator in the manner of french new wave films ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0027",
+    "text": "brazenly misguided project ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0028",
+    "text": "it could be , by its art and heart , a necessary one . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0029",
+    "text": "more attuned to the anarchist maxim that ` the urge to destroy is also a creative urge ' , or more willing to see with their own eyes , will find morrison 's iconoclastic uses of technology to be liberating . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0030",
+    "text": "her real-life persona is so charmless and vacant ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0031",
+    "text": "cliches , painful improbability and murky ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0032",
+    "text": "damned funny ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0033",
+    "text": "is icily brilliant ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0034",
+    "text": "wise-beyond-her-years teen ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0035",
+    "text": "a terrific date movie , whatever your orientation . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0036",
+    "text": "a backseat in his own film ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0037",
+    "text": "michael moore has perfected the art of highly entertaining , self-aggrandizing , politically motivated documentary-making , and he 's got as potent a topic as ever here ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0038",
+    "text": "a summertime look-see ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0039",
+    "text": ", not as gloriously flippant as lock , stock and two smoking barrels ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0040",
+    "text": "between being wickedly funny and just plain wicked ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0041",
+    "text": "wiseman is patient and uncompromising , letting his camera observe and record the lives of women torn apart by a legacy of abuse . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0042",
+    "text": "are great rewards ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0043",
+    "text": "be rewarded with some fine acting ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0044",
+    "text": "so bad it does n't improve upon the experience of staring at a blank screen ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0045",
+    "text": "an unholy mess , ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0046",
+    "text": "cloying messages and irksome characters ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0047",
+    "text": "how the film knows what 's unique and quirky about canadians ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0048",
+    "text": "virtually no understanding ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0049",
+    "text": "of a young woman who knows how to hold the screen ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0050",
+    "text": "of softheaded metaphysical claptrap ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0051",
+    "text": "potentially incredibly twisting mystery ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0052",
+    "text": "feels especially thin stretched over the nearly 80-minute running time . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0053",
+    "text": "be churlish to begrudge anyone for receiving whatever consolation ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0054",
+    "text": "two fatal ailments -- ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0055",
+    "text": ") becomes more specimen than character ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0056",
+    "text": "should be commended for illustrating the merits of fighting hard for something that really matters ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0057",
+    "text": "straightforward , emotionally honest ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0058",
+    "text": "tradition and warmth ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0059",
+    "text": "thrill you , ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0060",
+    "text": "a captivating drama ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0061",
+    "text": "the hard-to-predict and absolutely essential chemistry ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0062",
+    "text": "simply a re-hash of the other seven films ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0063",
+    "text": "one 's imagination will lead when given the opportunity ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0064",
+    "text": "they grow up and you can wait till then ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0065",
+    "text": "a collage of clich\u00e9s and a dim echo of allusions to other films . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0066",
+    "text": "invest such subtlety and warmth in an animatronic bear when the humans are acting like puppets ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0067",
+    "text": "of highly entertaining , self-aggrandizing , politically motivated documentary-making ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0068",
+    "text": "to die for ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0069",
+    "text": "shoplifts shamelessly from farewell-to-innocence movies like the wanderers and a bronx tale ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0070",
+    "text": "employ their quirky and fearless ability to look american angst in the eye and end up laughing ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0071",
+    "text": "'s so sloppily written and cast that you can not believe anyone more central to the creation of bugsy than the caterer ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0072",
+    "text": "is that it stinks ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0073",
+    "text": "bibbidy-bobbidi-bland ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0074",
+    "text": "has none of the pushiness and decibel volume of most contemporary comedies ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0075",
+    "text": "brilliantly ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0076",
+    "text": "faltering ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0077",
+    "text": "unentertaining ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0078",
+    "text": "'s so downbeat and nearly humorless ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0079",
+    "text": "the raunch in favor of gags that rely on the strength of their own cleverness ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0080",
+    "text": "hackneyed ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0081",
+    "text": "'ve been nice if the screenwriters had trusted audiences to understand a complex story , and left off the film 's predictable denouement ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0082",
+    "text": "a deliciously nonsensical comedy about a city coming apart at its seams . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0083",
+    "text": "definitely funny stuff , but it 's more of the ` laughing at ' variety than the ` laughing with ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0084",
+    "text": "of the things costner movies are known for ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0085",
+    "text": "stuffy , full of itself , morally ambiguous and nothing to shout about . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0086",
+    "text": "that plays like a 95-minute commercial for nba properties ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0087",
+    "text": "of true inspiration ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0088",
+    "text": ", the updated dickensian sensibility of writer craig bartlett 's story is appealing . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0089",
+    "text": "inviting ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0090",
+    "text": "with a tighter editorial process and firmer direction this material could work , especially since the actresses in the lead roles are all more than competent ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0091",
+    "text": "a rather tired ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0092",
+    "text": "repetitive arguments , schemes and treachery ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0093",
+    "text": "one of the most high-concept sci fi adventures attempted for the screen ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0094",
+    "text": "is still a deeply moving effort to put a human face on the travail of thousands of vietnamese ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0095",
+    "text": "retread , ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0096",
+    "text": "more chaotic than entertaining ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0097",
+    "text": "thoroughly satisfying entertainment ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0098",
+    "text": "like whether compromise is the death of self ... this orgasm ( wo n't be an ) exceedingly memorable one for most people ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0099",
+    "text": "brussels ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0100",
+    "text": "so much farcical ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0101",
+    "text": "its rough edges ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0102",
+    "text": ", they are pitted against shimmering cinematography that lends the setting the ethereal beauty of an asian landscape painting . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0103",
+    "text": "dramatic substance ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0104",
+    "text": "let-down ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0105",
+    "text": "a moral tale with a twisted sense of humor ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0106",
+    "text": "a smart , provocative drama that does the nearly impossible ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0107",
+    "text": "a kingdom ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0108",
+    "text": "of breathtaking mystery ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0109",
+    "text": "'s just one that could easily wait for your pay per view dollar ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0110",
+    "text": "to sneak out of the theater ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0111",
+    "text": "highly entertaining , self-aggrandizing , politically motivated documentary-making ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0112",
+    "text": "this thing is just garbage . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0113",
+    "text": "... a rather bland affair . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0114",
+    "text": "that it progresses in such a low-key manner that it risks monotony ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0115",
+    "text": "can truly be ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0116",
+    "text": "smart jokes ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0117",
+    "text": "an overly-familiar set ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0118",
+    "text": "should be served an eviction notice at every theater stuck with it . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0119",
+    "text": "a no-holds-barred cinematic ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0120",
+    "text": "frustrates and ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0121",
+    "text": "certainly wo n't be remembered as one of ( witherspoon 's ) better films . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0122",
+    "text": "the girls ' amusing personalities ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0123",
+    "text": "an engaging , formulaic sports drama that carries a charge of genuine excitement ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0124",
+    "text": "kiddie fantasy pablum ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0125",
+    "text": "a gorgeously strange movie , heaven is deeply concerned with morality , but it refuses to spell things out for viewers . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0126",
+    "text": "as a director , eastwood is off his game ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0127",
+    "text": "they presume their audience wo n't sit still for a sociology lesson , however entertainingly presented , so ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0128",
+    "text": "needs more impressionistic ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0129",
+    "text": "provoke introspection in both its characters and its audience ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0130",
+    "text": "have managed to pack it with enough action to satisfy the boom-bam crowd without a huge sacrifice of character and mood ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0131",
+    "text": "female empowerment ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0132",
+    "text": "women torn apart by a legacy of abuse ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0133",
+    "text": "'s muy loco , but no more ridiculous than most of the rest of `` dragonfly . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0134",
+    "text": "of this tacky nonsense ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0135",
+    "text": "much of the action takes place ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0136",
+    "text": "which leaves any true emotional connection or identification frustratingly out of reach ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0137",
+    "text": "nice piece ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0138",
+    "text": "this strenuously unconventional movie ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0139",
+    "text": "cleaner ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0140",
+    "text": "who is a welcome relief from the usual two-dimensional offerings ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0141",
+    "text": "this film is so different from the apple and so striking that it can only encourage us to see samira makhmalbaf as a very distinctive sensibility , working to develop her own film language with conspicuous success . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0142",
+    "text": "a visual delight ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0143",
+    "text": "crossed off the list of ideas for the inevitable future sequels ( hey , do n't shoot the messenger ) ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0144",
+    "text": "excellent performances ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0145",
+    "text": "dirty faces ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0146",
+    "text": "its good qualities are obscured ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0147",
+    "text": "accepting him in the role ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0148",
+    "text": "stunningly ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0149",
+    "text": "learns that believing in something does matter ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0150",
+    "text": "too erotic nor ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0151",
+    "text": "the best ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0152",
+    "text": "in a way that does n't make you feel like a sucker ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0153",
+    "text": "look back at civil disobedience , anti-war movements and the power of strong voices . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0154",
+    "text": "slow pacing ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0155",
+    "text": "blue crush is as predictable as the tides . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0156",
+    "text": "in this tepid genre offering ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0157",
+    "text": "with so much passion ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0158",
+    "text": "standout ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0159",
+    "text": "this stinker ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0160",
+    "text": ", and dramatically moving ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0161",
+    "text": "beloved-major ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0162",
+    "text": "a lot of tooth in roger dodger ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0163",
+    "text": "that everlasting conundrum ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0164",
+    "text": "a natural sense for what works ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0165",
+    "text": "both a beautifully made nature film and a tribute to a woman whose passion for this region and its inhabitants still shines in her quiet blue eyes . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0166",
+    "text": "transparent attempts ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0167",
+    "text": "allows us to be transported into the life of wladyslaw szpilman , who is not only a pianist , but a good human being . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0168",
+    "text": "offers a thoughtful and rewarding glimpse into the sort of heartache everyone ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0169",
+    "text": "one moment ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0170",
+    "text": "the immersive powers ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0171",
+    "text": "quickly wears out its limited welcome ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0172",
+    "text": "truths emerge . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0173",
+    "text": "was n't all that great to begin with ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0174",
+    "text": "to work in the same vein as the brilliance of animal house ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0175",
+    "text": "himself can take credit for most of the movie 's success . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0176",
+    "text": "stupid , infantile , redundant , sloppy , over-the-top , and amateurish . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0177",
+    "text": "a dualistic battle between good and evil ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0178",
+    "text": "of dark humor , gorgeous exterior photography , and a stable-full of solid performances ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0179",
+    "text": "grossest movie ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0180",
+    "text": "teenagers fixating on its body humor and reinforcement of stereotypes ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0181",
+    "text": "those rare films that come by once in a while with flawless amounts of acting , direction , story and pace ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0182",
+    "text": "a tired , unimaginative and derivative variation of that already-shallow genre . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0183",
+    "text": "the coen brothers and ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0184",
+    "text": "gary larson 's far side humor ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0185",
+    "text": "bluff ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0186",
+    "text": "pretty much sucks , but has a funny moment or two . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0187",
+    "text": "material realm ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0188",
+    "text": "no ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0189",
+    "text": "felt and vividly detailed story about newcomers in a strange new world . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0190",
+    "text": "about a horrifying historical event ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0191",
+    "text": "shockers since the evil dead ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0192",
+    "text": "sell many records ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0193",
+    "text": "a thriller without thrills and a mystery devoid of urgent questions . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0194",
+    "text": "everything except someone pulling the pin from a grenade with his teeth ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0195",
+    "text": "ode to unconditional love and compassion garnered from years of seeing it all , a condition only the old are privy to , and ... often misconstrued as weakness ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0196",
+    "text": "a very old-school kind ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0197",
+    "text": "mctiernan 's remake may be lighter on its feet -- the sober-minded original was as graceful as a tap-dancing rhino -- but it is just as boring and as obvious . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0198",
+    "text": ", french director anne fontaine delivers an inspired portrait of male-ridden angst and the emotional blockage that accompanies this human condition ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0199",
+    "text": "crummy , wannabe-hip crime comedy ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0200",
+    "text": "with taking insane liberties and doing the goofiest stuff out of left field ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0201",
+    "text": "tinny self-righteousness ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0202",
+    "text": "this is cruel , misanthropic stuff with only weak claims to surrealism and black comedy . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0203",
+    "text": "has a way of gently swaying back and forth as it cradles its characters , veiling tension beneath otherwise tender movements ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0204",
+    "text": "that the pocket monster movie franchise is nearly ready to keel over ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0205",
+    "text": "more valuable ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0206",
+    "text": "viewers do n't have to worry about being subjected to farts , urine , feces , semen , or any of the other foul substances that have overrun modern-day comedies ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0207",
+    "text": "abused ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0208",
+    "text": "it is interesting to see where one 's imagination will lead when given the opportunity ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0209",
+    "text": ", a movie like ballistic : ecks vs. sever is more of an ordeal than an amusement . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0210",
+    "text": "unexpected blast ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0211",
+    "text": "care what kind of sewage they shovel into their mental gullets to simulate sustenance ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0212",
+    "text": "a compelling dramatic means of addressing a complex situation ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0213",
+    "text": "it , offering fine acting moments and pungent insights ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0214",
+    "text": "familiar but utterly delightful . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0215",
+    "text": "is paced at a speed that is slow to those of us in middle age and deathly slow to any teen . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0216",
+    "text": "the movie knew what to do with him ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0217",
+    "text": "her beaten to a pulp in his dangerous game ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0218",
+    "text": "considerable aplomb ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0219",
+    "text": "is suitable summer entertainment that offers escapism without requiring a great deal of thought ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0220",
+    "text": "stylish and moody ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0221",
+    "text": "scathingly witty ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0222",
+    "text": "`` 13 conversations about one thing '' is an intelligent flick that examines many different ideas from happiness to guilt in an intriguing bit of storytelling . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0223",
+    "text": "'s worth the concentration . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0224",
+    "text": "serious and thoughtful . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0225",
+    "text": "the story has its redundancies ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0226",
+    "text": "it 's one long bore . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0227",
+    "text": "as south park ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0228",
+    "text": "clever credits roll ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0229",
+    "text": "in a well-balanced fashion ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0230",
+    "text": "awfully deadly ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0231",
+    "text": "indulge the fanciful daydreams of janice beard ( eileen walsh ) when her real-life persona is so charmless and vacant ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0232",
+    "text": "it just seems manufactured to me and artificial ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0233",
+    "text": "and more entertaining , too . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0234",
+    "text": "thriller as lazy ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0235",
+    "text": "you 'll leave the theater wondering why these people mattered ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0236",
+    "text": "super - ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0237",
+    "text": "be shallow ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0238",
+    "text": "leather ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0239",
+    "text": "the direction is intelligently accomplished ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0240",
+    "text": "those who do ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0241",
+    "text": "'s tough to tell which is in more abundant supply in this woefully hackneyed movie , directed by scott kalvert , about street gangs and turf wars in 1958 brooklyn -- stale cliches , gratuitous violence , or empty machismo . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0242",
+    "text": "glorious ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0243",
+    "text": "technical achievement ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0244",
+    "text": "a captivating and intimate study about dying and loving ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0245",
+    "text": "a few tasty morsels ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0246",
+    "text": "these two literary figures , and even the times ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0247",
+    "text": "just does n't work ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0248",
+    "text": "will warm your heart ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0249",
+    "text": "super troopers suffers because it does n't have enough vices to merit its 103-minute length . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0250",
+    "text": "raffish charm ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0251",
+    "text": "'re at the right film . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0252",
+    "text": "film ' in the worst sense of the expression ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0253",
+    "text": "decidedly flimsier with its many out-sized , out of character and logically porous action set pieces ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0254",
+    "text": "in fact , it 's quite fun in places . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0255",
+    "text": "his generation 's ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0256",
+    "text": "in a thriller , and the performances ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0257",
+    "text": "succeed in really rattling the viewer ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0258",
+    "text": "'s hard to imagine any recent film , independent or otherwise , that makes as much of a mess as this one ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0259",
+    "text": "as a war tribute is disgusting to begin with ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0260",
+    "text": "trudge out of the theater feeling ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0261",
+    "text": "you 're rooting for the film to hurry up and get to its subjects ' deaths just so the documentary will be over ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0262",
+    "text": "the film is , arguably , the most accomplished work to date from hong kong 's versatile stanley kwan . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0263",
+    "text": "the story has its redundancies , and the young actors , not very experienced , are sometimes inexpressive . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0264",
+    "text": "the sort for those moviegoers who complain that ` they do n't make movies like they used to anymore ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0265",
+    "text": ", this is more appetizing than a side dish of asparagus . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0266",
+    "text": "had all its vital essence scooped out and discarded ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0267",
+    "text": "to being the barn-burningly bad movie it promised it would be ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0268",
+    "text": "is lightweight filmmaking , to be sure ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0269",
+    "text": "across as lame and sophomoric ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0270",
+    "text": "does a great combination act ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0271",
+    "text": "wholesome fantasy ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0272",
+    "text": "and well-made entertainment ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0273",
+    "text": "of a respectable summer blockbuster ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0274",
+    "text": "that it no longer recognizes the needs of moviegoers for real characters and compelling plots ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0275",
+    "text": "abandon ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0276",
+    "text": "cares ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0277",
+    "text": "this is a very funny , heartwarming film . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0278",
+    "text": "just slopped ` em together here ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0279",
+    "text": "barker movie ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0280",
+    "text": "whimsicality , narrative discipline and serious improvisation ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0281",
+    "text": "attractive men ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0282",
+    "text": "all-night ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0283",
+    "text": "pays off , as does its sensitive handling of some delicate subject matter ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0284",
+    "text": "the point of nausea ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0285",
+    "text": "impenetrable and insufferable ball ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0286",
+    "text": "have failed ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0287",
+    "text": "some of the most inventive ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0288",
+    "text": "an unbelievably stupid film , though occasionally fun enough to make you forget its absurdity . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0289",
+    "text": "only prove that ` zany ' does n't necessarily mean ` funny ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0290",
+    "text": "smacks of exhibitionism ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0291",
+    "text": "to find better entertainment ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0292",
+    "text": "you wrong on both counts ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0293",
+    "text": "caddyshack ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0294",
+    "text": "a canny crowd pleaser ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0295",
+    "text": "me no lika da accents so good ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0296",
+    "text": "keen eye , sweet spirit and good taste ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0297",
+    "text": "ugly behavior ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0298",
+    "text": "without beauty or humor ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0299",
+    "text": "you 'll find yourself wishing that you and they were in another movie . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0300",
+    "text": "if allen , at 66 , has stopped challenging himself ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0301",
+    "text": "which is worth seeing ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0302",
+    "text": "gentle , touching story ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0303",
+    "text": "overwritten ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0304",
+    "text": "audacious-impossible yet compelling ... ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0305",
+    "text": "appalling as any ` comedy ' ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0306",
+    "text": "a legacy ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0307",
+    "text": "wrong with this increasingly pervasive aspect of gay culture ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0308",
+    "text": "is an intelligent flick that examines many different ideas from happiness to guilt in an intriguing bit of storytelling ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0309",
+    "text": "acted and directed ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0310",
+    "text": "... bibbidy-bobbidi-bland . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0311",
+    "text": "the film never recovers from the clumsy clich\u00e9 of the ugly american abroad , and the too-frosty exterior ms. paltrow employs to authenticate her british persona is another liability . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0312",
+    "text": "smart comedy ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0313",
+    "text": "compelling mix ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0314",
+    "text": "left me feeling refreshed and hopeful ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0315",
+    "text": "for its true-to-life characters , its sensitive acting , its unadorned view of rural life and the subtle direction of first-timer hilary birmingham ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0316",
+    "text": "a smart new comedy ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0317",
+    "text": "has a certain ghoulish fascination , and generates a fair amount of b-movie excitement . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0318",
+    "text": "who opts to overlook this goofily endearing and well-lensed gorefest ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0319",
+    "text": "naqoyqatsi ' is banal in its message and the choice of material to convey it . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0320",
+    "text": "splendid-looking ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0321",
+    "text": "certainly not a good movie , but it was n't horrible either . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0322",
+    "text": "notable for its sheer audacity and openness ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0323",
+    "text": "somber , absurd , and , finally , ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0324",
+    "text": "to perfect use in the breathtakingly beautiful outer-space documentary space station 3d ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0325",
+    "text": "schneider 's performance is so fine ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0326",
+    "text": "with a smile on your face and a grumble in your stomach ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0327",
+    "text": "shreve 's graceful dual narrative gets clunky on the screen , and we keep getting torn away from the compelling historical tale to a less-compelling soap opera . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0328",
+    "text": "the accidental spy is a solid action pic that returns the martial arts master to top form ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0329",
+    "text": "the courage of its convictions ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0330",
+    "text": "make love a joy to behold . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0331",
+    "text": "cinema 's directorial giants ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0332",
+    "text": "surprise us with plot twists ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0333",
+    "text": "a stable-full of solid performances ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0334",
+    "text": "with cheapo animation ( like saturday morning tv in the '60s ) , a complex sword-and-sorcery plot and characters who all have big round eyes and japanese names ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0335",
+    "text": "of intergalactic friendship ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0336",
+    "text": "across its indulgent two-hour-and-fifteen-minute length ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0337",
+    "text": "the hours represents two of those well spent ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0338",
+    "text": "the plot weaves us into a complex web . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0339",
+    "text": "is instead a cheap clich\u00e9 ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0340",
+    "text": "cast the magnificent jackie chan in a movie full of stunt doubles and special effects ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0341",
+    "text": "does n't end up being very inspiring or insightful ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0342",
+    "text": "shows excess in business and pleasure , ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0343",
+    "text": "is long on ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0344",
+    "text": "becomes an exercise in trying to predict when a preordained `` big moment '' will occur and not `` if ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0345",
+    "text": "is fascinating ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0346",
+    "text": "have been worth cheering as a breakthrough ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0347",
+    "text": "win you over ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0348",
+    "text": "simpler , leaner ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0349",
+    "text": "a successful one ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0350",
+    "text": "the year 's greatest adventure , ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0351",
+    "text": "its story about a young chinese woman , ah na , who has come to new york city to replace past tragedy with the american dream is one that any art-house moviegoer is likely to find compelling . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0352",
+    "text": "awe and affection -- and a strange urge to get on a board and , uh , shred , dude ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0353",
+    "text": "in the process of trimming the movie to an expeditious 84 minutes , director roger kumble seems to have dumped a whole lot of plot in favor of ... outrageous gags . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0354",
+    "text": "while reaffirming washington as possibly the best actor working in movies today ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0355",
+    "text": "in an independent film of satiric fire and emotional turmoil ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0356",
+    "text": "equally spoofs and celebrates the more outre aspects of ` black culture ' and the dorkier aspects of ` white culture , ' even as it points out how inseparable the two are . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0357",
+    "text": "starts off with a 1950 's doris day feel ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0358",
+    "text": "oppressively heavy ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0359",
+    "text": "is hardly a masterpiece ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0360",
+    "text": "seems impossible that an epic four-hour indian musical about a cricket game could be this good ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0361",
+    "text": "takes a great film and turns it into a mundane soap opera ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0362",
+    "text": "give shapiro , goldman , and bolado credit for good intentions , but there 's nothing here that they could n't have done in half an hour ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0363",
+    "text": "an all-time low for kevin costner ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0364",
+    "text": ", its true colors come out in various wet t-shirt and shower scenes . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0365",
+    "text": ", in the simple telling , proves simultaneously harrowing and uplifting ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0366",
+    "text": "'s not one decent performance from the cast and not one clever line of dialogue ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0367",
+    "text": "'ve seen some bad singer-turned actors ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0368",
+    "text": "wo n't hold up over the long haul ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0369",
+    "text": "rubbo 's dumbed-down tactics ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0370",
+    "text": "evokes a palpable sense ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0371",
+    "text": "resourceful ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0372",
+    "text": "kung pow seems like some futile concoction that was developed hastily after oedekerk and his fellow moviemakers got through crashing a college keg party ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0373",
+    "text": "stilted ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0374",
+    "text": "gifted korean american stand-up ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0375",
+    "text": "not for their acting chops , but for their looks ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0376",
+    "text": "a remarkable amount of material in the film 's short 90 minutes ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0377",
+    "text": ", unassuming , subordinate ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0378",
+    "text": "with an unflappable '50s dignity somewhere between jane wyman and june cleaver ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0379",
+    "text": "the death of self ... this orgasm ( wo n't be an ) ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0380",
+    "text": "the movie is amateurish ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0381",
+    "text": "writer and director otar iosseliani 's pleasant tale about a factory worker who escapes for a holiday in venice ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0382",
+    "text": "ai n't art ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0383",
+    "text": "watch barbershop again if you 're in need of a cube fix ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0384",
+    "text": "who willingly walk into the nightmare of war not only to record the events for posterity , but to help us ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0385",
+    "text": "if you find comfort in familiarity ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0386",
+    "text": "the film just might turn on many people to opera , in general , an art form at once visceral and spiritual , wonderfully vulgar and sublimely lofty -- and as emotionally grand as life . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0387",
+    "text": "adrift , bentley and hudson stare and sniffle , respectively , as ledger attempts , in vain , to prove that movie-star intensity can overcome bad hair design . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0388",
+    "text": "fluidity and sense ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0389",
+    "text": "the inherent absurdity of ganesh 's rise ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0390",
+    "text": "even that 's too committed . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0391",
+    "text": "makes you care about music you may not have heard before ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0392",
+    "text": ", signs is a tribute to shyamalan 's gifts , which are such that we 'll keep watching the skies for his next project . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0393",
+    "text": "be forewarned , if you 're depressed about anything before watching this film , you may just end up trying to drown yourself in a lake afterwards . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0394",
+    "text": "of sweet-and-sour insider movie that film buffs will eat up like so much gelati ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0395",
+    "text": "a vivid , spicy footnote to history , and a movie that grips and holds you in rapt attention from start to finish . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0396",
+    "text": "classy ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0397",
+    "text": "is a movie so insecure about its capacity ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0398",
+    "text": "pale successor ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0399",
+    "text": "a beautifully ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0400",
+    "text": "a corn dog ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0401",
+    "text": "best about ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0402",
+    "text": "undernourished and ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0403",
+    "text": "more likely ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0404",
+    "text": "meaningless , vapid and devoid ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0405",
+    "text": "like a living-room war of the worlds , gaining most of its unsettling force from the suggested and the unknown ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0406",
+    "text": "the same sledgehammer appeal as pokemon videos ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0407",
+    "text": "heartfelt , mesmerizing king lear ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0408",
+    "text": "love , family and ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0409",
+    "text": "starts off promisingly but then proceeds to flop ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0410",
+    "text": "inept , tedious ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0411",
+    "text": "this dog of a movie ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0412",
+    "text": "a much better documentary -- more revealing , more emotional and more surprising -- than its pedestrian english title would have you believe . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0413",
+    "text": "as sci-fi generic ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0414",
+    "text": "ravishing ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0415",
+    "text": "the similarly ill-timed antitrust ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0416",
+    "text": "indignant ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0417",
+    "text": "gorgeous locales ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0418",
+    "text": "'s as entertaining as it is instructive ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0419",
+    "text": "this likable movie ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0420",
+    "text": "a puritanical brand of christianity ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0421",
+    "text": "edgy thriller ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0422",
+    "text": "the triumph ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0423",
+    "text": "a horrible movie ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0424",
+    "text": "'s something vital about the movie ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0425",
+    "text": "is n't this painfully forced , false and fabricated ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0426",
+    "text": "powerfully drawn toward the light -- the light of the exit sign ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0427",
+    "text": ", it has a genuine dramatic impact ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0428",
+    "text": "a vibrant whirlwind of love , family and all that goes with it ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0429",
+    "text": "an allegedly inspiring and easily marketable flick ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0430",
+    "text": "go down as the worst -- and only -- killer website movie of this or any other year ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0431",
+    "text": "some episodes that rival vintage looney tunes for the most creative mayhem in a brief amount of time ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0432",
+    "text": "a well-deserved reputation ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0433",
+    "text": "that not only blockbusters pollute the summer movie pool ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0434",
+    "text": "wonderland adventure , a stalker thriller , and ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0435",
+    "text": "flat-out amusing , sometimes endearing and ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0436",
+    "text": "as plain and pedestrian as catsup -- ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0437",
+    "text": "it is nonjudgmental , and makes clear that a prostitute can be as lonely and needy as any of the clients ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0438",
+    "text": "does n't live up to material ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0439",
+    "text": "the artsy and often pointless visuals ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0440",
+    "text": "has never been more charming than in about a boy ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0441",
+    "text": "many ways the perfect festival film : ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0442",
+    "text": "reworks ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0443",
+    "text": "guaranteed to put a lump in your throat while reaffirming washington as possibly the best actor working in movies today ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0444",
+    "text": "careless and ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0445",
+    "text": "there is enough originality in ` life ' to distance it from the pack of paint-by-number romantic comedies that so often end up on cinema screens . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0446",
+    "text": "and wonderful creatures ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0447",
+    "text": "the film fearlessly gets under the skin of the people involved ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0448",
+    "text": "is hampered by its predictable plot and paper-thin supporting characters . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0449",
+    "text": "an open wound ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0450",
+    "text": "intrepid in exploring an attraction that crosses sexual identity ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0451",
+    "text": "a sensational , real-life 19th-century crime as a metaphor ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0452",
+    "text": "to be a boy truly in love with a girl ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0453",
+    "text": "an unremittingly ugly movie to look at , listen to , and think about , it is quite possibly the sturdiest example yet of why the dv revolution has cheapened the artistry of making a film . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0454",
+    "text": "intriguing and stylish ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0455",
+    "text": "little revision works ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0456",
+    "text": ", but it at least calls attention to a problem hollywood too long has ignored . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0457",
+    "text": "the horror fan ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0458",
+    "text": "contrived and predictable ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0459",
+    "text": "piffle ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0460",
+    "text": "it possible for the viewer to doze off for a few minutes or make several runs to the concession stand and/or restroom and not feel as if he or she has missed anything ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0461",
+    "text": "a dark comedy that goes for sick and demented humor simply to do so . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0462",
+    "text": "`` besotted '' is misbegotten ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0463",
+    "text": "spite of it ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0464",
+    "text": "really , really good things ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0465",
+    "text": "the last kiss will probably never achieve the popularity of my big fat greek wedding , but its provocative central wedding sequence has far more impact . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0466",
+    "text": "pushes too hard to make this a comedy or serious drama ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0467",
+    "text": "the animated sequences are well done and perfectly constructed to convey a sense of childhood imagination and creating adventure out of angst . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0468",
+    "text": "a movie can be mindless without being the peak of all things insipid ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0469",
+    "text": ", loud , painful , obnoxious ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0470",
+    "text": "presume ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0471",
+    "text": "snappy ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0472",
+    "text": "the thornier aspects ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0473",
+    "text": "only one of the best gay love stories ever made ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0474",
+    "text": "playfully profound ... and crazier than michael jackson on the top floor of a skyscraper nursery surrounded by open windows . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0475",
+    "text": "interesting to witness the conflict from the palestinian side ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0476",
+    "text": "who are alternately touching and funny ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0477",
+    "text": "the story is just too clich\u00e9d and too often strains credulity ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0478",
+    "text": "hollywood horror ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0479",
+    "text": "barlow ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0480",
+    "text": "beautifully crafted and cooly unsettling ... ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0481",
+    "text": "the two leads delivering oscar-caliber performances ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0482",
+    "text": "more and more frustrated and detached as vincent became more and more abhorrent ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0483",
+    "text": "ill-conceived and expensive project ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0484",
+    "text": "at least now we 've got something pretty damn close ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0485",
+    "text": "respectable summer blockbuster ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0486",
+    "text": "to the concession stand and/or restroom ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0487",
+    "text": "going at a rapid pace , ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0488",
+    "text": ", this thriller is too loud and thoroughly overbearing ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0489",
+    "text": "also intriguing and honorable , ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0490",
+    "text": "make it unexpectedly rewarding ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0491",
+    "text": "an insultingly inept and artificial examination of grief and its impacts upon the relationships of the survivors ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0492",
+    "text": "is hardly a perverse , dangerous libertine and agitator -- which would have made for better drama . ",
+    "gold_label": "negative"
+  },
+  {
+    "id": "sst2_0493",
+    "text": "twohy 's a good yarn-spinner ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0494",
+    "text": "derrida is an undeniably fascinating and playful fellow . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0495",
+    "text": "lovingly photographed in the manner of a golden book sprung to life , stuart little 2 manages sweetness largely without stickiness . ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0496",
+    "text": "as intelligent ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0497",
+    "text": "in 1958 brooklyn ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0498",
+    "text": "edits ",
+    "gold_label": "positive"
+  },
+  {
+    "id": "sst2_0499",
+    "text": "supremely hopeful cautionary tale ",
+    "gold_label": "positive"
+  }
+]

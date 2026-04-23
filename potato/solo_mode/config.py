@@ -22,24 +22,49 @@ class ModelConfig:
     max_tokens: int = 1000
     temperature: float = 0.1
     think: Optional[bool] = None  # None = use endpoint default, True/False = override
+    timeout: int = 60  # Request timeout in seconds (increase for thinking models)
 
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for AI endpoint factory."""
-        result = {
-            'endpoint_type': self.endpoint_type,
-            'ai_config': {
-                'model': self.model,
-                'max_tokens': self.max_tokens,
-                'temperature': self.temperature,
-            }
+    def to_endpoint_config(self, temperature_override: Optional[float] = None) -> Dict[str, Any]:
+        """Build the full endpoint config dict for AIEndpointFactory.
+
+        This is the single place that builds the config dict passed to
+        AIEndpointFactory.create_endpoint(). All solo mode components
+        should use this instead of manually constructing the dict.
+
+        Args:
+            temperature_override: Override the model's default temperature.
+
+        Returns:
+            Dict ready for AIEndpointFactory.create_endpoint()
+        """
+        ai_config = {
+            'model': self.model,
+            'max_tokens': self.max_tokens,
+            'temperature': temperature_override if temperature_override is not None else self.temperature,
         }
         if self.api_key:
-            result['ai_config']['api_key'] = self.api_key
+            ai_config['api_key'] = self.api_key
         if self.base_url:
-            result['ai_config']['base_url'] = self.base_url
+            ai_config['base_url'] = self.base_url
         if self.think is not None:
-            result['ai_config']['think'] = self.think
-        return result
+            ai_config['think'] = self.think
+        if self.timeout != 60:
+            ai_config['timeout'] = self.timeout
+        return {
+            'ai_support': {
+                'enabled': True,
+                'endpoint_type': self.endpoint_type,
+                'ai_config': ai_config,
+            }
+        }
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for AI endpoint factory (legacy format)."""
+        ec = self.to_endpoint_config()
+        return {
+            'endpoint_type': self.endpoint_type,
+            'ai_config': ec['ai_support']['ai_config'],
+        }
 
 
 @dataclass
@@ -157,6 +182,7 @@ class RefinementLoopConfig:
     max_cycles: int = 5                 # Maximum refinement cycles before alerting
     patience: int = 2                   # Cycles without improvement before stopping
     auto_apply_suggestions: bool = False  # Auto-apply LLM guideline suggestions
+    refinement_strategy: str = "focused_edit"  # "focused_edit", "generator_critic", "append" (legacy)
 
 
 @dataclass
@@ -297,6 +323,7 @@ def _parse_model_config(model_data: Dict[str, Any]) -> ModelConfig:
         max_tokens=model_data.get('max_tokens', 1000),
         temperature=model_data.get('temperature', 0.1),
         think=model_data.get('think'),  # None = endpoint default, True/False = override
+        timeout=model_data.get('timeout', 60),
     )
 
 
@@ -432,6 +459,7 @@ def parse_solo_mode_config(config_data: Dict[str, Any]) -> SoloModeConfig:
         max_cycles=rl_data.get('max_cycles', 5),
         patience=rl_data.get('patience', 2),
         auto_apply_suggestions=rl_data.get('auto_apply_suggestions', False),
+        refinement_strategy=rl_data.get('refinement_strategy', 'focused_edit'),
     )
 
     # Parse confusion analysis config

@@ -652,6 +652,8 @@ class SoloModeManager:
         """Remove low-confidence instances from llm_labeled_ids so they
         re-enter the labeling queue with the improved prompt.
 
+        Records old predictions for before/after accuracy comparison.
+
         Args:
             old_prompt_version: The prompt version whose labels to reconsider
 
@@ -665,7 +667,28 @@ class SoloModeManager:
         )
 
         with self._lock:
+            # Track old predictions for before/after comparison
+            if not hasattr(self, '_reannotation_history'):
+                self._reannotation_history: List[Dict[str, Any]] = []
+
             for instance_id in candidates:
+                # Record old prediction before re-annotation
+                old_pred = None
+                for schema_preds in self.predictions.get(instance_id, {}).values():
+                    old_pred = {
+                        'instance_id': instance_id,
+                        'old_label': schema_preds.predicted_label,
+                        'old_confidence': schema_preds.confidence_score,
+                        'old_prompt_version': schema_preds.prompt_version,
+                        'new_prompt_version': self.current_prompt_version,
+                        'had_human_label': schema_preds.human_label is not None,
+                        'human_label': schema_preds.human_label,
+                        'old_agreed': schema_preds.agrees_with_human,
+                    }
+                    break
+                if old_pred:
+                    self._reannotation_history.append(old_pred)
+
                 # Remove from llm_labeled_ids so it can be re-labeled
                 self.llm_labeled_ids.discard(instance_id)
                 # Track re-annotation count
@@ -676,8 +699,67 @@ class SoloModeManager:
             if candidates:
                 self._save_state()
 
-        logger.info(f"Queued {len(candidates)} instances for re-annotation")
+        logger.info(f"[Re-annotation] Queued {len(candidates)} instances for re-annotation")
         return len(candidates)
+
+    def get_reannotation_report(self) -> Dict[str, Any]:
+        """Get a before/after accuracy report for re-annotated instances.
+
+        Returns:
+            Dict with re-annotation statistics and per-instance comparisons.
+        """
+        if not hasattr(self, '_reannotation_history'):
+            return {'total': 0, 'comparisons': []}
+
+        comparisons = []
+        improved = 0
+        worsened = 0
+        unchanged = 0
+
+        with self._lock:
+            for record in self._reannotation_history:
+                iid = record['instance_id']
+                new_pred = None
+                for schema_preds in self.predictions.get(iid, {}).values():
+                    if schema_preds.prompt_version > record['old_prompt_version']:
+                        new_pred = schema_preds
+                        break
+
+                if new_pred is None:
+                    continue  # Not yet re-annotated
+
+                comp = {
+                    'instance_id': iid,
+                    'old_label': record['old_label'],
+                    'new_label': new_pred.predicted_label,
+                    'label_changed': record['old_label'] != new_pred.predicted_label,
+                    'old_confidence': record['old_confidence'],
+                    'new_confidence': new_pred.confidence_score,
+                    'human_label': record['human_label'],
+                }
+
+                if record['human_label'] is not None:
+                    old_correct = str(record['old_label']) == str(record['human_label'])
+                    new_correct = str(new_pred.predicted_label) == str(record['human_label'])
+                    comp['old_correct'] = old_correct
+                    comp['new_correct'] = new_correct
+                    if new_correct and not old_correct:
+                        improved += 1
+                    elif old_correct and not new_correct:
+                        worsened += 1
+                    else:
+                        unchanged += 1
+
+                comparisons.append(comp)
+
+        return {
+            'total_queued': len(self._reannotation_history),
+            'total_completed': len(comparisons),
+            'improved': improved,
+            'worsened': worsened,
+            'unchanged': unchanged,
+            'comparisons': comparisons,
+        }
 
     # === Refinement Loop ===
 
@@ -764,13 +846,44 @@ class SoloModeManager:
 
         # Define how to apply suggestions
         def apply_suggestions(suggestions: List[str]) -> Dict[str, Any]:
+            import re as re_mod
             current_prompt = self.get_current_prompt_text()
-            # Build a combined guidelines section from suggestions
             rules_section = "\n".join(f"- {s}" for s in suggestions)
-            updated = current_prompt + (
-                f"\n\n## Refinement Guidelines\n\n"
-                f"Based on observed confusion patterns:\n{rules_section}\n"
-            )
+
+            strategy = self.config.refinement_loop.refinement_strategy
+
+            if strategy == "append":
+                # Legacy: just append (can cause contradictions)
+                guidelines_block = (
+                    "## Refinement Guidelines\n\n"
+                    "Based on observed confusion patterns:\n"
+                )
+                if guidelines_block in current_prompt:
+                    updated = current_prompt.rstrip() + "\n" + rules_section + "\n"
+                else:
+                    updated = current_prompt + f"\n\n{guidelines_block}{rules_section}\n"
+            else:
+                # focused_edit and generator_critic: replace the entire
+                # guidelines section with the new set of rules
+                guidelines_section = (
+                    "## Annotation Guidelines\n\n"
+                    "When distinguishing between similar labels, follow these rules:\n"
+                    f"{rules_section}\n"
+                )
+                # Replace existing guidelines section or append if first time
+                if re_mod.search(
+                    r'## (?:Refinement |Annotation )?Guidelines',
+                    current_prompt
+                ):
+                    updated = re_mod.sub(
+                        r'## (?:Refinement |Annotation )?Guidelines.*',
+                        guidelines_section,
+                        current_prompt,
+                        flags=re_mod.DOTALL,
+                    )
+                else:
+                    updated = current_prompt + "\n\n" + guidelines_section
+
             old_version = self.current_prompt_version
             new_pv = self.create_prompt_version(
                 updated,
@@ -785,18 +898,57 @@ class SoloModeManager:
                 'categories_incorporated': len(suggestions),
                 'reannotation_count': 0,
             }
-            # Trigger re-annotation of low-confidence instances
-            if self.config.edge_case_rules.reannotation_enabled:
-                reannotated = self._trigger_reannotation(old_version)
-                result['reannotation_count'] = reannotated
+            # Re-annotate low-confidence instances with the improved prompt
+            # to verify the refinement actually helps
+            reannotated = self._trigger_reannotation(old_version)
+            result['reannotation_count'] = reannotated
+            if reannotated > 0:
+                logger.info(
+                    f"[Refinement] Re-annotating {reannotated} low-confidence "
+                    f"instances with new prompt v{new_pv.version}"
+                )
 
             return result
 
-        # Define suggestion generator
+        # Generate suggestions based on strategy
         analyzer = self.confusion_analyzer
+        strategy = self.config.refinement_loop.refinement_strategy
+        current_prompt_text = self.get_current_prompt_text()
 
-        def generate_suggestion(pattern, current_prompt):
-            return analyzer.suggest_guideline(pattern, current_prompt)
+        if strategy == "focused_edit":
+            # Single LLM call produces all guidelines as a coherent set
+            batch_guidelines = analyzer.generate_guidelines_rewrite(
+                patterns, current_prompt_text
+            )
+            # Pre-populate a queue so generate_suggestion just pops items
+            guideline_queue = list(batch_guidelines) if batch_guidelines else []
+            logger.info(
+                f"[Refinement] Focused edit generated {len(guideline_queue)} guidelines"
+            )
+
+        elif strategy == "generator_critic":
+            # Two-pass: generate candidates then critic-filter
+            batch_guidelines = analyzer.generate_and_critique_guidelines(
+                patterns, current_prompt_text
+            )
+            guideline_queue = list(batch_guidelines) if batch_guidelines else []
+            logger.info(
+                f"[Refinement] Generator-critic produced {len(guideline_queue)} approved guidelines"
+            )
+
+        else:
+            guideline_queue = None  # Will use per-pattern generation
+
+        if guideline_queue is not None:
+            # Batch strategies: feed pre-generated guidelines one at a time
+            def generate_suggestion(pattern, current_prompt):
+                if guideline_queue:
+                    return guideline_queue.pop(0)
+                return None
+        else:
+            # "append" or unknown: one suggestion per pattern (legacy)
+            def generate_suggestion(pattern, current_prompt):
+                return analyzer.suggest_guideline(pattern, current_prompt)
 
         # Run the cycle
         cycle = loop.run_cycle(
@@ -805,7 +957,7 @@ class SoloModeManager:
             confusion_patterns=patterns,
             apply_suggestions_fn=apply_suggestions,
             generate_suggestion_fn=generate_suggestion,
-            current_prompt=self.get_current_prompt_text(),
+            current_prompt=current_prompt_text,
         )
 
         logger.info(

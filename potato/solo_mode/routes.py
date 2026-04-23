@@ -342,7 +342,23 @@ def disagreements():
             parts = disagreement_id.split(':', 1)
             instance_id = parts[0]
             schema_name = parts[1] if len(parts) > 1 else 'default'
-            manager.resolve_disagreement(instance_id, schema_name, resolution, 'human')
+
+            # Resolve "human"/"llm" to the actual label value
+            actual_label = resolution
+            if resolution == 'human':
+                # Use the human's label
+                disagreement = manager.get_disagreement(instance_id)
+                if disagreement:
+                    actual_label = disagreement.get('human_label', resolution)
+            elif resolution == 'llm':
+                # Use the LLM's label
+                pred = manager.get_llm_prediction_for_instance(instance_id)
+                if pred:
+                    actual_label = pred.get('label', resolution)
+
+            manager.resolve_disagreement(
+                instance_id, schema_name, actual_label, resolved_by='human'
+            )
 
             # Check for more disagreements
             pending = manager.get_pending_disagreements()
@@ -1094,6 +1110,14 @@ def api_refinement_trigger():
     except Exception as e:
         logger.error("Refinement trigger failed: %s", traceback.format_exc())
         return jsonify({'error': 'An internal error occurred'}), 500
+
+
+@solo_mode_bp.route('/api/reannotation-report')
+@solo_mode_required
+def api_reannotation_report():
+    """Get before/after accuracy report for re-annotated instances."""
+    manager = get_solo_mode_manager()
+    return jsonify(manager.get_reannotation_report())
 
 
 @solo_mode_bp.route('/api/refinement/reset', methods=['POST'])

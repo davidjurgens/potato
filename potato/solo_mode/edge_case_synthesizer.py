@@ -156,21 +156,7 @@ class EdgeCaseSynthesizer:
 
             for model_config in self.solo_config.revision_models:
                 try:
-                    endpoint_config = {
-                        'ai_support': {
-                            'enabled': True,
-                            'endpoint_type': model_config.endpoint_type,
-                            'ai_config': {
-                                'model': model_config.model,
-                                'max_tokens': model_config.max_tokens,
-                                'temperature': 0.7,  # Higher temperature for diversity
-                            }
-                        }
-                    }
-                    if model_config.api_key:
-                        endpoint_config['ai_support']['ai_config']['api_key'] = model_config.api_key
-                    if model_config.base_url:
-                        endpoint_config['ai_support']['ai_config']['base_url'] = model_config.base_url
+                    endpoint_config = model_config.to_endpoint_config(temperature_override=0.7)
 
                     endpoint = AIEndpointFactory.create_endpoint(endpoint_config)
                     if endpoint:
