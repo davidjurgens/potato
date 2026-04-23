@@ -310,6 +310,7 @@ class SoloModeManager:
                 prompt_getter=self.get_current_prompt_text,
                 result_callback=self._handle_labeling_result,
                 prompt_version_getter=lambda: self.current_prompt_version,
+                examples_getter=self.get_icl_examples,
             )
         return self._llm_labeling_thread
 
@@ -339,6 +340,45 @@ class SoloModeManager:
                 endpoint_factory=LLMLabelingThread.create_endpoint_from_model_config,
             )
         return self._confidence_router
+
+    def get_icl_examples(self, max_per_label: int = 1, max_total: int = 5) -> List[Dict[str, str]]:
+        """Get in-context learning examples for the labeling prompt.
+
+        Selects human-verified examples where human and LLM agreed,
+        preferring diverse labels. Returns a compact list suitable for
+        injection into the labeling prompt.
+
+        Args:
+            max_per_label: Maximum examples per label.
+            max_total: Maximum total examples.
+
+        Returns:
+            List of {"text": "...", "label": "..."} dicts.
+        """
+        with self._lock:
+            by_label: Dict[str, List[Dict[str, str]]] = {}
+            for instance_id in self.human_labeled_ids:
+                if instance_id not in self.predictions:
+                    continue
+                for schema_name, pred in self.predictions[instance_id].items():
+                    if not pred.agrees_with_human or pred.human_label is None:
+                        continue
+                    label = str(pred.human_label)
+                    if label not in by_label:
+                        by_label[label] = []
+                    if len(by_label[label]) < max_per_label:
+                        text = self._get_instance_text(instance_id)
+                        if text:
+                            by_label[label].append({
+                                'text': text[:200],
+                                'label': label,
+                            })
+
+            # Flatten and limit
+            examples = []
+            for label_examples in by_label.values():
+                examples.extend(label_examples)
+            return examples[:max_total]
 
     def _get_labeled_examples_for_optimization(self) -> List[Dict[str, Any]]:
         """Get labeled examples for prompt optimization."""

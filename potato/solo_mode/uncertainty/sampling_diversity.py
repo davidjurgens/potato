@@ -71,6 +71,12 @@ class SamplingDiversityEstimator(UncertaintyEstimator):
                     metadata={'error': 'No valid samples obtained'}
                 )
 
+            logger.info(
+                f"[SamplingDiversity] {instance_id}: "
+                f"{len(sampled_labels)}/{self.num_samples} samples, "
+                f"labels={dict(Counter(sampled_labels))}"
+            )
+
             # Calculate diversity metrics
             label_counts = Counter(sampled_labels)
             total_samples = len(sampled_labels)
@@ -154,8 +160,10 @@ class SamplingDiversityEstimator(UncertaintyEstimator):
 
                     response = endpoint.query(prompt, LabelResponse)
 
-                    # Parse response
-                    if isinstance(response, str):
+                    # Parse response — handle all return types
+                    if isinstance(response, dict):
+                        label = response.get('label', str(response))
+                    elif isinstance(response, str):
                         label = response.strip()
                     elif hasattr(response, 'model_dump'):
                         label = response.model_dump().get('label', str(response))

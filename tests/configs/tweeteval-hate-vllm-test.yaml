@@ -58,5 +58,8 @@ solo_mode:
     minimum_validation_sample: 10
     periodic_review_interval: 50
   uncertainty:
-    strategy: direct_confidence
+    sampling_diversity:
+      num_samples: 5
+      temperature: 1.0
+    strategy: sampling_diversity
 task_dir: ../..
