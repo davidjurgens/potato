@@ -278,13 +278,17 @@ class ConfusionAnalyzer:
             f"## Confused Examples\n{examples_text}\n"
             f"## Current Prompt\n{current_prompt[:1500]}\n\n"
             f"## Task\n"
-            f"Write a specific, actionable guideline (1-2 sentences) that would "
-            f"help the annotator correctly distinguish \"{pattern.actual_label}\" "
-            f"from \"{pattern.predicted_label}\". The guideline should:\n"
-            f"- Reference concrete features (word choice, tone, context) "
-            f"that differentiate the two labels\n"
-            f"- Be specific enough to apply to the examples above\n"
-            f"- NOT repeat what the current prompt already says\n\n"
+            f"Write a GENERAL, actionable guideline (1-2 sentences) to help correctly "
+            f"distinguish \"{pattern.actual_label}\" from \"{pattern.predicted_label}\".\n\n"
+            f"Requirements:\n"
+            f"- Reference GENERAL linguistic features (sentiment polarity, intent, "
+            f"  rhetorical structure, framing) that differentiate the two labels.\n"
+            f"- DO NOT mention specific phrases or quotes from the examples above — "
+            f"  the rule should generalize to unseen cases.\n"
+            f"- DO NOT repeat what the current prompt already says.\n"
+            f"- Focus on the underlying reason the examples were misclassified, not the surface form.\n\n"
+            f"Bad rule (too specific): 'If the text says \"get under your skin\", classify as negative.'\n"
+            f"Good rule (general): 'When the text describes emotional discomfort or unease as a reaction to the content, classify as negative rather than positive.'\n\n"
             f"Respond with JSON: {{\"suggestion\": \"<your guideline>\"}}"
         )
 
@@ -368,23 +372,36 @@ class ConfusionAnalyzer:
         if existing_match:
             base_prompt = current_prompt[:existing_match.start()].strip()
 
+        has_existing = existing_guidelines and existing_guidelines != "None yet"
+
         prompt = (
             f"You are improving annotation guidelines for a text classification task.\n\n"
             f"## Base Task\n{base_prompt[:1000]}\n\n"
-            f"## Current Guidelines\n{existing_guidelines[:1500]}\n\n"
-            f"## Top Confusion Patterns\n"
-            f"These are the most frequent errors where the model predicts the wrong label:\n"
+            f"## Existing Guidelines\n{existing_guidelines[:1500]}\n\n"
+            f"## Current Confusion Patterns\n"
+            f"These are errors the model made WITH the guidelines above in place:\n"
             f"{patterns_text}\n"
             f"## Instructions\n"
-            f"Write a complete, non-redundant list of 3-8 disambiguation rules.\n"
-            f"Each rule should:\n"
-            f"1. Target a specific confusion pattern listed above\n"
-            f"2. Give concrete criteria (word choice, tone, context) for the correct label\n"
-            f"3. NOT contradict other rules in your list\n\n"
-            f"If an existing guideline addresses a pattern NOT in the confusion list, keep it.\n"
-            f"If an existing guideline is contradicted by the evidence above, replace it.\n"
-            f"If an existing guideline didn't help (pattern still appears), rewrite it more specifically.\n\n"
-            f"Respond with JSON: {{\"guidelines\": [\"rule 1\", \"rule 2\", ...]}}"
+            + (
+                "You are REFINING existing guidelines, NOT replacing them. Follow these rules strictly:\n\n"
+                "1. START with the existing guidelines above. KEEP all rules that address patterns NOT in the confusion list.\n"
+                "2. For each confusion pattern, check: is there already a rule addressing this label pair?\n"
+                "   - YES: The existing rule isn't working. REFINE it with more specific criteria — do NOT reverse its direction.\n"
+                "   - NO: ADD a new rule.\n"
+                "3. NEVER flip an existing rule from 'classify X as A' to 'classify X as B' — this creates contradictions.\n"
+                "4. Rules must be GENERAL — do NOT quote specific phrases from the examples. The rule should apply to unseen cases.\n"
+                "5. Output the COMPLETE updated list (existing rules + refinements + new rules).\n"
+                "6. Output at most 8 rules total. If you exceed 8, drop the ones with fewest matching examples.\n\n"
+                if has_existing else
+                "Write 3-8 disambiguation rules. Each rule should:\n"
+                "1. Target a specific confusion pattern above\n"
+                "2. Give GENERAL criteria (sentiment polarity, intent, rhetorical structure, framing)\n"
+                "   — do NOT quote specific phrases from the example texts.\n"
+                "3. NOT contradict other rules in your list\n\n"
+                "Bad (too specific): 'If the text says \"get under your skin\", classify as negative.'\n"
+                "Good (general): 'When the text describes emotional discomfort as a reaction, classify as negative.'\n\n"
+            )
+            + f"Respond with JSON: {{\"guidelines\": [\"rule 1\", \"rule 2\", ...]}}"
         )
 
         try:
@@ -460,21 +477,44 @@ class ConfusionAnalyzer:
         logger.info(f"[Generator-Critic] Generated {len(candidates)} candidates, running critic...")
 
         # Pass 2: Critic evaluates
-        candidates_text = "\n".join(
-            f"{i+1}. Pattern: {c['pattern']}\n   Suggestion: {c['suggestion']}"
-            for i, c in enumerate(candidates)
+        # Format each candidate so the rule text is clearly separated from metadata
+        candidates_text = ""
+        for i, c in enumerate(candidates):
+            candidates_text += (
+                f"\n### Candidate {i+1} (addresses pattern: {c['pattern']})\n"
+                f"RULE TEXT: {c['suggestion']}\n"
+            )
+
+        # Extract existing guidelines for contradiction check
+        import re as re_mod
+        existing_match = re_mod.search(
+            r'## (?:Refinement |Annotation )?Guidelines\s*\n(.*)',
+            current_prompt, re_mod.DOTALL
         )
+        existing_guidelines = existing_match.group(1).strip() if existing_match else ""
 
         critic_prompt = (
-            f"You are a quality reviewer for annotation guidelines.\n\n"
-            f"## Current Annotation Prompt\n{current_prompt[:1000]}\n\n"
-            f"## Candidate Guidelines\n{candidates_text}\n\n"
+            f"You are a quality reviewer for annotation guidelines. Be strict.\n\n"
+            f"## Base Annotation Task\n{current_prompt[:800]}\n\n"
+            + (f"## Existing Guidelines (already in production)\n{existing_guidelines[:800]}\n\n" if existing_guidelines else "")
+            + f"## Candidate Guidelines to Review\n{candidates_text}\n\n"
             f"## Task\n"
-            f"Evaluate each candidate and keep only the best ones. Remove any that are:\n"
-            f"- Too vague (e.g., 'consider the context' without specifying what to look for)\n"
-            f"- Redundant with another candidate (keep the more specific one)\n"
-            f"- Contradicting the base prompt or each other\n\n"
-            f"Respond with JSON: {{\"approved\": [\"guideline 1\", \"guideline 2\", ...]}}"
+            f"Review each candidate. For each candidate you APPROVE, copy its full "
+            f"text verbatim into your response. REJECT any candidate that:\n"
+            f"- Is too vague (e.g., 'consider the context' without specifying what)\n"
+            f"- Is too narrow (cherry-picks a specific phrase like 'lingering tug' instead of a general pattern)\n"
+            f"- Is redundant with another candidate\n"
+            + ("- CONTRADICTS an existing guideline above (flips 'classify as A' to 'classify as B')\n"
+               "- Restates an existing guideline without adding new criteria\n"
+               if existing_guidelines else "")
+            + f"- Mentions specific instance text rather than general features\n\n"
+            f"Prefer general patterns over specific words. Prefer 2-3 strong rules over 5 weak ones.\n"
+            f"If NO candidate is good enough, return an empty list.\n\n"
+            f"CRITICAL: Each entry in 'approved' must be ONLY the RULE TEXT from the candidate "
+            f"(the part after 'RULE TEXT:' above). Do NOT include 'Candidate N', 'Pattern:', or any "
+            f"metadata — just the rule itself. Example:\n"
+            f'{{"approved": ["When the text describes emotional discomfort as a reaction, classify as negative rather than positive."]}}'
+            f"\n\nRespond with JSON: {{\"approved\": [\"<rule text only>\", ...]}}"
         )
 
         try:
@@ -491,10 +531,36 @@ class ConfusionAnalyzer:
             data = self._parse_json(response)
             approved = data.get('approved', [])
 
+            # Clean up metadata prefixes the critic may have copied
+            import re as _re
+            cleaned_approved = []
+            for a in approved:
+                if not isinstance(a, str):
+                    continue
+                # Strip common prefixes: "Candidate N", "Pattern:", "RULE TEXT:", etc.
+                text = a.strip()
+                text = _re.sub(r'^(?:Candidate\s+\d+[^:]*:\s*)?', '', text)
+                text = _re.sub(r'^(?:Pattern:\s*[^(]*\(\d+x\)\s*)?', '', text, flags=_re.IGNORECASE)
+                text = _re.sub(r'^(?:\s*Suggestion:\s*)?', '', text, flags=_re.IGNORECASE)
+                text = _re.sub(r'^(?:\s*RULE TEXT:\s*)?', '', text, flags=_re.IGNORECASE)
+                text = text.strip()
+                if len(text) > 20:
+                    cleaned_approved.append(text)
+
+            # Sanity check: reject malformed output (e.g., just indices like ["1","2"])
+            valid_approved = cleaned_approved
+
+            if len(valid_approved) < len(approved):
+                logger.warning(
+                    f"[Generator-Critic] Critic returned {len(approved)} items but only "
+                    f"{len(valid_approved)} had full guideline text. Falling back to all candidates."
+                )
+                return [c['suggestion'] for c in candidates]
+
             logger.info(
-                f"[Generator-Critic] Critic approved {len(approved)}/{len(candidates)} guidelines"
+                f"[Generator-Critic] Critic approved {len(valid_approved)}/{len(candidates)} guidelines"
             )
-            return approved
+            return valid_approved
 
         except Exception as e:
             logger.warning(f"Critic pass failed: {e}, using all candidates")
