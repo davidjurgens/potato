@@ -50,11 +50,11 @@ solo_mode:
   revision_models:
   - base_url: http://burger.si.umich.edu:8001
     endpoint_type: vllm
-    max_tokens: 7000
+    max_tokens: 1500
     model: Qwen/Qwen3.5-4B
     temperature: 0.3
-    think: true
-    timeout: 180
+    think: false
+    timeout: 60
   state_dir: tests/output/agnews-solo-test/solo_state
   thresholds:
     confidence_low: 0.4
