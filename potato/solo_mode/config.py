@@ -182,7 +182,18 @@ class RefinementLoopConfig:
     max_cycles: int = 5                 # Maximum refinement cycles before alerting
     patience: int = 2                   # Cycles without improvement before stopping
     auto_apply_suggestions: bool = False  # Auto-apply LLM guideline suggestions
-    refinement_strategy: str = "focused_edit"  # "focused_edit", "generator_critic", "append" (legacy)
+    refinement_strategy: str = "focused_edit"  # Legacy or new names supported
+
+    # New framework options (used when strategy is validated_*, principle_icl,
+    # hybrid_dual_track, or legacy_append from the refinement registry)
+    validation_split_ratio: float = 0.3  # fraction of disagreements held out
+    eval_sample_size: int = 10  # val instances used to score each candidate
+    num_candidates: int = 3  # candidates proposed per cycle (where applicable)
+    min_val_size: int = 5  # minimum val size before validation-gated refinement runs
+    max_consecutive_failures: int = 2  # stop after N cycles with no improvement
+    dry_run: bool = False  # if True, log candidates but don't apply
+    require_approval: bool = False  # if True, queue for admin approval before applying
+    min_val_improvement: float = 0.0  # candidate must beat baseline by at least this much (strict=0.0)
 
 
 @dataclass
@@ -460,6 +471,14 @@ def parse_solo_mode_config(config_data: Dict[str, Any]) -> SoloModeConfig:
         patience=rl_data.get('patience', 2),
         auto_apply_suggestions=rl_data.get('auto_apply_suggestions', False),
         refinement_strategy=rl_data.get('refinement_strategy', 'focused_edit'),
+        validation_split_ratio=rl_data.get('validation_split_ratio', 0.3),
+        eval_sample_size=rl_data.get('eval_sample_size', 10),
+        num_candidates=rl_data.get('num_candidates', 3),
+        min_val_size=rl_data.get('min_val_size', 5),
+        max_consecutive_failures=rl_data.get('max_consecutive_failures', 2),
+        dry_run=rl_data.get('dry_run', False),
+        require_approval=rl_data.get('require_approval', False),
+        min_val_improvement=rl_data.get('min_val_improvement', 0.0),
     )
 
     # Parse confusion analysis config

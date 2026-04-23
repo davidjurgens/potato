@@ -1130,7 +1130,84 @@ def api_refinement_reset():
         return jsonify({'error': 'Refinement loop not enabled'}), 400
 
     manager.refinement_loop.reset()
+    # Also reset the validated framework's failure counter
+    if hasattr(manager, '_refinement_consecutive_failures'):
+        manager._refinement_consecutive_failures = 0
     return jsonify({'success': True, 'message': 'Refinement loop reset'})
+
+
+@solo_mode_bp.route('/api/refinement/log')
+@solo_mode_required
+def api_refinement_log():
+    """Get the full log of refinement cycles (validated framework only).
+
+    Returns each cycle's result including whether it was applied, dry-run,
+    candidates, per-candidate val accuracy, and the baseline score.
+    """
+    manager = get_solo_mode_manager()
+    log = manager.get_refinement_log() if hasattr(manager, 'get_refinement_log') else []
+    return jsonify({'log': log, 'count': len(log)})
+
+
+@solo_mode_bp.route('/api/refinement/pending')
+@solo_mode_required
+def api_refinement_pending():
+    """Get refinement candidates awaiting admin approval.
+
+    Only populated when refinement_loop.require_approval is True. Each entry
+    includes the proposed change, validation scores, and rationale so an
+    admin can decide whether to apply.
+    """
+    manager = get_solo_mode_manager()
+    pending = manager.get_pending_refinements() if hasattr(manager, 'get_pending_refinements') else []
+    return jsonify({'pending': pending, 'count': len(pending)})
+
+
+@solo_mode_bp.route('/api/refinement/approve', methods=['POST'])
+@solo_mode_required
+def api_refinement_approve():
+    """Apply a pending refinement candidate. Triggers re-annotation on apply."""
+    manager = get_solo_mode_manager()
+    data = request.get_json(silent=True) or {}
+    index = data.get('index')
+    if index is None or not isinstance(index, int):
+        return jsonify({'error': 'Missing integer index'}), 400
+
+    if not hasattr(manager, 'approve_pending_refinement'):
+        return jsonify({'error': 'Validated refinement not available'}), 400
+
+    result = manager.approve_pending_refinement(index)
+    status = 200 if result.get('success') else 400
+    return jsonify(result), status
+
+
+@solo_mode_bp.route('/api/refinement/reject', methods=['POST'])
+@solo_mode_required
+def api_refinement_reject():
+    """Reject a pending refinement candidate."""
+    manager = get_solo_mode_manager()
+    data = request.get_json(silent=True) or {}
+    index = data.get('index')
+    if index is None or not isinstance(index, int):
+        return jsonify({'error': 'Missing integer index'}), 400
+
+    if not hasattr(manager, 'reject_pending_refinement'):
+        return jsonify({'error': 'Validated refinement not available'}), 400
+
+    result = manager.reject_pending_refinement(index)
+    status = 200 if result.get('success') else 400
+    return jsonify(result), status
+
+
+@solo_mode_bp.route('/api/refinement/strategies')
+@solo_mode_required
+def api_refinement_strategies():
+    """List available refinement strategies and their metadata."""
+    try:
+        from .refinement import list_strategies
+        return jsonify({'strategies': list_strategies()})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @solo_mode_bp.route('/api/labeling-functions')
