@@ -78,6 +78,76 @@ class TestValidationSplit:
         val_ids = {c["instance_id"] for c in result.val}
         assert train_ids.isdisjoint(val_ids)
 
+    def _make_multi_pass_comparisons(
+        self, consistent_ids, oneoff_ids, n_agree=0
+    ):
+        """Build a comparison history where some instances disagreed twice."""
+        records = []
+        for iid in consistent_ids:
+            # Two disagreement records for the same instance_id (re-labeled
+            # under a later prompt version and still disagrees)
+            records.append(
+                {"instance_id": iid, "human_label": "pos", "llm_label": "neg", "agrees": False}
+            )
+            records.append(
+                {"instance_id": iid, "human_label": "pos", "llm_label": "neg", "agrees": False}
+            )
+        for iid in oneoff_ids:
+            records.append(
+                {"instance_id": iid, "human_label": "pos", "llm_label": "neg", "agrees": False}
+            )
+        for i in range(n_agree):
+            records.append(
+                {"instance_id": f"ag_{i}", "human_label": "pos", "llm_label": "pos", "agrees": True}
+            )
+        return records
+
+    def test_prefer_consistent_picks_repeat_disagreements_first(self):
+        """When prefer_consistent=True and enough consistent instances exist,
+        val should only contain the repeat-disagreement instances."""
+        split = ValidationSplit(
+            val_ratio=0.3, min_val=3, min_train=3, prefer_consistent=True
+        )
+        consistent = [f"c_{i}" for i in range(8)]
+        oneoff = [f"o_{i}" for i in range(12)]
+        comparisons = self._make_multi_pass_comparisons(consistent, oneoff)
+        result = split.split(comparisons, prompt_version=1)
+
+        # target_val_size = max(3, 28*0.3) = 8. All 8 should come from consistent pool.
+        val_ids = {c["instance_id"] for c in result.val}
+        assert len(val_ids) == 8
+        assert val_ids.issubset(set(consistent))
+        # No duplicate instances in val
+        assert len(val_ids) == len(result.val)
+
+    def test_prefer_consistent_falls_back_when_too_few(self):
+        """If <min_val consistent instances exist, top up with one-offs."""
+        split = ValidationSplit(
+            val_ratio=0.3, min_val=5, min_train=3, prefer_consistent=True
+        )
+        consistent = [f"c_{i}" for i in range(2)]  # only 2 consistent
+        oneoff = [f"o_{i}" for i in range(20)]
+        comparisons = self._make_multi_pass_comparisons(consistent, oneoff)
+        result = split.split(comparisons, prompt_version=1)
+
+        val_ids = {c["instance_id"] for c in result.val}
+        # Must include both consistent instances and top up with one-offs
+        assert set(consistent).issubset(val_ids)
+        assert len(val_ids) >= 5  # meets min_val
+
+    def test_prefer_consistent_off_behaves_as_before(self):
+        """prefer_consistent=False should not dedup by instance_id, matching old behavior."""
+        split = ValidationSplit(
+            val_ratio=0.3, min_val=3, min_train=3, prefer_consistent=False
+        )
+        consistent = [f"c_{i}" for i in range(4)]
+        oneoff = [f"o_{i}" for i in range(16)]
+        comparisons = self._make_multi_pass_comparisons(consistent, oneoff)
+        result = split.split(comparisons, prompt_version=1)
+        # With 24 disagreement records, val_ratio=0.3 → 7 records.
+        # May contain duplicates since we don't dedup in this mode.
+        assert len(result.val) >= 3
+
 
 # ===========================================================================
 # CandidateEvaluator tests

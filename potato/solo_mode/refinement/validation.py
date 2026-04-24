@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import random
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -35,16 +36,26 @@ class ValidationSplit:
     useful context but aren't needed for eval.
     """
 
-    def __init__(self, val_ratio: float = 0.3, min_val: int = 5, min_train: int = 5):
+    def __init__(
+        self,
+        val_ratio: float = 0.3,
+        min_val: int = 5,
+        min_train: int = 5,
+        prefer_consistent: bool = False,
+    ):
         """
         Args:
             val_ratio: fraction of disagreements held out for validation
             min_val: minimum val size; if fewer disagreements exist, returns empty val
             min_train: minimum train size; if fewer, returns empty train
+            prefer_consistent: if True, prefer val instances that have disagreed
+                across ≥2 labeling passes (systematic errors), falling back to
+                one-off disagreements only when too few qualify.
         """
         self.val_ratio = val_ratio
         self.min_val = min_val
         self.min_train = min_train
+        self.prefer_consistent = prefer_consistent
 
     def split(
         self,
@@ -73,12 +84,13 @@ class ValidationSplit:
             return SplitResult(train=[], val=[], seed=prompt_version)
 
         rng = random.Random(f"val_split_v{prompt_version}")
-        shuffled = list(disagreements)
-        rng.shuffle(shuffled)
 
-        val_size = max(self.min_val, int(len(shuffled) * self.val_ratio))
-        val = shuffled[:val_size]
-        train_disagreements = shuffled[val_size:]
+        # If preferring consistent disagreements: seed val from instances that
+        # have disagreed ≥2 times. If that pool is too small, top up with
+        # one-off disagreements so we still meet min_val.
+        val, train_disagreements = self._partition(
+            disagreements, prompt_version, rng
+        )
 
         # Combine train disagreements with agreements (useful context for
         # rule generation — but agreements aren't used for scoring)
@@ -92,6 +104,64 @@ class ValidationSplit:
         )
 
         return SplitResult(train=train, val=val, seed=prompt_version)
+
+    def _partition(
+        self,
+        disagreements: List[Dict[str, Any]],
+        prompt_version: int,
+        rng: random.Random,
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Pick val set (optionally preferring consistent disagreements) and return (val, train_disagreements)."""
+        target_val_size = max(self.min_val, int(len(disagreements) * self.val_ratio))
+
+        if not self.prefer_consistent:
+            shuffled = list(disagreements)
+            rng.shuffle(shuffled)
+            return shuffled[:target_val_size], shuffled[target_val_size:]
+
+        # Count disagreements per instance_id. An instance that shows up
+        # multiple times in the disagreement list has failed across at least
+        # that many labeling passes — treat it as a systematic error rather
+        # than a one-off stochastic flip.
+        counts = Counter(c['instance_id'] for c in disagreements)
+
+        # Keep only the *latest* disagreement record per instance to avoid
+        # the same instance appearing multiple times in the val set.
+        latest_by_iid: Dict[str, Dict[str, Any]] = {}
+        for c in disagreements:
+            latest_by_iid[c['instance_id']] = c
+
+        consistent = [
+            latest_by_iid[iid] for iid, n in counts.items() if n >= 2
+        ]
+        oneoff = [
+            latest_by_iid[iid] for iid, n in counts.items() if n < 2
+        ]
+
+        rng.shuffle(consistent)
+        rng.shuffle(oneoff)
+
+        if len(consistent) >= target_val_size:
+            val = consistent[:target_val_size]
+            topup_used = 0
+        else:
+            # Not enough consistent disagreements — top up with one-offs so
+            # we still meet min_val. This makes the filter a preference,
+            # not a hard gate.
+            need = target_val_size - len(consistent)
+            val = consistent + oneoff[:need]
+            topup_used = min(need, len(oneoff))
+
+        val_ids = {c['instance_id'] for c in val}
+        # Train gets all disagreement records whose instance_id isn't in val.
+        train_disagreements = [c for c in disagreements if c['instance_id'] not in val_ids]
+
+        logger.info(
+            f"[ValidationSplit] prefer_consistent: {len(consistent)} instances "
+            f"with ≥2 disagreements, {len(oneoff)} one-offs; "
+            f"val drew {len(val) - topup_used} consistent + {topup_used} one-off"
+        )
+        return val, train_disagreements
 
 
 @dataclass

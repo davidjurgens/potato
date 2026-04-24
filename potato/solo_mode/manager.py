@@ -233,6 +233,10 @@ class SoloModeManager:
         self._pending_refinements: List[Dict[str, Any]] = []
         self._refinement_log: List[Dict[str, Any]] = []
         self._icl_library = None  # Lazy-init via _get_icl_library()
+        # Dedicated endpoint for candidate evaluation at low/zero temperature.
+        # Using the labeler endpoint directly would mix prompt quality with
+        # sampling variance. Lazy-init via _get_eval_endpoint().
+        self._eval_endpoint = None
 
         # State persistence
         self._state_file = 'solo_mode_state.json'
@@ -1125,6 +1129,7 @@ class SoloModeManager:
         splitter = ValidationSplit(
             val_ratio=rl_config.validation_split_ratio,
             min_val=rl_config.min_val_size,
+            prefer_consistent=rl_config.prefer_consistent_disagreements,
         )
         split_result = splitter.split(
             comparisons, prompt_version=self.current_prompt_version
@@ -1322,18 +1327,66 @@ class SoloModeManager:
         patterns.sort(key=lambda p: p.count, reverse=True)
         return patterns[:ca_config.max_patterns]
 
+    def _get_eval_endpoint(self) -> Optional[Any]:
+        """Get (or lazily create) the dedicated low-temperature endpoint used
+        for candidate evaluation.
+
+        The labeler's default temperature is tuned for sampling diversity
+        (non-zero, so confidence estimates have signal). The refinement gate
+        needs the opposite: measure prompt quality, not sampling variance.
+        So we keep a separate endpoint at rl_config.eval_temperature (0.0 by
+        default) and re-use it across cycles.
+        """
+        if self._eval_endpoint is not None:
+            return self._eval_endpoint
+
+        if not self.config.labeling_models:
+            return None
+
+        try:
+            from potato.ai.ai_endpoint import AIEndpointFactory
+        except Exception as e:
+            logger.debug(f"[Refinement-Validated] eval endpoint factory unavailable: {e}")
+            return None
+
+        eval_temp = self.config.refinement_loop.eval_temperature
+        for model_config in self.config.labeling_models:
+            try:
+                endpoint_config = model_config.to_endpoint_config(
+                    temperature_override=eval_temp
+                )
+                endpoint = AIEndpointFactory.create_endpoint(endpoint_config)
+                if endpoint:
+                    self._eval_endpoint = endpoint
+                    logger.info(
+                        f"[Refinement-Validated] eval endpoint: "
+                        f"{model_config.endpoint_type}/{model_config.model} "
+                        f"(temperature={eval_temp})"
+                    )
+                    return endpoint
+            except Exception as e:
+                logger.debug(f"[Refinement-Validated] eval endpoint build failed for {model_config.model}: {e}")
+                continue
+        return None
+
     def _label_with_candidate(
         self, instance_id: str, text: str, candidate_prompt: str
     ) -> Optional[str]:
         """Single labeling call using a candidate prompt (no sampling diversity).
 
-        Used by CandidateEvaluator. Returns the predicted label or None on error.
+        Used by CandidateEvaluator. Routes to the dedicated eval endpoint
+        (low/zero temperature) so the validation gate measures prompt quality
+        rather than sampling variance.
         """
         schemes = self.app_config.get('annotation_schemes', [])
         schema_name = schemes[0].get('name', 'default') if schemes else 'default'
 
         try:
-            endpoint = self.llm_labeling_thread._get_endpoint()
+            endpoint = self._get_eval_endpoint()
+            if endpoint is None:
+                # Fall back to the labeler endpoint if the eval endpoint can't be
+                # built (e.g. during tests where AIEndpointFactory is mocked).
+                endpoint = self.llm_labeling_thread._get_endpoint()
             if endpoint is None:
                 return None
 

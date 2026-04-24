@@ -189,11 +189,20 @@ class RefinementLoopConfig:
     validation_split_ratio: float = 0.3  # fraction of disagreements held out
     eval_sample_size: int = 10  # val instances used to score each candidate
     num_candidates: int = 3  # candidates proposed per cycle (where applicable)
-    min_val_size: int = 5  # minimum val size before validation-gated refinement runs
+    min_val_size: int = 10  # minimum val size before validation-gated refinement runs
     max_consecutive_failures: int = 2  # stop after N cycles with no improvement
     dry_run: bool = False  # if True, log candidates but don't apply
     require_approval: bool = False  # if True, queue for admin approval before applying
     min_val_improvement: float = 0.0  # candidate must beat baseline by at least this much (strict=0.0)
+    # Separate temperature for the evaluator pass. Sampling diversity needs
+    # non-zero temperature for confidence, but the validation gate should
+    # measure prompt quality, not sampling variance.
+    eval_temperature: float = 0.0
+    # If True, prefer val instances that have disagreed across ≥2 labeling
+    # passes (i.e. stable systematic errors) over one-off disagreements
+    # that may be stochastic. Falls back to any disagreement if too few
+    # qualify.
+    prefer_consistent_disagreements: bool = True
 
 
 @dataclass
@@ -474,11 +483,13 @@ def parse_solo_mode_config(config_data: Dict[str, Any]) -> SoloModeConfig:
         validation_split_ratio=rl_data.get('validation_split_ratio', 0.3),
         eval_sample_size=rl_data.get('eval_sample_size', 10),
         num_candidates=rl_data.get('num_candidates', 3),
-        min_val_size=rl_data.get('min_val_size', 5),
+        min_val_size=rl_data.get('min_val_size', 10),
         max_consecutive_failures=rl_data.get('max_consecutive_failures', 2),
         dry_run=rl_data.get('dry_run', False),
         require_approval=rl_data.get('require_approval', False),
         min_val_improvement=rl_data.get('min_val_improvement', 0.0),
+        eval_temperature=rl_data.get('eval_temperature', 0.0),
+        prefer_consistent_disagreements=rl_data.get('prefer_consistent_disagreements', True),
     )
 
     # Parse confusion analysis config

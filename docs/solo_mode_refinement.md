@@ -74,9 +74,11 @@ solo_mode:
     validation_split_ratio: 0.3   # fraction of disagreements held out
     eval_sample_size: 10          # val instances scored per candidate
     num_candidates: 3             # candidates generated per cycle
-    min_val_size: 5               # skip cycle if insufficient val data
+    min_val_size: 10              # skip cycle if insufficient val data
     max_consecutive_failures: 2   # stop loop after N failed cycles
     min_val_improvement: 0.0      # candidate must beat baseline by this much (strict = 0.0)
+    eval_temperature: 0.0         # temperature for the evaluator pass (0 = deterministic)
+    prefer_consistent_disagreements: true  # prefer val instances that disagreed across ≥2 passes
     # Approval workflow (optional)
     dry_run: false                # if true, log candidates but don't apply
     require_approval: false       # if true, queue for admin review
@@ -121,9 +123,11 @@ If per-version agreement is dropping after refinement, check:
 
 1. **Is `min_val_improvement` set to `0.0` (strict)?** Lowering it to negative values lets worse candidates through.
 2. **Is `eval_sample_size` big enough?** 10 is the minimum for reliable signal. On noisy/subjective datasets (hate speech), 20+ is better.
-3. **Check the refinement log.** If most candidates score near-baseline, the optimizer model may be too small. Consider switching `principle_icl` (which avoids rule writing) or using a larger revision model.
-4. **If `hybrid_dual_track` keeps failing on prompt edits**, the failure counter will naturally route future cycles to ICL-only. Check the log for `proposed_by: principle_icl` entries.
-5. **Dry-run mode (`dry_run: true`)** lets you see what WOULD be applied without committing. Useful for evaluating a new strategy on your data before trusting it.
+3. **Is `eval_temperature` low?** Non-zero temperature during evaluation bakes sampling variance into the gate's decisions. Keep at 0.0 unless you specifically want to test prompt robustness under sampling noise.
+4. **Is `prefer_consistent_disagreements` on?** If the baseline val accuracy is surprisingly high (e.g. 1.000 on a val set drawn from disagreements), your "disagreements" may be stochastic one-offs. Keeping this on (default) forces val to prefer instances that have failed across ≥2 labeling passes.
+5. **Check the refinement log.** If most candidates score near-baseline, the optimizer model may be too small. Consider switching `principle_icl` (which avoids rule writing) or using a larger revision model.
+6. **If `hybrid_dual_track` keeps failing on prompt edits**, the failure counter will naturally route future cycles to ICL-only. Check the log for `proposed_by: principle_icl` entries.
+7. **Dry-run mode (`dry_run: true`)** lets you see what WOULD be applied without committing. Useful for evaluating a new strategy on your data before trusting it.
 
 ## References
 

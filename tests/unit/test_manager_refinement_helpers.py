@@ -217,5 +217,62 @@ class TestFailureCounterResumeLogic:
         assert manager.refinement_loop.is_stopped
 
 
+class TestEvalEndpoint:
+    """Test the dedicated low-temperature eval endpoint helper."""
+
+    def test_lazy_init_uses_eval_temperature(self, manager, monkeypatch):
+        """_get_eval_endpoint should build an endpoint with the configured
+        eval_temperature and cache it."""
+        captured = {}
+
+        def fake_create_endpoint(endpoint_config):
+            captured['temperature'] = (
+                endpoint_config['ai_support']['ai_config'].get('temperature')
+            )
+            return object()  # any truthy value acts as a stand-in endpoint
+
+        import potato.ai.ai_endpoint as ai_endpoint
+        monkeypatch.setattr(
+            ai_endpoint.AIEndpointFactory,
+            'create_endpoint',
+            staticmethod(fake_create_endpoint),
+        )
+
+        manager.config.refinement_loop.eval_temperature = 0.0
+        endpoint = manager._get_eval_endpoint()
+        assert endpoint is not None
+        assert captured['temperature'] == 0.0
+
+        # Cached on second call
+        cached = manager._get_eval_endpoint()
+        assert cached is endpoint
+
+    def test_respects_custom_eval_temperature(self, manager, monkeypatch):
+        captured = {}
+
+        def fake_create_endpoint(endpoint_config):
+            captured['temperature'] = (
+                endpoint_config['ai_support']['ai_config'].get('temperature')
+            )
+            return object()
+
+        import potato.ai.ai_endpoint as ai_endpoint
+        monkeypatch.setattr(
+            ai_endpoint.AIEndpointFactory,
+            'create_endpoint',
+            staticmethod(fake_create_endpoint),
+        )
+
+        manager.config.refinement_loop.eval_temperature = 0.2
+        manager._eval_endpoint = None  # force rebuild
+        manager._get_eval_endpoint()
+        assert captured['temperature'] == 0.2
+
+    def test_returns_none_when_no_labeling_models(self, manager):
+        manager.config.labeling_models = []
+        manager._eval_endpoint = None
+        assert manager._get_eval_endpoint() is None
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
