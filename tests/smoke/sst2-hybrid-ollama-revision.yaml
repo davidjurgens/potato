@@ -8,14 +8,14 @@ annotation_schemes:
   - key_value: b
     name: negative
   name: sentiment
-annotation_task_name: sst2-solo-test
+annotation_task_name: sst2-hybrid-ollama
 data_files:
 - tests/data/sst2_500.json
 item_properties:
   id_key: id
   text_key: text
-output_annotation_dir: tests/output/sst2-hybrid-test
-port: 8510
+output_annotation_dir: tests/output/sst2-hybrid-ollama
+port: 8511
 session_lifetime_days: 7
 solo_mode:
   batches:
@@ -43,8 +43,8 @@ solo_mode:
     enabled: true
     eval_sample_size: 10
     eval_temperature: 0.0
-    max_consecutive_failures: 2
-    max_cycles: 10
+    max_consecutive_failures: 3
+    max_cycles: 20
     min_val_improvement: 0.0
     min_val_size: 10
     num_candidates: 3
@@ -55,14 +55,13 @@ solo_mode:
     trigger_interval: 50
     validation_split_ratio: 0.3
   revision_models:
-  - base_url: http://burger.si.umich.edu:8001
-    endpoint_type: vllm
+  - endpoint_type: ollama
+    base_url: http://localhost:11434
+    model: gpt-oss:20b
     max_tokens: 1500
-    model: Qwen/Qwen3.5-4B
     temperature: 0.3
-    think: false
-    timeout: 60
-  state_dir: tests/output/sst2-hybrid-test/solo_state
+    timeout: 180
+  state_dir: tests/output/sst2-hybrid-ollama/solo_state
   thresholds:
     confidence_low: 0.4
     end_human_annotation_agreement: 0.7
