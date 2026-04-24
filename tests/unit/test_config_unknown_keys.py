@@ -136,3 +136,71 @@ class TestValidateUnknownKeys:
         for key, value in KNOWN_CONFIG_KEYS.items():
             assert value is None or isinstance(value, (set, dict)), \
                 f"KNOWN_CONFIG_KEYS['{key}'] has invalid type: {type(value)}"
+
+    def test_solo_mode_refinement_loop_recognized(self, caplog):
+        """solo_mode.refinement_loop must be a recognized key."""
+        config = {"solo_mode": {"enabled": True, "refinement_loop": {}}}
+        with caplog.at_level(logging.WARNING):
+            validate_unknown_keys(config)
+        assert not any(
+            "refinement_loop" in r.message for r in caplog.records
+        ), f"refinement_loop should not warn; got: {[r.message for r in caplog.records]}"
+
+    def test_solo_mode_all_top_level_sections_recognized(self, caplog):
+        """All SoloModeConfig sections should validate without warnings."""
+        config = {
+            "solo_mode": {
+                "enabled": True,
+                "labeling_models": [],
+                "revision_models": [],
+                "embedding": {},
+                "uncertainty": {},
+                "thresholds": {},
+                "instance_selection": {},
+                "batches": {},
+                "prompt_optimization": {},
+                "edge_case_rules": {},
+                "labeling_functions": {},
+                "confidence_routing": {},
+                "confusion_analysis": {},
+                "refinement_loop": {},
+                "state_dir": "/tmp/state",
+            }
+        }
+        with caplog.at_level(logging.WARNING):
+            validate_unknown_keys(config)
+        assert len(caplog.records) == 0, (
+            f"unexpected warnings: {[r.message for r in caplog.records]}"
+        )
+
+    def test_refinement_loop_new_keys_recognized(self, caplog):
+        """The eval_temperature and prefer_consistent_disagreements keys
+        added in the validation-gate improvements must be recognized."""
+        config = {
+            "solo_mode": {
+                "refinement_loop": {
+                    "eval_temperature": 0.0,
+                    "prefer_consistent_disagreements": True,
+                    "min_val_size": 10,
+                    "eval_sample_size": 10,
+                }
+            }
+        }
+        with caplog.at_level(logging.WARNING):
+            validate_unknown_keys(config)
+        assert len(caplog.records) == 0, (
+            f"unexpected warnings: {[r.message for r in caplog.records]}"
+        )
+
+    def test_refinement_loop_typo_caught_with_suggestion(self, caplog):
+        """A typo in refinement_loop sub-key should warn with full path."""
+        config = {
+            "solo_mode": {
+                "refinement_loop": {"eval_temperatuer": 0.0}
+            }
+        }
+        with caplog.at_level(logging.WARNING):
+            validate_unknown_keys(config)
+        assert len(caplog.records) == 1
+        assert "solo_mode.refinement_loop.eval_temperatuer" in caplog.records[0].message
+        assert "eval_temperature" in caplog.records[0].message
