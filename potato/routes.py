@@ -2867,6 +2867,56 @@ def admin_api_agreement():
     return jsonify(result)
 
 
+@app.route("/admin/api/code_cooccurrence", methods=["GET"])
+def admin_api_code_cooccurrence():
+    """
+    Get pairwise code co-occurrence across instances.
+
+    Query params:
+        schema (optional): Restrict to a single schema name.
+        min_count (optional): Minimum co-occurrence count to include (default 1).
+
+    Returns:
+        JSON with codes, pairs ({code_a, code_b, count}), n_instances.
+    """
+    schema = request.args.get("schema")
+    try:
+        min_count = int(request.args.get("min_count", "1"))
+    except ValueError:
+        min_count = 1
+    result = admin_dashboard.get_code_cooccurrence_matrix(
+        schema_filter=schema, min_count=min_count
+    )
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
+@app.route("/admin/api/code_crosstab", methods=["GET"])
+def admin_api_code_crosstab():
+    """
+    Get a codes-by-instance-attribute crosstab.
+
+    Query params:
+        attribute (required): The instance metadata field to pivot on
+            (e.g. "site", "condition", "language").
+        schema (optional): Restrict to a single schema name.
+
+    Returns:
+        JSON with codes, values, cells ({code, value, count}), n_instances.
+    """
+    attribute = request.args.get("attribute")
+    if not attribute:
+        return jsonify({"error": "attribute query param is required"}), 400
+    schema = request.args.get("schema")
+    result = admin_dashboard.get_code_crosstab(
+        attribute_key=attribute, schema_filter=schema
+    )
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
 @app.route("/admin/api/step_agreement", methods=["GET"])
 def admin_api_step_agreement():
     """
@@ -6684,6 +6734,8 @@ def configure_routes(flask_app, app_config):
 
     # Behavioral tracking and analytics routes
     app.add_url_rule("/admin/api/agreement", "admin_api_agreement", admin_api_agreement, methods=["GET"])
+    app.add_url_rule("/admin/api/code_cooccurrence", "admin_api_code_cooccurrence", admin_api_code_cooccurrence, methods=["GET"])
+    app.add_url_rule("/admin/api/code_crosstab", "admin_api_code_crosstab", admin_api_code_crosstab, methods=["GET"])
     app.add_url_rule("/admin/api/quality_control", "admin_api_quality_control", admin_api_quality_control, methods=["GET"])
     app.add_url_rule("/admin/api/behavioral_analytics", "admin_api_behavioral_analytics", admin_api_behavioral_analytics, methods=["GET"])
     app.add_url_rule("/api/track_interactions", "track_interactions", track_interactions, methods=["POST"])

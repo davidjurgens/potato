@@ -1500,13 +1500,29 @@ class AdminDashboard:
                         metric_fn=metric_fn
                     )
 
-                    metrics["by_schema"][schema_name] = {
+                    schema_metrics = {
                         "krippendorff_alpha": round(alpha, 4),
                         "metric_type": metric_name,
                         "items_evaluated": len(valid_items),
                         "total_annotations": len(reliability_data),
                         "interpretation": self._interpret_alpha(alpha)
                     }
+
+                    # Cohen's kappa (pairwise) and Fleiss' kappa apply to
+                    # categorical schemas; skip for interval-metric data where
+                    # Krippendorff alpha is the appropriate measure.
+                    if metric_name == "nominal":
+                        try:
+                            from potato.agreement import (
+                                cohen_kappa_pairwise, fleiss_kappa,
+                            )
+                            schema_metrics["cohen_kappa"] = cohen_kappa_pairwise(df)
+                            schema_metrics["fleiss_kappa"] = fleiss_kappa(df)
+                        except Exception as e:
+                            self.logger.error(f"Error calculating kappas for {schema_name}: {e}")
+                            schema_metrics["kappa_error"] = str(e)
+
+                    metrics["by_schema"][schema_name] = schema_metrics
 
                 except Exception as e:
                     self.logger.error(f"Error calculating alpha for {schema_name}: {e}")
@@ -1528,6 +1544,28 @@ class AdminDashboard:
                     "schemas_evaluated": len(alphas),
                     "interpretation": self._interpret_alpha(avg_alpha)
                 }
+
+                cohen_means = [
+                    m["cohen_kappa"]["mean_kappa"]
+                    for m in metrics["by_schema"].values()
+                    if isinstance(m.get("cohen_kappa"), dict)
+                    and m["cohen_kappa"].get("mean_kappa") is not None
+                ]
+                if cohen_means:
+                    metrics["overall"]["average_cohen_kappa"] = round(
+                        sum(cohen_means) / len(cohen_means), 4
+                    )
+
+                fleiss_values = [
+                    m["fleiss_kappa"]["kappa"]
+                    for m in metrics["by_schema"].values()
+                    if isinstance(m.get("fleiss_kappa"), dict)
+                    and m["fleiss_kappa"].get("kappa") is not None
+                ]
+                if fleiss_values:
+                    metrics["overall"]["average_fleiss_kappa"] = round(
+                        sum(fleiss_values) / len(fleiss_values), 4
+                    )
 
             return metrics
 
@@ -1579,6 +1617,215 @@ class AdminDashboard:
             return str(value)
 
         return str(value)
+
+    def get_code_cooccurrence_matrix(self, schema_filter: Optional[str] = None,
+                                     min_count: int = 1) -> Dict[str, Any]:
+        """
+        Compute pairwise code co-occurrence across instances.
+
+        Two codes co-occur on an instance when at least one annotator applied
+        each to that instance. Pairs are de-duplicated within an instance
+        (multiple annotators applying the same pair count once).
+
+        Args:
+            schema_filter: If set, restrict to codes belonging to this schema.
+            min_count: Skip pairs with co-occurrence below this threshold.
+
+        Returns:
+            Dict with `codes` (sorted code list), `pairs`
+            ({code_a, code_b, count}), and `n_instances` for context.
+        """
+        if not self.check_admin_access():
+            return {"error": "Admin access required"}, 403
+
+        try:
+            ism = get_item_state_manager()
+            usm = get_user_state_manager()
+            users = get_users()
+
+            codes_per_instance: Dict[str, set] = {}
+            for item in ism.items():
+                instance_id = item.get_id()
+                codes: set = set()
+                for username in users:
+                    user_state = usm.get_user_state(username)
+                    if not user_state:
+                        continue
+                    all_anns = user_state.get_all_annotations()
+                    if instance_id not in all_anns:
+                        continue
+                    instance_anns = all_anns[instance_id]
+                    labels = instance_anns.get("labels", {}) or {}
+                    for label, value in labels.items():
+                        schema_name = self._schema_for_label_key(label)
+                        if schema_filter and schema_name != schema_filter:
+                            continue
+                        for code in self._labels_from_value(value):
+                            codes.add(f"{schema_name}::{code}")
+                    spans = instance_anns.get("spans", {}) or {}
+                    for schema_name, span_list in spans.items():
+                        if schema_filter and schema_name != schema_filter:
+                            continue
+                        for span in span_list or []:
+                            code = span.get("label") or span.get("annotation")
+                            if code:
+                                codes.add(f"{schema_name}::{code}")
+                if codes:
+                    codes_per_instance[instance_id] = codes
+
+            pair_counts: Dict[Tuple[str, str], int] = {}
+            for codes in codes_per_instance.values():
+                sorted_codes = sorted(codes)
+                for i in range(len(sorted_codes)):
+                    for j in range(i + 1, len(sorted_codes)):
+                        key = (sorted_codes[i], sorted_codes[j])
+                        pair_counts[key] = pair_counts.get(key, 0) + 1
+
+            pairs = [
+                {"code_a": a, "code_b": b, "count": c}
+                for (a, b), c in pair_counts.items() if c >= min_count
+            ]
+            pairs.sort(key=lambda x: x["count"], reverse=True)
+
+            all_codes = sorted({
+                code for codes in codes_per_instance.values() for code in codes
+            })
+
+            return {
+                "codes": all_codes,
+                "pairs": pairs,
+                "n_instances": len(codes_per_instance),
+                "n_pairs": len(pairs),
+                "schema_filter": schema_filter,
+                "min_count": min_count,
+            }
+        except Exception as e:
+            self.logger.error(f"Error computing co-occurrence: {e}")
+            return {"error": f"Failed to compute co-occurrence: {str(e)}"}, 500
+
+    def get_code_crosstab(self, attribute_key: str,
+                          schema_filter: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Compute a codes-by-instance-attribute crosstab.
+
+        Each instance contributes one row to the count of (code, attribute_value);
+        multiple annotators applying the same code count once per instance.
+
+        Args:
+            attribute_key: Name of the item-metadata field to use as the column axis
+                (e.g. "site", "condition", "language").
+            schema_filter: If set, restrict to codes belonging to this schema.
+
+        Returns:
+            Dict with `codes` (row labels), `values` (column labels),
+            `cells` ({code, value, count}), and totals.
+        """
+        if not self.check_admin_access():
+            return {"error": "Admin access required"}, 403
+        if not attribute_key:
+            return {"error": "attribute_key is required"}, 400
+
+        try:
+            ism = get_item_state_manager()
+            usm = get_user_state_manager()
+            users = get_users()
+
+            cell_counts: Dict[Tuple[str, str], int] = {}
+            values_seen: set = set()
+            codes_seen: set = set()
+            n_instances_with_attr = 0
+
+            for item in ism.items():
+                instance_id = item.get_id()
+                item_data = self._get_item_data(item)
+                attr_value = item_data.get(attribute_key)
+                if attr_value is None or attr_value == "":
+                    continue
+                attr_value = str(attr_value)
+                values_seen.add(attr_value)
+                n_instances_with_attr += 1
+
+                codes: set = set()
+                for username in users:
+                    user_state = usm.get_user_state(username)
+                    if not user_state:
+                        continue
+                    all_anns = user_state.get_all_annotations()
+                    if instance_id not in all_anns:
+                        continue
+                    instance_anns = all_anns[instance_id]
+                    labels = instance_anns.get("labels", {}) or {}
+                    for label, value in labels.items():
+                        schema_name = self._schema_for_label_key(label)
+                        if schema_filter and schema_name != schema_filter:
+                            continue
+                        for code in self._labels_from_value(value):
+                            codes.add(f"{schema_name}::{code}")
+                    spans = instance_anns.get("spans", {}) or {}
+                    for schema_name, span_list in spans.items():
+                        if schema_filter and schema_name != schema_filter:
+                            continue
+                        for span in span_list or []:
+                            code = span.get("label") or span.get("annotation")
+                            if code:
+                                codes.add(f"{schema_name}::{code}")
+
+                for code in codes:
+                    codes_seen.add(code)
+                    key = (code, attr_value)
+                    cell_counts[key] = cell_counts.get(key, 0) + 1
+
+            cells = [
+                {"code": code, "value": value, "count": count}
+                for (code, value), count in cell_counts.items()
+            ]
+            cells.sort(key=lambda x: (x["code"], x["value"]))
+
+            return {
+                "codes": sorted(codes_seen),
+                "values": sorted(values_seen),
+                "cells": cells,
+                "n_instances": n_instances_with_attr,
+                "attribute_key": attribute_key,
+                "schema_filter": schema_filter,
+            }
+        except Exception as e:
+            self.logger.error(f"Error computing crosstab: {e}")
+            return {"error": f"Failed to compute crosstab: {str(e)}"}, 500
+
+    @staticmethod
+    def _schema_for_label_key(label_key) -> str:
+        """Extract schema name from a label key in user_state annotations."""
+        if hasattr(label_key, "schema"):
+            return label_key.schema
+        if hasattr(label_key, "get_schema"):
+            return label_key.get_schema()
+        return str(label_key)
+
+    @staticmethod
+    def _labels_from_value(value) -> List[str]:
+        """Pull individual code names out of an annotation value blob."""
+        if value is None or value == "":
+            return []
+        if isinstance(value, dict):
+            return [k for k, v in value.items() if v]
+        if isinstance(value, list):
+            return [str(x) for x in value]
+        return [str(value)]
+
+    @staticmethod
+    def _get_item_data(item) -> dict:
+        """Return the raw data dict for an ItemStateManager item."""
+        for attr in ("data", "_data", "item_data"):
+            data = getattr(item, attr, None)
+            if isinstance(data, dict):
+                return data
+        if hasattr(item, "to_dict"):
+            try:
+                return item.to_dict()
+            except Exception:
+                pass
+        return {}
 
     def get_quality_control_data(self) -> Dict[str, Any]:
         """

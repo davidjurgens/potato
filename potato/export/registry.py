@@ -126,6 +126,8 @@ def _register_builtin_exporters():
     from .coding_eval_exporter import CodingEvalExporter
     from .parquet_exporter import ParquetExporter
     from .tabular_exporter import CSVExporter, TSVExporter, JSONLExporter
+    from .codebook_exporter import CodebookExporter
+    from .quotation_report_exporter import QuotationReportExporter
 
     exporters = [
         COCOExporter(),
@@ -142,6 +144,8 @@ def _register_builtin_exporters():
         CSVExporter(),
         TSVExporter(),
         JSONLExporter(),
+        CodebookExporter(),
+        QuotationReportExporter(),
     ]
 
     # Optional exporters with external dependencies
