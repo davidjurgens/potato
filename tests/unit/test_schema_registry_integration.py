@@ -2,56 +2,36 @@
 Tests for schema registry integration.
 
 These tests verify that:
-1. All annotation types in config_module are registered in the schema registry
-2. The front_end module uses the schema registry (not a hardcoded dict)
-3. Each registered schema type can generate valid HTML
+1. The config validator sources its list of valid annotation types from the
+   schema registry (single source of truth -- no drift between a hardcoded
+   list in config_module and the registry).
+2. The front_end module uses the schema registry (not a hardcoded dict).
+3. Each registered schema type can generate valid HTML.
 """
 
 import pytest
 
 
-def _get_config_valid_types():
-    """Extract valid_types from config_module's validate_single_annotation_scheme.
-
-    Parses the source to find the valid_types list so the test stays in sync
-    automatically when new schema types are added.
-    """
-    import inspect, ast
-    from potato.server_utils import config_module
-    source = inspect.getsource(config_module.validate_single_annotation_scheme)
-    tree = ast.parse(source)
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == 'valid_types':
-                    return ast.literal_eval(node.value)
-    raise RuntimeError("Could not find valid_types in validate_single_annotation_scheme")
-
-
 class TestSchemaRegistryCompleteness:
-    """Test that the schema registry contains all expected annotation types."""
+    """Guard the single-source-of-truth invariant for annotation types."""
 
-    def test_all_config_types_registered(self):
-        """All annotation types in config_module.valid_types should be in registry."""
-        from potato.server_utils.schemas.registry import schema_registry
+    def test_valid_types_sourced_from_registry(self):
+        """``validate_single_annotation_scheme`` must pull ``valid_types`` from
+        the schema registry. If someone regresses back to a hardcoded list, the
+        registry and the validator can drift -- exactly the bug this test
+        prevents. Replaces two earlier AST-parsing tests that broke when
+        ``valid_types`` was (correctly) refactored from a literal list into
+        ``schema_registry.get_supported_types()``.
+        """
+        import inspect
+        from potato.server_utils import config_module
 
-        config_valid_types = _get_config_valid_types()
-        registry_types = schema_registry.get_supported_types()
-
-        for annotation_type in config_valid_types:
-            assert annotation_type in registry_types, \
-                f"Annotation type '{annotation_type}' is in config_module.valid_types but not in schema registry"
-
-    def test_registry_types_match_config_types(self):
-        """Schema registry should not have extra types not in config_module."""
-        from potato.server_utils.schemas.registry import schema_registry
-
-        config_valid_types = _get_config_valid_types()
-        registry_types = schema_registry.get_supported_types()
-
-        for registry_type in registry_types:
-            assert registry_type in config_valid_types, \
-                f"Schema registry has type '{registry_type}' not in config_module.valid_types"
+        src = inspect.getsource(config_module.validate_single_annotation_scheme)
+        assert "schema_registry.get_supported_types()" in src, (
+            "validate_single_annotation_scheme no longer sources valid_types "
+            "from schema_registry.get_supported_types(); the registry and the "
+            "config validator may have drifted out of sync."
+        )
 
 
 class TestSchemaGeneration:

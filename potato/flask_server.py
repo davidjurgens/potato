@@ -2138,6 +2138,10 @@ def render_page_with_annotations(username: str):
         # Original plain text without span HTML (for data-original-text attribute)
         instance_plain_text=original_plain_text,
         instance_obj=item,
+        # Full record dict so schemas like process_reward / trajectory_eval
+        # can bind to structured fields (e.g. structured_turns) via the
+        # [data-instance-json] element.
+        instance_record=item.get_data(),
         instance_id=instance_id,
         instance_index=user_state.get_current_instance_index(),
         finished=get_user_state(username).get_annotation_count(),
@@ -2520,6 +2524,7 @@ def render_page_with_annotations_WEIRD(username):
         html_fname,
         instance_id=instance_id,
         instance_data=item_data,
+        instance_record=item_data,
         annotations=annotations,
         span_annotations=span_annotations,
         progress=progress,

@@ -39,6 +39,12 @@ class DisplayDefinition:
         optional_fields: Dictionary of optional fields with default values
         supports_span_target: Whether this type can be a span annotation target
         description: Human-readable description of the display type
+        lazy_populated: When True, the display's data key is populated
+            after initial render (e.g. ``interactive_chat``'s conversation
+            is written only after the user finishes chatting). The
+            ``instance_display`` validator uses this to decide whether a
+            missing data key is a transient state (lazy) or a config
+            error (not lazy).
     """
     name: str
     renderer: Union[BaseDisplay, Callable[[Dict[str, Any], Any], str]]
@@ -46,6 +52,7 @@ class DisplayDefinition:
     optional_fields: Dict[str, Any] = field(default_factory=dict)
     supports_span_target: bool = False
     description: str = ""
+    lazy_populated: bool = False
 
 
 class DisplayRegistry:
@@ -249,6 +256,33 @@ class DisplayRegistry:
             })
 
         return result
+
+    def is_lazy_populated(self, name: str) -> bool:
+        """
+        Check whether a display type populates its data lazily (after
+        initial render). Used by ``instance_display._validate_fields`` to
+        distinguish an expected transient missing key (lazy) from a real
+        configuration error (not lazy).
+
+        Args:
+            name: The display type name.
+
+        Returns:
+            True iff the display's ``lazy_populated`` attribute is set. False
+            for unknown types (treat as strict for safety).
+        """
+        plugin = self._plugins.get(name)
+        if plugin is not None:
+            return bool(getattr(plugin, "lazy_populated", False))
+        display = self._displays.get(name)
+        if display is not None:
+            # Prefer the DisplayDefinition flag; fall back to the BaseDisplay
+            # class attr when a definition didn't explicitly set it.
+            if getattr(display, "lazy_populated", False):
+                return True
+            renderer = getattr(display, "renderer", None)
+            return bool(getattr(renderer, "lazy_populated", False))
+        return False
 
     def is_registered(self, name: str) -> bool:
         """
@@ -524,6 +558,7 @@ def _register_builtin_displays():
                 "placeholder_text": "Start chatting with the agent to begin the task.",
             },
             supports_span_target=True,
+            lazy_populated=True,  # conversation is written by /agent_chat/finish
             description="Interactive agent chat with post-interaction trace display"
         ),
         DisplayDefinition(
@@ -579,6 +614,7 @@ def _register_builtin_displays():
                 "filmstrip_size": 80,
             },
             supports_span_target=False,
+            lazy_populated=True,  # trace populated by live agent session
             description="Live AI agent viewer with real-time screenshots, controls, and interaction"
         ),
         DisplayDefinition(
@@ -594,6 +630,7 @@ def _register_builtin_displays():
                 "allow_instructions": True,
             },
             supports_span_target=False,
+            lazy_populated=True,  # trace populated by live coding-agent session
             description="Live coding agent viewer with real-time streaming and intervention controls"
         ),
     ]

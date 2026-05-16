@@ -14,13 +14,34 @@ import random
 import logging
 import re
 
+from pydantic import BaseModel, Field
+
 from .competence_profiles import CompetenceProfile
 from .config import (
     LLMStrategyConfig,
     BiasedStrategyConfig,
     PatternStrategyConfig,
+    AgentStrategyConfig,
     AnnotationStrategyType,
 )
+
+
+class _LLMResponse(BaseModel):
+    """Structured-output schema for the per-schema LLMStrategy query.
+
+    Endpoints that support structured output (Ollama, OllamaVision, OpenAI
+    via the responses API, etc.) pass this Pydantic class via
+    ``output_format`` so the model emits a deterministic JSON object. The
+    ``label`` field is interpreted by ``_parse_llm_result`` according to
+    the schema's annotation_type (label name / number / free text).
+    """
+
+    label: str = Field(
+        default="",
+        description=(
+            "The single label, integer, or short text the annotator chose."
+        ),
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -441,8 +462,14 @@ class LLMStrategy(AnnotationStrategy):
             # Build prompt for LLM
             prompt = self._build_prompt(text, labels, description, annotation_type)
 
-            # Query LLM
-            result = self.endpoint.query(prompt, None)
+            # Query LLM. Most endpoints (Ollama, OllamaVision, OpenAI) require
+            # a Pydantic schema as the second argument; AnthropicEndpoint's
+            # query() takes only `prompt`; VLLMEndpoint accepts both.
+            try:
+                result = self.endpoint.query(prompt, _LLMResponse)
+            except TypeError:
+                # Endpoint signature is query(prompt) — single-arg providers
+                result = self.endpoint.query(prompt)
 
             # Add noise if configured
             if self.config.add_noise and random.random() < self.config.noise_rate:
@@ -525,7 +552,7 @@ Respond briefly."""
         """Parse LLM result into annotation format.
 
         Args:
-            result: LLM response
+            result: LLM response (string, dict, or Pydantic model instance)
             labels: Available labels
             schema_name: Schema name
             annotation_type: Type of annotation
@@ -536,6 +563,24 @@ Respond briefly."""
         if result is None:
             return None
 
+        # Structured-output endpoints return either a Pydantic model or a dict
+        # with a ``label`` key (or, for OllamaEndpoint's parseStringToJson
+        # fallback, ``response`` / ``content``). Extract that into a string
+        # for the existing matching logic.
+        if hasattr(result, "model_dump"):
+            try:
+                result = result.model_dump()
+            except Exception:
+                pass
+        if isinstance(result, dict):
+            for key in ("label", "response", "content"):
+                if key in result and result[key] not in (None, ""):
+                    result = result[key]
+                    break
+            else:
+                # Dict with no recognised key — stringify everything
+                result = str(result)
+
         # Convert to string
         result_str = str(result).strip().lower()
 
@@ -543,19 +588,22 @@ Respond briefly."""
             # Try to match a label
             for label in labels:
                 if label.lower() in result_str or result_str in label.lower():
-                    if annotation_type == "radio":
-                        return {schema_name: label}
-                    else:
-                        return {f"{schema_name}:{label}": "on"}
+                    return self.random_strategy._format_annotation(
+                        schema_name, label, annotation_type
+                    )
 
         elif annotation_type == "likert":
             # Try to extract a number
             numbers = re.findall(r"\d+", result_str)
             if numbers:
-                return {schema_name: numbers[0]}
+                return self.random_strategy._format_annotation(
+                    schema_name, numbers[0], annotation_type
+                )
 
         elif annotation_type in ["text", "textbox"]:
-            return {schema_name: str(result)[:500]}
+            return self.random_strategy._format_annotation(
+                schema_name, str(result)[:500], annotation_type
+            )
 
         return None
 
@@ -682,6 +730,7 @@ def create_strategy(
     llm_config: Optional[LLMStrategyConfig] = None,
     biased_config: Optional[BiasedStrategyConfig] = None,
     pattern_config: Optional[PatternStrategyConfig] = None,
+    agent_config: Optional[AgentStrategyConfig] = None,
     user_id: str = "",
 ) -> AnnotationStrategy:
     """Factory function to create annotation strategies.
@@ -691,6 +740,7 @@ def create_strategy(
         llm_config: LLM configuration (for LLM strategy)
         biased_config: Bias configuration (for biased strategy)
         pattern_config: Pattern configuration (for pattern strategy)
+        agent_config: Agent (vision-LLM) configuration (for AGENT strategy)
         user_id: User ID (for pattern strategy)
 
     Returns:
@@ -717,6 +767,14 @@ def create_strategy(
 
     elif strategy_type == AnnotationStrategyType.GOLD_STANDARD:
         return GoldStandardStrategy()
+
+    elif strategy_type == AnnotationStrategyType.AGENT:
+        # Local import to avoid pulling pydantic / vision deps unless used
+        from .agent_strategy import AgentSimulatorStrategy
+        if agent_config:
+            return AgentSimulatorStrategy(agent_config)
+        logger.warning("AGENT strategy requested but no agent_config provided, using random")
+        return RandomStrategy()
 
     else:
         return RandomStrategy()

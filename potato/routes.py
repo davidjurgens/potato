@@ -5551,6 +5551,22 @@ def get_annotation_schemas():
                     labels.append(str(label))
             return labels
 
+        # Keys we surface via dedicated top-level fields above, plus
+        # internal/runtime keys that should never round-trip to API
+        # consumers. Anything else configured on the schema (likert.size,
+        # slider.min_value, process_reward.mode, code_review.verdict_options,
+        # span.labels, custom plugin keys, etc.) passes through verbatim.
+        _RESERVED_SCHEMA_KEYS = frozenset({
+            "name",
+            "annotation_type",
+            "type",
+            "labels",
+            "description",
+            # Runtime / server-side internals
+            "annotation_id",
+            "sequential_key_binding",
+        })
+
         # Helper function to process a single schema
         def process_schema(schema, schema_name=None):
             name = schema_name or schema.get('name', 'unknown')
@@ -5563,16 +5579,15 @@ def get_annotation_schemas():
                 'type': schema_type
             }
 
-            # Include additional type-specific info
-            if schema_type == 'likert':
-                schema_info['size'] = schema.get('size', 5)
-                schema_info['min_label'] = schema.get('min_label', '')
-                schema_info['max_label'] = schema.get('max_label', '')
-            elif schema_type == 'slider':
-                schema_info['min_value'] = schema.get('min_value', 0)
-                schema_info['max_value'] = schema.get('max_value', 100)
-            elif schema_type == 'textbox':
-                schema_info['textarea'] = schema.get('textarea', False)
+            # Pass through every other configured key unchanged. This keeps
+            # the API forward-compatible for any schema type (built-in or
+            # plugin) that carries type-specific config (e.g. likert.size,
+            # process_reward.mode, code_review.verdict_options). Underscore-
+            # prefixed keys are treated as internal and skipped.
+            for key, value in schema.items():
+                if key in _RESERVED_SCHEMA_KEYS or key.startswith('_'):
+                    continue
+                schema_info.setdefault(key, value)
 
             return schema_info
 

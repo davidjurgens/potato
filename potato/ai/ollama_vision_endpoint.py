@@ -39,6 +39,7 @@ VISION_MODELS = [
     "moondream",
     "minicpm-v",
     "gemma3",  # Gemma 3 has vision capabilities
+    "gemma4",  # Gemma 4 family (e.g. gemma4:e4b) supports vision
 ]
 
 

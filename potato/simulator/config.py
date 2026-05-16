@@ -40,6 +40,9 @@ class AnnotationStrategyType(Enum):
     - LLM: Use an LLM to generate annotations based on text content
     - PATTERN: Consistent per-user patterns for testing specific behaviors
     - GOLD_STANDARD: Use gold answer when available, random otherwise
+    - AGENT: Vision-capable LLM that reads structured / multi-modal instance
+      content (dialogue traces, spreadsheets, image fields) and emits a
+      single batched annotation covering every schema for the instance.
     """
 
     RANDOM = "random"
@@ -47,6 +50,7 @@ class AnnotationStrategyType(Enum):
     LLM = "llm"
     PATTERN = "pattern"
     GOLD_STANDARD = "gold_standard"
+    AGENT = "agent"
 
 
 @dataclass
@@ -97,6 +101,112 @@ class LLMStrategyConfig:
     max_tokens: int = 100
     add_noise: bool = True
     noise_rate: float = 0.05
+
+
+@dataclass
+class InteractiveConfig:
+    """Configuration for driving live ``interactive_chat`` sessions.
+
+    When enabled, the simulator runs a multi-turn chat against the server's
+    ``/agent_chat/*`` routes before annotating each instance whose display
+    contains an ``interactive_chat`` field. The simulator plays the user
+    role; the server-side ``agent_proxy`` plays the agent (echo, OpenAI,
+    HTTP, etc. -- whatever the annotation config specifies).
+
+    Attributes:
+        enabled: Whether to attempt an interactive session per instance.
+        endpoint_type: AI endpoint used to generate the user persona's
+            messages. Defaults to ``ollama`` (text only -- the persona
+            usually doesn't need vision).
+        model: Persona model name. Defaults to provider default.
+        api_key: Optional API key (env-var refs supported).
+        base_url: Optional endpoint base URL.
+        temperature: Sampling temperature for persona messages.
+        max_tokens: Per-message token cap.
+        max_turns: Hard upper bound on turn count per session.
+        persona_system_prompt: System prompt that defines the user persona.
+            Should encourage natural multi-turn behavior and a clear
+            ``DONE`` signal when the task is complete.
+        done_marker: Substring (case-insensitive) the persona emits when
+            it considers the task complete. The runner finishes the
+            session immediately when seen.
+        first_message_template: Template applied to the persona's first
+            message. ``{task}`` is replaced with the task description. If
+            None, the persona generates the first message from scratch.
+    """
+
+    enabled: bool = False
+    endpoint_type: str = "ollama"
+    model: Optional[str] = None
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    temperature: float = 0.7
+    max_tokens: int = 200
+    max_turns: int = 6
+    persona_system_prompt: str = (
+        "You are a curious end-user testing an AI assistant. "
+        "Send concise, natural messages that drive the assistant to "
+        "complete the task. When the assistant has fully completed the "
+        "task, respond with a short acknowledgement and the literal "
+        "marker [DONE]."
+    )
+    done_marker: str = "[DONE]"
+    first_message_template: Optional[str] = (
+        "Please help me with this task: {task}"
+    )
+
+
+@dataclass
+class AgentStrategyConfig:
+    """Configuration for the agent (vision-LLM) annotation strategy.
+
+    Drives a vision-capable LLM that consumes structured / multi-modal
+    instance content (dialogue arrays, spreadsheets, image fields) and
+    produces a batched annotation over every schema for the instance.
+
+    Attributes:
+        endpoint_type: AI endpoint (default ``ollama_vision``). Any vision
+            endpoint registered with ``AIEndpointFactory`` works
+            (``anthropic_vision``, ``openai_vision``, etc.).
+        model: Model identifier (e.g. ``gemma3:4b``, ``llava:latest``,
+            ``llama3.2-vision``). Defaults to provider default.
+        api_key: Cloud-provider API key (env-var refs supported, e.g.
+            ``${ANTHROPIC_API_KEY}``).
+        base_url: Custom endpoint URL (Ollama: ``http://localhost:11434``).
+        temperature: Sampling temperature.
+        max_tokens: Cap on response tokens.
+        max_image_dim: Resize images so the longest edge is at most this
+            many pixels before sending. ``None`` keeps the original.
+        max_image_count: Skip image attachment past this many images per
+            instance (some models cap at 1–4).
+        include_dialogue_text: Render dialogue arrays as
+            ``<speaker>: <text>`` lines in the prompt.
+        include_spreadsheet: Render spreadsheet/table fields as plain text.
+        max_dialogue_chars: Truncate long dialogue payloads to this many
+            characters in the prompt to fit the model's context window.
+        cache_per_instance: When True (default), one LLM call per instance
+            answers all schemas; subsequent ``generate_annotation`` calls
+            for the same instance return cached results.
+        add_noise: Probability of falling back to a random annotation per
+            schema (mirrors ``LLMStrategyConfig`` so existing competence
+            modeling still applies).
+        noise_rate: Probability used for noise injection (0–1).
+    """
+
+    endpoint_type: str = "ollama_vision"
+    model: Optional[str] = None
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    temperature: float = 0.1
+    max_tokens: int = 800
+    max_image_dim: Optional[int] = 1024
+    max_image_count: int = 4
+    include_dialogue_text: bool = True
+    include_spreadsheet: bool = True
+    max_dialogue_chars: int = 12000
+    cache_per_instance: bool = True
+    add_noise: bool = False
+    noise_rate: float = 0.0
 
 
 @dataclass
@@ -151,6 +261,7 @@ class UserConfig:
     llm_config: Optional[LLMStrategyConfig] = None
     biased_config: Optional[BiasedStrategyConfig] = None
     pattern_config: Optional[PatternStrategyConfig] = None
+    agent_config: Optional[AgentStrategyConfig] = None
     max_annotations: Optional[int] = None
 
 
@@ -191,6 +302,8 @@ class SimulatorConfig:
     strategy: AnnotationStrategyType = AnnotationStrategyType.RANDOM
     llm_config: Optional[LLMStrategyConfig] = None
     biased_config: Optional[BiasedStrategyConfig] = None
+    agent_config: Optional[AgentStrategyConfig] = None
+    interactive: Optional[InteractiveConfig] = None
 
     # Gold standard data for competence-based accuracy
     gold_standard_file: Optional[str] = None
@@ -309,6 +422,54 @@ class SimulatorConfig:
                 label_weights=data["biased_config"].get("label_weights", {})
             )
 
+        # Parse interactive (chat-driving) config
+        interactive_config = None
+        if "interactive" in data:
+            ic = data["interactive"]
+            api_key = ic.get("api_key")
+            if api_key and api_key.startswith("${") and api_key.endswith("}"):
+                api_key = os.environ.get(api_key[2:-1])
+            kwargs = {
+                "enabled": ic.get("enabled", True),
+                "endpoint_type": ic.get("endpoint_type", "ollama"),
+                "model": ic.get("model"),
+                "api_key": api_key,
+                "base_url": ic.get("base_url"),
+                "temperature": ic.get("temperature", 0.7),
+                "max_tokens": ic.get("max_tokens", 200),
+                "max_turns": ic.get("max_turns", 6),
+                "done_marker": ic.get("done_marker", "[DONE]"),
+            }
+            if "persona_system_prompt" in ic:
+                kwargs["persona_system_prompt"] = ic["persona_system_prompt"]
+            if "first_message_template" in ic:
+                kwargs["first_message_template"] = ic["first_message_template"]
+            interactive_config = InteractiveConfig(**kwargs)
+
+        # Parse agent (vision-LLM) config
+        agent_config = None
+        if "agent_config" in data:
+            ad = data["agent_config"]
+            api_key = ad.get("api_key")
+            if api_key and api_key.startswith("${") and api_key.endswith("}"):
+                api_key = os.environ.get(api_key[2:-1])
+            agent_config = AgentStrategyConfig(
+                endpoint_type=ad.get("endpoint_type", "ollama_vision"),
+                model=ad.get("model"),
+                api_key=api_key,
+                base_url=ad.get("base_url"),
+                temperature=ad.get("temperature", 0.1),
+                max_tokens=ad.get("max_tokens", 800),
+                max_image_dim=ad.get("max_image_dim", 1024),
+                max_image_count=ad.get("max_image_count", 4),
+                include_dialogue_text=ad.get("include_dialogue_text", True),
+                include_spreadsheet=ad.get("include_spreadsheet", True),
+                max_dialogue_chars=ad.get("max_dialogue_chars", 12000),
+                cache_per_instance=ad.get("cache_per_instance", True),
+                add_noise=ad.get("add_noise", False),
+                noise_rate=ad.get("noise_rate", 0.0),
+            )
+
         # Parse strategy
         strategy_str = data.get("strategy", "random")
         try:
@@ -357,6 +518,8 @@ class SimulatorConfig:
             strategy=strategy,
             llm_config=llm_config,
             biased_config=biased_config,
+            agent_config=agent_config,
+            interactive=interactive_config,
             gold_standard_file=data.get("gold_standard_file"),
             parallel_users=parallel_users,
             delay_between_users=delay_between,

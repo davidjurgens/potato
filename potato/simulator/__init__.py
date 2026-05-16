@@ -26,6 +26,8 @@ from .config import (
     LLMStrategyConfig,
     BiasedStrategyConfig,
     PatternStrategyConfig,
+    AgentStrategyConfig,
+    InteractiveConfig,
     CompetenceLevel,
     AnnotationStrategyType,
 )
@@ -41,6 +43,8 @@ from .annotation_strategies import (
     PatternStrategy,
     create_strategy,
 )
+from .agent_strategy import AgentSimulatorStrategy
+from .interactive_runner import InteractiveSessionRunner, InteractiveSessionResult
 from .timing_models import TimingModel
 from .user_simulator import SimulatedUser, UserSimulationResult, AnnotationRecord
 from .simulator_manager import SimulatorManager
@@ -54,6 +58,8 @@ __all__ = [
     "LLMStrategyConfig",
     "BiasedStrategyConfig",
     "PatternStrategyConfig",
+    "AgentStrategyConfig",
+    "InteractiveConfig",
     "CompetenceLevel",
     "AnnotationStrategyType",
     # Competence
@@ -65,6 +71,9 @@ __all__ = [
     "BiasedStrategy",
     "LLMStrategy",
     "PatternStrategy",
+    "AgentSimulatorStrategy",
+    "InteractiveSessionRunner",
+    "InteractiveSessionResult",
     "create_strategy",
     # Timing
     "TimingModel",

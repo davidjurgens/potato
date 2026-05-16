@@ -53,6 +53,12 @@ class BaseDisplay(ABC):
         supports_span_target: Whether this type can be a span annotation target.
             If True, render() MUST produce a .text-content wrapper when
             field_config["span_target"] is True.  Use render_span_wrapper().
+        lazy_populated: Whether this display's data field is populated after
+            initial page load (e.g. ``interactive_chat`` writes its
+            conversation only when the user finishes chatting with the
+            agent_proxy). Set True to tell the ``instance_display`` validator
+            that a missing data key for this field is an expected transient
+            state, not a configuration error.
     """
 
     name: str = ""
@@ -60,6 +66,7 @@ class BaseDisplay(ABC):
     optional_fields: Dict[str, Any] = {}
     description: str = ""
     supports_span_target: bool = False
+    lazy_populated: bool = False
 
     @abstractmethod
     def render(self, field_config: Dict[str, Any], data: Any) -> str:

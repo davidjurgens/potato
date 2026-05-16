@@ -18,10 +18,12 @@ from .config import (
     CompetenceLevel,
     AnnotationStrategyType,
     TimingConfig,
+    InteractiveConfig,
 )
 from .competence_profiles import CompetenceProfile, create_competence_profile
 from .annotation_strategies import AnnotationStrategy, create_strategy
 from .timing_models import TimingModel, NoWaitTimingModel
+from .interactive_runner import InteractiveSessionRunner
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +106,7 @@ class SimulatedUser:
         simulate_wait: bool = False,
         attention_check_fail_rate: float = 0.0,
         respond_fast_rate: float = 0.0,
+        interactive_config: Optional[InteractiveConfig] = None,
     ):
         """Initialize simulated user.
 
@@ -137,6 +140,13 @@ class SimulatedUser:
         self.current_instance_id: Optional[str] = None
         self.schemas: List[Dict[str, Any]] = []
 
+        # Optional interactive_chat driver
+        self.interactive_runner: Optional[InteractiveSessionRunner] = None
+        if interactive_config and interactive_config.enabled:
+            self.interactive_runner = InteractiveSessionRunner(
+                interactive_config, server_url
+            )
+
         # Results tracking
         self.result = UserSimulationResult(user_id=user_config.user_id)
 
@@ -151,6 +161,7 @@ class SimulatedUser:
             llm_config=self.config.llm_config,
             biased_config=self.config.biased_config,
             pattern_config=self.config.pattern_config,
+            agent_config=self.config.agent_config,
             user_id=self.config.user_id,
         )
 
@@ -302,6 +313,12 @@ class SimulatedUser:
         """
         instance_id = instance.get("instance_id")
         gold_answer = self.gold_standards.get(instance_id)
+
+        # Attach the full schema set so batching strategies (e.g. AgentSimulatorStrategy)
+        # can build a single multi-schema prompt per instance.  Other strategies
+        # ignore the extra key.
+        instance = dict(instance)
+        instance["__all_schemas__"] = self.schemas
 
         all_annotations = {}
 
@@ -468,6 +485,35 @@ class SimulatedUser:
                 if not instance or not instance.get("instance_id"):
                     logger.info(f"No more instances for {self.config.user_id}")
                     break
+
+                # If an interactive_chat session is configured, drive the
+                # chat first so the conversation field is populated before
+                # the rating strategy reads it.
+                if self.interactive_runner is not None:
+                    instance_data = instance.get("data") or {}
+                    task_text = (
+                        instance_data.get("task_description")
+                        or instance_data.get("text")
+                        or instance.get("text", "")
+                    )
+                    chat_result = self.interactive_runner.run(
+                        self.session,
+                        instance.get("instance_id"),
+                        task_text,
+                    )
+                    if chat_result.error:
+                        self.result.errors.append(
+                            f"interactive: {chat_result.error}"
+                        )
+                    # Re-fetch the instance so its data reflects the chat
+                    refreshed = self.get_current_instance()
+                    if refreshed and refreshed.get("instance_id") == instance.get("instance_id"):
+                        instance = refreshed
+                    else:
+                        # Server moved on; fall back to using the in-memory
+                        # conversation we just collected.
+                        instance.setdefault("data", {})
+                        instance["data"]["conversation"] = chat_result.conversation
 
                 # Generate timing
                 response_time = self.timing.get_response_time(self.respond_fast_rate)

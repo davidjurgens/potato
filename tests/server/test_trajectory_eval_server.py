@@ -64,7 +64,7 @@ class TestTrajectoryEvalServer:
         config_file = create_test_config(
             test_dir,
             annotation_schemes=annotation_schemes,
-            data_file=data_file,
+            data_files=[data_file],
             annotation_task_name="Trajectory Eval Test",
         )
 
@@ -137,3 +137,22 @@ class TestTrajectoryEvalServer:
         resp = session.get(f"{self.server.base_url}/annotate")
         assert "traj-steps-container" in resp.text
         assert "trajectory-eval-data-input" in resp.text
+
+    def test_data_instance_json_emitted_for_step_binding(self):
+        """Regression: process_reward / trajectory_eval bind their step
+        cards from document.querySelector('[data-instance-json]'). Nothing
+        used to emit that element, so step binding silently failed under
+        instance_display (form stuck on "Waiting for steps..."). The page
+        must now embed the full instance record (incl. the steps_key) in a
+        [data-instance-json] element.
+        """
+        session = self._login()
+        resp = session.get(f"{self.server.base_url}/annotate")
+        assert resp.status_code == 200
+        assert "data-instance-json=" in resp.text, (
+            "[data-instance-json] element missing — step-binding schemas "
+            "cannot resolve their steps"
+        )
+        # The embedded record must carry the structured step data, not just
+        # the display text: a step action from the fixture should be present.
+        assert "search_web" in resp.text

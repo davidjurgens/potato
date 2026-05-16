@@ -281,11 +281,24 @@ def stop_session(session_id):
 
     trace = runner.get_trace()
 
-    # Save trace to disk
-    task_dir = os.path.abspath(current_app.config.get("task_dir", "."))
-    trace_dir = os.path.join(task_dir, "live_sessions", session_id)
-    os.makedirs(trace_dir, exist_ok=True)
-    trace_path = os.path.join(trace_dir, "trace.json")
+    # Colocate trace.json with the screenshots it references so the bundle
+    # is self-contained and portable, and rewrite each step's
+    # screenshot_url from an absolute filesystem path (not browser-fetchable
+    # — this is what made static review images break) to a runner-independent
+    # served URL.
+    shots_dir = os.path.abspath(runner.screenshot_dir)
+    session_folder = os.path.dirname(shots_dir)        # .../live_sessions/<key>
+    folder_name = os.path.basename(session_folder)
+    os.makedirs(session_folder, exist_ok=True)
+
+    for step in trace.get("steps", []):
+        idx = step.get("step_index")
+        if idx is not None:
+            step["screenshot_url"] = (
+                f"/api/live_agent/saved_screenshot/{folder_name}/{idx}"
+            )
+
+    trace_path = os.path.join(session_folder, "trace.json")
     with open(trace_path, "w", encoding="utf-8") as f:
         json.dump(trace, f, indent=2)
 
@@ -313,6 +326,32 @@ def get_screenshot(session_id, step):
         return jsonify({"error": "Screenshot file not found"}), 404
 
     return send_file(screenshot_path, mimetype="image/png")
+
+
+@live_agent_bp.route(
+    "/api/live_agent/saved_screenshot/<path:session_dir>/<int:step>"
+)
+@_login_required
+def get_saved_screenshot(session_dir, step):
+    """Serve a screenshot for an *exported* trace (no live runner needed).
+
+    Reads task_dir/live_sessions/<session_dir>/screenshots/step_NNN.png
+    with path-traversal containment, so saved/replayed traces render their
+    real screenshots in the static web_agent_trace review display.
+    """
+    from flask import abort
+
+    task_dir = os.path.abspath(current_app.config.get("task_dir", "."))
+    base = os.path.realpath(os.path.join(task_dir, "live_sessions"))
+    target = os.path.realpath(
+        os.path.join(base, session_dir, "screenshots", f"step_{step:03d}.png")
+    )
+    if not (target == base or target.startswith(base + os.sep)):
+        logger.warning(f"Saved-screenshot path traversal blocked: {session_dir}")
+        abort(403)
+    if not os.path.isfile(target):
+        abort(404)
+    return send_file(target, mimetype="image/png")
 
 
 @live_agent_bp.route("/api/live_agent/state/<session_id>")
