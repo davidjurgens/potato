@@ -1,0 +1,10 @@
+[
+  {
+    "id": "docker_factorial",
+    "task_description": "Write a Python function `factorial(n)` that returns n!. Test it on n=5 and print the result (should be 120)."
+  },
+  {
+    "id": "docker_word_count",
+    "task_description": "Count the number of distinct words (case-insensitive) in the string 'the quick brown fox jumps over the lazy dog the' and print the count."
+  }
+]

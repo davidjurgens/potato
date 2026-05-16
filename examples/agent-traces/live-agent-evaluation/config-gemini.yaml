@@ -1,0 +1,124 @@
+# Live Web Agent against Gemini 2.5 Flash (Google), via the OpenAI-compatible
+# endpoint. No api_key in this file: the capture script loads paper/.env and
+# exports the key as OPENAI_API_KEY into the server process, which the
+# openai_vision endpoint picks up. Gemini 2.5 Flash is a "thinking" model, so
+# max_tokens must be generous or responses come back empty (all budget spent
+# on internal reasoning).
+
+annotation_task_name: "Live Web Agent Gemini 2.5 Flash"
+
+data_files:
+  - type: json
+    path: data/tasks-rivalry.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+task_dir: .
+
+live_agent:
+  endpoint_type: openai_vision
+  ai_config:
+    model: gemini-2.5-flash
+    base_url: https://generativelanguage.googleapis.com/v1beta/openai/
+    max_tokens: 3072
+    temperature: 0.3
+    timeout: 120
+  system_prompt: |
+    You are a web browsing agent. You can see screenshots of web pages and take actions to complete tasks.
+
+    For each step, analyze the current screenshot and respond with a JSON object:
+    {
+      "thought": "Your reasoning about what you see and what to do next",
+      "action": {
+        "type": "click|type|scroll|navigate|wait|done",
+        "x": 100,
+        "y": 200,
+        "text": "text to type",
+        "url": "https://...",
+        "direction": "up|down",
+        "amount": 300,
+        "summary": "why the task is complete"
+      }
+    }
+
+    Guidance:
+    - To reach search results, prefer the "navigate" action with a direct
+      URL when possible rather than clicking and typing (error-prone).
+    - From a search results page you MUST click into the actual article
+      (or navigate to the article URL) -- a search results page is not the
+      article and does not satisfy the task.
+    - Once on the article, use "scroll" to reach the requested section and
+      read its content before concluding.
+    - Do NOT use the "done" action until you have opened the relevant
+      article and read the requested section. The "done" action's "summary"
+      field must contain the actual requested summary (multiple sentences of
+      real content), not a status message like "task complete".
+    - STOPPING RULE: A few sentences summarizing the rivalry's origins and
+      major eras is sufficient. After roughly 3-5 scrolls through the
+      History/Series-history content you HAVE enough information -- do NOT
+      keep scrolling to read tables, statistics, or every section. On the
+      very next step you MUST emit the "done" action with the summary
+      written from what you have already read. Endless scrolling to
+      "gather more" is a failure; conclude promptly.
+    - If a cookie/subscription/ad modal blocks the page, dismiss it or
+      navigate away instead of repeatedly clicking the same element.
+    - Only include the action fields relevant to the chosen type.
+    Always respond with valid JSON only. No markdown, no extra text.
+  max_steps: 24
+  step_delay: 1.0
+  history_window: 4
+  viewport:
+    width: 1280
+    height: 720
+  allow_takeover: true
+  allow_instructions: true
+
+instance_display:
+  fields:
+    - key: task_description
+      type: text
+      label: "Task"
+    - key: start_url
+      type: text
+      label: "Starting URL"
+    - key: agent_trace
+      type: live_agent
+      label: "Live Agent Session"
+      display_options:
+        show_overlays: true
+        show_filmstrip: true
+        show_thought: true
+        show_controls: true
+        allow_takeover: true
+        allow_instructions: true
+
+annotation_schemes:
+  - annotation_type: radio
+    name: task_completion
+    description: "Did the agent complete the task?"
+    labels:
+      - name: "Fully completed"
+      - name: "Partially completed"
+      - name: "Not completed"
+    display_config:
+      style: vertical
+
+  - annotation_type: radio
+    name: efficiency
+    description: "How efficient was the agent's approach?"
+    labels:
+      - name: "Very efficient"
+      - name: "Somewhat efficient"
+      - name: "Inefficient"
+
+  - annotation_type: text
+    name: notes
+    description: "Additional notes about the agent's performance"
+
+user_config:
+  allow_all_users: true
+
+output_annotation_dir: annotation_output
+output_annotation_format: json

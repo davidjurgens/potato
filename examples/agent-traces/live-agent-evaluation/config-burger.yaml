@@ -1,0 +1,109 @@
+# Live Web Agent against the burger vLLM Gemma-4 (OpenAI-compatible).
+#
+# Endpoint: http://burger.si.umich.edu:8001/v1  (vLLM, model
+# google/gemma-4-E4B-it, vision-capable, verified via /v1/chat/completions
+# with an image_url block).
+#
+# RUN:
+#   python potato/flask_server.py start \
+#     examples/agent-traces/live-agent-evaluation/config-burger.yaml -p 8000 \
+#     --debug --debug-phase annotation
+# then open the page, set a task + start URL, click "Start Agent".
+
+annotation_task_name: "Live Web Agent Gemma-4 vLLM"
+
+data_files:
+  - type: json
+    path: data/tasks.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+task_dir: .
+
+live_agent:
+  endpoint_type: openai_vision
+  ai_config:
+    model: google/gemma-4-E4B-it
+    base_url: http://burger.si.umich.edu:8001/v1
+    api_key: EMPTY            # vLLM ignores it; SDK needs a non-empty string
+    max_tokens: 1024
+    temperature: 0.3
+    timeout: 90
+  system_prompt: |
+    You are a web browsing agent. You can see screenshots of web pages and take actions to complete tasks.
+
+    For each step, analyze the current screenshot and respond with a JSON object:
+    {
+      "thought": "Your reasoning about what you see and what to do next",
+      "action": {
+        "type": "click|type|scroll|navigate|wait|done",
+        "x": 100,
+        "y": 200,
+        "text": "text to type",
+        "url": "https://...",
+        "direction": "up|down",
+        "amount": 300,
+        "summary": "why the task is complete"
+      }
+    }
+
+    Only include the action fields relevant to the chosen type.
+    Always respond with valid JSON only. No markdown, no extra text.
+  max_steps: 16
+  step_delay: 1.0
+  history_window: 4
+  viewport:
+    width: 1280
+    height: 720
+  allow_takeover: true
+  allow_instructions: true
+
+instance_display:
+  fields:
+    - key: task_description
+      type: text
+      label: "Task"
+    - key: start_url
+      type: text
+      label: "Starting URL"
+    - key: agent_trace
+      type: live_agent
+      label: "Live Agent Session"
+      display_options:
+        show_overlays: true
+        show_filmstrip: true
+        show_thought: true
+        show_controls: true
+        allow_takeover: true
+        allow_instructions: true
+
+annotation_schemes:
+  - annotation_type: radio
+    name: task_completion
+    description: "Did the agent complete the task?"
+    labels:
+      - name: "Fully completed"
+      - name: "Partially completed"
+      - name: "Not completed"
+    display_config:
+      style: vertical
+
+  - annotation_type: radio
+    name: efficiency
+    description: "How efficient was the agent's approach?"
+    labels:
+      - name: "Very efficient"
+      - name: "Somewhat efficient"
+      - name: "Inefficient"
+
+  - annotation_type: text
+    name: notes
+    description: "Additional notes about the agent's performance"
+
+user_config:
+  allow_all_users: true
+
+output_annotation_dir: annotation_output
+output_annotation_format: json

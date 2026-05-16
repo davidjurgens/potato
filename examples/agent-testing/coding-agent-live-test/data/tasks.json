@@ -1,0 +1,14 @@
+[
+  {
+    "id": "task_factorial",
+    "task_description": "Write a Python function `factorial(n)` that returns n! and verify it works for n=5 (should print 120)."
+  },
+  {
+    "id": "task_fizzbuzz",
+    "task_description": "Print the FizzBuzz sequence for numbers 1 through 15 (Fizz on multiples of 3, Buzz on multiples of 5, FizzBuzz on multiples of both, otherwise the number)."
+  },
+  {
+    "id": "task_bash_count",
+    "task_description": "Use a single shell command to print the integers 1 through 5 separated by newlines."
+  }
+]

@@ -1,0 +1,9 @@
+[
+  {
+    "id": "task_001",
+    "task_description": "Search Wikipedia for information about the Michigan-Ohio State rivalry. Find any articles and summarize the history of the rivalry in a few sentences.",
+    "start_url": "https://duckduckgo.com",
+    "difficulty": "medium",
+    "agent_trace": {}
+  }
+]

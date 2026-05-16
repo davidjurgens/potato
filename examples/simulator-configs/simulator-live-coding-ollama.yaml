@@ -1,0 +1,66 @@
+# Simulator Configuration: drive the live coding-agent (subprocess proxy)
+# end-to-end -- a user persona LLM gives natural prompts to the proxy
+# that actually executes code, then a vision LLM rates the resulting
+# trajectory.
+#
+# Pair with examples/agent-testing/coding-agent-live-test/.
+#
+# Prerequisites:
+#   ollama pull llama3.2:3b   # persona AND planner
+#   ollama pull gemma4:e4b    # rater
+#
+# Usage:
+#   python potato/flask_server.py start \
+#       examples/agent-testing/coding-agent-live-test/config.yaml -p 8527
+#   python tests/smoke/run_live_coding_agent_sim.py
+
+simulator:
+  users:
+    count: 1
+    competence_distribution:
+      perfect: 1.0
+
+  strategy: agent
+
+  agent_config:
+    endpoint_type: ollama_vision
+    model: gemma4:e4b
+    base_url: http://localhost:11434
+    temperature: 0.0
+    max_tokens: 600
+    cache_per_instance: true
+    add_noise: false
+
+  interactive:
+    enabled: true
+    endpoint_type: ollama
+    model: llama3.2:3b
+    base_url: http://localhost:11434
+    temperature: 0.4
+    max_tokens: 200
+    max_turns: 4
+    persona_system_prompt: |
+      You are a developer testing a coding assistant. Briefly tell the
+      assistant what you want done in one or two sentences. After the
+      assistant responds, either ask a short clarifying question or
+      acknowledge the result. When the result is correct, acknowledge
+      and end your message with the marker [DONE].
+    done_marker: "[DONE]"
+    first_message_template: "Please help me with this coding task: {task}"
+
+  timing:
+    annotation_time:
+      min: 1.0
+      max: 5.0
+      mean: 2.0
+      std: 1.0
+      distribution: normal
+
+  execution:
+    parallel_users: 1
+    delay_between_users: 1.0
+    max_annotations_per_user: 2
+
+  output:
+    dir: simulator_output_live_coding
+    format: json

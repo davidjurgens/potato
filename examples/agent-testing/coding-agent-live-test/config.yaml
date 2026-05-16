@@ -1,0 +1,92 @@
+# Live coding-agent example via the new SubprocessCodingAgentProxy.
+#
+# The annotator chats with a live coding agent (planner LLM + sandboxed
+# subprocess executor) that can run python and shell commands in a
+# per-session tempdir. After the chat, the annotator rates the
+# trajectory with standard schemas.
+#
+# Pair with: tests/smoke/run_live_coding_agent_sim.py
+#
+# Prerequisites:
+#   ollama pull llama3.2:3b   # planner used by the coding proxy
+#   ollama pull gemma4:e4b    # rater used by the simulator after the chat
+
+annotation_task_name: "Live Coding Agent (subprocess sandbox)"
+
+data_files:
+  - data/tasks.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+agent_proxy:
+  type: subprocess_coding
+  llm:
+    endpoint_type: ollama
+    model: llama3.2:3b
+    base_url: http://localhost:11434
+    temperature: 0.2
+    max_tokens: 600
+  execution:
+    per_step_timeout: 6
+    max_output_chars: 2000
+  sandbox:
+    max_steps: 8
+    max_session_seconds: 240
+    request_timeout_seconds: 60
+    rate_limit_per_minute: 30
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    - key: task_description
+      type: text
+      label: "Coding Task"
+
+    - key: conversation
+      type: interactive_chat
+      label: "Live Coding Agent"
+      display_options:
+        show_turn_numbers: true
+        per_turn_ratings:
+          speakers: ["Agent"]
+          schemes:
+            - schema_name: turn_correct
+              scheme:
+                type: likert
+                size: 3
+                labels: ["Wrong", "Right"]
+
+annotation_schemes:
+  - annotation_type: radio
+    name: task_success
+    description: "Did the agent complete the coding task?"
+    labels:
+      - name: success
+        tooltip: "Agent produced correct working code"
+      - name: partial
+        tooltip: "Partial progress, but did not finish"
+      - name: failure
+        tooltip: "Did not solve the task"
+
+  - annotation_type: likert
+    name: code_quality
+    description: "Quality of the generated code"
+    size: 5
+    min_label: "Bad"
+    max_label: "Excellent"
+
+  - annotation_type: text
+    name: notes
+    description: "Notes about the session"
+
+user_config:
+  allow_all_users: true
