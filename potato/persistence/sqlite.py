@@ -91,6 +91,19 @@ def registered_migrations() -> List[Migration]:
         return list(_MIGRATIONS)
 
 
+def clear_migrations() -> None:
+    """Reset the process-global migration registry. Tests only.
+
+    The registry is process-global and migrations are normally registered
+    once at import time. A test that registers an ad-hoc migration would
+    otherwise leak it into every later test's `get_db()` in the same
+    pytest process. Call this (and `clear_db_cache()`) for isolation.
+    """
+    with _REGISTRY_LOCK:
+        _MIGRATIONS.clear()
+        _MIGRATION_NAMES.clear()
+
+
 def get_db(task_dir: str) -> sqlite3.Connection:
     """Return the cached WAL-mode SQLite connection for this project.
 

@@ -10,6 +10,7 @@ import pytest
 from potato.persistence import (
     Migration,
     clear_db_cache,
+    clear_migrations,
     close_db,
     get_db,
     register_migration,
@@ -19,10 +20,13 @@ from potato.persistence import (
 
 @pytest.fixture(autouse=True)
 def _reset_caches():
-    """Each test starts with an empty connection cache."""
+    """Each test starts with an empty connection cache AND migration
+    registry, so ad-hoc test migrations don't leak across the session."""
     clear_db_cache()
+    clear_migrations()
     yield
     clear_db_cache()
+    clear_migrations()
 
 
 @pytest.fixture
@@ -111,6 +115,24 @@ class TestMigrations:
         names = [m.name for m in registered_migrations()]
         # Second registration ignored
         assert names.count("test_persistence_idempotent_one") == 1
+
+    def test_clear_migrations_empties_registry(self):
+        register_migration(Migration(
+            name="test_persistence_to_be_cleared",
+            sql="CREATE TABLE cleared_t (a INT);",
+        ))
+        assert any(
+            m.name == "test_persistence_to_be_cleared"
+            for m in registered_migrations()
+        )
+        clear_migrations()
+        assert registered_migrations() == []
+        # Same name can be registered again after a clear (not deduped away).
+        register_migration(Migration(
+            name="test_persistence_to_be_cleared",
+            sql="CREATE TABLE cleared_t (a INT);",
+        ))
+        assert len(registered_migrations()) == 1
 
     def test_migration_does_not_re_run_on_second_get_db(self, task_dir):
         register_migration(Migration(

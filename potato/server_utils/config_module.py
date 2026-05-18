@@ -283,6 +283,13 @@ KNOWN_CONFIG_KEYS = {
         # Sub-blocks reserved for later phases:
         # "cases", "queries", "smart_codes", "network", "media_sync"
     },
+    # Universal annotation UI feature toggles (not QDA-gated). `memos`
+    # turns the memo sidebar on/off (default off in standard mode, on for
+    # qda_mode/solo_mode); `visibility` is the default new-memo visibility.
+    "annotation_ui": {
+        "memos": None,
+        "visibility": None,
+    },
     "solo_mode": {
         "enabled": None,
         "labeling_models": None,

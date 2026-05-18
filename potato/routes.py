@@ -6857,6 +6857,14 @@ def configure_routes(flask_app, app_config):
         except ImportError:
             pass
 
+    # Register universal Memos blueprint if not already registered
+    if 'memos' not in app.blueprints:
+        try:
+            from potato.memos.api import memos_bp
+            app.register_blueprint(memos_bp)
+        except ImportError:
+            pass
+
 # ============================================================================
 # Adjudication Routes
 # ============================================================================

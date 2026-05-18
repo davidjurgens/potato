@@ -18,6 +18,7 @@ from .sqlite import (
     get_db,
     close_db,
     clear_db_cache,
+    clear_migrations,
     register_migration,
     registered_migrations,
 )
@@ -27,6 +28,7 @@ __all__ = [
     "get_db",
     "close_db",
     "clear_db_cache",
+    "clear_migrations",
     "register_migration",
     "registered_migrations",
 ]
