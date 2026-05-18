@@ -20,7 +20,8 @@ from .identifier_utils import (
     generate_element_identifier,
     generate_validation_attribute,
     escape_html_content,
-    generate_layout_attributes
+    generate_layout_attributes,
+    display_label_text,
 )
 
 
@@ -144,8 +145,11 @@ def _generate_radio_layout_internal(annotation_scheme, horizontal=False):
                 key_bindings.append((shortcut_key, f"{identifiers['schema']}: {label}"))
                 logger.debug(f"Added sequential key binding '{shortcut_key}' for label '{label}'")
 
-        # Format label content with optional keyboard shortcut badge
-        label_content = escape_html_content(label)
+        # Visible text is humanized (or an explicit displayed_label);
+        # the stored value (label_value) remains the raw label name.
+        label_content = escape_html_content(
+            display_label_text(label_data, annotation_scheme)
+        )
         data_key_attr = ""
         key_badge = ""
         if label in label2key:

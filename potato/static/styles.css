@@ -2282,9 +2282,24 @@ fieldset[schema] {
   border-radius: var(--radius);
 }
 
+/* The flex children are the per-field wrappers (.display-field or the
+   .display-field-resizable wrapper), so size THOSE. flex-basis:0 +
+   min-width:0 lets columns actually share the row; without it wide
+   content (dialogue bubbles) pushes each past 50% and flex-wrap
+   stacks them instead. */
+.layout-horizontal > .display-field,
+.layout-horizontal > .display-field-resizable {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .layout-horizontal .display-field {
-  flex: 1;
-  min-width: 200px;
+  min-width: 0;
+}
+
+.layout-horizontal .display-field .display-field-content {
+  min-width: 0;
+  overflow-x: auto;
 }
 
 /* Display field label — quiet caption, not a shout */

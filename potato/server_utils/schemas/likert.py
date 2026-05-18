@@ -122,8 +122,9 @@ def _generate_likert_layout_internal(annotation_scheme):
             key_bindings.append((key_value, f"{identifiers['schema']}: {key_value}"))
             logger.debug(f"Added key binding '{key_value}' for point {i}")
 
-        # Format label content - show numbers if displaying_score is enabled
-        label_content = str(i) if annotation_scheme.get("displaying_score") else ""
+        # Show the point number by default (unlabeled circles are a
+        # usability defect); honor an explicit displaying_score: false.
+        label_content = str(i) if annotation_scheme.get("displaying_score", True) else ""
 
         # Generate radio input for each scale point
         schematic += f"""

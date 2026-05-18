@@ -8,6 +8,8 @@ events that the CodingAgentRunner consumes.
 Available backends:
 - anthropic_tool_use: Custom agent loop using Anthropic API
 - ollama_tool_use: Custom agent loop using Ollama (fully local, no API key)
+- openai_tool_use: Custom agent loop using any OpenAI-compatible server
+  (OpenAI, vLLM, llama.cpp, ...) with tool calling
 - claude_sdk: Claude Agent SDK (subprocess with JSON-lines IPC)
 - subprocess: Generic CLI agent (Phase 4)
 - opencode: OpenCode SDK (Phase 4)
@@ -305,6 +307,12 @@ def _register_builtin_backends():
         register_backend("ollama_tool_use", OllamaToolUseBackend)
     except ImportError:
         logger.debug("Ollama backend not available")
+
+    try:
+        from .coding_agent_backends.openai_backend import OpenAIToolUseBackend
+        register_backend("openai_tool_use", OpenAIToolUseBackend)
+    except ImportError:
+        logger.debug("OpenAI backend not available (missing openai package)")
 
     try:
         from .coding_agent_backends.claude_sdk_backend import ClaudeSDKBackend

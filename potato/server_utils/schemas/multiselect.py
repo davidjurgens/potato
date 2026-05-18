@@ -21,7 +21,8 @@ from .identifier_utils import (
     generate_element_identifier,
     generate_validation_attribute,
     escape_html_content,
-    generate_layout_attributes
+    generate_layout_attributes,
+    display_label_text,
 )
 
 
@@ -225,9 +226,11 @@ def _format_label_content(label_data, annotation_scheme):
         video_path = label_data["videopath"]
         return f'<video src="{escape_html_content(video_path)}" controls style="max-width: 200px; max-height: 150px;"></video>'
     else:
-        # Text label
-        label = label_data if isinstance(label_data, str) else label_data["name"]
-        return escape_html_content(label)
+        # Text label -- visible text is humanized (or explicit
+        # displayed_label); stored value remains the raw label name.
+        return escape_html_content(
+            display_label_text(label_data, annotation_scheme)
+        )
 
 def _generate_free_response(annotation_scheme, n_columns):
     """
