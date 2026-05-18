@@ -268,6 +268,14 @@ KNOWN_CONFIG_KEYS = {
     "max_annotations_per_item": None,
     "num_annotators_per_item": None,
     "min_annotators_per_instance": None,
+    # qda_mode sub-keys are deliberately leaf (None): validation stops at
+    # memos/codebook and does NOT recurse into their sub-keys. This is
+    # intentional forward-compat — parse_qda_mode_config() routes any
+    # unrecognized qda_mode.* keys into `extras` so configs can declare
+    # not-yet-shipped blocks (cases/queries/smart_codes/network/media_sync)
+    # without tripping unknown-key warnings. The tradeoff: a typo like
+    # qda_mode.memos.enabledd is silently accepted. Revisit (deepen the
+    # schema) once those sub-blocks ship and their shapes are stable.
     "qda_mode": {
         "enabled": None,
         "memos": None,

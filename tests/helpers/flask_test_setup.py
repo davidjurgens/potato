@@ -39,6 +39,20 @@ def clear_all_global_state():
     clear_item_state_manager()
     clear_user_state_manager()
 
+    # Mode singletons (QDA / Solo) — leak across in-process server tests
+    # otherwise, making a mode-disabled server report enabled.
+    for _mode_mod, _clear_fn in (
+        ("potato.qda_mode", "clear_qda_mode_manager"),
+        ("potato.solo_mode", "clear_solo_mode_manager"),
+    ):
+        try:
+            import importlib
+            _fn = getattr(importlib.import_module(_mode_mod), _clear_fn, None)
+            if _fn:
+                _fn()
+        except Exception:
+            pass
+
     # Config module
     try:
         from potato.server_utils.config_module import clear_config

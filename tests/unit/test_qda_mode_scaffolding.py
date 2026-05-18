@@ -118,14 +118,18 @@ class TestManager:
         clear_qda_mode_manager()
         assert get_qda_mode_manager() is None
 
-    def test_invalid_config_does_not_init(self):
-        result = init_qda_mode_manager({
-            "qda_mode": {
-                "enabled": True,
-                "codebook": {"mode": "nonsense"},
-            },
-        })
-        assert result is None
+    def test_invalid_config_raises_loud(self):
+        """F2: an enabled-but-invalid qda_mode must raise, not silently
+        boot with QDA disabled."""
+        from potato.server_utils.config_module import ConfigValidationError
+
+        with pytest.raises(ConfigValidationError, match="qda_mode"):
+            init_qda_mode_manager({
+                "qda_mode": {
+                    "enabled": True,
+                    "codebook": {"mode": "nonsense"},
+                },
+            })
         assert get_qda_mode_manager() is None
 
 

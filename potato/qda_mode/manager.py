@@ -66,7 +66,13 @@ def init_qda_mode_manager(config_data: Dict[str, Any]) -> Optional[QDAModeManage
         if errors:
             for err in errors:
                 logger.error(f"QDA Mode config error: {err}")
-            return None
+            # Fail loud: an explicitly-enabled but misconfigured qda_mode
+            # block must abort startup, not silently boot with QDA off
+            # (the same silent-failure class as the legacy phase-type bug).
+            from potato.server_utils.config_module import ConfigValidationError
+            raise ConfigValidationError(
+                "Invalid qda_mode configuration: " + "; ".join(errors)
+            )
 
         _QDA_MODE_MANAGER = QDAModeManager(qda_config, config_data)
         logger.info(f"QDA Mode initialized: {_QDA_MODE_MANAGER!r}")

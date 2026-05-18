@@ -91,7 +91,7 @@ from potato.knowledge_base import init_kb_manager
 from potato.solo_mode import init_solo_mode_manager, get_solo_mode_manager
 from potato.solo_mode.routes import solo_mode_bp
 
-from potato.qda_mode import init_qda_mode_manager, get_qda_mode_manager, qda_mode_bp
+from potato.qda_mode import init_qda_mode_manager
 
 from potato.create_task_cli import create_task_cli
 from potato.server_utils.arg_utils import arguments
@@ -113,7 +113,9 @@ from potato.ai.ai_help_wrapper import init_dynamic_ai_help
 # Initialize Flask app
 app = Flask(__name__)
 app.register_blueprint(solo_mode_bp)
-app.register_blueprint(qda_mode_bp)
+# Note: qda_mode_bp is registered on the *served* app in
+# potato.routes.configure_routes (the module-level `app` here is discarded
+# and rebuilt by create_app), so it is intentionally not registered here.
 
 # Web agent recording and proxy blueprints (registered lazily in configure_app
 # only when web_agent display types are configured)
