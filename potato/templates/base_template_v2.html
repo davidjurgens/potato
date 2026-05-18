@@ -118,6 +118,9 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/llm-chat-sidebar.css') }}?v=1">
     {% endif %}
 
+    <!-- Universal Memos sidebar styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/memos.css') }}?v=2">
+
     <!-- jQuery (required for span annotation) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
 
@@ -557,5 +560,39 @@
             }
         });
     </script>
+
+    <!-- Universal Memos sidebar (self-hides if annotation_ui.memos is off:
+         the API returns 503 and the toggle stays hidden) -->
+    {% if is_annotation_page %}
+    <button type="button" id="memo-panel-toggle" class="memo-panel-toggle" hidden>
+        &#128221; Notes
+    </button>
+    <div id="memo-panel" class="memo-panel" hidden aria-label="Notes panel">
+        <div class="memo-panel-header">
+            <span>Notes</span>
+            <button type="button" id="memo-panel-close" aria-label="Close notes">&times;</button>
+        </div>
+        <div id="memo-list" class="memo-list"></div>
+        <div class="memo-composer">
+            <textarea id="memo-new-body" placeholder="Add a note about this instance&hellip;"></textarea>
+            <div id="memo-anchor-wrap" class="memo-anchor-hint" hidden>
+                <label>
+                    <input type="checkbox" id="memo-anchor-check">
+                    Attach to selected text: &ldquo;<span id="memo-anchor-quote"></span>&rdquo;
+                </label>
+            </div>
+            <div class="memo-composer-row">
+                <label>Visibility
+                    <select id="memo-new-visibility">
+                        <option value="private">Private</option>
+                        <option value="shared">Shared</option>
+                    </select>
+                </label>
+                <button type="button" id="memo-add-btn" class="memo-primary">Add note</button>
+            </div>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='memos.js') }}?v=1"></script>
+    {% endif %}
 </body>
 </html>

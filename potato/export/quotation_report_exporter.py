@@ -14,6 +14,12 @@ Output columns:
     instance_id      source item id
     source_doc       text_key value or item id, for cross-reference
     coder            user id
+
+Option:
+    include_memos=true   Also append one row per memo (schema="(memo)",
+                         code=<visibility>, text=<memo body>, offsets from
+                         the memo anchor when span-anchored). Useful for
+                         audit trails and qualitative deliverables.
 """
 
 import csv
@@ -38,6 +44,48 @@ class QuotationReportExporter(BaseExporter):
         if not has_span_schema:
             return False, "No span annotation schema found in config"
         return True, ""
+
+    @staticmethod
+    def _truthy(v) -> bool:
+        return str(v).strip().lower() in ("1", "true", "yes", "on")
+
+    def _memo_rows(self, context: ExportContext, default_text_key: str) -> list:
+        """One row per memo. Reads the universal project.sqlite via the
+        memos store. No-op (returns []) when the DB or memos package is
+        absent — never breaks the core span export."""
+        task_dir = context.config.get("task_dir", ".")
+        db_path = os.path.join(task_dir, "project.sqlite")
+        if not os.path.exists(db_path):
+            return []
+        try:
+            from potato.memos import store as memo_store
+        except Exception:
+            return []
+        project = context.config.get("annotation_task_name") or "default"
+        out = []
+        for instance_id, item in (context.items or {}).items():
+            try:
+                memos = memo_store.list_for_instance(task_dir, project, instance_id)
+            except Exception as e:
+                logger.warning(f"Skipping memos for {instance_id}: {e}")
+                continue
+            source_doc = (item or {}).get(default_text_key, "") or instance_id
+            for m in memos:
+                anchor = m.get("anchor") or {}
+                out.append({
+                    "schema": "(memo)",
+                    "code": m.get("visibility", ""),
+                    "text": m.get("body", ""),
+                    "start": anchor.get("start", ""),
+                    "end": anchor.get("end", ""),
+                    "field": anchor.get("field", ""),
+                    "instance_id": instance_id,
+                    "source_doc": (source_doc[:200]
+                                   if isinstance(source_doc, str) else source_doc),
+                    "coder": m.get("created_by", ""),
+                })
+        logger.info(f"Quotation report including {len(out)} memo rows")
+        return out
 
     def export(self, context: ExportContext, output_path: str,
                options: Optional[dict] = None) -> ExportResult:
@@ -79,6 +127,9 @@ class QuotationReportExporter(BaseExporter):
                         "source_doc": (source_doc[:200] if isinstance(source_doc, str) else source_doc),
                         "coder": coder,
                     })
+
+        if self._truthy(options.get("include_memos")):
+            rows.extend(self._memo_rows(context, default_text_key))
 
         fieldnames = [
             "schema", "code", "text", "start", "end", "field",

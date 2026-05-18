@@ -45,6 +45,16 @@ _MEMOS_MIGRATION = Migration(
 register_migration(_MEMOS_MIGRATION)
 
 
+def _db(task_dir: str):
+    """Connection for the memos store, guaranteeing the migration is
+    registered first. register_migration is idempotent, so this is a
+    no-op in normal operation; it makes the store robust if a test
+    helper (clear_migrations) wiped the process-global registry before
+    the first get_db() for this task_dir opens the connection."""
+    register_migration(_MEMOS_MIGRATION)
+    return get_db(task_dir)
+
+
 def _row_to_dict(row) -> Dict[str, Any]:
     d = dict(row)
     d["anchor"] = json.loads(d["anchor"]) if d["anchor"] else None
@@ -64,7 +74,7 @@ def create(
     """Insert a memo row and return it as a dict."""
     memo_id = uuid.uuid4().hex
     now = time.time()
-    conn = get_db(task_dir)
+    conn = _db(task_dir)
     conn.execute(
         """INSERT INTO memos
            (id, project, instance_id, anchor, body, created_by,
@@ -81,7 +91,7 @@ def create(
 
 
 def get(task_dir: str, memo_id: str) -> Optional[Dict[str, Any]]:
-    row = get_db(task_dir).execute(
+    row = _db(task_dir).execute(
         "SELECT * FROM memos WHERE id = ?", (memo_id,)
     ).fetchone()
     return _row_to_dict(row) if row else None
@@ -91,7 +101,7 @@ def list_for_instance(
     task_dir: str, project: str, instance_id: str
 ) -> List[Dict[str, Any]]:
     """All memos on an instance (no visibility filtering — service does that)."""
-    rows = get_db(task_dir).execute(
+    rows = _db(task_dir).execute(
         """SELECT * FROM memos
            WHERE project = ? AND instance_id = ?
            ORDER BY created_at ASC""",
@@ -120,14 +130,14 @@ def update(
     sets.append("updated_at = ?")
     params.append(time.time())
     params.append(memo_id)
-    conn = get_db(task_dir)
+    conn = _db(task_dir)
     conn.execute(f"UPDATE memos SET {', '.join(sets)} WHERE id = ?", params)
     conn.commit()
     return get(task_dir, memo_id)
 
 
 def delete(task_dir: str, memo_id: str) -> bool:
-    conn = get_db(task_dir)
+    conn = _db(task_dir)
     cur = conn.execute("DELETE FROM memos WHERE id = ?", (memo_id,))
     conn.commit()
     return cur.rowcount > 0

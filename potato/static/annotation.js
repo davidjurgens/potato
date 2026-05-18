@@ -980,6 +980,12 @@ async function loadCurrentInstance() {
 
         restoreSpanAnnotationsFromHTML();
         loadAnnotations();
+        // Memos persist server-side and nav is a full reload, but if the
+        // instance changes without a reload, refresh the memo panel so it
+        // never shows another instance's notes.
+        if (window.MemoPanel && typeof window.MemoPanel.reload === 'function') {
+            window.MemoPanel.reload();
+        }
         generateAnnotationForms();
         aiAssistantManger.getAiAssistantName();
 

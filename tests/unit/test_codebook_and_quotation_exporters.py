@@ -155,3 +155,54 @@ class TestQuotationReportExporter:
         ok, reason = QuotationReportExporter().can_export(_context(schemas))
         assert not ok
         assert "span" in reason.lower()
+
+    def test_include_memos_appends_memo_rows(self):
+        from potato.memos import create_memo
+        from potato.memos.store import _MEMOS_MIGRATION
+        from potato.persistence import (
+            clear_db_cache, clear_migrations, register_migration,
+        )
+
+        clear_db_cache()
+        clear_migrations()
+        register_migration(_MEMOS_MIGRATION)
+        try:
+            with tempfile.TemporaryDirectory() as task_dir:
+                create_memo(task_dir, project="P", instance_id="i1",
+                            body="audit note", created_by="alice",
+                            visibility="shared",
+                            anchor={"start": 6, "end": 11, "field": "text"})
+                schemas = [{"name": "themes", "annotation_type": "span",
+                            "labels": ["a"]}]
+                items = {"i1": {"text": "Hello there, world."}}
+                annotations = [{"instance_id": "i1", "user_id": "u1",
+                                "spans": {"themes": [
+                                    {"label": "a", "text": "Hello",
+                                     "start": 0, "end": 5}]}}]
+                ctx = ExportContext(
+                    config={"item_properties": {"text_key": "text"},
+                            "task_dir": task_dir,
+                            "annotation_task_name": "P"},
+                    annotations=annotations, items=items, schemas=schemas,
+                    output_dir="")
+
+                with tempfile.TemporaryDirectory() as out:
+                    r = QuotationReportExporter().export(ctx, out)
+                    rows = list(csv.DictReader(open(r.files_written[0])))
+                # without the flag: only the span row
+                assert [x["schema"] for x in rows] == ["themes"]
+
+                with tempfile.TemporaryDirectory() as out:
+                    r = QuotationReportExporter().export(
+                        ctx, out, options={"include_memos": "true"})
+                    rows = list(csv.DictReader(open(r.files_written[0])))
+                memo_rows = [x for x in rows if x["schema"] == "(memo)"]
+                assert len(memo_rows) == 1
+                m = memo_rows[0]
+                assert m["text"] == "audit note"
+                assert m["code"] == "shared"      # visibility in code column
+                assert m["coder"] == "alice"
+                assert m["start"] == "6" and m["end"] == "11"
+        finally:
+            clear_db_cache()
+            clear_migrations()

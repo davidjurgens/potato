@@ -74,6 +74,7 @@ Role-based guides that walk you through Potato for your specific use case:
 - [Surveyflow](workflow/surveyflow.md) - Pre/post annotation surveys
 - [Annotation Filtering](workflow/annotation_filtering.md) - Filter data based on prior annotations
 - [Survey Instruments](advanced/survey_instruments.md) - 55 pre-built validated psychological instruments
+- [Memos](advanced/memos.md) - Universal annotator notes (instance/span-anchored, private/shared)
 
 ## Agent Evaluation
 
