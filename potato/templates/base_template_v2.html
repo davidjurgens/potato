@@ -120,6 +120,7 @@
 
     <!-- Universal Memos sidebar styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/memos.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/search.css') }}?v=1">
 
     <!-- jQuery (required for span annotation) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
@@ -593,6 +594,28 @@
         </div>
     </div>
     <script src="{{ url_for('static', filename='memos.js') }}?v=1"></script>
+
+    <!-- Annotator search-and-claim sidebar (self-hides unless
+         search.annotator_claim is enabled: the enable-probe gets 403). -->
+    <button type="button" id="search-panel-toggle" class="search-panel-toggle" hidden>
+        &#128269; Find
+    </button>
+    <div id="search-panel" class="search-panel" hidden aria-label="Search panel">
+        <div class="search-panel-header">
+            <span>Find instances</span>
+            <button type="button" id="search-panel-close" aria-label="Close search">&times;</button>
+        </div>
+        <div class="search-form">
+            <input type="text" id="search-q" placeholder="Search instance text&hellip;"
+                   aria-label="Search query">
+            <button type="button" id="search-go" class="search-primary">Search</button>
+        </div>
+        <div id="search-results" class="search-results">
+            <div class="search-empty">Search to find instances, then Claim
+                one to add it to your queue.</div>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='search.js') }}?v=1"></script>
     {% endif %}
 </body>
 </html>
