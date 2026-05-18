@@ -1,0 +1,8 @@
+[
+  {"id": "1", "text": "Routine status update with nothing unusual to report."},
+  {"id": "2", "text": "A rare anomaly was detected in the overnight batch job."},
+  {"id": "3", "text": "Standard weekly summary of completed tasks."},
+  {"id": "4", "text": "Another rare edge case: duplicate records under high load."},
+  {"id": "5", "text": "Nominal performance across all monitored services."},
+  {"id": "6", "text": "Unusual spike correlated with the rare anomaly above."}
+]

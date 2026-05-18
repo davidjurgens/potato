@@ -44,6 +44,7 @@ def clear_all_global_state():
     for _mode_mod, _clear_fn in (
         ("potato.qda_mode", "clear_qda_mode_manager"),
         ("potato.solo_mode", "clear_solo_mode_manager"),
+        ("potato.search", "clear_search"),
     ):
         try:
             import importlib
@@ -610,6 +611,16 @@ class FlaskTestServer:
                         print(f"[DEBUG] Error initializing QDA Mode manager: {e}")
                         import traceback
                         traceback.print_exc()
+
+                # Build the universal search index (no-op if disabled)
+                try:
+                    from potato.search import (
+                        clear_search, init_search_from_item_state,
+                    )
+                    clear_search()
+                    init_search_from_item_state(config)
+                except Exception as e:
+                    print(f"[DEBUG] Search index init skipped: {e}")
 
                 # Initialize chat manager if configured
                 if config.get("chat_support", {}).get("enabled", False):

@@ -119,6 +119,12 @@ def get_db(task_dir: str) -> sqlite3.Connection:
     with _DB_CACHE_LOCK:
         existing = _DB_CACHE.get(abs_dir)
         if existing is not None:
+            # Apply any migrations registered AFTER this connection was
+            # first opened. Idempotent and cheap (one indexed SELECT when
+            # nothing is pending). Without this, a feature whose module
+            # is imported/registered later than another feature's first
+            # get_db() call would never get its tables created.
+            _run_pending_migrations(existing)
             return existing
         os.makedirs(abs_dir, exist_ok=True)
         db_path = os.path.join(abs_dir, "project.sqlite")

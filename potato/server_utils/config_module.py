@@ -290,6 +290,15 @@ KNOWN_CONFIG_KEYS = {
         "memos": None,
         "visibility": None,
     },
+    # Universal full-text search (FTS5). Read-only admin search is always
+    # safe; `annotator_claim` opt-in is governed by a startup
+    # compatibility guard (see validate_search_assignment_compat).
+    "search": {
+        "enabled": None,
+        "backend": None,
+        "max_instances": None,
+        "annotator_claim": None,
+    },
     "solo_mode": {
         "enabled": None,
         "labeling_models": None,
@@ -657,8 +666,90 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Validate types for commonly misconfigured optional fields
     validate_optional_field_types(config_data)
 
+    # Fail loud if annotator search-and-claim is combined with an
+    # assignment design it would corrupt via self-selection.
+    validate_search_assignment_compat(config_data)
+
     # Warn about unrecognized keys at all nesting levels
     validate_unknown_keys(config_data)
+
+
+# Assignment strategies whose sampling/ordering self-selection breaks.
+_CLAIM_INCOMPATIBLE_STRATEGIES = {
+    "random", "diversity_clustering", "max_diversity",
+    "active_learning", "llm_confidence", "least_annotated",
+    "category_based",
+}
+
+
+def validate_search_assignment_compat(config_data: Dict[str, Any]) -> None:
+    """Hard-fail when ``search.annotator_claim`` is combined with a
+    feature whose integrity depends on the platform — not the annotator —
+    choosing the next item. Read-only admin search is unaffected.
+
+    Solo/QDA mode (single coder over the whole corpus) is always allowed.
+    """
+    search = config_data.get("search")
+    if not isinstance(search, dict) or not search.get("annotator_claim"):
+        return
+
+    # Single-coder modes have no sampling/overlap invariant to protect.
+    if (config_data.get("qda_mode") or {}).get("enabled") or \
+       (config_data.get("solo_mode") or {}).get("enabled"):
+        return
+
+    conflicts = []
+
+    strat = config_data.get("assignment_strategy")
+    if isinstance(strat, dict):
+        strat = strat.get("name")
+    if strat and str(strat).lower() in _CLAIM_INCOMPATIBLE_STRATEGIES:
+        conflicts.append(
+            f"assignment_strategy: {strat} (self-selection breaks "
+            f"sampling/ordering)")
+
+    for k in ("max_annotations_per_item", "num_annotators_per_item",
+              "min_annotators_per_instance"):
+        try:
+            if int(config_data.get(k, -1)) > 1:
+                conflicts.append(
+                    f"{k}: {config_data[k]} (inter-annotator overlap "
+                    f"cannot be guaranteed under self-selection)")
+        except (TypeError, ValueError):
+            pass
+
+    if (config_data.get("attention_checks") or {}).get("enabled"):
+        conflicts.append("attention_checks.enabled (annotators could "
+                          "locate/avoid QC items)")
+    if (config_data.get("gold_standards") or {}).get("enabled"):
+        conflicts.append("gold_standards.enabled (annotators could "
+                         "locate/avoid gold items)")
+    if (config_data.get("icl_labeling") or {}).get("enabled"):
+        conflicts.append("icl_labeling.enabled (blind LLM-verification "
+                         "tasks must not be findable)")
+    if (config_data.get("adjudication") or {}).get("enabled"):
+        conflicts.append("adjudication.enabled (the adjudication queue "
+                         "is curated)")
+
+    login_type = (config_data.get("login") or {}).get("type")
+    crowd = (
+        "mturk" in config_data or "prolific" in config_data
+        or login_type in ("mturk", "prolific")
+    )
+    if crowd:
+        conflicts.append("crowdsourcing backend (HIT = the assigned "
+                         "unit; self-selection breaks payment/coverage)")
+
+    if conflicts:
+        raise ConfigValidationError(
+            "search.annotator_claim: true is incompatible with this "
+            "configuration:\n  - " + "\n  - ".join(conflicts) +
+            "\n\nAnnotator search-and-claim is only supported with "
+            "solo_mode/qda_mode, or fixed_order assignment without "
+            "overlap, quality-control injection, ICL verification, "
+            "adjudication, or a crowdsourcing backend. Use read-only "
+            "admin search (no annotator_claim) for those designs."
+        )
 
 
 def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:

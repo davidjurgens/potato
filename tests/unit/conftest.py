@@ -55,6 +55,11 @@ def reset_mode_singletons():
                     clear()
             except Exception:
                 pass
+        try:
+            from potato.search import clear_search
+            clear_search()
+        except Exception:
+            pass
 
     _clear()
     yield

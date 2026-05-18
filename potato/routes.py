@@ -6865,6 +6865,14 @@ def configure_routes(flask_app, app_config):
         except ImportError:
             pass
 
+    # Register universal Search blueprint if not already registered
+    if 'search' not in app.blueprints:
+        try:
+            from potato.search.api import search_bp
+            app.register_blueprint(search_bp)
+        except ImportError:
+            pass
+
 # ============================================================================
 # Adjudication Routes
 # ============================================================================

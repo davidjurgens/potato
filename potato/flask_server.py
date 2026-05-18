@@ -3305,6 +3305,13 @@ def _initialize_from_config(config_file):
         init_qda_mode_manager(config)
         logger.info("QDA Mode initialized successfully")
 
+    # Build the universal search index (no-op if search disabled).
+    try:
+        from potato.search import init_search_from_item_state
+        init_search_from_item_state(config)
+    except Exception as e:
+        logger.warning(f"Search index init skipped: {e}")
+
     logger.info("Server initialization complete (WSGI factory mode)")
 
 
@@ -3480,6 +3487,13 @@ def run_server(args):
         logger.info("Initializing QDA Mode...")
         init_qda_mode_manager(config)
         logger.info("QDA Mode initialized successfully")
+
+    # Build the universal search index (no-op if search disabled).
+    try:
+        from potato.search import init_search_from_item_state
+        init_search_from_item_state(config)
+    except Exception as e:
+        logger.warning(f"Search index init skipped: {e}")
 
     # Initialize diversity manager if diversity_clustering strategy is used
     # or if diversity_ordering is explicitly enabled
