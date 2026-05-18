@@ -4,6 +4,7 @@ OpenAI AI endpoint implementation.
 This module provides integration with OpenAI's API for LLM inference.
 """
 
+import os
 from typing import Dict, List
 from openai import OpenAI
 from .ai_endpoint import BaseAIEndpoint, AIEndpointRequestError, ModelCapabilities
@@ -27,13 +28,27 @@ class OpenAIEndpoint(BaseAIEndpoint):
 
     def _initialize_client(self) -> None:
         """Initialize the OpenAI client."""
-        api_key = self.ai_config.get("api_key", "")
+        # OpenAI-compatible servers (vLLM, llama.cpp, etc.) ignore the key
+        # but the SDK rejects an empty string, so accept a placeholder.
+        api_key = self.ai_config.get("api_key") or os.environ.get(
+            "OPENAI_API_KEY", ""
+        )
+        base_url = self.ai_config.get("base_url")
         if not api_key:
-            raise AIEndpointRequestError("OpenAI API key is required")
+            if base_url:
+                api_key = "EMPTY"  # non-empty placeholder for local servers
+            else:
+                raise AIEndpointRequestError("OpenAI API key is required")
 
         # Default timeout of 30 seconds, configurable via ai_config
         timeout = self.ai_config.get("timeout", 30)
-        self.client = OpenAI(api_key=api_key, timeout=timeout)
+        client_kwargs = {"api_key": api_key, "timeout": timeout}
+        # Honor a custom base_url so this endpoint can target any
+        # OpenAI-compatible server (previously ignored -> always hit
+        # api.openai.com even when a local base_url was configured).
+        if base_url:
+            client_kwargs["base_url"] = base_url
+        self.client = OpenAI(**client_kwargs)
 
     def _get_default_model(self) -> str:
         """Get the default OpenAI model."""

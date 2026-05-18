@@ -36,18 +36,35 @@ class VLLMEndpoint(BaseAIEndpoint):
 
     def _initialize_client(self) -> None:
         """Initialize the VLLM client."""
-        self.base_url = self.ai_config.get("base_url", "http://localhost:8000")
+        raw_base = self.ai_config.get("base_url", "http://localhost:8000")
+        # Accept either the server root or an OpenAI-style ".../v1" base_url.
+        # We append "/v1/chat/completions" ourselves, so a trailing "/v1"
+        # (or "/") would otherwise double up ("/v1/v1/...") and the health
+        # probe would hit "/v1/health" (404 on vLLM, whose health is at root).
+        self.base_url = raw_base.rstrip("/")
+        if self.base_url.endswith("/v1"):
+            self.base_url = self.base_url[: -len("/v1")]
         self.api_key = self.ai_config.get("api_key", "")
         # Default timeout of 30 seconds, configurable via ai_config
         self.timeout = self.ai_config.get("timeout", 30)
 
-        # Test connection
-        try:
-            response = requests.get(f"{self.base_url}/health", timeout=5)
-            if response.status_code != 200:
-                raise AIEndpointRequestError(f"VLLM server not healthy: {response.status_code}")
-        except requests.exceptions.RequestException as e:
-            raise AIEndpointRequestError(f"Failed to connect to VLLM server at {self.base_url}: {e}")
+        # Liveness probe: prefer /health, but some deployments gate it, so
+        # fall back to the OpenAI-compatible /v1/models listing before
+        # declaring the server unreachable.
+        last_err = None
+        for probe in (f"{self.base_url}/health", f"{self.base_url}/v1/models"):
+            try:
+                resp = requests.get(probe, timeout=5)
+                if resp.status_code == 200:
+                    last_err = None
+                    break
+                last_err = f"{probe} -> HTTP {resp.status_code}"
+            except requests.exceptions.RequestException as e:
+                last_err = f"{probe} -> {e}"
+        if last_err is not None:
+            raise AIEndpointRequestError(
+                f"Failed to reach VLLM server at {self.base_url}: {last_err}"
+            )
 
     def _get_default_model(self) -> str:
         """Get the default VLLM model."""

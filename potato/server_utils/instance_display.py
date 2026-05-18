@@ -141,6 +141,26 @@ class InstanceDisplayRenderer:
         Raises:
             InstanceDisplayError: If any non-lazy field is missing
         """
+        non_lazy = [
+            f for f in self.fields
+            if not display_registry.is_lazy_populated(f.get("type", ""))
+        ]
+        missing_non_lazy = [
+            f["key"] for f in non_lazy if f["key"] not in instance_data
+        ]
+        # Every non-lazy field missing is almost always a config/data
+        # key mismatch (e.g. fields reference task_description but the
+        # data uses task), not a transient lazy state -- make it loud so
+        # it isn't silently rendered as a blank page.
+        if non_lazy and len(missing_non_lazy) == len(non_lazy):
+            logger.error(
+                "instance_display: ALL %d non-lazy field(s) %s are absent "
+                "from the instance data (available keys: %s). This is "
+                "almost certainly a config/data key mismatch.",
+                len(non_lazy), missing_non_lazy,
+                list(instance_data.keys()),
+            )
+
         for field in self.fields:
             key = field["key"]
             if key in instance_data:

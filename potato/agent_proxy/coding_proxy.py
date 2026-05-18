@@ -101,6 +101,13 @@ class CodingAgentProxy(BaseAgentProxy):
         self.llm_base_url = llm_cfg.get("base_url")
         self.llm_temperature = llm_cfg.get("temperature", 0.2)
         self.llm_max_tokens = llm_cfg.get("max_tokens", 800)
+        # OpenAI-compatible servers (vLLM etc.) ignore the key but the SDK
+        # requires a non-empty string. Ollama needs none. Without forwarding
+        # this the planner silently failed with "planner_unavailable".
+        self.llm_api_key = llm_cfg.get("api_key")
+        # Last endpoint init / call error, surfaced to the user instead of
+        # an opaque "planner unavailable" message.
+        self._llm_error: Optional[str] = None
 
         execution_cfg = self.config.get("execution") or {}
         self.per_step_timeout = execution_cfg.get("per_step_timeout", 8)
@@ -126,6 +133,15 @@ class CodingAgentProxy(BaseAgentProxy):
             }
             if self.llm_base_url:
                 ai_cfg["base_url"] = self.llm_base_url
+            # Forward the key for OpenAI-compatible endpoints; vLLM ignores
+            # its value but the OpenAI SDK rejects an empty one. Fall back to
+            # env then a non-empty placeholder so local servers just work.
+            ai_cfg["api_key"] = (
+                self.llm_api_key
+                or os.environ.get("OPENAI_API_KEY")
+                or os.environ.get("ANTHROPIC_API_KEY")
+                or "EMPTY"
+            )
 
             self._llm = AIEndpointFactory.create_endpoint({
                 "ai_support": {
@@ -134,8 +150,10 @@ class CodingAgentProxy(BaseAgentProxy):
                     "ai_config": ai_cfg,
                 }
             })
+            self._llm_error = None
         except Exception as e:
             logger.warning("CodingAgentProxy: planner LLM init failed: %s", e)
+            self._llm_error = f"{type(e).__name__}: {e}"
             self._llm = None
         return self._llm
 
@@ -186,7 +204,11 @@ class CodingAgentProxy(BaseAgentProxy):
 
         plan = self._plan_next_action(history)
         if plan is None:
-            reply = "Planner LLM unavailable; aborting."
+            detail = self._llm_error or "no response from planner LLM"
+            reply = (
+                f"Planner LLM unavailable ({self.llm_endpoint_type}): "
+                f"{detail}"
+            )
             history.append({"role": "assistant", "content": reply})
             session_context["finished"] = True
             return AgentResponse(
@@ -235,6 +257,7 @@ class CodingAgentProxy(BaseAgentProxy):
                 raw = endpoint.query(flat + "\nassistant:", None)
         except Exception as e:
             logger.warning("Planner LLM call failed: %s", e)
+            self._llm_error = f"{type(e).__name__}: {e}"
             return None
 
         if isinstance(raw, dict):

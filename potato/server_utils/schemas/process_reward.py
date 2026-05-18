@@ -192,32 +192,39 @@ def _generate_internal(
             // Pair each trace element with its step object (by data-turn-index)
             // and keep only ratable agent steps -- the user prompt turn is
             // skipped entirely so it carries no rating control or reward.
+            // Keep the structured-turns index ('data-turn-index', which the
+            // coding_trace display sets per turn) as the canonical step
+            // index. This MUST match buildCards' index space so saved data,
+            // first_error cascade and downstream consumers stay consistent
+            // across inline/card modes (previously inline used a dense
+            // user-filtered counter, corrupting persistence).
             var ratable = [];
             stepEls.forEach(function(el) {{
                 var ti = parseInt(el.getAttribute('data-turn-index'), 10);
-                var stepObj = (!isNaN(ti) && ti < steps.length) ? steps[ti] : null;
+                if (isNaN(ti)) return;
+                var stepObj = (ti < steps.length) ? steps[ti] : null;
                 if (isUserTurn(el, stepObj)) return;
-                ratable.push(el);
+                ratable.push({{ el: el, ti: ti }});
             }});
             if (!ratable.length) return false;
 
-            var n = ratable.length;
-            // Dense array (not sparse) so initStepModel's forEach visits all.
-            initStepModel(Array.apply(null, {{ length: n }}));
+            // _steps spans the full step list (same as buildCards) so
+            // existingData restore by index aligns; user/non-ratable turns
+            // simply carry no card.
+            initStepModel(steps);
 
-            for (var i = 0; i < n; i++) {{
-                var host = ratable[i];
-                if (host.querySelector('.prm-step-card')) continue; // already injected
+            ratable.forEach(function(r) {{
+                if (r.el.querySelector('.prm-step-card')) return; // already injected
                 var card = document.createElement('div');
                 card.className = 'prm-step-card prm-inline';
-                card.setAttribute('data-step-index', i);
-                card.innerHTML = controlHtml(i);
-                host.classList.add('prm-turn-ratable');
-                host.appendChild(card);
-            }}
+                card.setAttribute('data-step-index', r.ti);
+                card.innerHTML = controlHtml(r.ti);
+                r.el.classList.add('prm-turn-ratable');
+                r.el.appendChild(card);
+            }});
             if (bottom) bottom.innerHTML = '';
             attachHandlers();
-            for (var k = 0; k < n; k++) updateStepVisual(k);
+            _steps.forEach(function(s) {{ updateStepVisual(s.index); }});
             updateCount();
             return true;
         }}

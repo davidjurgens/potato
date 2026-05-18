@@ -265,6 +265,34 @@ def serve_media(filepath):
     return send_from_directory(media_dir, filepath)
 
 
+def serve_trace_screenshot(filepath):
+    """Serve a static agent-trace screenshot referenced by trace data.
+
+    ``web_agent_trace`` / visual trace data set ``screenshot_url`` to a path
+    relative to the example (e.g. ``screenshots/step_000.png``), which the
+    browser requests as ``/screenshots/...``.  Without this route those
+    requests 404 and every step image + filmstrip thumbnail breaks.  Files
+    resolve against ``task_dir`` (the runtime CWD) with path-traversal
+    containment, mirroring ``serve_media``.
+    """
+    from flask import send_from_directory, abort
+
+    task_dir = config.get("task_dir", ".")
+    base_dir = os.path.realpath(task_dir)
+    screenshots_root = os.path.realpath(os.path.join(base_dir, "screenshots"))
+
+    requested = os.path.realpath(os.path.join(screenshots_root, filepath))
+    if not (requested == screenshots_root
+            or requested.startswith(screenshots_root + os.sep)):
+        logger.warning(f"Screenshot path traversal blocked: {filepath}")
+        abort(403)
+
+    if not os.path.isfile(requested):
+        abort(404)
+
+    return send_from_directory(screenshots_root, filepath)
+
+
 @app.route("/", methods=["GET", "POST"])
 def home():
     """
@@ -6663,6 +6691,11 @@ def configure_routes(flask_app, app_config):
 
     # Register all routes with the flask app instance
     app.add_url_rule("/media/<path:filepath>", "serve_media", serve_media)
+    app.add_url_rule(
+        "/screenshots/<path:filepath>",
+        "serve_trace_screenshot",
+        serve_trace_screenshot,
+    )
     app.add_url_rule("/", "home", home, methods=["GET", "POST"])
     app.add_url_rule("/auth", "auth", auth, methods=["GET", "POST"])
     app.add_url_rule("/passwordless-login", "passwordless_login", passwordless_login, methods=["GET", "POST"])

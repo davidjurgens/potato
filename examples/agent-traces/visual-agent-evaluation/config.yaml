@@ -38,7 +38,7 @@ instance_display:
       label: "Trace Info"
       display_options:
         compact: true
-        max_height: 100
+        max_height: 220
 
     - key: screenshot_url
       type: image
