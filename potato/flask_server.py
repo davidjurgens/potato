@@ -1317,12 +1317,29 @@ def load_phase_data(config: dict) -> None:
                 else:
                     phase_type = UserPhase.ANNOTATION
             else:
-                # Legacy format with file and type
-                if not "type" in phase or not phase['type']:
-                    logger.error(f"Phase {phase_name} does not have a type")
-                    raise Exception("Phase %s does not have a type" % phase_name)
-
-                phase_type = UserPhase.fromstr(phase['type'])
+                # File-based phase. Prefer an explicit `type`; otherwise
+                # infer it from the phase name when the name is itself a
+                # canonical phase (e.g. a phase literally named `consent`
+                # or `prestudy`). This makes the documented `phases`
+                # config work even without a `type` field, while still
+                # requiring an explicit `type` for custom-named phases.
+                explicit_type = phase.get("type") if isinstance(phase, dict) else None
+                if explicit_type:
+                    phase_type = UserPhase.fromstr(explicit_type)
+                else:
+                    try:
+                        phase_type = UserPhase.fromstr(phase_name)
+                    except ValueError:
+                        logger.error(
+                            f"Phase '{phase_name}' has no 'type' and its name is "
+                            f"not a canonical phase type"
+                        )
+                        raise Exception(
+                            "Phase %s does not have a 'type' and its name is not "
+                            "a canonical phase type (one of: consent, prestudy, "
+                            "instructions, training, annotation, poststudy). Add "
+                            "a 'type:' field to this phase." % phase_name
+                        )
 
                 # Instructions phase with an HTML file: register the HTML
                 # directly as a template rather than parsing it as annotation

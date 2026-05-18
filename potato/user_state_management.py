@@ -792,8 +792,17 @@ class UserStateManager:
                     if UserPhase.ANNOTATION not in config_phases:
                         config_phases.append(UserPhase.ANNOTATION)
                 elif phase_name in self.config["phases"]:
-                    phase_type_str = self.config["phases"][phase_name]["type"]
-                    phase_type = UserPhase.fromstr(phase_type_str)
+                    phase_cfg = self.config["phases"][phase_name]
+                    phase_type_str = (
+                        phase_cfg.get("type") if isinstance(phase_cfg, dict) else None
+                    )
+                    # Fall back to inferring the type from the phase name
+                    # when no explicit `type` is given (matches the phase
+                    # loader in flask_server.py).
+                    try:
+                        phase_type = UserPhase.fromstr(phase_type_str or phase_name)
+                    except ValueError:
+                        continue
                     if phase_type in self.phase_type_to_name_to_page:
                         if phase_type not in config_phases:
                             config_phases.append(phase_type)
