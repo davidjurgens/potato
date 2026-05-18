@@ -268,6 +268,13 @@ KNOWN_CONFIG_KEYS = {
     "max_annotations_per_item": None,
     "num_annotators_per_item": None,
     "min_annotators_per_instance": None,
+    "qda_mode": {
+        "enabled": None,
+        "memos": None,
+        "codebook": None,
+        # Sub-blocks reserved for later phases:
+        # "cases", "queries", "smart_codes", "network", "media_sync"
+    },
     "solo_mode": {
         "enabled": None,
         "labeling_models": None,

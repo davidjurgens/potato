@@ -91,6 +91,8 @@ from potato.knowledge_base import init_kb_manager
 from potato.solo_mode import init_solo_mode_manager, get_solo_mode_manager
 from potato.solo_mode.routes import solo_mode_bp
 
+from potato.qda_mode import init_qda_mode_manager, get_qda_mode_manager, qda_mode_bp
+
 from potato.create_task_cli import create_task_cli
 from potato.server_utils.arg_utils import arguments
 from potato.server_utils.config_module import init_config, config
@@ -111,6 +113,7 @@ from potato.ai.ai_help_wrapper import init_dynamic_ai_help
 # Initialize Flask app
 app = Flask(__name__)
 app.register_blueprint(solo_mode_bp)
+app.register_blueprint(qda_mode_bp)
 
 # Web agent recording and proxy blueprints (registered lazily in configure_app
 # only when web_agent display types are configured)
@@ -3286,6 +3289,20 @@ def _initialize_from_config(config_file):
         from potato.webhooks import init_webhook_emitter
         init_webhook_emitter(config)
 
+    # Initialize Solo Mode if enabled (parity with run_server() — the
+    # WSGI/gunicorn factory path must initialize it too, otherwise the
+    # /solo routes exist but the manager is never created).
+    if config.get("solo_mode", {}).get("enabled", False):
+        logger.info("Initializing Solo Mode...")
+        init_solo_mode_manager(config)
+        logger.info("Solo Mode initialized successfully")
+
+    # Initialize QDA Mode if enabled (parity with run_server()).
+    if config.get("qda_mode", {}).get("enabled", False):
+        logger.info("Initializing QDA Mode...")
+        init_qda_mode_manager(config)
+        logger.info("QDA Mode initialized successfully")
+
     logger.info("Server initialization complete (WSGI factory mode)")
 
 
@@ -3455,6 +3472,12 @@ def run_server(args):
         logger.info("Initializing Solo Mode...")
         init_solo_mode_manager(config)
         logger.info("Solo Mode initialized successfully")
+
+    # Initialize QDA Mode if enabled
+    if config.get("qda_mode", {}).get("enabled", False):
+        logger.info("Initializing QDA Mode...")
+        init_qda_mode_manager(config)
+        logger.info("QDA Mode initialized successfully")
 
     # Initialize diversity manager if diversity_clustering strategy is used
     # or if diversity_ordering is explicitly enabled

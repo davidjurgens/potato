@@ -6849,6 +6849,14 @@ def configure_routes(flask_app, app_config):
         except ImportError:
             pass
 
+    # Register QDA Mode blueprint if not already registered
+    if 'qda_mode' not in app.blueprints:
+        try:
+            from potato.qda_mode import qda_mode_bp
+            app.register_blueprint(qda_mode_bp)
+        except ImportError:
+            pass
+
 # ============================================================================
 # Adjudication Routes
 # ============================================================================

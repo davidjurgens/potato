@@ -576,6 +576,27 @@ class FlaskTestServer:
                         import traceback
                         traceback.print_exc()
 
+                # Reset + (re)initialize QDA Mode manager. The clear runs
+                # unconditionally so a leaked singleton from a prior in-process
+                # test server cannot make a QDA-disabled server report enabled.
+                try:
+                    from potato.qda_mode import clear_qda_mode_manager
+                    clear_qda_mode_manager()
+                except Exception:
+                    pass
+                if config.get('qda_mode', {}).get('enabled', False):
+                    try:
+                        from potato.qda_mode import init_qda_mode_manager
+                        qda_manager = init_qda_mode_manager(config)
+                        if qda_manager:
+                            print("[DEBUG] QDA Mode manager initialized successfully")
+                        else:
+                            print("[DEBUG] QDA Mode manager returned None")
+                    except Exception as e:
+                        print(f"[DEBUG] Error initializing QDA Mode manager: {e}")
+                        import traceback
+                        traceback.print_exc()
+
                 # Initialize chat manager if configured
                 if config.get("chat_support", {}).get("enabled", False):
                     try:

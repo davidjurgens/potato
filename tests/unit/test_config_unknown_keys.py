@@ -173,6 +173,37 @@ class TestValidateUnknownKeys:
             f"unexpected warnings: {[r.message for r in caplog.records]}"
         )
 
+    def test_qda_mode_is_known_config_key(self):
+        """qda_mode must be registered in KNOWN_CONFIG_KEYS."""
+        assert "qda_mode" in KNOWN_CONFIG_KEYS
+
+    def test_qda_mode_block_recognized(self, caplog):
+        """A valid qda_mode block (enabled/memos/codebook) must not warn."""
+        config = {
+            "qda_mode": {
+                "enabled": True,
+                "memos": {},
+                "codebook": {},
+            }
+        }
+        with caplog.at_level(logging.WARNING):
+            validate_unknown_keys(config)
+        assert len(caplog.records) == 0, (
+            f"unexpected warnings: {[r.message for r in caplog.records]}"
+        )
+
+    def test_qda_mode_top_level_typo_flagged(self, caplog):
+        """A typo'd qda_mode key should warn and suggest qda_mode.
+
+        This guards against the KNOWN_CONFIG_KEYS['qda_mode'] entry being
+        dropped — without it, 'qda_mode' itself would silently validate.
+        """
+        config = {"qda_mdoe": {"enabled": True}}
+        with caplog.at_level(logging.WARNING):
+            validate_unknown_keys(config)
+        assert any("qda_mdoe" in r.message for r in caplog.records)
+        assert any("qda_mode" in r.message for r in caplog.records)
+
     def test_refinement_loop_new_keys_recognized(self, caplog):
         """The eval_temperature and prefer_consistent_disagreements keys
         added in the validation-gate improvements must be recognized."""
