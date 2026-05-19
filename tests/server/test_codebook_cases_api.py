@@ -111,6 +111,21 @@ class TestCodebookOpenMode:
         ids = [x["instance_id"] for x in wl["stale"]]
         assert "i1" in ids and wl["count"] >= 1
 
+    def test_version_poll_tracks_any_change(self):
+        s = _login(self.server, "vic")
+        base = self.server.base_url
+        v0 = s.get(f"{base}/api/codebook/version").json()["revision"]
+        r = s.post(f"{base}/api/codebook", json={"name": "Vseed"})
+        assert r.status_code == 200
+        cid = r.json()["code"]["id"]
+        v1 = s.get(f"{base}/api/codebook/version").json()["revision"]
+        assert v1 == v0 + 1
+        # a non-create change (rename) also bumps the version
+        s.request("PATCH", f"{base}/api/codebook/{cid}",
+                  json={"name": "Vrenamed"})
+        v2 = s.get(f"{base}/api/codebook/version").json()["revision"]
+        assert v2 == v1 + 1
+
     def test_provenance_requires_instance_id(self):
         s = _login(self.server, "eve")
         assert s.get(

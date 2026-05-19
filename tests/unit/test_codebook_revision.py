@@ -65,14 +65,16 @@ class TestRevisionBumpRules:
         delete_code(td, c["id"], project="P")
         assert current_revision(td, "P") == 2
 
-    def test_rename_recolor_move_do_not_bump(self, td):
+    def test_any_change_bumps(self, td):
         a = create_code(td, project="P", name="a", created_by="u")
         b = create_code(td, project="P", name="b", created_by="u")
-        rev = current_revision(td, "P")  # 2
+        assert current_revision(td, "P") == 2
         rename_code(td, a["id"], new_name="a2", project="P")
+        assert current_revision(td, "P") == 3
         recolor_code(td, a["id"], color="#fff", project="P")
+        assert current_revision(td, "P") == 4
         move_under(td, b["id"], new_parent_id=a["id"], project="P")
-        assert current_revision(td, "P") == rev  # unchanged
+        assert current_revision(td, "P") == 5
 
     def test_created_revision_stamped(self, td):
         a = create_code(td, project="P", name="a", created_by="u")

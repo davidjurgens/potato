@@ -166,6 +166,17 @@ def get_codebook(ctx):
     })
 
 
+@codebook_bp.route("/version", methods=["GET"])
+@codebook_view
+def version(ctx):
+    """Lightweight revision poll. The client checks this on each
+    navigation and only re-fetches the full codebook (GET /api/codebook)
+    when the revision has moved — instead of downloading the whole tree
+    on every page load."""
+    return jsonify({
+        "revision": current_revision(ctx["task_dir"], ctx["project"])})
+
+
 @codebook_bp.route("/provenance", methods=["GET"])
 @codebook_view
 def provenance(ctx):

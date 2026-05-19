@@ -114,6 +114,10 @@ def rename_code(
         raise DuplicateCodeError(
             f"A code named {new_name!r} already exists at this level")
     updated = store.update_code(task_dir, code_id, name=new_name)
+    # Any codebook change bumps the revision (provenance: an instance
+    # labeled before this change is flagged stale on revisit).
+    from potato.codebook import revision
+    revision.bump_revision(task_dir, project)
     _notify(task_dir, project)
     return updated
 
@@ -123,6 +127,8 @@ def recolor_code(
 ) -> Dict[str, Any]:
     _require(task_dir, code_id)
     updated = store.update_code(task_dir, code_id, color=color)
+    from potato.codebook import revision
+    revision.bump_revision(task_dir, project)
     _notify(task_dir, project)
     return updated
 
@@ -161,6 +167,8 @@ def move_under(
     updated = store.update_code(
         task_dir, code_id,
         parent_id=new_parent_id, sort_order=len(siblings))
+    from potato.codebook import revision
+    revision.bump_revision(task_dir, project)
     _notify(task_dir, project)
     return updated
 

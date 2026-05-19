@@ -1,12 +1,13 @@
 """
 Codebook revision provenance.
 
-A per-project monotonic ``codebook_revision`` counter, bumped only when
-the *option set* changes (a code is created or deleted — not rename /
-recolor / move, which don't change which labels exist). Every saved
-annotation is stamped with the revision in effect, so analysts can
-condition on the option set an annotation was made against, and the UI
-can softly flag instances labeled under an older codebook.
+A per-project monotonic ``codebook_revision`` counter, bumped on **any**
+codebook change (create / rename / recolor / move / delete) — all
+codebook edits are server-persisted and every one advances the
+revision. Every saved annotation is stamped with the revision in
+effect, so analysts can condition on the codebook state an annotation
+was made against, and the UI can softly flag instances labeled under an
+older codebook revision.
 
 `codes.created_revision` records the revision a code first appeared in,
 so the review worklist can show *which* codes were added since a given
