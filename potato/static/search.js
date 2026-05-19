@@ -20,12 +20,18 @@
         return d.innerHTML;
     }
 
+    function setStatus(html) {
+        var box = el("search-results");
+        if (box) box.innerHTML = html;
+    }
+
     function renderResults(data) {
         var box = el("search-results");
         if (!box) return;
         var hits = (data && data.results) || [];
         if (!hits.length) {
-            box.innerHTML = '<div class="search-empty">No matches.</div>';
+            box.innerHTML = '<div class="search-empty">No matches. Try a '
+                + "different word or phrase.</div>";
             return;
         }
         box.innerHTML = hits.map(function (h) {
@@ -33,7 +39,7 @@
                 + '<div class="search-snippet">' + esc(h.snippet) + "</div>"
                 + '<div class="search-row">'
                 + '<span class="search-id">' + esc(h.instance_id) + "</span>"
-                + '<button class="search-claim" data-id="'
+                + '<button type="button" class="search-claim" data-id="'
                 + esc(h.instance_id) + '">Claim</button>'
                 + "</div></div>";
         }).join("");
@@ -45,27 +51,63 @@
     function claim(btn) {
         var id = btn.getAttribute("data-id");
         btn.disabled = true;
+        var prev = btn.textContent;
+        btn.textContent = "Claiming…";
         fetch(API + "/claim", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ instance_id: id }),
         }).then(function (r) {
-            if (!r.ok) { btn.disabled = false; return; }
+            if (!r.ok) { failClaim(btn, prev); return; }
             var span = document.createElement("span");
             span.className = "search-claimed";
             span.textContent = "✓ In your queue";
             btn.replaceWith(span);
-        }).catch(function () { btn.disabled = false; });
+        }).catch(function () { failClaim(btn, prev); });
+    }
+
+    function failClaim(btn, label) {
+        var note = document.createElement("span");
+        note.className = "search-claim-error";
+        note.textContent = "Couldn't claim — retry";
+        note.setAttribute("role", "button");
+        note.setAttribute("tabindex", "0");
+        function retry() {
+            var b = document.createElement("button");
+            b.type = "button";
+            b.className = "search-claim";
+            b.setAttribute("data-id", btn.getAttribute("data-id"));
+            b.textContent = label;
+            b.addEventListener("click", function () { claim(b); });
+            note.replaceWith(b);
+            b.focus();
+        }
+        note.addEventListener("click", retry);
+        note.addEventListener("keydown", function (e) {
+            if (e.key === "Enter" || e.key === " ") { e.preventDefault(); retry(); }
+        });
+        btn.replaceWith(note);
     }
 
     function doSearch() {
         var input = el("search-q");
+        var go = el("search-go");
         var q = (input && input.value || "").trim();
-        if (!q) return;
+        if (!q) { if (input) input.focus(); return; }
+        if (go) go.disabled = true;
+        setStatus('<div class="search-loading" role="status">Searching…</div>');
         fetch(API + "?q=" + encodeURIComponent(q) + "&limit=50")
             .then(function (r) { return r.ok ? r.json() : { results: [] }; })
             .then(renderResults)
-            .catch(function () { renderResults({ results: [] }); });
+            .catch(function () { renderResults({ results: [] }); })
+            .finally(function () { if (go) go.disabled = false; });
+    }
+
+    function closePanel() {
+        var panel = el("search-panel");
+        var toggle = el("search-panel-toggle");
+        if (panel) panel.hidden = true;
+        if (toggle) { toggle.hidden = false; toggle.focus(); }
     }
 
     function wire() {
@@ -80,10 +122,10 @@
                 if (q) q.focus();
             });
         }
-        if (close && panel && toggle) {
-            close.addEventListener("click", function () {
-                panel.hidden = true;
-                toggle.hidden = false;
+        if (close) close.addEventListener("click", closePanel);
+        if (panel) {
+            panel.addEventListener("keydown", function (e) {
+                if (e.key === "Escape") { e.preventDefault(); closePanel(); }
             });
         }
         var go = el("search-go");
