@@ -485,9 +485,146 @@
 
 .cb-iv-cancel:active { background: var(--cb-surface-3); }
 
+/* Admin curation section — same token system as the rest of the tray. */
+.cb-admin-section {
+    border-top: 1px solid var(--cb-line);
+    padding: var(--cb-space-3) var(--cb-space-4) var(--cb-space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--cb-space-4);
+}
+
+.cb-admin-head {
+    margin: 0;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--cb-ink-soft);
+}
+
+.cb-admin-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--cb-space-2);
+}
+
+.cb-admin-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--cb-ink);
+}
+
+.cb-admin-sub {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--cb-ink-soft);
+}
+
+.cb-admin-row {
+    display: flex;
+    align-items: center;
+    gap: var(--cb-space-2);
+}
+
+.cb-admin-select,
+.cb-admin-input {
+    flex: 1;
+    min-width: 0;
+    min-height: 34px;
+    border: 1px solid var(--cb-line);
+    border-radius: 6px;
+    padding: var(--cb-space-1) var(--cb-space-2);
+    font: inherit;
+    font-size: 0.85rem;
+    color: var(--cb-ink);
+    background: var(--cb-surface);
+    transition: border-color 140ms ease-out, box-shadow 140ms ease-out;
+}
+
+.cb-admin-select:focus,
+.cb-admin-input:focus {
+    outline: 2px solid var(--cb-focus);
+    outline-offset: 1px;
+    border-color: var(--cb-focus);
+}
+
+.cb-admin-arrow {
+    flex: 0 0 auto;
+    color: var(--cb-ink-soft);
+    font-size: 0.9rem;
+}
+
+.cb-proposals,
+.cb-changes-wrap { font-size: 0.82rem; }
+
+.cb-prop-list,
+.cb-changes-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.cb-prop-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--cb-space-2);
+    padding: var(--cb-space-2) 0;
+    border-bottom: 1px solid var(--cb-line);
+}
+
+.cb-prop-item:last-child { border-bottom: none; }
+
+.cb-prop-desc {
+    font-size: 0.78rem;
+    color: var(--cb-ink);
+    word-break: break-word;
+}
+
+.cb-prop-actions {
+    display: flex;
+    gap: var(--cb-space-2);
+}
+
+.cb-changes-wrap > summary {
+    cursor: pointer;
+    list-style: revert;
+}
+
+.cb-chg-item {
+    padding: var(--cb-space-1) 0;
+    font-size: 0.76rem;
+    color: var(--cb-ink-soft);
+    word-break: break-word;
+}
+
+.cb-chg-op {
+    font-weight: 700;
+    color: var(--cb-ink);
+}
+
+.cb-chg-by { color: var(--cb-ink-soft); font-style: italic; }
+
+/* Calm success/status line — no new success-green; the one-accent
+   discipline holds, a quiet italic soft-ink note is enough. */
+.cb-admin-status {
+    font-size: 0.78rem;
+    font-style: italic;
+    color: var(--cb-ink-soft);
+    min-height: 1.1em;            /* reserve space — no layout shift */
+}
+
+.cb-admin-status:empty { min-height: 0; }
+
+/* Programmatic focus target (error is announced via role=alert; no
+   stray ring needed when it is focused for sighted recovery). */
+#cb-admin-error:focus { outline: none; }
+
 .cb-panel-toggle:focus-visible,
 .cb-panel button:focus-visible,
 .cb-panel input:focus-visible,
+.cb-panel select:focus-visible,
 .cb-invivo button:focus-visible,
 .cb-invivo input:focus-visible {
     outline: 2px solid var(--cb-focus);
@@ -503,5 +640,7 @@
     .cb-iv-chip,
     .cb-iv-cancel,
     .cb-iv-input,
+    .cb-admin-select,
+    .cb-admin-input,
     .cb-panel-header button { transition: none; }
 }

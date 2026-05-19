@@ -109,6 +109,49 @@ straight there. Nothing is force-reopened; reviewing is optional.
 Admins/adjudicators can see the project-wide stale set via
 `GET /api/codebook/admin/stale`.
 
+### Retroactive curation (merge / split) — admin only
+
+A long-lived codebook accretes near-duplicate or mis-scoped codes
+(more so once on-the-fly and in-vivo coding are in use). Admins and
+adjudicators get a **Curate** section in the tray to fix this
+**retroactively without destroying history**:
+
+- **Merge** folds one code into another: every existing annotation
+  linked to the source is re-pointed at the target (idempotent if the
+  annotation already had the target), the source's links are
+  *invalidated* (never deleted), and the source code is **archived**
+  (it leaves the label list / ICL prompt but its row and history
+  survive).
+- **Split by annotator** moves just one annotator's links from a code
+  to a new or existing code — the concrete fix when two coders meant
+  different things by the same name. The source stays live for the
+  other annotators.
+
+Both are **append-only**: historical links are marked superseded, not
+removed, so the change is fully auditable and the codebook can never
+silently lose data. Affected instances are softly re-flagged so they
+resurface in each annotator's **Review** worklist (dismissible, never a
+hard re-label gate — same policy as ordinary revision changes).
+
+Authorship/provenance lives in a **separate change log**, never on the
+code records (those feed the ICL prompt verbatim). The collapsed
+**Recent changes** list in the Curate section is the human-readable
+before→after delta.
+
+### LLM-proposed edits (propose → human confirm)
+
+A model (e.g. in solo mode) must **not** mutate a shared codebook
+autonomously. Instead it *proposes*: a queued, pending edit an admin
+reviews as a plain sentence ("Merge «cost» into «cost concerns»") and
+**Confirms** or **Rejects**. Confirmed proposals execute through the
+same audited path as a human edit and are tagged in the change log as
+model-originated; rejected ones change nothing. Producers (HTTP agents
+or in-process callers) stage a proposal via
+`POST /api/codebook/proposals` with `actor_kind: "model"`, or the
+in-process helper `potato.codebook.propose_change(...)`. Queuing needs
+no admin rights (nothing changes until confirmed); confirming/rejecting
+is admin/adjudicator only.
+
 ## Initialising / migrating from the CLI
 
 ```bash
@@ -135,6 +178,13 @@ machines — important because annotations carry a parallel `code_id`.
 | POST | `/api/codebook` | add a code (`extensible`/`open`) |
 | PATCH | `/api/codebook/<id>` | rename / recolor / move (`open`) |
 | DELETE | `/api/codebook/<id>` | delete a code + subtree (`open`) |
+| POST | `/api/codebook/admin/merge` | fold src into dst, append-only (admin) |
+| POST | `/api/codebook/admin/split` | split a code by annotator (admin) |
+| GET | `/api/codebook/admin/changes` | change log for the before→after delta (admin) |
+| POST | `/api/codebook/proposals` | queue a model-proposed edit (`actor_kind:"model"`) |
+| GET | `/api/codebook/admin/proposals` | pending proposals (admin) |
+| POST | `/api/codebook/admin/proposals/<id>/confirm` | execute a proposal (admin) |
+| POST | `/api/codebook/admin/proposals/<id>/reject` | discard a proposal (admin) |
 
 `/qda/codebook` is the QDA-scoped read view (returns `503` when QDA Mode
 is not enabled).

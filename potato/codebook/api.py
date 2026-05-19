@@ -250,6 +250,190 @@ def admin_stale():
     return jsonify({"stale": items, "count": len(items)})
 
 
+def _admin_ctx():
+    """(task_dir, project, username, None) or (None,None,None, resp).
+    Mirrors admin_stale's gate for the Phase 2 (C) retroactive ops."""
+    from potato.server_utils.config_module import config as _cfg
+    if not codebook_enabled(_cfg):
+        return None, None, None, (
+            jsonify({"error": "Codebook not enabled"}), 503)
+    if not _admin_or_adjudicator():
+        return None, None, None, (
+            jsonify({"error": "Admin or adjudicator access required"}),
+            403)
+    return (_cfg.get("task_dir", "."),
+            _cfg.get("annotation_task_name") or "default",
+            session.get("username") or "admin", None)
+
+
+@codebook_bp.route("/admin/merge", methods=["POST"])
+def admin_merge():
+    """Fold src into dst retroactively (append-only). Admin only."""
+    td, project, user, err = _admin_ctx()
+    if err:
+        return err
+    from potato.codebook import merge_codes
+    data = request.get_json(silent=True) or {}
+    src_id = (data.get("src_id") or "").strip()
+    dst_id = (data.get("dst_id") or "").strip()
+    if not src_id or not dst_id:
+        return jsonify({"error": "src_id and dst_id are required"}), 400
+    return _handle(lambda: jsonify(merge_codes(
+        td, project=project, src_id=src_id, dst_id=dst_id,
+        actor=user, actor_kind="human")))
+
+
+@codebook_bp.route("/admin/split", methods=["POST"])
+def admin_split():
+    """Split a code by annotator retroactively. Admin only."""
+    td, project, user, err = _admin_ctx()
+    if err:
+        return err
+    from potato.codebook import split_code
+    data = request.get_json(silent=True) or {}
+    src_id = (data.get("src_id") or "").strip()
+    annotator = (data.get("annotator") or "").strip()
+    if not src_id or not annotator:
+        return jsonify({
+            "error": "src_id and annotator are required"}), 400
+    return _handle(lambda: jsonify(split_code(
+        td, project=project, src_id=src_id, annotator=annotator,
+        new_name=(data.get("new_name") or "").strip() or None,
+        target_id=(data.get("target_id") or "").strip() or None,
+        actor=user, actor_kind="human")))
+
+
+@codebook_bp.route("/admin/changes", methods=["GET"])
+def admin_changes():
+    """Full change-log for the before->after delta view. Admin only."""
+    td, project, _user, err = _admin_ctx()
+    if err:
+        return err
+    from potato.codebook import changelog
+    rows = changelog.all_changes(td, project)
+    return jsonify({"changes": rows, "count": len(rows)})
+
+
+@codebook_bp.route("/proposals", methods=["POST"])
+@codebook_view
+def submit_proposal(ctx):
+    """Producer contract: a model/agent stages a codebook edit for human
+    confirmation. `actor_kind=="model"` is the machine path (no admin
+    gate — it only QUEUES; nothing changes until an admin confirms).
+    A human-submitted proposal still requires edit rights."""
+    data = request.get_json(silent=True) or {}
+    op = (data.get("op") or "").strip()
+    payload = data.get("payload") or {}
+    actor_kind = (data.get("actor_kind") or "model").strip()
+    if op not in ("merge", "split", "rename", "recolor", "move",
+                  "delete"):
+        return jsonify({"error": f"unsupported op {op!r}"}), 400
+    if actor_kind != "model" and not _can_mutate(ctx, need_open=True):
+        return jsonify({
+            "error": "Proposing edits requires edit rights"}), 403
+    from potato.codebook import changelog
+    prop = changelog.record_proposal(
+        task_dir=ctx["task_dir"], project=ctx["project"], op=op,
+        payload=payload, actor=ctx["username"], actor_kind=actor_kind)
+    return jsonify({"proposal": prop}), 201
+
+
+@codebook_bp.route("/admin/proposals", methods=["GET"])
+def admin_list_proposals():
+    td, project, _user, err = _admin_ctx()
+    if err:
+        return err
+    from potato.codebook import changelog
+    items = changelog.list_proposals(td, project, status="pending")
+    return jsonify({"proposals": items, "count": len(items)})
+
+
+def _apply_proposed(td, project, op, payload, actor):
+    """Dispatch a confirmed proposal through the audited service path."""
+    from potato.codebook import (
+        merge_codes, split_code, rename_code, recolor_code,
+        move_under, delete_code)
+    if op == "merge":
+        return merge_codes(
+            td, project=project, src_id=payload["src_id"],
+            dst_id=payload["dst_id"], actor=actor, actor_kind="model")
+    if op == "split":
+        return split_code(
+            td, project=project, src_id=payload["src_id"],
+            annotator=payload["annotator"],
+            new_name=payload.get("new_name"),
+            target_id=payload.get("target_id"),
+            actor=actor, actor_kind="model")
+    if op == "rename":
+        return rename_code(
+            td, payload["code_id"], new_name=payload["new_name"],
+            project=project, actor=actor, actor_kind="model")
+    if op == "recolor":
+        return recolor_code(
+            td, payload["code_id"], color=payload["color"],
+            project=project, actor=actor, actor_kind="model")
+    if op == "move":
+        return move_under(
+            td, payload["code_id"],
+            new_parent_id=payload.get("parent_id") or "",
+            project=project, actor=actor, actor_kind="model")
+    if op == "delete":
+        return delete_code(
+            td, payload["code_id"], project=project,
+            actor=actor, actor_kind="model")
+    raise CodebookError(f"unsupported op {op!r}")
+
+
+@codebook_bp.route("/admin/proposals/<pid>/confirm", methods=["POST"])
+def admin_confirm_proposal(pid):
+    td, project, user, err = _admin_ctx()
+    if err:
+        return err
+    from potato.codebook import changelog
+    prop = changelog.get_proposal(td, pid)
+    if not prop or prop["project"] != project:
+        return jsonify({"error": "proposal not found"}), 404
+    if prop["status"] != "pending":
+        return jsonify({
+            "error": f"proposal already {prop['status']}"}), 409
+
+    def _do():
+        result = _apply_proposed(
+            td, project, prop["op"], prop["payload"], user)
+        cid = changelog.log_change(
+            td, project=project, op="llm_confirmed",
+            old_value=prop["op"], new_value=str(result),
+            actor=user, actor_kind="model",
+            revision=current_revision(td, project))
+        changelog.set_proposal_status(
+            td, pid, status="confirmed", decided_by=user,
+            change_id=result.get("change_id") or cid)
+        return jsonify({"confirmed": True, "result": result})
+
+    return _handle(_do)
+
+
+@codebook_bp.route("/admin/proposals/<pid>/reject", methods=["POST"])
+def admin_reject_proposal(pid):
+    td, project, user, err = _admin_ctx()
+    if err:
+        return err
+    from potato.codebook import changelog
+    prop = changelog.get_proposal(td, pid)
+    if not prop or prop["project"] != project:
+        return jsonify({"error": "proposal not found"}), 404
+    if prop["status"] != "pending":
+        return jsonify({
+            "error": f"proposal already {prop['status']}"}), 409
+    cid = changelog.log_change(
+        td, project=project, op="llm_rejected",
+        old_value=prop["op"], new_value=None, actor=user,
+        actor_kind="model", revision=0)
+    changelog.set_proposal_status(
+        td, pid, status="rejected", decided_by=user, change_id=cid)
+    return jsonify({"rejected": True})
+
+
 @codebook_bp.route("/similar", methods=["GET"])
 @codebook_view
 def similar(ctx):

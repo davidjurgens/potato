@@ -27,7 +27,12 @@ class Codebook:
 
     @classmethod
     def load(cls, task_dir: str, project: str) -> "Codebook":
-        return cls(project, store.list_codes(task_dir, project))
+        # Archived codes (e.g. merged away in Phase 2 C) must not reach
+        # the label list / tree — those feed the ICL prompt and the live
+        # forms. `.get` keeps this tolerant of pre-0003 schemas.
+        codes = [c for c in store.list_codes(task_dir, project)
+                 if not c.get("archived_at")]
+        return cls(project, codes)
 
     def __len__(self) -> int:
         return len(self._codes)

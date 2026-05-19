@@ -399,6 +399,286 @@
         if (!el("cb-panel")) return;
         syncCodebook(instanceId());
         refreshProvenance();
+        refreshAdmin();
+    }
+
+    // ---- admin curation (Phase 2 C): merge / split / proposals ----------
+    // Admin status is probed once via the gated endpoint (200 -> show
+    // the section, 403 -> stay hidden) — same self-gating pattern as the
+    // codebook toggle itself.
+
+    var ADMIN_API = API + "/admin";
+    var adminProbed = false, adminOK = false;
+
+    function flatCodes() {
+        var c = readCache();
+        var tree = (c && c.tree) || [];
+        var out = [];
+        (function walk(nodes, depth) {
+            nodes.forEach(function (n) {
+                out.push({ id: n.id,
+                           name: (depth ? "— " : "") + n.name });
+                if (n.children) walk(n.children, depth + 1);
+            });
+        })(tree, 0);
+        return out;
+    }
+
+    function fillCodeSelect(sel, codes, placeholder) {
+        if (!sel) return;
+        var cur = sel.value;
+        sel.innerHTML = '<option value="">' + esc(placeholder)
+            + "</option>"
+            + codes.map(function (c) {
+                return '<option value="' + esc(c.id) + '">'
+                    + esc(c.name) + "</option>";
+            }).join("");
+        if (cur) sel.value = cur;
+    }
+
+    function codeNameMap() {
+        var c = readCache();
+        var map = {};
+        (function walk(nodes) {
+            (nodes || []).forEach(function (n) {
+                map[n.id] = n.name;
+                if (n.children) walk(n.children);
+            });
+        })((c && c.tree) || []);
+        return map;
+    }
+
+    function codeName(id) {
+        if (!id) return "?";
+        var nm = codeNameMap()[id];
+        return nm != null ? nm : String(id).slice(0, 8);
+    }
+
+    // Human, reviewable sentence — an admin must understand what they
+    // are confirming, not decode uuids.
+    function describeProposal(p) {
+        var q = function (s) { return "«" + esc(s) + "»"; };
+        var pay = p.payload || {};
+        switch (p.op) {
+        case "merge":
+            return "Merge " + q(codeName(pay.src_id)) + " into "
+                + q(codeName(pay.dst_id));
+        case "split":
+            var dest = pay.new_name
+                ? " → " + q(pay.new_name)
+                : (pay.target_id
+                    ? " → " + q(codeName(pay.target_id)) : "");
+            return "Split " + q(codeName(pay.src_id)) + " by "
+                + esc(pay.annotator || "?") + dest;
+        case "rename":
+            return "Rename " + q(codeName(pay.code_id)) + " → "
+                + q(pay.new_name || "?");
+        case "recolor":
+            return "Recolour " + q(codeName(pay.code_id));
+        case "move":
+            return "Move " + q(codeName(pay.code_id));
+        case "delete":
+            return "Delete " + q(codeName(pay.code_id));
+        default:
+            return esc(p.op);
+        }
+    }
+
+    function adminStatus(msg) {
+        var s = el("cb-admin-status");
+        if (s) { s.textContent = msg || ""; }
+    }
+
+    var _statusT;
+    function flashStatus(msg) {
+        adminStatus(msg);
+        clearTimeout(_statusT);
+        _statusT = setTimeout(function () { adminStatus(""); }, 4000);
+    }
+
+    function adminErr(msg) {
+        var e = el("cb-admin-error");
+        adminStatus("");
+        if (e) {
+            e.textContent = msg || "";
+            e.hidden = !msg;
+            if (msg && e.focus) {
+                try { e.focus(); } catch (x) { /* non-fatal */ }
+            }
+        }
+    }
+
+    function afterAdminOp(okMsg) {
+        var e = el("cb-admin-error");
+        if (e) { e.textContent = ""; e.hidden = true; }
+        flashStatus(okMsg || "Done.");
+        fetchFull().then(function (data) {
+            if (data) {
+                renderTray(data);
+                reconcileForms(data, instanceId());
+            }
+            refreshProvenance();
+            populateAdmin();
+        });
+    }
+
+    function _adminButtons() {
+        var sec = el("cb-admin-section");
+        return sec ? sec.querySelectorAll(
+            ".cb-primary, .cb-go, .cb-iv-cancel") : [];
+    }
+
+    function postAdmin(path, body, onok) {
+        adminStatus("");
+        var btns = _adminButtons();
+        btns.forEach(function (b) { b.disabled = true; });
+        var done = function () {
+            btns.forEach(function (b) { b.disabled = false; });
+        };
+        fetch(ADMIN_API + path, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body || {}),
+        }).then(function (r) {
+            return r.json().then(function (b) {
+                return { ok: r.ok, body: b };
+            });
+        }).then(function (res) {
+            done();
+            if (!res.ok) {
+                adminErr(res.body && res.body.error
+                    ? res.body.error : "Action failed.");
+                return;
+            }
+            onok(res.body);
+        }).catch(function () {
+            done();
+            adminErr("Action failed.");
+        });
+    }
+
+    function renderProposals(items) {
+        var box = el("cb-proposals");
+        if (!box) return;
+        items = items || [];
+        if (!items.length) {
+            box.innerHTML =
+                '<div class="cb-empty">No pending proposals.</div>';
+            return;
+        }
+        box.innerHTML = '<ul class="cb-prop-list">'
+            + items.map(function (p) {
+            return '<li class="cb-prop-item">'
+                + '<div class="cb-prop-desc">'
+                + describeProposal(p) + "</div>"
+                + '<div class="cb-prop-actions">'
+                + '<button type="button" class="cb-go" '
+                + 'data-confirm="' + esc(p.id) + '">Confirm</button>'
+                + '<button type="button" class="cb-iv-cancel" '
+                + 'data-reject="' + esc(p.id) + '">Reject</button>'
+                + "</div></li>";
+        }).join("") + "</ul>";
+        box.querySelectorAll("[data-confirm]").forEach(function (b) {
+            b.addEventListener("click", function () {
+                postAdmin("/proposals/"
+                    + encodeURIComponent(b.getAttribute("data-confirm"))
+                    + "/confirm", null, function () {
+                        afterAdminOp("Proposal confirmed.");
+                    });
+            });
+        });
+        box.querySelectorAll("[data-reject]").forEach(function (b) {
+            b.addEventListener("click", function () {
+                postAdmin("/proposals/"
+                    + encodeURIComponent(b.getAttribute("data-reject"))
+                    + "/reject", null, function () {
+                        flashStatus("Proposal rejected.");
+                        populateAdmin();
+                    });
+            });
+        });
+    }
+
+    var CHANGES_CAP = 20;
+
+    function renderChanges(items) {
+        var box = el("cb-changes");
+        if (!box) return;
+        var all = (items || []).slice().reverse();   // newest first
+        if (!all.length) {
+            box.innerHTML = '<li class="cb-empty">No changes yet.</li>';
+            return;
+        }
+        var shown = all.slice(0, CHANGES_CAP);
+        var note = all.length > CHANGES_CAP
+            ? '<li class="cb-empty">Showing latest ' + CHANGES_CAP
+              + "</li>"
+            : "";
+        box.innerHTML = note + shown.map(function (c) {
+            var from = c.old_value == null ? "" : esc(c.old_value);
+            var to = c.new_value == null ? "" : (" → "
+                + esc(c.new_value));
+            return '<li class="cb-chg-item"><span class="cb-chg-op">'
+                + esc(c.op) + '</span> ' + from + to
+                + ' <span class="cb-chg-by">'
+                + esc(c.actor) + "</span></li>";
+        }).join("");
+    }
+
+    function populateAdmin() {
+        var codes = flatCodes();
+        fillCodeSelect(el("cb-merge-src"), codes, "merge from…");
+        fillCodeSelect(el("cb-merge-dst"), codes, "into…");
+        fillCodeSelect(el("cb-split-src"), codes, "split…");
+        fetch(ADMIN_API + "/proposals")
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) { renderProposals(d && d.proposals); })
+            .catch(function () { /* best-effort */ });
+        fetch(ADMIN_API + "/changes")
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) { renderChanges(d && d.changes); })
+            .catch(function () { /* best-effort */ });
+    }
+
+    function refreshAdmin() {
+        var sec = el("cb-admin-section");
+        if (!sec) return;
+        if (adminProbed) {
+            if (adminOK) populateAdmin();
+            return;
+        }
+        adminProbed = true;
+        fetch(ADMIN_API + "/proposals").then(function (r) {
+            adminOK = r.status === 200;
+            sec.hidden = !adminOK;
+            if (adminOK) populateAdmin();
+        }).catch(function () { sec.hidden = true; });
+    }
+
+    function wireAdmin() {
+        var m = el("cb-merge-btn");
+        if (m) m.addEventListener("click", function () {
+            var s = el("cb-merge-src").value;
+            var d = el("cb-merge-dst").value;
+            if (!s || !d) { adminErr("Pick both codes."); return; }
+            postAdmin("/merge", { src_id: s, dst_id: d }, afterAdminOp);
+        });
+        var sp = el("cb-split-btn");
+        if (sp) sp.addEventListener("click", function () {
+            var body = {
+                src_id: el("cb-split-src").value,
+                annotator: (el("cb-split-annotator").value || "").trim(),
+                new_name: (el("cb-split-name").value || "").trim(),
+            };
+            if (!body.src_id || !body.annotator) {
+                adminErr("Pick a code and an annotator."); return;
+            }
+            postAdmin("/split", body, function () {
+                el("cb-split-name").value = "";
+                el("cb-split-annotator").value = "";
+                afterAdminOp();
+            });
+        });
     }
 
     // ---- composer (add a code) ------------------------------------------
@@ -820,6 +1100,7 @@
         // In-vivo coding: global key, active whenever a codebook span
         // scheme exists (wire() runs only when the codebook is enabled).
         document.addEventListener("keydown", onGlobalKeydown);
+        wireAdmin();
 
         var add = el("cb-add-btn");
         if (add) add.addEventListener("click", addCode);

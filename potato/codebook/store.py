@@ -80,6 +80,20 @@ def _db(task_dir: str):
     return get_db(task_dir)
 
 
+def _ensure_temporal_schema() -> None:
+    """Guarantee the Phase 2 (C) append-only columns/tables exist before
+    any link read/write that depends on `invalidated_at`. Lazy import
+    avoids a module-load cycle (changelog imports this module). The
+    0003 migration is additive (nullable cols + new tables), so this is
+    safe even for callers that only registered 0001."""
+    from potato.codebook.changelog import _CHANGE_MIGRATION
+    from potato.codebook.revision import (
+        _REVISION_MIGRATION, _CODES_REV_MIGRATION)
+    register_migration(_REVISION_MIGRATION)
+    register_migration(_CODES_REV_MIGRATION)
+    register_migration(_CHANGE_MIGRATION)
+
+
 # ---- codes ---------------------------------------------------------------
 
 def insert_code(
@@ -234,13 +248,111 @@ def unlink_annotation(
 def codes_for_annotation(
     task_dir: str, annotation_id: str
 ) -> List[Dict[str, Any]]:
+    # THE single load-bearing temporal reader: only LIVE links, and
+    # never an archived (e.g. merged-away) code.
+    _ensure_temporal_schema()
     rows = _db(task_dir).execute(
         """SELECT ac.code_id, ac.started_at, ac.ended_at,
                   ac.created_by, c.name, c.color, c.parent_id
            FROM annotation_codes ac
            JOIN codes c ON c.id = ac.code_id
            WHERE ac.annotation_id = ?
+             AND ac.invalidated_at IS NULL
+             AND c.archived_at IS NULL
            ORDER BY c.name ASC""",
         (annotation_id,),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+# ---- Phase 2 (C): append-only retroactive primitives --------------------
+
+def affected_annotation_ids(
+    task_dir: str, project: str, code_id: str,
+    created_by: Optional[str] = None,
+) -> List[str]:
+    """annotation_ids with a LIVE link to `code_id` (optionally only
+    those created by `created_by` — the split-by-annotator selector)."""
+    _ensure_temporal_schema()
+    q = ("SELECT DISTINCT annotation_id FROM annotation_codes "
+         "WHERE project = ? AND code_id = ? AND invalidated_at IS NULL")
+    p: List[Any] = [project, code_id]
+    if created_by is not None:
+        q += " AND created_by = ?"
+        p.append(created_by)
+    rows = _db(task_dir).execute(q, p).fetchall()
+    return [r["annotation_id"] for r in rows]
+
+
+def get_link(
+    task_dir: str, annotation_id: str, code_id: str
+) -> Optional[Dict[str, Any]]:
+    _ensure_temporal_schema()
+    row = _db(task_dir).execute(
+        """SELECT * FROM annotation_codes
+           WHERE annotation_id = ? AND code_id = ?""",
+        (annotation_id, code_id),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def invalidate_links(
+    task_dir: str, *, project: str, code_id: str, change_id: str,
+    created_by: Optional[str] = None,
+) -> int:
+    """Mark live links to `code_id` superseded (append-only — never
+    DELETE). Optional `created_by` scopes to one annotator (split)."""
+    _ensure_temporal_schema()
+    q = ("UPDATE annotation_codes SET invalidated_at = ?, "
+         "invalidated_by_change = ? "
+         "WHERE project = ? AND code_id = ? AND invalidated_at IS NULL")
+    p: List[Any] = [time.time(), change_id, project, code_id]
+    if created_by is not None:
+        q += " AND created_by = ?"
+        p.append(created_by)
+    conn = _db(task_dir)
+    cur = conn.execute(q, p)
+    conn.commit()
+    return cur.rowcount
+
+
+def set_link_live(
+    task_dir: str, *, project: str, annotation_id: str, code_id: str,
+    created_by: str, started_at: Optional[float] = None,
+    ended_at: Optional[float] = None,
+) -> None:
+    """Make (annotation_id, code_id) a LIVE link. Idempotent against the
+    PK(annotation_id, code_id): if the row exists (live or invalidated)
+    it is reactivated rather than duplicated/clobbered — this is how a
+    merge stays correct when the annotation is already on the target."""
+    _ensure_temporal_schema()
+    conn = _db(task_dir)
+    cur = conn.execute(
+        """UPDATE annotation_codes
+           SET invalidated_at = NULL, invalidated_by_change = NULL
+           WHERE annotation_id = ? AND code_id = ?""",
+        (annotation_id, code_id),
+    )
+    if cur.rowcount == 0:
+        conn.execute(
+            """INSERT INTO annotation_codes
+               (annotation_id, code_id, project, created_by,
+                started_at, ended_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (annotation_id, code_id, project, created_by,
+             started_at, ended_at),
+        )
+    conn.commit()
+
+
+def archive_code(task_dir: str, code_id: str) -> bool:
+    """Soft-archive a code (merged away): leaves the live palette + ICL
+    prompt but the row and its history survive (append-only)."""
+    _ensure_temporal_schema()
+    conn = _db(task_dir)
+    cur = conn.execute(
+        "UPDATE codes SET archived_at = ?, updated_at = ? WHERE id = ?",
+        (time.time(), time.time(), code_id),
+    )
+    conn.commit()
+    return cur.rowcount > 0

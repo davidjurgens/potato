@@ -28,15 +28,19 @@ from .service import (
     codes_on,
     create_code,
     delete_code,
+    merge_codes,
     move_under,
     recolor_code,
     register_change_listener,
     remove_code,
     rename_code,
+    split_code,
 )
 from .codebook import Codebook
 from .similar import derive_code_name, similar_code_names
 from . import revision
+from . import changelog
+from .changelog import propose_change
 from .revision import (
     all_stale_instances,
     codes_added_since,
@@ -44,6 +48,7 @@ from .revision import (
     instance_revision,
     record_annotation,
     stale_instances,
+    touch_instances,
 )
 
 __all__ = [
@@ -57,6 +62,9 @@ __all__ = [
     "recolor_code",
     "move_under",
     "delete_code",
+    "merge_codes",
+    "split_code",
+    "touch_instances",
     "apply_code",
     "remove_code",
     "codes_on",
@@ -71,4 +79,6 @@ __all__ = [
     "codes_added_since",
     "derive_code_name",
     "similar_code_names",
+    "changelog",
+    "propose_change",
 ]

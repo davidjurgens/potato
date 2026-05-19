@@ -181,6 +181,34 @@ def all_stale_instances(
     } for r in rows]
 
 
+def touch_instances(
+    task_dir: str, project: str, instance_ids: List[str]
+) -> int:
+    """Re-flag specific instances as stale after a retroactive codebook
+    edit (merge/split/rename) that affected exactly them. Sets their
+    stamped revision to current-1 so `stale_instances` resurfaces them —
+    soft and dismissible, never a hard re-label gate (Phase 2 (B)
+    policy). Only lowers a revision (never un-stales an already-older
+    row), and never raises one above current."""
+    if not instance_ids:
+        return 0
+    cur = current_revision(task_dir, project)
+    if cur <= 0:
+        return 0
+    target = cur - 1
+    qs = ",".join("?" * len(instance_ids))
+    conn = _db(task_dir)
+    cur_ = conn.execute(
+        f"""UPDATE annotation_provenance
+            SET revision = ?, updated_at = ?
+            WHERE project = ? AND instance_id IN ({qs})
+              AND revision > ?""",
+        [target, time.time(), project, *instance_ids, target],
+    )
+    conn.commit()
+    return cur_.rowcount
+
+
 def codes_added_since(
     task_dir: str, project: str, revision: int
 ) -> List[str]:
