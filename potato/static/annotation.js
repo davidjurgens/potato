@@ -995,6 +995,15 @@ async function loadCurrentInstance() {
         // Populate dynamic schema content (extractive_qa, text_edit, error_span, card_sort, conjoint)
         await populateDynamicSchemaContent();
 
+        // Codebook: reconcile codebook-backed forms (append codes added
+        // mid-session) + restore runtime-code selections + the
+        // stale-revision banner. MUST run AFTER generateAnnotationForms()
+        // / populate* so the appended options aren't discarded by a
+        // form rebuild.
+        if (window.CodebookPanel && typeof window.CodebookPanel.onInstance === 'function') {
+            window.CodebookPanel.onInstance();
+        }
+
         // Load span annotations
         debugLog('🔍 [DEBUG] loadCurrentInstance() - About to call loadSpanAnnotations()');
         debugLog('🔍 [DEBUG] loadCurrentInstance() - currentInstance.id:', currentInstance?.id);

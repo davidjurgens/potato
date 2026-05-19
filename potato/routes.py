@@ -3753,6 +3753,23 @@ def get_annotations():
         label_annotations = user_state.get_label_annotations(instance_id)
         span_annotations = user_state.get_span_annotations(instance_id)
 
+        # label_annotations is keyed by Label objects (schema, name) ->
+        # value; that is not JSON-serializable. Flatten to
+        # {schema: [selected label names]} (skip falsy/unset values).
+        serializable_label_annotations = {}
+        for lbl, value in (label_annotations or {}).items():
+            if value in (False, None, "", 0):
+                continue
+            schema = getattr(lbl, "schema", None)
+            name = getattr(lbl, "name", None)
+            if schema is None or name is None:
+                # Already-serialized or unexpected shape; keep as-is.
+                serializable_label_annotations.setdefault(
+                    str(lbl), value)
+                continue
+            serializable_label_annotations.setdefault(
+                schema, []).append(name)
+
         # Convert span annotations to serializable format
         serializable_span_annotations = {}
         for span, value in span_annotations.items():
@@ -3760,7 +3777,7 @@ def get_annotations():
 
         # Combine annotations
         annotations = {
-            "label_annotations": label_annotations,
+            "label_annotations": serializable_label_annotations,
             "span_annotations": serializable_span_annotations
         }
 
@@ -6727,6 +6744,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/annotate", "annotate", annotate, methods=["GET", "POST"])
     app.add_url_rule("/go_to", "go_to", go_to, methods=["GET", "POST"])
     app.add_url_rule("/updateinstance", "update_instance", update_instance, methods=["POST"])
+    app.add_url_rule("/get_annotations", "get_annotations", get_annotations, methods=["GET"])
     app.add_url_rule("/poststudy", "poststudy", poststudy, methods=["GET", "POST"])
     app.add_url_rule("/done", "done", done, methods=["GET", "POST"])
     app.add_url_rule("/admin", "admin", admin, methods=["GET"])

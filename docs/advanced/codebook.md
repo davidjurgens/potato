@@ -55,8 +55,33 @@ Adjudicators are privileged and may edit in any non-`fixed` mode.
 When a codebook is enabled, a **Codebook** toggle appears on the right
 edge of the annotation page (below Notes). It lists the codes and, when
 `codebook_mode` is `extensible`/`open`, shows an "Add a code…" composer.
-New codes appear immediately; reload the page to pick them up as form
-labels in the annotation scheme.
+
+### Add a code while coding
+
+A code added from the tray is **usable immediately** on the current
+instance — it is appended to the codebook-backed scheme's options
+in place, no reload required. Because the annotation form template is
+built once at server start, the tray re-applies any missing codes to
+the form on every page load (it polls a lightweight
+`/api/codebook/version` and only re-downloads the full codebook when
+the revision moved), so codes added mid-session keep working across
+navigation and their selections are restored.
+
+### Revision provenance & the review worklist
+
+Every codebook change (add / rename / recolor / move / delete) bumps a
+per-project `codebook_revision`, and every saved annotation is stamped
+with the revision in effect. When you revisit an instance you labeled
+under an older revision, a dismissible banner notes what changed
+("*N codes added since you labeled this: …*", or a generic message for
+non-additive changes). The tray's **Review** worklist lists exactly the
+instances you labeled before later changes — only genuinely affected
+instances are surfaced (an instance is listed only if its stamped
+revision precedes the change) — each with a **Go** button to jump
+straight there. Nothing is force-reopened; reviewing is optional.
+
+Admins/adjudicators can see the project-wide stale set via
+`GET /api/codebook/admin/stale`.
 
 ## Initialising / migrating from the CLI
 
@@ -75,7 +100,11 @@ machines — important because annotations carry a parallel `code_id`.
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/codebook` | tree + flat labels + `can_add`/`can_edit` |
+| GET | `/api/codebook` | tree + labels + `revision` + `schemes` + `can_add`/`can_edit` |
+| GET | `/api/codebook/version` | just `{revision}` — the cheap navigation poll |
+| GET | `/api/codebook/provenance?instance_id=` | is this instance stale for me + codes added since |
+| GET | `/api/codebook/stale` | my review worklist (stale instances + nav index) |
+| GET | `/api/codebook/admin/stale` | project-wide stale set (admin/adjudicator) |
 | POST | `/api/codebook` | add a code (`extensible`/`open`) |
 | PATCH | `/api/codebook/<id>` | rename / recolor / move (`open`) |
 | DELETE | `/api/codebook/<id>` | delete a code + subtree (`open`) |

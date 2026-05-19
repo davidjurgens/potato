@@ -121,7 +121,7 @@
     <!-- Universal Memos sidebar styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/memos.css') }}?v=2">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/search.css') }}?v=2">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/codebook.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/codebook.css') }}?v=4">
 
     <!-- jQuery (required for span annotation) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
@@ -631,8 +631,16 @@
             <button type="button" id="cb-panel-close"
                     aria-label="Close codebook">&times;</button>
         </div>
+        <div id="cb-stale-banner" class="cb-stale-banner" role="status"
+             hidden></div>
         <div id="cb-tree" class="cb-tree" aria-live="polite">
             <div class="cb-empty">Loading&hellip;</div>
+        </div>
+        <div class="cb-worklist-section">
+            <div id="cb-worklist-head" class="cb-worklist-head">Review</div>
+            <div id="cb-worklist" class="cb-worklist" aria-live="polite">
+                <div class="cb-empty">Nothing to review.</div>
+            </div>
         </div>
         <div id="cb-composer" class="cb-composer" hidden>
             <div class="cb-composer-row">
@@ -646,7 +654,7 @@
             <div id="cb-mode-hint" class="cb-mode-hint"></div>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='codebook.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='codebook.js') }}?v=4"></script>
     {% endif %}
 </body>
 </html>

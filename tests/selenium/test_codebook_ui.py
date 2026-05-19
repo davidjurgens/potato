@@ -121,6 +121,113 @@ class TestCodebookTrayOpenMode(unittest.TestCase):
         self.assertIn("already exists", err.text.lower())
 
 
+_CB_MULTI = [{
+    "name": "themes", "description": "Themes",
+    "annotation_type": "multiselect", "codebook": True,
+    "labels": ["seed-a", "seed-b"],
+}]
+
+
+class TestCodebookOnTheFlyNavBack(unittest.TestCase):
+    """The persistence risk area (CLAUDE.md): add a code mid-session,
+    use it, navigate away and back via full reloads, and verify the
+    runtime code survives in the form AND its selection is restored."""
+
+    @classmethod
+    def setUpClass(cls):
+        from tests.helpers.flask_test_setup import FlaskTestServer
+        from tests.helpers.port_manager import find_free_port
+        from tests.helpers.test_utils import (
+            create_test_data_file, create_test_config)
+        tests_dir = Path(__file__).parent.parent
+        cls.test_dir = os.path.join(
+            tests_dir, "output", f"cb_nav_{int(time.time())}")
+        os.makedirs(cls.test_dir, exist_ok=True)
+        data_file = create_test_data_file(cls.test_dir, [
+            {"id": "n1", "text": "first instance"},
+            {"id": "n2", "text": "second instance"},
+        ])
+        cls.config_file = create_test_config(
+            cls.test_dir, _CB_MULTI, data_files=[data_file],
+            annotation_task_name="Codebook NavBack",
+            require_password=False,
+            additional_config={"codebook_mode": "open"})
+        cls.port = find_free_port()
+        cls.server = FlaskTestServer(
+            port=cls.port, debug=False, config_file=cls.config_file)
+        assert cls.server.start_server(), "server did not start"
+        cls.server._wait_for_server_ready(timeout=10)
+        cls.chrome_options = _chrome()
+
+    @classmethod
+    def tearDownClass(cls):
+        from tests.helpers.test_utils import cleanup_test_directory
+        if hasattr(cls, "server"):
+            cls.server.stop_server()
+        if hasattr(cls, "test_dir"):
+            cleanup_test_directory(cls.test_dir)
+
+    def setUp(self):
+        self.driver = webdriver.Chrome(options=self.chrome_options)
+        self.driver.implicitly_wait(5)
+        self.wait = WebDriverWait(self.driver, 20)
+        _login(self.driver, self.wait, self.server.base_url,
+               f"navcoder_{int(time.time()*1000)}")
+
+    def tearDown(self):
+        if hasattr(self, "driver"):
+            self.driver.quit()
+
+    def _cb(self, value):
+        return self.driver.find_element(
+            By.CSS_SELECTOR,
+            "form#themes input.annotation-input[value='%s']" % value)
+
+    def test_runtime_code_survives_nav_and_restores(self):
+        d, w = self.driver, self.wait
+        # add a code via the tray
+        w.until(EC.element_to_be_clickable(
+            (By.ID, "cb-panel-toggle"))).click()
+        w.until(EC.text_to_be_present_in_element(
+            (By.ID, "cb-tree"), "seed-a"))
+        nm = d.find_element(By.ID, "cb-new-name")
+        nm.clear()
+        nm.send_keys("runtime-x")
+        d.find_element(By.ID, "cb-add-btn").click()
+        # reconciled into the form on the current instance (no reload)
+        w.until(lambda x: x.find_elements(
+            By.CSS_SELECTOR,
+            "form#themes input.annotation-input[value='runtime-x']"))
+        # select an existing seed + the runtime code on instance 1
+        self._cb("seed-a").click()
+        self._cb("runtime-x").click()
+        time.sleep(2)  # autosave debounce
+        # Next (full reload) -> instance 2: runtime code reconciled again
+        d.find_element(By.ID, "next-btn").click()
+        w.until(lambda x: x.find_elements(
+            By.CSS_SELECTOR,
+            "form#themes input.annotation-input[value='runtime-x']"))
+        # Previous (full reload) -> back to instance 1
+        d.find_element(By.ID, "prev-btn").click()
+        # runtime option present again (client reconcile on stale tmpl)
+        w.until(lambda x: x.find_elements(
+            By.CSS_SELECTOR,
+            "form#themes input.annotation-input[value='runtime-x']"))
+        # and BOTH selections restored (seed via server HTML, runtime
+        # via the async codebook restore path). Exception-safe poll:
+        # during a reload the element is briefly absent/stale, which
+        # must not abort the wait.
+        def _selected(value):
+            def _check(_):
+                try:
+                    return self._cb(value).is_selected()
+                except Exception:
+                    return False
+            return _check
+        w.until(_selected("seed-a"))
+        w.until(_selected("runtime-x"))
+
+
 class TestCodebookTrayDisabled(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -174,3 +281,4 @@ class TestCodebookTrayDisabled(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
