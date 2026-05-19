@@ -88,10 +88,14 @@ def create_code(
         raise DuplicateCodeError(
             f"A code named {name!r} already exists at this level")
     siblings = store.children_of(task_dir, project, parent_id)
+    # A new code changes the option set -> bump the project revision and
+    # stamp the code with the revision it first appeared in.
+    from potato.codebook import revision
+    new_rev = revision.bump_revision(task_dir, project)
     code = store.insert_code(
         task_dir, project=project, name=name, created_by=created_by,
         color=color, parent_id=parent_id, sort_order=len(siblings),
-        code_id=code_id,
+        code_id=code_id, created_revision=new_rev,
     )
     _notify(task_dir, project)
     return code
@@ -169,6 +173,9 @@ def delete_code(
     _require(task_dir, code_id)
     ids = _subtree_ids(task_dir, project, code_id)
     n = store.delete_codes(task_dir, ids)
+    # Removing a code also changes the option set.
+    from potato.codebook import revision
+    revision.bump_revision(task_dir, project)
     _notify(task_dir, project)
     return n
 

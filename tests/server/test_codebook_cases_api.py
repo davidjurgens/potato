@@ -83,6 +83,45 @@ class TestCodebookOpenMode:
         assert s.post(f"{self.server.base_url}/api/codebook",
                       json={"name": "  "}).status_code == 400
 
+    def test_revision_bumps_and_provenance_flags_stale(self):
+        s = _login(self.server, "dora")
+        base = self.server.base_url
+        # baseline revision (seeding may have bumped it already)
+        r0 = s.get(f"{base}/api/codebook").json()
+        rev0 = r0["revision"]
+        # annotate instance i1 under the current revision
+        ann = s.post(f"{base}/updateinstance", json={
+            "instance_id": "i1",
+            "annotations": {"code:::seed-a": "seed-a"}})
+        assert ann.status_code == 200
+        prov = s.get(
+            f"{base}/api/codebook/provenance?instance_id=i1").json()
+        assert prov["annotated_revision"] == rev0
+        assert prov["stale"] is False
+        # add a code -> revision bumps -> i1 becomes stale
+        s.post(f"{base}/api/codebook", json={"name": "Later Code"})
+        r1 = s.get(f"{base}/api/codebook").json()
+        assert r1["revision"] == rev0 + 1
+        prov2 = s.get(
+            f"{base}/api/codebook/provenance?instance_id=i1").json()
+        assert prov2["stale"] is True
+        assert "Later Code" in prov2["codes_added_since"]
+        # worklist surfaces it
+        wl = s.get(f"{base}/api/codebook/stale").json()
+        ids = [x["instance_id"] for x in wl["stale"]]
+        assert "i1" in ids and wl["count"] >= 1
+
+    def test_provenance_requires_instance_id(self):
+        s = _login(self.server, "eve")
+        assert s.get(
+            f"{self.server.base_url}/api/codebook/provenance"
+        ).status_code == 400
+
+    def test_admin_stale_requires_privilege(self):
+        s = _login(self.server, "frank")
+        r = s.get(f"{self.server.base_url}/api/codebook/admin/stale")
+        assert r.status_code == 403
+
 
 class TestCodebookFixedMode:
     @pytest.fixture(scope="class", autouse=True)

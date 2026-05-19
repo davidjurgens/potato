@@ -16,7 +16,8 @@ Layers:
   prompt-cache invalidation).
 """
 
-from .codebook import Codebook
+# Import order matters: .service -> .store registers the 0001_codebook
+# migration (CREATE TABLE codes) which .revision's ALTER depends on.
 from .service import (
     CodebookCycleError,
     CodebookError,
@@ -32,6 +33,16 @@ from .service import (
     register_change_listener,
     remove_code,
     rename_code,
+)
+from .codebook import Codebook
+from . import revision
+from .revision import (
+    all_stale_instances,
+    codes_added_since,
+    current_revision,
+    instance_revision,
+    record_annotation,
+    stale_instances,
 )
 
 __all__ = [
@@ -50,4 +61,11 @@ __all__ = [
     "codes_on",
     "register_change_listener",
     "clear_change_listeners",
+    "revision",
+    "current_revision",
+    "record_annotation",
+    "instance_revision",
+    "stale_instances",
+    "all_stale_instances",
+    "codes_added_since",
 ]

@@ -30,11 +30,15 @@ from potato.codebook import (
     CodeNotFound,
     DuplicateCodeError,
     Codebook,
+    codes_added_since,
     create_code,
+    current_revision,
     delete_code,
+    instance_revision,
     move_under,
     recolor_code,
     rename_code,
+    stale_instances,
 )
 from potato.codebook.store import ROOT
 
@@ -128,6 +132,25 @@ def _handle(fn):
         return jsonify({"error": str(e)}), 400
 
 
+def _codebook_scheme_names() -> list:
+    """Names of schemes opted into the codebook — the forms the tray
+    refreshes in place after an add."""
+    cfg = _config()
+    return [s.get("name") for s in (cfg.get("annotation_schemes") or [])
+            if isinstance(s, dict) and s.get("codebook") and s.get("name")]
+
+
+def _instance_index_map() -> dict:
+    """instance_id -> 0-based position, so the review worklist can jump
+    via the existing index-based navigateToInstance()."""
+    try:
+        from potato.item_state_management import get_item_state_manager
+        ids = get_item_state_manager().get_instance_ids()
+        return {str(iid): i for i, iid in enumerate(ids)}
+    except Exception:
+        return {}
+
+
 @codebook_bp.route("", methods=["GET"])
 @codebook_view
 def get_codebook(ctx):
@@ -136,9 +159,82 @@ def get_codebook(ctx):
         "mode": ctx["mode"],
         "labels": cb.labels(),
         "tree": cb.as_tree(),
+        "revision": current_revision(ctx["task_dir"], ctx["project"]),
+        "schemes": _codebook_scheme_names(),
         "can_add": _can_mutate(ctx, need_open=False),
         "can_edit": _can_mutate(ctx, need_open=True),
     })
+
+
+@codebook_bp.route("/provenance", methods=["GET"])
+@codebook_view
+def provenance(ctx):
+    """Is one instance stale for the current annotator (labeled before
+    later code additions)? Powers the dismissible revisit banner."""
+    instance_id = request.args.get("instance_id")
+    if not instance_id:
+        return jsonify({"error": "instance_id is required"}), 400
+    cur = current_revision(ctx["task_dir"], ctx["project"])
+    ann = instance_revision(
+        ctx["task_dir"], ctx["project"], instance_id, ctx["username"])
+    added = ([] if ann is None or ann >= cur
+             else codes_added_since(ctx["task_dir"], ctx["project"], ann))
+    return jsonify({
+        "instance_id": instance_id,
+        "annotated_revision": ann,
+        "current_revision": cur,
+        "stale": bool(added),
+        "codes_added_since": added,
+    })
+
+
+@codebook_bp.route("/stale", methods=["GET"])
+@codebook_view
+def stale(ctx):
+    """The current annotator's review worklist: their instances labeled
+    under an older revision, each with the codes added since."""
+    items = stale_instances(
+        ctx["task_dir"], ctx["project"], ctx["username"])
+    idx = _instance_index_map()
+    for it in items:
+        it["index"] = idx.get(str(it["instance_id"]))
+    return jsonify({"stale": items, "count": len(items)})
+
+
+def _admin_or_adjudicator() -> bool:
+    try:
+        from potato.admin import admin_dashboard
+        if admin_dashboard.check_admin_access():
+            return True
+    except Exception:
+        pass
+    username = session.get("username")
+    if username:
+        try:
+            from potato.adjudication import get_adjudication_manager
+            adj = get_adjudication_manager()
+            if adj and adj.is_adjudicator(username):
+                return True
+        except Exception:
+            pass
+    return False
+
+
+@codebook_bp.route("/admin/stale", methods=["GET"])
+def admin_stale():
+    """Project-wide stale instances (all users) for oversight. Admin
+    API key or adjudicator only."""
+    from potato.server_utils.config_module import config as _cfg
+    if not codebook_enabled(_cfg):
+        return jsonify({"error": "Codebook not enabled"}), 503
+    if not _admin_or_adjudicator():
+        return jsonify({
+            "error": "Admin or adjudicator access required"}), 403
+    from potato.codebook.revision import all_stale_instances
+    task_dir = _cfg.get("task_dir", ".")
+    project = _cfg.get("annotation_task_name") or "default"
+    items = all_stale_instances(task_dir, project)
+    return jsonify({"stale": items, "count": len(items)})
 
 
 @codebook_bp.route("", methods=["POST"])

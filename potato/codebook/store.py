@@ -92,19 +92,22 @@ def insert_code(
     parent_id: str = ROOT,
     sort_order: int = 0,
     code_id: Optional[str] = None,
+    created_revision: int = 0,
 ) -> Dict[str, Any]:
     """Insert one code row and return it. `code_id` lets the init CLI
-    supply a deterministic id; otherwise a random uuid4 is used."""
+    supply a deterministic id; otherwise a random uuid4 is used.
+    `created_revision` records the codebook revision the code first
+    appeared in (for provenance / the review worklist)."""
     cid = code_id or uuid.uuid4().hex
     now = time.time()
     conn = _db(task_dir)
     conn.execute(
         """INSERT INTO codes
            (id, project, name, color, parent_id, sort_order,
-            created_by, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            created_by, created_at, updated_at, created_revision)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (cid, project, name, color, parent_id, sort_order,
-         created_by, now, now),
+         created_by, now, now, created_revision),
     )
     conn.commit()
     return get_code(task_dir, cid)

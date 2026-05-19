@@ -4600,6 +4600,22 @@ def update_instance():
             total = mace_mgr.count_total_annotations()
             mace_mgr.check_and_run(total)
 
+        # Stamp this annotation with the codebook revision in effect so
+        # an instance labeled before later code additions can be softly
+        # flagged for review. No-op unless the project uses a codebook;
+        # never allowed to break the save.
+        try:
+            if not is_phase_page_update:
+                from potato.codebook.api import codebook_enabled
+                if codebook_enabled(config):
+                    from potato.codebook import record_annotation
+                    record_annotation(
+                        config.get("task_dir", "."),
+                        config.get("annotation_task_name") or "default",
+                        instance_id, username)
+        except Exception as e:
+            logger.warning(f"Codebook provenance stamp skipped: {e}")
+
         # Get performance metrics for response
         performance_metrics = user_state.get_performance_metrics()
 
