@@ -445,6 +445,7 @@
     var INVIVO_CAP = 60;
     var iv = null;        // popover root (built lazily)
     var ivState = null;   // { range, schema, field, chosen }
+    var ivReturn = null;  // element to restore focus to on close
 
     // Mirrors potato/codebook/similar.py derive_code_name — keep in sync.
     function deriveName(text) {
@@ -496,6 +497,7 @@
         iv.id = "cb-invivo";
         iv.className = "cb-invivo";
         iv.setAttribute("role", "dialog");
+        iv.setAttribute("aria-modal", "true");
         iv.setAttribute("aria-label",
             "Create a code from the selected text");
         iv.hidden = true;
@@ -503,8 +505,10 @@
             '<div class="cb-iv-quote" id="cb-iv-quote"></div>' +
             '<input id="cb-iv-name" class="cb-iv-input" type="text" ' +
                 'autocomplete="off" spellcheck="false" ' +
-                'aria-label="New code name" />' +
-            '<div id="cb-iv-sim" class="cb-iv-sim" hidden></div>' +
+                'aria-label="New code name" ' +
+                'aria-describedby="cb-iv-quote" />' +
+            '<div id="cb-iv-sim" class="cb-iv-sim" hidden ' +
+                'aria-live="polite"></div>' +
             '<div id="cb-iv-err" class="cb-error" hidden ' +
                 'role="alert"></div>' +
             '<div class="cb-iv-actions">' +
@@ -530,6 +534,22 @@
             updateGoLabel();
             clearTimeout(simT);
             simT = setTimeout(fetchSimilar, 220);
+        });
+        // Modal dialog: Esc closes from anywhere inside; Tab is trapped
+        // so keyboard focus can't fall behind the popover.
+        iv.addEventListener("keydown", function (e) {
+            if (e.key === "Escape") {
+                e.preventDefault(); closeInvivo(); return;
+            }
+            if (e.key !== "Tab") return;
+            var f = ivFocusables();
+            if (!f.length) return;
+            var first = f[0], last = f[f.length - 1];
+            if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault(); last.focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault(); first.focus();
+            }
         });
         return iv;
     }
@@ -574,9 +594,23 @@
         iv.style.left = left + "px";
     }
 
+    function ivFocusables() {
+        if (!iv) return [];
+        return Array.prototype.filter.call(
+            iv.querySelectorAll("input, button"),
+            function (n) { return !n.disabled && n.offsetParent !== null; });
+    }
+
     function closeInvivo() {
         if (iv) iv.hidden = true;
         ivState = null;
+        // Restore focus so the annotator isn't dropped onto <body>
+        // mid-coding (WCAG 2.4.3).
+        var back = ivReturn;
+        ivReturn = null;
+        if (back && back.focus) {
+            try { back.focus(); } catch (e) { /* non-fatal */ }
+        }
     }
 
     function showIvErr(msg) {
@@ -626,6 +660,12 @@
 
     function openInvivo(sel, form) {
         buildPopover();
+        // Where focus returns on close. The opener is a keypress over a
+        // text selection (no focused control), so prefer the codebook
+        // toggle; fall back to whatever was focused, else body.
+        var ae = document.activeElement;
+        ivReturn = (ae && ae !== document.body && ae.focus) ? ae
+            : (el("cb-panel-toggle") || document.body);
         var range = sel.getRangeAt(0).cloneRange();
         var rect = range.getBoundingClientRect();
         var raw = sel.toString();

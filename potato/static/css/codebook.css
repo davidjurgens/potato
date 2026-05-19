@@ -19,6 +19,13 @@
     --cb-accent: var(--memo-accent, #4063b8);
     --cb-accent-ink: var(--memo-accent-ink, #ffffff);
     --cb-focus: var(--memo-focus, #6c8cff);
+    /* Tertiary surface + pressed tint + stronger hairline, so hover/
+       active states stop hard-coding the same literals across the file.
+       Shadow ink is tokenised (geometry stays per-element). */
+    --cb-surface-3: var(--memo-surface-3, #eef0f6);
+    --cb-press: var(--memo-press, #e4e7f1);
+    --cb-line-strong: var(--memo-line-strong, #cdd2e4);
+    --cb-shadow-ink: var(--memo-shadow-ink, 31, 35, 48);
 }
 
 .cb-panel-toggle {
@@ -37,7 +44,7 @@
     color: var(--cb-ink);
     padding: 10px 14px;
     border-radius: var(--cb-radius) 0 0 var(--cb-radius);
-    box-shadow: -1px 1px 6px rgba(31, 35, 48, 0.08);
+    box-shadow: -1px 1px 6px rgba(var(--cb-shadow-ink), 0.08);
     cursor: pointer;
     font-size: 0.85rem;
     font-weight: 600;
@@ -49,7 +56,7 @@
     transform: translateY(-50%) translateX(-2px);
 }
 
-.cb-panel-toggle:active { background: #eef0f6; }
+.cb-panel-toggle:active { background: var(--cb-surface-3); }
 
 .cb-panel {
     position: fixed;
@@ -60,7 +67,7 @@
     max-width: 92vw;
     background: var(--cb-surface);
     border-left: 1px solid var(--cb-line);
-    box-shadow: -4px 0 24px rgba(31, 35, 48, 0.10);
+    box-shadow: -4px 0 24px rgba(var(--cb-shadow-ink), 0.10);
     z-index: 1050;
     display: flex;
     flex-direction: column;
@@ -346,7 +353,7 @@
     background: var(--cb-surface);
     border: 1px solid var(--cb-line);
     border-radius: var(--cb-radius);
-    box-shadow: 0 8px 28px rgba(31, 35, 48, 0.16);
+    box-shadow: 0 8px 28px rgba(var(--cb-shadow-ink), 0.16);
     color: var(--cb-ink);
 }
 
@@ -378,10 +385,12 @@
     transition: border-color 140ms ease-out, box-shadow 140ms ease-out;
 }
 
+/* Solid ring (not a faint shadow) so the focused state clears WCAG
+   1.4.11 non-text contrast for pointer focus too, not only :focus-visible. */
 .cb-iv-input:focus {
-    outline: none;
+    outline: 2px solid var(--cb-focus);
+    outline-offset: 1px;
     border-color: var(--cb-focus);
-    box-shadow: 0 0 0 3px rgba(108, 140, 255, 0.18);
 }
 
 .cb-iv-sim {
@@ -399,13 +408,15 @@
 }
 
 .cb-iv-chip {
+    display: inline-flex;
+    align-items: center;
     border: 1px solid var(--cb-line);
     background: var(--cb-surface-2);
     color: var(--cb-ink);
     font-size: 0.76rem;
     font-weight: 500;
-    min-height: 26px;
-    padding: 4px 11px;
+    min-height: 34px;
+    padding: 6px 12px;
     border-radius: 999px;
     cursor: pointer;
     transition: background-color 140ms ease-out,
@@ -413,11 +424,11 @@
 }
 
 .cb-iv-chip:hover {
-    background: #eef0f6;
-    border-color: #cdd2e4;
+    background: var(--cb-surface-3);
+    border-color: var(--cb-line-strong);
 }
 
-.cb-iv-chip:active { background: #e4e7f1; }
+.cb-iv-chip:active { background: var(--cb-press); }
 
 .cb-iv-chip-on,
 .cb-iv-chip-on:hover {
@@ -451,7 +462,7 @@
     color: var(--cb-ink);
 }
 
-.cb-iv-cancel:active { background: #eef0f6; }
+.cb-iv-cancel:active { background: var(--cb-surface-3); }
 
 .cb-panel-toggle:focus-visible,
 .cb-panel button:focus-visible,
