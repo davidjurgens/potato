@@ -265,43 +265,55 @@
         return e ? (e.value || e.textContent || "").trim() : "";
     }
 
+    var staleDismissBound = false;
+    var staleInstance = null;
+
     function renderBanner(p) {
         var bar = el("cb-stale-banner");
-        if (!bar) return;
+        var msgEl = el("cb-stale-msg");
+        if (!bar || !msgEl) return;
+        // Bind the persistent dismiss control exactly once — the banner
+        // is stable structure (the message <span> is the live region),
+        // never re-injected, so the control is never re-announced.
+        if (!staleDismissBound) {
+            var x = el("cb-stale-dismiss");
+            if (x) x.addEventListener("click", function () {
+                if (staleInstance) dismissed[staleInstance] = true;
+                bar.hidden = true;
+            });
+            staleDismissBound = true;
+        }
         if (!p || !p.stale || dismissed[p.instance_id]) {
             bar.hidden = true;
             return;
         }
         var added = p.codes_added_since || [];
-        var msg = added.length
+        staleInstance = p.instance_id;
+        msgEl.textContent = added.length
             ? added.length + " code" + (added.length > 1 ? "s" : "")
               + " added since you labeled this: " + added.join(", ")
             : "The codebook changed since you labeled this "
               + "(renamed / recolored / reorganized).";
-        bar.innerHTML =
-            '<span class="cb-stale-msg">' + esc(msg) + "</span>"
-            + '<button type="button" id="cb-stale-dismiss" '
-            + 'class="cb-stale-x" aria-label="Dismiss">&times;</button>';
         bar.hidden = false;
-        var x = el("cb-stale-dismiss");
-        if (x) x.addEventListener("click", function () {
-            dismissed[p.instance_id] = true;
-            bar.hidden = true;
-        });
     }
 
     function renderWorklist(items) {
         var box = el("cb-worklist");
         var head = el("cb-worklist-head");
+        var section = el("cb-worklist-section");
         if (!box) return;
         items = items || [];
         if (head) head.textContent = "Review (" + items.length + ")";
+        // The empty worklist is the common case — collapse the whole
+        // section so it adds no resting chrome to the tray.
+        if (section) section.hidden = !items.length;
         if (!items.length) {
             box.innerHTML =
                 '<div class="cb-empty">Nothing to review.</div>';
             return;
         }
-        box.innerHTML = items.map(function (it) {
+        box.innerHTML = '<ul class="cb-worklist-list">'
+            + items.map(function (it) {
             var added = (it.codes_added_since || []);
             var sub = added.length
                 ? esc(added.join(", "))
@@ -309,12 +321,12 @@
             var btn = it.index == null ? ""
                 : '<button type="button" class="cb-go" data-idx="'
                   + it.index + '">Go</button>';
-            return '<div class="cb-wl-item">'
+            return '<li class="cb-wl-item">'
                 + '<div class="cb-wl-id">' + esc(it.instance_id)
                 + "</div>"
                 + '<div class="cb-wl-sub">' + sub + "</div>"
-                + btn + "</div>";
-        }).join("");
+                + btn + "</li>";
+        }).join("") + "</ul>";
         box.querySelectorAll(".cb-go").forEach(function (b) {
             b.addEventListener("click", function () {
                 var idx = parseInt(b.getAttribute("data-idx"), 10);

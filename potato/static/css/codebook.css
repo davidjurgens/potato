@@ -26,6 +26,12 @@
     --cb-press: var(--memo-press, #e4e7f1);
     --cb-line-strong: var(--memo-line-strong, #cdd2e4);
     --cb-shadow-ink: var(--memo-shadow-ink, 31, 35, 48);
+    --cb-accent-press: var(--memo-accent-press, #36559e);
+    /* The single intentional non-neutral: a calm tinted-amber "your
+       labels may be stale" notice. Defined once here, not spread. */
+    --cb-warn-ink: var(--memo-warn-ink, #7a5200);
+    --cb-warn-surface: var(--memo-warn-surface, #fdf5e6);
+    --cb-warn-line: var(--memo-warn-line, #ecd9b4);
 }
 
 .cb-panel-toggle {
@@ -207,7 +213,7 @@
     transition: background-color 150ms ease-out, transform 120ms ease-out;
 }
 
-.cb-primary:hover { background: #36559e; }
+.cb-primary:hover { background: var(--cb-accent-press); }
 .cb-primary:active { transform: translateY(1px); }
 .cb-primary:disabled {
     background: #aab2cc;
@@ -243,33 +249,37 @@
              var(--cb-space-2) var(--cb-space-3);
     font-size: 0.8rem;
     line-height: 1.45;
-    color: #7a5200;
-    background: #fdf5e6;
-    border: 1px solid #ecd9b4;
+    color: var(--cb-warn-ink);
+    background: var(--cb-warn-surface);
+    border: 1px solid var(--cb-warn-line);
     border-radius: var(--cb-radius);
 }
 
-.cb-stale-msg { flex: 1; padding-top: 2px; }
+.cb-stale-msg { flex: 1; padding-top: 3px; }
 
 .cb-stale-x {
     flex: 0 0 auto;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    width: 28px;
+    height: 28px;
     border: none;
     background: none;
-    color: #7a5200;
+    color: var(--cb-warn-ink);
     font-size: 1.05rem;
     line-height: 1;
     cursor: pointer;
-    border-radius: 5px;
+    border-radius: 6px;
     transition: background-color 140ms ease-out;
 }
 
-.cb-stale-x:hover { background: rgba(122, 82, 0, 0.14); }
-.cb-stale-x:active { background: rgba(122, 82, 0, 0.22); }
+.cb-stale-x:hover {
+    background: color-mix(in srgb, var(--cb-warn-ink) 14%, transparent);
+}
+.cb-stale-x:active {
+    background: color-mix(in srgb, var(--cb-warn-ink) 22%, transparent);
+}
 
 @media (prefers-reduced-motion: reduce) {
     .cb-stale-x { transition: none; }
@@ -283,6 +293,7 @@
 }
 
 .cb-worklist-head {
+    margin: 0;                      /* neutralise <h2> UA margins */
     padding: var(--cb-space-2) var(--cb-space-4);
     font-size: 0.72rem;
     font-weight: 700;
@@ -294,6 +305,12 @@
 .cb-worklist {
     overflow-y: auto;
     padding: 0 var(--cb-space-4) var(--cb-space-3);
+}
+
+.cb-worklist-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
 }
 
 .cb-wl-item {
@@ -330,14 +347,18 @@
     color: var(--cb-accent);
     font-size: 0.74rem;
     font-weight: 600;
-    padding: 4px 10px;
-    border-radius: 5px;
+    min-height: 30px;
+    padding: 5px 12px;
+    border-radius: 6px;
     cursor: pointer;
     transition: background-color 140ms ease-out, color 140ms ease-out;
 }
 
 .cb-go:hover { background: var(--cb-accent); color: var(--cb-accent-ink); }
-.cb-go:active { background: #36559e; border-color: #36559e; }
+.cb-go:active {
+    background: var(--cb-accent-press);
+    border-color: var(--cb-accent-press);
+}
 
 /* In-vivo composer — a small popover anchored to the text selection.
    Same token system as the tray so the two never drift. */
