@@ -310,6 +310,11 @@ KNOWN_CONFIG_KEYS = {
     },
     # Top-level convenience scalar mirroring codebook.mode.
     "codebook_mode": None,
+    # In-vivo coding (D): single key that, with text selected in a
+    # codebook-backed span scheme, opens the "code from selection"
+    # composer. Default 'i'; only meaningful when a codebook span
+    # scheme exists.
+    "codebook_invivo_key": "i",
     # Universal cases: group instances into units of analysis. `key`
     # names the item-data field to group on; `auto_detect` lets QDA
     # scan participant_id/respondent_id/case_id; `attributes` lifts

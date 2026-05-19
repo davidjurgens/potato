@@ -83,6 +83,30 @@ class TestCodebookOpenMode:
         assert s.post(f"{self.server.base_url}/api/codebook",
                       json={"name": "  "}).status_code == 400
 
+    def test_similar_endpoint_on_served_app(self):
+        # Registered on the SERVED app (blueprint), not just module app.
+        s = _login(self.server, "simi")
+        base = self.server.base_url
+        s.post(f"{base}/api/codebook", json={"name": "cost concerns"})
+        r = s.get(f"{base}/api/codebook/similar",
+                  params={"name": "cost concern"})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert "cost concerns" in body["matches"]
+        # dissimilar -> no false suggestion
+        r2 = s.get(f"{base}/api/codebook/similar",
+                   params={"name": "telehealth latency"})
+        assert r2.status_code == 200
+        assert r2.json()["matches"] == []
+        # empty name -> empty, no error
+        r3 = s.get(f"{base}/api/codebook/similar", params={"name": ""})
+        assert r3.status_code == 200 and r3.json()["matches"] == []
+
+    def test_similar_requires_auth(self):
+        r = requests.get(
+            f"{self.server.base_url}/api/codebook/similar?name=x")
+        assert r.status_code == 401
+
     def test_revision_bumps_and_provenance_flags_stale(self):
         s = _login(self.server, "dora")
         base = self.server.base_url

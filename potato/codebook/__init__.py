@@ -35,6 +35,7 @@ from .service import (
     rename_code,
 )
 from .codebook import Codebook
+from .similar import derive_code_name, similar_code_names
 from . import revision
 from .revision import (
     all_stale_instances,
@@ -68,4 +69,6 @@ __all__ = [
     "stale_instances",
     "all_stale_instances",
     "codes_added_since",
+    "derive_code_name",
+    "similar_code_names",
 ]

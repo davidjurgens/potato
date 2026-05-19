@@ -67,6 +67,32 @@ the form on every page load (it polls a lightweight
 the revision moved), so codes added mid-session keep working across
 navigation and their selections are restored.
 
+### In-vivo coding (code from a selection)
+
+For a scheme that is both `annotation_type: span` **and**
+`codebook: true`, you can mint a code straight from the text:
+
+1. Select the passage in the instance.
+2. Press the in-vivo key (`codebook_invivo_key`, default `i`).
+3. A small composer opens, pre-filled with a code name derived from
+   the selection. Edit it if you like, then **Create & code**.
+
+The code is created through the same audited path as the tray, added
+to the scheme's label palette in place, and a span with that code is
+laid over your selection — no reload, no losing the selection.
+
+**Soft suggest-on-create.** As you type the name, closely matching
+existing codes surface as one-click chips ("Similar existing code —
+reuse instead?"). Picking one reuses that code instead of creating a
+near-duplicate; the primary button then reads **Apply code**. Nothing
+is blocked or silently merged — the choice is always yours. This keeps
+a fast in-vivo workflow from fragmenting the codebook into
+`cost` / `costs` / `cost concerns`.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `codebook_invivo_key` | `i` | Single key that opens the in-vivo composer when text is selected in a codebook-backed span scheme. Only meaningful when such a scheme exists. |
+
 ### Revision provenance & the review worklist
 
 Every codebook change (add / rename / recolor / move / delete) bumps a
@@ -102,6 +128,7 @@ machines — important because annotations carry a parallel `code_id`.
 |--------|------|---------|
 | GET | `/api/codebook` | tree + labels + `revision` + `schemes` + `can_add`/`can_edit` |
 | GET | `/api/codebook/version` | just `{revision}` — the cheap navigation poll |
+| GET | `/api/codebook/similar?name=` | near-duplicate existing codes for soft suggest-on-create |
 | GET | `/api/codebook/provenance?instance_id=` | is this instance stale for me + codes added since |
 | GET | `/api/codebook/stale` | my review worklist (stale instances + nav index) |
 | GET | `/api/codebook/admin/stale` | project-wide stale set (admin/adjudicator) |

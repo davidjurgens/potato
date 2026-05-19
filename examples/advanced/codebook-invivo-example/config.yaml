@@ -1,0 +1,39 @@
+port: 8000
+annotation_task_name: Codebook In-Vivo Example
+task_dir: .
+output_annotation_dir: annotation_output/codebook-invivo-example/
+output_annotation_format: tsv
+data_files:
+- data/codebook-invivo-example.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+
+# `open` lets annotators grow the codebook on the fly; QDA/solo default
+# to `open`, a crowdsourcing backend force-locks `fixed`.
+codebook_mode: open
+
+# In-vivo coding: with text selected in the codebook-backed span scheme
+# below, press this key to mint a code straight from the selection.
+# Default is `i`; shown here explicitly for the example.
+codebook_invivo_key: i
+
+annotation_schemes:
+# A span scheme that is ALSO codebook-backed: its labels come from the
+# project codebook (seeded once from the labels below). Select a phrase
+# in the text, press `i`, and create a new code from the selection — the
+# composer surfaces near-duplicate existing codes so you reuse instead
+# of fragmenting the codebook.
+- annotation_type: span
+  name: codes
+  description: Highlight a passage and code it (press `i` to code in vivo)
+  codebook: true
+  labels:
+  - cost concerns
+  - access barriers
+
+site_dir: default

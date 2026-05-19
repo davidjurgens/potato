@@ -161,6 +161,8 @@ def get_codebook(ctx):
         "tree": cb.as_tree(),
         "revision": current_revision(ctx["task_dir"], ctx["project"]),
         "schemes": _codebook_scheme_names(),
+        "invivo_key": str(
+            _config().get("codebook_invivo_key") or "i")[:1].lower(),
         "can_add": _can_mutate(ctx, need_open=False),
         "can_edit": _can_mutate(ctx, need_open=True),
     })
@@ -246,6 +248,23 @@ def admin_stale():
     project = _cfg.get("annotation_task_name") or "default"
     items = all_stale_instances(task_dir, project)
     return jsonify({"stale": items, "count": len(items)})
+
+
+@codebook_bp.route("/similar", methods=["GET"])
+@codebook_view
+def similar(ctx):
+    """Soft suggest-on-create: existing codes that closely match a
+    proposed name (Phase 2 #1). Read-only — drives a non-blocking
+    "Use «X»?" prompt before the in-vivo / on-the-fly add commits."""
+    from potato.codebook.similar import similar_code_names
+    name = (request.args.get("name") or "").strip()
+    if not name:
+        return jsonify({"name": name, "matches": []})
+    cb = Codebook.load(ctx["task_dir"], ctx["project"])
+    return jsonify({
+        "name": name,
+        "matches": similar_code_names(cb.labels(), name),
+    })
 
 
 @codebook_bp.route("", methods=["POST"])

@@ -332,17 +332,144 @@
 .cb-go:hover { background: var(--cb-accent); color: var(--cb-accent-ink); }
 .cb-go:active { background: #36559e; border-color: #36559e; }
 
+/* In-vivo composer — a small popover anchored to the text selection.
+   Same token system as the tray so the two never drift. */
+.cb-invivo {
+    position: absolute;
+    z-index: 1060;
+    width: 320px;
+    max-width: calc(100vw - 16px);
+    display: flex;
+    flex-direction: column;
+    gap: var(--cb-space-2);
+    padding: var(--cb-space-3);
+    background: var(--cb-surface);
+    border: 1px solid var(--cb-line);
+    border-radius: var(--cb-radius);
+    box-shadow: 0 8px 28px rgba(31, 35, 48, 0.16);
+    color: var(--cb-ink);
+}
+
+.cb-invivo:not([hidden]) { animation: cb-iv-in 140ms ease-out; }
+
+@keyframes cb-iv-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.cb-iv-quote {
+    font-size: 0.8rem;
+    line-height: 1.4;
+    color: var(--cb-ink-soft);
+    font-style: italic;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+}
+
+.cb-iv-input {
+    border: 1px solid var(--cb-line);
+    border-radius: 6px;
+    padding: var(--cb-space-2) var(--cb-space-3);
+    font: inherit;
+    font-size: 0.92rem;
+    color: var(--cb-ink);
+    transition: border-color 140ms ease-out, box-shadow 140ms ease-out;
+}
+
+.cb-iv-input:focus {
+    outline: none;
+    border-color: var(--cb-focus);
+    box-shadow: 0 0 0 3px rgba(108, 140, 255, 0.18);
+}
+
+.cb-iv-sim {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--cb-space-1) var(--cb-space-2);
+}
+
+.cb-iv-sim-label {
+    width: 100%;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--cb-ink-soft);
+}
+
+.cb-iv-chip {
+    border: 1px solid var(--cb-line);
+    background: var(--cb-surface-2);
+    color: var(--cb-ink);
+    font-size: 0.76rem;
+    font-weight: 500;
+    min-height: 26px;
+    padding: 4px 11px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background-color 140ms ease-out,
+                border-color 140ms ease-out, color 140ms ease-out;
+}
+
+.cb-iv-chip:hover {
+    background: #eef0f6;
+    border-color: #cdd2e4;
+}
+
+.cb-iv-chip:active { background: #e4e7f1; }
+
+.cb-iv-chip-on,
+.cb-iv-chip-on:hover {
+    background: var(--cb-accent);
+    border-color: var(--cb-accent);
+    color: var(--cb-accent-ink);
+}
+
+.cb-iv-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--cb-space-2);
+    margin-top: var(--cb-space-1);
+}
+
+.cb-iv-cancel {
+    border: 1px solid var(--cb-line);
+    background: var(--cb-surface);
+    color: var(--cb-ink-soft);
+    min-height: 36px;
+    padding: 7px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: background-color 140ms ease-out, color 140ms ease-out;
+}
+
+.cb-iv-cancel:hover {
+    background: var(--cb-surface-2);
+    color: var(--cb-ink);
+}
+
+.cb-iv-cancel:active { background: #eef0f6; }
+
 .cb-panel-toggle:focus-visible,
 .cb-panel button:focus-visible,
-.cb-panel input:focus-visible {
+.cb-panel input:focus-visible,
+.cb-invivo button:focus-visible,
+.cb-invivo input:focus-visible {
     outline: 2px solid var(--cb-focus);
     outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
     .cb-panel:not([hidden]) { animation: none; }
+    .cb-invivo:not([hidden]) { animation: none; }
     .cb-panel-toggle,
     .cb-primary,
     .cb-go,
+    .cb-iv-chip,
+    .cb-iv-cancel,
+    .cb-iv-input,
     .cb-panel-header button { transition: none; }
 }

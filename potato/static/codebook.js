@@ -99,12 +99,61 @@
 
     function optionValues(form) {
         var vals = {};
-        form.querySelectorAll("input.annotation-input").forEach(
-            function (i) { vals[i.value] = true; });
+        form.querySelectorAll(
+            "input.annotation-input, input.shadcn-span-checkbox"
+        ).forEach(function (i) { vals[i.value] = true; });
         return vals;
     }
 
+    // Span schemes (annotation_type: span, codebook: true) render a
+    // different option shape (.shadcn-span-option / .shadcn-span-checkbox,
+    // no .annotation-input, an inline changeSpanLabel onclick). The label
+    // palette must still gain runtime codes so they are usable as span
+    // labels; span *persistence* itself is overlay-based and independent
+    // of the palette.
+    function reconcileSpanForm(form, tmpl, labels) {
+        var schema = form.getAttribute("data-schema-name") || form.id;
+        var have = optionValues(form);
+        var parent = tmpl.parentElement;
+        var tInput = tmpl.querySelector("input");
+        var targetField = tInput
+            ? (tInput.getAttribute("data-target-field") || "") : "";
+
+        labels.forEach(function (name) {
+            if (have[name]) return;          // idempotent
+            var node = tmpl.cloneNode(true);
+            var input = node.querySelector("input");
+            var label = node.querySelector("label");
+            if (!input || !label) return;
+            var newId = schema + "__cb__" + slug(name);
+            input.value = name;
+            input.id = newId;
+            input.checked = false;
+            input.removeAttribute("data-key");
+            // label/title carry the code name; color is hash-derived in
+            // SpanManager (getSpanColor) so '' here is correct.
+            input.setAttribute(
+                "onclick",
+                "onlyOne(this); changeSpanLabel(this, "
+                + JSON.stringify(schema) + ", " + JSON.stringify(name)
+                + ", " + JSON.stringify(name) + ", '', "
+                + JSON.stringify(targetField) + ");");
+            label.setAttribute("for", newId);
+            var swatch = label.querySelector("span");
+            if (swatch) {
+                swatch.textContent = name;
+                swatch.style.backgroundColor = "";   // no borrowed color
+            } else {
+                label.textContent = name;
+            }
+            parent.appendChild(node);
+            have[name] = true;
+        });
+    }
+
     function reconcileForm(form, labels) {
+        var span = form.querySelector(".shadcn-span-option");
+        if (span) return reconcileSpanForm(form, span, labels);
         var radio = form.querySelector(".shadcn-radio-option");
         var multi = form.querySelector(".shadcn-multiselect-item");
         var tmpl = radio || multi;
@@ -387,6 +436,307 @@
         });
     }
 
+    // ---- in-vivo coding (D): select text -> key -> code from selection --
+    // Reuses the (B) create path + the existing span create/save/overlay
+    // pipeline: capture the selection Range, create (or reuse) the code,
+    // reconcile the palette, then replay the Range through SpanManager so
+    // zero span logic is duplicated here.
+
+    var INVIVO_CAP = 60;
+    var iv = null;        // popover root (built lazily)
+    var ivState = null;   // { range, schema, field, chosen }
+
+    // Mirrors potato/codebook/similar.py derive_code_name — keep in sync.
+    function deriveName(text) {
+        var s = String(text || "").replace(/\s+/g, " ").trim();
+        if (s.length <= INVIVO_CAP) return s;
+        var head = s.slice(0, INVIVO_CAP).replace(/\s\S*$/, "");
+        return (head || s.slice(0, INVIVO_CAP)).trim();
+    }
+
+    function invivoKey() {
+        var c = readCache();
+        var k = c && c.invivo_key;
+        return (k || "i").toString().slice(0, 1).toLowerCase();
+    }
+
+    function codebookSpanForm() {
+        var forms = document.querySelectorAll("form.annotation-form.span");
+        for (var i = 0; i < forms.length; i++) {
+            if (forms[i].querySelector(".shadcn-span-option")) {
+                return forms[i];
+            }
+        }
+        return null;
+    }
+
+    function activeSelectionInInstance() {
+        var sel = window.getSelection && window.getSelection();
+        if (!sel || !sel.rangeCount || sel.isCollapsed) return null;
+        if (!sel.toString().trim()) return null;
+        var node = sel.getRangeAt(0).startContainer;
+        var elx = node.nodeType === 3 ? node.parentElement : node;
+        if (!elx || !elx.closest) return null;
+        var host = elx.closest(
+            '[id^="text-content-"], #instance-text, #text-content');
+        return host ? sel : null;
+    }
+
+    function fieldOfSelection(sel) {
+        var node = sel.getRangeAt(0).startContainer;
+        var elx = node.nodeType === 3 ? node.parentElement : node;
+        var host = elx && elx.closest
+            ? elx.closest('[id^="text-content-"]') : null;
+        return host ? host.id.replace("text-content-", "") : "";
+    }
+
+    function buildPopover() {
+        if (iv) return iv;
+        iv = document.createElement("div");
+        iv.id = "cb-invivo";
+        iv.className = "cb-invivo";
+        iv.setAttribute("role", "dialog");
+        iv.setAttribute("aria-label",
+            "Create a code from the selected text");
+        iv.hidden = true;
+        iv.innerHTML =
+            '<div class="cb-iv-quote" id="cb-iv-quote"></div>' +
+            '<input id="cb-iv-name" class="cb-iv-input" type="text" ' +
+                'autocomplete="off" spellcheck="false" ' +
+                'aria-label="New code name" />' +
+            '<div id="cb-iv-sim" class="cb-iv-sim" hidden></div>' +
+            '<div id="cb-iv-err" class="cb-error" hidden ' +
+                'role="alert"></div>' +
+            '<div class="cb-iv-actions">' +
+                '<button type="button" id="cb-iv-cancel" ' +
+                    'class="cb-iv-cancel">Cancel</button>' +
+                '<button type="button" id="cb-iv-go" ' +
+                    'class="cb-primary">Create &amp; code</button>' +
+            '</div>';
+        document.body.appendChild(iv);
+        el("cb-iv-cancel").addEventListener("click", closeInvivo);
+        el("cb-iv-go").addEventListener("click", commitInvivo);
+        var nm = el("cb-iv-name");
+        nm.addEventListener("keydown", function (e) {
+            if (e.key === "Enter") {
+                e.preventDefault(); commitInvivo();
+            } else if (e.key === "Escape") {
+                e.preventDefault(); closeInvivo();
+            }
+        });
+        var simT;
+        nm.addEventListener("input", function () {
+            if (ivState) ivState.chosen = null;
+            updateGoLabel();
+            clearTimeout(simT);
+            simT = setTimeout(fetchSimilar, 220);
+        });
+        return iv;
+    }
+
+    function truncate(s, n) {
+        s = String(s || "").replace(/\s+/g, " ").trim();
+        return s.length > n ? s.slice(0, n - 1).trim() + "…" : s;
+    }
+
+    // Reflect what the primary action will actually do so "Create" never
+    // lies when the name resolves to an existing code.
+    function updateGoLabel() {
+        var go = el("cb-iv-go");
+        if (!go || !ivState) return;
+        var nm = el("cb-iv-name");
+        var name = (nm && nm.value || "").trim().toLowerCase();
+        var reuse = !!ivState.chosen;
+        if (!reuse && name) {
+            var cache = readCache();
+            var labels = (cache && cache.labels) || [];
+            reuse = labels.some(function (l) {
+                return String(l).trim().toLowerCase() === name;
+            });
+        }
+        go.textContent = reuse ? "Apply code" : "Create & code";
+    }
+
+    function positionPopover(rect) {
+        var pad = 8, w = 320;
+        var de = document.documentElement;
+        var left = Math.max(pad, Math.min(
+            rect.left + window.scrollX,
+            window.scrollX + de.clientWidth - w - pad));
+        // Flip above the selection if it would overflow the fold.
+        var h = iv.offsetHeight || 0;
+        var below = rect.bottom + pad + h <= de.clientHeight;
+        var top = below
+            ? rect.bottom + window.scrollY + pad
+            : Math.max(pad + window.scrollY,
+                       rect.top + window.scrollY - pad - h);
+        iv.style.top = top + "px";
+        iv.style.left = left + "px";
+    }
+
+    function closeInvivo() {
+        if (iv) iv.hidden = true;
+        ivState = null;
+    }
+
+    function showIvErr(msg) {
+        var e = el("cb-iv-err");
+        if (e) { e.textContent = msg; e.hidden = false; }
+    }
+
+    function renderSimilar(matches) {
+        var box = el("cb-iv-sim");
+        if (!box) return;
+        if (!matches || !matches.length) {
+            box.hidden = true; box.innerHTML = ""; return;
+        }
+        box.hidden = false;
+        box.innerHTML = '<span class="cb-iv-sim-label">Similar existing '
+            + 'code' + (matches.length > 1 ? "s" : "")
+            + ' — reuse instead?</span>';
+        matches.forEach(function (m) {
+            var b = document.createElement("button");
+            b.type = "button";
+            b.className = "cb-iv-chip";
+            b.textContent = m;
+            b.addEventListener("click", function () {
+                var nm = el("cb-iv-name");
+                nm.value = m;
+                if (ivState) ivState.chosen = m;
+                box.querySelectorAll(".cb-iv-chip").forEach(
+                    function (c) {
+                        c.classList.toggle("cb-iv-chip-on", c === b);
+                    });
+                updateGoLabel();
+                nm.focus();
+            });
+            box.appendChild(b);
+        });
+    }
+
+    function fetchSimilar() {
+        var nm = el("cb-iv-name");
+        var q = (nm && nm.value || "").trim();
+        if (!q) { renderSimilar([]); return; }
+        fetch(API + "/similar?name=" + encodeURIComponent(q))
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) { renderSimilar(d && d.matches); })
+            .catch(function () { /* suggestion is best-effort */ });
+    }
+
+    function openInvivo(sel, form) {
+        buildPopover();
+        var range = sel.getRangeAt(0).cloneRange();
+        var rect = range.getBoundingClientRect();
+        var raw = sel.toString();
+        ivState = {
+            range: range,
+            schema: form.getAttribute("data-schema-name") || form.id,
+            field: fieldOfSelection(sel),
+            chosen: null,
+        };
+        // Quote shows the *selected text* for context; the input holds
+        // the editable derived code name.
+        el("cb-iv-quote").textContent = "“" + truncate(raw, 140) + "”";
+        var nm = el("cb-iv-name");
+        nm.value = deriveName(raw);
+        el("cb-iv-err").hidden = true;
+        renderSimilar([]);
+        updateGoLabel();
+        iv.hidden = false;
+        positionPopover(rect);
+        nm.focus();
+        nm.select();
+        fetchSimilar();
+    }
+
+    function applySpan(name) {
+        var sm = window.spanManager;
+        if (!sm || !ivState) return;
+        try {
+            sm.selectLabel(name, ivState.schema, ivState.field);
+            var s = window.getSelection();
+            s.removeAllRanges();
+            s.addRange(ivState.range);
+            sm.handleTextSelection({});
+            s.removeAllRanges();
+        } catch (e) { /* code is created; span apply is best-effort */ }
+    }
+
+    function afterCode(name) {
+        fetchFull().then(function (data) {
+            if (data) {
+                renderTray(data);
+                reconcileForms(data, instanceId());
+            }
+            applySpan(name);
+            refreshProvenance();
+            closeInvivo();
+        });
+    }
+
+    function commitInvivo() {
+        if (!ivState) return;
+        var nm = el("cb-iv-name");
+        var name = (nm && nm.value || "").trim();
+        var errEl = el("cb-iv-err");
+        if (errEl) errEl.hidden = true;
+        if (!name) { if (nm) nm.focus(); return; }
+        // Reuse an existing code? (chip-picked, or exact normalized hit)
+        var existing = ivState.chosen;
+        if (!existing) {
+            var cache = readCache();
+            var labels = (cache && cache.labels) || [];
+            for (var i = 0; i < labels.length; i++) {
+                if (String(labels[i]).trim().toLowerCase()
+                        === name.toLowerCase()) {
+                    existing = labels[i]; break;
+                }
+            }
+        }
+        if (existing) { afterCode(existing); return; }
+        var go = el("cb-iv-go");
+        if (go) go.disabled = true;
+        fetch(API, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: name }),
+        }).then(function (r) {
+            return r.json().then(function (b) {
+                return { ok: r.ok, status: r.status, body: b };
+            });
+        }).then(function (res) {
+            if (go) go.disabled = false;
+            if (!res.ok) {
+                if (res.status === 409) { afterCode(name); return; }
+                showIvErr(res.body && res.body.error
+                    ? res.body.error : "Could not add code.");
+                return;
+            }
+            afterCode(name);
+        }).catch(function () {
+            if (go) go.disabled = false;
+            showIvErr("Could not add code.");
+        });
+    }
+
+    function onGlobalKeydown(e) {
+        if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) {
+            return;
+        }
+        if (iv && !iv.hidden) return;   // popover owns its own keys
+        var t = e.target, tag = t && t.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA"
+            || (t && t.isContentEditable)) return;
+        if ((e.key || "").toLowerCase() !== invivoKey()) return;
+        var form = codebookSpanForm();
+        if (!form) return;
+        var sel = activeSelectionInInstance();
+        if (!sel) return;
+        e.preventDefault();
+        openInvivo(sel, form);
+    }
+
     function closePanel() {
         var panel = el("cb-panel");
         var toggle = el("cb-panel-toggle");
@@ -415,6 +765,10 @@
                 }
             });
         }
+        // In-vivo coding: global key, active whenever a codebook span
+        // scheme exists (wire() runs only when the codebook is enabled).
+        document.addEventListener("keydown", onGlobalKeydown);
+
         var add = el("cb-add-btn");
         if (add) add.addEventListener("click", addCode);
         var input = el("cb-new-name");
