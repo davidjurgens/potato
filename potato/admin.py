@@ -1735,10 +1735,25 @@ class AdminDashboard:
             codes_seen: set = set()
             n_instances_with_attr = 0
 
+            # When the attribute is not on the instance itself, fall
+            # back to the case-level attribute (cases group instances by
+            # participant/respondent; the attribute may live on the
+            # case). No-op for projects that don't use cases.
+            cb_task_dir = config.get("task_dir", ".")
+            cb_project = config.get("annotation_task_name") or "default"
+
             for item in ism.items():
                 instance_id = item.get_id()
                 item_data = self._get_item_data(item)
                 attr_value = item_data.get(attribute_key)
+                if attr_value is None or attr_value == "":
+                    try:
+                        from potato.cases import attribute_for_instance
+                        attr_value = attribute_for_instance(
+                            cb_task_dir, cb_project, instance_id,
+                            attribute_key)
+                    except Exception:
+                        attr_value = None
                 if attr_value is None or attr_value == "":
                     continue
                 attr_value = str(attr_value)

@@ -1,0 +1,240 @@
+/* Codebook tray.
+   Right-edge toggle below Notes (Notes 42%, Codebook 62%); panel
+   slides from the right. Consumes the memos design-system tokens
+   directly (loaded first) so the three sidebars never drift; literal
+   fallbacks keep this file self-contained. Vanilla CSS, no build. */
+
+:root {
+    --cb-space-1: var(--memo-space-1, 4px);
+    --cb-space-2: var(--memo-space-2, 8px);
+    --cb-space-3: var(--memo-space-3, 12px);
+    --cb-space-4: var(--memo-space-4, 16px);
+    --cb-space-5: var(--memo-space-5, 24px);
+    --cb-radius: var(--memo-radius, 8px);
+    --cb-ink: var(--memo-ink, #1f2330);
+    --cb-ink-soft: var(--memo-ink-soft, #5b6072);
+    --cb-line: var(--memo-line, #e4e5ec);
+    --cb-surface: var(--memo-surface, #ffffff);
+    --cb-surface-2: var(--memo-surface-2, #f7f8fb);
+    --cb-accent: var(--memo-accent, #4063b8);
+    --cb-accent-ink: var(--memo-accent-ink, #ffffff);
+    --cb-focus: var(--memo-focus, #6c8cff);
+}
+
+.cb-panel-toggle {
+    position: fixed;
+    right: 0;
+    top: 62%;
+    transform: translateY(-50%);
+    z-index: 1040;
+    display: flex;
+    align-items: center;
+    gap: var(--cb-space-2);
+    min-height: 44px;
+    border: 1px solid var(--cb-line);
+    border-right: none;
+    background: var(--cb-surface);
+    color: var(--cb-ink);
+    padding: 10px 14px;
+    border-radius: var(--cb-radius) 0 0 var(--cb-radius);
+    box-shadow: -1px 1px 6px rgba(31, 35, 48, 0.08);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: background-color 160ms ease-out, transform 160ms ease-out;
+}
+
+.cb-panel-toggle:hover {
+    background: var(--cb-surface-2);
+    transform: translateY(-50%) translateX(-2px);
+}
+
+.cb-panel-toggle:active { background: #eef0f6; }
+
+.cb-panel {
+    position: fixed;
+    right: 0;
+    top: 0;
+    height: 100vh;
+    width: 360px;
+    max-width: 92vw;
+    background: var(--cb-surface);
+    border-left: 1px solid var(--cb-line);
+    box-shadow: -4px 0 24px rgba(31, 35, 48, 0.10);
+    z-index: 1050;
+    display: flex;
+    flex-direction: column;
+    color: var(--cb-ink);
+}
+
+.cb-panel:not([hidden]) { animation: cb-panel-in 200ms ease-out; }
+
+@keyframes cb-panel-in {
+    from { opacity: 0; transform: translateX(12px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+.cb-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--cb-space-4);
+    border-bottom: 1px solid var(--cb-line);
+    font-size: 0.95rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+
+.cb-panel-header button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    font-size: 1.25rem;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--cb-ink-soft);
+    transition: background-color 140ms ease-out, color 140ms ease-out;
+}
+
+.cb-panel-header button:hover {
+    background: var(--cb-surface-2);
+    color: var(--cb-ink);
+}
+
+.cb-tree {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--cb-space-4);
+}
+
+.cb-empty {
+    color: var(--cb-ink-soft);
+    font-size: 0.85rem;
+    text-align: center;
+    margin-top: var(--cb-space-5);
+}
+
+.cb-root, .cb-children {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+/* Semantic nesting only — visual indentation is depth-driven padding
+   on the row (see --cb-depth) so deep trees don't compound-march off
+   the panel. */
+.cb-children { margin-left: 0; }
+
+.cb-node-row {
+    display: flex;
+    align-items: center;
+    gap: var(--cb-space-2);
+    /* Depth indent, capped at 6 levels so it never runs off a 360px
+       panel; falls back to 0 for flat codebooks. */
+    padding: 5px var(--cb-space-2) 5px
+        calc(var(--cb-space-2)
+             + min(var(--cb-depth, 0), 6) * var(--cb-space-4));
+    font-size: 0.88rem;
+    line-height: 1.4;
+}
+
+.cb-dot {
+    flex: 0 0 auto;
+    width: 9px;
+    height: 9px;
+    border-radius: 999px;
+    box-shadow: inset 0 0 0 1px rgba(31, 35, 48, 0.12);
+}
+
+.cb-name { word-break: break-word; }
+
+.cb-composer {
+    border-top: 1px solid var(--cb-line);
+    padding: var(--cb-space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--cb-space-2);
+    background: var(--cb-surface);
+}
+
+.cb-composer-row {
+    display: flex;
+    gap: var(--cb-space-2);
+}
+
+.cb-composer input {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--cb-line);
+    border-radius: 6px;
+    padding: var(--cb-space-2) var(--cb-space-3);
+    font: inherit;
+    font-size: 0.9rem;
+    color: var(--cb-ink);
+    transition: border-color 140ms ease-out, box-shadow 140ms ease-out;
+}
+
+.cb-composer input::placeholder { color: #9aa0b4; }
+
+.cb-composer input:focus {
+    outline: none;
+    border-color: var(--cb-focus);
+    box-shadow: 0 0 0 3px rgba(108, 140, 255, 0.18);
+}
+
+.cb-primary {
+    border: 1px solid var(--cb-accent);
+    background: var(--cb-accent);
+    color: var(--cb-accent-ink);
+    min-height: 36px;
+    padding: 7px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: background-color 150ms ease-out, transform 120ms ease-out;
+}
+
+.cb-primary:hover { background: #36559e; }
+.cb-primary:active { transform: translateY(1px); }
+.cb-primary:disabled {
+    background: #aab2cc;
+    border-color: #aab2cc;
+    cursor: progress;
+    transform: none;
+}
+
+.cb-mode-hint {
+    font-size: 0.72rem;
+    color: var(--cb-ink-soft);
+    letter-spacing: 0.02em;
+}
+
+.cb-error {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #b23b3b;
+    background: #fbeeee;
+    border: 1px solid #f0d2d2;
+    border-radius: 6px;
+    padding: var(--cb-space-2) var(--cb-space-3);
+}
+
+.cb-panel-toggle:focus-visible,
+.cb-panel button:focus-visible,
+.cb-panel input:focus-visible {
+    outline: 2px solid var(--cb-focus);
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cb-panel:not([hidden]) { animation: none; }
+    .cb-panel-toggle,
+    .cb-primary,
+    .cb-panel-header button { transition: none; }
+}

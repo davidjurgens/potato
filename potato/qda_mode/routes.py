@@ -20,6 +20,8 @@ from functools import wraps
 from flask import Blueprint, jsonify
 
 from .manager import get_qda_mode_manager
+from potato.codebook import Codebook
+from potato.cases import list_cases as _list_cases
 
 logger = logging.getLogger(__name__)
 
@@ -71,4 +73,26 @@ def qda_mode_status():
             {"enabled": cfg.codebook.enabled, "mode": cfg.codebook.mode}
         ),
         "task_dir": manager.task_dir,
+    })
+
+
+@qda_mode_bp.route("/codebook", methods=["GET"])
+@qda_mode_required
+def qda_codebook():
+    """QDA project codebook (tree + flat labels).
+
+    First real ``/qda/*`` route behind ``qda_mode_required`` — returns
+    503 on a served app where QDA Mode is not enabled (F5/T3). The
+    universal codebook CRUD API lives at ``/api/codebook``; this is the
+    QDA-scoped read view bound to the active QDA project.
+    """
+    manager = get_qda_mode_manager()
+    from potato.server_utils.config_module import config
+    project = config.get("annotation_task_name") or "default"
+    cb = Codebook.load(manager.task_dir, project)
+    return jsonify({
+        "project": project,
+        "labels": cb.labels(),
+        "tree": cb.as_tree(),
+        "cases": _list_cases(manager.task_dir, project),
     })

@@ -3305,6 +3305,22 @@ def _initialize_from_config(config_file):
         init_qda_mode_manager(config)
         logger.info("QDA Mode initialized successfully")
 
+    # Keep ICL prompts restricted to the codebook's current set: a
+    # change listener re-syncs live scheme labels on any codebook edit.
+    try:
+        from potato.codebook.schema_bridge import install_codebook_icl_sync
+        install_codebook_icl_sync()
+    except Exception as e:
+        logger.warning(f"Codebook ICL sync not installed: {e}")
+
+    # Auto-detect cases from item metadata (no-op unless cases enabled
+    # or QDA mode is on).
+    try:
+        from potato.cases import init_cases_from_config
+        init_cases_from_config(config)
+    except Exception as e:
+        logger.warning(f"Cases auto-detect skipped: {e}")
+
     # Build the universal search index (no-op if search disabled).
     try:
         from potato.search import init_search_from_item_state
@@ -3487,6 +3503,22 @@ def run_server(args):
         logger.info("Initializing QDA Mode...")
         init_qda_mode_manager(config)
         logger.info("QDA Mode initialized successfully")
+
+    # Keep ICL prompts restricted to the codebook's current set: a
+    # change listener re-syncs live scheme labels on any codebook edit.
+    try:
+        from potato.codebook.schema_bridge import install_codebook_icl_sync
+        install_codebook_icl_sync()
+    except Exception as e:
+        logger.warning(f"Codebook ICL sync not installed: {e}")
+
+    # Auto-detect cases from item metadata (no-op unless cases enabled
+    # or QDA mode is on).
+    try:
+        from potato.cases import init_cases_from_config
+        init_cases_from_config(config)
+    except Exception as e:
+        logger.warning(f"Cases auto-detect skipped: {e}")
 
     # Build the universal search index (no-op if search disabled).
     try:
@@ -3721,6 +3753,10 @@ def main():
         if args.quiet:
             migrate_args.append("--quiet")
         sys.exit(migrate_main(migrate_args))
+    elif args.mode == 'codebook':
+        logger.info("Starting codebook initialization")
+        from potato.codebook_cli import main as codebook_main
+        sys.exit(codebook_main([args.config_file]))
 
     logger.info("Annotation platform shutdown complete")
 

@@ -1,0 +1,8 @@
+[
+  {"id": "1", "text": "The onboarding was smooth and the team was responsive.", "participant_id": "P01", "condition": "treatment"},
+  {"id": "2", "text": "I hit a wall when the export feature failed silently.", "participant_id": "P01", "condition": "treatment"},
+  {"id": "3", "text": "Documentation was sparse but support filled the gaps.", "participant_id": "P02", "condition": "control"},
+  {"id": "4", "text": "Everything just worked; nothing notable to report.", "participant_id": "P02", "condition": "control"},
+  {"id": "5", "text": "The new dashboard saved me a lot of manual work.", "participant_id": "P03", "condition": "treatment"},
+  {"id": "6", "text": "I was confused by the terminology in the settings page.", "participant_id": "P03", "condition": "treatment"}
+]

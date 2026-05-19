@@ -120,7 +120,8 @@
 
     <!-- Universal Memos sidebar styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/memos.css') }}?v=2">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/search.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/search.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/codebook.css') }}?v=2">
 
     <!-- jQuery (required for span annotation) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
@@ -596,7 +597,8 @@
     <script src="{{ url_for('static', filename='memos.js') }}?v=1"></script>
 
     <!-- Annotator search-and-claim sidebar (self-hides unless
-         search.annotator_claim is enabled: the enable-probe gets 403). -->
+         search.annotator_claim is enabled: the enable-probe only gets
+         400 when the feature is on and the user is authed). -->
     <button type="button" id="search-panel-toggle" class="search-panel-toggle" hidden>
         &#128269; Find
     </button>
@@ -610,12 +612,41 @@
                    aria-label="Search query">
             <button type="button" id="search-go" class="search-primary">Search</button>
         </div>
-        <div id="search-results" class="search-results">
+        <div id="search-results" class="search-results" aria-live="polite">
             <div class="search-empty">Search to find instances, then Claim
                 one to add it to your queue.</div>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='search.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='search.js') }}?v=2"></script>
+
+    <!-- Universal Codebook tray (self-hides unless the codebook is
+         enabled: the enable-probe is not 200 otherwise). The composer
+         only appears when codebook_mode is extensible/open. -->
+    <button type="button" id="cb-panel-toggle" class="cb-panel-toggle" hidden>
+        &#127991; Codebook
+    </button>
+    <div id="cb-panel" class="cb-panel" hidden aria-label="Codebook panel">
+        <div class="cb-panel-header">
+            <span>Codebook</span>
+            <button type="button" id="cb-panel-close"
+                    aria-label="Close codebook">&times;</button>
+        </div>
+        <div id="cb-tree" class="cb-tree" aria-live="polite">
+            <div class="cb-empty">Loading&hellip;</div>
+        </div>
+        <div id="cb-composer" class="cb-composer" hidden>
+            <div class="cb-composer-row">
+                <input type="text" id="cb-new-name"
+                       placeholder="Add a code&hellip;"
+                       aria-label="New code name">
+                <button type="button" id="cb-add-btn"
+                        class="cb-primary">Add</button>
+            </div>
+            <div id="cb-error" class="cb-error" hidden></div>
+            <div id="cb-mode-hint" class="cb-mode-hint"></div>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='codebook.js') }}?v=2"></script>
     {% endif %}
 </body>
 </html>

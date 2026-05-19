@@ -54,6 +54,20 @@ def clear_all_global_state():
         except Exception:
             pass
 
+    # Codebook change-listener registry (process-global; the ICL-sync
+    # listener captures config_module.config and would leak across
+    # in-process servers) + universal persistence connection cache.
+    try:
+        from potato.codebook import clear_change_listeners
+        clear_change_listeners()
+    except ImportError:
+        pass
+    try:
+        from potato.persistence import clear_db_cache
+        clear_db_cache()
+    except ImportError:
+        pass
+
     # Config module
     try:
         from potato.server_utils.config_module import clear_config
@@ -611,6 +625,24 @@ class FlaskTestServer:
                         print(f"[DEBUG] Error initializing QDA Mode manager: {e}")
                         import traceback
                         traceback.print_exc()
+
+                # Codebook ICL-sync listener (parity with the real init
+                # paths; keeps ICL prompts on the current codebook set).
+                try:
+                    from potato.codebook.schema_bridge import (
+                        install_codebook_icl_sync,
+                    )
+                    install_codebook_icl_sync()
+                except Exception as e:
+                    print(f"[DEBUG] Codebook ICL sync not installed: {e}")
+
+                # Auto-detect cases from item metadata (no-op unless
+                # cases enabled or QDA mode is on).
+                try:
+                    from potato.cases import init_cases_from_config
+                    init_cases_from_config(config)
+                except Exception as e:
+                    print(f"[DEBUG] Cases auto-detect skipped: {e}")
 
                 # Build the universal search index (no-op if disabled)
                 try:

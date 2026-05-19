@@ -299,6 +299,27 @@ KNOWN_CONFIG_KEYS = {
         "max_instances": None,
         "annotator_claim": None,
     },
+    # Universal codebook. `mode` (fixed|extensible|open) governs whether
+    # annotators may add codes on the fly; resolved via
+    # get_codebook_mode() (defaults: qda/solo -> open, standard -> fixed;
+    # a crowd backend force-locks fixed). Per-scheme opt-in is the
+    # scheme-level `codebook: true` key.
+    "codebook": {
+        "enabled": None,
+        "mode": None,
+    },
+    # Top-level convenience scalar mirroring codebook.mode.
+    "codebook_mode": None,
+    # Universal cases: group instances into units of analysis. `key`
+    # names the item-data field to group on; `auto_detect` lets QDA
+    # scan participant_id/respondent_id/case_id; `attributes` lifts
+    # item fields onto the case for crosstabs.
+    "cases": {
+        "enabled": None,
+        "key": None,
+        "auto_detect": None,
+        "attributes": None,
+    },
     "solo_mode": {
         "enabled": None,
         "labeling_models": None,
@@ -670,6 +691,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # assignment design it would corrupt via self-selection.
     validate_search_assignment_compat(config_data)
 
+    # Validate codebook_mode (and apply the crowd force-lock).
+    validate_codebook_config(config_data)
+
     # Warn about unrecognized keys at all nesting levels
     validate_unknown_keys(config_data)
 
@@ -750,6 +774,65 @@ def validate_search_assignment_compat(config_data: Dict[str, Any]) -> None:
             "adjudication, or a crowdsourcing backend. Use read-only "
             "admin search (no annotator_claim) for those designs."
         )
+
+
+_CODEBOOK_MODES = ("fixed", "extensible", "open")
+
+
+def _crowd_backend(config_data: Dict[str, Any]) -> bool:
+    login_type = (config_data.get("login") or {}).get("type")
+    return (
+        "mturk" in config_data or "prolific" in config_data
+        or login_type in ("mturk", "prolific")
+    )
+
+
+def get_codebook_mode(config_data: Dict[str, Any]) -> str:
+    """Resolve the effective codebook mode.
+
+    Precedence: explicit ``codebook_mode`` / ``codebook.mode`` if set;
+    else ``open`` when solo/QDA mode is enabled; else ``fixed``. A crowd
+    backend force-locks ``fixed`` regardless of the request (annotators
+    on a paid HIT must not reshape the shared codebook).
+    """
+    raw = config_data.get("codebook_mode")
+    if raw is None:
+        raw = (config_data.get("codebook") or {}).get("mode")
+
+    if raw is None:
+        single = (
+            (config_data.get("qda_mode") or {}).get("enabled")
+            or (config_data.get("solo_mode") or {}).get("enabled")
+        )
+        mode = "open" if single else "fixed"
+    else:
+        mode = str(raw).strip().lower()
+
+    if _crowd_backend(config_data):
+        return "fixed"
+    return mode
+
+
+def validate_codebook_config(config_data: Dict[str, Any]) -> None:
+    """Reject an invalid ``codebook_mode`` value, and warn when a crowd
+    backend overrides a requested non-fixed mode."""
+    raw = config_data.get("codebook_mode")
+    if raw is None:
+        raw = (config_data.get("codebook") or {}).get("mode")
+    if raw is None:
+        return
+
+    mode = str(raw).strip().lower()
+    if mode not in _CODEBOOK_MODES:
+        raise ConfigValidationError(
+            f"codebook_mode must be one of {', '.join(_CODEBOOK_MODES)}; "
+            f"got {raw!r}."
+        )
+    if mode != "fixed" and _crowd_backend(config_data):
+        logging.warning(
+            "codebook_mode=%s requested with a crowdsourcing backend; "
+            "force-locking to 'fixed' (paid annotators must not reshape "
+            "the shared codebook).", mode)
 
 
 def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:

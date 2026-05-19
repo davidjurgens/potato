@@ -6873,6 +6873,22 @@ def configure_routes(flask_app, app_config):
         except ImportError:
             pass
 
+    # Register universal Codebook blueprint if not already registered
+    if 'codebook' not in app.blueprints:
+        try:
+            from potato.codebook.api import codebook_bp
+            app.register_blueprint(codebook_bp)
+        except ImportError:
+            pass
+
+    # Register universal Cases blueprint if not already registered
+    if 'cases' not in app.blueprints:
+        try:
+            from potato.cases.api import cases_bp
+            app.register_blueprint(cases_bp)
+        except ImportError:
+            pass
+
 # ============================================================================
 # Adjudication Routes
 # ============================================================================

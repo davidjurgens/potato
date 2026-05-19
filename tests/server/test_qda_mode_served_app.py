@@ -67,6 +67,20 @@ class TestQDAModeEnabledServedApp:
         assert body["codebook"] == {"enabled": True, "mode": "extensible"}
         assert body["memos"]["enabled"] is True
 
+    def test_qda_codebook_route_200_when_enabled(self):
+        """First real /qda/* route behind qda_mode_required: 200 here."""
+        resp = requests.get(f"{self.server.base_url}/qda/codebook")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "labels" in body and "tree" in body and "cases" in body
+
+    def test_universal_codebook_api_registered_on_served_app(self):
+        """/api/codebook must exist on the served app (not 404). Without
+        a session it gates to 401 — proving the blueprint is wired."""
+        resp = requests.get(f"{self.server.base_url}/api/codebook")
+        assert resp.status_code != 404
+        assert resp.status_code in (401, 200)
+
 
 class TestQDAModeDisabledServedApp:
     @pytest.fixture(scope="class", autouse=True)
@@ -94,3 +108,12 @@ class TestQDAModeDisabledServedApp:
         resp = requests.get(f"{self.server.base_url}/qda/status")
         assert resp.status_code == 200
         assert resp.json() == {"enabled": False}
+
+    def test_qda_codebook_route_503_when_disabled(self):
+        """F5/T3: the first real /qda/* route behind qda_mode_required
+        returns 503 (not 404, not 500) on a served app where QDA Mode is
+        not enabled — the endpoint exists, the mode just isn't active."""
+        resp = requests.get(f"{self.server.base_url}/qda/codebook")
+        assert resp.status_code == 503
+        body = resp.json()
+        assert "QDA Mode not enabled" in body["error"]

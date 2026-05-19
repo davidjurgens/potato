@@ -1,0 +1,37 @@
+port: 8000
+annotation_task_name: Cases Example
+task_dir: .
+output_annotation_dir: annotation_output/cases-example/
+output_annotation_format: tsv
+data_files:
+- data/cases-example.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+
+# Universal cases: group instances into units of analysis. Here each
+# excerpt carries a `participant_id`; auto-detection groups excerpts by
+# participant and lifts `condition` onto the case so the code crosstab
+# can tabulate codes by participant-level metadata.
+cases:
+  enabled: true
+  key: participant_id
+  auto_detect: true
+  attributes:
+  - condition
+
+annotation_schemes:
+- annotation_type: radio
+  name: sentiment
+  description: Overall sentiment of this excerpt
+  labels:
+  - positive
+  - neutral
+  - negative
+  sequential_key_binding: true
+
+site_dir: default

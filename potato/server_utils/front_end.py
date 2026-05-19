@@ -376,6 +376,16 @@ def generate_annotation_html_template(config: dict) -> str:
             '<div class="navbar-nav">', '<div class="navbar-nav" hidden>'
         )
 
+    # Codebook bridge: schemes with `codebook: true` get their labels
+    # from the project's mutable codebook (seeded from YAML on first
+    # run). Single chokepoint before any scheme HTML is generated, in
+    # both the CLI and WSGI-factory init paths.
+    try:
+        from potato.codebook.schema_bridge import apply_codebook_to_schemes
+        apply_codebook_to_schemes(config)
+    except Exception as e:
+        logger.warning(f"Codebook schema bridge skipped: {e}")
+
     # Grab the annotation schemes
     annotation_schemes = config["annotation_schemes"]
     logger.debug("Saw %d annotation scheme(s)" % len(annotation_schemes))
