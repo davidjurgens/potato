@@ -1,0 +1,47 @@
+name: Post Bluesky Release Announcement
+
+on:
+  schedule:
+    # Check for new releases every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run — preview posts without actually posting to Bluesky'
+        type: boolean
+        default: false
+      force:
+        description: 'Force post even if this version was already posted'
+        type: boolean
+        default: false
+
+jobs:
+  post-bluesky:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Needed to commit the state file back
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Check for new release and post to Bluesky
+        env:
+          BLUESKY_APP_PASSWORD: ${{ secrets.BLUESKY_APP_PASSWORD }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && '1' || '' }}
+          FORCE_POST: ${{ github.event.inputs.force == 'true' && '1' || '' }}
+        run: python scripts/post_bluesky_release.py
+
+      - name: Commit updated state file
+        # Only commit when not a dry run (state file changes only after a real post)
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add scripts/.last_bluesky_release
+          git diff --staged --quiet || git commit -m "chore: record Bluesky post for $(cat scripts/.last_bluesky_release)"
+          git push
