@@ -1,3 +1,4 @@
+import threading
 import time
 
 from potato.item_state_management import Item, ItemStateManager, Label
@@ -176,6 +177,53 @@ def test_blocked_user_reclaim_survives_save_user_state_failure(monkeypatch, capl
     assert any("disk on fire" in r.getMessage() or "save_fail_worker" in r.getMessage()
                for r in caplog.records), \
         "expected a warning log mentioning the failing user"
+
+
+def test_concurrent_reclaim_for_users_is_idempotent(monkeypatch):
+    """Two threads racing on reclaim_unannotated_assignments_for_users for the
+    same user set must agree on the final state and never double-reclaim."""
+    manager = _manager_with_items()
+    user = InMemoryUserState("racing_worker")
+    user.advance_to_phase(UserPhase.ANNOTATION, None)
+    for item_id in ("item_1", "item_2", "item_3"):
+        user.assign_instance(manager.get_item(item_id))
+
+    class StubUserStateManager:
+        def get_user_state(self, user_id):
+            return user if user_id == "racing_worker" else None
+
+        def save_user_state(self, user_state):
+            return None
+
+    monkeypatch.setattr(
+        "potato.user_state_management.get_user_state_manager",
+        lambda: StubUserStateManager(),
+    )
+
+    results = [None, None]
+    barrier = threading.Barrier(2)
+
+    def worker(idx):
+        barrier.wait()
+        results[idx] = manager.reclaim_unannotated_assignments_for_users(
+            ["racing_worker"],
+            reason=f"thread_{idx}",
+        )
+
+    t1 = threading.Thread(target=worker, args=(0,))
+    t2 = threading.Thread(target=worker, args=(1,))
+    t1.start(); t2.start()
+    t1.join(); t2.join()
+
+    # Combined claims across both threads cover exactly the three items, no duplicates
+    claimed = []
+    for r in results:
+        claimed.extend(r.get("racing_worker", []))
+    assert sorted(claimed) == ["item_1", "item_2", "item_3"]
+    assert user.get_assigned_instance_ids() == set()
+    # remaining_instance_ids may legitimately contain each item once
+    for iid in ("item_1", "item_2", "item_3"):
+        assert list(manager.remaining_instance_ids).count(iid) == 1
 
 
 def test_prolific_reclaim_survives_per_user_save_failure(monkeypatch, caplog):
