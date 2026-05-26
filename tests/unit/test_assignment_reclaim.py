@@ -179,6 +179,51 @@ def test_blocked_user_reclaim_survives_save_user_state_failure(monkeypatch, capl
         "expected a warning log mentioning the failing user"
 
 
+def test_prolific_dropped_user_can_be_reassigned_after_reclaim(monkeypatch):
+    """After a Prolific worker is dropped and their items are reclaimed,
+    the same items must be freely reassignable (to that user or others)."""
+    manager = _manager_with_items()
+    user = InMemoryUserState("PROLIFIC_PID_X")
+    user.assign_instance(manager.get_item("item_1"))
+    user.assign_instance(manager.get_item("item_2"))
+
+    class StubUserStateManager:
+        def get_user_state(self, user_id):
+            return user if user_id == "PROLIFIC_PID_X" else None
+
+        def save_user_state(self, user_state):
+            return None
+
+    monkeypatch.setattr(
+        "potato.user_state_management.get_user_state_manager",
+        lambda: StubUserStateManager(),
+    )
+    monkeypatch.setattr(
+        "potato.item_state_management.get_item_state_manager",
+        lambda: manager,
+    )
+
+    study = ProlificStudy.__new__(ProlificStudy)
+    study.user_status_dict = {
+        "RETURNED": {"PROLIFIC_PID_X"},
+        "TIMED-OUT": set(),
+        "REJECTED": set(),
+    }
+    study.reclaim_dropped_user_assignments()
+
+    # The items are now back in the pool — assignment_timestamps for the
+    # dropped user must be cleared so a reconnecting worker doesn't trip
+    # the stale-assignment heuristic on items they were never reassigned.
+    assert "PROLIFIC_PID_X" not in manager.assignment_timestamps.get("item_1", {})
+    assert "PROLIFIC_PID_X" not in manager.assignment_timestamps.get("item_2", {})
+    assert set(manager.remaining_instance_ids) >= {"item_1", "item_2"}
+
+    # A new (or returning) user can now be reassigned the reclaimed items.
+    fresh_user = InMemoryUserState("PROLIFIC_PID_X")
+    fresh_user.assign_instance(manager.get_item("item_1"))
+    assert "item_1" in fresh_user.get_assigned_instance_ids()
+
+
 def test_concurrent_reclaim_for_users_is_idempotent(monkeypatch):
     """Two threads racing on reclaim_unannotated_assignments_for_users for the
     same user set must agree on the final state and never double-reclaim."""
