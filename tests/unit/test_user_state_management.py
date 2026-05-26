@@ -150,6 +150,76 @@ def test_get_current_instance_returns_none_for_missing(monkeypatch):
     assert user.current_instance_index == 0  # unchanged
 
 
+def test_load_round_trip_preserves_assignment_bookkeeping_invariants(monkeypatch, temp_user_dir):
+    """After save+load, the three assignment-tracking structures must stay in
+    sync: assigned_instance_ids == set(instance_id_ordering), and
+    instance_id_to_order maps each id to its index in instance_id_ordering.
+
+    Regression: load() previously left instance_id_to_order as {} unless the
+    prune step happened to fire, which silently broke unassign_instance and
+    any other code that consulted the index map."""
+    from potato.item_state_management import Item
+
+    user = InMemoryUserState("rt_user")
+    user.current_phase_and_page = (UserPhase.ANNOTATION, None)
+    for iid in ("alpha", "beta", "gamma"):
+        user.assign_instance(Item(iid, {"text": iid}))
+    user.go_to_index(2)
+    user.save(temp_user_dir)
+
+    class AllItemsPresent:
+        def has_item(self, item_id):
+            return True
+        def get_item(self, item_id):
+            return Item(item_id, {"text": item_id})
+
+    monkeypatch.setattr(
+        "potato.user_state_management.get_item_state_manager",
+        lambda: AllItemsPresent(),
+    )
+
+    loaded = InMemoryUserState.load(temp_user_dir)
+
+    assert loaded.instance_id_ordering == ["alpha", "beta", "gamma"]
+    assert loaded.get_assigned_instance_ids() == {"alpha", "beta", "gamma"}
+    assert loaded.instance_id_to_order == {"alpha": 0, "beta": 1, "gamma": 2}
+    assert loaded.get_current_instance_index() == 2
+
+
+def test_load_then_unassign_works_without_prune(monkeypatch, temp_user_dir):
+    """Direct regression for the load-without-prune scenario: a freshly loaded
+    user must be able to have an assignment reclaimed without depending on
+    prune_missing_assigned_instances to first repopulate instance_id_to_order."""
+    from potato.item_state_management import Item
+
+    user = InMemoryUserState("reclaim_after_load")
+    user.current_phase_and_page = (UserPhase.ANNOTATION, None)
+    for iid in ("x", "y", "z"):
+        user.assign_instance(Item(iid, {"text": iid}))
+    user.save(temp_user_dir)
+
+    # Stub out the item manager so prune does NOT fire (all items still exist).
+    class AllItemsPresent:
+        def has_item(self, item_id):
+            return True
+        def get_item(self, item_id):
+            return Item(item_id, {"text": item_id})
+
+    monkeypatch.setattr(
+        "potato.user_state_management.get_item_state_manager",
+        lambda: AllItemsPresent(),
+    )
+
+    loaded = InMemoryUserState.load(temp_user_dir)
+
+    # unassign_instance reads instance_id_to_order via generate_id_order_mapping;
+    # if load left it stale, the bookkeeping below diverges.
+    assert loaded.unassign_instance("y") is True
+    assert loaded.instance_id_ordering == ["x", "z"]
+    assert loaded.instance_id_to_order == {"x": 0, "z": 1}
+    assert loaded.get_assigned_instance_ids() == {"x", "z"}
+
+
 def test_load_prunes_missing_items(monkeypatch, temp_user_dir):
     """Loading persisted state should automatically prune stale items."""
     user = InMemoryUserState("load_prune_user")

@@ -2811,6 +2811,9 @@ class InMemoryUserState(UserState):
 
         user_state.instance_id_ordering = j['instance_id_ordering']
         user_state.assigned_instance_ids = set(j['instance_id_ordering'])
+        user_state.instance_id_to_order = user_state.generate_id_order_mapping(
+            user_state.instance_id_ordering
+        )
         user_state.current_instance_index = j['current_instance_index']
 
         # Restore behavioral data (used for interaction tracking)
