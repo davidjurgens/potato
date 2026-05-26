@@ -551,6 +551,82 @@ class TestMysqlUserStateIntegration:
         pass
 
 
+class TestMysqlBackendReclaimSmoke:
+    """End-to-end smoke test for the QC-block reclaim flow against a real
+    MysqlUserState instance (with mocked DB). Acts as a tripwire for future
+    code in the reclaim path that direct-accesses InMemoryUserState-only
+    attributes like assigned_instance_ids or instance_id_ordering."""
+
+    @pytest.fixture
+    def mock_db_manager(self):
+        mock_manager = Mock()
+        mock_connection = Mock()
+        mock_cursor = Mock()
+        mock_connection.cursor.return_value = mock_cursor
+        context_mock = Mock()
+        context_mock.__enter__ = Mock(return_value=mock_connection)
+        context_mock.__exit__ = Mock(return_value=None)
+        mock_manager.get_connection.return_value = context_mock
+        return mock_manager, mock_connection, mock_cursor
+
+    def test_blocked_user_reclaim_works_against_mysql_user_state(self, mock_db_manager, monkeypatch):
+        """The QC-block helper must run through MysqlUserState without hitting
+        AttributeError on InMemoryUserState-only attributes."""
+        from potato import routes
+        from potato.item_state_management import ItemStateManager
+
+        mock_manager, mock_conn, mock_cursor = mock_db_manager
+        user_state = MysqlUserState("blocked_mysql_user", mock_manager)
+
+        # Drive the SQL responses for the whole reclaim sequence with one
+        # assigned item and no annotations:
+        #   get_assigned_instance_ids (fetchall) -> [("item_z",)]
+        #   has_annotated (fetchall)            -> [(0,), (0,)]
+        #   unassign SELECT order               -> (0,)
+        #   get_current_instance_index SELECT   -> (0,)
+        #   SELECT COUNT(*) post-delete         -> (0,)
+        mock_cursor.fetchall.side_effect = [
+            [("item_z",)],   # get_assigned_instance_ids
+            [(0,), (0,)],    # has_annotated UNION counts
+        ]
+        mock_cursor.fetchone.side_effect = [
+            (0,),  # unassign: removed_order
+            (0,),  # unassign: current_instance_index
+            (0,),  # unassign: post-delete COUNT
+        ]
+
+        item_manager = ItemStateManager(
+            {"assignment_strategy": "fixed_order", "max_annotations_per_item": 1}
+        )
+        item_manager.add_items({"item_z": {"id": "item_z", "text": "z"}})
+        # Pretend the user was tracked as an annotator candidate (matches what
+        # assign_instances_to_user would have set up in production).
+        item_manager.instance_annotators["item_z"].add("blocked_mysql_user")
+
+        class StubUSM:
+            def save_user_state(self, _us):
+                return None
+
+        monkeypatch.setattr(routes, "get_item_state_manager", lambda: item_manager)
+        monkeypatch.setattr(routes, "get_user_state_manager", lambda: StubUSM())
+
+        # The call below would raise AttributeError on the pre-refactor reclaim
+        # path that touched user_state.assigned_instance_ids directly.
+        reclaimed = routes._reclaim_blocked_user_assignments(
+            "blocked_mysql_user",
+            user_state,
+            current_instance_id="item_z",
+        )
+
+        assert reclaimed == ["item_z"]
+        # Verify both per-instance DELETEs (clear_instance_annotations) and
+        # the unassign UPDATE/DELETE all ran against the mock cursor.
+        executed = [c.args[0] for c in mock_cursor.execute.call_args_list]
+        assert any("DELETE FROM label_annotations" in q for q in executed)
+        assert any("DELETE FROM user_instance_assignments" in q for q in executed)
+        assert any("UPDATE user_states SET current_instance_index" in q for q in executed)
+
+
 class TestDatabaseConfiguration:
     """Test database configuration validation."""
 
