@@ -274,6 +274,159 @@ class TestMysqlUserState:
         assert mock_cursor.execute.call_count == 6
         mock_conn.commit.assert_called()
 
+    def test_clear_instance_annotations_runs_four_deletes(self, mock_db_manager):
+        """clear_instance_annotations should issue one DELETE per per-instance table."""
+        mock_manager, mock_conn, mock_cursor = mock_db_manager
+
+        user_state = MysqlUserState("test_user", mock_manager)
+        mock_cursor.execute.reset_mock()
+        mock_conn.commit.reset_mock()
+
+        user_state.clear_instance_annotations("item1")
+
+        # 4 DELETEs: label_annotations, span_annotations, behavioral_data, ai_hints
+        assert mock_cursor.execute.call_count == 4
+        executed_sql = [call.args[0] for call in mock_cursor.execute.call_args_list]
+        for table in ("label_annotations", "span_annotations", "behavioral_data", "ai_hints"):
+            assert any(f"FROM {table}" in sql for sql in executed_sql), (
+                f"Expected DELETE from {table}, got: {executed_sql}"
+            )
+        # Every DELETE is parametrized with (user_id, instance_id)
+        for call in mock_cursor.execute.call_args_list:
+            assert call.args[1] == ("test_user", "item1")
+        mock_conn.commit.assert_called_once()
+
+    def test_unassign_instance_returns_false_when_not_assigned(self, mock_db_manager):
+        """If no row exists for (user, instance), return False without DELETE/UPDATE."""
+        mock_manager, mock_conn, mock_cursor = mock_db_manager
+
+        user_state = MysqlUserState("test_user", mock_manager)
+        mock_cursor.execute.reset_mock()
+        mock_conn.commit.reset_mock()
+        mock_cursor.fetchone.side_effect = [None]  # No assignment row
+
+        result = user_state.unassign_instance("ghost_item")
+
+        assert result is False
+        # Only the SELECT should have been issued; no DELETE/UPDATE
+        assert mock_cursor.execute.call_count == 1
+        assert "SELECT assignment_order" in mock_cursor.execute.call_args_list[0].args[0]
+        mock_conn.commit.assert_not_called()
+
+    def test_unassign_instance_middle_item_shifts_orders(self, mock_db_manager):
+        """Removing an item shifts later assignment_orders down by 1."""
+        mock_manager, mock_conn, mock_cursor = mock_db_manager
+
+        user_state = MysqlUserState("test_user", mock_manager)
+        mock_cursor.execute.reset_mock()
+        mock_conn.commit.reset_mock()
+        # Sequence: removed_order=1, then current_instance_index=2, then count=2
+        mock_cursor.fetchone.side_effect = [(1,), (2,), (2,)]
+
+        result = user_state.unassign_instance("item_b")
+
+        assert result is True
+        executed = [(c.args[0], c.args[1]) for c in mock_cursor.execute.call_args_list]
+        # SELECT order
+        assert "SELECT assignment_order" in executed[0][0]
+        # DELETE
+        assert "DELETE FROM user_instance_assignments" in executed[1][0]
+        # SHIFT — orders > 1 get decremented
+        assert "SET assignment_order = assignment_order - 1" in executed[2][0]
+        assert executed[2][1] == ("test_user", 1)
+        # Final UPDATE of current_instance_index: current was 2, > removed_order=1 → 1
+        update_idx_call = next(c for c in mock_cursor.execute.call_args_list
+                               if "UPDATE user_states SET current_instance_index" in c.args[0])
+        assert update_idx_call.args[1] == (1, "test_user")
+        mock_conn.commit.assert_called_once()
+
+    def test_unassign_instance_empties_assignments_sets_index_to_minus_one(self, mock_db_manager):
+        """Last assignment removed → current_instance_index = -1."""
+        mock_manager, mock_conn, mock_cursor = mock_db_manager
+
+        user_state = MysqlUserState("test_user", mock_manager)
+        mock_cursor.execute.reset_mock()
+        mock_conn.commit.reset_mock()
+        # removed_order=0, current_index=0, count=0 after delete
+        mock_cursor.fetchone.side_effect = [(0,), (0,), (0,)]
+
+        result = user_state.unassign_instance("only_item")
+
+        assert result is True
+        update_idx_call = next(c for c in mock_cursor.execute.call_args_list
+                               if "UPDATE user_states SET current_instance_index" in c.args[0])
+        assert update_idx_call.args[1] == (-1, "test_user")
+
+    def test_unassign_instance_current_equals_removed_caps_at_last_index(self, mock_db_manager):
+        """If user was on the removed slot and it was the last, clamp to new last."""
+        mock_manager, mock_conn, mock_cursor = mock_db_manager
+
+        user_state = MysqlUserState("test_user", mock_manager)
+        mock_cursor.execute.reset_mock()
+        mock_conn.commit.reset_mock()
+        # 3 items, user at index 2 (the last), remove item at order 2
+        # After delete: count=2, removed_order=2, current_index=2
+        # Branch: current_index == removed_order → min(2, 1) = 1
+        mock_cursor.fetchone.side_effect = [(2,), (2,), (2,)]
+
+        result = user_state.unassign_instance("last_item")
+
+        assert result is True
+        update_idx_call = next(c for c in mock_cursor.execute.call_args_list
+                               if "UPDATE user_states SET current_instance_index" in c.args[0])
+        assert update_idx_call.args[1] == (1, "test_user")
+
+    def test_unassign_instance_removed_before_current_decrements(self, mock_db_manager):
+        """Removing an item before the current cursor decrements the index."""
+        mock_manager, mock_conn, mock_cursor = mock_db_manager
+
+        user_state = MysqlUserState("test_user", mock_manager)
+        mock_cursor.execute.reset_mock()
+        mock_conn.commit.reset_mock()
+        # 5 items, user at index 4, remove item at order 0
+        # current_index > removed_order (4 > 0) → new_index = 3
+        mock_cursor.fetchone.side_effect = [(0,), (4,), (4,)]
+
+        result = user_state.unassign_instance("first_item")
+
+        assert result is True
+        update_idx_call = next(c for c in mock_cursor.execute.call_args_list
+                               if "UPDATE user_states SET current_instance_index" in c.args[0])
+        assert update_idx_call.args[1] == (3, "test_user")
+
+    def test_unassign_instance_removed_after_current_leaves_index(self, mock_db_manager):
+        """Removing an item after the current cursor leaves the index unchanged."""
+        mock_manager, mock_conn, mock_cursor = mock_db_manager
+
+        user_state = MysqlUserState("test_user", mock_manager)
+        mock_cursor.execute.reset_mock()
+        mock_conn.commit.reset_mock()
+        # 5 items, user at index 1, remove item at order 3
+        # current_index < removed_order → min(1, 3) = 1
+        mock_cursor.fetchone.side_effect = [(3,), (1,), (4,)]
+
+        result = user_state.unassign_instance("later_item")
+
+        assert result is True
+        update_idx_call = next(c for c in mock_cursor.execute.call_args_list
+                               if "UPDATE user_states SET current_instance_index" in c.args[0])
+        assert update_idx_call.args[1] == (1, "test_user")
+
+    def test_unassign_instance_invalidates_cache(self, mock_db_manager):
+        """After a successful unassign, cached index/ordering must be cleared."""
+        mock_manager, mock_conn, mock_cursor = mock_db_manager
+
+        user_state = MysqlUserState("test_user", mock_manager)
+        # Prime the cache with a fake value to confirm it's wiped
+        user_state._current_instance_index_cache = 7
+        user_state._instance_ordering_cache = ["a", "b"]
+        mock_cursor.fetchone.side_effect = [(1,), (1,), (2,)]
+
+        user_state.unassign_instance("item_b")
+
+        assert user_state._current_instance_index_cache is None
+        assert user_state._instance_ordering_cache is None
+
     def test_hint_operations(self, mock_db_manager):
         """Test AI hint operations."""
         mock_manager, mock_conn, mock_cursor = mock_db_manager
