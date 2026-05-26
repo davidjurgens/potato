@@ -1085,6 +1085,9 @@ class UserState:
     def assign_instance(self, item: Item) -> None:
         raise NotImplementedError()
 
+    def unassign_instance(self, instance_id: str) -> bool:
+        raise NotImplementedError()
+
     def get_current_instance(self) -> Item:
         raise NotImplementedError()
 
@@ -1903,6 +1906,36 @@ class InMemoryUserState(UserState):
         if self.current_instance_index == -1:
             self.current_instance_index = 0
 
+    def unassign_instance(self, instance_id: str) -> bool:
+        """Remove an uncompleted assignment from this user."""
+        if instance_id not in self.assigned_instance_ids and instance_id not in self.instance_id_ordering:
+            return False
+
+        old_index = self.current_instance_index
+        try:
+            removed_index = self.instance_id_ordering.index(instance_id)
+        except ValueError:
+            removed_index = None
+
+        self.assigned_instance_ids.discard(instance_id)
+        self.instance_id_ordering = [
+            iid for iid in self.instance_id_ordering if iid != instance_id
+        ]
+        self.instance_id_to_order = self.generate_id_order_mapping(self.instance_id_ordering)
+
+        if not self.instance_id_ordering:
+            self.current_instance_index = -1
+        elif removed_index is None:
+            self.current_instance_index = min(max(old_index, 0), len(self.instance_id_ordering) - 1)
+        elif old_index > removed_index:
+            self.current_instance_index = max(0, old_index - 1)
+        elif old_index == removed_index:
+            self.current_instance_index = min(removed_index, len(self.instance_id_ordering) - 1)
+        else:
+            self.current_instance_index = min(old_index, len(self.instance_id_ordering) - 1)
+
+        return True
+
     def get_current_phase_and_page(self) -> tuple[UserPhase, str]:
         return self.current_phase_and_page
 
@@ -2292,6 +2325,15 @@ class InMemoryUserState(UserState):
         self.instance_id_to_event_to_value.clear()
         self.instance_id_to_behavioral_data.clear()
         self.ai_hints.clear()
+
+    def clear_instance_annotations(self, instance_id: str) -> None:
+        """Clear all annotation state for one instance."""
+        self.instance_id_to_label_to_value.pop(instance_id, None)
+        self.instance_id_to_span_to_value.pop(instance_id, None)
+        self.instance_id_to_link_to_value.pop(instance_id, None)
+        self.instance_id_to_event_to_value.pop(instance_id, None)
+        self.instance_id_to_behavioral_data.pop(instance_id, None)
+        self.ai_hints.pop(instance_id, None)
 
     def has_remaining_assignments(self) -> bool:
         """Returns True if the user has any remaining instances to annotate."""

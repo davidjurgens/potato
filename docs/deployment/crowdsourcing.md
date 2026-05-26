@@ -150,6 +150,11 @@ For larger studies, Potato can integrate with Prolific's API to automatically ma
 - Resume when load decreases
 - Automatically pause when the study is complete
 
+When Prolific submission status is refreshed, Potato also releases any
+assigned-but-unannotated items from workers whose submissions are `RETURNED`,
+`TIMED-OUT`, or `REJECTED`, so abandoned batches can be assigned to other workers.
+Annotations already completed by those workers are preserved.
+
 ### Setup Prolific API
 
 1. **Get your Prolific API token** from your [Prolific account settings](https://app.prolific.com/account/general)

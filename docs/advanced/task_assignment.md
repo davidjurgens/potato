@@ -165,6 +165,23 @@ assignment:
 | `max_annotations_per_item` | integer | Target annotations per item (-1 = unlimited) |
 | `assignment.random_seed` | integer | Seed for reproducible random assignment |
 
+### Reclaiming Abandoned Assignments
+
+For crowdsourcing batches, workers can return, time out, or fail quality checks after
+receiving a batch of assigned items. Potato reclaims assigned-but-unannotated items
+so they can be assigned again. Completed annotations are kept.
+
+```yaml
+instance_reclaim:
+  enabled: true
+  timeout_hours: 24
+```
+
+Reclaiming happens automatically for stale assignments when assignment runs, and for
+Prolific workers whose submissions become `RETURNED`, `TIMED-OUT`, or `REJECTED`
+when Prolific submission status is refreshed. Users blocked by attention-check
+failure also release their unannotated assignments immediately.
+
 ---
 
 ## Legacy Configuration

@@ -140,6 +140,31 @@ def _inject_quality_control_item_if_needed(username, user_state):
             return
 
 
+def _reclaim_blocked_user_assignments(username, user_state, current_instance_id=None):
+    """Release unannotated assignments after a user is blocked."""
+    if current_instance_id and hasattr(user_state, "clear_instance_annotations"):
+        user_state.clear_instance_annotations(current_instance_id)
+
+    reclaimed = get_item_state_manager().reclaim_unannotated_assignments_for_user(
+        user_state,
+        reason="quality_control_block",
+    )
+
+    if reclaimed:
+        logger.info(
+            "Reclaimed %d unannotated assignments from blocked user %s",
+            len(reclaimed),
+            username,
+        )
+
+    try:
+        get_user_state_manager().save_user_state(user_state)
+    except Exception as e:
+        logger.warning("Could not persist blocked-user assignment reclaim for %s: %s", username, e)
+
+    return reclaimed
+
+
 def get_debug_phase_target(debug_phase: str) -> tuple:
     """
     Parse the debug_phase string and find the matching phase and page.
@@ -2775,21 +2800,15 @@ def admin_api_reclaim_instance():
     if user_state.has_annotated(iid):
         return jsonify({"error": "Cannot reclaim: user has already annotated this instance"}), 400
 
-    # Remove from user's assignment
-    assigned_ids = user_state.get_assigned_instance_ids()
-    if iid in assigned_ids:
-        assigned_ids.discard(iid)
-        if iid in user_state.instance_id_ordering:
-            user_state.instance_id_ordering.remove(iid)
+    reclaimed = ism._reclaim_unannotated_assignment(
+        user_state,
+        iid,
+        reason="manual_admin_reclaim",
+    )
+    if not reclaimed:
+        return jsonify({"error": "Instance is not assigned to this user"}), 400
 
-    # Return to pool
-    if iid not in ism.completed_instance_ids and iid not in ism.remaining_instance_ids:
-        ism.remaining_instance_ids.append(iid)
-
-    # Clean up tracking
-    ism.instance_annotators[iid].discard(username)
-    if iid in ism.assignment_timestamps and username in ism.assignment_timestamps[iid]:
-        del ism.assignment_timestamps[iid][username]
+    get_user_state_manager().save_user_state(user_state)
 
     return jsonify({"success": True, "instance_id": iid, "username": username})
 
@@ -4514,6 +4533,11 @@ def update_instance():
                 # Handle blocking
                 if attention_result.get("blocked"):
                     logger.warning(f"User {username} blocked by attention check")
+                    reclaimed = _reclaim_blocked_user_assignments(
+                        username,
+                        user_state,
+                        current_instance_id=instance_id,
+                    )
 
                     # Emit webhook for attention check failure
                     from potato.webhooks import get_webhook_emitter
@@ -4533,11 +4557,11 @@ def update_instance():
                             ),
                         )
 
-                    # Don't save state for blocked user
                     return jsonify({
                         "status": "blocked",
                         "message": attention_result.get("message", "You have been blocked."),
-                        "qc_result": qc_result
+                        "qc_result": qc_result,
+                        "reclaimed_assignments": reclaimed,
                     })
             else:
                 # Check if this is a gold standard
