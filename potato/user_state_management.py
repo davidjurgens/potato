@@ -1085,6 +1085,16 @@ class UserState:
     def assign_instance(self, item: Item) -> None:
         raise NotImplementedError()
 
+    def assign_instance_at_index(self, item: Item, index: int) -> bool:
+        """Insert an item at a specific position in the user's assignment
+        ordering. Used by quality-control injection (attention checks, gold
+        standards) to place an item right after the user's current cursor
+        without going to the end of the queue.
+
+        Returns False if the item was already assigned. Raises IndexError
+        if index is outside [0, len(ordering)]."""
+        raise NotImplementedError()
+
     def unassign_instance(self, instance_id: str) -> bool:
         raise NotImplementedError()
 
@@ -1905,6 +1915,25 @@ class InMemoryUserState(UserState):
         # If this is the first assigned instance, set the current instance to be the first one
         if self.current_instance_index == -1:
             self.current_instance_index = 0
+
+    def assign_instance_at_index(self, item: Item, index: int) -> bool:
+        """Insert ``item`` at ``index`` in the user's assignment ordering."""
+        item_id = item.get_id()
+        if item_id in self.assigned_instance_ids:
+            return False
+        if index < 0 or index > len(self.instance_id_ordering):
+            raise IndexError(
+                f"assign_instance_at_index: index {index} out of range "
+                f"[0, {len(self.instance_id_ordering)}]"
+            )
+        self.instance_id_ordering.insert(index, item_id)
+        self.assigned_instance_ids.add(item_id)
+        self.instance_id_to_order = self.generate_id_order_mapping(self.instance_id_ordering)
+        if self.current_instance_index == -1:
+            self.current_instance_index = 0
+        elif self.current_instance_index >= index:
+            self.current_instance_index += 1
+        return True
 
     def unassign_instance(self, instance_id: str) -> bool:
         """Remove an uncompleted assignment from this user."""

@@ -412,6 +412,93 @@ class TestMysqlUserState:
                                if "UPDATE user_states SET current_instance_index" in c.args[0])
         assert update_idx_call.args[1] == (1, "test_user")
 
+    def test_assign_instance_at_index_returns_false_when_already_assigned(self, mock_db_manager):
+        """Duplicate assignment short-circuits without DELETE/INSERT/UPDATE."""
+        mock_manager, mock_conn, mock_cursor = mock_db_manager
+
+        user_state = MysqlUserState("test_user", mock_manager)
+        mock_cursor.execute.reset_mock()
+        mock_conn.commit.reset_mock()
+        # SELECT COUNT for already-assigned → (1,)
+        mock_cursor.fetchone.side_effect = [(1,)]
+
+        item = Mock(); item.get_id.return_value = "dup_item"
+        result = user_state.assign_instance_at_index(item, 0)
+
+        assert result is False
+        # Only the duplicate-check SELECT should run.
+        assert mock_cursor.execute.call_count == 1
+        mock_conn.commit.assert_not_called()
+
+    def test_assign_instance_at_index_inserts_and_shifts(self, mock_db_manager):
+        """Insert at index 1 with current cursor at 2 must shift later orders
+        and bump the cursor to 3."""
+        mock_manager, mock_conn, mock_cursor = mock_db_manager
+
+        user_state = MysqlUserState("test_user", mock_manager)
+        mock_cursor.execute.reset_mock()
+        mock_conn.commit.reset_mock()
+        # Sequence: not assigned (0,), count=3, current_index=2
+        mock_cursor.fetchone.side_effect = [(0,), (3,), (2,)]
+
+        item = Mock(); item.get_id.return_value = "new_item"
+        result = user_state.assign_instance_at_index(item, 1)
+
+        assert result is True
+        executed = [c.args[0] for c in mock_cursor.execute.call_args_list]
+        assert any("SET assignment_order = assignment_order + 1" in q for q in executed)
+        assert any("INSERT INTO user_instance_assignments" in q for q in executed)
+        update_idx_call = next(c for c in mock_cursor.execute.call_args_list
+                               if "UPDATE user_states SET current_instance_index" in c.args[0])
+        assert update_idx_call.args[1] == (3, "test_user")
+        mock_conn.commit.assert_called_once()
+
+    def test_assign_instance_at_index_after_cursor_leaves_cursor(self, mock_db_manager):
+        """Insert at index 2 with current cursor at 0 must leave the cursor."""
+        mock_manager, mock_conn, mock_cursor = mock_db_manager
+
+        user_state = MysqlUserState("test_user", mock_manager)
+        mock_cursor.execute.reset_mock()
+        mock_conn.commit.reset_mock()
+        # Sequence: not assigned, count=3, current_index=0
+        mock_cursor.fetchone.side_effect = [(0,), (3,), (0,)]
+
+        item = Mock(); item.get_id.return_value = "later_item"
+        assert user_state.assign_instance_at_index(item, 2) is True
+
+        update_idx_call = next(c for c in mock_cursor.execute.call_args_list
+                               if "UPDATE user_states SET current_instance_index" in c.args[0])
+        assert update_idx_call.args[1] == (0, "test_user")
+
+    def test_assign_instance_at_index_empty_state_sets_cursor_to_zero(self, mock_db_manager):
+        """Insert into empty user (cursor = -1) must move cursor to 0."""
+        mock_manager, mock_conn, mock_cursor = mock_db_manager
+
+        user_state = MysqlUserState("test_user", mock_manager)
+        mock_cursor.execute.reset_mock()
+        mock_conn.commit.reset_mock()
+        # Sequence: not assigned, count=0, current_index=-1
+        mock_cursor.fetchone.side_effect = [(0,), (0,), (-1,)]
+
+        item = Mock(); item.get_id.return_value = "first_item"
+        assert user_state.assign_instance_at_index(item, 0) is True
+
+        update_idx_call = next(c for c in mock_cursor.execute.call_args_list
+                               if "UPDATE user_states SET current_instance_index" in c.args[0])
+        assert update_idx_call.args[1] == (0, "test_user")
+
+    def test_assign_instance_at_index_out_of_range_raises(self, mock_db_manager):
+        """Index past the end of the ordering must raise IndexError."""
+        mock_manager, mock_conn, mock_cursor = mock_db_manager
+
+        user_state = MysqlUserState("test_user", mock_manager)
+        # Sequence: not assigned, count=2
+        mock_cursor.fetchone.side_effect = [(0,), (2,)]
+
+        item = Mock(); item.get_id.return_value = "bad_index"
+        with pytest.raises(IndexError):
+            user_state.assign_instance_at_index(item, 5)
+
     def test_unassign_instance_invalidates_cache(self, mock_db_manager):
         """After a successful unassign, cached index/ordering must be cleared."""
         mock_manager, mock_conn, mock_cursor = mock_db_manager

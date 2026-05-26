@@ -92,15 +92,16 @@ def _inject_quality_control_item_if_needed(username, user_state):
     ):
         return
 
-    assigned_ids = set(getattr(user_state, "assigned_instance_ids", set()) or set())
+    assigned_ids = set(user_state.get_assigned_instance_ids())
     annotated_ids = set(user_state.get_annotated_instance_ids()) if hasattr(user_state, "get_annotated_instance_ids") else set()
     seen_qc_ids = assigned_ids | annotated_ids
 
-    insert_index = user_state.current_instance_index + 1 if user_state.current_instance_index >= 0 else 0
+    current_index = user_state.get_current_instance_index()
+    insert_index = current_index + 1 if current_index >= 0 else 0
 
     def inject_item(item_data):
         item_id = item_data.get("id")
-        if not item_id or item_id in user_state.instance_id_ordering or item_id in seen_qc_ids:
+        if not item_id or item_id in seen_qc_ids:
             return False
 
         prepared_item = dict(item_data)
@@ -116,16 +117,12 @@ def _inject_quality_control_item_if_needed(username, user_state):
                 existing_data = existing_item.get_data()
                 if "displayed_text" not in existing_data:
                     existing_data["displayed_text"] = prepared_item["displayed_text"]
+            item = item_manager.get_item(item_id)
         else:
             item_manager.add_item(item_id, prepared_item)
+            item = item_manager.get_item(item_id)
 
-        if item_id in user_state.assigned_instance_ids:
-            return False
-
-        user_state.instance_id_ordering.insert(insert_index, item_id)
-        user_state.assigned_instance_ids.add(item_id)
-        user_state.instance_id_to_order = user_state.generate_id_order_mapping(user_state.instance_id_ordering)
-        return True
+        return user_state.assign_instance_at_index(item, insert_index)
 
     if qc_manager.should_inject_attention_check(username):
         attention_item = qc_manager.get_attention_check_item(username)
