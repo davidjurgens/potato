@@ -24,6 +24,14 @@ class MysqlUserState(UserState):
 
     This class stores all user state data in MySQL tables, providing
     persistence and scalability for annotation workflows.
+
+    Backend feature parity gap: link annotations (SpanLink) and event
+    annotations (EventAnnotation) are only supported by InMemoryUserState.
+    The MySQL schema has no link_annotations or event_annotations tables,
+    and this class does not implement add_link_annotation /
+    add_event_annotation / get_*_annotations. Configurations that use
+    span_link or event_annotation schemas will fail with AttributeError
+    on the MySQL backend.
     """
 
     def __init__(self, user_id: str, db_manager: DatabaseManager, max_assignments: int = -1):
