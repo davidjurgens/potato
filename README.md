@@ -264,7 +264,7 @@ Potato is licensed under [Polyform Shield](LICENSE). Non-commercial applications
 ```bibtex
 @inproceedings{jurgens2026potato,
   title={POTATO 2.0: A Comprehensive Annotation Platform\\with Support for AI-in-the-Loop and Agentic Systems},
-  author={Jurgen, David and Chen, Michael and Iyer, Lina},
+  author={Jurgens, David and Chen, Michael and Iyer, Lina},
   booktitle={Proceedings of the The 64th Annual Meeting of the Association for Computational Linguistics: System Demonstrations},
   year={2026}
 }
