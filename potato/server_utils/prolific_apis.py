@@ -24,6 +24,7 @@ import requests
 from collections import OrderedDict, defaultdict
 import time
 import json
+import logging
 
 # The base wrapper of prolific apis
 class ProlificBase(object):
@@ -372,6 +373,7 @@ class ProlificStudy(ProlificBase):
             self.sessions[v['id']] = v
             #self.user2session[v['participant_id']] = v['id']
             self.user_status_dict[v['status']].add(v['participant_id'])
+        self.reclaim_dropped_user_assignments()
 
     def get_dropped_users(self):
         """
@@ -381,6 +383,32 @@ class ProlificStudy(ProlificBase):
             list: Participant IDs who have returned, timed out, or been rejected
         """
         return list(self.user_status_dict['RETURNED'] | self.user_status_dict['TIMED-OUT'] | self.user_status_dict['REJECTED'])
+
+    def reclaim_dropped_user_assignments(self):
+        """
+        Release unannotated Potato assignments for dropped Prolific workers.
+
+        Prolific reports dropped workers as RETURNED, TIMED-OUT, or REJECTED.
+        Their participant IDs are also the Potato usernames for url-direct
+        Prolific login, so the item state manager can safely reclaim any
+        assigned-but-unannotated instances.
+        """
+        dropped_users = self.get_dropped_users()
+        if not dropped_users:
+            return {}
+
+        try:
+            from potato.item_state_management import get_item_state_manager
+            return get_item_state_manager().reclaim_unannotated_assignments_for_users(
+                dropped_users,
+                reason="prolific_dropped",
+            )
+        except Exception as e:
+            logging.getLogger(__name__).warning(
+                "Could not reclaim assignments for dropped Prolific users: %s",
+                e,
+            )
+            return {}
 
     def get_concurrent_sessions_count(self):
         """

@@ -130,6 +130,53 @@ class MysqlUserState(UserState):
 
         self._invalidate_cache()
 
+    def unassign_instance(self, instance_id: str) -> bool:
+        """Remove an instance assignment from the user."""
+        with self.db_manager.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT assignment_order FROM user_instance_assignments
+                WHERE user_id = %s AND instance_id = %s
+            """, (self.user_id, instance_id))
+            result = cursor.fetchone()
+            if result is None:
+                return False
+
+            removed_order = result[0]
+            cursor.execute("""
+                DELETE FROM user_instance_assignments
+                WHERE user_id = %s AND instance_id = %s
+            """, (self.user_id, instance_id))
+            cursor.execute("""
+                UPDATE user_instance_assignments
+                SET assignment_order = assignment_order - 1
+                WHERE user_id = %s AND assignment_order > %s
+            """, (self.user_id, removed_order))
+
+            current_index = self.get_current_instance_index()
+            cursor.execute("""
+                SELECT COUNT(*) FROM user_instance_assignments WHERE user_id = %s
+            """, (self.user_id,))
+            count_result = cursor.fetchone()
+            assignment_count = count_result[0] if count_result is not None else 0
+
+            if assignment_count == 0:
+                new_index = -1
+            elif current_index > removed_order:
+                new_index = current_index - 1
+            elif current_index == removed_order:
+                new_index = min(removed_order, assignment_count - 1)
+            else:
+                new_index = min(current_index, assignment_count - 1)
+
+            cursor.execute("""
+                UPDATE user_states SET current_instance_index = %s WHERE user_id = %s
+            """, (new_index, self.user_id))
+            conn.commit()
+
+        self._invalidate_cache()
+        return True
+
     def get_current_instance(self) -> Optional[Item]:
         """Get the current instance the user is annotating."""
         current_index = self.get_current_instance_index()
@@ -454,6 +501,28 @@ class MysqlUserState(UserState):
             cursor.execute("DELETE FROM phase_annotations WHERE user_id = %s", (self.user_id,))
             cursor.execute("DELETE FROM behavioral_data WHERE user_id = %s", (self.user_id,))
             cursor.execute("DELETE FROM ai_hints WHERE user_id = %s", (self.user_id,))
+            conn.commit()
+
+    def clear_instance_annotations(self, instance_id: str) -> None:
+        """Clear all annotations for one instance."""
+        with self.db_manager.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM label_annotations WHERE user_id = %s AND instance_id = %s",
+                (self.user_id, instance_id),
+            )
+            cursor.execute(
+                "DELETE FROM span_annotations WHERE user_id = %s AND instance_id = %s",
+                (self.user_id, instance_id),
+            )
+            cursor.execute(
+                "DELETE FROM behavioral_data WHERE user_id = %s AND instance_id = %s",
+                (self.user_id, instance_id),
+            )
+            cursor.execute(
+                "DELETE FROM ai_hints WHERE user_id = %s AND instance_id = %s",
+                (self.user_id, instance_id),
+            )
             conn.commit()
 
     def has_assignments(self) -> bool:
