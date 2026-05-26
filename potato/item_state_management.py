@@ -1517,31 +1517,110 @@ class ItemStateManager:
                 self.logger.info(f"Reclaiming stale instance {iid} from user {username} "
                                  f"(assigned {(time.time() - timestamp)/3600:.1f} hours ago)")
 
-                # Remove from user's assignment
+                reclaimed = False
                 if user_state:
-                    assigned_ids = user_state.get_assigned_instance_ids()
-                    if iid in assigned_ids:
-                        assigned_ids.discard(iid)
-                        if iid in user_state.instance_id_ordering:
-                            user_state.instance_id_ordering.remove(iid)
+                    reclaimed = self._reclaim_unannotated_assignment(
+                        user_state,
+                        iid,
+                        reason="stale_assignment",
+                    )
+                else:
+                    if iid not in self.completed_instance_ids and iid not in self.remaining_instance_ids:
+                        self.remaining_instance_ids.append(iid)
+                    self.instance_annotators[iid].discard(username)
+                    if iid in self.assignment_timestamps:
+                        self.assignment_timestamps[iid].pop(username, None)
+                    reclaimed = True
 
-                # Return to pool if not already there and not completed
-                if iid not in self.completed_instance_ids and iid not in self.remaining_instance_ids:
-                    self.remaining_instance_ids.append(iid)
-
-                # Remove annotator tracking
-                self.instance_annotators[iid].discard(username)
-
-                # Clean up timestamp
-                del self.assignment_timestamps[iid][username]
-                reclaimed_count += 1
+                if reclaimed:
+                    reclaimed_count += 1
 
             # Clean up empty entries
-            if not self.assignment_timestamps[iid]:
+            if iid in self.assignment_timestamps and not self.assignment_timestamps[iid]:
                 del self.assignment_timestamps[iid]
 
         if reclaimed_count > 0:
             self.logger.info(f"Reclaimed {reclaimed_count} stale instance assignments")
+
+    def _reclaim_unannotated_assignment(
+        self,
+        user_state: 'UserState',
+        instance_id: str,
+        reason: str = "assignment_reclaim",
+    ) -> bool:
+        """Reclaim one unannotated assignment from a user."""
+        user_id = getattr(user_state, 'user_id', None) or user_state.get_user_id()
+
+        if user_state.has_annotated(instance_id):
+            return False
+
+        unassigned = user_state.unassign_instance(instance_id)
+        if not unassigned:
+            return False
+
+        if instance_id not in self.completed_instance_ids and instance_id not in self.remaining_instance_ids:
+            self.remaining_instance_ids.append(instance_id)
+
+        self.instance_annotators[instance_id].discard(user_id)
+        if instance_id in self.assignment_timestamps:
+            self.assignment_timestamps[instance_id].pop(user_id, None)
+            if not self.assignment_timestamps[instance_id]:
+                del self.assignment_timestamps[instance_id]
+
+        self.logger.info(
+            "Reclaimed unannotated assignment %s from user %s (%s)",
+            instance_id,
+            user_id,
+            reason,
+        )
+        return True
+
+    def reclaim_unannotated_assignments_for_user(
+        self,
+        user_state: 'UserState',
+        reason: str = "assignment_reclaim",
+    ) -> List[str]:
+        """Reclaim all assigned-but-unannotated instances for a user."""
+        reclaimed = []
+        with self._lock:
+            for instance_id in list(user_state.get_assigned_instance_ids()):
+                if self._reclaim_unannotated_assignment(user_state, instance_id, reason):
+                    reclaimed.append(instance_id)
+        return reclaimed
+
+    def reclaim_unannotated_assignments_for_users(
+        self,
+        user_ids: List[str],
+        reason: str = "assignment_reclaim",
+    ) -> Dict[str, List[str]]:
+        """Reclaim assigned-but-unannotated instances for several users."""
+        from potato.user_state_management import get_user_state_manager
+
+        usm = get_user_state_manager()
+        reclaimed_by_user = {}
+        for user_id in user_ids:
+            user_state = usm.get_user_state(user_id)
+            if not user_state:
+                continue
+
+            reclaimed = self.reclaim_unannotated_assignments_for_user(
+                user_state,
+                reason=reason,
+            )
+            if not reclaimed:
+                continue
+
+            reclaimed_by_user[user_id] = reclaimed
+            try:
+                usm.save_user_state(user_state)
+            except Exception as e:
+                self.logger.warning(
+                    "Could not persist reclaimed assignments for user %s: %s",
+                    user_id,
+                    e,
+                )
+
+        return reclaimed_by_user
 
     def _maybe_assign_icl_verification(self, user_state: 'UserState') -> int:
         """
